@@ -1,37 +1,46 @@
 // ============================================================
-// Sub-PR E: Consolidación pantalla Wallet driver
+// Wallet driver — Cuban Modern premium redesign (post-PR #231)
 //
-// User pidió: "en el driver cuando entrar a wallet sale todo en 0".
-// Root cause: la subpantalla `apps/driver/app/wallet/index.tsx` (a la
-// que linkeaba el botón "Ver Wallet" desde Ganancias) seguía leyendo
-// driver_cash en lugar de tricicoin → todo en 0 para Eduardo Admin.
+// Visual layer: paleta cubanLight/cubanDark (warm cream + navy + gold),
+// LinearGradient hero balance card con orange glow radial, CTA "Recargar
+// wallet" con halo naranja + spring animation, StatCards Cuban-styled,
+// stagger fade-in entrance, transactions con pill "Comprobante" gold.
 //
-// Decisión: consolidar TODO en este tab. La subscreen se elimina.
-// El tab muestra: balance principal + Total ganado/gastado + lista
-// paginada de transacciones (con descarga de comprobantes para
-// recargas NETOPIA). Sin QuotaCard "Crédito de comisión", sin metas
-// Daily/Weekly/Monthly, sin historial filtered redundante.
+// Lógica intacta: fetchData (post-00324 RPC fix), Toast on error,
+// pagination, refresh, CSV export, receipt download, useColorScheme.
+// Route /wallet/recharge (zona NETOPIA) intacta.
 //
-// Todas las queries usan account_type='tricicoin' (single-wallet
-// model post-00300).
+// Fuentes: Inter (cargado en _layout) + tabular-nums fontVariant para
+// alineación numérica. BricolageGrotesque/JetBrainsMono no están
+// cargadas en driver app — usamos Inter_800ExtraBold para hero monto.
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Pressable, RefreshControl, ActivityIndicator, Alert, Linking, useColorScheme } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Animated,
+  Easing,
+  StyleSheet,
+  useColorScheme,
+} from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
-import { StatCard } from '@tricigo/ui/StatCard';
 import { EmptyState } from '@tricigo/ui/EmptyState';
-import { SkeletonBalance, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateWalletCSV } from '@tricigo/utils';
-import { colors, driverStandardLightColors, driverDarkColors } from '@tricigo/theme';
+import { colors, cubanLight, cubanDark } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LedgerTransaction, WalletSummary } from '@tricigo/types';
 import * as Sharing from 'expo-sharing';
@@ -39,22 +48,39 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 const PAGE_SIZE = 20;
 
+// Tabular-nums style for number alignment (CUP, USD totals)
+const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nums'] };
+
 export default function WalletScreen() {
   const { t } = useTranslation('driver');
   const userId = useAuthStore((s) => s.user?.id);
-  // 00324: dark mode support — driver app respects device theme. Picks between
-  // driverStandardLightColors (default) and driverDarkColors based on system.
-  // Both palettes share the same shape (text.{primary,secondary,tertiary},
-  // background.tertiary, card), so call sites need no further branching.
+
+  // Cuban Modern palette — warm cream light / navy profundo dark
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const lt = isDark ? driverDarkColors : driverStandardLightColors;
+  const palette = isDark ? cubanDark : cubanLight;
+
+  // RN-style shadows (cuban*.shadow.hero is CSS string syntax — not portable)
+  const HERO_SHADOW = {
+    shadowColor: '#FF4D00',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: isDark ? 0.28 : 0.16,
+    shadowRadius: 24,
+    elevation: 12,
+  };
   const CARD_SHADOW = {
-    shadowColor: isDark ? '#FFF' : '#000',
-    shadowOpacity: isDark ? 0.06 : 0.04,
-    shadowRadius: 8,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
     elevation: 2,
+  };
+  const GLOW_CTA = {
+    shadowColor: '#FF4D00',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
   };
 
   const [summary, setSummary] = useState<WalletSummary | null>(null);
@@ -66,8 +92,7 @@ export default function WalletScreen() {
   const [hasMore, setHasMore] = useState(true);
 
   // RECARGA V2 PARITY: map payment_intent_id → receipt metadata so we
-  // can render a "Descargar comprobante" button on each tricicoin
-  // recharge txn. Portado de wallet/index.tsx (BUG-Wallet-Consolidate).
+  // can render a "Comprobante" pill on each tricicoin recharge txn.
   const [receiptByPiId, setReceiptByPiId] = useState<Map<string, {
     receipt_no: string;
     pdf_storage_path: string | null;
@@ -78,8 +103,7 @@ export default function WalletScreen() {
     if (!userId) return;
     try {
       const p = reset ? 0 : page;
-      // 00300: single-wallet driver model → tricicoin es la única fuente
-      // de verdad para el balance + transacciones del driver.
+      // 00300: single-wallet driver model → tricicoin es la única fuente.
       const [summaryData, rateData] = await Promise.all([
         walletService.getSummary(userId, 'tricicoin'),
         exchangeRateService.getUsdCupRate().catch(() => DEFAULT_EXCHANGE_RATE),
@@ -101,9 +125,7 @@ export default function WalletScreen() {
       }
       setHasMore(txData.length === PAGE_SIZE);
 
-      // RECARGA V2 PARITY: load wallet receipts so each `recharge` txn
-      // with matching payment_intent_id surfaces a download button.
-      // Best-effort — UI hides receipts silently if this fails.
+      // Best-effort receipt map (NETOPIA recharges → PDF link)
       if (reset) {
         try {
           const receipts = await walletService.getReceipts(userId, 100);
@@ -116,13 +138,11 @@ export default function WalletScreen() {
           }
           setReceiptByPiId(map);
         } catch {
-          // Non-fatal: txn rows just won't have a download button.
+          // Non-fatal
         }
       }
     } catch (err) {
-      // 00324: surface the error via Toast so we catch RPC regressions early
-      // (we just lost a critical week of "everyone sees 0" due to the silent
-      // catch swallowing an ambiguous-column exception from get_wallet_summary).
+      // 00324: surface RPC errors via Toast (no more silent zeroes)
       console.error('[Wallet] fetchData error:', err);
       Toast.show({
         type: 'error',
@@ -149,8 +169,6 @@ export default function WalletScreen() {
     if (hasMore && !loading) fetchData(false);
   };
 
-  // RECARGA V2 PARITY: open PDF via a fresh 1h signed URL. Linking.openURL
-  // hands off to the OS browser / PDF viewer for review/share.
   const openReceiptNative = useCallback(async (storagePath: string, receiptNo: string) => {
     setOpeningReceipt(receiptNo);
     try {
@@ -241,8 +259,6 @@ export default function WalletScreen() {
   }) => {
     const amount = (item as { ledger_entries?: { amount: number }[] }).ledger_entries?.[0]?.amount ?? 0;
     const txColor = getTransactionColor(item.type);
-    // RECARGA V2: only `recharge` txns whose ledger row points at a
-    // payment_intent (NETOPIA / historical Stripe) have a PDF receipt.
     const receipt = item.type === 'recharge'
       && item.reference_type === 'payment_intent'
       && item.reference_id
@@ -252,36 +268,40 @@ export default function WalletScreen() {
 
     return (
       <View
-        className="mx-4 mb-2 rounded-xl"
-        style={{ backgroundColor: lt.card, borderWidth: 1, borderColor: lt.border.default, ...CARD_SHADOW }}
+        style={{
+          marginHorizontal: 16,
+          marginBottom: 8,
+          backgroundColor: palette.bg.elev1,
+          borderRadius: 14,
+          ...CARD_SHADOW,
+        }}
         accessible
         accessibilityLabel={`${item.type}: ${formatCUP(Math.abs(amount))}`}
       >
-        <View className="flex-row items-center py-3.5 px-4">
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 14 }}>
           <View
-            className="w-10 h-10 rounded-xl items-center justify-center mr-3"
-            style={{ backgroundColor: `${txColor}15` }}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              backgroundColor: `${txColor}1A`,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 12,
+            }}
           >
-            <Ionicons
-              name={getTransactionIcon(item.type)}
-              size={18}
-              color={txColor}
-            />
+            <Ionicons name={getTransactionIcon(item.type)} size={18} color={txColor} />
           </View>
-          <View className="flex-1">
-            <Text variant="body" style={{ color: lt.text.primary }} className="font-medium">
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: palette.ink.primary, fontWeight: '600', fontSize: 14 }}>
               {t(`wallet.tx_${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') })}
             </Text>
-            <Text variant="caption" style={{ color: lt.text.secondary }} className="mt-0.5">
+            <Text style={{ color: palette.ink.secondary, fontSize: 12, marginTop: 2 }}>
               {new Date(item.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
-          <Text
-            variant="body"
-            className="font-bold tabular-nums"
-            style={{ color: txColor }}
-          >
-            {isCreditType(item.type) ? '+' : '-'}{formatCUP(Math.abs(amount))}
+          <Text style={{ color: txColor, fontWeight: '700', fontSize: 15, ...TABULAR }}>
+            {isCreditType(item.type) ? '+' : '−'}{formatCUP(Math.abs(amount))}
           </Text>
         </View>
         {canDownload && receipt && (
@@ -289,14 +309,8 @@ export default function WalletScreen() {
             onPress={() => openReceiptNative(receipt.pdf_storage_path!, receipt.receipt_no)}
             disabled={openingReceipt === receipt.receipt_no}
             style={({ pressed }) => [
-              {
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingHorizontal: 16,
-                paddingBottom: 12,
-                marginTop: -4,
-              },
-              pressed && { opacity: 0.7 },
+              { paddingHorizontal: 14, paddingBottom: 12, marginTop: -4 },
+              pressed && { opacity: 0.65 },
             ]}
             accessibilityRole="button"
             accessibilityLabel={t('wallet.download_receipt_aria', {
@@ -304,31 +318,95 @@ export default function WalletScreen() {
               no: receipt.receipt_no,
             })}
           >
-            <Ionicons name="download-outline" size={14} color={colors.brand.orange} />
-            <Text
-              variant="caption"
-              style={{ color: colors.brand.orange, fontWeight: '600', marginLeft: 6 }}
+            <View
+              style={{
+                alignSelf: 'flex-start',
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: palette.accent.warm,
+                borderRadius: 9999,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                marginLeft: 52, // aligns with text start (icon 40 + margin 12)
+              }}
             >
-              {openingReceipt === receipt.receipt_no
-                ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
-                : `${t('wallet.download_receipt', { defaultValue: 'Comprobante' })} ${receipt.receipt_no}`}
-            </Text>
+              <Ionicons
+                name={openingReceipt === receipt.receipt_no ? 'hourglass-outline' : 'document-text-outline'}
+                size={11}
+                color="#FFFFFF"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                {openingReceipt === receipt.receipt_no
+                  ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
+                  : `${t('wallet.download_receipt', { defaultValue: 'Comprobante' })} ${receipt.receipt_no}`}
+              </Text>
+            </View>
           </Pressable>
         )}
       </View>
     );
   };
 
+  // ── Stagger entrance animations ────────────────────────────────────
+  // 4 sections: balance hero (0), recharge CTA (1), stats row (2), txns header (3).
+  // Each fades in + slides up 12px. Kicks off when `loading` flips false.
+  const fadeAnim = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+  useEffect(() => {
+    if (!loading) {
+      Animated.stagger(
+        80,
+        fadeAnim.map((a) =>
+          Animated.timing(a, {
+            toValue: 1,
+            duration: 380,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic),
+          }),
+        ),
+      ).start();
+    }
+  }, [loading, fadeAnim]);
+
+  const sectionTranslateY = (idx: number) =>
+    fadeAnim[idx]!.interpolate({ inputRange: [0, 1], outputRange: [12, 0] });
+
+  const sectionStyle = (idx: number) => ({
+    opacity: fadeAnim[idx]!,
+    transform: [{ translateY: sectionTranslateY(idx) }],
+  });
+
+  // ── CTA press feedback (spring scale) ──────────────────────────────
+  const ctaScale = useRef(new Animated.Value(1)).current;
+  const handleCtaPressIn = () =>
+    Animated.spring(ctaScale, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
+  const handleCtaPressOut = () =>
+    Animated.spring(ctaScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 6 }).start();
+
   if (loading) {
     return (
-      <Screen bg={isDark ? 'dark' : 'lightPrimary'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded scroll>
-        <View className="pt-4">
-          <Text variant="h3" style={{ color: lt.text.primary }} className="mb-4">
+      <Screen
+        bg={isDark ? 'dark' : 'white'}
+        statusBarStyle={isDark ? 'light-content' : 'dark-content'}
+      >
+        <View style={{ flex: 1, backgroundColor: palette.bg.paper, paddingHorizontal: 16, paddingTop: 16 }}>
+          <Text style={{ color: palette.ink.primary, fontSize: 28, fontWeight: '800', marginBottom: 20 }}>
             {t('wallet.title', { defaultValue: 'Billetera' })}
           </Text>
-          <SkeletonBalance />
-          <SkeletonCard />
-          <SkeletonCard />
+          {/* Hero skeleton */}
+          <View style={{ height: 160, borderRadius: 24, backgroundColor: palette.bg.elev1, marginBottom: 20, ...CARD_SHADOW }} />
+          {/* CTA skeleton */}
+          <View style={{ height: 60, borderRadius: 20, backgroundColor: palette.bg.elev1, marginBottom: 20, opacity: 0.6 }} />
+          {/* Stats skeleton */}
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1, height: 100, borderRadius: 16, backgroundColor: palette.bg.elev1 }} />
+            <View style={{ flex: 1, height: 100, borderRadius: 16, backgroundColor: palette.bg.elev1 }} />
+          </View>
         </View>
       </Screen>
     );
@@ -340,121 +418,270 @@ export default function WalletScreen() {
   const totalSpent = summary?.total_spent ?? 0;
 
   return (
-    <Screen bg={isDark ? 'dark' : 'lightPrimary'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
-      <FlatList
-        data={transactions}
-        keyExtractor={(item) => item.id}
-        renderItem={renderTransaction}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.3}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.brand.orange}
-          />
-        }
-        contentContainerStyle={{ paddingBottom: 32 }}
-        ListHeaderComponent={
-          <View className="px-4 pt-4 mb-2">
-            {/* Header con título + acción exportar */}
-            <View className="flex-row items-center justify-between mb-4">
-              <Text variant="h3" style={{ color: lt.text.primary }}>
-                {t('wallet.title', { defaultValue: 'Billetera' })}
-              </Text>
-              <Pressable
-                onPress={handleExportCSV}
-                disabled={!summary?.account_id}
-                className="w-10 h-10 rounded-xl items-center justify-center"
-                style={({ pressed }) => [
-                  { backgroundColor: lt.background.tertiary, opacity: !summary?.account_id ? 0.4 : 1 },
-                  pressed && { transform: [{ scale: 0.95 }] },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={t('wallet.export_csv', { defaultValue: 'Exportar CSV' })}
-              >
-                <Ionicons name="download-outline" size={18} color={lt.text.secondary} />
-              </Pressable>
-            </View>
-
-            {/* Balance card principal */}
-            <Card variant="surface" padding="lg" className="mb-4" style={{ backgroundColor: lt.card, ...CARD_SHADOW }}>
-              <Text variant="caption" style={{ color: lt.text.secondary }} className="mb-1">
-                {t('wallet.balance_label', { defaultValue: 'Crédito de comisión' })}
-              </Text>
-              <Text variant="stat" style={{ color: lt.text.primary }}>
-                {formatCUP(balance)}
-              </Text>
-              <Text variant="caption" style={{ color: lt.text.tertiary }} className="mt-0.5">
-                {'≈'} {formatUSD(trcToUsd(balance, exchangeRate))}
-              </Text>
-              {held > 0 && (
-                <Text variant="caption" style={{ color: lt.text.secondary }} className="mt-2">
-                  {t('wallet.held', { defaultValue: 'Retenido' })}: {formatCUP(held)}
-                </Text>
-              )}
-            </Card>
-
-            {/* Botón Recargar (sigue ruteando a /wallet/recharge — ZONA NETOPIA, no se toca) */}
-            <Pressable
-              onPress={() => router.push('/wallet/recharge')}
-              className="flex-row items-center justify-center py-4 rounded-2xl mb-4"
-              style={({ pressed }) => [
-                { backgroundColor: colors.brand.orange, minHeight: 52 },
-                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar' })}
-            >
-              <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-              <Text variant="body" style={{ color: '#FFFFFF', fontWeight: '700', marginLeft: 8 }}>
-                {t('wallet.recharge', { defaultValue: 'Recargar' })}
-              </Text>
-            </Pressable>
-
-            {/* Stats row: Total ganado / Total gastado */}
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-1">
-                <StatCard
-                  icon="trending-up"
-                  value={formatCUP(totalEarned)}
-                  label={t('wallet.total_earned', { defaultValue: 'Total ganado' })}
-                  iconColor={colors.success.DEFAULT}
-                />
-              </View>
-              <View className="flex-1">
-                <StatCard
-                  icon="trending-down"
-                  value={formatCUP(totalSpent)}
-                  label={t('wallet.total_spent', { defaultValue: 'Total gastado' })}
-                  iconColor={colors.error.DEFAULT}
-                />
-              </View>
-            </View>
-
-            {/* Transactions section header */}
-            <Text variant="label" style={{ color: lt.text.secondary }} className="mb-2 ml-1">
-              {t('wallet.transactions', { defaultValue: 'Transacciones' })}
-            </Text>
-          </View>
-        }
-        ListEmptyComponent={
-          <View className="px-4">
-            <EmptyState
-              icon="wallet-outline"
-              title={t('wallet.no_transactions_title', { defaultValue: 'Sin transacciones' })}
-              description={t('wallet.no_transactions', { defaultValue: 'Aun no tienes transacciones. Completa viajes para empezar a ganar.' })}
+    <Screen
+      bg={isDark ? 'dark' : 'white'}
+      statusBarStyle={isDark ? 'light-content' : 'dark-content'}
+    >
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
+        <FlatList
+          data={transactions}
+          keyExtractor={(item) => item.id}
+          renderItem={renderTransaction}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.brand.orange}
             />
-          </View>
-        }
-        ListFooterComponent={
-          transactions.length > 0 && hasMore ? (
-            <View className="py-4 items-center">
-              <ActivityIndicator size="small" color={colors.brand.orange} />
+          }
+          contentContainerStyle={{ paddingBottom: 32 }}
+          ListHeaderComponent={
+            <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+              {/* Header — title + export CSV */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <Text style={{ color: palette.ink.primary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
+                  {t('wallet.title', { defaultValue: 'Billetera' })}
+                </Text>
+                <Pressable
+                  onPress={handleExportCSV}
+                  disabled={!summary?.account_id}
+                  style={({ pressed }) => [
+                    {
+                      width: 40,
+                      height: 40,
+                      borderRadius: 12,
+                      backgroundColor: palette.bg.elev2,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: !summary?.account_id ? 0.4 : 1,
+                    },
+                    pressed && { transform: [{ scale: 0.94 }] },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('wallet.export_csv', { defaultValue: 'Exportar CSV' })}
+                >
+                  <Ionicons name="download-outline" size={18} color={palette.ink.secondary} />
+                </Pressable>
+              </View>
+
+              {/* ── Hero Balance Card ──────────────────────────────── */}
+              <Animated.View style={[sectionStyle(0), { borderRadius: 24, overflow: 'hidden', marginBottom: 18, ...HERO_SHADOW }]}>
+                {/* Layer 1: base gradient */}
+                <LinearGradient
+                  colors={isDark ? ['#11172A', '#18203A'] : ['#FFFFFF', '#FFFBF5']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+                {/* Layer 2: orange glow accent (top-right corner) */}
+                <LinearGradient
+                  colors={[palette.accent.orangeGlow, 'transparent']}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0.3, y: 0.7 }}
+                  style={{ position: 'absolute', top: 0, right: 0, width: 180, height: 180 }}
+                  pointerEvents="none"
+                />
+                {/* Layer 3: content */}
+                <View style={{ padding: 24 }}>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      letterSpacing: 1.6,
+                      color: palette.ink.secondary,
+                      textTransform: 'uppercase',
+                      marginBottom: 10,
+                    }}
+                  >
+                    {t('wallet.balance_label', { defaultValue: 'Crédito de comisión' })}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: 'Inter_800ExtraBold',
+                      fontSize: 42,
+                      letterSpacing: -1.2,
+                      lineHeight: 48,
+                      color: palette.ink.primary,
+                      ...TABULAR,
+                    }}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {formatCUP(balance)}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                    <View
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: palette.accent.warm,
+                        marginRight: 8,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: '600',
+                        color: palette.accent.warm,
+                        ...TABULAR,
+                      }}
+                    >
+                      ≈ {formatUSD(trcToUsd(balance, exchangeRate))}
+                    </Text>
+                  </View>
+                  {held > 0 && (
+                    <View
+                      style={{
+                        marginTop: 16,
+                        alignSelf: 'flex-start',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: palette.accent.orangeGlow,
+                        borderRadius: 9999,
+                        paddingHorizontal: 12,
+                        paddingVertical: 5,
+                      }}
+                    >
+                      <Ionicons name="lock-closed" size={11} color={palette.accent.orange} style={{ marginRight: 5 }} />
+                      <Text style={{ color: palette.accent.orange, fontSize: 12, fontWeight: '700', ...TABULAR }}>
+                        {t('wallet.held', { defaultValue: 'Retenido' })}: {formatCUP(held)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </Animated.View>
+
+              {/* ── CTA Recargar wallet ──────────────────────────────
+                  Combine stagger fade-in (opacity + translateY) with
+                  press scale into ONE Animated.View transform array. */}
+              <Animated.View
+                style={{
+                  opacity: fadeAnim[1]!,
+                  marginBottom: 22,
+                  ...GLOW_CTA,
+                  transform: [
+                    { translateY: sectionTranslateY(1) },
+                    { scale: ctaScale },
+                  ],
+                }}
+              >
+                <Pressable
+                  onPress={() => router.push('/wallet/recharge')}
+                  onPressIn={handleCtaPressIn}
+                  onPressOut={handleCtaPressOut}
+                  style={{ borderRadius: 20, overflow: 'hidden' }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
+                >
+                  <LinearGradient
+                    colors={[colors.brand.orange, palette.accent.warm]}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 18,
+                      paddingHorizontal: 24,
+                      minHeight: 60,
+                    }}
+                  >
+                    <Ionicons name="add-circle" size={24} color="#FFFFFF" />
+                    <Text
+                      style={{
+                        color: '#FFFFFF',
+                        fontFamily: 'Inter_700Bold',
+                        fontSize: 17,
+                        marginLeft: 10,
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      {t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8, opacity: 0.85 }} />
+                  </LinearGradient>
+                </Pressable>
+              </Animated.View>
+
+              {/* ── Stats row ──────────────────────────────────────── */}
+              <Animated.View style={[sectionStyle(2), { flexDirection: 'row', gap: 12, marginBottom: 24 }]}>
+                {[
+                  { label: t('wallet.total_earned', { defaultValue: 'Total ganado' }), value: totalEarned, icon: 'trending-up' as const, tint: '#22C55E' },
+                  { label: t('wallet.total_spent', { defaultValue: 'Total gastado' }), value: totalSpent, icon: 'trending-down' as const, tint: '#EF4444' },
+                ].map((stat) => (
+                  <View
+                    key={stat.label}
+                    style={{
+                      flex: 1,
+                      backgroundColor: palette.bg.elev1,
+                      borderRadius: 16,
+                      padding: 16,
+                      ...CARD_SHADOW,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 12,
+                        backgroundColor: `${stat.tint}22`,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: 12,
+                      }}
+                    >
+                      <Ionicons name={stat.icon} size={18} color={stat.tint} />
+                    </View>
+                    <Text
+                      style={{
+                        color: palette.ink.primary,
+                        fontFamily: 'Inter_700Bold',
+                        fontSize: 17,
+                        letterSpacing: -0.3,
+                        ...TABULAR,
+                      }}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                    >
+                      {formatCUP(stat.value)}
+                    </Text>
+                    <Text style={{ color: palette.ink.secondary, fontSize: 12, marginTop: 4 }}>
+                      {stat.label}
+                    </Text>
+                  </View>
+                ))}
+              </Animated.View>
+
+              {/* ── Transactions section header ─────────────────────── */}
+              <Animated.View style={[sectionStyle(3), { flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingLeft: 4 }]}>
+                <Text style={{ color: palette.ink.primary, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
+                  {t('wallet.transactions', { defaultValue: 'Transacciones' })}
+                </Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: palette.line, marginLeft: 12 }} />
+              </Animated.View>
             </View>
-          ) : null
-        }
-      />
+          }
+          ListEmptyComponent={
+            <View style={{ paddingHorizontal: 16 }}>
+              <EmptyState
+                icon="wallet-outline"
+                title={t('wallet.no_transactions_title', { defaultValue: 'Sin transacciones' })}
+                description={t('wallet.no_transactions', { defaultValue: 'Aun no tienes transacciones. Completa viajes para empezar a ganar.' })}
+              />
+            </View>
+          }
+          ListFooterComponent={
+            transactions.length > 0 && hasMore ? (
+              <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.brand.orange} />
+              </View>
+            ) : null
+          }
+        />
+      </View>
     </Screen>
   );
 }
