@@ -39,8 +39,6 @@
     "./TripProgressBar": "./src/TripProgressBar.tsx",
     "./DraggableSheet": "./src/DraggableSheet.tsx",
     "./WalletMigrationBanner": "./src/WalletMigrationBanner.tsx",
-    "./PoiMapLayers": "./src/PoiMapLayers.tsx",
-    "./useViewportPois": "./src/useViewportPois.ts",
     "./SubmitPoiSheet": "./src/SubmitPoiSheet.tsx",
     "./useSubmitPoi": "./src/useSubmitPoi.ts",
     "./SourceAttribution": "./src/SourceAttribution.tsx"

@@ -19,7 +19,6 @@ import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
-import { useViewportPois, PoiMapLayers, extractBoundsFromCameraEvent } from '@tricigo/ui';
 
 let _MapboxGL: any = undefined;
 function getMapboxGL(): any {
@@ -47,9 +46,6 @@ ensureMapboxToken();
 // Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
 const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
 
-// BUG-296: POI rendering moved to the shared <PoiMapLayers> component.
-// The old per-subcategory POI_COLORS map + poisToGeoJSON are gone.
-
 interface ConfirmLocationScreenProps {
   mode: 'pickup' | 'dropoff';
   initialLocation?: GeoPoint | null;
@@ -75,22 +71,6 @@ export function ConfirmLocationScreen({
   const [confirming, setConfirming] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<any>(null);
-
-  // POIs — seed immediately from initialLocation so they appear before
-  // the user pans the map. Without this, on cold mount the user can
-  // wait several seconds for onMapIdle to fire before any POI shows.
-  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois(
-    initialLocation ?? null,
-  );
-  // BUG-296: POI GeoJSON now built inside <PoiMapLayers>.
-
-  // BUG-poi-viewport-visibility (PR D, 2026-05-25): use shared
-  // extractor so events without visibleBounds still trigger a POI refetch.
-  const handleCameraForPois = useCallback((event: unknown) => {
-    const result = extractBoundsFromCameraEvent(event);
-    if (!result) return;
-    onPoiCameraChanged(result.bounds, result.zoom);
-  }, [onPoiCameraChanged]);
 
   // Shimmer animation for address bar
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -277,7 +257,7 @@ export function ConfirmLocationScreen({
         zoomEnabled={true}
         pitchEnabled={false}
         rotateEnabled={false}
-        onMapIdle={(event: any) => { handleMapIdle(); handleCameraForPois(event); }}
+        onMapIdle={handleMapIdle}
       >
         {/* BUG-282 — key forces Camera remount when initialCenter resolves
             asynchronously (cachedFallback). defaultSettings only applies
@@ -289,16 +269,6 @@ export function ConfirmLocationScreen({
             centerCoordinate: initialCenter,
             zoomLevel: 15,
           }}
-        />
-
-        {/* BUG-296: POIs via the shared <PoiMapLayers> — same Google-
-            Maps-style categorical badges as RideMapView. No onPoiPress
-            here: while confirming a pickup/dropoff the POIs are visual
-            context only (the user drags the map under the center pin). */}
-        <PoiMapLayers
-          MapboxGL={MapboxGL}
-          pois={pois}
-          isDark={isDark}
         />
       </MapboxGL.MapView>
 

@@ -8,7 +8,6 @@ import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/typ
 import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
 import { useMapboxReady } from '../hooks/useMapboxReady';
-import { PoiMapLayers, useViewportPois, extractBoundsFromCameraEvent } from '@tricigo/ui';
 import { mapLogger } from '@tricigo/utils';
 
 // Native map (iOS/Android)
@@ -745,23 +744,6 @@ function RideMapViewInner(
   const { t } = useTranslation('driver');
   const cameraRef = useRef<any>(null);
 
-  // POI rendering — display-only on the driver app (no `onPoiPress` since
-  // tapping a POI during a trip would distract from the route). Seeds from
-  // current driverLocation so POIs appear immediately on cold mount.
-  const poiSeedCenter = driverLocation
-    ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
-    : null;
-  const { pois: viewportPois, onCameraChanged: poiOnCameraChanged } = useViewportPois(poiSeedCenter);
-
-  // BUG-poi-viewport-visibility (PR D, 2026-05-25): use shared
-  // extractor so events without visibleBounds (common on @rnmapbox v10.3
-  // new arch mid-pan) still trigger a POI refetch via centre+zoom
-  // synthesis instead of silently no-op'ing.
-  const handlePoiCameraChanged = useCallback((event: unknown) => {
-    const result = extractBoundsFromCameraEvent(event);
-    if (!result) return;
-    poiOnCameraChanged(result.bounds, result.zoom);
-  }, [poiOnCameraChanged]);
   const [markerImageError, setMarkerImageError] = useState(false);
   // PR E (2026-05-12) — track whether MapboxGL has finished streaming
   // the style URL. On first install, fetching the style + glyphs from
@@ -1360,11 +1342,6 @@ function RideMapViewInner(
         // rest of the trip. onTouchStart is the same pattern the client app
         // uses and only fires on real finger contact.
         onTouchStart={followMode ? () => onUserInteraction?.() : undefined}
-        // POI viewport sync (PR 2 of POI parity program): onMapIdle is the
-        // primary trigger; onCameraChanged is chatty but the hook debounces
-        // and skips if still in the previous bbox.
-        onMapIdle={handlePoiCameraChanged}
-        onCameraChanged={handlePoiCameraChanged}
       >
         <MapboxGL.Camera
           ref={cameraRef}
@@ -1448,12 +1425,6 @@ function RideMapViewInner(
             <View style={styles.riderMarker} accessibilityLabel="Rider location" />
           </MapboxGL.PointAnnotation>
         )}
-        {/* POI categorical badges (PR 2 of POI parity program). Display-only
-            on the driver app — no `onPoiPress` so taps don't distract the
-            driver during a trip. Mounted BEFORE the driver/pickup/dropoff
-            markers so POIs sit underneath in z-order. */}
-        <PoiMapLayers MapboxGL={MapboxGL} pois={viewportPois} />
-
         {/* Hoisted vehicle icons — needed by BOTH the driver SymbolLayer below
             AND the peers SymbolLayer further down. Mounting once at the map
             root ensures the icon is available as soon as the driver marker

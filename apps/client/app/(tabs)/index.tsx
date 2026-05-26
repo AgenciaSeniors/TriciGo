@@ -27,7 +27,7 @@ import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
 import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
-import { useViewportPois, SubmitPoiSheet } from '@tricigo/ui';
+import { SubmitPoiSheet } from '@tricigo/ui';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
@@ -2929,14 +2929,12 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     [draft.waypoints],
   );
   const { coordinates: routeCoordinates, distanceM: routeDistanceM, durationS: routeDurationS } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location, waypointPoints);
-  // Pass userCenter so the hook seeds POIs immediately instead of waiting
-  // for the first onMapIdle event (which can be silent for several seconds
-  // — or forever — on fresh installs of the new arch + 10.3.0 combo).
+  // Memoized lat/lng form of the user center — consumed by SubmitPoiSheet
+  // (defaults the "report a place" form to where the user is standing).
   const userCenterLatLng = useMemo(
     () => (userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null),
     [userCenter],
   );
-  const { pois, onCameraChanged: onPoiCameraChanged } = useViewportPois(userCenterLatLng);
 
   // Compute selectedEstimate from allFareEstimates for the current service type
   const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
@@ -2953,14 +2951,6 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickupSuggestion, setPickupSuggestion] = useState<{
     latitude: number; longitude: number; address: string;
-  } | null>(null);
-  // Tapped POI from the map's PoisLayer — drives the floating "Ir aquí"
-  // card. Closing the card resets to null. Q3=c logic: if pickup is
-  // already set, "Ir aquí" wires the POI as dropoff; otherwise as
-  // pickup. Keeps the map a one-tap planning surface.
-  const [selectedMapPoi, setSelectedMapPoi] = useState<{
-    id: number; name: string; tricigo_category: string | null;
-    lat: number; lng: number; address: string | null;
   } | null>(null);
 
   // Crowdsourcing — "Sugerir lugar" sheet visibility + snapshotted coords.
@@ -3141,9 +3131,6 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         routeCoordinates={routeCoordinates ?? null}
         nearbyVehicles={nearbyVehicles ?? []}
         waypointLocations={draft.waypoints.filter((wp) => wp.location !== null).map((wp) => wp.location!)}
-        pois={pois}
-        onCameraChanged={onPoiCameraChanged}
-        onPoiPress={(poi) => { triggerHaptic('light'); setSelectedMapPoi(poi); }}
         // BUG-282 — open map at the user's actual location instead of the
         // demo-city fallback (São Paulo). userCenter resolves from cached
         // AsyncStorage instantly, then upgrades when GPS gives a fresh fix.
@@ -3185,57 +3172,6 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
           lng={submitPoiCoords.longitude}
           supabase={getSupabaseClient()}
         />
-      )}
-
-      {/*
-        Floating "Ir aquí" card — appears when the user taps a POI on
-        the map. Q3=c rule: when a pickup already exists, the POI fills
-        in dropoff; when there's no pickup yet, the POI fills in
-        pickup. One-tap planning, no full search panel needed.
-      */}
-      {selectedMapPoi && !searchingField && (
-        <View style={{ position: 'absolute', left: 12, right: 12, bottom: insets.bottom + 16, zIndex: 25, backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, elevation: 6, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-            <Text style={{ fontSize: 26, marginRight: 10, marginTop: 2 }}>
-              {tricigoCategoryEmoji(selectedMapPoi.tricigo_category)}
-            </Text>
-            <View style={{ flex: 1 }}>
-              <Text variant="body" style={{ fontWeight: '600' }} numberOfLines={2}>
-                {selectedMapPoi.name}
-              </Text>
-              {selectedMapPoi.address ? (
-                <Text variant="caption" color="tertiary" numberOfLines={1} style={{ marginTop: 2 }}>
-                  {selectedMapPoi.address}
-                </Text>
-              ) : null}
-            </View>
-            <Pressable onPress={() => setSelectedMapPoi(null)} hitSlop={8} style={{ padding: 4 }}>
-              <Ionicons name="close" size={20} color={colors.neutral[400]} />
-            </Pressable>
-          </View>
-          <Pressable
-            onPress={() => {
-              triggerHaptic('medium');
-              const addr = selectedMapPoi.address && selectedMapPoi.address.length > 0
-                ? `${selectedMapPoi.name}, ${selectedMapPoi.address}`
-                : selectedMapPoi.name;
-              const loc = { latitude: selectedMapPoi.lat, longitude: selectedMapPoi.lng };
-              if (draft.pickup) {
-                setDropoff(addr, loc);
-              } else {
-                setPickup(addr, loc);
-              }
-              setSelectedMapPoi(null);
-            }}
-            style={{ marginTop: 12, backgroundColor: colors.brand.orange, borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
-          >
-            <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>
-              {draft.pickup
-                ? t('ride.go_here_dropoff', { defaultValue: 'Ir aquí (destino)' })
-                : t('ride.go_here_pickup', { defaultValue: 'Ir aquí (origen)' })}
-            </Text>
-          </Pressable>
-        </View>
       )}
 
       {/* Floating top bar: [X] + compact address summary */}
