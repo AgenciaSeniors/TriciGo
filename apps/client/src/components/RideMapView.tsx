@@ -6,10 +6,8 @@ import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
-import type { ViewportPoi } from '@tricigo/utils';
 import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
 import { WebMapView } from './WebMapView';
-import { PoiMapLayers, extractBoundsFromCameraEvent } from '@tricigo/ui';
 import { mapLogger } from '@tricigo/utils';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
 import type { SearchingDriverPresence } from '@tricigo/types';
@@ -102,17 +100,6 @@ interface RideMapViewProps {
   /** Vehicle type slug for driver marker (triciclo, moto, auto, confort) */
   vehicleType?: string;
   height?: number;
-  /** POIs to display on the map (fetched by useViewportPois) */
-  pois?: ViewportPoi[];
-  /** Called when the map camera changes — use to update viewport POIs */
-  onCameraChanged?: (bounds: { minLng: number; minLat: number; maxLng: number; maxLat: number }, zoom: number) => void;
-  /**
-   * Called when the user taps an unclustered POI marker on the map.
-   * Parent should open a bottom sheet showing the POI name + category +
-   * an "Ir aquí" button that wires the coords as pickup or dropoff
-   * depending on the current ride state.
-   */
-  onPoiPress?: (poi: { id: number; name: string; tricigo_category: string | null; lat: number; lng: number; address: string | null }) => void;
   /** When true, map fills all available space via flex:1 instead of fixed height */
   fullscreen?: boolean;
   /**
@@ -146,11 +133,6 @@ const DASH_SEQUENCE: number[][] = [
   [0, 2, 3, 2], [0, 2.25, 3, 1.75], [0, 2.5, 3, 1.5], [0, 2.75, 3, 1.25],
   [0, 3, 3, 1], [0, 3.25, 3, 0.75], [0, 3.5, 3, 0.5], [0, 3.75, 3, 0.25],
 ];
-
-// BUG-296: POI rendering moved to the shared <PoiMapLayers> component.
-// The old POI_COLORS rainbow map + poisToGeoJSON (emoji-based) are gone —
-// the new system maps every POI to one of 9 restrained visual groups
-// (see packages/utils/src/poiCategories.ts).
 
 /** Compute bounding box from an array of [lng, lat] coordinates */
 function computeBounds(coords: [number, number][]): {
@@ -217,9 +199,6 @@ function RideMapViewInner({
   driverToPickupRoute,
   vehicleType,
   height = 200,
-  pois,
-  onCameraChanged,
-  onPoiPress,
   fullscreen,
   initialUserCenter,
   rideStatus,
@@ -526,20 +505,6 @@ function RideMapViewInner({
     };
   }, [nearbyVehicles]);
 
-  // BUG-296: POI GeoJSON now built inside <PoiMapLayers> — no local memo.
-
-  // Handle camera change — notify parent with viewport bounds + zoom.
-  // BUG-poi-viewport-visibility (PR D, 2026-05-25): delegate the bounds
-  // extraction to the shared helper so missing visibleBounds (common on
-  // @rnmapbox/maps v10.3.0 new arch mid-pan) falls back to centre+zoom
-  // synthesis instead of silently dropping the event.
-  const handleCameraChanged = useCallback((event: unknown) => {
-    if (!onCameraChanged) return;
-    const result = extractBoundsFromCameraEvent(event);
-    if (!result) return;
-    onCameraChanged(result.bounds, result.zoom);
-  }, [onCameraChanged]);
-
   // Compute camera bounds (includes searching driver positions)
   // BUG-229: stabilize bounds via primitive lat/lng deps. Object refs
   // change every render even if values are identical → bounds recomputes
@@ -823,14 +788,6 @@ function RideMapViewInner({
         scrollEnabled={true}
         pitchEnabled={true}
         rotateEnabled={true}
-        // onMapIdle is the primary hook; it fires when the camera fully
-        // settles. But on some Android builds (new arch + 10.3.0) the idle
-        // event is delayed or never emitted on cold mount. onCameraChanged
-        // is more chatty (every animation frame) but the upstream hook
-        // (useViewportPois) debounces by 300 ms and skips if still inside
-        // the previous bounds, so it's safe to attach both.
-        onMapIdle={handleCameraChanged}
-        onCameraChanged={handleCameraChanged}
         // BUG-267 v3: pause the Uber follow while the user is exploring
         // the map. onTouchStart on the underlying View fires on any
         // touch (tap/pan/pinch begins). Combined with the 8s resume
@@ -890,17 +847,6 @@ function RideMapViewInner({
                     animationDuration: 500,
                   }
                 : {})}
-        />
-
-        {/* BUG-296: POIs rendered below routes and markers via the
-            shared <PoiMapLayers> — Google-Maps-style categorical badges
-            (9 visual groups, Ionicons glyphs) replacing the old
-            colored-circle + emoji layers. */}
-        <PoiMapLayers
-          MapboxGL={MapboxGL}
-          pois={pois}
-          onPoiPress={onPoiPress}
-          isDark={isDark}
         />
 
         {/* Driver-to-pickup route (light blue dashed) */}

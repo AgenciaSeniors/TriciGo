@@ -97,17 +97,6 @@ export { StopMarker } from './StopMarker';
 export type { StopMarkerProps, StopStatus } from './StopMarker';
 export { StopsList } from './StopsList';
 export type { StopsListProps, StopsListItem } from './StopsList';
-// POI rendering — shared across client + driver native maps (web uses its
-// own mapbox-gl-js implementation in apps/web).
-export { PoiMapLayers } from './PoiMapLayers';
-export type { PoiTapPayload } from './PoiMapLayers';
-export { useViewportPois } from './useViewportPois';
-// Camera event → bbox + zoom extractor with 3-tier fallback. Used by
-// the camera-change handlers in client + driver RideMapView and
-// ConfirmLocationScreen so an event with missing visibleBounds (common
-// on @rnmapbox/maps v10.3.0 new arch mid-pan) still triggers a refetch.
-export { extractBoundsFromCameraEvent } from './cameraEventBounds';
-export type { CameraEventBoundsResult, ViewportBoundsBox } from './cameraEventBounds';
 // POI crowdsourcing — shared submit form + hook for driver + client.
 export { SubmitPoiSheet } from './SubmitPoiSheet';
 export type { SubmitPoiSheetProps } from './SubmitPoiSheet';
