@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, importPoiFromSearch, dedupeSearchResults } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -93,6 +93,12 @@ function AddressSearchInputInner({
   const [attribution, setAttribution] = useState<'google' | 'mapbox' | 'mixed' | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastQueryRef = useRef<string>('');
+  // PR C of POI parity — Google Places session token. Generated lazily on
+  // the first keystroke and reused for every keystroke + the Place Details
+  // lookup until the user selects, clears, or empties the input. Bills the
+  // entire typeahead as one "Autocomplete - Per Session" SKU instead of N
+  // per-request charges (see newSessionToken docs).
+  const sessionTokenRef = useRef<string | null>(null);
   const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
 
   // Fetch user location once for distance display
@@ -125,7 +131,16 @@ function AddressSearchInputInner({
       setIsSearching(false);
       setIsOffline(false);
       setAttribution(null);
+      // Empty/short input ends the typeahead session. Drop the token so
+      // the next keystroke starts a fresh billable session.
+      sessionTokenRef.current = null;
       return;
+    }
+
+    // Lazy-init the session token on the first non-empty keystroke. Reused
+    // for every subsequent debounced call until select/clear.
+    if (sessionTokenRef.current === null) {
+      sessionTokenRef.current = newSessionToken();
     }
 
     setIsSearching(true);
@@ -214,7 +229,7 @@ function AddressSearchInputInner({
         // Fire Google + cuba_pois in parallel — Google takes ~200-400 ms via
         // the EF, the local RPC is ~50-100 ms, so we wait on the slower one.
         const [unifiedResults, poiResults] = await Promise.all([
-          searchAddressUnified(text, getSupabaseClient(), userLocation),
+          searchAddressUnified(text, getSupabaseClient(), userLocation, undefined, 10, sessionTokenRef.current ?? undefined),
           searchPoisSupabase(text, userLocation, 6),
         ]);
         const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
@@ -319,6 +334,9 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
+    // Session ends on selection — drop the Google Places session token so
+    // the next search starts a fresh billable session.
+    sessionTokenRef.current = null;
     onSelect(result.address, { latitude: result.latitude, longitude: result.longitude });
     // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox lookup
     // when the selection came from Google/Mapbox unified search. Never blocks UX.
@@ -332,6 +350,7 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
+    sessionTokenRef.current = null;
     onSelect(loc.address, { latitude: loc.latitude, longitude: loc.longitude });
   };
 
@@ -340,6 +359,7 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
+    sessionTokenRef.current = null;
     onSelect(loc.address, { latitude: loc.latitude, longitude: loc.longitude });
   };
 
@@ -348,6 +368,7 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
+    sessionTokenRef.current = null;
     onSelect(preset.address, { latitude: preset.latitude, longitude: preset.longitude });
   };
 
@@ -367,6 +388,7 @@ function AddressSearchInputInner({
       setQuery('');
       setResults([]);
       setIsExpanded(false);
+      sessionTokenRef.current = null;
       onSelect(
         address ?? `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
         { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
@@ -386,6 +408,7 @@ function AddressSearchInputInner({
   const handleClear = () => {
     setQuery('');
     setResults([]);
+    sessionTokenRef.current = null;
   };
 
   // ── Local filtering (instant results while API is loading) ──
@@ -397,6 +420,7 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
+    sessionTokenRef.current = null;
     onSelect(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
   };
 
@@ -420,6 +444,7 @@ function AddressSearchInputInner({
     setQuery('');
     setResults([]);
     setIsExpanded(false);
+    sessionTokenRef.current = null;
     // Immediate select: if the item is a POI with a known street address,
     // combine "POI name, street" so the user sees the full label right
     // away (no flicker waiting for reverseGeocode background enrich).

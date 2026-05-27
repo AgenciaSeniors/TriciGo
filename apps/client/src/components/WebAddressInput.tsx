@@ -3,6 +3,7 @@ import { View, TextInput, Pressable, ScrollView, ActivityIndicator, Platform } f
 import { Text } from '@tricigo/ui/Text';
 import {
   searchAddressUnified,
+  newSessionToken,
   importPoiFromSearch,
   searchPoisSupabase,
   computeSpecificity,
@@ -253,6 +254,10 @@ export function WebAddressInput({
   const abortRef = useRef<AbortController | null>(null);
   const searchIdRef = useRef(0);
   const searchCacheRef = useRef<Map<string, SearchBoxResult[]>>(new Map());
+  // PR C of POI parity — Google Places session token. Lazy-init on first
+  // keystroke, reset on select / clear / empty input. Reused for every
+  // keystroke + the Place Details lookup in one billable session.
+  const sessionTokenRef = useRef<string | null>(null);
   const internalRef = useRef<TextInput>(null);
   const ref = externalRef ?? internalRef;
 
@@ -354,7 +359,14 @@ export function WebAddressInput({
         setShowDropdown(false);
         setShowSaved(false);
         setAttribution(null);
+        // Empty/short input ends the typeahead session.
+        sessionTokenRef.current = null;
         return;
+      }
+
+      // Lazy-init the session token on the first non-empty keystroke.
+      if (sessionTokenRef.current === null) {
+        sessionTokenRef.current = newSessionToken();
       }
 
       setShowSaved(false);
@@ -435,7 +447,7 @@ export function WebAddressInput({
           if (searchCacheRef.current.has(cacheKey)) {
             external = searchCacheRef.current.get(cacheKey)!;
           } else {
-            const externalRes = await searchAddressUnified(searchQuery, getSupabaseClient(), proximity ?? null, controller.signal, 10)
+            const externalRes = await searchAddressUnified(searchQuery, getSupabaseClient(), proximity ?? null, controller.signal, 10, sessionTokenRef.current ?? undefined)
               .catch(() => [] as SearchBoxResult[]);
             if (searchIdRef.current !== thisId || controller.signal.aborted) { setLoading(false); return; }
             external = externalRes;
@@ -527,6 +539,9 @@ export function WebAddressInput({
     setCrossStreets([]);
     setCubanContext(null);
     setAttribution(null);
+    // Session ends on selection — drop the token so the next search opens
+    // a fresh billable session.
+    sessionTokenRef.current = null;
     onAddRecent?.(addr);
     onSelect(addr);
     // PR 4b — background fire-and-forget: when the user picks a Google
@@ -565,6 +580,7 @@ export function WebAddressInput({
           setSelected(true);
           setShowDropdown(false);
           setResults([]);
+          sessionTokenRef.current = null;
           onAddRecent?.(addr);
           onSelect(addr);
         } else {
@@ -591,6 +607,7 @@ export function WebAddressInput({
     setShowSaved(false);
     setResults([]);
     setCrossStreets([]);
+    sessionTokenRef.current = null;
     onSelect(addr);
   };
 
@@ -603,6 +620,7 @@ export function WebAddressInput({
     setShowDropdown(false);
     setShowSaved(false);
     setAttribution(null);
+    sessionTokenRef.current = null;
     onClear?.();
     ref.current?.focus();
   };
