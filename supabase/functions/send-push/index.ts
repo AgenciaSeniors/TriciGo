@@ -37,7 +37,7 @@ interface PushRequest {
 }
 
 // Curated list of valid notification categories. Kept in sync with
-// the CHECK constraint added by migration 00328 on
+// the CHECK constraint added by migration 00333 on
 // `notifications.type`. Any caller passing a value outside this set
 // gets a 400 so contamination surfaces at the API edge instead of
 // as a silent CHECK violation when send-push tries to insert.
@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
     }
 
     // Validate category against the curated list. The DB-side CHECK
-    // (migration 00328) catches violations too, but failing here
+    // (migration 00333) catches violations too, but failing here
     // gives a clean 400 with a specific error before we burn Expo
     // API calls on a payload the inbox would reject anyway.
     if (category && !VALID_CATEGORIES.has(category)) {
