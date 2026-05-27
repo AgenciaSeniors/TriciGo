@@ -17,6 +17,7 @@ import {
   searchStreetsSupabase,
   searchAddress,
   searchAddressUnified,
+  newSessionToken,
   tricigoCategoryEmoji,
   importPoiFromSearch,
   dedupeSearchResults,
@@ -72,14 +73,14 @@ interface SearchOutcome {
   attribution: 'google' | 'mapbox' | 'mixed' | null;
 }
 
-async function searchUnified(query: string, near: GeoPoint | null): Promise<SearchOutcome> {
+async function searchUnified(query: string, near: GeoPoint | null, sessionToken: string | null): Promise<SearchOutcome> {
   if (query.trim().length < 2) return { results: [], attribution: null };
 
   // PR F (2026-05-25) — flipped search order: Google PRIMARY, cuba_pois
   // SECONDARY. Same change as the client AddressSearchInput — see the
   // comment there for the airport-bug rationale.
   const [unified, poiResults] = await Promise.all([
-    searchAddressUnified(query, getSupabaseClient(), near).catch(() => [] as SearchBoxResult[]),
+    searchAddressUnified(query, getSupabaseClient(), near, undefined, 10, sessionToken ?? undefined).catch(() => [] as SearchBoxResult[]),
     searchPoisSupabase(query, near, 6).catch(() => [] as SearchBoxResult[]),
   ]);
   const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
@@ -153,6 +154,11 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastQueryRef = useRef<string>('');
   const inputRef = useRef<TextInput>(null);
+  // PR C of POI parity — Google Places session token. Generated lazily on
+  // the first keystroke of a typeahead session and reused for every
+  // subsequent keystroke until the user selects, clears, or empties the
+  // input. See `newSessionToken` for billing rationale.
+  const sessionTokenRef = useRef<string | null>(null);
 
   // Bias search results to the driver's current vicinity so closer
   // matches outrank far-away ones with similar names.
@@ -178,11 +184,18 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
     if (!text.trim()) {
       setResults([]);
       setLoading(false);
+      // Empty input ends the typeahead session — drop the token so the
+      // next keystroke starts a fresh billable session.
+      sessionTokenRef.current = null;
       return;
+    }
+    // Lazy-init the session token on the first non-empty keystroke.
+    if (sessionTokenRef.current === null) {
+      sessionTokenRef.current = newSessionToken();
     }
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
-      const outcome = await searchUnified(text, near);
+      const outcome = await searchUnified(text, near, sessionTokenRef.current);
       // Drop stale responses if the user kept typing
       if (lastQueryRef.current !== text) return;
       setResults(outcome.results);
@@ -197,6 +210,10 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
       setResults([]);
       setFocused(false);
       Keyboard.dismiss();
+      // Session ends on selection — discard the token so the next search
+      // starts fresh (Google bills per-session, reusing the token after
+      // select would mix unrelated typing into one billable session).
+      sessionTokenRef.current = null;
       onSelect({ latitude: item.latitude, longitude: item.longitude, address: item.address });
       // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox
       // lookup for selected Google/Supabase-miss results. Never blocks UX.
@@ -211,6 +228,7 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
     setQuery('');
     setResults([]);
     setLoading(false);
+    sessionTokenRef.current = null;
     inputRef.current?.focus();
   }, []);
 

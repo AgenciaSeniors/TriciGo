@@ -2823,6 +2823,31 @@ interface SupabaseClientLike {
 }
 
 /**
+ * Generate a fresh session token for Google Places billing. Callers should:
+ *   1. Generate ONE token at the start of a typeahead session (e.g. first
+ *      keystroke into an empty search box).
+ *   2. Pass the SAME token to every `searchAddressUnified` / `searchAddressGoogle`
+ *      call as the user keeps typing.
+ *   3. DISCARD the token (and generate a new one) when the user selects a
+ *      result, clears the input, or aborts the session.
+ *
+ * With proper session reuse, Google bills the entire session as a single
+ * "Autocomplete - Per Session" SKU (~$2.83/1k) plus a $0 Place Details
+ * call — vs. N per-request charges + a $5/1k Place Details when no token
+ * is used.
+ *
+ * Prefers crypto.randomUUID() (RN 0.72+, Expo SDK 50+, modern browsers).
+ * Falls back to a timestamp + random string for older environments. Output
+ * shape is opaque to Google — any reasonably-unique string works.
+ */
+export function newSessionToken(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/**
  * Calls the search-places-google Edge Function. Returns:
  *   - SearchBoxResult[] with source='google' on success
  *   - [] when the EF says fallback OR when proxy errors
@@ -2839,6 +2864,7 @@ export async function searchAddressGoogle(
   proximity: { latitude: number; longitude: number } | null = null,
   signal?: AbortSignal,
   limit = 10,
+  sessionToken?: string,
 ): Promise<SearchBoxResult[]> {
   if (!supabase || !query || query.trim().length < 2) return [];
   // signal-aware short-circuit: if caller already aborted, don't fire
@@ -2850,6 +2876,7 @@ export async function searchAddressGoogle(
         query: query.trim(),
         proximity: proximity ?? undefined,
         limit,
+        session_token: sessionToken,
       },
     });
 
@@ -2900,6 +2927,12 @@ export async function searchAddressGoogle(
  * Pass `supabase=null` to skip the Google attempt entirely (useful for
  * apps without a configured Supabase client at the search site, or for
  * graceful degradation).
+ *
+ * sessionToken: opaque token (see `newSessionToken`) reused across every
+ * keystroke of a single typeahead session and discarded after select. When
+ * supplied, the EF forwards it to Google, which bills the session as a
+ * single SKU (~70-80% cost reduction vs. per-request billing). Callers
+ * that don't pass a token still work — Google bills per-request.
  */
 export async function searchAddressUnified(
   query: string,
@@ -2907,13 +2940,14 @@ export async function searchAddressUnified(
   proximity: { latitude: number; longitude: number } | null = null,
   signal?: AbortSignal,
   limit = 10,
+  sessionToken?: string,
 ): Promise<SearchBoxResult[]> {
   // Try Google first — it has the best Cuban coverage for the long-tail
   // of mypimes / paladares / kioscos that aren't in OSM/Mapbox.
   mapLogger.search({ query, provider: 'google', count: 0, stage: 'fire' });
   const startGoogle = Date.now();
   const googleResults = supabase
-    ? await searchAddressGoogle(query, supabase, proximity, signal, limit)
+    ? await searchAddressGoogle(query, supabase, proximity, signal, limit, sessionToken)
     : [];
   mapLogger.search({
     query,

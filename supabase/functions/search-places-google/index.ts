@@ -32,6 +32,16 @@ interface RequestBody {
   query: string;
   proximity?: { latitude: number; longitude: number };
   limit?: number;
+  /**
+   * Opaque token (UUID-ish) generated client-side at the start of a
+   * typeahead session. When present, the EF forwards it to Google's
+   * Autocomplete AND Place Details endpoints so the full session bills
+   * as one "Autocomplete - Per Session" SKU instead of N per-request
+   * calls + 1 Place Details. Caller is responsible for reusing the same
+   * token across every keystroke until the user selects or aborts; on
+   * select/abort the caller MUST generate a new token for the next session.
+   */
+  session_token?: string;
 }
 
 interface ResponseBody {
@@ -72,6 +82,10 @@ Deno.serve(async (req: Request) => {
   }
   const proximity = body.proximity ?? null;
   const limit = Math.min(Math.max(body.limit ?? 10, 1), 20);
+  // Session token is passed through opaque — we don't validate the shape,
+  // just forward it. Empty string is treated as absent so a buggy caller
+  // can't break the request.
+  const sessionToken = (body.session_token ?? '').trim() || undefined;
 
   // ── Setup ──
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -150,6 +164,7 @@ Deno.serve(async (req: Request) => {
       { apiKey: googleApiKey },
       proximity ?? undefined,
       limit,
+      sessionToken,
     );
   } catch (e) {
     console.error('[search-places-google] Google API call failed:', e);
@@ -169,8 +184,9 @@ Deno.serve(async (req: Request) => {
   // accurate, but the next caller will re-hit Google (~1 extra call/day
   // per missing query — acceptable tradeoff vs sticky-empty bug).
   console.info(
-    '[search-places-google] live_call query=%s n=%d cache=%s',
+    '[search-places-google] live_call query=%s n=%d cache=%s session=%s',
     query, results.length, results.length === 0 ? 'skipped_empty' : 'will_cache',
+    sessionToken ? 'present' : 'absent',
   );
   try {
     const ops: Promise<unknown>[] = [supabase.rpc('google_cache_increment_call')];

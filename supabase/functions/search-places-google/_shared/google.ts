@@ -50,12 +50,21 @@ export const CUBA_BBOX = {
  *
  * Restricts to Cuba via `locationRestriction` so we don't pay for global
  * results we'll never use (and to align with our user base).
+ *
+ * sessionToken (recommended): when present, this token must be sent on every
+ * Autocomplete call within a single user's typeahead session AND on the
+ * subsequent Place Details call. Google then bills the entire session as
+ * a single "Autocomplete - Per Session" SKU (~$2.83/1k) instead of
+ * per-character ("Autocomplete - Per Request" ~$2.83/1k × N chars) +
+ * Place Details ($5/1k). Caller is responsible for generating + reusing
+ * the token across the lifetime of one search session.
  */
 export async function googlePlacesAutocomplete(
   query: string,
   config: GooglePlacesConfig,
   proximity?: { latitude: number; longitude: number },
   limit: number = 10,
+  sessionToken?: string,
 ): Promise<SearchBoxResult[]> {
   const url = 'https://places.googleapis.com/v1/places:autocomplete';
 
@@ -64,6 +73,10 @@ export async function googlePlacesAutocomplete(
     languageCode: 'es',
     regionCode: 'CU',
   };
+
+  if (sessionToken) {
+    body.sessionToken = sessionToken;
+  }
 
   // Google Places API (New) rejects requests that set BOTH locationBias and
   // locationRestriction with HTTP 400 INVALID_ARGUMENT:
@@ -151,8 +164,15 @@ export async function googlePlacesAutocomplete(
         return null;
       }
       try {
+        // sessionToken (when present) ties this Place Details lookup to the
+        // same billable session as the preceding Autocomplete calls. Without
+        // it, Google bills this as a standalone Place Details Basic call
+        // ($5/1k) on top of any per-request Autocomplete charges.
+        const detailsUrl = sessionToken
+          ? `https://places.googleapis.com/v1/places/${placeId}?sessionToken=${encodeURIComponent(sessionToken)}`
+          : `https://places.googleapis.com/v1/places/${placeId}`;
         const detailsResp = await fetch(
-          `https://places.googleapis.com/v1/places/${placeId}`,
+          detailsUrl,
           {
             headers: {
               'X-Goog-Api-Key': config.apiKey,

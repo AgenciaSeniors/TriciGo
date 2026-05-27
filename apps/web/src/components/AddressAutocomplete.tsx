@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, tricigoCategoryEmoji } from '@tricigo/utils';
+import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, newSessionToken, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, tricigoCategoryEmoji } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -197,6 +197,10 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   const mapboxCacheRef = useRef<Map<string, AddressResult[]>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
   const isSelectingRef = useRef(false);
+  // PR C of POI parity — Google Places session token. Lazy-init on first
+  // keystroke, reset on select / clear / empty input. Reused for every
+  // keystroke + the Place Details lookup in one billable session.
+  const sessionTokenRef = useRef<string | null>(null);
   const [recentAddresses, setRecentAddresses] = useState<AddressResult[]>([]);
 
   // Clear Mapbox cache when proximity changes (results are location-dependent)
@@ -297,7 +301,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     const cached = mapboxCacheRef.current.get(q);
     if (cached) return cached;
     try {
-      const results = await searchAddressUnified(q, getSupabaseClient(), proximity ?? null, signal, 10);
+      const results = await searchAddressUnified(q, getSupabaseClient(), proximity ?? null, signal, 10, sessionTokenRef.current ?? undefined);
       const items: AddressResult[] = results.map(r => ({
         address: r.full_address || r.address,
         latitude: r.latitude,
@@ -539,7 +543,13 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     if (val.length === 0) {
       setResults([]);
       setIsOpen(false);
+      // Empty input ends the typeahead session.
+      sessionTokenRef.current = null;
       return;
+    }
+    // Lazy-init the session token on the first non-empty keystroke.
+    if (sessionTokenRef.current === null) {
+      sessionTokenRef.current = newSessionToken();
     }
     debounceRef.current = setTimeout(() => search(val), 200);
   }
@@ -565,6 +575,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     setQuery(result.place_name); // Show immediately
     setIsOpen(false);
     setActiveIndex(-1);
+    // Session ends on selection — drop the Google Places session token so
+    // the next search starts a fresh billable session.
+    sessionTokenRef.current = null;
 
     // If this is a Cuban address suggestion with "e/" pattern, resolve exact intersection coords
     const parsed = parseCubanAddress(result.place_name);
@@ -605,6 +618,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     setResults([]);
     setIsOpen(false);
     setActiveIndex(-1);
+    sessionTokenRef.current = null;
     inputRef.current?.focus();
     onClear?.();
   }
