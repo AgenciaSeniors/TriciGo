@@ -33,7 +33,7 @@
  * Microcopy unification stays out of scope; PR-B3 owns it.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Switch, Alert } from 'react-native';
+import { View, Pressable, Switch, Alert, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -42,7 +42,7 @@ import { Card } from '@tricigo/ui/Card';
 import { MenuRow } from '@tricigo/ui/MenuRow';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, driverService, authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -95,6 +95,9 @@ const SWITCH_TRACK = {
 
 export default function DriverSettingsScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
   const profile = useDriverStore((s) => s.profile);
 
@@ -292,7 +295,8 @@ export default function DriverSettingsScreen() {
   };
 
   return (
-    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4 pb-12">
         <ProfileScreenHeader
           title={t('profile.settings_title')}
@@ -580,6 +584,7 @@ export default function DriverSettingsScreen() {
             </Pressable>
           </Card>
         </SettingsGroup>
+      </View>
       </View>
     </Screen>
   );
