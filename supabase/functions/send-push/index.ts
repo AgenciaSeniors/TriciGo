@@ -36,6 +36,40 @@ interface PushRequest {
   category?: string;
 }
 
+// Curated list of valid notification categories. Kept in sync with
+// the CHECK constraint added by migration 00328 on
+// `notifications.type`. Any caller passing a value outside this set
+// gets a 400 so contamination surfaces at the API edge instead of
+// as a silent CHECK violation when send-push tries to insert.
+//
+// When adding a new category: (1) add it to this set, (2) extend
+// the CHECK constraint via a follow-up migration, (3) update the
+// driver/client notification handlers if it needs custom navigation.
+const VALID_CATEGORIES = new Set([
+  'ride',
+  'ride_offer',
+  'ride_matching',
+  'chat',
+  'proximity',
+  'payment',
+  'wallet_recharge',
+  'wallet_recharge_refund',
+  'wallet_credit',
+  'wallet_debit',
+  'scheduled_ride',
+  'lost_item',
+  'dispute_update',
+  'sos',
+  'delivery',
+  'system',
+  'promo',
+  // Legacy values kept for backward-compat with existing migrations.
+  // TODO: consolidate `ride_updates` → `proximity` and remove
+  // `wallet_v2_migration` after the one-shot migration RPC is dropped.
+  'ride_updates',
+  'wallet_v2_migration',
+]);
+
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -107,6 +141,20 @@ Deno.serve(async (req) => {
     if (targetIds.length === 0 || !title || !body) {
       return new Response(
         JSON.stringify({ error: 'user_id (or user_ids), title, and body are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Validate category against the curated list. The DB-side CHECK
+    // (migration 00328) catches violations too, but failing here
+    // gives a clean 400 with a specific error before we burn Expo
+    // API calls on a payload the inbox would reject anyway.
+    if (category && !VALID_CATEGORIES.has(category)) {
+      return new Response(
+        JSON.stringify({
+          error: 'invalid_category',
+          detail: `category "${category}" is not in the curated list. See VALID_CATEGORIES in send-push/index.ts.`,
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
