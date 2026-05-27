@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, FlatList, Alert, Share } from 'react-native';
+import { View, FlatList, Alert, Share, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -10,7 +10,7 @@ import { Input } from '@tricigo/ui/Input';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { EmptyState } from '@tricigo/ui/EmptyState';
-import { midnightEmber } from '@tricigo/theme';
+import { cubanLight, cubanDark } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
@@ -26,6 +26,9 @@ const STATUS_DISPLAY: Record<string, { key: string }> = {
 export default function DriverReferralScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
 
   const [myCode, setMyCode] = useState('');
   const [inputCode, setInputCode] = useState('');
@@ -112,8 +115,8 @@ export default function DriverReferralScreen() {
   };
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
-      <View className="pt-4 flex-1">
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }} className="pt-4">
         <ScreenHeader
           title={t('profile.referral_title')}
           onBack={() => router.back()}
@@ -175,7 +178,7 @@ export default function DriverReferralScreen() {
               {hasBeenReferred && (
                 <Card theme="light" variant="filled" padding="md" className="mb-6 bg-white">
                   <View className="flex-row items-center">
-                    <Ionicons name="checkmark-circle" size={20} color={midnightEmber.state.success} />
+                    <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
                     <Text variant="bodySmall" color="primary" className="ml-2 opacity-70">
                       {t('profile.referral_already_applied')}
                     </Text>

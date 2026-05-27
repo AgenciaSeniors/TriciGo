@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, ActivityIndicator, Image } from 'react-native';
+import { View, ActivityIndicator, Image, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -27,6 +27,18 @@ export default function VehicleScreen() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Cuban palette
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  };
 
   const fetchVehicle = useCallback(() => {
     if (!driverProfile) return;
@@ -64,8 +76,8 @@ export default function VehicleScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchVehicle(); }} />;
 
   return (
-    <Screen scroll bg="lightPrimary" padded>
-      <View className="pt-4">
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }} className="pt-4">
         <ProfileScreenHeader
           title={t('profile.vehicle_info')}
           onBack={() => router.back()}
@@ -73,7 +85,7 @@ export default function VehicleScreen() {
         />
 
         {loading ? (
-          <ActivityIndicator color={midnightEmber.state.success} className="mt-8" />
+          <ActivityIndicator color={colors.brand.orange} className="mt-8" />
         ) : !vehicle ? (
           <Text variant="body" color="secondary" className="text-center mt-8">
             No hay vehículo registrado
@@ -91,25 +103,33 @@ export default function VehicleScreen() {
               </View>
             )}
 
-            <Card theme="light" variant="filled" padding="md" className="bg-white">
-            {infoRows.map((row) => (
-              <View
-                key={row.label}
-                className="flex-row justify-between py-3 border-b"
-                style={{ borderBottomColor: midnightEmber.screen.line.default }}
-              >
-                <Text variant="body" color="secondary">
-                  {row.label}
-                </Text>
-                <Text variant="body" color="primary" className="font-medium">
-                  {row.value}
-                </Text>
-              </View>
-            ))}
-          </Card>
+            <View style={{ backgroundColor: palette.bg.elev1, borderRadius: 16, padding: 14, ...CARD_SHADOW }}>
+              {infoRows.map((row, i) => (
+                <View
+                  key={row.label}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                    borderBottomWidth: i === infoRows.length - 1 ? 0 : 1,
+                    borderBottomColor: palette.line,
+                  }}
+                >
+                  <Text style={{ color: palette.ink.secondary, fontSize: 14 }}>
+                    {row.label}
+                  </Text>
+                  <Text style={{ color: palette.ink.primary, fontSize: 14, fontWeight: '600' }}>
+                    {row.value}
+                  </Text>
+                </View>
+              ))}
+            </View>
           </>
         )}
       </View>
     </Screen>
   );
 }
+
+// midnightEmber kept imported (no-op) for potential future fallback wiring.
+void midnightEmber;

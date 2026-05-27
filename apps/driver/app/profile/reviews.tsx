@@ -1,28 +1,27 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, FlatList, RefreshControl } from 'react-native';
+import { View, FlatList, RefreshControl, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { useAuthStore } from '@/stores/auth.store';
-import { midnightEmber } from '@tricigo/theme';
+import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Review, ReviewTagSummaryItem } from '@tricigo/types';
 import { ReviewTagsBreakdown } from '@/components/profile/ReviewTagsBreakdown';
 
 const PAGE_SIZE = 20;
 
-function StarRow({ rating }: { rating: number }) {
+function StarRow({ rating, palette }: { rating: number; palette: typeof cubanLight | typeof cubanDark }) {
   return (
     <View className="flex-row">
       {[1, 2, 3, 4, 5].map((star) => (
         <Text
           key={star}
           variant="body"
-          style={{ color: star <= rating ? midnightEmber.state.warning : midnightEmber.screen.text.tertiary }}
+          style={{ color: star <= rating ? '#FBBF24' : palette.ink.subtle }}
         >
           ★
         </Text>
@@ -34,6 +33,18 @@ function StarRow({ rating }: { rating: number }) {
 export default function DriverReviewsScreen() {
   const { t } = useTranslation('driver');
   const userId = useAuthStore((s) => s.user?.id);
+
+  // Cuban palette
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  };
 
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,10 +99,10 @@ export default function DriverReviewsScreen() {
   }, [hasMore, loading, page, fetchReviews]);
 
   const renderReview = ({ item }: { item: Review }) => (
-    <Card theme="light" variant="filled" padding="md" className="mb-2 bg-white">
+    <View style={{ backgroundColor: palette.bg.elev1, borderRadius: 14, padding: 14, marginBottom: 8, ...CARD_SHADOW }}>
       <View className="flex-row items-center justify-between mb-1">
-        <StarRow rating={item.rating} />
-        <Text variant="caption" color="primary" className="opacity-50">
+        <StarRow rating={item.rating} palette={palette} />
+        <Text style={{ fontSize: 11, color: palette.ink.subtle }}>
           {new Date(item.created_at).toLocaleDateString('es-CU', {
             day: 'numeric',
             month: 'short',
@@ -100,29 +111,29 @@ export default function DriverReviewsScreen() {
         </Text>
       </View>
       {item.comment && (
-        <Text variant="bodySmall" color="primary" className="mt-1 opacity-80">
+        <Text style={{ fontSize: 13, color: palette.ink.primary, marginTop: 4, lineHeight: 18 }}>
           "{item.comment}"
         </Text>
       )}
       {item.tags && item.tags.length > 0 && (
         <View className="flex-row flex-wrap gap-1 mt-2">
           {item.tags.map((tag) => (
-            <View key={tag} className="px-2 py-0.5 rounded-full" style={{ backgroundColor: midnightEmber.screen.bg.sunken }}>
-              <Text variant="caption" color="primary" className="text-[10px] opacity-70">
+            <View key={tag} style={{ backgroundColor: palette.bg.elev2, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 }}>
+              <Text style={{ fontSize: 10, color: palette.ink.secondary, fontWeight: '600' }}>
                 {t(`review.tag_${tag}`, { defaultValue: tag.replace(/_/g, ' ') })}
               </Text>
             </View>
           ))}
         </View>
       )}
-    </Card>
+    </View>
   );
 
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchReviews(0, true); }} />;
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content">
-      <View className="pt-4 px-5 flex-1">
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }} className="pt-4 px-5">
         <ScreenHeader
           title={t('reviews.title', { defaultValue: 'Mis Reseñas' })}
           onBack={() => router.back()}
@@ -130,14 +141,14 @@ export default function DriverReviewsScreen() {
 
         {/* Summary header */}
         {summary && (
-          <Card theme="light" variant="filled" padding="lg" className="bg-white mb-4 mt-2">
+          <View style={{ backgroundColor: palette.bg.elev1, borderRadius: 16, padding: 18, marginTop: 8, marginBottom: 16, ...CARD_SHADOW }}>
             <View className="flex-row items-center justify-between">
               <View className="items-center">
-                <Text variant="h1" color="primary" className="font-bold">
+                <Text style={{ fontFamily: 'Inter_800ExtraBold', fontSize: 36, color: palette.ink.primary, fontVariant: ['tabular-nums'] }}>
                   {summary.average_rating.toFixed(1)}
                 </Text>
-                <StarRow rating={Math.round(summary.average_rating)} />
-                <Text variant="caption" color="primary" className="opacity-50 mt-1">
+                <StarRow rating={Math.round(summary.average_rating)} palette={palette} />
+                <Text style={{ fontSize: 11, color: palette.ink.subtle, marginTop: 4 }}>
                   {t('reviews.total_count', { defaultValue: '{{count}} reseñas', count: summary.total_reviews })}
                 </Text>
               </View>
@@ -149,17 +160,18 @@ export default function DriverReviewsScreen() {
                   const pct = summary.total_reviews > 0 ? (count / summary.total_reviews) * 100 : 0;
                   return (
                     <View key={star} className="flex-row items-center mb-1">
-                      <Text variant="caption" color="primary" className="w-3 opacity-50">{star}</Text>
-                      <View className="flex-1 h-2 rounded-full mx-2 overflow-hidden" style={{ backgroundColor: midnightEmber.screen.line.default }}>
+                      <Text style={{ width: 12, color: palette.ink.subtle, fontSize: 11 }}>{star}</Text>
+                      <View style={{ flex: 1, height: 8, borderRadius: 4, marginHorizontal: 8, overflow: 'hidden', backgroundColor: palette.line }}>
                         <View
-                          className="h-full rounded-full"
                           style={{
+                            height: '100%',
+                            borderRadius: 4,
                             width: `${pct}%`,
-                            backgroundColor: star >= 4 ? midnightEmber.state.success : star === 3 ? midnightEmber.state.warning : midnightEmber.state.danger,
+                            backgroundColor: star >= 4 ? '#22C55E' : star === 3 ? '#F59E0B' : '#EF4444',
                           }}
                         />
                       </View>
-                      <Text variant="caption" color="primary" className="w-6 text-right opacity-50">
+                      <Text style={{ width: 24, textAlign: 'right', color: palette.ink.subtle, fontSize: 11, fontVariant: ['tabular-nums'] }}>
                         {count}
                       </Text>
                     </View>
@@ -167,10 +179,10 @@ export default function DriverReviewsScreen() {
                 })}
               </View>
             </View>
-          </Card>
+          </View>
         )}
 
-        {/* N4: Tag breakdown — what passengers highlight (positive vs to-improve) */}
+        {/* N4: Tag breakdown */}
         <ReviewTagsBreakdown topTags={summary?.top_tags} />
 
         {/* Reviews list */}
@@ -179,14 +191,14 @@ export default function DriverReviewsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderReview}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={midnightEmber.screen.text.secondary} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand.orange} />
           }
           onEndReached={onEndReached}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
             !loading ? (
               <View className="items-center py-12">
-                <Text variant="body" color="primary" className="opacity-30">
+                <Text style={{ color: palette.ink.subtle }}>
                   {t('reviews.no_reviews', { defaultValue: 'Aún no tienes reseñas' })}
                 </Text>
               </View>
