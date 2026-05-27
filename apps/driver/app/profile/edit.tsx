@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Alert, Pressable, ActionSheetIOS, Platform, Switch, Image } from 'react-native';
+import { View, Alert, Pressable, ActionSheetIOS, Platform, Switch, Image, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,7 +12,7 @@ import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { Card } from '@tricigo/ui/Card';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { authService, driverService } from '@tricigo/api';
 import { isValidEmail, isValidCubanPhone, normalizeCubanPhone, PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -37,6 +37,9 @@ const VEHICLE_IMAGES: Record<string, any> = {
 export default function EditProfileScreen() {
   const { t } = useTranslation('common');
   const { t: td, i18n } = useTranslation('driver');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const driverId = useDriverStore((s) => s.profile?.id);
@@ -259,7 +262,8 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4">
         <ProfileScreenHeader
           title={t('profile.edit_profile')}
@@ -477,6 +481,7 @@ export default function EditProfileScreen() {
         onCancel={() => setPendingCrop(null)}
         onConfirm={handleCropConfirm}
       />
+      </View>
     </Screen>
   );
 }
