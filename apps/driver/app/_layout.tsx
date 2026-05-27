@@ -22,7 +22,7 @@ import { colors } from '@tricigo/theme';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
-import { registerSoundAssets } from '@tricigo/utils';
+import { registerSoundAssets, setupRuntimeLogging } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
 // FD1: importing for side effect — registers the TaskManager.defineTask
@@ -33,6 +33,11 @@ import '@/services/locationBackgroundTask';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { Platform } from 'react-native';
 import '../global.css';
+
+// Silence known-benign runtime warnings (ExpoKeepAwake / expo-av / SafeAreaView
+// / push token network failure). MUST run before initSentry so the rejection
+// tracker is installed first. See setupRuntimeLogging.native.ts for details.
+try { setupRuntimeLogging(); } catch { /* setup failed — non-fatal */ }
 
 // Initialize Sentry as early as possible (safe for web)
 try { initSentry(); } catch { /* Sentry init failed — non-fatal */ }

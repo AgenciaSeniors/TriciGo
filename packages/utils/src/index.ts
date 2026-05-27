@@ -17,6 +17,9 @@ export {
 export { triggerHaptic, triggerSelection } from './haptics';
 export { playSound, triggerFeedback, registerSoundAssets } from './sounds';
 export type { SoundEvent } from './sounds';
+// Silences known-benign runtime warnings (ExpoKeepAwake / expo-av / SafeAreaView /
+// push token network). Native-only; web stub is a no-op. Call once at app boot.
+export { setupRuntimeLogging } from './setupRuntimeLogging';
 export { useDebouncePress } from './useDebouncePress';
 // BUG-marker-position-lag: smooth coordinate interpolation for Uber-style
 // marker animation between discrete GPS samples. Used by RideMapView
