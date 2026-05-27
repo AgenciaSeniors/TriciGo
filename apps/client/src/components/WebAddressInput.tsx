@@ -2,7 +2,8 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, TextInput, Pressable, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import {
-  searchAddressSearchBox,
+  searchAddressUnified,
+  importPoiFromSearch,
   searchPoisSupabase,
   computeSpecificity,
   haversineDistance,
@@ -14,6 +15,8 @@ import {
   suggestCrossStreetsSupabase,
 } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
+import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
+import { getSupabaseClient } from '@tricigo/api';
 import { colors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
 
@@ -162,8 +165,18 @@ function scoreResult(
     distScore = Math.max(0, 1 - dist / 20000);
   }
 
-  // Source (10%)
-  const sourceScores: Record<string, number> = { searchbox: 1.0, supabase: 0.9, nominatim: 0.5, overpass: 0.6 };
+  // Source (10%) — PR F (2026-05-25) tiering: Google > Mapbox > local
+  // cuba_pois > Nominatim. Keeps Google/Mapbox results at the top of the
+  // dropdown so the unified provider's better Cuban coverage actually
+  // surfaces over a stale local POI. searchbox === Mapbox SearchBox.
+  const sourceScores: Record<string, number> = {
+    google: 1.0,
+    mapbox: 0.95,
+    searchbox: 0.95,
+    overpass: 0.6,
+    supabase: 0.4,
+    nominatim: 0.3,
+  };
   const srcScore = sourceScores[r.source] ?? 0.5;
 
   return textScore * 0.4 + specificity * 0.3 + distScore * 0.2 + srcScore * 0.1;
@@ -232,10 +245,14 @@ export function WebAddressInput({
   const [selected, setSelected] = useState(!!value);
   const [showSaved, setShowSaved] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  // PR 4 of POI parity — when external search (Google/Mapbox) contributes
+  // results, render "Powered by Google" / "© Mapbox" at the bottom of the
+  // dropdown per TOS. Null when the dropdown contains only local sources.
+  const [attribution, setAttribution] = useState<'google' | 'mapbox' | 'mixed' | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const searchIdRef = useRef(0);
-  const mapboxCacheRef = useRef<Map<string, SearchBoxResult[]>>(new Map());
+  const searchCacheRef = useRef<Map<string, SearchBoxResult[]>>(new Map());
   const internalRef = useRef<TextInput>(null);
   const ref = externalRef ?? internalRef;
 
@@ -276,7 +293,7 @@ export function WebAddressInput({
 
   // Invalidate Mapbox cache when proximity changes
   useEffect(() => {
-    mapboxCacheRef.current.clear();
+    searchCacheRef.current.clear();
   }, [proximity?.latitude, proximity?.longitude]);
 
   // Reset activeIndex when results change
@@ -336,6 +353,7 @@ export function WebAddressInput({
         setCubanContext(null);
         setShowDropdown(false);
         setShowSaved(false);
+        setAttribution(null);
         return;
       }
 
@@ -375,6 +393,7 @@ export function WebAddressInput({
               };
               setResults([r]);
               setCrossStreets([]);
+              setAttribution(null);
               setShowDropdown(true);
               setLoading(false);
               return;
@@ -393,6 +412,7 @@ export function WebAddressInput({
 
             setCrossStreets(streets);
             setResults([]);
+            setAttribution(null);
             setShowDropdown(streets.length > 0);
             setLoading(false);
             return;
@@ -404,20 +424,25 @@ export function WebAddressInput({
           setCubanContext(null);
           setCrossStreets([]);
 
-          // Check Mapbox cache
+          // External provider cache — keyed by query. PR 4 of POI parity:
+          // searchAddressUnified() tries Google Places first (best Cuban
+          // coverage) and falls back to Mapbox SearchBox if Google is
+          // unavailable or the daily budget cap is hit. The cache holds the
+          // merged result so subsequent renders of the same query skip both
+          // providers entirely.
           const cacheKey = searchQuery.toLowerCase().trim();
-          let mapbox: SearchBoxResult[];
-          if (mapboxCacheRef.current.has(cacheKey)) {
-            mapbox = mapboxCacheRef.current.get(cacheKey)!;
+          let external: SearchBoxResult[];
+          if (searchCacheRef.current.has(cacheKey)) {
+            external = searchCacheRef.current.get(cacheKey)!;
           } else {
-            const mapboxRes = await searchAddressSearchBox(searchQuery, proximity ?? null, controller.signal, 10)
+            const externalRes = await searchAddressUnified(searchQuery, getSupabaseClient(), proximity ?? null, controller.signal, 10)
               .catch(() => [] as SearchBoxResult[]);
             if (searchIdRef.current !== thisId || controller.signal.aborted) { setLoading(false); return; }
-            mapbox = mapboxRes;
-            mapboxCacheRef.current.set(cacheKey, mapbox);
+            external = externalRes;
+            searchCacheRef.current.set(cacheKey, external);
           }
 
-          // Supabase + Nominatim in parallel (Mapbox may have been cached)
+          // Supabase + Nominatim in parallel (external may have been cached)
           const [supabaseRes, nominatimRes] = await Promise.allSettled([
             searchPoisSupabase(searchQuery, proximity ?? null, 10, controller.signal),
             searchNominatimEnhanced(searchQuery, proximity ?? null, controller.signal),
@@ -429,7 +454,7 @@ export function WebAddressInput({
           const nominatim = nominatimRes.status === 'fulfilled' ? nominatimRes.value : [];
 
           // Merge, dedup, rank
-          const merged = [...mapbox, ...supabase, ...nominatim];
+          const merged = [...external, ...supabase, ...nominatim];
           const deduped = deduplicateResults(merged);
           const scored = deduped
             .map((r) => ({ ...r, _score: scoreResult(r, searchQuery, proximity ?? null) }))
@@ -437,6 +462,9 @@ export function WebAddressInput({
             .slice(0, 7);
 
           setResults(scored);
+          // PR 4 of POI parity — derive attribution from external sources
+          // (Google/Mapbox). Local-only results clear the label.
+          setAttribution(inferAttributionSource(scored));
           setShowDropdown(scored.length > 0 || searchQuery.length >= 8);
           setLoading(false);
 
@@ -498,8 +526,13 @@ export function WebAddressInput({
     setResults([]);
     setCrossStreets([]);
     setCubanContext(null);
+    setAttribution(null);
     onAddRecent?.(addr);
     onSelect(addr);
+    // PR 4b — background fire-and-forget: when the user picks a Google
+    // result, persist it to cuba_pois via Mapbox lookup (Google TOS forbids
+    // storage; Mapbox SearchBox explicitly allows it). Never blocks UX.
+    void importPoiFromSearch(result, getSupabaseClient());
   };
 
   const handleSelectCrossStreet = (streetName: string) => {
@@ -569,6 +602,7 @@ export function WebAddressInput({
     setCubanContext(null);
     setShowDropdown(false);
     setShowSaved(false);
+    setAttribution(null);
     onClear?.();
     ref.current?.focus();
   };
@@ -776,6 +810,10 @@ export function WebAddressInput({
                   No encontramos resultados. Intenta con otro término.
                 </Text>
               </View>
+            )}
+            {/* PR 4 of POI parity — TOS attribution for external providers */}
+            {attribution && results.length > 0 && (
+              <SourceAttribution source={attribution} isDark={isDark} />
             )}
           </ScrollView>
         </View>
