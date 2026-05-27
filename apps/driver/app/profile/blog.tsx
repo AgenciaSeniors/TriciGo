@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable, RefreshControl, Linking } from 'react-native';
+import { View, Pressable, RefreshControl, Linking, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -7,7 +7,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -22,6 +22,9 @@ type BlogPost = {
 
 export default function BlogScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,11 +54,12 @@ export default function BlogScreen() {
   return (
     <Screen
       scroll
-      bg="lightPrimary"
-      statusBarStyle="dark-content"
+      bg={isDark ? 'dark' : 'white'}
+      statusBarStyle={isDark ? 'light-content' : 'dark-content'}
       padded
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchPosts(); }} tintColor={midnightEmber.accent[500]} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchPosts(); }} tintColor={colors.brand.orange} />}
     >
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4 pb-8">
         <ProfileScreenHeader
           title={t('profile.blog', { defaultValue: 'Blog' })}
@@ -102,6 +106,7 @@ export default function BlogScreen() {
             ))}
           </StaggeredList>
         )}
+      </View>
       </View>
     </Screen>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, FlatList, RefreshControl } from 'react-native';
+import { View, FlatList, RefreshControl, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -9,13 +9,16 @@ import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { CancellationPenalty } from '@tricigo/types';
 
 export default function PenaltiesScreen() {
   const { t } = useTranslation('driver');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
 
   const [penalties, setPenalties] = useState<CancellationPenalty[]>([]);
@@ -76,7 +79,8 @@ export default function PenaltiesScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchData(); }} />;
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content">
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4 px-5 flex-1">
         <ScreenHeader
           title={t('penalties.title', { defaultValue: 'Penalidades' })}
@@ -121,6 +125,7 @@ export default function PenaltiesScreen() {
             ) : null
           }
         />
+      </View>
       </View>
     </Screen>
   );

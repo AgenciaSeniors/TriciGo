@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -7,7 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,6 +31,9 @@ const DEFAULT_ZONES: SavedZone[] = [
 
 export default function SavedZonesScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const [zones, setZones] = useState<SavedZone[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,7 +60,8 @@ export default function SavedZonesScreen() {
   };
 
   return (
-    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4 pb-8">
         <ProfileScreenHeader
           title={t('profile.saved_zones', { defaultValue: 'Zonas guardadas' })}
@@ -125,6 +129,7 @@ export default function SavedZonesScreen() {
             ))}
           </StaggeredList>
         )}
+      </View>
       </View>
     </Screen>
   );

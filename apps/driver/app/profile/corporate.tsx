@@ -10,7 +10,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, RefreshControl } from 'react-native';
+import { View, RefreshControl, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -18,7 +18,7 @@ import { Card } from '@tricigo/ui/Card';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { fleetService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -27,6 +27,9 @@ import FleetMembersList from '@/components/FleetMembersList';
 import type { FleetMember, FleetWithMembers } from '@tricigo/types';
 
 export default function CorporateScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const driverProfile = useDriverStore((s) => s.profile);
   const authUser = useAuthStore((s) => s.user);
 
@@ -68,17 +71,18 @@ export default function CorporateScreen() {
   return (
     <Screen
       scroll
-      bg="lightPrimary"
-      statusBarStyle="dark-content"
+      bg={isDark ? 'dark' : 'white'}
+      statusBarStyle={isDark ? 'light-content' : 'dark-content'}
       padded
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
           onRefresh={() => { setRefreshing(true); fetchData(); }}
-          tintColor={midnightEmber.accent[500]}
+          tintColor={colors.brand.orange}
         />
       }
     >
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4 pb-8">
         <ProfileScreenHeader
           title="Corporativo"
@@ -162,6 +166,7 @@ export default function CorporateScreen() {
             onSubmitted={() => setVersion((v) => v + 1)}
           />
         )}
+      </View>
       </View>
     </Screen>
   );

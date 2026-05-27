@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Image } from 'react-native';
+import { View, Image, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -7,7 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { MenuRow } from '@tricigo/ui/MenuRow';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 
 const APP_VERSION = '1.0.0';
 
@@ -15,6 +15,9 @@ type RoutePath = Parameters<typeof router.push>[0];
 
 export default function AboutScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
 
   const links: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; route: RoutePath; iconBg: 'primary' | 'info' | 'success' }[] = [
     { label: t('profile.terms_of_service'), icon: 'document-text-outline', route: '/profile/terms', iconBg: 'primary' },
@@ -23,7 +26,8 @@ export default function AboutScreen() {
   ];
 
   return (
-    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4">
         <ProfileScreenHeader
           title={t('profile.about_title')}
@@ -65,6 +69,7 @@ export default function AboutScreen() {
 
           />
         ))}
+      </View>
       </View>
     </Screen>
   );

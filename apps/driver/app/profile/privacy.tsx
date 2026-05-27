@@ -9,7 +9,7 @@
 // ============================================================
 
 import React, { useEffect, useState } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView, Platform } from 'react-native';
+import { View, Pressable, ActivityIndicator, ScrollView, Platform, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { WebView } from 'react-native-webview';
@@ -17,13 +17,16 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { cmsService } from '@tricigo/api/services/cms';
 
 const FALLBACK_URL = 'https://tricigo.com/privacy';
 
 export default function PrivacyScreen() {
   const { t, i18n } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const [loading, setLoading] = useState(true);
   const [cmsTitle, setCmsTitle] = useState<string | null>(null);
   const [cmsBody, setCmsBody] = useState<string | null>(null);
@@ -58,7 +61,8 @@ export default function PrivacyScreen() {
   }, [loadCms]);
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded={false}>
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded={false}>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4 px-4">
         <ProfileScreenHeader
           title={cmsTitle ?? t('profile.privacy', { defaultValue: 'Política de privacidad' })}
@@ -120,6 +124,7 @@ export default function PrivacyScreen() {
           </Pressable>
         </View>
       )}
+      </View>
     </Screen>
   );
 }
