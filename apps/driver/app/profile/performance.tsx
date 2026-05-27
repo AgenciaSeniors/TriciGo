@@ -18,7 +18,7 @@
  * just hide and the headline cards keep working from the snapshot.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, ActivityIndicator, StyleSheet, Text as RNText } from 'react-native';
+import { View, ScrollView, ActivityIndicator, StyleSheet, Text as RNText, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -26,7 +26,7 @@ import { Card } from '@tricigo/ui/Card';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
@@ -131,6 +131,9 @@ function MetricCard({ label, value, hint, warning }: MetricCardProps) {
 
 export default function PerformanceScreen() {
   const { t } = useTranslation('driver');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const driverProfile = useDriverStore((s) => s.profile);
   const driverId = driverProfile?.id ?? null;
 
@@ -205,7 +208,8 @@ export default function PerformanceScreen() {
 
   if (!driverId) {
     return (
-      <Screen>
+      <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+        <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
         <ScreenHeader
           title={t('performance.title', { defaultValue: 'Mi desempeño' })}
           onBack={() => router.back()}
@@ -215,13 +219,15 @@ export default function PerformanceScreen() {
             {t('performance.no_profile', { defaultValue: 'Sin perfil de conductor' })}
           </Text>
         </View>
+        </View>
       </Screen>
     );
   }
 
   if (loadingSnapshot) {
     return (
-      <Screen>
+      <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+        <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
         <ScreenHeader
           title={t('performance.title', { defaultValue: 'Mi desempeño' })}
           onBack={() => router.back()}
@@ -229,13 +235,15 @@ export default function PerformanceScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={midnightEmber.accent[500]} />
         </View>
+        </View>
       </Screen>
     );
   }
 
   if (!snapshot) {
     return (
-      <Screen>
+      <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+        <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
         <ScreenHeader
           title={t('performance.title', { defaultValue: 'Mi desempeño' })}
           onBack={() => router.back()}
@@ -245,6 +253,7 @@ export default function PerformanceScreen() {
             {t('performance.no_data', { defaultValue: 'Sin datos disponibles' })}
           </Text>
         </View>
+        </View>
       </Screen>
     );
   }
@@ -252,7 +261,8 @@ export default function PerformanceScreen() {
   const cancellationOverPolicy = snapshot.cancellationRate > 0.15;
 
   return (
-    <Screen>
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <ScreenHeader
         title={t('performance.title', { defaultValue: 'Mi desempeño' })}
         onBack={() => router.back()}
@@ -376,6 +386,7 @@ export default function PerformanceScreen() {
           </Card>
         )}
       </ScrollView>
+      </View>
     </Screen>
   );
 }
