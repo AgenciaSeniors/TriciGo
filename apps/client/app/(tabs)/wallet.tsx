@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
@@ -260,6 +260,22 @@ function WebWalletScreen() {
     load();
     return () => { cancelled = true; };
   }, [userId, fetchData]);
+
+  // Refetch whenever the Wallet tab regains focus. The common flow is
+  // "user opens wallet/recharge or NETOPIA browser flow, completes
+  // payment, taps back" — the wallet screen stays mounted in that case
+  // and the [userId, fetchData] effect above does NOT re-run (fetchData
+  // is a memoized callback whose deps don't change on focus). Without
+  // this hook, the new recharge txn never appears in the Movimientos
+  // list until the user pull-to-refreshes manually. Mirror of the
+  // driver fix shipped in the same PR.
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        fetchData();
+      }
+    }, [userId, fetchData])
+  );
 
   // Cleanup poll on unmount
   useEffect(() => {
