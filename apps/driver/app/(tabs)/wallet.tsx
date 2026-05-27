@@ -29,7 +29,7 @@ import {
   StyleSheet,
   useColorScheme,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -159,6 +159,18 @@ export default function WalletScreen() {
   useEffect(() => {
     fetchData(true);
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refetch whenever the Wallet tab regains focus. The common flow is
+  // "user opens /wallet/recharge, completes payment, taps back" — the
+  // wallet screen stays mounted in that case and the [userId] effect
+  // above does NOT re-run. Without this hook, the new recharge txn
+  // never appears in the Movimientos list until the user pull-to-
+  // refreshes manually. Bug observed 2026-05-27 (intent bf2840ba).
+  useFocusEffect(
+    useCallback(() => {
+      fetchData(true);
+    }, [fetchData])
+  );
 
   const handleRefresh = () => {
     setRefreshing(true);
