@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, FlatList, Alert, TextInput } from 'react-native';
+import { View, Pressable, FlatList, Alert, TextInput, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -9,7 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
@@ -35,6 +35,9 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; key: string }> =
 
 export default function DriverHelpScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
@@ -123,7 +126,8 @@ export default function DriverHelpScreen() {
   };
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4 flex-1">
         <ProfileScreenHeader
           title={t('profile.help_title')}
@@ -265,6 +269,7 @@ export default function DriverHelpScreen() {
           />
         </View>
       </BottomSheet>
+      </View>
     </Screen>
   );
 }

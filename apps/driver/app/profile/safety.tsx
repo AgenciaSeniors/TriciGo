@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable, Linking, Alert } from 'react-native';
+import { View, Pressable, Linking, Alert, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -8,7 +8,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { incidentService, trustedContactService } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
@@ -21,6 +21,9 @@ const DRIVER_TIPS = ['tip_driver_1', 'tip_driver_2', 'tip_driver_3', 'tip_driver
 
 export default function DriverSafetyCenterScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const user = useAuthStore((s) => s.user);
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const driverLat = useLocationStore((s) => s.latitude);
@@ -143,7 +146,8 @@ export default function DriverSafetyCenterScreen() {
   };
 
   return (
-    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4">
         <ProfileScreenHeader
           title={t('safety.title')}
@@ -268,6 +272,7 @@ export default function DriverSafetyCenterScreen() {
             ))
           )}
         </Card>
+      </View>
       </View>
     </Screen>
   );

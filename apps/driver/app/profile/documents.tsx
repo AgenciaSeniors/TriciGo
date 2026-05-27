@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Pressable, ActivityIndicator, Alert, Platform, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,7 +14,7 @@ import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, midnightEmber } from '@tricigo/theme';
+import { colors, midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -33,6 +33,9 @@ const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'v
 
 export default function DocumentsScreen() {
   const { t } = useTranslation('driver');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const driverId = useDriverStore((s) => s.profile?.id);
   const [documents, setDocuments] = useState<DriverDocument[]>([]);
   const [selfieChecks, setSelfieChecks] = useState<SelfieCheck[]>([]);
@@ -187,7 +190,8 @@ export default function DocumentsScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); fetchData(); }} />;
 
   return (
-    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4">
         <ProfileScreenHeader
           title={t('profile.documents', { defaultValue: 'Documentos' })}
@@ -197,7 +201,7 @@ export default function DocumentsScreen() {
 
         {loading ? (
           <View className="items-center py-20">
-            <ActivityIndicator size="large" color={midnightEmber.accent[500]} />
+            <ActivityIndicator size="large" color={colors.brand.orange} />
           </View>
         ) : documents.length === 0 ? (
           <EmptyState
@@ -313,6 +317,7 @@ export default function DocumentsScreen() {
             )}
           </>
         )}
+      </View>
       </View>
     </Screen>
   );
