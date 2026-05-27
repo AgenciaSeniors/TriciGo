@@ -50,12 +50,21 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
       // Home tab shows active trip automatically
       router.push('/(tabs)');
       break;
+    case 'ride_offer':
+      // Home tab subscribes to ride_offers via Realtime and renders
+      // the incoming offer modal. If the offer expired between push
+      // delivery and tap, the home tab shows the "no longer available"
+      // state — both paths are already handled in (tabs)/index.tsx.
+      router.push('/(tabs)');
+      break;
     case 'chat':
       if (data.ride_id) {
         router.push(`/chat/${data.ride_id}`);
       }
       break;
     case 'wallet':
+    case 'payment':
+    case 'wallet_recharge':
       router.push('/(tabs)/earnings');
       break;
     default:

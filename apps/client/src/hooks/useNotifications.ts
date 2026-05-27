@@ -48,6 +48,8 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
 
   switch (data.type) {
     case 'ride':
+    case 'ride_matching':
+    case 'proximity':
       // Home tab shows active ride automatically
       router.push('/(tabs)');
       break;
@@ -57,6 +59,9 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
       }
       break;
     case 'wallet':
+    case 'payment':
+    case 'wallet_recharge':
+    case 'wallet_recharge_refund':
       router.push('/(tabs)/wallet');
       break;
     default:
