@@ -1,41 +1,24 @@
 /**
- * HomeBottomSheet v2 — Midnight Ember edition.
+ * HomeBottomSheet v3 — Cuban Modern edition (post PR #235).
  *
- * Panel de control principal del driver. Reemplaza la implementación previa
- * que renderizaba simultáneamente:
- *   - Greeting "HOLA, RAÚL" 42pt 900 weight letterSpacing 4 uppercase
- *     ("fitness app smell", anti-Linear)
- *   - "Ignition Portal" CTA: 120pt circle + gradient + 3 anillos animados
- *     concéntricos + 2 halos estáticos (5 capas de motion en una decisión
- *     de toggle on/off)
- *   - Radar sweep gradient pasando 80px → 280px en loop 2s
- *   - Pulse animado en barra de address (orange stripe)
- *   - 3 stat cards simétricos sin storytelling (Hoy / Viajes / Por hora)
+ * Mantiene la estructura v2: 3 estados (OFFLINE / ONLINE IDLE / ON-BREAK)
+ * + banners (ineligible, selfie, autoNav, fatigue) + storytelling hero
+ * earnings + smart suggestion + footer (Pausar/Desconectar).
  *
- * Decisiones de diseño confirmadas con el usuario:
- *   A. Greeting → sentence-case + storytelling histórico ("Recogiste $X
- *      ayer · N viajes") en vez de slogan motivacional.
- *   B. CTA portal → botón rectangular ancho con shadow.glow. Sin rings
- *      ni halos (motion.glowRing y motion.ignitionPortal en blacklist).
- *   C. Radar sweep + "Buscando…" + wait time pasivo → smart suggestion
- *      card accionable con data del hook `useDemandHotspots` ya existente.
- *   D. 3 stat cards → 1 hero card con storytelling (`+18% vs ayer ·
- *      N viajes · $X/h`).
- *   E. Break + Disconnect → 2 botones discretos en footer (acciones
- *      semánticamente distintas).
- *   F. Eliminadas 6 animation props del componente y del padre
- *      (ring1/2/3Anim, radarSweepAnim, searchPulseAnim, addressPulseAnim).
- *      Solo queda ctaScaleAnim para press feedback.
+ * Cambios visuales:
+ *  - Paleta midnightEmber → cubanLight/cubanDark dinámica (useColorScheme)
+ *  - CTA "Conectarme" → LinearGradient orange→warm-gold + GLOW_CTA halo +
+ *    spring scale + Inter_800ExtraBold 18pt
+ *  - Hero earnings card → 3 capas LinearGradient (base + orange-glow radial
+ *    + content) con monto Inter_800ExtraBold 36pt tabular-nums
+ *  - Status pill → alpha bg semántico + dot pulsing
+ *  - Suggestion card → palette.bg.elev1 con accent border warm
+ *  - Banners → bg alpha de su estado + Inter typography
+ *  - Footer Pausar/Desconectar → pills discretas Cuban
+ *  - Greeting → mismo storytelling (sentence-case + nombre + recap ayer)
  *
- * 3 estados visuales bien diferenciados:
- *   - OFFLINE: greeting + banners + CTA primario + recap ayer
- *   - ONLINE IDLE: status pill + hero earnings + search + suggestion +
- *     footer (Pausar / Desconectar)
- *   - ONLINE ON-BREAK: status pill warning + hero atenuado + Reanudar +
- *     link Desconectar completamente
- *
- * Lógica preservada: snap points, desktop sidebar fallback, todos los
- * callbacks, haptics, accessibility.
+ * Lógica intacta: todos los snap points, callbacks, haptics, accessibility,
+ * desktop sidebar fallback, useEffect del status dot pulse.
  */
 import React, { useRef } from 'react';
 import {
@@ -44,40 +27,35 @@ import {
   Animated,
   StyleSheet,
   Text as RNText,
+  useColorScheme,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { DraggableSheet } from '@tricigo/ui/DraggableSheet';
 import { AddressSearchBar } from '@/components/AddressSearchBar';
 import { Ionicons } from '@expo/vector-icons';
-import { midnightEmber } from '@tricigo/theme';
+import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nums'] };
+
+// Semantic colors (Cuban-agnostic — same in light + dark)
+const STATE_SUCCESS = '#22C55E';
+const STATE_WARNING = '#F59E0B';
+const STATE_DANGER = '#EF4444';
+const STATE_INFO = '#3B82F6';
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-/**
- * Smart suggestion to pre-position the driver toward a high-demand
- * zone. Computed by the parent via `useSmartSuggestion`, which
- * composes live demand hotspots, surge zones, and historical popular
- * pickup clusters into a single ranked recommendation (Phase 2 N1).
- */
 export interface NearestHotspot {
   lat: number;
   lng: number;
-  /** Kilometers to the hotspot, rounded to 1 decimal. */
   distance: number;
-  /** Live concurrent rides being requested in this hotspot. */
   liveCount: number;
-  /**
-   * Surge multiplier in effect at this point (1 = no surge).
-   * Optional so older callers without N1 wiring keep compiling.
-   */
   surgeMultiplier?: number;
-  /**
-   * Where the suggestion came from. `live` = current request hotspot,
-   * `popular` = historical pickup cluster fallback. Used to choose
-   * the right copy when surfacing the suggestion.
-   */
   source?: 'live' | 'popular';
 }
 
@@ -94,26 +72,19 @@ export interface HomeBottomSheetProps {
 
   // ── Data ──
   todayEarnings: { amount: number; trips: number };
-  /** Optional — only available when parent has fetched yesterday's totals. */
   yesterdayEarnings: { amount: number; trips: number } | null;
   perHour: number;
   userName?: string;
 
-  // ── Auto-nav (legacy, idle-≥-10min trigger) ──
+  // ── Auto-nav ──
   navCountdown: number | null;
   nearestHotZone: { lat: number; lng: number; distance: number } | null;
 
-  // ── Smart suggestion (always available when online idle) ──
+  // ── Smart suggestion ──
   nearestHotspot: NearestHotspot | null;
 
-  /**
-   * Phase 2 N6 — anti-fatigue level derived from continuous online time.
-   * `none` = no warning. `soft` = ~6h+ (suggestion). `firm` = ~10h+
-   * (strong recommendation, encourages break). Drives the warning
-   * banner in the sheet; pure UX nudge — never blocks driving.
-   */
+  // ── Fatigue ──
   fatigueLevel: 'none' | 'soft' | 'firm';
-  /** Continuous online-session hours, rounded to 1 decimal. Surfaced in the banner copy. */
   sessionHours: number;
 
   // ── Callbacks ──
@@ -126,10 +97,9 @@ export interface HomeBottomSheetProps {
     longitude: number;
     address: string;
   }) => void;
-  /** Open turn-by-turn nav toward the suggested hotspot. */
   onGoToSuggestion: (lat: number, lng: number) => void;
 
-  // ── Animations (only press feedback survives v2) ──
+  // ── Animations ──
   ctaScaleAnim: Animated.Value;
   onCtaPressIn: () => void;
   onCtaPressOut: () => void;
@@ -142,11 +112,6 @@ const DEFAULT_SNAP_INDEX = 1;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Returns the Spanish time-of-day greeting used by the offline state.
- * Uses Havana wall-clock when possible (string is locale-dependent so the
- * caller can localize via i18n).
- */
 function getTimeOfDayKey(): 'morning' | 'afternoon' | 'evening' {
   const h = new Date().getHours();
   if (h >= 5 && h < 12) return 'morning';
@@ -154,7 +119,6 @@ function getTimeOfDayKey(): 'morning' | 'afternoon' | 'evening' {
   return 'evening';
 }
 
-/** Returns the comparison label for today vs yesterday earnings. */
 function compareEarnings(today: number, yesterday: number | null): {
   delta: number | null;
   symbol: '↑' | '↓' | '→' | null;
@@ -173,35 +137,59 @@ function compareEarnings(today: number, yesterday: number | null): {
 export function HomeBottomSheet(props: HomeBottomSheetProps) {
   const { t } = useTranslation('driver');
   const { isDesktop } = useResponsive();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
 
-  const content = <SheetContent {...props} t={t} />;
+  const content = <SheetContent {...props} t={t} palette={palette} isDark={isDark} />;
 
-  // Desktop: fixed right sidebar instead of bottom sheet
   if (isDesktop) {
     return (
-      <View style={styles.desktopSidebar}>
+      <View
+        style={[
+          styles.desktopSidebar,
+          {
+            backgroundColor: palette.bg.elev1,
+            borderLeftColor: palette.line,
+            borderLeftWidth: 1,
+          },
+        ]}
+      >
         <View style={styles.desktopSidebarInner}>{content}</View>
       </View>
     );
   }
 
-  // Mobile / tablet: draggable bottom sheet
   return (
     <DraggableSheet
       snapPoints={SNAP_POINTS}
       initialIndex={DEFAULT_SNAP_INDEX}
-      theme="dark"
+      theme={isDark ? 'dark' : 'light'}
       scrollable
     >
-      {content}
+      <View style={{ backgroundColor: palette.bg.paper, flex: 1, paddingHorizontal: 16, paddingTop: 4 }}>
+        {content}
+      </View>
     </DraggableSheet>
   );
 }
 
 // ─── Inner content ─────────────────────────────────────────────────────────────
 
+// Structural type so cubanLight and cubanDark both fit (their literal hex
+// types differ — using `typeof cubanLight` would fail for cubanDark).
+type Palette = {
+  bg: { paper: string; elev1: string; elev2: string };
+  ink: { primary: string; secondary: string; subtle: string };
+  accent: { orange: string; orangeGlow: string; warm: string; dusk: string };
+  line: string;
+  shadow: { card: string; hero: string };
+};
+
 interface SheetContentProps extends HomeBottomSheetProps {
   t: (key: string, opts?: Record<string, unknown>) => string;
+  palette: Palette;
+  isDark: boolean;
 }
 
 function SheetContent({
@@ -232,8 +220,33 @@ function SheetContent({
   onCtaPressIn,
   onCtaPressOut,
   t,
+  palette,
+  isDark,
 }: SheetContentProps) {
-  // ── Status dot pulse (única motion sobreviviente del system) ──
+  // Shadows
+  const GLOW_CTA = {
+    shadowColor: '#FF4D00',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  };
+  const HERO_SHADOW = {
+    shadowColor: '#FF4D00',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: isDark ? 0.22 : 0.12,
+    shadowRadius: 18,
+    elevation: 8,
+  };
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.3 : 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  };
+
+  // ── Status dot pulse ──
   const statusDotPulse = useRef(new Animated.Value(0.6)).current;
   React.useEffect(() => {
     if (isOnline && !isOnBreak) {
@@ -249,7 +262,7 @@ function SheetContent({
     }
   }, [isOnline, isOnBreak, statusDotPulse]);
 
-  // ── Banners (alerts) ──────────────────────────────────────────
+  // ── Banners ──────────────────────────────────────────────────
   const banners = (
     <>
       {isIneligible && (
@@ -257,6 +270,7 @@ function SheetContent({
           variant="danger"
           icon="warning-outline"
           message={t('home.ineligible_banner')}
+          palette={palette}
         />
       )}
       {(needsSelfieCheck || isSelfieProcessing) && (
@@ -271,6 +285,7 @@ function SheetContent({
           }
           onActionPress={!isSelfieProcessing ? onSubmitSelfie : undefined}
           actionDisabled={selfieLoading || isSelfieProcessing}
+          palette={palette}
         />
       )}
       {navCountdown !== null && nearestHotZone && (
@@ -286,13 +301,9 @@ function SheetContent({
           })}
           actionLabel={t('home.stay_here', { defaultValue: 'Quedar' })}
           onActionPress={onCancelAutoNav}
+          palette={palette}
         />
       )}
-      {/* Phase 2 N6 — anti-fatigue prompt. Only renders while genuinely
-           online and not already on break (the warning would be tone-deaf
-           if the driver is currently resting). Soft level at ~6h, firm
-           at ~10h. Action wires straight to the existing break toggle
-           so the driver can act in one tap. */}
       {fatigueLevel !== 'none' && isOnline && !isOnBreak && (
         <Banner
           variant={fatigueLevel === 'firm' ? 'danger' : 'warning'}
@@ -319,6 +330,7 @@ function SheetContent({
           }
           actionLabel={t('home.fatigue_take_break', { defaultValue: 'Tomar descanso' })}
           onActionPress={onToggleBreak}
+          palette={palette}
         />
       )}
     </>
@@ -339,15 +351,23 @@ function SheetContent({
 
     return (
       <View style={styles.sheetContent}>
-        {/* Greeting (sentence-case, no shouty uppercase) */}
-        <RNText style={[styles.greeting, { color: midnightEmber.map.text.primary }]}>
+        {/* Greeting */}
+        <RNText
+          style={{
+            fontFamily: 'Inter_700Bold',
+            fontSize: 22,
+            letterSpacing: -0.3,
+            color: palette.ink.primary,
+            marginBottom: 16,
+          }}
+        >
           {greetingFull}
         </RNText>
 
         {banners}
 
-        {/* Primary CTA — ancho, con glow, sin portal */}
-        <Animated.View style={{ transform: [{ scale: ctaScaleAnim }] }}>
+        {/* Primary CTA — Cuban gradient + glow */}
+        <Animated.View style={{ transform: [{ scale: ctaScaleAnim }], ...GLOW_CTA }}>
           <Pressable
             onPressIn={onCtaPressIn}
             onPressOut={onCtaPressOut}
@@ -357,33 +377,52 @@ function SheetContent({
             accessibilityState={{ checked: false, disabled: toggling || isIneligible }}
             accessibilityLabel={t('home.go_online', { defaultValue: 'Conectarme' })}
             style={[
-              styles.ctaPrimary,
-              {
-                backgroundColor: midnightEmber.accent[500],
-                borderRadius: midnightEmber.radius.card,
-                ...midnightEmber.shadow.glow,
-              },
+              { borderRadius: 20, overflow: 'hidden' },
               (toggling || isIneligible) && styles.disabled,
             ]}
           >
-            <Ionicons name="power" size={20} color={midnightEmber.map.text.onAccent} />
-            <RNText style={[
-              midnightEmber.text.buttonLg,
-              { color: midnightEmber.map.text.onAccent, marginLeft: 8 },
-            ]}>
-              {toggling
-                ? t('home.connecting', { defaultValue: 'Conectando…' })
-                : t('home.go_online', { defaultValue: 'Conectarme' })}
-            </RNText>
+            <LinearGradient
+              colors={[colors.brand.orange, palette.accent.warm]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 18,
+                paddingHorizontal: 16,
+                minHeight: 60,
+              }}
+            >
+              <Ionicons name="power" size={22} color="#FFFFFF" />
+              <RNText
+                style={{
+                  color: '#FFFFFF',
+                  fontFamily: 'Inter_800ExtraBold',
+                  fontSize: 17,
+                  marginLeft: 10,
+                  letterSpacing: 0.3,
+                }}
+              >
+                {toggling
+                  ? t('home.connecting', { defaultValue: 'Conectando…' })
+                  : t('home.go_online', { defaultValue: 'Conectarme' })}
+              </RNText>
+            </LinearGradient>
           </Pressable>
         </Animated.View>
 
-        {/* Yesterday recap — storytelling con data */}
+        {/* Yesterday recap */}
         {yesterdayEarnings && yesterdayEarnings.amount > 0 && (
-          <RNText style={[
-            styles.yesterdayRecap,
-            { color: midnightEmber.map.text.secondary },
-          ]}>
+          <RNText
+            style={{
+              fontSize: 13,
+              color: palette.ink.secondary,
+              textAlign: 'center',
+              marginTop: 16,
+              ...TABULAR,
+            }}
+          >
             {t('home.yesterday_recap', {
               amount: yesterdayEarnings.amount.toLocaleString(),
               trips: yesterdayEarnings.trips,
@@ -411,68 +450,94 @@ function SheetContent({
             ? t('home.break_status', { defaultValue: 'En descanso · No recibís solicitudes' })
             : t('home.idle_status', { defaultValue: 'En línea · Buscando viajes' })
         }
+        palette={palette}
       />
 
-      {/* Hero earnings card */}
+      {/* Hero earnings card — Cuban gradient + orange glow corner */}
       <View
         style={[
-          styles.heroCard,
-          {
-            backgroundColor: midnightEmber.map.bg.elevated,
-            borderColor: midnightEmber.map.line.default,
-            borderRadius: midnightEmber.radius.card,
-          },
+          { borderRadius: 20, overflow: 'hidden', marginTop: 4, ...HERO_SHADOW },
           isOnBreak && { opacity: 0.6 },
         ]}
       >
-        <RNText style={[
-          midnightEmber.text.meta,
-          { color: midnightEmber.map.text.tertiary, marginBottom: 4 },
-        ]}>
-          {t('home.earnings_today_label', { defaultValue: 'HOY' })}
-        </RNText>
-        <RNText style={[
-          midnightEmber.text.heroLg,
-          { color: midnightEmber.map.text.primary },
-        ]}>
-          ${todayEarnings.amount.toLocaleString()}
-        </RNText>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 8, gap: 6 }}>
-          {cmp.symbol && cmp.delta !== null && (
-            <RNText style={[
-              midnightEmber.text.bodyDense,
-              {
-                color:
-                  cmp.color === 'success' ? midnightEmber.state.success :
-                  cmp.color === 'warning' ? midnightEmber.state.warning :
-                  midnightEmber.map.text.secondary,
-                fontWeight: '600',
-              },
-            ]}>
-              {cmp.symbol} {Math.abs(cmp.delta)}% {t('home.compare_yesterday', { defaultValue: 'vs ayer' })}
-            </RNText>
-          )}
-          {cmp.symbol && (
-            <RNText style={[midnightEmber.text.bodyDense, { color: midnightEmber.map.text.tertiary }]}>·</RNText>
-          )}
-          <RNText style={[midnightEmber.text.bodyDense, { color: midnightEmber.map.text.secondary }]}>
-            {t('home.trips_count', { count: todayEarnings.trips, defaultValue: '{{count}} viajes' })}
+        <LinearGradient
+          colors={isDark ? ['#11172A', '#18203A'] : ['#FFFFFF', '#FFFBF5']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <LinearGradient
+          colors={[palette.accent.orangeGlow, 'transparent']}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0.3, y: 0.7 }}
+          style={{ position: 'absolute', top: 0, right: 0, width: 160, height: 160 }}
+          pointerEvents="none"
+        />
+        <View style={{ padding: 18 }}>
+          <RNText
+            style={{
+              fontSize: 11,
+              fontWeight: '700',
+              letterSpacing: 1.6,
+              color: palette.ink.secondary,
+              textTransform: 'uppercase',
+              marginBottom: 6,
+            }}
+          >
+            {t('home.earnings_today_label', { defaultValue: 'Hoy' })}
           </RNText>
-          {perHour > 0 && (
-            <>
-              <RNText style={[midnightEmber.text.bodyDense, { color: midnightEmber.map.text.tertiary }]}>·</RNText>
-              <RNText style={[midnightEmber.text.bodyDense, { color: midnightEmber.map.text.secondary }]}>
-                ${perHour.toLocaleString()}{t('home.per_hour_short', { defaultValue: '/h' })}
+          <RNText
+            style={{
+              fontFamily: 'Inter_800ExtraBold',
+              fontSize: 36,
+              letterSpacing: -1,
+              lineHeight: 40,
+              color: palette.ink.primary,
+              ...TABULAR,
+            }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            ${todayEarnings.amount.toLocaleString()}
+          </RNText>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 8, gap: 6 }}>
+            {cmp.symbol && cmp.delta !== null && (
+              <RNText
+                style={{
+                  fontSize: 13,
+                  fontWeight: '700',
+                  color:
+                    cmp.color === 'success' ? STATE_SUCCESS :
+                    cmp.color === 'warning' ? STATE_WARNING :
+                    palette.ink.secondary,
+                  ...TABULAR,
+                }}
+              >
+                {cmp.symbol} {Math.abs(cmp.delta)}% {t('home.compare_yesterday', { defaultValue: 'vs ayer' })}
               </RNText>
-            </>
-          )}
+            )}
+            {cmp.symbol && (
+              <RNText style={{ fontSize: 13, color: palette.ink.subtle }}>·</RNText>
+            )}
+            <RNText style={{ fontSize: 13, color: palette.ink.secondary, ...TABULAR }}>
+              {t('home.trips_count', { count: todayEarnings.trips, defaultValue: '{{count}} viajes' })}
+            </RNText>
+            {perHour > 0 && (
+              <>
+                <RNText style={{ fontSize: 13, color: palette.ink.subtle }}>·</RNText>
+                <RNText style={{ fontSize: 13, color: palette.accent.warm, fontWeight: '700', ...TABULAR }}>
+                  ${perHour.toLocaleString()}{t('home.per_hour_short', { defaultValue: '/h' })}
+                </RNText>
+              </>
+            )}
+          </View>
         </View>
       </View>
 
-      {/* On-break: simplified controls (no search, no suggestion, just resume) */}
+      {/* On-break: simplified controls */}
       {isOnBreak ? (
         <>
-          <Animated.View style={{ transform: [{ scale: ctaScaleAnim }], marginTop: 12 }}>
+          <Animated.View style={{ transform: [{ scale: ctaScaleAnim }], marginTop: 12, ...GLOW_CTA }}>
             <Pressable
               onPressIn={onCtaPressIn}
               onPressOut={onCtaPressOut}
@@ -481,34 +546,44 @@ function SheetContent({
               accessibilityRole="button"
               accessibilityLabel={t('home.resume_work', { defaultValue: 'Reanudar trabajo' })}
               style={[
-                styles.ctaPrimary,
-                {
-                  backgroundColor: midnightEmber.accent[500],
-                  borderRadius: midnightEmber.radius.card,
-                  ...midnightEmber.shadow.glow,
-                },
+                { borderRadius: 20, overflow: 'hidden' },
                 togglingBreak && styles.disabled,
               ]}
             >
-              <Ionicons name="play" size={18} color={midnightEmber.map.text.onAccent} />
-              <RNText style={[
-                midnightEmber.text.buttonLg,
-                { color: midnightEmber.map.text.onAccent, marginLeft: 8 },
-              ]}>
-                {togglingBreak
-                  ? t('home.resuming', { defaultValue: 'Reanudando…' })
-                  : t('home.resume_work', { defaultValue: 'Reanudar trabajo' })}
-              </RNText>
+              <LinearGradient
+                colors={[colors.brand.orange, palette.accent.warm]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 16,
+                  paddingHorizontal: 16,
+                  minHeight: 56,
+                }}
+              >
+                <Ionicons name="play" size={18} color="#FFFFFF" />
+                <RNText
+                  style={{
+                    color: '#FFFFFF',
+                    fontFamily: 'Inter_800ExtraBold',
+                    fontSize: 16,
+                    marginLeft: 8,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  {togglingBreak
+                    ? t('home.resuming', { defaultValue: 'Reanudando…' })
+                    : t('home.resume_work', { defaultValue: 'Reanudar trabajo' })}
+                </RNText>
+              </LinearGradient>
             </Pressable>
           </Animated.View>
 
           <Pressable
             onPress={() => { triggerHaptic('light'); onToggleOnline(); }}
             disabled={toggling}
-            // V2 — paddingVertical 8 → 14 + minHeight 44 to clear HIG.
-            // body-dense text is ~18pt; 18 + 14×2 = 46. Visual still
-            // reads as a discreet underline link, but the tap area is
-            // now full-width and 44pt+ tall.
             style={{
               marginTop: 14,
               alignItems: 'center',
@@ -519,20 +594,20 @@ function SheetContent({
             accessibilityRole="button"
             accessibilityLabel={t('home.disconnect_full', { defaultValue: 'Desconectar completamente' })}
           >
-            <RNText style={[
-              midnightEmber.text.bodyDense,
-              {
-                color: midnightEmber.map.text.tertiary,
+            <RNText
+              style={{
+                fontSize: 13,
+                color: palette.ink.subtle,
                 textDecorationLine: 'underline',
-              },
-            ]}>
+              }}
+            >
               {t('home.disconnect_full', { defaultValue: 'Desconectar completamente' })}
             </RNText>
           </Pressable>
         </>
       ) : (
         <>
-          {/* Search bar — sin pulse animado */}
+          {/* Search bar */}
           <View style={{ marginTop: 12 }}>
             <AddressSearchBar
               onSelect={onAddressSelect}
@@ -542,20 +617,24 @@ function SheetContent({
             />
           </View>
 
-          {/* Smart suggestion card (solo cuando hay hotspot real) */}
+          {/* Smart suggestion card */}
           {nearestHotspot && (nearestHotspot.liveCount > 0 || nearestHotspot.source === 'popular') && (
             <Pressable
               onPress={() => {
                 triggerHaptic('medium');
                 onGoToSuggestion(nearestHotspot.lat, nearestHotspot.lng);
               }}
-              style={[
-                styles.suggestionCard,
+              style={({ pressed }) => [
                 {
-                  backgroundColor: midnightEmber.map.bg.elevated,
-                  borderColor: midnightEmber.accent[800],
-                  borderRadius: midnightEmber.radius.card,
+                  padding: 14,
+                  marginTop: 10,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: palette.accent.warm,
+                  backgroundColor: palette.bg.elev1,
+                  ...CARD_SHADOW,
                 },
+                pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
               ]}
               accessibilityRole="button"
               accessibilityLabel={t('home.suggestion_a11y', {
@@ -564,16 +643,25 @@ function SheetContent({
                 defaultValue: 'Ir a zona caliente a {{distance}} km con {{count}} viajes esperando',
               })}
             >
-              <RNText style={[
-                midnightEmber.text.meta,
-                { color: midnightEmber.accent[400], marginBottom: 4 },
-              ]}>
-                {t('home.suggestion_label', { defaultValue: 'SUGERENCIA' })}
+              <RNText
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  letterSpacing: 1.4,
+                  color: palette.accent.warm,
+                  textTransform: 'uppercase',
+                  marginBottom: 4,
+                }}
+              >
+                {t('home.suggestion_label', { defaultValue: 'Sugerencia' })}
               </RNText>
-              <RNText style={[
-                midnightEmber.text.body,
-                { color: midnightEmber.map.text.primary, fontWeight: '600' },
-              ]}>
+              <RNText
+                style={{
+                  fontSize: 15,
+                  fontWeight: '600',
+                  color: palette.ink.primary,
+                }}
+              >
                 {nearestHotspot.source === 'popular' && nearestHotspot.liveCount === 0
                   ? t('home.suggestion_body_popular', {
                       distance: nearestHotspot.distance,
@@ -585,79 +673,76 @@ function SheetContent({
                       defaultValue: 'Hotspot a {{distance}} km · {{count}} viajes activos',
                     })}
               </RNText>
-              {/* N1 — surge multiplier badge when this point sits inside
-                  an active surge zone. The "+X%" framing is friendlier
-                  than "1.5x" for non-power users. */}
+              {/* Surge multiplier badge */}
               {nearestHotspot.surgeMultiplier !== undefined && nearestHotspot.surgeMultiplier > 1 && (
                 <View
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 4,
-                    backgroundColor: midnightEmber.accent[300],
-                    paddingHorizontal: 8,
-                    paddingVertical: 2,
-                    borderRadius: midnightEmber.radius.pill,
+                    backgroundColor: palette.accent.orangeGlow,
+                    paddingHorizontal: 10,
+                    paddingVertical: 3,
+                    borderRadius: 9999,
                     alignSelf: 'flex-start',
-                    marginTop: 6,
+                    marginTop: 8,
                   }}
                 >
-                  <Ionicons
-                    name="flame"
-                    size={11}
-                    color={midnightEmber.accent[800]}
-                  />
+                  <Ionicons name="flame" size={11} color={colors.brand.orange} />
                   <RNText
-                    style={[
-                      midnightEmber.text.caption,
-                      { color: midnightEmber.accent[800], fontWeight: '700' },
-                    ]}
+                    style={{
+                      fontSize: 11,
+                      color: colors.brand.orange,
+                      fontWeight: '800',
+                      ...TABULAR,
+                    }}
                   >
                     +{Math.round((nearestHotspot.surgeMultiplier - 1) * 100)}%
                   </RNText>
                 </View>
               )}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 }}>
-                <Ionicons
-                  name="arrow-forward"
-                  size={13}
-                  color={midnightEmber.accent[500]}
-                />
-                <RNText style={[
-                  midnightEmber.text.caption,
-                  { color: midnightEmber.accent[500], fontWeight: '600' },
-                ]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                <Ionicons name="arrow-forward" size={13} color={colors.brand.orange} />
+                <RNText
+                  style={{
+                    fontSize: 12,
+                    color: colors.brand.orange,
+                    fontWeight: '700',
+                  }}
+                >
                   {t('home.suggestion_go', { defaultValue: 'Ir hacia allá' })}
                 </RNText>
               </View>
             </Pressable>
           )}
 
-          {/* Footer: Pausar + Desconectar (acciones discretas) */}
+          {/* Footer: Pausar + Desconectar */}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
             <Pressable
               onPress={() => { triggerHaptic('light'); onToggleBreak(); }}
               disabled={togglingBreak}
               style={[
-                styles.footerActionSecondary,
+                styles.footerAction,
                 {
-                  borderColor: midnightEmber.map.line.default,
-                  borderRadius: midnightEmber.radius.card,
+                  borderWidth: 1,
+                  borderColor: palette.line,
+                  backgroundColor: 'transparent',
+                  borderRadius: 16,
                 },
                 togglingBreak && styles.disabled,
               ]}
               accessibilityRole="button"
               accessibilityLabel={t('home.pause', { defaultValue: 'Pausar' })}
             >
-              <Ionicons
-                name="pause"
-                size={16}
-                color={midnightEmber.map.text.secondary}
-              />
-              <RNText style={[
-                midnightEmber.text.buttonMd,
-                { color: midnightEmber.map.text.secondary, marginLeft: 6 },
-              ]}>
+              <Ionicons name="pause" size={16} color={palette.ink.secondary} />
+              <RNText
+                style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: palette.ink.secondary,
+                  marginLeft: 6,
+                }}
+              >
                 {t('home.pause', { defaultValue: 'Pausar' })}
               </RNText>
             </Pressable>
@@ -665,25 +750,25 @@ function SheetContent({
               onPress={() => { triggerHaptic('medium'); onToggleOnline(); }}
               disabled={toggling}
               style={[
-                styles.footerActionDisconnect,
+                styles.footerAction,
                 {
-                  backgroundColor: midnightEmber.map.bg.elevated,
-                  borderRadius: midnightEmber.radius.card,
+                  backgroundColor: palette.bg.elev2,
+                  borderRadius: 16,
                 },
                 toggling && styles.disabled,
               ]}
               accessibilityRole="button"
               accessibilityLabel={t('home.disconnect', { defaultValue: 'Desconectar' })}
             >
-              <Ionicons
-                name="power"
-                size={16}
-                color={midnightEmber.state.danger}
-              />
-              <RNText style={[
-                midnightEmber.text.buttonMd,
-                { color: midnightEmber.state.danger, marginLeft: 6 },
-              ]}>
+              <Ionicons name="power" size={16} color={STATE_DANGER} />
+              <RNText
+                style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: STATE_DANGER,
+                  marginLeft: 6,
+                }}
+              >
                 {toggling
                   ? t('home.disconnecting', { defaultValue: 'Desconectando…' })
                   : t('home.disconnect', { defaultValue: 'Desconectar' })}
@@ -706,6 +791,7 @@ interface BannerProps {
   actionLabel?: string;
   onActionPress?: () => void;
   actionDisabled?: boolean;
+  palette: Palette;
 }
 
 function Banner({
@@ -716,20 +802,21 @@ function Banner({
   actionLabel,
   onActionPress,
   actionDisabled,
+  palette,
 }: BannerProps) {
   const accent =
-    variant === 'danger' ? midnightEmber.state.danger :
-    variant === 'warning' ? midnightEmber.state.warning :
-    midnightEmber.state.info;
+    variant === 'danger' ? STATE_DANGER :
+    variant === 'warning' ? STATE_WARNING :
+    STATE_INFO;
   return (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'flex-start',
-        backgroundColor: midnightEmber.map.bg.surface,
+        backgroundColor: `${accent}1A`,
         borderWidth: 1,
-        borderColor: accent + '4D', // 30% alpha
-        borderRadius: midnightEmber.radius.input,
+        borderColor: `${accent}4D`,
+        borderRadius: 12,
         padding: 12,
         marginBottom: 10,
         gap: 8,
@@ -739,39 +826,31 @@ function Banner({
     >
       <Ionicons name={icon} size={16} color={accent} style={{ marginTop: 1 }} />
       <View style={{ flex: 1 }}>
-        <RNText style={[midnightEmber.text.bodyDense, { color: accent }]}>
+        <RNText style={{ fontSize: 13, fontWeight: '600', color: accent }}>
           {message}
         </RNText>
         {subtitle && (
-          <RNText style={[
-            midnightEmber.text.caption,
-            { color: midnightEmber.map.text.secondary, marginTop: 2 },
-          ]}>
+          <RNText style={{ fontSize: 11, color: palette.ink.secondary, marginTop: 2 }}>
             {subtitle}
           </RNText>
         )}
         {actionLabel && onActionPress && (
-          // V2 — hitSlop bumped from 6 to 14 to bring the effective tap
-          // zone above 44pt (caption text is ~16pt high; 16 + 14×2 = 44).
-          // The visible style is intentionally compact — we don't want to
-          // turn a banner action into a huge button — but the hit area
-          // must clear HIG.
           <Pressable
             onPress={onActionPress}
             disabled={actionDisabled}
             hitSlop={14}
             accessibilityRole="button"
           >
-            <RNText style={[
-              midnightEmber.text.caption,
-              {
+            <RNText
+              style={{
+                fontSize: 12,
                 color: accent,
                 fontWeight: '700',
                 textDecorationLine: 'underline',
                 marginTop: 4,
                 opacity: actionDisabled ? 0.5 : 1,
-              },
-            ]}>
+              }}
+            >
               {actionLabel}
             </RNText>
           </Pressable>
@@ -785,11 +864,11 @@ interface StatusPillProps {
   variant: 'online' | 'break';
   label: string;
   pulseAnim?: Animated.Value;
+  palette: Palette;
 }
 
-function StatusPill({ variant, label, pulseAnim }: StatusPillProps) {
-  const dotColor =
-    variant === 'online' ? midnightEmber.state.success : midnightEmber.state.warning;
+function StatusPill({ variant, label, pulseAnim, palette }: StatusPillProps) {
+  const dotColor = variant === 'online' ? STATE_SUCCESS : STATE_WARNING;
   return (
     <View
       style={{
@@ -797,12 +876,10 @@ function StatusPill({ variant, label, pulseAnim }: StatusPillProps) {
         alignItems: 'center',
         gap: 8,
         alignSelf: 'flex-start',
-        backgroundColor: midnightEmber.map.bg.elevated,
-        borderWidth: 1,
-        borderColor: midnightEmber.map.line.default,
-        paddingVertical: 6,
+        backgroundColor: `${dotColor}22`,
+        paddingVertical: 5,
         paddingHorizontal: 12,
-        borderRadius: midnightEmber.radius.pill,
+        borderRadius: 9999,
         marginBottom: 12,
       }}
       accessibilityRole="text"
@@ -817,17 +894,22 @@ function StatusPill({ variant, label, pulseAnim }: StatusPillProps) {
           opacity: pulseAnim ?? 1,
         }}
       />
-      <RNText style={[
-        midnightEmber.text.label,
-        { color: midnightEmber.map.text.primary },
-      ]}>
+      <RNText
+        style={{
+          fontSize: 12,
+          fontWeight: '700',
+          color: dotColor,
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}
+      >
         {label}
       </RNText>
     </View>
   );
 }
 
-// ─── Styles (layout only — no colors/fonts; those come from tokens) ────────────
+// ─── Styles (layout only) ──────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   desktopSidebar: {
@@ -840,9 +922,6 @@ const styles = StyleSheet.create({
   },
   desktopSidebarInner: {
     flex: 1,
-    backgroundColor: midnightEmber.map.bg.surface,
-    borderLeftWidth: 1,
-    borderLeftColor: midnightEmber.map.line.hairline,
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 24,
@@ -850,44 +929,7 @@ const styles = StyleSheet.create({
   sheetContent: {
     paddingTop: 4,
   },
-  greeting: {
-    ...midnightEmber.text.h1,
-    marginBottom: 16,
-  },
-  ctaPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 56,
-    minHeight: 48,
-    paddingHorizontal: 16,
-    width: '100%',
-  },
-  yesterdayRecap: {
-    ...midnightEmber.text.bodyDense,
-    textAlign: 'center',
-    marginTop: 16,
-  },
-  heroCard: {
-    padding: 16,
-    borderWidth: 1,
-  },
-  suggestionCard: {
-    padding: 14,
-    borderWidth: 1,
-    marginTop: 10,
-  },
-  footerActionSecondary: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 48,
-    minHeight: 48,
-    borderWidth: 1,
-    backgroundColor: 'transparent',
-  },
-  footerActionDisconnect: {
+  footerAction: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
