@@ -1,14 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { View, Image, ActivityIndicator } from 'react-native';
+import { View, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { Card } from '@tricigo/ui/Card';
+import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
 import { deliveryService } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
-import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 interface DeliveryPhotoSheetProps {
@@ -24,12 +24,36 @@ interface DeliveryPhotoSheetProps {
 
 /**
  * Mandatory delivery photo capture sheet.
- * Supports two phases: 'pickup' (at package collection) and 'delivery' (at drop-off).
+ *
+ * Pickup phase: photo only.
+ *
+ * Delivery phase: 4-digit OTP from the recipient validated via
+ * `validate_delivery_otp` RPC THEN photo upload. The OTP unlocks the +5%
+ * cargo bonus trigger (`trg_apply_cargo_completion_bonus`). If the RPC
+ * is absent (legacy DB without the OTP feature), the UI surfaces a
+ * "continue without OTP" path so completions never get stuck.
  */
-export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded, onSkip, recipientName, recipientPhone, specialInstructions }: DeliveryPhotoSheetProps) {
+export function DeliveryPhotoSheet({
+  rideId,
+  phase = 'delivery',
+  onPhotoUploaded,
+  recipientName,
+  recipientPhone,
+  specialInstructions,
+}: DeliveryPhotoSheetProps) {
   const { t } = useTranslation('driver');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  // OTP state — only relevant in `delivery` phase.
+  const [otp, setOtp] = useState('');
+  const [otpValidated, setOtpValidated] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [validatingOtp, setValidatingOtp] = useState(false);
+  const [otpUnavailable, setOtpUnavailable] = useState(false);
+
+  const isDelivery = phase === 'delivery';
+  const requiresOtp = isDelivery && !otpUnavailable;
 
   const takePhoto = useCallback(async () => {
     try {
@@ -58,6 +82,47 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
     }
   }, [t]);
 
+  const validateOtp = useCallback(async () => {
+    if (otp.length !== 4) {
+      setOtpError(t('trip.otp_must_be_4_digits', { defaultValue: 'Ingrese 4 dígitos' }));
+      return;
+    }
+    setValidatingOtp(true);
+    setOtpError(null);
+    try {
+      const result = await deliveryService.validateDeliveryOtp(rideId, otp);
+      if (result.success) {
+        triggerHaptic('success');
+        setOtpValidated(true);
+        Toast.show({
+          type: 'success',
+          text1: t('trip.otp_validated', { defaultValue: 'Código verificado' }),
+        });
+      } else if (result.error === 'no_otp_set') {
+        // Legacy ride (created before OTP feature). Allow completion
+        // without OTP — surface message + auto-mark validated.
+        setOtpUnavailable(true);
+        setOtpValidated(true);
+        Toast.show({
+          type: 'info',
+          text1: t('trip.otp_not_required', { defaultValue: 'Código no requerido para este envío' }),
+        });
+      } else if (result.error === 'invalid_otp') {
+        triggerHaptic('error');
+        setOtpError(t('trip.otp_invalid', { defaultValue: 'Código incorrecto. Pídalo al destinatario.' }));
+      } else if (result.error === 'forbidden') {
+        setOtpError(t('trip.otp_forbidden', { defaultValue: 'No autorizado para validar este envío.' }));
+      } else {
+        setOtpError(t('trip.otp_error', { defaultValue: 'Error al validar el código' }));
+      }
+    } catch (err) {
+      logger.error('[DeliveryPhoto] OTP validation error', { error: err instanceof Error ? err.message : 'unknown' });
+      setOtpError(t('trip.otp_error', { defaultValue: 'Error al validar el código' }));
+    } finally {
+      setValidatingOtp(false);
+    }
+  }, [otp, rideId, t]);
+
   const uploadAndConfirm = useCallback(async () => {
     if (!photoUri) return;
 
@@ -82,7 +147,13 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
     } finally {
       setUploading(false);
     }
-  }, [photoUri, rideId, onPhotoUploaded, t]);
+  }, [photoUri, rideId, phase, onPhotoUploaded, t]);
+
+  // For delivery phase, the OTP card is the FIRST artifact the driver
+  // must clear. Once validated (or marked unavailable), the photo flow
+  // becomes available. For pickup phase, photo only — original UX.
+  const canShowPhotoControls = !requiresOtp || otpValidated;
+  const canConfirm = !!photoUri && (!requiresOtp || otpValidated);
 
   return (
     <Card forceDark variant="filled" padding="lg" className="bg-neutral-800 mb-4">
@@ -124,49 +195,113 @@ export function DeliveryPhotoSheet({ rideId, phase = 'delivery', onPhotoUploaded
           : t('trip.delivery_photo_desc', { defaultValue: 'Tome una foto del paquete entregado como comprobante' })}
       </Text>
 
-      {photoUri ? (
-        <View className="items-center mb-4">
-          <Image
-            source={{ uri: photoUri }}
-            style={{ width: 240, height: 240, borderRadius: 12 }}
-            resizeMode="cover"
-            accessibilityLabel={phase === 'pickup' ? 'Pickup photo preview' : 'Delivery photo preview'}
+      {/* OTP step (delivery only) */}
+      {requiresOtp && !otpValidated && (
+        <View className="mb-4 bg-orange-900/15 rounded-lg p-3">
+          <View className="flex-row items-center mb-2">
+            <Ionicons name="keypad" size={16} color="#F97316" />
+            <Text variant="bodySmall" color="inverse" className="ml-2 font-semibold">
+              {t('trip.otp_request_title', { defaultValue: 'Pida el código al destinatario' })}
+            </Text>
+          </View>
+          <Text variant="caption" color="secondary" className="mb-3 opacity-80">
+            {t('trip.otp_request_desc', { defaultValue: 'El cliente le compartió un código de 4 dígitos al destinatario. Pídaselo para confirmar la entrega.' })}
+          </Text>
+          <Input
+            variant="dark"
+            placeholder="0000"
+            value={otp}
+            onChangeText={(text) => {
+              const digits = text.replace(/\D/g, '').slice(0, 4);
+              setOtp(digits);
+              if (otpError) setOtpError(null);
+            }}
+            keyboardType="number-pad"
+            maxLength={4}
+            error={otpError ?? undefined}
+            className="mb-2"
+            accessibilityLabel="OTP de 4 dígitos"
           />
           <Button
-            title={t('trip.retake_photo', { defaultValue: 'Tomar otra foto' })}
-            variant="outline"
-            size="sm"
-            forceDark
-            onPress={takePhoto}
-            className="mt-2"
+            title={
+              validatingOtp
+                ? t('trip.validating_otp', { defaultValue: 'Validando...' })
+                : t('trip.validate_otp', { defaultValue: 'Validar código' })
+            }
+            size="lg"
+            fullWidth
+            onPress={validateOtp}
+            loading={validatingOtp}
+            disabled={validatingOtp || otp.length !== 4}
           />
         </View>
-      ) : (
-        <Button
-          title={t('trip.take_delivery_photo', { defaultValue: 'Tomar foto' })}
-          size="lg"
-          fullWidth
-          onPress={takePhoto}
-          className="mb-2"
-        />
       )}
 
-      {photoUri && (
-        <Button
-          title={
-            uploading
-              ? t('trip.uploading', { defaultValue: 'Subiendo...' })
-              : phase === 'pickup'
-                ? t('trip.confirm_pickup_photo', { defaultValue: 'Confirmar recogida' })
-                : t('trip.confirm_delivery', { defaultValue: 'Confirmar entrega y completar' })
-          }
-          size="lg"
-          fullWidth
-          onPress={uploadAndConfirm}
-          loading={uploading}
-          disabled={uploading}
-          style={{ backgroundColor: '#22C55E' }}
-        />
+      {/* Photo controls — gated on OTP for delivery phase */}
+      {canShowPhotoControls && (
+        <>
+          {otpValidated && otpUnavailable && (
+            <View className="flex-row items-center justify-center mb-2 bg-blue-900/15 rounded-lg p-2">
+              <Ionicons name="information-circle" size={14} color="#60A5FA" />
+              <Text variant="caption" color="inverse" className="ml-2 opacity-80">
+                {t('trip.otp_not_required', { defaultValue: 'Código no requerido para este envío' })}
+              </Text>
+            </View>
+          )}
+          {otpValidated && !otpUnavailable && isDelivery && (
+            <View className="flex-row items-center justify-center mb-2 bg-green-900/15 rounded-lg p-2">
+              <Ionicons name="checkmark-circle" size={14} color="#22C55E" />
+              <Text variant="caption" color="inverse" className="ml-2 opacity-90">
+                {t('trip.otp_validated', { defaultValue: 'Código verificado' })}
+              </Text>
+            </View>
+          )}
+
+          {photoUri ? (
+            <View className="items-center mb-4">
+              <Image
+                source={{ uri: photoUri }}
+                style={{ width: 240, height: 240, borderRadius: 12 }}
+                resizeMode="cover"
+                accessibilityLabel={phase === 'pickup' ? 'Pickup photo preview' : 'Delivery photo preview'}
+              />
+              <Button
+                title={t('trip.retake_photo', { defaultValue: 'Tomar otra foto' })}
+                variant="outline"
+                size="sm"
+                forceDark
+                onPress={takePhoto}
+                className="mt-2"
+              />
+            </View>
+          ) : (
+            <Button
+              title={t('trip.take_delivery_photo', { defaultValue: 'Tomar foto' })}
+              size="lg"
+              fullWidth
+              onPress={takePhoto}
+              className="mb-2"
+            />
+          )}
+
+          {canConfirm && (
+            <Button
+              title={
+                uploading
+                  ? t('trip.uploading', { defaultValue: 'Subiendo...' })
+                  : phase === 'pickup'
+                    ? t('trip.confirm_pickup_photo', { defaultValue: 'Confirmar recogida' })
+                    : t('trip.confirm_delivery', { defaultValue: 'Confirmar entrega y completar' })
+              }
+              size="lg"
+              fullWidth
+              onPress={uploadAndConfirm}
+              loading={uploading}
+              disabled={uploading}
+              style={{ backgroundColor: '#22C55E' }}
+            />
+          )}
+        </>
       )}
     </Card>
   );

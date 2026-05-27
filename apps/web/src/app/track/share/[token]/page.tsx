@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { rideService } from '@tricigo/api';
+import { rideService, deliveryService } from '@tricigo/api';
+import type { PublicDeliveryView } from '@tricigo/api';
 import type { SharedRideView, RideStatus } from '@tricigo/types';
 import '../../[id]/track.css';
 
@@ -90,6 +91,7 @@ export default function SharedTrackingPage() {
   const params = useParams();
   const token = params.token as string;
   const [ride, setRide] = useState<SharedRideView | null>(null);
+  const [delivery, setDelivery] = useState<PublicDeliveryView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number; heading: number | null } | null>(null);
@@ -98,9 +100,19 @@ export default function SharedTrackingPage() {
 
   const fetchRide = useCallback(async () => {
     try {
-      const data = await rideService.getPublicRideByShareToken(token);
-      if (data) setRide(data);
-      else setError(t('track.invalid_link', { defaultValue: 'Enlace de seguimiento inválido o expirado' }));
+      // Fetch ride + (optional) delivery details in parallel — the latter
+      // resolves to null for passenger rides, which is the only signal
+      // the page needs to decide whether to render the package card.
+      const [rideData, deliveryData] = await Promise.all([
+        rideService.getPublicRideByShareToken(token),
+        deliveryService.getPublicDeliveryByToken(token).catch(() => null),
+      ]);
+      if (rideData) {
+        setRide(rideData);
+        setDelivery(deliveryData);
+      } else {
+        setError(t('track.invalid_link', { defaultValue: 'Enlace de seguimiento inválido o expirado' }));
+      }
     } catch {
       setError(t('track.error_loading', { defaultValue: 'Error al cargar el viaje' }));
     } finally {
@@ -312,6 +324,66 @@ export default function SharedTrackingPage() {
               </div>
             </div>
           </div>
+
+          {/* Delivery card — only when this ride is cargo */}
+          {delivery && (
+            <div className="track-card">
+              <div className="track-route-label" style={{ marginBottom: 10 }}>
+                {t('track.delivery_package', { defaultValue: 'Tu envío' })}
+              </div>
+              {delivery.recipient_first_name && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 'var(--text-sm)' }}>
+                  <span style={{ color: 'var(--text-tertiary)' }}>
+                    {t('track.recipient', { defaultValue: 'Destinatario' })}:
+                  </span>
+                  <strong>{delivery.recipient_first_name}</strong>
+                </div>
+              )}
+              {delivery.package_description && (
+                <div style={{ fontSize: 'var(--text-sm)', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--text-tertiary)' }}>
+                    {t('track.package', { defaultValue: 'Paquete' })}:
+                  </span>{' '}
+                  {delivery.package_description}
+                </div>
+              )}
+              {delivery.package_category && (
+                <div style={{ display: 'inline-block', padding: '2px 8px', background: 'rgba(255,77,0,0.08)', color: 'var(--primary)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'capitalize', marginBottom: 8 }}>
+                  {delivery.package_category.replace(/_/g, ' ')}
+                </div>
+              )}
+              {(delivery.pickup_photo_url || delivery.delivery_photo_url) && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                  {delivery.pickup_photo_url && (
+                    <div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                        {t('track.pickup_photo', { defaultValue: 'Recogida' })}
+                      </div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={delivery.pickup_photo_url}
+                        alt="Pickup"
+                        style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
+                      />
+                    </div>
+                  )}
+                  {delivery.delivery_photo_url && (
+                    <div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>
+                        {t('track.delivery_photo', { defaultValue: 'Entrega' })}
+                      </div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={delivery.delivery_photo_url}
+                        alt="Delivery"
+                        style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Driver Card — first name only for privacy */}
           {ride.driver_first_name && (

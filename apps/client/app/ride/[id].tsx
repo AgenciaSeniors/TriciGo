@@ -9,7 +9,8 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { disputeService, lostItemService } from '@tricigo/api';
+import { disputeService, lostItemService, deliveryService } from '@tricigo/api';
+import type { DeliveryDetails } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
 import { formatTRC, formatCUP, formatUSD, cupToUsd, DEFAULT_EXCHANGE_RATE, triggerHaptic, logger, formatTimestamp, buildShareUrl, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
@@ -47,6 +48,12 @@ export default function RideDetailScreen() {
   const [lostItem, setLostItem] = useState<LostItem | null>(null);
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[] | null>(null);
   const [loading, setLoading] = useState(true);
+  // BUG-G1b: when the ride is a delivery (ride_mode='cargo'), the rider
+  // needs to see the 4-digit OTP so they can hand it to the recipient.
+  // The driver will ask for it at drop-off to validate via validate_delivery_otp.
+  // delivery_details is loaded separately because RideWithDriver doesn't
+  // include it — RLS allows the customer to read it for their own rides.
+  const [deliveryDetails, setDeliveryDetails] = useState<DeliveryDetails | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -76,6 +83,17 @@ export default function RideDetailScreen() {
               const li = await lostItemService.getLostItemByRide(id);
               if (!cancelled) setLostItem(li);
             } catch { /* no lost item */ }
+          }
+
+          // Fetch delivery details when this is a cargo ride. We need
+          // the OTP column too so the customer can share it with the
+          // recipient — getDeliveryDetails() does SELECT * so it's
+          // already included.
+          if (rideData && rideData.ride_mode === 'cargo') {
+            try {
+              const dd = await deliveryService.getDeliveryDetails(id);
+              if (!cancelled && dd) setDeliveryDetails(dd);
+            } catch { /* no delivery_details — non-blocking */ }
           }
 
           // Fetch route location events for completed rides
@@ -154,6 +172,33 @@ export default function RideDetailScreen() {
     }
   };
 
+  // Share the delivery tracking link + OTP with the recipient via the
+  // OS share sheet (WhatsApp, SMS, etc.). Combines the public tracking
+  // URL with the 4-digit code so a single message gives the recipient
+  // everything they need to follow the ride and hand the code to the
+  // driver at drop-off.
+  const handleShareDeliveryOtp = async () => {
+    if (!ride.share_token || !deliveryDetails?.delivery_otp) return;
+    const trackUrl = buildShareUrl(ride.share_token);
+    const message = t('delivery.otp_share_message', {
+      defaultValue: 'TriciGo: te envío un paquete. Sigue el viaje aquí: {{url}}\n\nCódigo para recibirlo: {{otp}}',
+      url: trackUrl,
+      otp: deliveryDetails.delivery_otp,
+    });
+    await Share.share({ message });
+    triggerHaptic('light');
+  };
+
+  const handleCopyOtp = async () => {
+    if (!deliveryDetails?.delivery_otp) return;
+    await Clipboard.setStringAsync(deliveryDetails.delivery_otp);
+    Toast.show({ type: 'success', text1: t('delivery.otp_copied', { defaultValue: 'Código copiado' }) });
+    triggerHaptic('light');
+  };
+
+  const isCargoActive = ride.ride_mode === 'cargo'
+    && ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'].includes(ride.status);
+
   return (
     <Screen scroll bg="cuban" padded>
       <View className="pt-4 pb-8">
@@ -195,6 +240,71 @@ export default function RideDetailScreen() {
             dropoffLabel={t('ride.dropoff')}
           />
         </Card>
+
+        {/* Delivery OTP — visible during active cargo rides so the
+            customer can share the code with the recipient before the
+            driver arrives. Bonus: surfaces recipient + package info. */}
+        {isCargoActive && deliveryDetails && (
+          <Card variant="elevated" padding="lg" className="mb-4">
+            <View className="flex-row items-center mb-2">
+              <Ionicons name="cube" size={18} color={colors.brand.orange} />
+              <Text variant="label" className="ml-2">
+                {t('delivery.share_with_recipient', { defaultValue: 'Comparte con el destinatario' })}
+              </Text>
+            </View>
+            {deliveryDetails.delivery_otp && (
+              <>
+                <Text variant="caption" color="secondary" className="mb-2">
+                  {t('delivery.otp_helper', {
+                    defaultValue: 'El conductor pedirá este código al destinatario para confirmar la entrega.',
+                  })}
+                </Text>
+                <Pressable
+                  onPress={handleCopyOtp}
+                  className="bg-primary-50 rounded-lg py-4 mb-3 items-center"
+                  accessibilityRole="button"
+                  accessibilityLabel={t('delivery.otp_copy', { defaultValue: 'Copiar código' })}
+                >
+                  <Text
+                    variant="h1"
+                    color="accent"
+                    className="font-bold tracking-widest"
+                    style={{ letterSpacing: 8 }}
+                  >
+                    {deliveryDetails.delivery_otp}
+                  </Text>
+                  <Text variant="caption" color="secondary" className="mt-1">
+                    {t('delivery.tap_to_copy', { defaultValue: 'Toca para copiar' })}
+                  </Text>
+                </Pressable>
+              </>
+            )}
+            {ride.share_token && (
+              <Button
+                title={t('delivery.share_link_and_otp', { defaultValue: 'Compartir enlace y código' })}
+                onPress={handleShareDeliveryOtp}
+                size="lg"
+                fullWidth
+              />
+            )}
+            {deliveryDetails.recipient_name && (
+              <View className="flex-row justify-between mt-3 pt-3 border-t border-neutral-200">
+                <Text variant="caption" color="secondary">
+                  {t('delivery.recipient', { defaultValue: 'Destinatario' })}
+                </Text>
+                <Text variant="caption" className="font-semibold">{deliveryDetails.recipient_name}</Text>
+              </View>
+            )}
+            {deliveryDetails.recipient_phone && (
+              <View className="flex-row justify-between mt-1">
+                <Text variant="caption" color="secondary">
+                  {t('delivery.recipient_phone', { defaultValue: 'Teléfono' })}
+                </Text>
+                <Text variant="caption">{deliveryDetails.recipient_phone}</Text>
+              </View>
+            )}
+          </Card>
+        )}
 
         {/* Driver info */}
         {ride.driver_name && (
