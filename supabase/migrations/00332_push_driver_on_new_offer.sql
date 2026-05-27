@@ -1,5 +1,5 @@
 -- ============================================================
--- 00327_push_driver_on_new_offer.sql
+-- 00332_push_driver_on_new_offer.sql
 --
 -- Closes the gap where drivers never receive a push notification
 -- when `dispatch_ride()` inserts a new row into `ride_offers`.
@@ -138,4 +138,4 @@ EXECUTE FUNCTION public.notify_driver_new_offer();
 REVOKE EXECUTE ON FUNCTION public.notify_driver_new_offer() FROM PUBLIC, authenticated, anon;
 
 COMMENT ON FUNCTION public.notify_driver_new_offer() IS
-  '00327: Push notification to driver on every new ride_offers row. Realtime subscription is the fallback path; this guarantees delivery when the app is closed/backgrounded.';
+  '00332: Push notification to driver on every new ride_offers row. Realtime subscription is the fallback path; this guarantees delivery when the app is closed/backgrounded.';

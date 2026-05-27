@@ -1,5 +1,5 @@
 -- ============================================================
--- 00328_notifications_type_check.sql
+-- 00333_notifications_type_check.sql
 --
 -- Defense-in-depth against cross-event template contamination on
 -- the `notifications` inbox table (created by 00040). Today the
@@ -28,7 +28,7 @@
 --
 -- Values catalogued from the codebase (2026-05-27):
 --   ride               00124 (status changes accepted/en_route/arrived/in_progress/completed/canceled)
---   ride_offer         00327 (NEW — driver push on new offer)
+--   ride_offer         00332 (NEW — driver push on new offer)
 --   ride_matching      00269 (dispatch retry rounds 2/3)
 --   chat               00054 (new chat message)
 --   proximity          00095/00096 (driver near pickup/dropoff)
@@ -91,4 +91,4 @@ ALTER TABLE notifications
   VALIDATE CONSTRAINT notifications_type_check;
 
 COMMENT ON CONSTRAINT notifications_type_check ON notifications IS
-  '00328: Curated discriminator for inbox routing. Keep in sync with send-push EF validator and the codebase grep ''category|type'': ride, ride_offer, ride_matching, chat, proximity, payment, wallet_*, scheduled_ride, lost_item, dispute_update, sos, delivery, system, promo.';
+  '00333: Curated discriminator for inbox routing. Keep in sync with send-push EF validator and the codebase grep ''category|type'': ride, ride_offer, ride_matching, chat, proximity, payment, wallet_*, scheduled_ride, lost_item, dispute_update, sos, delivery, system, promo.';
