@@ -73,16 +73,23 @@ interface SearchOutcome {
   attribution: 'google' | 'mapbox' | 'mixed' | null;
 }
 
-async function searchUnified(query: string, near: GeoPoint | null, sessionToken: string | null): Promise<SearchOutcome> {
+async function searchUnified(query: string, near: GeoPoint | null, sessionToken: string | null, signal?: AbortSignal): Promise<SearchOutcome> {
   if (query.trim().length < 2) return { results: [], attribution: null };
+  // Short-circuit if caller already aborted before we even fire requests
+  if (signal?.aborted) return { results: [], attribution: null };
 
   // PR F (2026-05-25) — flipped search order: Google PRIMARY, cuba_pois
   // SECONDARY. Same change as the client AddressSearchInput — see the
   // comment there for the airport-bug rationale.
+  //
+  // T1.7 (2026-05-27) — pass AbortSignal to searchAddressUnified so the
+  // Google EF call gets cancelled when the user types another character
+  // before this debounced one resolves. Saves a Google billable session.
   const [unified, poiResults] = await Promise.all([
-    searchAddressUnified(query, getSupabaseClient(), near, undefined, 10, sessionToken ?? undefined).catch(() => [] as SearchBoxResult[]),
+    searchAddressUnified(query, getSupabaseClient(), near, signal, 10, sessionToken ?? undefined).catch(() => [] as SearchBoxResult[]),
     searchPoisSupabase(query, near, 6).catch(() => [] as SearchBoxResult[]),
   ]);
+  if (signal?.aborted) return { results: [], attribution: null };
   const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
   const streetResults: SearchBoxResult[] = detectedCategory
     ? []
@@ -159,6 +166,20 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
   // subsequent keystroke until the user selects, clears, or empties the
   // input. See `newSessionToken` for billing rationale.
   const sessionTokenRef = useRef<string | null>(null);
+  // T1.7 (2026-05-27) — cancel in-flight fetches when the user types
+  // another character or unmounts. Saves Google billable session +
+  // prevents stale responses sneaking through after `lastQueryRef` check.
+  const abortRef = useRef<AbortController | null>(null);
+  // T1.7 — in-memory cache for repeated queries within the same session
+  // (e.g. user types "Otra" → "Otramanera" → deletes → retypes "Otramanera"
+  // → cache hit, no Google call). Capped at 50 entries to prevent leak;
+  // cleared when `near` (driver location) changes since results are
+  // proximity-biased and stale coords would mislead.
+  const queryCacheRef = useRef<Map<string, SearchOutcome>>(new Map());
+  // T1.7 — flag flips after the first search completes. Used to gate the
+  // "No se encontraron lugares cerca" empty state so it doesn't flash
+  // before the first call even fires.
+  const hasSearchedRef = useRef(false);
 
   // Bias search results to the driver's current vicinity so closer
   // matches outrank far-away ones with similar names.
@@ -177,13 +198,35 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
     return () => { cancelled = true; };
   }, []);
 
+  // T1.7 — invalidate cache when driver location changes. The cached
+  // results are proximity-biased; keeping them after a meaningful move
+  // would show stale "near you" rankings.
+  useEffect(() => {
+    queryCacheRef.current.clear();
+  }, [near?.latitude, near?.longitude]);
+
+  // T1.7 — cleanup on unmount: cancel pending debounce + in-flight fetch.
+  // Prevents memory leaks and dangling Google calls when the driver
+  // navigates out of the search screen mid-typing.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const handleChangeText = useCallback((text: string) => {
     setQuery(text);
     lastQueryRef.current = text;
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    // T1.7 — cancel any in-flight fetch from the previous keystroke
+    abortRef.current?.abort();
+    abortRef.current = null;
     if (!text.trim()) {
       setResults([]);
+      setAttribution(null);
       setLoading(false);
+      hasSearchedRef.current = false;
       // Empty input ends the typeahead session — drop the token so the
       // next keystroke starts a fresh billable session.
       sessionTokenRef.current = null;
@@ -193,14 +236,38 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
     if (sessionTokenRef.current === null) {
       sessionTokenRef.current = newSessionToken();
     }
+
+    // T1.7 — in-memory cache check: if we already searched this exact
+    // query (normalized) since the last `near` change, reuse the result
+    // and skip the EF call entirely. Saves a Google billable session.
+    const cacheKey = text.trim().toLowerCase();
+    const cached = queryCacheRef.current.get(cacheKey);
+    if (cached) {
+      setResults(cached.results);
+      setAttribution(cached.attribution);
+      setLoading(false);
+      hasSearchedRef.current = true;
+      return;
+    }
+
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
-      const outcome = await searchUnified(text, near, sessionTokenRef.current);
-      // Drop stale responses if the user kept typing
-      if (lastQueryRef.current !== text) return;
+      // Fresh abort controller for THIS debounced fetch
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const outcome = await searchUnified(text, near, sessionTokenRef.current, controller.signal);
+      // Drop stale responses if the user kept typing OR the fetch was aborted
+      if (lastQueryRef.current !== text || controller.signal.aborted) return;
       setResults(outcome.results);
       setAttribution(outcome.attribution);
       setLoading(false);
+      hasSearchedRef.current = true;
+      // Cache result (LRU cap: 50 entries — evict oldest)
+      if (queryCacheRef.current.size >= 50) {
+        const firstKey = queryCacheRef.current.keys().next().value;
+        if (firstKey !== undefined) queryCacheRef.current.delete(firstKey);
+      }
+      queryCacheRef.current.set(cacheKey, outcome);
     }, 350);
   }, [near]);
 
@@ -214,6 +281,9 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
       // starts fresh (Google bills per-session, reusing the token after
       // select would mix unrelated typing into one billable session).
       sessionTokenRef.current = null;
+      // T1.7 — cancel any pending fetch (e.g. user typed + tapped result fast)
+      abortRef.current?.abort();
+      hasSearchedRef.current = false;
       onSelect({ latitude: item.latitude, longitude: item.longitude, address: item.address });
       // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox
       // lookup for selected Google/Supabase-miss results. Never blocks UX.
@@ -227,12 +297,24 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
   const handleClear = useCallback(() => {
     setQuery('');
     setResults([]);
+    setAttribution(null);
     setLoading(false);
     sessionTokenRef.current = null;
+    // T1.7 — cancel pending fetch + reset empty-state flag
+    abortRef.current?.abort();
+    hasSearchedRef.current = false;
     inputRef.current?.focus();
   }, []);
 
-  const showDropdown = focused && (results.length > 0 || loading);
+  // T1.7 — show empty state when we've done at least one search for this
+  // query and it returned nothing. Gated by `hasSearchedRef` to avoid
+  // flashing "no results" before the debounce fires.
+  const showEmptyState = focused
+    && !loading
+    && results.length === 0
+    && query.trim().length >= 2
+    && hasSearchedRef.current;
+  const showDropdown = focused && (results.length > 0 || loading || showEmptyState);
 
   return (
     <View style={styles.wrapper}>
@@ -272,6 +354,17 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
           {results.length === 0 && loading ? (
             <View style={styles.dropdownEmpty}>
               <ActivityIndicator size="small" color={colors.brand.orange} />
+            </View>
+          ) : showEmptyState ? (
+            /* T1.7 — explicit empty state replaces silent spinner */
+            <View style={styles.dropdownEmpty}>
+              <Ionicons name="search-outline" size={20} color={colors.neutral[500]} style={{ marginBottom: 6 }} />
+              <Text variant="body" style={{ color: colors.neutral[400], fontSize: 13, textAlign: 'center' }}>
+                No se encontraron lugares cerca
+              </Text>
+              <Text variant="caption" style={{ color: colors.neutral[500], fontSize: 11, marginTop: 4, textAlign: 'center' }}>
+                Probá con otro nombre o calle
+              </Text>
             </View>
           ) : (
             <FlatList
