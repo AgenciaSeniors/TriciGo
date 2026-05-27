@@ -239,6 +239,35 @@ Si el celu carga el dev client y queda en blanco/splash sin renderizar la app, *
 
 > Esta sección crece con cada sesión, igual que "Local dev". Captura las restricciones del sandbox y los patrones canónicos para evitar redescubrirlos.
 
+### Pre-flight para elegir número de migración (evitar colisiones)
+
+**Bug verificado 2026-05-27.** En sesiones paralelas dos PRs pueden elegir el mismo número de migración. Master ya tiene casos vivos:
+
+- `00332_push_driver_on_new_offer.sql` + `00332_search_streets_alias_normalization.sql`
+- `00333_notifications_type_check.sql` + `00333_search_streets_cross_alias.sql`
+
+Supabase usa el filename completo como `version` en `supabase_migrations.schema_migrations`, así que ambos archivos se aplican. Pero rompe la convención numérica y dificulta la lectura del historial.
+
+**Patrón canónico antes de elegir número de migración**:
+
+```bash
+git fetch origin master
+git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5
+```
+
+Elegir el siguiente número libre y confirmar antes de escribir el archivo. Si la sesión es larga, **re-checar antes del push** — otro PR podría haber landeado tu número mientras tanto.
+
+### Cadenas de `CREATE OR REPLACE FUNCTION` — verificar que el último wins no perdió features
+
+**Regresión verificada 2026-05-27.** La función `notify_ride_status_change` fue redefinida en 5 migraciones (00022, 00054, 00095, 00096, 00124). Cada `CREATE OR REPLACE` sobrescribe el cuerpo entero. Cuando 00124 cambió el header de auth para usar vault, copió y pegó la versión BASE de 00054 (sin el caso `arrived_at_destination` que 00096 había agregado, sin el fare en `completed` de 00095). Resultado: dos features perdidas silenciosamente en prod hasta el fix en 00334.
+
+**Patrón canónico cuando vas a hacer `CREATE OR REPLACE FUNCTION X`**:
+
+1. `grep -l "CREATE OR REPLACE FUNCTION.*X\b" supabase/migrations/*.sql | sort` para encontrar todas las migraciones que la redefinen.
+2. Leer la **última** versión (la que está en prod hoy).
+3. Si tu cambio toca el header/wiring (auth, params), conservar el cuerpo del case statement de la última versión.
+4. PR review: incluir un diff entre el cuerpo de la versión NUEVA y la anterior para que el reviewer detecte regresiones.
+
 ### MCP migration guard
 
 El MCP de Supabase está conectado a producción/shared infra. Cualquier `mcp__apply_migration` o `mcp__execute_sql` con DDL es **denegado por el sandbox** ("Permission for this action has been denied. Reason: Production/shared infrastructure modification without explicit user authorization."). Aplica también para creación de triggers, ALTERs, y funciones `CREATE OR REPLACE`.

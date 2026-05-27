@@ -7,11 +7,26 @@ import { router } from 'expo-router';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
-// Preference keys for granular filtering
+// Preference keys for granular filtering. Multiple notification
+// `data.type` values can map to the same toggle when they belong to
+// the same UX category (e.g. all ride-related events share the
+// rides toggle). Without these aliases, a new type like
+// 'wallet_recharge' would bypass the user's "wallet" preference
+// because PREF_KEYS['wallet_recharge'] would be undefined and the
+// handler defaults to shouldShowAlert: true.
 const PREF_KEYS: Record<string, string> = {
+  // Ride lifecycle
   ride: '@tricigo/notif_rides',
+  ride_matching: '@tricigo/notif_rides',
+  proximity: '@tricigo/notif_rides',
+  // Chat
   chat: '@tricigo/notif_chat',
+  // Wallet / payments
   wallet: '@tricigo/notif_wallet',
+  payment: '@tricigo/notif_wallet',
+  wallet_recharge: '@tricigo/notif_wallet',
+  wallet_recharge_refund: '@tricigo/notif_wallet',
+  // Marketing
   promo: '@tricigo/notif_promos',
 };
 
