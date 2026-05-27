@@ -93,13 +93,27 @@ export async function googlePlacesAutocomplete(
   // below (lines ~165) still drops any result outside Cuba in case Google
   // bends the bias and returns something close to the border.
   if (proximity) {
+    // Tier 1.6 R1 (2026-05-27) — radius 5km → 25km:
+    //
+    // 5km was too tight for national use across Cuba. The bug we were
+    // chasing: a user in Vedado searching "Paladar X" in Playa (~10km
+    // away) would see it ranked off the top-10 list because the strong
+    // 5km bias buried far-but-relevant venues. 25km comfortably covers
+    // Habana metro (Centro Habana → Playa, Vedado → Cojimar) and the
+    // immediate surroundings of every major Cuban city (Santiago,
+    // Camagüey, Holguín, etc.).
+    //
+    // locationBias is preference, not exclusion — Google will still
+    // include faraway results (e.g. an exact-name match in another
+    // province) but rank them below the biased zone. That's the right
+    // trade-off for "search where I am".
     body.locationBias = {
       circle: {
         center: {
           latitude: proximity.latitude,
           longitude: proximity.longitude,
         },
-        radius: 5000, // 5km — typical urban search radius
+        radius: 25000, // 25km — covers Cuban metropolitan areas
       },
     };
   } else {
@@ -222,10 +236,22 @@ export async function googlePlacesAutocomplete(
   for (const d of details) {
     if (!d) continue;
     // Sanity: confirm within Cuba bbox (Google may bend the restriction).
+    //
+    // Tier 1.6 R5 (2026-05-27) — widened bounds with ±0.2° margin (~20km):
+    //   - lat: 19.5/23.5 → 19.3/23.7
+    //   - lng: -85.0/-74.0 → -85.2/-73.8
+    //
+    // Why: Google occasionally returns coords slightly outside the
+    // canonical Cuba bbox for coastal venues (cayos on the edge,
+    // marinas, coastal hotels). The previous strict bounds silently
+    // dropped these legitimate Cuban places. The margin still keeps
+    // results within the ocean/cayos around Cuba (no risk of bleeding
+    // into Bahamas, Caymans, etc. as actual settlements there are
+    // hundreds of km outside Cuba's coordinates).
+    //
     // PR I (2026-05-25): log rejections so we notice when a real Cuban
-    // venue (e.g. coastal hotel in a cayo on the bbox edge) is being
-    // silently dropped. Behaviour unchanged.
-    if (d.lat < 19.5 || d.lat > 23.5 || d.lng < -85.0 || d.lng > -74.0) {
+    // venue is being silently dropped. Behaviour unchanged.
+    if (d.lat < 19.3 || d.lat > 23.7 || d.lng < -85.2 || d.lng > -73.8) {
       console.warn(
         '[search-places-google] bbox_reject placeId=%s mainText=%s lat=%f lng=%f',
         d.placeId, d.mainText, d.lat, d.lng,
