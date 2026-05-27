@@ -148,6 +148,121 @@
 
 ---
 
+## 6. NETOPIA — switch sandbox → live (cuando estés listo para tráfico real)
+
+> **Añadido:** 2026-05-27. El código ya soporta live (el EF `create-netopia-payment-intent` rutea según `platform_config.netopia_environment`). Faltan credenciales, configuración y smoke test antes de switchear.
+
+**Qué bloquea:** Sin esto, las recargas reales de los usuarios NO se procesan — NETOPIA sandbox no debita tarjetas reales. Esto es lo último que se ejecuta antes de abrir tráfico productivo.
+
+### Pre-requisitos externos (hard requirements de NETOPIA, no de TriciGo)
+
+- [ ] **KYC completo en NETOPIA Romania** — documentos de identidad + comprobante de domicilio + selfie de verificación
+- [ ] **Contrato comercial firmado** — define fees, settlement terms, currencies habilitadas, payout schedule
+- [ ] **Bank account verificada para settlements** — NETOPIA hace deposits ahí. **Debe ser bank account fuera de Cuba** (NETOPIA no opera con entidades cubanas — mismo problema que Stripe)
+- [ ] **Currency USD habilitada en el POS dashboard** — por default solo RON. Sin esto el flow USD falla
+- [ ] **API key live generada** — NETOPIA admin → Profile → Security → "Generate API key". **Guardar fuera del repo** (Supabase Secrets only)
+- [ ] **POS signature live obtenida** — NETOPIA admin → POS settings → "Semnătură" (formato `XXXX-XXXX-XXXX-XXXX-XXXX`)
+
+### Qué necesitas
+
+- Las credentials del bullet anterior
+- 30 min para smoke testing con TU tarjeta real (monto mínimo configurado, típicamente $20 USD)
+- Aprobación tuya explícita para hacer el switch
+
+### Plan de ejecución (orden estricto — no saltarse pasos)
+
+**Paso 1 — Pre-flight check (read-only, no cambia nada)**
+- Confirmar que el EF en prod tiene branching sandbox/live:
+  ```
+  mcp get-edge-function create-netopia-payment-intent
+  ```
+  Buscar la función `netopiaApiBase(env)` que rutea entre `secure.sandbox.netopia-payments.com` y `secure.netopia-payments.com`.
+
+**Paso 2 — Setear credentials live SIN activar live todavía**
+
+En Supabase Dashboard → Edge Functions → Secrets:
+```
+NETOPIA_LIVE_API_KEY = <api key del NETOPIA dashboard>
+```
+
+En Supabase Dashboard → SQL Editor (con auth explícita del user porque toca platform_config en prod):
+```sql
+UPDATE platform_config
+SET value = '"<live POS signature>"', updated_at = NOW()
+WHERE key = 'netopia_live_signature';
+```
+
+**⚠️ NO TOCAR `netopia_environment` todavía** — debe seguir en `'sandbox'`.
+
+**Paso 3 — Sandbox health check (sanity — confirma que el setup nuevo no rompió nada)**
+
+Hacer una recarga sandbox de $20 USD con tarjeta `9900 0000 0000 5159`, CVV `123`, exp `12/30`:
+- [ ] NETOPIA confirma success
+- [ ] IPN webhook llega (`process-netopia-webhook` log)
+- [ ] Wallet acreditada en DB
+- **Si falla → STOP**, algo se rompió con los cambios. No continuar.
+
+**Paso 4 — Activar live** (el switch atómico)
+
+```sql
+UPDATE platform_config
+SET value = '"live"', updated_at = NOW()
+WHERE key = 'netopia_environment';
+```
+
+A partir de este UPDATE, el próximo intent va a NETOPIA live (URL `secure.netopia-payments.com`).
+
+**Paso 5 — Smoke test con TU tarjeta real, monto mínimo ($20 USD si es el min)**
+
+Hacer una recarga real desde TU usuario admin (todavía NO abrir a usuarios reales):
+- [ ] NETOPIA hosted page carga URL `secure.netopia-payments.com` (NO `sandbox`)
+- [ ] Pagás con tarjeta real (probablemente requiere 3DS/OTP del banco emisor)
+- [ ] NETOPIA confirma success en pantalla
+- [ ] IPN webhook llega (`process-netopia-webhook` log con `mapNetopiaStatus(3) → 'paid'`)
+- [ ] `payment_intents` table tiene row con `status='completed'` y `payment_provider='netopia'`
+- [ ] `ledger_transactions` tiene row de credit (idempotency_key `stripe_recharge_<intent>`)
+- [ ] Wallet (`customer_cash` o `tricicoin`) subió el monto esperado
+- [ ] Estado de cuenta de TU tarjeta muestra el cargo real (puede tardar 1-3 días hábiles en aparecer)
+- [ ] Email de NETOPIA llega al cardholder (probablemente en rumano — issue conocido sección 5)
+
+**Paso 6 — Apertura gradual a usuarios reales**
+
+Si todo el paso 5 está ✓:
+- Empezar con grupo cerrado de 5-10 beta testers (no anunciar públicamente)
+- Monitorear logs de `process-netopia-webhook` + DB `payment_intents` por 24-48hs
+- Buscar: discrepancias, two-IPN inesperados, ntpID mismatches, errores de credit RPC
+
+Si todo OK a las 48hs → abrir tráfico general.
+
+### Rollback (en cualquier momento si algo se rompe)
+
+```sql
+UPDATE platform_config
+SET value = '"sandbox"', updated_at = NOW()
+WHERE key = 'netopia_environment';
+```
+
+El switch back es inmediato — el próximo intent vuelve a sandbox. **Las transacciones live ya procesadas NO se revierten automáticamente** — requieren refund manual via NETOPIA POS dashboard si hace falta.
+
+### Riesgos conocidos en live (no son blockers pero los considero)
+
+- **Email cardholder en rumano** — issue abierto NETOPIA ticket (sección 5). Probablemente se repite en live. UX issue, no funcional.
+- **Two-IPN race condition** — observado en sandbox (intent `d3fc744f`). El fix de PR #158 (EF v5) lo mitiga automáticamente con `failed→paid` recovery + ntpID matching. No requiere acción.
+- **3DS challenge real** — algunos bancos requieren OTP via SMS o app del banco. Asegurarse que TU tarjeta lo soporte para el smoke test.
+- **Tarjetas no cubanas** — NETOPIA está en Rumania. Los cardholders cubanos pueden no tener tarjetas Visa/MC internacionales (acceso limitado en Cuba a USD cards). Esto **NO es un problema de la integración** — es contexto de mercado.
+
+### Tiempo estimado
+
+- Paso 1-2: 15 min (setear credentials)
+- Paso 3: 5 min (sandbox sanity)
+- Paso 4: 1 min (switch activate)
+- Paso 5: 10 min (smoke test real)
+- Paso 6: 24-48hs (monitoreo + apertura gradual)
+
+**Total para abrir tráfico real: ~30 min + 48hs de baking**
+
+---
+
 ## Orden de resolución recomendado
 
 ```
@@ -160,14 +275,15 @@
 4. App Store Submission (después de smoke test exitoso)
    ↓
 5. Load Testing (después de primeros usuarios reales)
+   ↓
+6. NETOPIA switch sandbox → live (sección 6 — ÚLTIMO antes de tráfico real)
 
 ═══════════════════════════════════════════════════════════════
 PARALELO (independiente del orden de arriba):
 ═══════════════════════════════════════════════════════════════
 
 • NETOPIA Support ticket (sección 5) — podés mandarlo en cualquier
-  momento; la respuesta llega cuando llegue. No bloquea ninguno
-  de los items 1-5.
+  momento; la respuesta llega cuando llegue. No bloquea los items 1-6.
 ```
 
 ---
@@ -185,3 +301,10 @@ PARALELO (independiente del orden de arriba):
 - [ ] Confirmar: Google Play Console activo
 - [ ] Confirmar: ticket NETOPIA enviado (texto en plan A.3, sección 5 arriba)
 - [ ] Respuesta de NETOPIA support (cuando llegue) — copy/paste la respuesta acá o reenviame el email
+
+**Para el switch a live (sección 6):**
+- [ ] NETOPIA_LIVE_API_KEY (valor exacto del NETOPIA dashboard → Profile → Security)
+- [ ] NETOPIA Live POS signature (`XXXX-XXXX-XXXX-XXXX-XXXX` del POS settings → "Semnătură")
+- [ ] Confirmar: KYC + contrato + bank account NETOPIA validados
+- [ ] Confirmar: USD habilitada en POS dashboard NETOPIA
+- [ ] TU tarjeta real disponible para el smoke test de $20 USD (saldo + 3DS habilitado)
