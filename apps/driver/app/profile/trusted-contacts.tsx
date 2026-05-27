@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Switch, Alert, ScrollView, RefreshControl } from 'react-native';
+import { View, Pressable, Switch, Alert, ScrollView, RefreshControl, useColorScheme } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -11,7 +11,7 @@ import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { StaggeredList } from '@tricigo/ui/AnimatedCard';
 import { trustedContactService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
@@ -23,6 +23,9 @@ const MAX_CONTACTS = 5;
 
 export default function TrustedContactsScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const user = useAuthStore((s) => s.user);
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,11 +91,12 @@ export default function TrustedContactsScreen() {
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadContacts(); }} />;
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={midnightEmber.accent[500]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.brand.orange} />}
       >
         <View className="pt-4 pb-8">
           <ProfileScreenHeader
@@ -194,6 +198,7 @@ export default function TrustedContactsScreen() {
           onAdded={loadContacts}
         />
       )}
+      </View>
     </Screen>
   );
 }

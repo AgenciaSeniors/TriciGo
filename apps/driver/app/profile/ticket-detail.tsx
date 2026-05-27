@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Pressable, FlatList, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Pressable, FlatList, TextInput, KeyboardAvoidingView, Platform, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, midnightEmber } from '@tricigo/theme';
+import { colors, midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketMessage } from '@tricigo/types';
@@ -20,6 +20,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function DriverTicketDetailScreen() {
   const { t } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const { ticketId } = useLocalSearchParams<{ ticketId: string }>();
   const userId = useAuthStore((s) => s.user?.id);
   const flatListRef = useRef<FlatList>(null);
@@ -107,7 +110,8 @@ export default function DriverTicketDetailScreen() {
   const isClosed = ticket?.status === 'closed' || ticket?.status === 'resolved';
 
   return (
-    <Screen bg="lightPrimary" statusBarStyle="dark-content">
+    <Screen bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
@@ -188,6 +192,7 @@ export default function DriverTicketDetailScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+      </View>
     </Screen>
   );
 }

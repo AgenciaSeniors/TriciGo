@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Pressable, Alert, Image, Platform } from 'react-native';
+import { View, Pressable, Alert, Image, Platform, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,7 +12,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Card } from '@tricigo/ui/Card';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { isValidPlateNumber } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
@@ -82,6 +82,9 @@ const INITIAL_PHOTOS: PhotoDoc[] = [
 export default function EditVehicleScreen() {
   const { t } = useTranslation('driver');
   const { t: tc } = useTranslation('common');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const driverId = useDriverStore((s) => s.profile?.id);
 
   // Vehicle fields
@@ -239,7 +242,8 @@ export default function EditVehicleScreen() {
   };
 
   return (
-    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4">
         {/* Header */}
         <ProfileScreenHeader
@@ -445,6 +449,7 @@ export default function EditVehicleScreen() {
             />
           </>
         )}
+      </View>
       </View>
     </Screen>
   );
