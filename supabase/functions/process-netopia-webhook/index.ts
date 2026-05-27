@@ -460,25 +460,13 @@ Deno.serve(async (req) => {
  * payment was rejected without opening the app.
  */
 async function sendPaymentNotification(
-  supabase: ReturnType<typeof createClient>,
+  _supabase: ReturnType<typeof createClient>,
   userId: string,
   amountCup: number,
   success: boolean,
   failReason?: string | null,
 ): Promise<void> {
   try {
-    const { data: devices } = await supabase
-      .from('user_devices')
-      .select('push_token')
-      .eq('user_id', userId)
-      .not('push_token', 'is', null);
-
-    const tokens = (devices ?? [])
-      .map((d: { push_token: string | null }) => d.push_token)
-      .filter(Boolean) as string[];
-
-    if (tokens.length === 0) return;
-
     const formattedAmount = amountCup.toLocaleString();
     const title = success ? 'Recarga exitosa' : 'Recarga fallida';
 
@@ -497,18 +485,27 @@ async function sendPaymentNotification(
       body = `Tu recarga de ${formattedAmount} CUP no pudo ser procesada.`;
     }
 
-    const messages = tokens.map((token) => ({
-      to: token,
-      title,
-      body,
-      sound: 'default' as const,
-      data: { type: 'wallet_recharge', success: String(success), provider: 'netopia' },
-    }));
-
-    await fetch('https://exp.host/--/api/v2/push/send', {
+    // Route through send-push EF so the push gets:
+    //   • dead token cleanup (DeviceNotRegistered tickets)
+    //   • persistence to the `notifications` inbox table
+    //   • category validation against VALID_CATEGORIES
+    // Previously we called Expo's API directly and bypassed all three.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    await fetch(`${supabaseUrl}/functions/v1/send-push`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(messages),
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        title,
+        body,
+        category: 'wallet_recharge',
+        data: { type: 'wallet_recharge', success: String(success), provider: 'netopia' },
+      }),
     });
   } catch (err) {
     console.error('[netopia] Error sending payment notification:', err);
@@ -521,36 +518,31 @@ async function sendPaymentNotification(
  * this is just the user-facing announcement.
  */
 async function sendRefundNotification(
-  supabase: ReturnType<typeof createClient>,
+  _supabase: ReturnType<typeof createClient>,
   userId: string,
   amountCup: number,
 ): Promise<void> {
   try {
-    const { data: devices } = await supabase
-      .from('user_devices')
-      .select('push_token')
-      .eq('user_id', userId)
-      .not('push_token', 'is', null);
-
-    const tokens = (devices ?? [])
-      .map((d: { push_token: string | null }) => d.push_token)
-      .filter(Boolean) as string[];
-
-    if (tokens.length === 0) return;
-
     const formattedAmount = amountCup.toLocaleString();
-    const messages = tokens.map((token) => ({
-      to: token,
-      title: 'Recarga reembolsada',
-      body: `Tu recarga de ${formattedAmount} CUP fue reembolsada. Si tienes dudas, escríbenos a soporte@tricigo.com.`,
-      sound: 'default' as const,
-      data: { type: 'wallet_recharge_refund', provider: 'netopia' },
-    }));
 
-    await fetch('https://exp.host/--/api/v2/push/send', {
+    // Route through send-push EF (same reasoning as sendPaymentNotification):
+    // dead token cleanup + inbox persistence + category validation.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    await fetch(`${supabaseUrl}/functions/v1/send-push`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(messages),
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        title: 'Recarga reembolsada',
+        body: `Tu recarga de ${formattedAmount} CUP fue reembolsada. Si tienes dudas, escríbenos a soporte@tricigo.com.`,
+        category: 'wallet_recharge_refund',
+        data: { type: 'wallet_recharge_refund', provider: 'netopia' },
+      }),
     });
   } catch (err) {
     console.error('[netopia] Error sending refund notification:', err);

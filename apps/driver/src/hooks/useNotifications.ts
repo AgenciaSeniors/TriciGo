@@ -7,11 +7,24 @@ import { router } from 'expo-router';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
-// Preference keys for granular filtering
+// Preference keys for granular filtering. Multiple notification
+// `data.type` values can map to the same toggle when they belong to
+// the same UX category. Note: `ride_offer` is intentionally NOT
+// mapped here — offers are core to being a working driver, so the
+// only way to silence them is the master toggle (which is
+// effectively going offline). See PR follow-up doc.
 const PREF_KEYS: Record<string, string> = {
+  // Ride lifecycle
   ride: '@tricigo/notif_rides',
+  proximity: '@tricigo/notif_rides',
+  scheduled_ride: '@tricigo/notif_rides',
+  // Chat
   chat: '@tricigo/notif_chat',
+  // Wallet / payments (driver earnings)
   wallet: '@tricigo/notif_wallet',
+  payment: '@tricigo/notif_wallet',
+  wallet_recharge: '@tricigo/notif_wallet',
+  wallet_recharge_refund: '@tricigo/notif_wallet',
 };
 
 Notifications.setNotificationHandler({
