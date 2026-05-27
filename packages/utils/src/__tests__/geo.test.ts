@@ -14,6 +14,8 @@ import {
   importPoiFromSearch,
   dedupeSearchResults,
   searchAddressGoogle,
+  searchAddressUnified,
+  newSessionToken,
   mapExternalCategoryToTricigo,
   tricigoCategoryEmoji,
   type SearchBoxResult,
@@ -897,5 +899,221 @@ describe('mapExternalCategoryToTricigo', () => {
       const tc = mapExternalCategoryToTricigo('google', 'tourist_attraction');
       expect(tricigoCategoryEmoji(tc)).toBe('📍');
     });
+  });
+});
+
+// ============================================================
+// PR C of POI parity (2026-05-27) — Google Places session tokens
+//
+// `newSessionToken` is the helper used by every search component to
+// generate ONE token at the start of a typeahead session and reuse it
+// across every keystroke until select/clear. With session reuse, Google
+// bills the entire session as a single SKU instead of N per-request
+// calls — ~70-80% cost reduction at the same UX.
+// ============================================================
+describe('newSessionToken', () => {
+  it('returns a non-empty string', () => {
+    const t = newSessionToken();
+    expect(typeof t).toBe('string');
+    expect(t.length).toBeGreaterThan(0);
+  });
+
+  it('returns a different token on each call (no collisions across sessions)', () => {
+    const tokens = new Set(Array.from({ length: 50 }, () => newSessionToken()));
+    expect(tokens.size).toBe(50);
+  });
+
+  it('falls back gracefully when crypto.randomUUID is unavailable', () => {
+    // Some older RN runtimes / non-secure contexts don't ship crypto.randomUUID.
+    // The helper must still produce a usable opaque string in that case.
+    const originalCrypto = globalThis.crypto;
+    // Replace the global with one that lacks randomUUID
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {},
+    });
+    try {
+      const t = newSessionToken();
+      expect(typeof t).toBe('string');
+      expect(t.length).toBeGreaterThan(0);
+      // Should still be unique across multiple fallback calls
+      const t2 = newSessionToken();
+      expect(t).not.toBe(t2);
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', {
+        configurable: true,
+        value: originalCrypto,
+      });
+    }
+  });
+});
+
+// ============================================================
+// PR C of POI parity (2026-05-27) — sessionToken forwarding
+//
+// Verify the new `sessionToken` param on `searchAddressGoogle` lands in
+// the EF body under the snake_case `session_token` key (the EF reads it
+// as `session_token` per index.ts:body). Without this contract the EF
+// silently bills per-request and the cost reduction never materialises.
+// ============================================================
+describe('searchAddressGoogle — session token forwarding', () => {
+  function mkSupabase(invokeImpl: (name: string, opts: { body?: unknown }) => Promise<{ data: unknown; error: { message: string } | null }>) {
+    return {
+      functions: { invoke: invokeImpl },
+    };
+  }
+
+  it('passes session_token in the EF body when supplied', async () => {
+    const invokeSpy = vi.fn(async () => ({ data: { data: [] }, error: null }));
+    const supabase = mkSupabase(invokeSpy);
+    await searchAddressGoogle('hotel boutique', supabase, null, undefined, 10, 'tok-abc-123');
+    expect(invokeSpy).toHaveBeenCalledOnce();
+    const [, opts] = invokeSpy.mock.calls[0]!;
+    const body = (opts as { body: { session_token?: string } }).body;
+    expect(body.session_token).toBe('tok-abc-123');
+  });
+
+  it('omits session_token (sends undefined) when caller does not supply one', async () => {
+    const invokeSpy = vi.fn(async () => ({ data: { data: [] }, error: null }));
+    const supabase = mkSupabase(invokeSpy);
+    await searchAddressGoogle('hotel boutique', supabase);
+    const [, opts] = invokeSpy.mock.calls[0]!;
+    const body = (opts as { body: { session_token?: string } }).body;
+    expect(body.session_token).toBeUndefined();
+  });
+});
+
+// ============================================================
+// PR C of POI parity (2026-05-27) — searchAddressUnified dispatcher
+//
+// This is the function that every new caller uses. It tries Google first
+// (best Cuban coverage for the long-tail of paladares/mypimes/kioscos)
+// and falls back to Mapbox SearchBox when Google returns nothing OR sends
+// the `fallback: 'mapbox'` hint (budget cap, API misconfigured, etc.).
+//
+// Tests use a global fetch stub to control the Mapbox path without
+// hitting the network. The Google path is controlled via the Supabase
+// invoke mock.
+// ============================================================
+describe('searchAddressUnified', () => {
+  function mkSupabase(invokeImpl: (name: string, opts: { body?: unknown }) => Promise<{ data: unknown; error: { message: string } | null }>) {
+    return {
+      functions: { invoke: invokeImpl },
+    };
+  }
+
+  function mockMapboxResponse(features: Array<{ name: string; lat: number; lng: number }>) {
+    const body = {
+      suggestions: features.map((f) => ({
+        name: f.name,
+        full_address: f.name,
+        mapbox_id: `mb_${f.name}`,
+        feature_type: 'poi',
+      })),
+    };
+    const retrieveBody = {
+      features: features.map((f) => ({
+        properties: {
+          name: f.name,
+          full_address: f.name,
+          mapbox_id: `mb_${f.name}`,
+        },
+        geometry: { coordinates: [f.lng, f.lat] },
+      })),
+    };
+    const fetchStub = vi.fn(async (url: string) => {
+      // Mapbox SearchBox uses 2 endpoints: /suggest then /retrieve. We
+      // route on the URL substring so the same stub handles both.
+      if (url.includes('/suggest')) {
+        return new Response(JSON.stringify(body), { status: 200 });
+      }
+      return new Response(JSON.stringify(retrieveBody), { status: 200 });
+    });
+    globalThis.fetch = fetchStub as unknown as typeof fetch;
+    return fetchStub;
+  }
+
+  let originalFetch: typeof fetch;
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it('returns Google results without calling Mapbox when Google has hits', async () => {
+    const supabase = mkSupabase(async () => ({
+      data: {
+        data: [
+          {
+            address: 'Malecón 663',
+            latitude: 23.1408,
+            longitude: -82.3712,
+            place_name: 'Hotel Boutique Malecon 663',
+            matchedCategory: 'lodging',
+          },
+        ],
+      },
+      error: null,
+    }));
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const out = await searchAddressUnified('hotel boutique', supabase);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.source).toBe('google');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('falls back to Mapbox (re-tagged source=mapbox) when Google returns []', async () => {
+    const supabase = mkSupabase(async () => ({
+      data: { data: [] },
+      error: null,
+    }));
+    mockMapboxResponse([{ name: 'Hotel X', lat: 23.0, lng: -82.0 }]);
+    const out = await searchAddressUnified('hotel x', supabase);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.source).toBe('mapbox');
+    expect(out[0]!.place_name).toBe('Hotel X');
+  });
+
+  it('falls back to Mapbox when Google sends fallback hint (budget cap)', async () => {
+    const supabase = mkSupabase(async () => ({
+      data: { data: [], fallback: 'mapbox', reason: 'budget_cap' },
+      error: null,
+    }));
+    mockMapboxResponse([{ name: 'Hotel Y', lat: 23.0, lng: -82.0 }]);
+    const out = await searchAddressUnified('hotel y', supabase);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.source).toBe('mapbox');
+  });
+
+  it('returns [] when both Google and Mapbox return nothing', async () => {
+    const supabase = mkSupabase(async () => ({
+      data: { data: [] },
+      error: null,
+    }));
+    mockMapboxResponse([]);
+    const out = await searchAddressUnified('xyzzy nonexistent', supabase);
+    expect(out).toEqual([]);
+  });
+
+  it('skips Google entirely when supabase=null and goes straight to Mapbox', async () => {
+    const fetchSpy = mockMapboxResponse([{ name: 'Hotel Z', lat: 23.0, lng: -82.0 }]);
+    const out = await searchAddressUnified('hotel z', null);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.source).toBe('mapbox');
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it('forwards the sessionToken to searchAddressGoogle (EF body session_token)', async () => {
+    const invokeSpy = vi.fn(async () => ({ data: { data: [] }, error: null }));
+    const supabase = mkSupabase(invokeSpy);
+    mockMapboxResponse([]); // Mapbox empty so we don't care about its branch
+    await searchAddressUnified('hotel', supabase, null, undefined, 10, 'tok-unified-456');
+    expect(invokeSpy).toHaveBeenCalled();
+    const [, opts] = invokeSpy.mock.calls[0]!;
+    const body = (opts as { body: { session_token?: string } }).body;
+    expect(body.session_token).toBe('tok-unified-456');
   });
 });
