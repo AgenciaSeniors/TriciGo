@@ -31,12 +31,17 @@ import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { colors } from '@tricigo/theme';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
-import { registerSoundAssets } from '@tricigo/utils';
+import { registerSoundAssets, setupRuntimeLogging } from '@tricigo/utils';
 import { useMapboxOffline } from '@/hooks/useMapboxOffline';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { registerForPushNotifications } from '@/services/push.service';
 import { useRideInit } from '@/hooks/useRide';
 import '../global.css';
+
+// Silence known-benign runtime warnings (ExpoKeepAwake / expo-av / SafeAreaView
+// / push token network failure). MUST run before initSentry so the rejection
+// tracker is installed first. See setupRuntimeLogging.native.ts for details.
+try { setupRuntimeLogging(); } catch { /* setup failed — non-fatal */ }
 
 // Initialize Sentry as early as possible (safe for web)
 try { initSentry(); } catch { /* Sentry init failed — non-fatal */ }
