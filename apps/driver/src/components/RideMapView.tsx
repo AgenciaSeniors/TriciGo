@@ -167,6 +167,23 @@ function toCoord(p: GeoPoint): [number, number] {
   return [p.longitude, p.latitude];
 }
 
+/**
+ * BUG-Mapbox-Null-Coord: Mapbox Camera's `stop` prop crashes with
+ *   `JSApplicationIllegalArgumentException: Expected NUMBER but was NULL at path $.coordinates[0]`
+ * when ANY coordinate in bounds/route is NULL or NaN. ride_location_events
+ * occasionally land in DB with null lat/lng (GPS unavailable mid-trip).
+ * This guard filters out invalid coords before they reach the native side.
+ */
+function isFiniteCoord(p: GeoPoint | null | undefined): p is GeoPoint {
+  return (
+    !!p &&
+    typeof p.latitude === 'number' &&
+    typeof p.longitude === 'number' &&
+    Number.isFinite(p.latitude) &&
+    Number.isFinite(p.longitude)
+  );
+}
+
 // ── Web Mapbox GL component ─────────────────────────────────────────────────────
 function WebMapboxView({
   driverLocation,
@@ -844,11 +861,15 @@ function RideMapViewInner(
   }, [pickupLocation, pickupPulseAnim, pickupPulseOpacity]);
 
   // Build route GeoJSON
+  // BUG-Mapbox-Null-Coord: filter null/NaN coords before passing to Mapbox
+  // (ride_location_events can have null lat/lng if GPS dropped mid-trip).
   const routeGeoJSON = useMemo(() => {
     if (!routeCoordinates || routeCoordinates.length < 2) return null;
+    const valid = routeCoordinates.filter(isFiniteCoord);
+    if (valid.length < 2) return null;
     return {
       type: 'Feature' as const,
-      geometry: { type: 'LineString' as const, coordinates: routeCoordinates.map(toCoord) },
+      geometry: { type: 'LineString' as const, coordinates: valid.map(toCoord) },
       properties: {},
     };
   }, [routeCoordinates]);
@@ -924,13 +945,17 @@ function RideMapViewInner(
   const bounds = useMemo(() => {
     if (followMode) return null;
     const allCoords: [number, number][] = [];
+    // BUG-Mapbox-Null-Coord: filter at every push so a single bad
+    // pickup/dropoff/driver/route point can't crash the Camera.
     if (routeCoordinates && routeCoordinates.length > 0) {
-      routeCoordinates.forEach((c) => allCoords.push(toCoord(c)));
+      routeCoordinates.forEach((c) => {
+        if (isFiniteCoord(c)) allCoords.push(toCoord(c));
+      });
     } else {
-      if (pickupLocation) allCoords.push(toCoord(pickupLocation));
-      if (dropoffLocation) allCoords.push(toCoord(dropoffLocation));
+      if (isFiniteCoord(pickupLocation)) allCoords.push(toCoord(pickupLocation));
+      if (isFiniteCoord(dropoffLocation)) allCoords.push(toCoord(dropoffLocation));
     }
-    if (driverLocation) allCoords.push(toCoord(driverLocation));
+    if (isFiniteCoord(driverLocation)) allCoords.push(toCoord(driverLocation));
     if (allCoords.length < 2) return null;
     return computeBounds(allCoords);
   }, [pickupLocation, dropoffLocation, driverLocation, routeCoordinates, followMode]);
@@ -1029,7 +1054,8 @@ function RideMapViewInner(
   }, [snappedDriver?.bearing, driverHeading]);
 
   // Default center: driver location > Havana
-  const defaultCenter: [number, number] = driverLocation
+  // BUG-Mapbox-Null-Coord: guard against driverLocation with null lat/lng.
+  const defaultCenter: [number, number] = isFiniteCoord(driverLocation)
     ? toCoord(driverLocation)
     : HAVANA_CENTER;
 
@@ -1054,7 +1080,8 @@ function RideMapViewInner(
   // hid the pickup detail. Closer + status-appropriate pitch = more
   // Uber-like.
   const tripCameraProfile = useMemo(() => {
-    if (!followMode || !driverLocation) return null;
+    // BUG-Mapbox-Null-Coord: also reject driverLocation with null lat/lng.
+    if (!followMode || !isFiniteCoord(driverLocation)) return null;
     const driverCoord = toCoord(driverLocation);
     // BUG-298: camera bearing must match the marker bearing. Previously this
     // was `driverHeading` (raw GPS+EMA from useDriverLocation), while the
@@ -1171,7 +1198,8 @@ function RideMapViewInner(
       cameraRef.current?.flyTo([lng, lat], zoom);
     },
     recenterOnDriver() {
-      if (driverLocation) {
+      // BUG-Mapbox-Null-Coord: defensive guard.
+      if (isFiniteCoord(driverLocation)) {
         cameraRef.current?.flyTo(toCoord(driverLocation), 15);
       }
     },
@@ -1393,7 +1421,7 @@ function RideMapViewInner(
           // the GPS point.
           // BUG-281: branded TriciGo pin (transparent silhouette tinted to
           // brand orange) replaces the previous red circle + tail combo.
-          <MapboxGL.MarkerView id="dropoff" coordinate={toCoord(dropoffLocation)} anchor={{ x: 0.5, y: 1 }}>
+          <MapboxGL.MarkerView id="dropoff" coordinate={isFiniteCoord(dropoffLocation) ? toCoord(dropoffLocation) : HAVANA_CENTER} anchor={{ x: 0.5, y: 1 }}>
             {/* BUG-285 — wrapper needs explicit width/height so MarkerView
                 doesn't lay it out as 0×0 (which made the dropoff pin
                 disappear during the trip even though the route polyline
@@ -1420,7 +1448,7 @@ function RideMapViewInner(
             </View>
           </MapboxGL.MarkerView>
         )}
-        {riderLocation && (
+        {isFiniteCoord(riderLocation) && (
           <MapboxGL.PointAnnotation id="rider" coordinate={toCoord(riderLocation)}>
             <View style={styles.riderMarker} accessibilityLabel="Rider location" />
           </MapboxGL.PointAnnotation>
@@ -1549,7 +1577,7 @@ function RideMapViewInner(
             overlap (driver at pickup), the green pickup stays visible on
             top instead of being hidden under the auto/triciclo icon.
             MarkerView z-order on Android follows JSX order. */}
-        {pickupLocation && (
+        {isFiniteCoord(pickupLocation) && (
           <MapboxGL.MarkerView id="pickup" coordinate={toCoord(pickupLocation)} anchor={{ x: 0.5, y: 0.5 }}>
             <View style={{ width: MARKER.pickup.size, height: MARKER.pickup.size, alignItems: 'center', justifyContent: 'center' }}>
               <Animated.View
