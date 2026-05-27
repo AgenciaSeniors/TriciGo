@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, ActivityIndicator } from 'react-native';
+import { View, TextInput, ActivityIndicator, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -9,13 +9,16 @@ import { Button } from '@tricigo/ui/Button';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { formatCUP, triggerHaptic, validateDriverRate } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 
 export default function DriverPricingScreen() {
   const { t } = useTranslation('driver');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const palette = isDark ? cubanDark : cubanLight;
   const driverProfile = useDriverStore((s) => s.profile);
 
   const [loading, setLoading] = useState(true);
@@ -136,16 +139,17 @@ export default function DriverPricingScreen() {
 
   if (loading) {
     return (
-      <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
-        <View className="flex-1 items-center justify-center pt-20">
-          <ActivityIndicator size="large" color={midnightEmber.accent[500]} />
+      <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+        <View style={{ flex: 1, backgroundColor: palette.bg.paper }} className="items-center justify-center pt-20">
+          <ActivityIndicator size="large" color={colors.brand.orange} />
         </View>
       </Screen>
     );
   }
 
   return (
-    <Screen scroll bg="lightPrimary" statusBarStyle="dark-content" padded>
+    <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'} padded>
+      <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
       <View className="pt-4">
         {/* Header */}
         <ProfileScreenHeader
@@ -283,6 +287,7 @@ export default function DriverPricingScreen() {
             disabled={saving}
           />
         )}
+      </View>
       </View>
     </Screen>
   );
