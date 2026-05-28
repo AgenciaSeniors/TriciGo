@@ -1055,6 +1055,216 @@ override fun onUserLeaveHint() {
 
 ---
 
+### Search de direcciones — estado canónico (Tier 1.5 + 1.6 + 1.7 cerrados 2026-05-27)
+
+> Esta sección documenta el estado actual del search y los patrones aprendidos durante 3 sesiones de trabajo (7 PRs mergeados). Sirve para diagnosticar bugs futuros sin re-descubrir contexto.
+
+#### Estado actual en prod
+
+| Pieza | Versión | Notas |
+|---|---|---|
+| RPC `public.search_streets` | v6 (migración 00333 aplicada) | pg_trgm fuzzy + escape wildcards + proximity buckets (25/100/300 km) + dedup main_street + alias normalization main + cross |
+| Tabla `public.street_intersections` | poblada con 381,951 rows | 16 provincias, 23k calles únicas. La Habana sola 68k rows / 3,509 calles |
+| EF `search-places-google` | version 5 ACTIVE | locationBias 25km + locationRestriction Cuba bbox + bbox margin ±0.2° + cache 30d + daily cap 1000 + session tokens |
+| Helpers SQL | `_street_display_name`, `_street_normalize_key`, `_street_full_display` | Inmutables, reusables. Ver migración 00332/00333 |
+| Cliente — 4 componentes search | Todos con AbortController + cache + empty state + cleanup | rider mobile, rider web, driver mobile, web landing |
+
+**Verificación rápida de salud del search:**
+
+```sql
+-- 1. RPC existe con el shape correcto (debe devolver 7 columns incluyendo distance_m)
+SELECT pg_get_function_result(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = 'search_streets';
+
+-- 2. Cobertura de datos por provincia
+SELECT province, COUNT(*) AS rows, COUNT(DISTINCT main_street) AS calles
+FROM street_intersections WHERE province IS NOT NULL
+GROUP BY province ORDER BY rows DESC;
+
+-- 3. Smoke contra prod: 4 queries cubanos típicos desde Capitolio
+SELECT 'Belascoaín' AS q, name, address FROM search_streets('Belascoaín', 23.1357, -82.3666, 2)
+UNION ALL SELECT 'Reina', name, address FROM search_streets('Reina', 23.1357, -82.3666, 2)
+UNION ALL SELECT 'Galiano', name, address FROM search_streets('Galiano', 23.1357, -82.3666, 2)
+UNION ALL SELECT 'Carlos III', name, address FROM search_streets('Carlos III', 23.1357, -82.3666, 2);
+-- Esperado: nombres con alias popular + cross_street en form "alias (oficial)"
+
+-- 4. EF Google está siendo invocado por users reales
+SELECT day, call_count, cache_hits FROM google_places_daily_counter ORDER BY day DESC LIMIT 7;
+```
+
+#### Patrones canónicos aprendidos
+
+**1. Detectar drift git/prod antes de crear migration `CREATE OR REPLACE FUNCTION`**
+
+Antes de escribir una nueva migration que crea una RPC, verificar que NO exista ya en prod con un shape diferente. Postgres rechaza `CREATE OR REPLACE` con `42P13: cannot change return type of existing function` y la migration falla a mitad. El caso real: PR #249 intentó crear `search_streets` que ya existía en prod (creada manualmente sin migration en git).
+
+```sql
+-- Pre-flight obligatorio antes de cada CREATE OR REPLACE FUNCTION nueva:
+SELECT pg_get_function_identity_arguments(p.oid) AS args,
+       pg_get_function_result(p.oid) AS returns
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = '<funcion>';
+```
+
+Si devuelve filas → la función ya existe. **Opciones**:
+- Mantener el shape exacto (mejor body, mismo return) → CREATE OR REPLACE funciona
+- Cambiar el shape → necesita `DROP FUNCTION ... CASCADE` primero (riesgoso, puede romper dependencias)
+
+**2. Cache shape mismatch — el cache guarda array directo, EF lo envuelve en `{data:[...]}`**
+
+El EF `search-places-google` guarda en `google_places_cache.response_json` el **array crudo** de `SearchBoxResult[]`, NO un objeto `{data: [...]}`. Cuando hay cache hit, el EF lo envuelve antes de devolver al cliente: `return {data: cachedArr, source: 'cache'}`. Si interpretás un dump del cache pensando que el shape es `{data:[...]}`, te equivocás.
+
+Ver `supabase/functions/search-places-google/index.ts:126-133` y `_shared/google.ts` línea de cache_put.
+
+**3. Testing del EF con curl: necesita JWT real, no publishable key**
+
+El EF tiene `verify_jwt: true`. El nuevo `sb_publishable_*` key NO es JWT — el EF lo rechaza con 401. Para smoke testing desde curl, usar el **legacy anon JWT** (aunque esté marcado `disabled: true`, sigue siendo válido para el EF):
+
+```bash
+# Obtener el legacy anon JWT via MCP:
+# mcp__e4ba2dbd...get_publishable_keys → buscar el key con type='legacy' y format JWT
+JWT="eyJhbGc...IS0iQ"   # 200+ chars, formato JWT clásico
+URL="https://lqaufszburqvlslpcuac.supabase.co"
+
+curl -sX POST "$URL/functions/v1/search-places-google" \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"<query>","proximity":{"latitude":23.1357,"longitude":-82.3666}}'
+```
+
+Si recibís `{"code":"UNAUTHORIZED_INVALID_JWT_FORMAT"}` → estás pasando el publishable key, no el JWT.
+
+**4. locationBias vs locationRestriction (Google Places API)**
+
+Google rechaza con `400 INVALID_ARGUMENT` si pasás AMBOS. Bug verificado 2026-05-25 (PR I): versión 3 del EF seteaba los dos cuando había proximity → todas las búsquedas con GPS fallaban silenciosamente.
+
+**Resolución canónica (Tier 1.6 PR #261, version 5 ACTIVE):**
+- Con `proximity` (GPS del user) → `locationBias` con radius **25km** (cubre Cuban metro areas; 5km es muy estrecho)
+- Sin `proximity` → `locationRestriction` con Cuba bbox completo
+- Post-fetch sanity check con bbox margin ±0.2° (`lat 19.3-23.7, lng -85.2 to -73.8`) para tolerar venues costeros que Google bend slightly fuera del bbox canónico
+
+Ver `supabase/functions/search-places-google/_shared/google.ts:95-123` + `228`.
+
+**5. Alias normalization regex pattern (OSM en Cuba)**
+
+OSM guarda muchas calles cubanas como `"Nombre Oficial (Alias)"` (e.g. "Padre Varela (Belascoaín)", "Avenida Salvador Allende (Carlos III)"). Los cubanos buscan el **alias entre paréntesis**, no el oficial. El helper canónico:
+
+```sql
+CREATE FUNCTION _street_display_name(s TEXT) RETURNS TEXT LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE
+    WHEN s IS NULL THEN NULL
+    WHEN s ~ '^.+\s+\(([^)]+)\)\s*$' THEN
+      trim(regexp_replace(s, '^.+\s+\(([^)]+)\)\s*$', '\1'))   -- extract alias
+    ELSE s
+  END;
+$$;
+```
+
+Para dedup canónico (colapsar "Ampliacion" vs "Ampliación"): `LOWER(unaccent(_street_display_name(main_street)))`. Tanto `pg_trgm` como `unaccent` están instaladas en el cluster.
+
+**6. Cliente robustness pattern (los 4 search components)**
+
+Hoy todos los components search siguen el mismo pattern:
+
+```ts
+// Refs:
+const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const lastQueryRef = useRef<string>('');
+const abortRef = useRef<AbortController | null>(null);
+const queryCacheRef = useRef<Map<string, Outcome>>(new Map());  // LRU cap 50
+const sessionTokenRef = useRef<string | null>(null);   // Google session token
+const hasSearchedRef = useRef(false);                   // gate empty state
+
+// handleChangeText:
+// 1. abort previous in-flight: abortRef.current?.abort()
+// 2. clear timeout: clearTimeout(debounceRef.current)
+// 3. if empty: reset all refs + return
+// 4. cache check: si hit, render instant y return
+// 5. lazy-init session token si null
+// 6. setTimeout (300-350ms) → AbortController nuevo + searchUnified(signal)
+// 7. drop stale: if lastQueryRef.current !== text || controller.signal.aborted → return
+// 8. set results + cache.set(query, outcome) + LRU evict si > 50
+
+// useEffect cleanup on unmount: clearTimeout + abort
+// useEffect on `near` change: queryCacheRef.current.clear()
+```
+
+Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo pattern en los otros 3 (`WebAddressInput.tsx`, `apps/driver/src/components/AddressSearchBar.tsx`, `apps/web/src/components/AddressAutocomplete.tsx`).
+
+**Sin este pattern**, el componente sufre: race conditions (response vieja sobrescribe nueva), calls duplicadas (re-typing gasta sesiones Google), leaks (pending fetches después de navigate).
+
+#### Migraciones del search (orden cronológico)
+
+| Migration | Foco | Notas |
+|---|---|---|
+| 00088 | `street_intersections` schema + GIST index | Schema OK desde hace meses |
+| 00091 / 00264 | `find_intersection_point` RPC | Resuelve "X e/ Y y Z" → coords. NO TOCAR |
+| 00093 / 00108 | `suggest_cross_streets` RPC + escape fix | Autocomplete cross-street typing |
+| 00304 | `google_places_cache` + RPCs cache | Cache 30d + daily counter |
+| 00329 | `search_streets` v2 — reconcile drift | pg_trgm + escape wildcards + plpgsql guardrails |
+| 00330 | v3 — proximity-aware ranking | Distance buckets 25/100/300km dominan match_rank |
+| 00331 | v4 — dedup main_street | DROP municipality del DISTINCT ON |
+| 00332 | v5 — alias normalization (main) | Helpers `_street_display_name` + `_street_normalize_key` |
+| 00333 | v6 — cross_street alias también | Helper `_street_full_display` aplicado a cross |
+
+**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5`.
+
+#### Debugging guide cuando aparezca un bug nuevo de search
+
+**Síntoma: "No aparece lugar X en la búsqueda"**
+
+1. **Confirmar que el EF lo devuelve**: smoke directo con curl + legacy JWT (ver punto 3 arriba). Si curl devuelve el lugar → bug client-side. Si no → bug EF/Google.
+
+2. **Si EF no devuelve**: revisar logs EF
+   ```sql
+   -- vía mcp__e4ba2dbd...get_logs con service='edge-function'
+   ```
+   Buscar líneas `bbox_reject`, `place_details_fail`, `place_details_skip`, `live_call n=0`. Si aparecen → ahí está descartando.
+
+3. **Si curl devuelve pero el cliente no muestra**: race condition o dedup agresivo. Verificar:
+   - `lastQueryRef.current === text` cuando llega la response (sin esto se descarta)
+   - `dedupeSearchResults(unified, poiResults)` no está colapsando el lugar con un cuba_pois genérico
+   - `scoreResult` no lo ranquea fuera del top-N
+
+4. **Si el lugar aparece pero con label confuso** (e.g. "Padre Varela (Belascoaín)"): verificar que la migration 00332/00333 esté aplicada en prod. Pre-flight SQL del punto "Verificación rápida de salud" arriba.
+
+5. **Si el ranking pone Camagüey arriba de Habana**: verificar que 00330 esté aplicada (distance buckets). Smoke directo:
+   ```sql
+   SELECT name, (distance_m/1000)::numeric(10,1) AS dist_km
+   FROM search_streets('<calle>', <user_lat>, <user_lng>, 5);
+   -- El primer resultado debe estar en bucket 0 (<25km), no en bucket 3 (>300km)
+   ```
+
+**Síntoma: "Calle se duplica en el dropdown"**
+
+Verificar que 00331 esté aplicada. La RPC debe hacer `DISTINCT ON (si.main_street)` (sin municipality). Si vez `DISTINCT ON (main_street, municipality)` → migration vieja.
+
+**Síntoma: "Costos Google subieron"**
+
+```sql
+SELECT day, call_count, cache_hits,
+       ROUND(100.0 * cache_hits / NULLIF(call_count + cache_hits, 0), 1) AS hit_rate_pct
+FROM google_places_daily_counter
+ORDER BY day DESC LIMIT 14;
+```
+
+Si `hit_rate_pct` está consistentemente <40% → el cache no está cumpliendo su función. Posibles causas:
+- Cache key fragmentado (proximity con demasiada precisión — debe estar redondeado a 2 decimals)
+- TTL hardcoded a 30 días pero queries son únicos
+- Session tokens NO se están reusando del lado del cliente (verificar `sessionTokenRef`)
+
+#### Deuda explícitamente diferida (no urgente)
+
+- **R2** retry Place Details con backoff 300ms — protege contra 429 transient
+- **R3** tabla `google_places_diagnostics` para visibilidad de descartes
+- **G2.1** Place Details lazy (solo on-select) — ahorra ~30% costo cuando crezca el tráfico
+- **G2.2** reverse geocoding con Google — mejora calidad de "Use my location"
+- **Rider cosmético** — isFinite check en recents + emoji categoría Google POIs + unify debounce 300ms
+
+Abordar cuando aparezca un síntoma concreto que lo justifique, NO preventivamente.
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
