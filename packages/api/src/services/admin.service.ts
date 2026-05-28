@@ -17,6 +17,7 @@ import type {
   ExchangeRate,
   FeatureFlag,
   LedgerTransaction,
+  OnlineFleetDriver,
   PaymentIntent,
   PricingRule,
   Promotion,
@@ -1571,6 +1572,19 @@ export const adminService = {
   /**
    * Get rides grouped by day for trend chart.
    */
+  /**
+   * 00339 (PR-MAP-1): returns all drivers online + approved with a
+   * current location, plus their active ride if any. Used by
+   * /admin/fleet map to render the live fleet overview. The RPC
+   * gates internally for admin/super_admin role.
+   */
+  async getOnlineFleet(): Promise<OnlineFleetDriver[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('admin_get_online_fleet');
+    if (error) throw error;
+    return (data ?? []) as OnlineFleetDriver[];
+  },
+
   async getRidesByDay(daysBack = 30) {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('get_rides_by_day', { p_days_back: daysBack });
