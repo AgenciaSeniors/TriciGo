@@ -10,12 +10,14 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { useAuthStore } from '@/stores/auth.store';
 import { corporateService, paymentService, invoiceService } from '@tricigo/api';
 import CorporateRequestForm from '@/components/CorporateRequestForm';
 import * as Sharing from 'expo-sharing';
+import * as WebBrowser from 'expo-web-browser';
+import Toast from 'react-native-toast-message';
 // Bugfix: same as rides.tsx — cacheDirectory + EncodingType live in the
 // /legacy entrypoint post-SDK migration, otherwise the CSV export path
 // throws at runtime.
@@ -279,14 +281,127 @@ export default function CorporateProfileScreen() {
     }
   };
 
-  // TODO: wire to paymentService.createRechargeIntent with the corporate
-  // account id (provider routed via active_payment_provider in platform_config).
-  const handleRecharge = async (_accountId: string) => {
-    Alert.alert(
-      t('common:coming_soon', { defaultValue: 'Coming soon' }),
-      t('common:wallet.recharge_coming_soon', { defaultValue: 'Coming soon' }),
-    );
+  // PR-CORP-2: real NETOPIA recharge for corporate wallet.
+  // Mirrors apps/driver/app/wallet/recharge.tsx pattern (WebBrowser
+  // openAuthSessionAsync + poll intent status), but credits the
+  // corporate_cash wallet via process_recharge_payment branch
+  // (recognized by corporate_account_id on the intent row).
+  //
+  // Return-URL bridge: apps/client/app/app/client/profile/corporate.tsx
+  // catches the universal-link return and redirects here with ?intent=.
+  const RETURN_URL_BASE = 'https://tricigo.com/app/client/profile/corporate';
+
+  const refreshBilling = useCallback(async (accountId: string) => {
+    try {
+      const [summary, balance, rides] = await Promise.all([
+        corporateService.getBillingSummary(accountId),
+        corporateService.getCorporateBalance(accountId),
+        corporateService.getCorporateRides(accountId, 0, 10),
+      ]);
+      setBillingSummary(summary);
+      setCorporateBalance(balance);
+      setCorporateRides(rides);
+    } catch {
+      // best-effort refresh
+    }
+  }, []);
+
+  const handleRecharge = async (accountId: string) => {
+    if (!userId) return;
+    const amountUsd = parseFloat(rechargeAmount.trim());
+    if (!Number.isFinite(amountUsd) || amountUsd < 100 || amountUsd > 10000) {
+      Alert.alert(
+        t('common:error', { defaultValue: 'Error' }),
+        t('corporate.recharge_invalid_range', { defaultValue: 'Monto inválido (rango: $100–$10,000 USD)' }),
+      );
+      return;
+    }
+    setRecharging(true);
+    try {
+      // 1. Create intent — corporate_account_id triggers corp routing
+      const result = await paymentService.createRechargeIntent({
+        provider: 'netopia',
+        userId,
+        amountUsd,
+        corporateAccountId: accountId,
+        returnUrl: RETURN_URL_BASE,
+      });
+      if (!result.redirectUrl) {
+        throw new Error(
+          t('common:wallet.recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }),
+        );
+      }
+
+      // 2. Open hosted page in in-app browser; closes on NETOPIA redirect.
+      const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
+      await WebBrowser.openAuthSessionAsync(result.redirectUrl, dismissUrl);
+
+      // 3. Always poll — browser dismissal type is not a reliable signal.
+      Toast.show({
+        type: 'info',
+        text1: t('common:wallet.processing_recharge', { defaultValue: 'Verificando tu pago…' }),
+      });
+      const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
+
+      if (final.status === 'completed') {
+        Toast.show({
+          type: 'success',
+          text1: t('corporate.recharge_success', { defaultValue: 'Recarga exitosa' }),
+        });
+        setRechargeAmount('');
+        await refreshBilling(accountId);
+      } else if (final.status === 'failed') {
+        Alert.alert(
+          t('common:error', { defaultValue: 'Error' }),
+          t('corporate.recharge_failed', { defaultValue: 'El pago no se procesó.' }),
+        );
+      } else {
+        Alert.alert(
+          t('corporate.recharge_pending_title', { defaultValue: 'Verificando' }),
+          t('corporate.recharge_pending_msg', { defaultValue: 'El pago sigue en proceso. Volvé en unos minutos a revisar el saldo.' }),
+        );
+      }
+    } catch (err) {
+      Alert.alert(t('common:error', { defaultValue: 'Error' }), getErrorMessage(err));
+    } finally {
+      setRecharging(false);
+    }
   };
+
+  // Handle return-URL from NETOPIA universal link: if `?intent=<id>` is
+  // present on mount, poll status and refresh balance. The bridge route
+  // (apps/client/app/app/client/profile/corporate.tsx) forwards us here.
+  const { intent: returnIntent } = useLocalSearchParams<{ intent?: string }>();
+  useEffect(() => {
+    if (!returnIntent || accounts.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      Toast.show({
+        type: 'info',
+        text1: t('common:wallet.processing_recharge', { defaultValue: 'Verificando tu pago…' }),
+      });
+      try {
+        const final = await paymentService.pollIntentStatus(returnIntent, 20, 2000);
+        if (cancelled) return;
+        if (final.status === 'completed') {
+          Toast.show({
+            type: 'success',
+            text1: t('corporate.recharge_success', { defaultValue: 'Recarga exitosa' }),
+          });
+          // Refresh first account's billing if expanded
+          const intentCorpId = final.corporate_account_id;
+          if (intentCorpId) {
+            setBillingExpanded(intentCorpId);
+            await refreshBilling(intentCorpId);
+          }
+        }
+      } catch {
+        // silent on return-url poll failure
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnIntent]);
 
   const handleToggleReports = useCallback(async (accountId: string) => {
     if (reportsExpanded === accountId) {
@@ -771,15 +886,18 @@ export default function CorporateProfileScreen() {
                         </Card>
                       )}
 
-                      {/* Recharge button (admin) */}
+                      {/* Recharge button (admin) — corporate $100–$10,000 USD per PR F design */}
                       <View className="mb-3">
                         <Input
-                          label={t('corporate.recharge_amount', { defaultValue: 'Monto a recargar (CUP)' })}
+                          label={t('corporate.recharge_amount_usd', { defaultValue: 'Monto a recargar (USD)' })}
                           value={rechargeAmount}
                           onChangeText={setRechargeAmount}
                           keyboardType="numeric"
-                          placeholder="1000"
+                          placeholder="100"
                         />
+                        <Text variant="caption" color="secondary" className="mt-1">
+                          {t('corporate.recharge_range_hint', { defaultValue: 'Rango: $100 – $10,000 USD' })}
+                        </Text>
                         <View className="mt-2">
                           <Button
                             title={recharging

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, corporateService, paymentService, invoiceService } from '@tricigo/api';
 import type { CorporateAccount, CorporateEmployeeRole, EmployeeReport } from '@tricigo/types';
@@ -169,11 +169,72 @@ export default function CorporatePage() {
     }
   };
 
-  // TODO: wire to paymentService.createRechargeIntent with the corporate
-  // account id (provider routed via active_payment_provider in platform_config).
-  const handleRecharge = async (_accountId: string) => {
-    setError(t('common:wallet.recharge_coming_soon', { defaultValue: 'Coming soon' }));
+  // PR-CORP-2: real NETOPIA recharge for corporate wallet.
+  // Web pattern (mirrors apps/web/src/app/wallet/page.tsx):
+  // 1. createRechargeIntent with corporateAccountId
+  // 2. window.location.href = redirectUrl (NETOPIA hosted page)
+  // 3. NETOPIA redirects back to /profile/corporate?intent=<id>
+  // 4. useEffect below polls status + refreshes balance.
+  const handleRecharge = async (accountId: string) => {
+    if (!userId) return;
+    const amountUsd = parseFloat(rechargeAmount.trim());
+    if (!Number.isFinite(amountUsd) || amountUsd < 100 || amountUsd > 10000) {
+      setError(t('corporate_recharge_invalid_range', { defaultValue: 'Monto inválido (rango: $100–$10,000 USD)' }));
+      return;
+    }
+    setError(null);
+    setRecharging(true);
+    try {
+      const returnUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/profile/corporate`
+        : 'https://tricigo.com/profile/corporate';
+      const result = await paymentService.createRechargeIntent({
+        provider: 'netopia',
+        userId,
+        amountUsd,
+        corporateAccountId: accountId,
+        returnUrl,
+      });
+      if (!result.redirectUrl) {
+        throw new Error(t('corporate_recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }));
+      }
+      // Hand off to NETOPIA hosted page. After settlement, NETOPIA
+      // redirects back to /profile/corporate?intent=<id> and the
+      // useEffect below polls + refreshes balance.
+      window.location.href = result.redirectUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al iniciar la recarga');
+      setRecharging(false);
+    }
   };
+
+  // PR-CORP-2: handle NETOPIA return — when ?intent=<id> is present on
+  // mount, poll the intent status and refresh balances on completion.
+  const searchParams = useSearchParams();
+  const returnIntentId = searchParams?.get('intent');
+  useEffect(() => {
+    if (!returnIntentId || !userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const final = await paymentService.pollIntentStatus(returnIntentId, 20, 2000);
+        if (cancelled) return;
+        if (final.status === 'completed' && final.corporate_account_id) {
+          // Refresh balance for the recharged account
+          const newBalance = await corporateService.getCorporateBalance(final.corporate_account_id);
+          setCorporateBalances((prev) => ({ ...prev, [final.corporate_account_id!]: newBalance }));
+          setSaveSuccess(final.corporate_account_id);
+          setRechargeAmount('');
+        } else if (final.status === 'failed') {
+          setError(t('corporate_recharge_failed', { defaultValue: 'El pago no se procesó.' }));
+        }
+      } catch {
+        // silent on return-url poll failure
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnIntentId, userId]);
 
   const loadReports = async (accountId: string, monthStr: string) => {
     setLoadingReports(true);
@@ -419,8 +480,10 @@ export default function CorporatePage() {
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', alignItems: 'center' }}>
                         <input
                           type="number"
-                          min={500}
-                          placeholder="Monto CUP"
+                          min={100}
+                          max={10000}
+                          step={1}
+                          placeholder={t('corporate_recharge_amount_usd', { defaultValue: 'Monto USD ($100–$10,000)' })}
                           value={rechargeAmount}
                           onChange={(e) => setRechargeAmount(e.target.value)}
                           style={{ ...inputStyle, flex: 1 }}
