@@ -26,6 +26,7 @@ import {
   Trophy,
   Newspaper,
   Building2,
+  Crosshair,
   Megaphone,
   TrendingUp,
   DollarSign,
@@ -63,6 +64,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/', labelKey: 'sidebar.dashboard', defaultLabel: 'Pulso general', icon: LayoutDashboard },
       { href: '/live-map', labelKey: 'sidebar.live_map', defaultLabel: 'Mapa en vivo', icon: MapPin },
+      { href: '/fleet', labelKey: 'sidebar.fleet', defaultLabel: 'Flota en vivo', icon: Crosshair },
     ],
   },
   {
