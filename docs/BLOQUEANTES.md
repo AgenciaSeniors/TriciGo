@@ -1,6 +1,12 @@
 # TriciGo — Bloqueantes Pendientes
 
-> Actualizado: 22 marzo 2026
+> ⚠️ **SUPERSEDED 2026-05-28** — Este doc está outdated. Menciona Twilio + Stripe que ya fueron reemplazados por **D7 Networks** (SMS) y **NETOPIA** (pagos).
+>
+> **Doc canónico para launch external accounts**: [`docs/LAUNCH_EXTERNAL_ACCOUNTS.md`](./LAUNCH_EXTERNAL_ACCOUNTS.md)
+>
+> Mantenido solo como referencia histórica del estado pre-NETOPIA / pre-D7.
+
+> Actualizado original: 22 marzo 2026
 > Estado general: 9.2/10 — Todo el código está listo. Solo faltan credenciales externas.
 
 ---
