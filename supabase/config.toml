@@ -226,16 +226,50 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# ── Custom email templates (TriciGo) ──
+# All templates use ./templates/*.html with brand-consistent HTML
+# (logo header, orange #F97316 hero, body, footer). Templates use
+# Go template syntax: {{ .Email }}, {{ .ConfirmationURL }}, etc.
+# Variables available depend on the template type — see Supabase
+# Auth (GoTrue) docs. PR #261 (2026-05-28) added these to close
+# the bug where the "signed_in_new_device" email arrived with
+# subject set but body empty (only subject had been customized via
+# dashboard, content was left blank).
 
-# Uncomment to customize notification email template
-# [auth.email.notification.password_changed]
-# enabled = true
-# subject = "Your password has been changed"
-# content_path = "./templates/password_changed_notification.html"
+[auth.email.template.invite]
+subject = "Te han invitado a TriciGo"
+content_path = "./templates/invite.html"
+
+[auth.email.template.recovery]
+subject = "Restablecé tu contraseña de TriciGo"
+content_path = "./templates/recovery.html"
+
+[auth.email.template.magic_link]
+subject = "Tu enlace mágico para entrar a TriciGo"
+content_path = "./templates/magic_link.html"
+
+[auth.email.template.email_change]
+subject = "Confirmá tu nuevo correo en TriciGo"
+content_path = "./templates/email_change.html"
+
+[auth.email.template.reauthentication]
+subject = "Verificá tu identidad en TriciGo"
+content_path = "./templates/reauthentication.html"
+
+[auth.email.notification.password_changed]
+enabled = true
+subject = "Tu contraseña de TriciGo fue cambiada"
+content_path = "./templates/password_changed_notification.html"
+
+[auth.email.notification.email_change]
+enabled = true
+subject = "Tu correo en TriciGo fue cambiado"
+content_path = "./templates/email_change_notification.html"
+
+[auth.email.notification.signed_in_new_device]
+enabled = true
+subject = "Nuevo inicio de sesión en tu cuenta TriciGo"
+content_path = "./templates/signed_in_new_device_notification.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.

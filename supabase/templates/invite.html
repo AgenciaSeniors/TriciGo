@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Te invitamos a TriciGo</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+<div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">Aceptá tu invitación a TriciGo y creá tu contraseña.</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#F8FAFC">
+  <tr>
+    <td align="center" style="padding: 24px 12px;">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,0.05);">
+        <tr>
+          <td style="padding: 28px 32px 20px; text-align: center;">
+            <a href="https://tricigo.com" target="_blank" rel="noopener" style="display: inline-block; text-decoration: none; color: #0F172A;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+                <tr>
+                  <td valign="middle" style="padding-right: 12px;">
+                    <img src="https://tricigo.com/icon-192.png" alt="" width="40" height="40" style="display: block; width: 40px; height: 40px; border-radius: 8px;">
+                  </td>
+                  <td valign="middle">
+                    <span style="display: inline-block; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: #0F172A; line-height: 1;">
+                      Trici<span style="color: #F97316;">Go</span>
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td bgcolor="#F97316" style="padding: 32px 32px 28px; text-align: center;">
+            <h1 style="margin: 0 0 8px; font-size: 24px; font-weight: 700; color: #FFFFFF; letter-spacing: -0.01em;">
+              Te invitamos a TriciGo
+            </h1>
+            <p style="margin: 0; font-size: 15px; color: rgba(255,255,255,0.92); line-height: 1.5;">
+              Movilidad cubana, en la palma de tu mano.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 32px 32px 16px; font-size: 15px; line-height: 1.6; color: #334155;">
+            <p style="margin: 0 0 16px; font-size: 16px; color: #0F172A;">
+              Hola,
+            </p>
+            <p style="margin: 0 0 20px;">
+              Te invitamos a unirte a <strong>TriciGo</strong>, la app cubana de movilidad. Tu cuenta fue creada con el email <strong>{{ .Email }}</strong>. Para activarla y crear tu contraseña, tocá el botón de abajo.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 32px 32px; text-align: center;">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+              <tr>
+                <td align="center" bgcolor="#F97316" style="border-radius: 8px;">
+                  <a href="{{ .ConfirmationURL }}" target="_blank" rel="noopener" style="display: inline-block; padding: 14px 32px; font-size: 15px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 8px;">
+                    Aceptar invitación
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin: 20px 0 0; font-size: 13px; color: #64748B; line-height: 1.5;">
+              ¿No funciona el botón? Copiá y pegá este enlace en tu navegador:<br>
+              <a href="{{ .ConfirmationURL }}" style="color: #F97316; text-decoration: none; word-break: break-all;">{{ .ConfirmationURL }}</a>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td bgcolor="#F8FAFC" style="padding: 24px 32px; text-align: center; border-top: 1px solid #E2E8F0;">
+            <p style="margin: 0; font-size: 13px; font-weight: 600; color: #64748B;">
+              TriciGo · Cuba
+            </p>
+            <p style="margin: 8px 0 0; font-size: 12px; color: #94A3B8; line-height: 1.5;">
+              ¿No esperabas esta invitación? Podés ignorar este correo.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
