@@ -79,7 +79,7 @@ function ActiveTripMap({
   onUserInteraction: () => void;
   lockZoom: boolean;
 }) {
-  const { pickupLocation, dropoffLocation, riderLocation, routeCoordinates } = useActiveTripMapData();
+  const { pickupLocation, dropoffLocation, riderLocation, routeCoordinates, waypointLocations, waypointStatuses } = useActiveTripMapData();
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const rideStatus = activeTrip?.status ?? null;
   // BUG-258: driver marker wasn't rotating during turns because this
@@ -107,6 +107,8 @@ function ActiveTripMap({
       dropoffLocation={dropoffLocation}
       riderLocation={riderLocation}
       routeCoordinates={routeCoordinates}
+      waypointLocations={waypointLocations}
+      waypointStatuses={waypointStatuses}
       height={screenHeight}
       darkStyle
       onRecenter={onRecenter}
