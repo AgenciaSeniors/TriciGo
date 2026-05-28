@@ -238,23 +238,23 @@ otp_expiry = 3600
 
 [auth.email.template.invite]
 subject = "Te han invitado a TriciGo"
-content_path = "./templates/invite.html"
+content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.recovery]
 subject = "Restablecé tu contraseña de TriciGo"
-content_path = "./templates/recovery.html"
+content_path = "./supabase/templates/recovery.html"
 
 [auth.email.template.magic_link]
 subject = "Tu enlace mágico para entrar a TriciGo"
-content_path = "./templates/magic_link.html"
+content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.email_change]
 subject = "Confirmá tu nuevo correo en TriciGo"
-content_path = "./templates/email_change.html"
+content_path = "./supabase/templates/email_change.html"
 
 [auth.email.template.reauthentication]
 subject = "Verificá tu identidad en TriciGo"
-content_path = "./templates/reauthentication.html"
+content_path = "./supabase/templates/reauthentication.html"
 
 [auth.email.notification.password_changed]
 enabled = true
