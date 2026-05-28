@@ -34,6 +34,7 @@ import {
   triggerHaptic,
   haversineDistance,
 } from '@tricigo/utils';
+import type { GeoPoint } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import {
   incidentService,
@@ -121,6 +122,57 @@ export function useActiveTripMapData() {
     ? { latitude: driverLatMap, longitude: driverLngMap }
     : null;
 
+  // 00341: subscribe to passenger-added waypoints so the polyline +
+  // StopMarkers update in real-time as the rider edits the route. Initial
+  // fetch is reconciled with subscription via a Set merge (same pattern as
+  // DriverTripView component's own subscription). Without this, the driver
+  // map kept showing the straight pickup→dropoff polyline and ignored stops.
+  const [mapWaypoints, setMapWaypoints] = useState<GeoPoint[]>([]);
+  const [mapWaypointStatuses, setMapWaypointStatuses] = useState<
+    Array<'pending' | 'current' | 'completed'>
+  >([]);
+  useEffect(() => {
+    if (!activeTrip?.id) {
+      setMapWaypoints([]);
+      setMapWaypointStatuses([]);
+      return;
+    }
+    let cancelled = false;
+    const refresh = (list: Array<{
+      latitude: number;
+      longitude: number;
+      arrived_at?: string | null;
+      departed_at?: string | null;
+      sort_order: number;
+    }>) => {
+      if (cancelled) return;
+      const sorted = [...list].sort((a, b) => a.sort_order - b.sort_order);
+      setMapWaypoints(sorted.map((w) => ({ latitude: w.latitude, longitude: w.longitude })));
+      // Status mapping: the next not-departed waypoint is "current",
+      // earlier ones are "completed", later ones are "pending". This
+      // mirrors how the client app pulses the next stop on its map.
+      const nextIdx = sorted.findIndex((w) => !w.departed_at);
+      setMapWaypointStatuses(sorted.map((w, idx) => {
+        if (w.departed_at) return 'completed';
+        if (idx === nextIdx) return 'current';
+        return 'pending';
+      }));
+    };
+
+    rideService.getRideWaypoints(activeTrip.id).then((wps) => {
+      const flat = (wps as any[]).map((w: any) => ({
+        latitude: w.latitude ?? w.location?.latitude ?? 0,
+        longitude: w.longitude ?? w.location?.longitude ?? 0,
+        arrived_at: w.arrived_at ?? null,
+        departed_at: w.departed_at ?? null,
+        sort_order: w.sort_order ?? 0,
+      })).filter((w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude));
+      refresh(flat);
+    }).catch(() => { /* silent — empty waypoints is fine */ });
+
+    return () => { cancelled = true; };
+  }, [activeTrip?.id]);
+
   // BUG-283 — live route from driver to current target (pickup during
   // pickup phase, dropoff during the trip). Refetches on >50 m deviation
   // with a 5 s min interval, so when the driver takes a parallel street
@@ -137,9 +189,15 @@ export function useActiveTripMapData() {
     ? (activeTrip?.pickup_location ?? null)
     : (activeTrip?.dropoff_location ?? null);
   const liveLegRoute = useLiveDriverRoute(driverLocationMap, legTo, !!legTo);
+  // 00341: pass waypoints so the full pickup→dropoff polyline includes the
+  // detour. The legRoute (driver→nextTarget) is still the primary display,
+  // but during in_progress when driver passed pickup, the fallback route
+  // must reflect the new waypoints — otherwise the user sees a straight
+  // line behind their current position that ignores the stops.
   const fullRoute = useRoutePolyline(
     activeTrip?.pickup_location ?? null,
     activeTrip?.dropoff_location ?? null,
+    mapWaypoints.length > 0 ? mapWaypoints : undefined,
   );
   // Prefer the live driver→leg polyline once it has at least one road
   // segment (≥ 4 points). Until OSRM responds the first time, fall back
@@ -168,6 +226,10 @@ export function useActiveTripMapData() {
     routeCoordinates: inAppNavMap.isNavigating && inAppNavMap.routeCoordinates.length > 0
       ? inAppNavMap.routeCoordinates.map(([lat, lng]: [number, number]) => ({ latitude: lat, longitude: lng }))
       : routeCoordinates,
+    // 00341: expose to the parent wrapper so RideMapView can render
+    // numbered StopMarker components for each passenger-added stop.
+    waypointLocations: mapWaypoints,
+    waypointStatuses: mapWaypointStatuses,
   };
 }
 

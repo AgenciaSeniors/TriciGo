@@ -5,6 +5,7 @@ import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate } from '@tricigo/utils';
 import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/types';
+import { StopMarker } from '@tricigo/ui';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
 import { PopularLocationPin } from './PopularLocationPin';
 import { useMapboxReady } from '../hooks/useMapboxReady';
@@ -75,6 +76,16 @@ interface RideMapViewProps {
   /** Real-time rider location during pickup phase (from useRiderLocation hook) */
   riderLocation?: GeoPoint | null;
   routeCoordinates?: GeoPoint[] | null;
+  /**
+   * Optional intermediate waypoints (passenger added stops). When set, the
+   * driver map renders a numbered StopMarker per waypoint and the polyline
+   * (passed in via routeCoordinates) should already include the detour
+   * through them — see useActiveTripMapData in DriverTripView.tsx.
+   */
+  waypointLocations?: GeoPoint[];
+  /** Status per waypoint (same order as waypointLocations). Drives the
+   *  StopMarker pulse: the first 'current' one pulses. */
+  waypointStatuses?: Array<'pending' | 'current' | 'completed'>;
   heatmapData?: { latitude: number; longitude: number; intensity: number }[];
   /** Active surge zones with GeoJSON boundaries for polygon overlay */
   surgeZones?: { multiplier: number; zone_name: string | null; boundary: { type: 'Polygon'; coordinates: number[][][] } }[];
@@ -191,6 +202,8 @@ function WebMapboxView({
   dropoffLocation,
   riderLocation,
   routeCoordinates,
+  waypointLocations,
+  waypointStatuses,
   heatmapData,
   surgeZones,
   height = 200,
@@ -207,6 +220,11 @@ function WebMapboxView({
   demandHotspots,
   popularLocations,
 }: RideMapViewProps) {
+  // Web map doesn't render waypoint markers (web is admin/desktop-only for
+  // drivers; mobile is canonical). Reference to satisfy lint without
+  // shipping unused renders.
+  void waypointLocations;
+  void waypointStatuses;
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const driverMarkerRef = useRef<any>(null);
@@ -694,6 +712,8 @@ function RideMapViewInner(
     driverLocation,
     riderLocation,
     routeCoordinates,
+    waypointLocations,
+    waypointStatuses,
     heatmapData,
     surgeZones,
     height = 200,
@@ -1573,6 +1593,31 @@ function RideMapViewInner(
             </MapboxGL.ShapeSource>
           </>
         )}
+        {/* 00341 waypoints: numbered StopMarker per passenger-added stop.
+            Same component the client RideMapView uses so the driver sees the
+            same visual language. Status drives the pulse on the first
+            "current" one. The polyline (routeCoordinates) is already
+            recalculated through the waypoints via fetchMultiStopRoute in
+            useActiveTripMapData. */}
+        {waypointLocations?.map((wp, idx) => {
+          if (!isFiniteCoord(wp)) return null;
+          const status = waypointStatuses?.[idx] ?? 'pending';
+          return (
+            <MapboxGL.PointAnnotation
+              key={`waypoint-${idx}`}
+              id={`waypoint-${idx}`}
+              coordinate={toCoord(wp)}
+            >
+              <StopMarker
+                index={idx + 1}
+                status={status}
+                size={36}
+                mode="dark"
+              />
+            </MapboxGL.PointAnnotation>
+          );
+        })}
+
         {/* BUG-218: pickup marker rendered AFTER driver so when both
             overlap (driver at pickup), the green pickup stays visible on
             top instead of being hidden under the auto/triciclo icon.
