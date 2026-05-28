@@ -1055,6 +1055,136 @@ override fun onUserLeaveHint() {
 
 ---
 
+### Wallet model — 2 generaciones coexistiendo (verificado 2026-05-28)
+
+**Esto es crítico para cualquier RPC nuevo o fix que toque dinero.** Hay 2 generaciones de wallets viviendo en `wallet_accounts` simultáneamente:
+
+**Gen A (pre PR #184)** — código viejo aún los toca:
+- Driver: `driver_cash` (earnings) + `driver_quota` (commission credit, deprecated)
+- Customer: `customer_cash`
+
+**Gen B (post PR #184)** — wallet "vivo" actual:
+- Driver: `tricicoin` (consolidado, todo aquí)
+- Customer: `customer_cash` (sin cambio — funciona como saldo TC)
+
+**Drift histórico real verificado en prod**:
+| account_type | balance total | users | notas |
+|---|---|---|---|
+| `tricicoin` | 196,814 | 7 drivers | Gen B activo |
+| `driver_cash` | 228,696 | 3 | Gen A legacy, sigue creciendo si no se hace el fix |
+| `customer_cash` | 23,600 | 3 | activo |
+| `corporate_cash` | 5,000 | 1 | activo |
+| `platform_revenue` | 82,044 | 1 | activo |
+
+Ejemplo concreto: Eduardo Admin tiene `tricicoin=80,905` (visible) Y `driver_cash=−60,403` (legacy drift BUG-211).
+
+**Patrón canónico cuando vas a tocar wallets en un RPC nuevo**:
+
+1. **Drivers**: usar `tricicoin` para earnings y commission. NUNCA `driver_cash` (excepto insurance que sigue ahí por legacy — referencia el código del ELSE branch en `complete_ride_and_pay`).
+2. **Customers**: usar `customer_cash` para saldo TC.
+3. **Corporate**: `corporate_cash` para wallet de empresa (necesita `admin_adjust_wallet` extended desde 00338 para acreditar via RPC oficial).
+4. **Platform**: `platform_revenue` para commissions/insurance.
+
+**Si encontrás un RPC que credita `driver_cash` para earnings**: es bug silencioso. Verificar con SQL `SELECT prosrc FROM pg_proc WHERE proname='X'` y buscar `'driver_cash'`. Fix patrón: change `ensure_wallet_account(_, 'driver_cash')` → `'tricicoin'` para el path del driver.
+
+Migration de referencia: `00340_complete_ride_and_pay_tricicoin_mixed_fix.sql` cerró este bug para los payment methods `tricicoin` y `mixed`.
+
+### Auditoría secuencial pattern — Explore → SQL → Plan → PRs en cadena
+
+**Patrón verificado 2026-05-27 / 28** ejecutando 3 audits grandes (corporate, driver rendering, payment methods). Funcionó bien y produjo 13 PRs mergeados con cero rollbacks.
+
+**Fases**:
+
+1. **Phase 1 — Explore agents en paralelo** (max 3): map codebase para entender el flujo. Útil para preguntas tipo "¿funciona X?" donde necesitamos abrirnos primero.
+
+2. **Phase 2 — Queries SQL en prod para grounding real**: los Explore agents pueden reportar bugs basados en código viejo. SIEMPRE verificar contra prod con `SELECT pg_get_functiondef(...)` del RPC actual (lo que está vivo, no lo que dice la migration #N). En este sesión, el primer Explore agent dijo "tricicoin está roto" basándose en mig 00247, pero pg_get_functiondef confirmó que la migration última 00247 sigue siendo la vigente y efectivamente tenía el bug.
+
+3. **Phase 3 — Real data check**: ¿cuántas veces se ejercitó esto en prod? Si 0 veces, el bug es silencioso histórico (caso de tricicoin/mixed: 0 rides ever, 47 cash rides). Datos cambian la prioridad del fix.
+
+4. **Phase 4 — Plan file con propuestas PR-XXX-N**: documentar findings + propuestas con scope claro. Usar `AskUserQuestion` para confirmar scope antes de ExitPlanMode.
+
+5. **Phase 5 — PRs en cadena** (PR-XXX-1, PR-XXX-2, ...) cada uno con su branch fresh from origin/master, check-types, commit, push, autorización explícita per-PR (per CLAUDE.md), merge, opcionalmente apply migration via MCP.
+
+**Performance metric**: este pattern produjo 8 migrations aplicadas + 13 PRs mergeados en una sesión, sin rollbacks ni bugs introducidos en otras áreas.
+
+### Pattern para CREATE OR REPLACE FUNCTION grandes (≥7k chars)
+
+**Verificado 2026-05-28 con `complete_ride_and_pay` de 24,240 chars.**
+
+`pg_get_functiondef(oid)` retorna el cuerpo completo del RPC, pero `mcp__execute_sql` tiene limit ~30k de output. Para RPCs grandes que necesitás reproducir verbatim:
+
+```sql
+-- Fetch en chunks de 7000 chars
+SELECT substring(pg_get_functiondef(oid) FROM 1 FOR 7000) AS chunk1
+FROM pg_proc WHERE proname = 'X' LIMIT 1;
+
+SELECT substring(pg_get_functiondef(oid) FROM 7001 FOR 7000) AS chunk2
+FROM pg_proc WHERE proname = 'X' LIMIT 1;
+
+-- ... continuar
+```
+
+Luego ensamblar el archivo de migración con la fuente completa + cambios surgicales. CREATE OR REPLACE FUNCTION debe tener la SAME signature (mismos params + mismo arg count) — sino Postgres crea overload en vez de replace.
+
+**Para cambios de arity** (params nuevos), DROP FUNCTION primero con la signature vieja, después CREATE. Ver `00336_find_best_drivers_fleet_priority.sql` para el ejemplo (12 params → 13 params).
+
+### Fleet membership 3-way gate (corporate)
+
+**Verificado en migraciones 00336 + 00337.**
+
+Para gates donde "solo drivers de la flota del corporate":
+
+```sql
+-- 3-way check defensive:
+SELECT EXISTS (
+  SELECT 1
+  FROM corporate_accounts ca
+  WHERE ca.id = v_corporate_account_id
+    AND ca.is_fleet_owner = true
+    AND EXISTS (
+      SELECT 1 FROM fleet_members fm
+      JOIN driver_fleets df ON df.id = fm.fleet_id
+      WHERE df.corporate_account_id = ca.id
+        AND fm.status = 'active'
+        AND fm.driver_id IS NOT NULL  -- KEY: skip pending_signup
+    )
+) INTO v_use_fleet_restriction;
+```
+
+**Falsos negativos defensivos**: si el corp NO es fleet_owner, o NO tiene members activos, la gate se desactiva silenciosamente. Esto evita romper service mid-setup (corp recién creada sin drivers asignados todavía).
+
+**FK schema importante**: `fleet_members.driver_id` referencia `users.id`, NO `driver_profiles.id`. En el JOIN final, usar `fm.driver_id = dp.user_id` (NO `dp.id`).
+
+### Smoke test E2E paths cuando el rider OTP no funciona
+
+Verificado 2026-05-28 — cuando un test rider está en otro país (Lucía en Brasil) y no puede recibir OTP cubano, hay 3 alternativas:
+
+| Opción | Descripción | Cuándo elegir |
+|---|---|---|
+| **A** | Eduardo (super_admin + driver + employee) rider Y driver en 2 devices | Más realista, no rompe nada. `accept_ride_v2` no tiene check `customer_id ≠ driver_id`. |
+| **B** | Simular ride via SQL/RPC directo | Salta UI pero valida backend (triggers + ledger). Útil para validar `complete_ride_and_pay` branches. |
+| **C** | Bypass OTP via admin SDK (createSession) | Genera token de sesión sin SMS. Requiere dev build, más setup. |
+
+En la sesión 2026-05-28 elegimos esperar a Lucía (Opción "esperá") pero las 3 alternativas funcionan. Para futuras situaciones similares, escalar a Opción A primero.
+
+### Patrón de Admin map: react-leaflet vs Mapbox-gl-js
+
+**Decisión verificada 2026-05-28 (PR-MAP-1).**
+
+El admin app (`apps/admin/`) usa **react-leaflet** para mapas (`live-map`, `fleet`), NO mapbox-gl-js. El web app usa mapbox-gl-js. El mobile usa `@rnmapbox/maps`.
+
+**Cuándo usar cuál**:
+- Admin nuevas pantallas con mapa → react-leaflet (consistente con live-map existente, sin dep adicional)
+- Web nuevas pantallas con mapa → mapbox-gl-js (consistente con BookingMap)
+- Mobile → `@rnmapbox/maps`
+
+**Pattern react-leaflet en admin** (referencia `apps/admin/src/app/fleet/page.tsx`):
+- `dynamic` import con `ssr: false` (Leaflet toca `window`)
+- `MapContainer` + `TileLayer` + `CircleMarker` + `Popup` (no GeoJSON sources tipo Mapbox)
+- Realtime via Supabase channel + 30s polling fallback
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
