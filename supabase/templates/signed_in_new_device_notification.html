@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Nuevo inicio de sesión · TriciGo</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+<div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">Detectamos un nuevo inicio de sesión en tu cuenta TriciGo.</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#F8FAFC">
+  <tr>
+    <td align="center" style="padding: 24px 12px;">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,0.05);">
+        <tr>
+          <td style="padding: 28px 32px 20px; text-align: center;">
+            <a href="https://tricigo.com" target="_blank" rel="noopener" style="display: inline-block; text-decoration: none; color: #0F172A;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+                <tr>
+                  <td valign="middle" style="padding-right: 12px;">
+                    <img src="https://tricigo.com/icon-192.png" alt="" width="40" height="40" style="display: block; width: 40px; height: 40px; border-radius: 8px;">
+                  </td>
+                  <td valign="middle">
+                    <span style="display: inline-block; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: #0F172A; line-height: 1;">
+                      Trici<span style="color: #F97316;">Go</span>
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td bgcolor="#F97316" style="padding: 32px 32px 28px; text-align: center;">
+            <h1 style="margin: 0 0 8px; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 24px; font-weight: 700; color: #FFFFFF; letter-spacing: -0.01em;">
+              Nuevo inicio de sesión
+            </h1>
+            <p style="margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 15px; color: rgba(255,255,255,0.92); line-height: 1.5;">
+              Detectamos un acceso desde un dispositivo nuevo a tu cuenta.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 32px 32px 16px; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #334155;">
+            <p style="margin: 0 0 16px; font-size: 16px; color: #0F172A;">
+              Hola,
+            </p>
+            <p style="margin: 0 0 20px;">
+              Tu cuenta TriciGo (<strong>{{ .Email }}</strong>) fue accedida desde un dispositivo o ubicación que no reconocemos. Si fuiste vos, podés ignorar este mensaje.
+            </p>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 20px; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 10px 0; font-size: 14px; color: #64748B; border-bottom: 1px solid #E2E8F0;">Fecha</td>
+                <td align="right" style="padding: 10px 0; font-size: 14px; font-weight: 600; color: #0F172A; border-bottom: 1px solid #E2E8F0;">{{ .Date }}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; font-size: 14px; color: #64748B; border-bottom: 1px solid #E2E8F0;">Dirección IP</td>
+                <td align="right" style="padding: 10px 0; font-size: 14px; font-weight: 600; color: #0F172A; border-bottom: 1px solid #E2E8F0; font-variant-numeric: tabular-nums;">{{ .NewDeviceIP }}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; font-size: 14px; color: #64748B; border-bottom: 1px solid #E2E8F0;">Ubicación aproximada</td>
+                <td align="right" style="padding: 10px 0; font-size: 14px; font-weight: 600; color: #0F172A; border-bottom: 1px solid #E2E8F0;">{{ .NewDeviceLocation }}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; font-size: 14px; color: #64748B; border-bottom: 1px solid #E2E8F0;">Navegador</td>
+                <td align="right" style="padding: 10px 0; font-size: 14px; font-weight: 600; color: #0F172A; border-bottom: 1px solid #E2E8F0;">{{ .NewDeviceBrowser }}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 0; font-size: 14px; color: #64748B;">Sistema operativo</td>
+                <td align="right" style="padding: 10px 0; font-size: 14px; font-weight: 600; color: #0F172A;">{{ .NewDeviceOS }}</td>
+              </tr>
+            </table>
+            <p style="margin: 24px 0 8px; font-size: 16px; font-weight: 600; color: #0F172A;">
+              ¿No fuiste vos?
+            </p>
+            <p style="margin: 0 0 12px;">
+              Si no reconocés este acceso, tu cuenta podría estar comprometida. Tomá estas acciones inmediatamente:
+            </p>
+            <ol style="margin: 0 0 8px; padding-left: 20px; color: #334155;">
+              <li style="margin: 0 0 6px;">Restablecé tu contraseña desde la pantalla de login.</li>
+              <li style="margin: 0 0 6px;">Cerrá sesión en todos tus dispositivos desde tu perfil.</li>
+              <li style="margin: 0 0 6px;">Escribinos a <a href="mailto:soporte@tricigo.com" style="color: #F97316; text-decoration: none;">soporte@tricigo.com</a> para reportar el incidente.</li>
+            </ol>
+          </td>
+        </tr>
+        <tr>
+          <td bgcolor="#F8FAFC" style="padding: 24px 32px; text-align: center; border-top: 1px solid #E2E8F0;">
+            <p style="margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 13px; font-weight: 600; color: #64748B;">
+              TriciGo · Cuba
+            </p>
+            <p style="margin: 8px 0 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #94A3B8; line-height: 1.5;">
+              Este es un correo automático de seguridad. No respondas a esta dirección.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
