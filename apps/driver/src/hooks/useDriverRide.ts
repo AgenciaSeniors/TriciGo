@@ -448,6 +448,19 @@ export function useDriverRideActions() {
           }),
           type: 'error',
         },
+        // 00337 (PR-CORP-4): corporate ride belongs to a fleet_owner
+        // corp and this driver isn't a member of its fleet. The dispatch
+        // (00336) shouldn't have offered it, but a race or out-of-band
+        // accept attempt can still hit here. Toast explains it clearly.
+        not_in_fleet: {
+          title: i18next.t('driver:common.not_in_fleet', {
+            defaultValue: 'Este viaje es de una flota',
+          }),
+          subtitle: i18next.t('driver:common.not_in_fleet_sub', {
+            defaultValue: 'No pertenecés a la flota corporativa que paga este viaje.',
+          }),
+          type: 'info',
+        },
       };
       const entry = errorMessages[rawMsg];
       // Enrich insufficient_balance subtitle with the actual numbers so the
