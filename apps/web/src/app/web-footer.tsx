@@ -22,6 +22,7 @@ export function WebFooter() {
           <a href="/book" className="footer-link">{t('footer.book_ride')}</a>
           <a href="/login" className="footer-link">{t('footer.login')}</a>
           <a href="/blog" className="footer-link">{t('footer.blog')}</a>
+          <a href="/empresas" className="footer-link">{t('footer.empresas', { defaultValue: 'Empresas' })}</a>
         </div>
 
         <div>
