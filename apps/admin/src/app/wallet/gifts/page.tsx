@@ -36,6 +36,8 @@ export default function GiftsPage() {
   const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
   const [sendOpen, setSendOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [stats, setStats] = useState({ total_gifts: 0, reversed: 0, volume_cup: 0, gifts_7d: 0, distinct_senders: 0 });
+  const [freezeModal, setFreezeModal] = useState<{ open: boolean; userId: string; reason: string }>({ open: false, userId: '', reason: '' });
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
     action: () => void | Promise<void>;
@@ -48,8 +50,12 @@ export default function GiftsPage() {
     setLoading(true);
     setError(null);
     try {
-      const rows = await adminService.listGifts(PAGE_SIZE, page * PAGE_SIZE);
+      const [rows, s] = await Promise.all([
+        adminService.listGifts(PAGE_SIZE, page * PAGE_SIZE),
+        adminService.getGiftStats().catch(() => null),
+      ]);
       setGifts(rows);
+      if (s) setStats(s);
     } catch (err) {
       setGifts([]);
       setError(err instanceof Error ? err.message : t('gifts.load_error', { defaultValue: 'No pudimos cargar los regalos.' }));
@@ -72,15 +78,6 @@ export default function GiftsPage() {
     return [...rows].sort((a, b) => String(a[key] ?? '').localeCompare(String(b[key] ?? '')) * dir);
   }, [gifts, filter, sort]);
 
-  const stats = useMemo(() => {
-    const giftRows = gifts.filter((g) => g.kind === 'gift');
-    return {
-      total: gifts.length,
-      reversed: gifts.filter((g) => !!g.reversed_at).length,
-      volume: giftRows.reduce((sum, g) => sum + (g.reversed_at ? 0 : g.amount), 0),
-    };
-  }, [gifts]);
-
   const handleReverse = (g: WalletTransfer) => {
     setConfirmModal({
       open: true,
@@ -97,6 +94,42 @@ export default function GiftsPage() {
           await fetchData();
         } catch (err) {
           showToast('error', err instanceof Error ? err.message : t('gifts.reverse_error', { defaultValue: 'No pudimos revertir el regalo.' }));
+        }
+      },
+    });
+  };
+
+  const handleFreeze = (g: WalletTransfer) => {
+    if (!g.from_user_id) return;
+    setFreezeModal({ open: true, userId: g.from_user_id, reason: '' });
+  };
+
+  const handleConfirmFreeze = async () => {
+    if (freezeModal.reason.trim().length < 3) return;
+    try {
+      await adminService.freezeWallet(freezeModal.userId, freezeModal.reason.trim());
+      showToast('success', t('gifts.freeze_success', { defaultValue: 'Billetera congelada' }));
+      setFreezeModal({ open: false, userId: '', reason: '' });
+      await fetchData();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : t('gifts.freeze_error', { defaultValue: 'No pudimos congelar la billetera.' }));
+    }
+  };
+
+  const handleUnfreeze = (g: WalletTransfer) => {
+    if (!g.from_user_id) return;
+    const uid = g.from_user_id;
+    setConfirmModal({
+      open: true,
+      title: t('gifts.unfreeze_title', { defaultValue: 'Descongelar billetera' }),
+      message: t('gifts.unfreeze_confirm', { defaultValue: 'El emisor podrá volver a enviar regalos y gastar su saldo.' }),
+      action: async () => {
+        setConfirmModal((prev) => ({ ...prev, open: false }));
+        try {
+          await adminService.unfreezeWallet(uid);
+          showToast('success', t('gifts.unfreeze_success', { defaultValue: 'Billetera descongelada' }));
+        } catch (err) {
+          showToast('error', err instanceof Error ? err.message : t('gifts.unfreeze_error', { defaultValue: 'No pudimos descongelar la billetera.' }));
         }
       },
     });
@@ -204,8 +237,8 @@ export default function GiftsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <KpiCard label={t('gifts.kpi_total', { defaultValue: 'En esta página' })} value={String(stats.total)} loading={loading} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <KpiCard label={t('gifts.kpi_total', { defaultValue: 'Total regalos' })} value={String(stats.total_gifts)} loading={loading} />
         <KpiCard
           label={t('gifts.kpi_reversed', { defaultValue: 'Revertidos' })}
           value={String(stats.reversed)}
@@ -213,12 +246,13 @@ export default function GiftsPage() {
           loading={loading}
         />
         <KpiCard
-          label={t('gifts.kpi_volume', { defaultValue: 'Volumen (regalos)' })}
-          value={formatCUP(stats.volume).replace('CUP', '').trim()}
+          label={t('gifts.kpi_volume', { defaultValue: 'Volumen activo' })}
+          value={formatCUP(stats.volume_cup).replace('CUP', '').trim()}
           unit="CUP"
           tone="primary"
           loading={loading}
         />
+        <KpiCard label={t('gifts.kpi_7d', { defaultValue: 'Últimos 7 días' })} value={String(stats.gifts_7d)} loading={loading} />
       </div>
 
       <FilterBar<Filter>
@@ -255,6 +289,15 @@ export default function GiftsPage() {
               if (g.kind === 'gift' && !g.reversed_at && g.from_user_id) handleReverse(g);
             },
           },
+          {
+            label: t('gifts.action_freeze', { defaultValue: 'Congelar emisor' }),
+            tone: 'danger',
+            onClick: (g) => { if (g.from_user_id) handleFreeze(g); },
+          },
+          {
+            label: t('gifts.action_unfreeze', { defaultValue: 'Descongelar emisor' }),
+            onClick: (g) => { if (g.from_user_id) handleUnfreeze(g); },
+          },
         ]}
       />
 
@@ -273,6 +316,50 @@ export default function GiftsPage() {
         onConfirm={confirmModal.action}
         onCancel={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
       />
+
+      {freezeModal.open ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setFreezeModal((p) => ({ ...p, open: false }))}
+        >
+          <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <h3 className="font-display text-[18px] font-semibold text-ink">
+              {t('gifts.freeze_title', { defaultValue: 'Congelar billetera' })}
+            </h3>
+            <p className="mt-0.5 text-[12.5px] text-ink-muted">
+              {t('gifts.freeze_help', { defaultValue: 'El emisor no podrá enviar regalos ni gastar su saldo hasta descongelar.' })}
+            </p>
+            <label className="mt-4 flex flex-col gap-1">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+                {t('gifts.freeze_reason', { defaultValue: 'Motivo (obligatorio)' })}
+              </span>
+              <textarea
+                value={freezeModal.reason}
+                onChange={(e) => setFreezeModal((p) => ({ ...p, reason: e.target.value }))}
+                rows={3}
+                className="rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary-500 focus:outline-none resize-none"
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setFreezeModal((p) => ({ ...p, open: false }))}
+                className="rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-medium text-ink hover:bg-surface-sunken"
+              >
+                {t('gifts.cancel', { defaultValue: 'Cancelar' })}
+              </button>
+              <button
+                type="button"
+                disabled={freezeModal.reason.trim().length < 3}
+                onClick={handleConfirmFreeze}
+                className="rounded-lg bg-red-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {t('gifts.freeze_confirm', { defaultValue: 'Congelar' })}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
