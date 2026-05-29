@@ -30,6 +30,7 @@ import type {
   User,
   Vehicle,
   WalletRechargeRequest,
+  WalletTransfer,
   Zone,
   SelfieCheck,
 } from '@tricigo/types';
@@ -1691,6 +1692,63 @@ export const adminService = {
     ).catch(() => { /* silent — non-critical */ });
 
     return data as { transaction_id: string; account_id: string; amount_cup: number; new_balance: number };
+  },
+
+  // ==================== GIFTS ("Regalo") ====================
+
+  /**
+   * Send a promotional gift credit to a user (00345 admin_send_gift).
+   * One-sided credit (mirrors admin_adjust_wallet) recorded as a gift
+   * with an admin_actions audit row.
+   * @returns the new wallet_transfers id
+   */
+  async sendGift(toUserId: string, amount: number, note: string): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+
+    const { data, error } = await supabase.rpc('admin_send_gift', {
+      p_to_user_id: toUserId,
+      p_amount: amount,
+      p_note: note,
+      p_admin_user_id: admin.id,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  /**
+   * Reverse a user-to-user gift via a compensating ledger transaction
+   * (00345 admin_reverse_gift). The ledger is immutable, so this posts
+   * a new offsetting transaction and marks the original reversed.
+   * @returns the reversal's wallet_transfers id
+   */
+  async reverseGift(transferId: string): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+
+    const { data, error } = await supabase.rpc('admin_reverse_gift', {
+      p_transfer_id: transferId,
+      p_admin_user_id: admin.id,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  /**
+   * List gifts for the admin audit view (newest first). Admin RLS on
+   * wallet_transfers grants full read access (00009).
+   */
+  async listGifts(limit = 100, offset = 0): Promise<WalletTransfer[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_transfers')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return (data ?? []) as WalletTransfer[];
   },
 
   /**
