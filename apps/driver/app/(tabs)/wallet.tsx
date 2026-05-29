@@ -618,6 +618,35 @@ export default function WalletScreen() {
                 </Pressable>
               </Animated.View>
 
+              {/* ── Regalar (gift) — secondary action ────────────────
+                  Closed-loop: a driver can gift TriciCoin from their
+                  tricicoin balance to another active TriciGo user. */}
+              <Animated.View style={[sectionStyle(1), { marginBottom: 24, marginTop: -6 }]}>
+                <Pressable
+                  onPress={() => router.push('/wallet/gift')}
+                  style={({ pressed }) => [
+                    {
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 14,
+                      borderRadius: 16,
+                      borderWidth: 1,
+                      borderColor: palette.line,
+                      backgroundColor: palette.bg.elev1,
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
+                >
+                  <Ionicons name="gift-outline" size={20} color={palette.accent.orange} />
+                  <Text style={{ color: palette.ink.primary, fontFamily: 'Inter_700Bold', fontSize: 15, marginLeft: 10 }}>
+                    {t('wallet.gift', { defaultValue: 'Regalar' })}
+                  </Text>
+                </Pressable>
+              </Animated.View>
+
               {/* ── Stats row ──────────────────────────────────────── */}
               <Animated.View style={[sectionStyle(2), { flexDirection: 'row', gap: 12, marginBottom: 24 }]}>
                 {[
