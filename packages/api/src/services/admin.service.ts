@@ -1752,6 +1752,60 @@ export const adminService = {
   },
 
   /**
+   * Global gift KPIs for the admin Regalos panel (00346 get_gift_stats).
+   */
+  async getGiftStats(): Promise<{
+    total_gifts: number;
+    reversed: number;
+    volume_cup: number;
+    gifts_7d: number;
+    distinct_senders: number;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_gift_stats');
+    if (error) throw error;
+    const r = (data ?? {}) as Record<string, unknown>;
+    return {
+      total_gifts: Number(r.total_gifts ?? 0),
+      reversed: Number(r.reversed ?? 0),
+      volume_cup: Number(r.volume_cup ?? 0),
+      gifts_7d: Number(r.gifts_7d ?? 0),
+      distinct_senders: Number(r.distinct_senders ?? 0),
+    };
+  },
+
+  /**
+   * Freeze a user's wallet (blocks send_gift + other debits). Admin id
+   * resolved from the session (mirrors adjustWallet). Delegates to the
+   * existing freeze_wallet RPC (00013).
+   */
+  async freezeWallet(userId: string, reason: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+    const { error } = await supabase.rpc('freeze_wallet', {
+      p_user_id: userId,
+      p_reason: reason,
+      p_admin_id: admin.id,
+    });
+    if (error) throw error;
+  },
+
+  /**
+   * Unfreeze a user's wallet. Delegates to unfreeze_wallet (00013/00211).
+   */
+  async unfreezeWallet(userId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+    const { error } = await supabase.rpc('unfreeze_wallet', {
+      p_user_id: userId,
+      p_admin_id: admin.id,
+    });
+    if (error) throw error;
+  },
+
+  /**
    * Refund the commission charged on a specific ride.
    * Credits the driver's driver_cash balance with the commission amount.
    */

@@ -157,4 +157,48 @@ describe('adminService gifts', () => {
       await expect(adminService.reverseGift('gift-tx-1')).rejects.toEqual(err);
     });
   });
+
+  describe('getGiftStats', () => {
+    it('maps the RPC jsonb to numbers', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { total_gifts: 12, reversed: 1, volume_cup: 5400, gifts_7d: 3, distinct_senders: 4 },
+        error: null,
+      });
+      const result = await adminService.getGiftStats();
+      expect(mockRpc).toHaveBeenCalledWith('get_gift_stats');
+      expect(result).toEqual({ total_gifts: 12, reversed: 1, volume_cup: 5400, gifts_7d: 3, distinct_senders: 4 });
+    });
+
+    it('defaults to zeros when fields are missing', async () => {
+      mockRpc.mockResolvedValueOnce({ data: {}, error: null });
+      const result = await adminService.getGiftStats();
+      expect(result).toEqual({ total_gifts: 0, reversed: 0, volume_cup: 0, gifts_7d: 0, distinct_senders: 0 });
+    });
+  });
+
+  describe('freezeWallet', () => {
+    it('calls freeze_wallet with the authenticated admin id', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: null });
+      await adminService.freezeWallet(TO, 'Abuso detectado');
+      expect(mockRpc).toHaveBeenCalledWith('freeze_wallet', {
+        p_user_id: TO,
+        p_reason: 'Abuso detectado',
+        p_admin_id: 'admin-1',
+      });
+    });
+
+    it('throws when no admin is authenticated', async () => {
+      mockGetUser.mockResolvedValueOnce({ data: { user: null } });
+      await expect(adminService.freezeWallet(TO, 'x')).rejects.toThrow('Admin not authenticated');
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unfreezeWallet', () => {
+    it('calls unfreeze_wallet with the admin id', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: null });
+      await adminService.unfreezeWallet(TO);
+      expect(mockRpc).toHaveBeenCalledWith('unfreeze_wallet', { p_user_id: TO, p_admin_id: 'admin-1' });
+    });
+  });
 });
