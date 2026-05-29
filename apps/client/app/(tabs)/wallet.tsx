@@ -550,6 +550,14 @@ function WebWalletScreen() {
               onPress={submitRecharge}
               variant="outline"
             />
+            <Button
+              title={t('wallet.gift', { defaultValue: 'Regalar' })}
+              size="lg"
+              fullWidth
+              onPress={() => router.push('/wallet/gift')}
+              variant="primary"
+              className="mt-3"
+            />
           </View>
 
         </View>
@@ -1115,17 +1123,28 @@ function NativeWalletScreen() {
           </View>
         </AnimatedCard>
 
-        {/* Compact action buttons — smaller than before, iOS native size.
-            P2P transfer removed (closed-loop ride credit); recharge is the
-            only wallet action now. */}
-        <View className="mb-6">
-          <Button
-            title={t('wallet.recharge')}
-            variant="primary"
-            size="sm"
-            fullWidth
-            onPress={handleRecharge}
-          />
+        {/* Compact action buttons — Recargar + Regalar. The gift feature is
+            closed-loop: TriciCoin can be sent to another active TriciGo user
+            but stays spend-only (rides), never cashed out. */}
+        <View className="mb-6 flex-row gap-3">
+          <View className="flex-1">
+            <Button
+              title={t('wallet.recharge')}
+              variant="primary"
+              size="sm"
+              fullWidth
+              onPress={handleRecharge}
+            />
+          </View>
+          <View className="flex-1">
+            <Button
+              title={t('wallet.gift', { defaultValue: 'Regalar' })}
+              variant="outline"
+              size="sm"
+              fullWidth
+              onPress={() => router.push('/wallet/gift')}
+            />
+          </View>
         </View>
 
         {/* BUG-280 — "Este mes" now hides when there are no rides this month
