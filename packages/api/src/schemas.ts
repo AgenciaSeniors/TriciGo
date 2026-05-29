@@ -81,12 +81,17 @@ export const rechargeSchema = z.object({
   amount: z.number().positive().min(100).max(50000), // CUP limits
 });
 
-export const transferP2PSchema = z.object({
+// Gift ("Regalo") — closed-loop user-to-user transfer (00343).
+export const sendGiftSchema = z.object({
   fromUserId: uuidSchema,
   toUserId: uuidSchema,
-  amount: z.number().positive().min(1).max(100000),
+  amount: z.number().int().positive().min(1).max(100000),
   note: z.string().max(500).optional(),
-}).refine(d => d.fromUserId !== d.toUserId, 'No puedes transferir a ti mismo');
+}).refine(d => d.fromUserId !== d.toUserId, 'No puedes regalar a ti mismo');
+
+// Shareable gift/QR code = referral_codes.code (00319): [A-Z0-9]{6,16}.
+// Case-insensitive at the edge; the RPC upper()-normalizes.
+export const giftCodeSchema = z.string().trim().regex(/^[A-Za-z0-9]{6,16}$/, 'Código inválido');
 
 // Review schema
 export const submitReviewSchema = z.object({

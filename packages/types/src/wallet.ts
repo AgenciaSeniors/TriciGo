@@ -61,12 +61,20 @@ export interface LedgerEntry {
 
 export interface WalletTransfer {
   id: string;
-  from_user_id: string;
+  /** Null for platform/admin-originated gifts (00345 admin_send_gift). */
+  from_user_id: string | null;
   to_user_id: string;
   /** Amount in TRC whole units */
   amount: number;
   transaction_id: string;
   note: string | null;
+  /** 'gift' | 'gift_reversal' | 'transfer' (legacy pre-00274). Added 00343. */
+  kind: string;
+  /** Set when an admin reversed this gift (00345). */
+  reversed_at: string | null;
+  reversed_by: string | null;
+  /** When this row IS a reversal, points to the original transfer. */
+  reversal_of: string | null;
   created_at: string;
 }
 

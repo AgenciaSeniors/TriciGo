@@ -30,6 +30,7 @@ import type {
   User,
   Vehicle,
   WalletRechargeRequest,
+  WalletTransfer,
   Zone,
   SelfieCheck,
 } from '@tricigo/types';
@@ -1691,6 +1692,117 @@ export const adminService = {
     ).catch(() => { /* silent — non-critical */ });
 
     return data as { transaction_id: string; account_id: string; amount_cup: number; new_balance: number };
+  },
+
+  // ==================== GIFTS ("Regalo") ====================
+
+  /**
+   * Send a promotional gift credit to a user (00345 admin_send_gift).
+   * One-sided credit (mirrors admin_adjust_wallet) recorded as a gift
+   * with an admin_actions audit row.
+   * @returns the new wallet_transfers id
+   */
+  async sendGift(toUserId: string, amount: number, note: string): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+
+    const { data, error } = await supabase.rpc('admin_send_gift', {
+      p_to_user_id: toUserId,
+      p_amount: amount,
+      p_note: note,
+      p_admin_user_id: admin.id,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  /**
+   * Reverse a user-to-user gift via a compensating ledger transaction
+   * (00345 admin_reverse_gift). The ledger is immutable, so this posts
+   * a new offsetting transaction and marks the original reversed.
+   * @returns the reversal's wallet_transfers id
+   */
+  async reverseGift(transferId: string): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+
+    const { data, error } = await supabase.rpc('admin_reverse_gift', {
+      p_transfer_id: transferId,
+      p_admin_user_id: admin.id,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  /**
+   * List gifts for the admin audit view (newest first). Admin RLS on
+   * wallet_transfers grants full read access (00009).
+   */
+  async listGifts(limit = 100, offset = 0): Promise<WalletTransfer[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('wallet_transfers')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return (data ?? []) as WalletTransfer[];
+  },
+
+  /**
+   * Global gift KPIs for the admin Regalos panel (00346 get_gift_stats).
+   */
+  async getGiftStats(): Promise<{
+    total_gifts: number;
+    reversed: number;
+    volume_cup: number;
+    gifts_7d: number;
+    distinct_senders: number;
+  }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_gift_stats');
+    if (error) throw error;
+    const r = (data ?? {}) as Record<string, unknown>;
+    return {
+      total_gifts: Number(r.total_gifts ?? 0),
+      reversed: Number(r.reversed ?? 0),
+      volume_cup: Number(r.volume_cup ?? 0),
+      gifts_7d: Number(r.gifts_7d ?? 0),
+      distinct_senders: Number(r.distinct_senders ?? 0),
+    };
+  },
+
+  /**
+   * Freeze a user's wallet (blocks send_gift + other debits). Admin id
+   * resolved from the session (mirrors adjustWallet). Delegates to the
+   * existing freeze_wallet RPC (00013).
+   */
+  async freezeWallet(userId: string, reason: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+    const { error } = await supabase.rpc('freeze_wallet', {
+      p_user_id: userId,
+      p_reason: reason,
+      p_admin_id: admin.id,
+    });
+    if (error) throw error;
+  },
+
+  /**
+   * Unfreeze a user's wallet. Delegates to unfreeze_wallet (00013/00211).
+   */
+  async unfreezeWallet(userId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+    const { error } = await supabase.rpc('unfreeze_wallet', {
+      p_user_id: userId,
+      p_admin_id: admin.id,
+    });
+    if (error) throw error;
   },
 
   /**

@@ -15,7 +15,7 @@ import type {
   DriverQuotaStatus,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
-import { validate, rechargeSchema } from '../schemas';
+import { validate, rechargeSchema, sendGiftSchema, giftCodeSchema, cubanPhoneSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
 import { NotFoundError } from '../errors';
 
@@ -226,13 +226,72 @@ export const walletService = {
     return data as WalletRechargeRequest[];
   },
 
-  // ============ P2P TRANSFERS (legacy, read-only) ============
-  // User-to-user transfers were removed when TriciCoin became a
-  // closed-loop ride credit. `getTransfers` stays read-only so
-  // historical transfers remain visible; no new transfers are created.
+  // ==================== GIFTS ("Regalo") ====================
+  // Closed-loop user-to-user gift of TriciCoin (00343-00345). Reframes
+  // the P2P transfer removed in 00274: the recipient must be an active
+  // TriciGo user and the gifted balance is spend-only (rides), never
+  // withdrawable to fiat. Admin can reverse a gift + freeze wallets.
 
   /**
-   * Get P2P transfer history for a user (legacy records only).
+   * Send a gift to another user. Debits the sender's role wallet
+   * (driver→tricicoin, else customer_cash) and credits the recipient's
+   * role wallet. The `send_gift` RPC enforces caller identity, positive
+   * amount, active/non-frozen sender, sufficient balance, and atomicity.
+   * @returns the new wallet_transfers id
+   */
+  async sendGift(
+    fromUserId: string,
+    toUserId: string,
+    amount: number,
+    note?: string,
+  ): Promise<string> {
+    const valid = validate(sendGiftSchema, { fromUserId, toUserId, amount, note });
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('send_gift', {
+      p_from_user_id: valid.fromUserId,
+      p_to_user_id: valid.toUserId,
+      p_amount: valid.amount,
+      p_note: valid.note ?? null,
+    });
+    if (error) throw error;
+    logger.info('gift_sent', { from: valid.fromUserId, to: valid.toUserId, amount: valid.amount });
+    return data as string;
+  },
+
+  /**
+   * Resolve a gift recipient by exact phone (+53XXXXXXXX). Server-side
+   * rate-limited (30/h, anti-enumeration). Returns null when no active
+   * user matches.
+   */
+  async findUserByPhone(
+    phone: string,
+  ): Promise<{ id: string; full_name: string; phone: string } | null> {
+    const validPhone = validate(cubanPhoneSchema, phone);
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('find_user_by_phone', { p_phone: validPhone });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row as { id: string; full_name: string; phone: string } | undefined) ?? null;
+  },
+
+  /**
+   * Resolve a gift recipient by their shareable code (referral_codes,
+   * reused as the gift/QR code). Server-side rate-limited (30/h).
+   */
+  async findUserByGiftCode(
+    code: string,
+  ): Promise<{ id: string; full_name: string } | null> {
+    const validCode = validate(giftCodeSchema, code);
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('find_user_by_gift_code', { p_code: validCode });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row as { id: string; full_name: string } | undefined) ?? null;
+  },
+
+  /**
+   * Get gift/transfer history for a user (sent + received). RLS on
+   * wallet_transfers restricts rows to sender or recipient.
    */
   async getTransfers(userId: string): Promise<WalletTransfer[]> {
     const supabase = getSupabaseClient();
