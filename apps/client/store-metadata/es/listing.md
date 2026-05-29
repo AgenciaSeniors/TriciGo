@@ -56,7 +56,7 @@ TriciGo revoluciona la forma de moverse en La Habana. Nuestra app te permite sol
 Actualmente disponible en La Habana, con planes de expansión a otras ciudades de Cuba.
 
 📞 SOPORTE
-¿Tienes preguntas o necesitas ayuda? Contáctanos directamente desde la app o escríbenos a soporte@tricigo.app
+¿Tienes preguntas o necesitas ayuda? Contáctanos directamente desde la app o escríbenos a soporte@tricigo.com
 
 Descarga TriciGo y muévete por La Habana como nunca antes. ¡Tu bicitaxi te espera! 🚲
 
@@ -67,11 +67,11 @@ Maps & Navigation (principal) / Travel & Local (secundaria)
 bicitaxi, taxi, cuba, habana, transporte, movilidad, triciclo, ride, conductor, viaje
 
 ## Política de privacidad URL
-https://tricigo.app/privacy
+https://tricigo.com/privacy
 
 ## Clasificación de contenido
 Todos (Everyone)
 
 ## Información de contacto
-- Email: soporte@tricigo.app
-- Website: https://tricigo.app
+- Email: soporte@tricigo.com
+- Website: https://tricigo.com

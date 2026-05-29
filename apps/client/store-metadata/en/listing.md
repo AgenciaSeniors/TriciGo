@@ -49,7 +49,7 @@ AVAILABILITY
 Currently available in Havana, with plans to expand to other Cuban cities.
 
 SUPPORT
-Questions or need help? Contact us from the app or email soporte@tricigo.app
+Questions or need help? Contact us from the app or email soporte@tricigo.com
 
 Download TriciGo and explore Havana like never before!
 
@@ -60,11 +60,11 @@ Maps & Navigation (primary) / Travel & Local (secondary)
 taxi, cuba, havana, transport, ride, triciclo, pedicab, driver, trip, mobility
 
 ## Privacy Policy URL
-https://tricigo.app/privacy
+https://tricigo.com/privacy
 
 ## Content Rating
 Everyone
 
 ## Contact Information
-- Email: soporte@tricigo.app
-- Website: https://tricigo.app
+- Email: soporte@tricigo.com
+- Website: https://tricigo.com

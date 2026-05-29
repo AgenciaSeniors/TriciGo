@@ -61,7 +61,7 @@ TriciGo Conductor es tu herramienta de trabajo como bicitaxista. La app te conec
 Actualmente operando en La Habana, con planes de expansión a otras ciudades de Cuba.
 
 📞 SOPORTE PARA CONDUCTORES
-¿Necesitas ayuda? Contáctanos desde la app o escríbenos a conductores@tricigo.app
+¿Necesitas ayuda? Contáctanos desde la app o escríbenos a soporte@tricigo.com
 
 Únete a TriciGo Conductor y empieza a generar ingresos con tu bicitaxi. ¡La Habana te necesita! 🚲
 
@@ -72,11 +72,11 @@ Maps & Navigation (principal) / Business (secundaria)
 conductor, bicitaxi, taxi, cuba, habana, driver, transporte, ganancias, bicitaxista, empleo
 
 ## Política de privacidad URL
-https://tricigo.app/privacy
+https://tricigo.com/privacy
 
 ## Clasificación de contenido
 Todos (Everyone)
 
 ## Información de contacto
-- Email: conductores@tricigo.app
-- Website: https://tricigo.app
+- Email: soporte@tricigo.com
+- Website: https://tricigo.com

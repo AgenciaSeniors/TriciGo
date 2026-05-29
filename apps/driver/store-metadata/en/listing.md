@@ -56,7 +56,7 @@ AVAILABILITY
 Currently operating in Havana, with expansion plans to other Cuban cities.
 
 DRIVER SUPPORT
-Need help? Contact us from the app or email conductores@tricigo.app
+Need help? Contact us from the app or email soporte@tricigo.com
 
 Join TriciGo Driver and start earning with your vehicle today!
 
@@ -67,11 +67,11 @@ Maps & Navigation (primary) / Business (secondary)
 driver, taxi, cuba, havana, transport, earnings, ride, pedicab, employment, gig
 
 ## Privacy Policy URL
-https://tricigo.app/privacy
+https://tricigo.com/privacy
 
 ## Content Rating
 Everyone
 
 ## Contact Information
-- Email: conductores@tricigo.app
-- Website: https://tricigo.app
+- Email: soporte@tricigo.com
+- Website: https://tricigo.com
