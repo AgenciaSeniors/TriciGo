@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, ScrollView, Share } from 'react-native';
+import { View, Pressable, ScrollView, Share, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
@@ -16,6 +16,14 @@ import { referralService } from '@tricigo/api';
 import { walletService } from '@tricigo/api/services/wallet';
 import { formatTriciCoin, getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { GiftQrScanner } from '@/components/GiftQrScanner';
+
+// QR generation is native-only (uses react-native-svg). On web we fall
+// back to the text code + copy/share.
+let QRCode: React.ComponentType<{ value: string; size?: number }> | null = null;
+if (Platform.OS !== 'web') {
+  try { QRCode = require('react-native-qrcode-svg').default; } catch { QRCode = null; }
+}
 
 type LookupMode = 'code' | 'phone';
 type Recipient = { id: string; full_name: string };
@@ -23,12 +31,13 @@ type Recipient = { id: string; full_name: string };
 /**
  * "Regalo" — send TriciCoin to another TriciGo user. Closed-loop:
  * the recipient must be an active user and the gifted balance is
- * spend-only (rides). Lookup by shareable code or by phone (no QR yet
- * — phase 2). Mirrors the wallet/referral screen style.
+ * spend-only (rides). Recipient lookup by shareable code (QR or typed)
+ * or by phone. Mirrors the wallet/referral screen style.
  */
 export default function GiftScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
+  const { code: codeParam } = useLocalSearchParams<{ code?: string }>();
 
   const [balance, setBalance] = useState(0);
   const [myCode, setMyCode] = useState('');
@@ -37,6 +46,7 @@ export default function GiftScreen() {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [recipient, setRecipient] = useState<Recipient | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -60,32 +70,63 @@ export default function GiftScreen() {
     fetchData();
   }, [fetchData]);
 
-  const handleSearch = async () => {
-    const q = query.trim();
-    if (!q) return;
+  const applyFound = useCallback((found: Recipient | null) => {
+    if (!found) {
+      Toast.show({ type: 'error', text1: t('gift.recipient_not_found', { defaultValue: 'Usuario no encontrado' }) });
+      return;
+    }
+    if (found.id === userId) {
+      Toast.show({ type: 'error', text1: t('gift.cannot_self', { defaultValue: 'No puedes regalarte a ti mismo' }) });
+      return;
+    }
+    setRecipient({ id: found.id, full_name: found.full_name });
+    triggerHaptic('light');
+  }, [userId, t]);
+
+  const resolveByCode = useCallback(async (code: string) => {
+    const c = code.trim();
+    if (!c) return;
     setSearching(true);
     setRecipient(null);
     try {
-      const found =
-        mode === 'code'
-          ? await walletService.findUserByGiftCode(q)
-          : await walletService.findUserByPhone(q);
-      if (!found) {
-        Toast.show({ type: 'error', text1: t('gift.recipient_not_found', { defaultValue: 'Usuario no encontrado' }) });
-        return;
-      }
-      if (found.id === userId) {
-        Toast.show({ type: 'error', text1: t('gift.cannot_self', { defaultValue: 'No puedes regalarte a ti mismo' }) });
-        return;
-      }
-      setRecipient({ id: found.id, full_name: found.full_name });
-      triggerHaptic('light');
+      applyFound(await walletService.findUserByGiftCode(c));
+    } catch (err) {
+      Toast.show({ type: 'error', text1: getErrorMessage(err) });
+    } finally {
+      setSearching(false);
+    }
+  }, [applyFound]);
+
+  const handleSearch = async () => {
+    const q = query.trim();
+    if (!q) return;
+    if (mode === 'code') { void resolveByCode(q); return; }
+    setSearching(true);
+    setRecipient(null);
+    try {
+      applyFound(await walletService.findUserByPhone(q));
     } catch (err) {
       Toast.show({ type: 'error', text1: getErrorMessage(err) });
     } finally {
       setSearching(false);
     }
   };
+
+  // Deep link / QR: tricigo://gift/<code> opens this screen with ?code=,
+  // which auto-resolves the recipient.
+  useEffect(() => {
+    if (codeParam) {
+      setMode('code');
+      setQuery(codeParam);
+      void resolveByCode(codeParam);
+    }
+  }, [codeParam, resolveByCode]);
+
+  const handleScanned = useCallback((code: string) => {
+    setMode('code');
+    setQuery(code);
+    void resolveByCode(code);
+  }, [resolveByCode]);
 
   const numericAmount = parseInt(amount, 10);
   const amountValid = Number.isFinite(numericAmount) && numericAmount > 0 && numericAmount <= balance;
@@ -187,6 +228,14 @@ export default function GiftScreen() {
                 disabled={!query.trim() || searching}
                 className="mt-2"
               />
+              {Platform.OS !== 'web' ? (
+                <Pressable onPress={() => setScannerOpen(true)} className="flex-row items-center justify-center mt-3" hitSlop={8}>
+                  <Ionicons name="qr-code-outline" size={18} color={colors.primary[500]} />
+                  <Text variant="bodySmall" color="primary" className="ml-2 font-medium">
+                    {t('gift.scan_qr', { defaultValue: 'Escanear QR' })}
+                  </Text>
+                </Pressable>
+              ) : null}
             </Card>
           ) : (
             <Card variant="filled" padding="md" className="mb-4 flex-row items-center justify-between">
@@ -253,6 +302,11 @@ export default function GiftScreen() {
                 <Ionicons name="copy-outline" size={20} color={colors.primary[500]} style={{ marginLeft: 8 }} />
               ) : null}
             </Pressable>
+            {QRCode && myCode ? (
+              <View className="mb-3 p-3 bg-white rounded-2xl">
+                <QRCode value={`tricigo://gift/${myCode}`} size={160} />
+              </View>
+            ) : null}
             <Button
               title={t('gift.share_my_code', { defaultValue: 'Compartir mi código' })}
               variant="outline"
@@ -262,6 +316,8 @@ export default function GiftScreen() {
             />
           </Card>
         </ScrollView>
+
+        <GiftQrScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScanned={handleScanned} />
       </View>
     </Screen>
   );

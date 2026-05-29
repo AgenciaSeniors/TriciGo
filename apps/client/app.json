@@ -43,7 +43,8 @@
       "package": "app.tricigo.client",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA"
       ],
       "intentFilters": [
         {
@@ -109,7 +110,13 @@
       ["expo-image-picker", {
         "photosPermission": "TriciGo necesita acceso a tus fotos para tu avatar.",
         "cameraPermission": "TriciGo necesita acceso a la cámara para tu avatar."
-      }]
+      }],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "TriciGo usa la cámara para escanear el código QR de un amigo y enviarle un regalo."
+        }
+      ]
     ],
     "extra": {
       "router": {
