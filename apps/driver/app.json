@@ -46,7 +46,8 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.CAMERA"
       ],
       "intentFilters": [
         {
@@ -111,6 +112,12 @@
           "imageWidth": 120,
           "backgroundColor": "#0F0F23",
           "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "TriciGo Conductor usa la cámara para escanear el código QR de un amigo y enviarle un regalo."
         }
       ]
     ],
