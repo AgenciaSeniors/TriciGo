@@ -73,30 +73,33 @@ function injectOverride(contents) {
     return contents;
   }
 
-  // Strategy: insert AFTER the `getMainComponentName()` function which
-  // is always present in Expo-generated MainActivity.kt files. This
-  // anchor is stable across SDK 50 → 55 (verified manually).
-  const anchorRegex = /override fun getMainComponentName\(\)[^}]*\}/;
-
-  if (!anchorRegex.test(contents)) {
-    // Fallback: insert before the final closing brace of the class.
-    // This is robust to Expo template changes that rename or remove
-    // getMainComponentName.
-    const lastBraceIdx = contents.lastIndexOf('}');
-    if (lastBraceIdx === -1) {
-      throw new Error(
-        '[with-user-leave-hint-safe] MainActivity.kt has no closing brace — file may be corrupt',
-      );
-    }
-    return (
-      contents.slice(0, lastBraceIdx) +
-      KOTLIN_OVERRIDE +
-      '\n' +
-      contents.slice(lastBraceIdx)
-    );
+  // Strategy: insert right AFTER the class opening brace so the override
+  // always lands INSIDE the class body.
+  //
+  // The previous anchor (after `getMainComponentName()`) broke on Expo
+  // SDK 55: there both `getMainComponentName` and `createReactActivityDelegate`
+  // use expression bodies (no `{}`), so a `getMainComponentName()[^}]*}`
+  // match ran past the class's OWN closing brace and the override was
+  // injected OUTSIDE the class → kotlin "Unresolved reference 'override'".
+  // Anchoring on the class header avoids that entirely.
+  const classOpen = /(class\s+\w+\s*:\s*ReactActivity\s*\([^)]*\)\s*\{)/;
+  if (classOpen.test(contents)) {
+    return contents.replace(classOpen, (m) => `${m}\n${KOTLIN_OVERRIDE}`);
   }
 
-  return contents.replace(anchorRegex, (match) => match + KOTLIN_OVERRIDE);
+  // Fallback: insert before the final closing brace (the class close).
+  const lastBraceIdx = contents.lastIndexOf('}');
+  if (lastBraceIdx === -1) {
+    throw new Error(
+      '[with-user-leave-hint-safe] MainActivity.kt has no closing brace — file may be corrupt',
+    );
+  }
+  return (
+    contents.slice(0, lastBraceIdx) +
+    KOTLIN_OVERRIDE +
+    '\n' +
+    contents.slice(lastBraceIdx)
+  );
 }
 
 module.exports = function withUserLeaveHintSafe(config) {
