@@ -40,24 +40,28 @@ function injectOverride(contents) {
     return contents;
   }
 
-  const anchorRegex = /override fun getMainComponentName\(\)[^}]*\}/;
-
-  if (!anchorRegex.test(contents)) {
-    const lastBraceIdx = contents.lastIndexOf('}');
-    if (lastBraceIdx === -1) {
-      throw new Error(
-        '[with-user-leave-hint-safe] MainActivity.kt has no closing brace — file may be corrupt',
-      );
-    }
-    return (
-      contents.slice(0, lastBraceIdx) +
-      KOTLIN_OVERRIDE +
-      '\n' +
-      contents.slice(lastBraceIdx)
-    );
+  // Insert right after the class opening brace so the override always lands
+  // INSIDE the class body. The previous anchor (after getMainComponentName)
+  // broke on Expo SDK 55: its expression-body methods have no braces, so
+  // `getMainComponentName()[^}]*}` ran past the class's own closing brace and
+  // injected the override OUTSIDE the class. (Keep in sync with apps/client.)
+  const classOpen = /(class\s+\w+\s*:\s*ReactActivity\s*\([^)]*\)\s*\{)/;
+  if (classOpen.test(contents)) {
+    return contents.replace(classOpen, (m) => `${m}\n${KOTLIN_OVERRIDE}`);
   }
 
-  return contents.replace(anchorRegex, (match) => match + KOTLIN_OVERRIDE);
+  const lastBraceIdx = contents.lastIndexOf('}');
+  if (lastBraceIdx === -1) {
+    throw new Error(
+      '[with-user-leave-hint-safe] MainActivity.kt has no closing brace — file may be corrupt',
+    );
+  }
+  return (
+    contents.slice(0, lastBraceIdx) +
+    KOTLIN_OVERRIDE +
+    '\n' +
+    contents.slice(lastBraceIdx)
+  );
 }
 
 module.exports = function withUserLeaveHintSafe(config) {
