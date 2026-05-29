@@ -91,6 +91,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/users', labelKey: 'sidebar.users', defaultLabel: 'Pasajeros', icon: Users },
       { href: '/wallet', labelKey: 'sidebar.wallet', defaultLabel: 'Billeteras', icon: Wallet },
       { href: '/wallet/receipts', labelKey: 'sidebar.wallet_receipts', defaultLabel: 'Comprobantes', icon: Receipt },
+      { href: '/wallet/gifts', labelKey: 'sidebar.gifts', defaultLabel: 'Regalos', icon: Gift },
       { href: '/earnings', labelKey: 'sidebar.earnings', defaultLabel: 'Ingresos', icon: DollarSign },
       { href: '/reviews', labelKey: 'sidebar.reviews', defaultLabel: 'Reseñas', icon: Star },
       { href: '/support', labelKey: 'sidebar.support', defaultLabel: 'Soporte', icon: Headphones },
