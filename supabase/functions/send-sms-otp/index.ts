@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { resolveDemoOtp } from '../_shared/demo-otp.ts';
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -55,6 +56,46 @@ Deno.serve(async (req) => {
 
     // ── Route by country: Cuba → D7 SMS (with Meta WhatsApp fallback), rest → Twilio Verify ──
     if (normalizedPhone.startsWith('+53')) {
+      // ── Google Play review demo account: seed a fixed code, skip real SMS ──
+      // Env-gated: resolveDemoOtp returns null unless DEMO_PHONE + DEMO_OTP_CODE
+      // are both set, so this path is inert in normal production.
+      const demoCode = resolveDemoOtp(
+        normalizedPhone,
+        Deno.env.get('DEMO_PHONE'),
+        Deno.env.get('DEMO_OTP_CODE'),
+      );
+      if (demoCode) {
+        const supabaseDemo = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+        );
+        // Keep at most one live code for the demo phone — clear any prior
+        // unverified row so the fixed code can't accumulate concurrent rows.
+        await supabaseDemo.from('otp_codes')
+          .delete()
+          .eq('phone', normalizedPhone)
+          .is('verified_at', null);
+        const { error: demoInsertError } = await supabaseDemo.from('otp_codes').insert({
+          phone: normalizedPhone,
+          code: demoCode,
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+        if (demoInsertError) {
+          console.error('Failed to store demo OTP:', demoInsertError.message, demoInsertError.code);
+          return new Response(
+            JSON.stringify({ error: 'Failed to generate verification code' }),
+            { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+          );
+        }
+        // Response is byte-identical to a normal D7 Cuba send so the bypass is
+        // not observable to clients (no demo-account enumeration oracle).
+        console.log('Demo OTP seeded for Play review account');
+        return new Response(
+          JSON.stringify({ success: true, message: 'Verification sent via SMS', provider: 'd7' }),
+          { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+        );
+      }
+
       // ── Cuba: D7 Networks SMS preferred, Meta WhatsApp fallback ──
       const d7Token = Deno.env.get('D7_API_TOKEN');
       const d7Sender = Deno.env.get('D7_SENDER_ID') || 'TriciGo';
