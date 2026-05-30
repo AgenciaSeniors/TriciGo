@@ -629,6 +629,11 @@ export function useRideActions() {
         insurance_selected: d.insuranceSelected,
         insurance_premium_cup: d.insuranceSelected ? (selectedFare?.insurance_premium_cup ?? 0) : 0,
         rider_preferences: Object.keys(d.ridePreferences).length > 0 ? d.ridePreferences : undefined,
+        // "Compartir viaje" — only for the tricycle. The server trigger
+        // (00347) computes the discount; declared_passengers = seats the
+        // rider occupies.
+        share_ride: d.serviceType === 'triciclo_basico' ? d.shareRide : false,
+        declared_passengers: d.shareRide && d.serviceType === 'triciclo_basico' ? d.passengerCount : undefined,
       });
 
       // Bug 30: Save delivery details as blocking step — cancel ride if it fails

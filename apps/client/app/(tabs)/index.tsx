@@ -3592,7 +3592,7 @@ function ReviewingView() {
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const mode: 'light' | 'dark' = resolvedScheme;
   const tokens = mode === 'dark' ? cubanDark : cubanLight;
-  const { draft, fareEstimate, allFareEstimates, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, activeRide } = useRideStore();
+  const { draft, fareEstimate, allFareEstimates, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, setShareRide, activeRide } = useRideStore();
 
   /** Format fare based on payment method */
   const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
@@ -3700,7 +3700,20 @@ function ReviewingView() {
     return null;
   }
 
-  const discount = promoResult?.valid ? promoResult.discountAmount : 0;
+  const promoDiscount = promoResult?.valid ? (promoResult.discountAmount ?? 0) : 0;
+  // "Compartir viaje" preview discount (the server trigger 00347 recomputes
+  // it authoritatively at booking — this is display-only). Tricycle capacity
+  // is 4; free seats = 4 − seats the rider occupies (passengerCount). Default
+  // 7% per free seat.
+  const shareFreeSeats =
+    draft.serviceType === 'triciclo_basico' && draft.shareRide
+      ? Math.max(0, 4 - (draft.passengerCount || 1))
+      : 0;
+  const shareDiscount =
+    shareFreeSeats > 0
+      ? Math.floor((fareEstimate?.estimated_fare_cup ?? 0) * shareFreeSeats * 7 / 100)
+      : 0;
+  const discount = promoDiscount + shareDiscount;
 
   return (
     <View className="pt-4 flex-1">
@@ -3958,7 +3971,7 @@ function ReviewingView() {
               totalTrc={fareEstimate.estimated_fare_trc}
               totalLabel={t('ride.estimated_fare')}
               discountCup={discount} /* Bugfix: prop is discountCup (TRC = CUP 1:1, the component computes TRC internally). `discountTrc` was never accepted by FareBreakdownCardProps so the value was silently dropped — the card rendered without the discount. */
-              discountLabel={discount > 0 ? t('ride.discount', { defaultValue: 'Descuento' }) : undefined}
+              discountLabel={discount > 0 ? (shareDiscount > 0 && promoDiscount === 0 ? t('ride.share_discount', { defaultValue: 'Compartir viaje' }) : t('ride.discount', { defaultValue: 'Descuento' })) : undefined}
               minFareApplied={fareEstimate.min_fare_applied}
               minFareNote={fareEstimate.min_fare_applied ? t('ride.min_fare_note', { defaultValue: 'Se aplicó tarifa mínima' }) : undefined}
               fareRangeMinTrc={fareEstimate.fare_range_min_trc}
@@ -4023,6 +4036,37 @@ function ReviewingView() {
               <Switch
                 value={draft.insuranceSelected}
                 onValueChange={(val) => setInsurance(val)}
+                trackColor={{ false: '#D1D5DB', true: colors.brand.orange }}
+                thumbColor="white"
+              />
+            </Pressable>
+          )}
+
+          {/* Compartir viaje toggle (solo triciclo) */}
+          {draft.serviceType === 'triciclo_basico' && fareEstimate.estimated_fare_cup > 0 && (
+            <Pressable
+              className={`flex-row items-center rounded-xl px-4 py-3 mb-4 ${
+                draft.shareRide ? 'bg-primary-50 border border-primary-500' : 'bg-neutral-100'
+              }`}
+              onPress={() => setShareRide(!draft.shareRide)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: draft.shareRide }}
+              accessibilityLabel={t('ride.share_ride_toggle', { defaultValue: 'Compartir viaje' })}
+            >
+              <Ionicons name="people-outline" size={20} color={draft.shareRide ? colors.brand.orange : colors.neutral[500]} />
+              <View className="flex-1 ml-3">
+                <Text variant="body" color={draft.shareRide ? 'primary' : undefined}>
+                  {t('ride.share_ride_toggle', { defaultValue: 'Compartir viaje' })}
+                </Text>
+                <Text variant="caption" color="secondary">
+                  {draft.shareRide && shareFreeSeats > 0
+                    ? t('ride.share_ride_active', { defaultValue: '{{seats}} asientos libres · −{{pct}}%', seats: shareFreeSeats, pct: shareFreeSeats * 7 })
+                    : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagás menos' })}
+                </Text>
+              </View>
+              <Switch
+                value={draft.shareRide}
+                onValueChange={(val) => setShareRide(val)}
                 trackColor={{ false: '#D1D5DB', true: colors.brand.orange }}
                 thumbColor="white"
               />
