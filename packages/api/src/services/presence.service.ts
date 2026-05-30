@@ -10,6 +10,7 @@ import type {
   DriverAcceptedBroadcast,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { realtimeStatusLogger } from './_realtime-status';
 
 /** Active channels keyed by rideId */
 const activeChannels = new Map<string, RealtimeChannel>();
@@ -35,12 +36,14 @@ export const presenceService = {
       return channel;
     }
 
+    const logStatus = realtimeStatusLogger('ride_search_join');
     channel = supabase.channel(channelName);
     channel
-      .subscribe((status) => {
+      .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           channel!.track(presence);
         }
+        logStatus(status, err);
       });
 
     activeChannels.set(rideId, channel);
@@ -100,7 +103,7 @@ export const presenceService = {
       .on('broadcast', { event: 'driver_accepted' }, (payload) => {
         onAccepted(payload.payload as DriverAcceptedBroadcast);
       })
-      .subscribe();
+      .subscribe(realtimeStatusLogger('ride_search_drivers'));
 
     activeChannels.set(rideId, channel);
     return channel;

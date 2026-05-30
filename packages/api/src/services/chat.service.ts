@@ -4,6 +4,7 @@
 
 import { getSupabaseClient } from '../client';
 import type { ChatMessage } from '@tricigo/types';
+import { realtimeStatusLogger } from './_realtime-status';
 import { validate, sendMessageSchema } from '../schemas';
 
 export const chatService = {
@@ -53,7 +54,7 @@ export const chatService = {
           onMessage(payload.new as ChatMessage);
         },
       )
-      .subscribe();
+      .subscribe(realtimeStatusLogger('chat_messages'));
   },
 
   // ==================== TYPING INDICATOR ====================
@@ -77,7 +78,7 @@ export const chatService = {
           onTyping(senderId);
         }
       })
-      .subscribe();
+      .subscribe(realtimeStatusLogger('chat_typing'));
   },
 
   /**

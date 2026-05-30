@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, realtimeStatusLogger } from '@tricigo/api';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
@@ -55,7 +55,7 @@ export function useRiderLocationSharing() {
         // Create a broadcast channel for this ride
         const supabase = getSupabaseClient();
         channelRef.current = supabase.channel(`rider-location:${rideId}`);
-        channelRef.current.subscribe();
+        channelRef.current.subscribe(realtimeStatusLogger('rider_location_share'));
 
         // Watch position with lower accuracy and less frequent updates
         // (rider location is supplementary, not primary tracking)

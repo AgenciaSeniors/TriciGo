@@ -28,6 +28,7 @@ export type { DeliveryDetails, PublicDeliveryView, ValidateOtpResult, CreateDeli
 export { nearbyService } from './services/nearby.service';
 export { exchangeRateService } from './services/exchange-rate.service';
 export { presenceService } from './services/presence.service';
+export { realtimeStatusLogger } from './services/_realtime-status';
 export {
   initOfflineQueue,
   registerOfflineMutation,

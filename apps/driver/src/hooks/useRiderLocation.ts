@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, realtimeStatusLogger } from '@tricigo/api';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface RiderLocationPayload {
@@ -57,7 +57,7 @@ export function useRiderLocation(
           });
         }
       })
-      .subscribe();
+      .subscribe(realtimeStatusLogger('rider_location'));
 
     channelRef.current = channel;
 

@@ -1,5 +1,6 @@
 import { getSupabaseClient } from '../client';
 import type { AppNotification, NotificationType } from '@tricigo/types';
+import { realtimeStatusLogger } from './_realtime-status';
 
 export const notificationService = {
   async registerPushToken(
@@ -666,6 +667,6 @@ export const notificationService = {
           onNotification(payload.new as AppNotification);
         },
       )
-      .subscribe();
+      .subscribe(realtimeStatusLogger('inbox'));
   },
 };
