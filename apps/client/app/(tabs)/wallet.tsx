@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView } from 'react-native';
+import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
-import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { WalletMigrationBanner } from '@tricigo/ui/WalletMigrationBanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from '@tricigo/ui/Button';
@@ -14,6 +13,8 @@ import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import { paymentService } from '@tricigo/api/services/payment';
 import {
   formatTriciCoin,
+  formatTriciCoinUsd,
+  formatCupApprox,
   formatUSD,
   trcToUsd,
   DEFAULT_EXCHANGE_RATE,
@@ -29,7 +30,7 @@ import {
 } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
-import { SkeletonListItem, SkeletonBalance } from '@tricigo/ui/Skeleton';
+import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useAuthStore } from '@/stores/auth.store';
@@ -574,6 +575,46 @@ function NativeWalletScreen() {
   const tokens = useTokens();
   const userId = useAuthStore((s) => s.user?.id);
 
+  // Cuban Modern premium shadows (mirror driver wallet). Orange-tinted on the
+  // hero + CTA to reinforce brand; neutral on transaction cards.
+  const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nums'] };
+  const HERO_SHADOW = {
+    shadowColor: '#FF4D00',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: isDark ? 0.28 : 0.16,
+    shadowRadius: 24,
+    elevation: 12,
+  };
+  const GLOW_CTA = {
+    shadowColor: '#FF4D00',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  };
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  };
+
+  const getTransactionIcon = (type: string): keyof typeof Ionicons.glyphMap => {
+    switch (type) {
+      case 'ride_payment': return 'car';
+      case 'commission': return 'trending-down';
+      case 'tip': return 'heart';
+      case 'transfer_in': return 'arrow-down';
+      case 'transfer_out': return 'arrow-up';
+      case 'recharge': return 'add-circle';
+      case 'promo_credit': return 'gift';
+      case 'redemption': return 'wallet';
+      case 'adjustment': return 'swap-horizontal';
+      default: return 'swap-horizontal';
+    }
+  };
+
   const [balance, setBalance] = useState<{
     available: number;
     held: number;
@@ -956,55 +997,51 @@ function NativeWalletScreen() {
       ? receiptByPiId.get(item.reference_id)
       : null;
     const canDownload = !!receipt?.pdf_storage_path;
+    const txColor = isCredit ? (isDark ? '#4ADE80' : '#16A34A') : (isDark ? '#F87171' : '#DC2626');
     return (
       <AnimatedCard delay={Math.min(index * 60, 300)}>
-        {/* Cuban Modern visual tokens (sub-project #5) layered over wallet
-            v2 functional structure (USD caption + receipt download from
-            master). Master's outer View handles padding + border via the
-            token system; the inner row keeps amount + USD caption right-
-            aligned, and the optional receipt button hangs below the row
-            on its own line. */}
+        {/* Elevated transaction card (driver parity): icon-box by type, amount
+            + optional USD caption right-aligned, receipt pill below. */}
         <View
           style={{
-            paddingVertical: 14,
-            borderBottomWidth: 1,
-            borderBottomColor: tokens.line,
+            marginBottom: 8,
+            backgroundColor: tokens.bg.elev1,
+            borderRadius: 14,
+            ...CARD_SHADOW,
           }}
           accessible={true}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 14 }}>
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: `${txColor}1A`,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 12,
+              }}
+            >
+              <Ionicons name={getTransactionIcon(item.type)} size={18} color={txColor} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text
-                variant="bodySmall"
                 numberOfLines={1}
-                style={{ color: tokens.ink.primary, fontWeight: '500' }}
+                style={{ color: tokens.ink.primary, fontWeight: '600', fontSize: 14 }}
               >
                 {item.description || getTransactionLabel(item.type, isCredit, t)}
               </Text>
-              <Text
-                variant="captionMono"
-                style={{ color: tokens.ink.subtle, marginTop: 2 }}
-              >
+              <Text style={{ color: tokens.ink.secondary, fontSize: 12, marginTop: 2 }}>
                 {getRelativeDay(item.created_at, t('today'), t('yesterday'))}
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text
-                variant="numberMono"
-                style={{
-                  fontWeight: '600',
-                  color: isCredit
-                    ? (isDark ? '#4ADE80' : '#16A34A')
-                    : (isDark ? '#F87171' : '#DC2626'),
-                }}
-              >
+              <Text style={{ color: txColor, fontWeight: '700', fontSize: 15, ...TABULAR }}>
                 {isCredit ? '+' : ''}{formatTriciCoin(amount)}
               </Text>
               {balance.availableUsdCents != null && (
-                <Text
-                  variant="captionMono"
-                  style={{ color: tokens.ink.subtle, marginTop: 2 }}
-                >
+                <Text style={{ color: tokens.ink.subtle, fontSize: 11, marginTop: 2, ...TABULAR }}>
                   ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
                 </Text>
               )}
@@ -1014,17 +1051,37 @@ function NativeWalletScreen() {
             <Pressable
               onPress={() => openReceiptNative(receipt.pdf_storage_path!, receipt.receipt_no)}
               disabled={openingReceipt === receipt.receipt_no}
-              style={{ marginTop: 6, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center' }}
+              style={({ pressed }) => [
+                { paddingHorizontal: 14, paddingBottom: 12, marginTop: -4 },
+                pressed && { opacity: 0.65 },
+              ]}
               accessibilityRole="button"
               accessibilityLabel={t('wallet.download_receipt_aria', { defaultValue: 'Descargar comprobante {{no}}', no: receipt.receipt_no })}
             >
-              <Ionicons name="download-outline" size={13} color={tokens.accent.orange} />
-              <Text variant="captionMono" style={{ color: tokens.accent.orange, fontWeight: '600', marginLeft: 4 }}>
-                {openingReceipt === receipt.receipt_no
-                  ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
-                  : t('wallet.download_receipt', { defaultValue: 'Comprobante' })}{' '}
-                <Text variant="captionMono" style={{ color: tokens.accent.orange, fontFamily: 'monospace' }}>{receipt.receipt_no}</Text>
-              </Text>
+              <View
+                style={{
+                  alignSelf: 'flex-start',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: tokens.accent.warm,
+                  borderRadius: 9999,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  marginLeft: 52,
+                }}
+              >
+                <Ionicons
+                  name={openingReceipt === receipt.receipt_no ? 'hourglass-outline' : 'document-text-outline'}
+                  size={11}
+                  color="#FFFFFF"
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                  {openingReceipt === receipt.receipt_no
+                    ? t('wallet.opening_receipt', { defaultValue: 'Abriendo…' })
+                    : `${t('wallet.download_receipt', { defaultValue: 'Comprobante' })} ${receipt.receipt_no}`}
+                </Text>
+              </View>
             </Pressable>
           )}
         </View>
@@ -1035,16 +1092,36 @@ function NativeWalletScreen() {
   if (loading) {
     return (
       <Screen bg="cuban" padded>
-        <View className="pt-4">
-          <SkeletonBalance />
-          <SkeletonListItem />
-          <SkeletonListItem />
-          <SkeletonListItem />
-          <SkeletonListItem />
+        <View className="pt-4 flex-1" style={{ backgroundColor: tokens.bg.paper }}>
+          {/* Final-shape skeletons (driver parity): hero + CTA + tx rows. */}
+          <View style={{ height: 160, borderRadius: 24, backgroundColor: tokens.bg.elev1, marginBottom: 16, ...HERO_SHADOW }} />
+          <View style={{ height: 60, borderRadius: 20, backgroundColor: tokens.bg.elev1, marginBottom: 12, opacity: 0.6 }} />
+          <View style={{ height: 48, borderRadius: 16, backgroundColor: tokens.bg.elev1, marginBottom: 24, opacity: 0.5 }} />
+          {[0, 1, 2, 3].map((i) => (
+            <View
+              key={i}
+              style={{ height: 72, borderRadius: 14, backgroundColor: tokens.bg.elev1, marginBottom: 8, opacity: 1 - i * 0.12, ...CARD_SHADOW }}
+            />
+          ))}
         </View>
       </Screen>
     );
   }
+
+  // Hero balance display — replicate BalanceBadge's USD/legacy logic so the
+  // hand-rolled premium hero shows the same figures (no display regression).
+  const heroRate = balance.migrationRate ?? exchangeRate;
+  const heroUsdMode = balance.availableUsdCents != null && balance.availableUsdCents > 0;
+  const heroPrimary = heroUsdMode
+    ? formatTriciCoinUsd(balance.availableUsdCents ?? 0)
+    : formatTriciCoin(displayBalance);
+  const heroSubtitle = heroUsdMode
+    ? formatCupApprox(balance.availableUsdCents ?? 0, heroRate)
+    : `≈ ${formatUSD(trcToUsd(displayBalance, heroRate))}`;
+  const heroHasHeld = heroUsdMode ? (balance.heldUsdCents ?? 0) > 0 : balance.held > 0;
+  const heroHeldText = heroUsdMode
+    ? formatTriciCoinUsd(balance.heldUsdCents ?? 0)
+    : formatTriciCoin(balance.held);
 
   return (
     <Screen bg="cuban" padded>
@@ -1060,8 +1137,8 @@ function NativeWalletScreen() {
             "RECIENTES" / "SERVICIOS" mono labels of the home. */}
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center gap-2">
-            <Image source={tricoinLogo} style={{ width: 22, height: 22 }} resizeMode="contain" />
-            <Text variant="h4" style={{ color: tokens.ink.primary }}>
+            <Image source={tricoinLogo} style={{ width: 26, height: 26 }} resizeMode="contain" />
+            <Text style={{ color: tokens.ink.primary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
               {t('wallet.title', { defaultValue: 'Créditos TriciGo' })}
             </Text>
           </View>
@@ -1076,76 +1153,142 @@ function NativeWalletScreen() {
           />
         )}
 
-        {/* Mono label above balance, mirrors home's section header style. */}
-        <Text
-          variant="captionMono"
-          style={{ color: tokens.ink.subtle, marginBottom: 8 }}
-        >
-          {t('wallet.balance_label', { defaultValue: 'SALDO DISPONIBLE' })}
-        </Text>
-
-        {/* Compact balance card — bg.elev1 surface with line border instead
-            of the heavy orange hero gradient (redesign V2). Numbers in
-            BalanceBadge stay big (it's the primary metric of this screen)
-            but the surface is calmer and matches the home's card aesthetic.
-            BalanceBadge keeps wallet v2 USD-mode props so the badge auto-
-            switches to "$X.XX" when migration data is available. */}
+        {/* Premium hero — 3-layer (gradient base + orange glow + content) with
+            orange-tinted shadow, mirroring the driver wallet. Replaces the flat
+            balance card. heroPrimary/heroSubtitle replicate BalanceBadge's
+            USD/legacy display so there's no figure regression. */}
         <AnimatedCard delay={0}>
-          <View
-            style={{
-              backgroundColor: tokens.bg.elev1,
-              borderColor: tokens.line,
-              borderWidth: 1,
-              borderRadius: 16,
-              padding: 16,
-              marginBottom: 16,
-              ...(isDark ? {} : {
-                shadowColor: '#1A1414',
-                shadowOpacity: 0.04,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 2 },
-                elevation: 1,
-              }),
-            }}
-          >
-            <BalanceBadge
-              balance={displayBalance}
-              held={balance.held}
-              balanceUsdCents={balance.availableUsdCents}
-              heldUsdCents={balance.heldUsdCents}
-              exchangeRate={balance.migrationRate ?? exchangeRate}
-              size="md"
-              showHeld
-              coinIcon={tricoinSmall}
-              GradientComponent={LinearGradient}
-              gradientColors={['#FF4D00', '#FF8A5C']}
-            />
+          <View style={{ borderRadius: 24, marginBottom: 16, ...HERO_SHADOW }}>
+            <View style={{ borderRadius: 24, overflow: 'hidden' }}>
+              <LinearGradient
+                colors={isDark ? ['#11172A', '#18203A'] : ['#FFFFFF', '#FFFBF5']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <LinearGradient
+                colors={[tokens.accent.orangeGlow, 'transparent']}
+                start={{ x: 1, y: 0 }}
+                end={{ x: 0.3, y: 0.7 }}
+                style={{ position: 'absolute', top: 0, right: 0, width: 180, height: 180 }}
+                pointerEvents="none"
+              />
+              <View style={{ padding: 24 }}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '700',
+                    letterSpacing: 1.6,
+                    color: tokens.ink.secondary,
+                    textTransform: 'uppercase',
+                    marginBottom: 10,
+                  }}
+                >
+                  {t('wallet.balance_label', { defaultValue: 'SALDO DISPONIBLE' })}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: 'Montserrat_800ExtraBold',
+                    fontSize: 42,
+                    letterSpacing: -1.2,
+                    lineHeight: 48,
+                    color: tokens.ink.primary,
+                    ...TABULAR,
+                  }}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {heroPrimary}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                  <View
+                    style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tokens.accent.warm, marginRight: 8 }}
+                  />
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: tokens.accent.warm, ...TABULAR }}>
+                    {heroSubtitle}
+                  </Text>
+                </View>
+                {heroHasHeld && (
+                  <View
+                    style={{
+                      marginTop: 16,
+                      alignSelf: 'flex-start',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: tokens.accent.orangeGlow,
+                      borderRadius: 9999,
+                      paddingHorizontal: 12,
+                      paddingVertical: 5,
+                    }}
+                  >
+                    <Ionicons name="lock-closed" size={11} color={tokens.accent.orange} style={{ marginRight: 5 }} />
+                    <Text style={{ color: tokens.accent.orange, fontSize: 12, fontWeight: '700', ...TABULAR }}>
+                      {t('wallet.held', { defaultValue: 'Retenido' })}: {heroHeldText}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
         </AnimatedCard>
 
-        {/* Compact action buttons — Recargar + Regalar. The gift feature is
-            closed-loop: TriciCoin can be sent to another active TriciGo user
-            but stays spend-only (rides), never cashed out. */}
-        <View className="mb-6 flex-row gap-3">
-          <View className="flex-1">
-            <Button
-              title={t('wallet.recharge')}
-              variant="primary"
-              size="sm"
-              fullWidth
-              onPress={handleRecharge}
-            />
-          </View>
-          <View className="flex-1">
-            <Button
-              title={t('wallet.gift', { defaultValue: 'Regalar' })}
-              variant="outline"
-              size="sm"
-              fullWidth
-              onPress={() => router.push('/wallet/gift')}
-            />
-          </View>
-        </View>
+        {/* Premium CTA — glow gradient Recargar (driver parity) + outlined
+            Regalar below. Gift is closed-loop: TriciCoin can be sent to another
+            active TriciGo user but stays spend-only (rides), never cashed out. */}
+        <Pressable
+          onPress={handleRecharge}
+          accessibilityRole="button"
+          accessibilityLabel={t('wallet.recharge')}
+          style={({ pressed }) => [
+            { borderRadius: 20, overflow: 'hidden', marginBottom: 12, ...GLOW_CTA },
+            pressed && { transform: [{ scale: 0.97 }], opacity: 0.95 },
+          ]}
+        >
+          <LinearGradient
+            colors={[colors.brand.orange, tokens.accent.warm]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 18,
+              paddingHorizontal: 24,
+              minHeight: 60,
+            }}
+          >
+            <Ionicons name="add-circle" size={24} color="#FFFFFF" />
+            <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 17, marginLeft: 10, letterSpacing: 0.3 }}>
+              {t('wallet.recharge')}
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8, opacity: 0.85 }} />
+          </LinearGradient>
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push('/wallet/gift')}
+          accessibilityRole="button"
+          accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
+          style={({ pressed }) => [
+            {
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 14,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: tokens.line,
+              backgroundColor: tokens.bg.elev1,
+              marginBottom: 24,
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Ionicons name="gift-outline" size={20} color={tokens.accent.orange} />
+          <Text style={{ color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 15, marginLeft: 10 }}>
+            {t('wallet.gift', { defaultValue: 'Regalar' })}
+          </Text>
+        </Pressable>
 
         {/* BUG-280 — "Este mes" now hides when there are no rides this month
             (previously showed "70,000 TC gastado / 0 viajes" because admin
@@ -1170,10 +1313,9 @@ function NativeWalletScreen() {
                   style={{
                     flex: 1,
                     backgroundColor: tokens.bg.elev1,
-                    borderColor: tokens.accent.orangeGlow,
-                    borderWidth: 1,
                     borderRadius: 16,
                     padding: 16,
+                    ...CARD_SHADOW,
                   }}
                 >
                   <Text
@@ -1194,12 +1336,12 @@ function NativeWalletScreen() {
           </View>
         )}
 
-        <Text
-          variant="captionMono"
-          style={{ color: tokens.ink.subtle, marginBottom: 8 }}
-        >
-          {t('wallet.history', { defaultValue: 'HISTORIAL' })}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={{ color: tokens.ink.primary, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 }}>
+            {t('wallet.history', { defaultValue: 'Historial' })}
+          </Text>
+          <View style={{ flex: 1, height: 1, backgroundColor: tokens.line, marginLeft: 12 }} />
+        </View>
 
         {/* Filter chips — clean implementation that doesn't fight the
             parent layout. Wrapping the ScrollView in a fixed-height

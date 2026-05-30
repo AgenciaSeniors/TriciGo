@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Linking, Share, useColorScheme } from 'react-native';
+import { View, Pressable, Linking, Share, useColorScheme, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { colors, darkColors } from '@tricigo/theme';
 import { customerService, incidentService, rideService, trustedContactService } from '@tricigo/api';
+import { useTokens } from '@/hooks/useTokens';
 import { getErrorMessage, logger } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
@@ -24,6 +23,14 @@ export default function SafetyCenterScreen() {
   const { t } = useTranslation('common');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const tokens = useTokens();
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  };
   const user = useAuthStore((s) => s.user);
   const activeRide = useRideStore((s) => s.activeRide);
   const [emergencyContact, setEmergencyContact] = useState<{ name: string; phone: string } | null>(null);
@@ -107,7 +114,7 @@ export default function SafetyCenterScreen() {
       <View className="pt-4">
         <ScreenHeader title={t('safety.title')} onBack={() => router.back()} />
 
-        <Text variant="bodySmall" color="secondary" className="mb-4">
+        <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginTop: 8, marginBottom: 16 }}>
           {t('safety.desc')}
         </Text>
 
@@ -121,14 +128,14 @@ export default function SafetyCenterScreen() {
 
         {!loading && (<>
         {/* Emergency Services */}
-        <Card variant="outlined" padding="md" className="mb-3">
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 12, ...CARD_SHADOW }}>
           <View className="flex-row items-center mb-3">
-            <View className="w-10 h-10 rounded-full bg-error items-center justify-center mr-3">
-              <Ionicons name="warning" size={20} color="white" />
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="warning" size={20} color="#FFFFFF" />
             </View>
             <View className="flex-1">
-              <Text variant="body" className="font-semibold">{t('safety.emergency_call')}</Text>
-              <Text variant="caption" color="secondary">{t('safety.emergency_call_desc')}</Text>
+              <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('safety.emergency_call')}</Text>
+              <Text variant="caption" style={{ color: tokens.ink.secondary }}>{t('safety.emergency_call_desc')}</Text>
             </View>
           </View>
           <Button
@@ -138,45 +145,45 @@ export default function SafetyCenterScreen() {
             fullWidth
             onPress={() => Linking.openURL('tel:106')}
           />
-        </Card>
+        </View>
 
         {/* Trusted Contacts */}
-        <Card variant="outlined" padding="md" className="mb-3">
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 12, ...CARD_SHADOW }}>
           <Pressable
             className="flex-row items-center"
             onPress={() => router.push('/profile/trusted-contacts')}
           >
-            <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-              <Ionicons name="people-outline" size={20} color={isDark ? colors.primary[400] : colors.primary[500]} />
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#FF4D001A', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="people-outline" size={20} color="#FF4D00" />
             </View>
             <View className="flex-1">
-              <Text variant="body" className="font-semibold">{t('trusted_contacts.title')}</Text>
+              <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('trusted_contacts.title')}</Text>
               {emergencyContact ? (
-                <Text variant="caption" color="secondary">
+                <Text variant="caption" style={{ color: tokens.ink.secondary }}>
                   {emergencyContact.name} — {emergencyContact.phone}
                 </Text>
               ) : (
-                <Text variant="caption" color="secondary">{t('profile.no_emergency_contact')}</Text>
+                <Text variant="caption" style={{ color: tokens.ink.secondary }}>{t('profile.no_emergency_contact')}</Text>
               )}
               {trustedCount > 0 && (
-                <Text variant="caption" color="secondary">
+                <Text variant="caption" style={{ color: tokens.ink.secondary }}>
                   {t('safety.trusted_contacts_count', { count: trustedCount })}
                 </Text>
               )}
             </View>
-            <Ionicons name="chevron-forward" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
+            <Ionicons name="chevron-forward" size={20} color={tokens.ink.subtle} />
           </Pressable>
-        </Card>
+        </View>
 
         {/* Share My Trip */}
-        <Card variant="outlined" padding="md" className="mb-3">
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 12, ...CARD_SHADOW }}>
           <View className="flex-row items-center mb-2">
-            <View className="w-10 h-10 rounded-full bg-primary-100 items-center justify-center mr-3">
-              <Ionicons name="share-outline" size={20} color={isDark ? colors.primary[400] : colors.primary[500]} />
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#3B82F61A', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="share-outline" size={20} color="#3B82F6" />
             </View>
             <View className="flex-1">
-              <Text variant="body" className="font-semibold">{t('safety.share_trip')}</Text>
-              <Text variant="caption" color="secondary">{t('safety.share_trip_desc')}</Text>
+              <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('safety.share_trip')}</Text>
+              <Text variant="caption" style={{ color: tokens.ink.secondary }}>{t('safety.share_trip_desc')}</Text>
             </View>
           </View>
           {activeRide ? (
@@ -189,77 +196,77 @@ export default function SafetyCenterScreen() {
               loading={sharing}
             />
           ) : (
-            <Text variant="caption" color="secondary" className="text-center py-1">
+            <Text variant="caption" style={{ color: tokens.ink.secondary, textAlign: 'center', paddingVertical: 4 }}>
               {t('safety.share_trip_inactive')}
             </Text>
           )}
-        </Card>
+        </View>
 
         {/* Report Safety Issue */}
-        <Card variant="outlined" padding="md" className="mb-3">
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 12, ...CARD_SHADOW }}>
           <Pressable
             className="flex-row items-center"
             onPress={() => router.push('/profile/help')}
           >
-            <View className="w-10 h-10 rounded-full bg-warning-100 items-center justify-center mr-3">
-              <Ionicons name="flag-outline" size={20} color={isDark ? '#FBBF24' : (colors.warning?.DEFAULT ?? '#F59E0B')} />
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F59E0B1A', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="flag-outline" size={20} color="#F59E0B" />
             </View>
             <View className="flex-1">
-              <Text variant="body" className="font-semibold">{t('safety.report')}</Text>
-              <Text variant="caption" color="secondary">{t('safety.report_desc')}</Text>
+              <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('safety.report')}</Text>
+              <Text variant="caption" style={{ color: tokens.ink.secondary }}>{t('safety.report_desc')}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />
+            <Ionicons name="chevron-forward" size={20} color={tokens.ink.subtle} />
           </Pressable>
-        </Card>
+        </View>
 
         {/* Safety Tips */}
-        <Card variant="outlined" padding="md" className="mb-3">
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 12, ...CARD_SHADOW }}>
           <Pressable
             className="flex-row items-center justify-between"
             onPress={() => setTipsExpanded(!tipsExpanded)}
           >
             <View className="flex-row items-center">
-              <View className="w-10 h-10 rounded-full bg-success-100 items-center justify-center mr-3">
-                <Ionicons name="bulb-outline" size={20} color={isDark ? '#4ADE80' : '#16A34A'} />
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#22C55E1A', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Ionicons name="bulb-outline" size={20} color="#22C55E" />
               </View>
-              <Text variant="body" className="font-semibold">{t('safety.tips_title')}</Text>
+              <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('safety.tips_title')}</Text>
             </View>
             <Ionicons
               name={tipsExpanded ? 'chevron-up' : 'chevron-down'}
               size={20}
-              color={isDark ? darkColors.text.secondary : colors.neutral[400]}
+              color={tokens.ink.subtle}
             />
           </Pressable>
           {tipsExpanded && (
-            <View className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+            <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: tokens.line }}>
               {SAFETY_TIPS.map((tipKey, idx) => (
                 <View key={tipKey} className="flex-row items-start mb-2">
-                  <Text variant="caption" color="secondary" className="mr-2">{idx + 1}.</Text>
-                  <Text variant="bodySmall" className="flex-1">{t(`safety.${tipKey}`)}</Text>
+                  <Text variant="caption" style={{ color: tokens.ink.secondary, marginRight: 8 }}>{idx + 1}.</Text>
+                  <Text variant="bodySmall" className="flex-1" style={{ color: tokens.ink.primary }}>{t(`safety.${tipKey}`)}</Text>
                 </View>
               ))}
             </View>
           )}
-        </Card>
+        </View>
 
         {/* My Safety Reports */}
-        <Card variant="outlined" padding="md" className="mb-6">
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 24, ...CARD_SHADOW }}>
           <View className="flex-row items-center mb-3">
-            <View className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-neutral-800 items-center justify-center mr-3">
-              <Ionicons name="document-text-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: `${tokens.ink.secondary}1A`, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="document-text-outline" size={20} color={tokens.ink.secondary} />
             </View>
-            <Text variant="body" className="font-semibold">{t('safety.my_reports')}</Text>
+            <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('safety.my_reports')}</Text>
           </View>
           {incidents.length === 0 ? (
-            <Text variant="caption" color="secondary" className="text-center py-2">
+            <Text variant="caption" style={{ color: tokens.ink.secondary, textAlign: 'center', paddingVertical: 8 }}>
               {t('safety.no_reports')}
             </Text>
           ) : (
             incidents.slice(0, 5).map((incident) => (
-              <View key={incident.id} className="flex-row items-center justify-between py-2 border-t border-neutral-100 dark:border-neutral-800">
+              <View key={incident.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: tokens.line }}>
                 <View className="flex-1">
-                  <Text variant="bodySmall">{getReportTypeLabel(incident.type)}</Text>
-                  <Text variant="caption" color="secondary">
+                  <Text variant="bodySmall" style={{ color: tokens.ink.primary }}>{getReportTypeLabel(incident.type)}</Text>
+                  <Text variant="caption" style={{ color: tokens.ink.secondary }}>
                     {new Date(incident.created_at).toLocaleDateString()}
                   </Text>
                 </View>
@@ -269,7 +276,7 @@ export default function SafetyCenterScreen() {
               </View>
             ))
           )}
-        </Card>
+        </View>
         </>)}
       </View>
     </Screen>

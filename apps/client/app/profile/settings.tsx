@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Switch, Alert, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Switch, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
-import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
-import { MenuRow } from '@tricigo/ui/MenuRow';
+import { ProfileSection } from '@/components/profile/ProfileSection';
+import { ProfileRow } from '@/components/profile/ProfileRow';
+import { useTokens } from '@/hooks/useTokens';
 import { useTranslation } from '@tricigo/i18n';
-import { colors } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, authService, customerService } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
@@ -32,6 +30,7 @@ const PAYMENT_CYCLE: PaymentMethod[] = ['cash', 'tricicoin', 'mixed'];
 
 export default function SettingsScreen() {
   const { t } = useTranslation('common');
+  const tokens = useTokens();
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
   const reset = useAuthStore((s) => s.reset);
@@ -147,88 +146,74 @@ export default function SettingsScreen() {
       <View className="pt-4">
         <ScreenHeader title={t('profile.settings_title')} onBack={() => router.back()} />
 
-        {/* General section — single source of truth for language + payment.
-            Dark-mode toggle lives in the Profile header card (one place only). */}
-        <Text variant="caption" color="tertiary" className="mb-2 mt-2 uppercase tracking-wider font-semibold px-1">
-          {t('profile.section_general', { defaultValue: 'General' })}
-        </Text>
-        <Card variant="outlined" padding="md" className="mb-6">
-          <MenuRow
+        <View style={{ height: 12 }} />
+
+        {/* General — language + payment. Dark-mode toggle lives in Profile. */}
+        <ProfileSection title={t('profile.section_general', { defaultValue: 'General' })}>
+          <ProfileRow
             icon="language-outline"
-            iconBg="info"
+            tint="#3B82F6"
             label={t('profile.preferred_language')}
             value={languageLabel}
             onPress={toggleLanguage}
-            showBorder={true}
           />
-          <MenuRow
+          <ProfileRow
             icon="card-outline"
-            iconBg="success"
+            tint="#22C55E"
             label={t('profile.payment_method')}
             value={paymentLabel}
             onPress={customerProfile ? togglePaymentMethod : undefined}
-            showChevron={!!customerProfile}
-            showBorder={false}
+            isLast
           />
-        </Card>
+        </ProfileSection>
 
-        {/* Notifications section */}
-        <Text variant="caption" color="tertiary" className="mb-2 uppercase tracking-wider font-semibold px-1">
-          {t('profile.notifications_toggle')}
-        </Text>
-        <Card variant="outlined" padding="md" className="mb-6">
-          <MenuRow
+        {/* Notifications */}
+        <ProfileSection title={t('profile.notifications_toggle')}>
+          <ProfileRow
             icon="notifications-outline"
-            iconBg="warning"
+            tint="#F59E0B"
             label={t('profile.notifications_toggle')}
-            showChevron={false}
-            showBorder={notificationsEnabled}
+            isLast={!notificationsEnabled}
             right={
               <Switch
                 value={notificationsEnabled}
                 onValueChange={handleNotificationToggle}
-                trackColor={{ true: colors.brand.orange }}
+                trackColor={{ false: tokens.line, true: tokens.accent.orange }}
+                thumbColor="#FFFFFF"
+                ios_backgroundColor={tokens.line}
               />
             }
           />
+          {notificationsEnabled &&
+            NOTIF_CATEGORIES.map((cat, idx) => (
+              <ProfileRow
+                key={cat.key}
+                icon={cat.icon}
+                tint={tokens.ink.secondary}
+                label={t(cat.labelKey)}
+                isLast={idx === NOTIF_CATEGORIES.length - 1}
+                right={
+                  <Switch
+                    value={categoryPrefs[cat.key] !== false}
+                    onValueChange={(v) => handleCategoryToggle(cat.key, v)}
+                    trackColor={{ false: tokens.line, true: tokens.accent.orange }}
+                    thumbColor="#FFFFFF"
+                    ios_backgroundColor={tokens.line}
+                    style={{ transform: [{ scale: 0.85 }] }}
+                  />
+                }
+              />
+            ))}
+        </ProfileSection>
 
-          {/* Granular category toggles */}
-          {notificationsEnabled && (
-            <View className="pt-1">
-              <Text variant="caption" color="secondary" className="mb-1 mt-1 px-1">
-                {t('profile.notif_section_title')}
-              </Text>
-              {NOTIF_CATEGORIES.map((cat, idx) => (
-                <MenuRow
-                  key={cat.key}
-                  icon={cat.icon}
-                  iconBg="neutral"
-                  label={t(cat.labelKey)}
-                  showChevron={false}
-                  showBorder={idx < NOTIF_CATEGORIES.length - 1}
-                  right={
-                    <Switch
-                      value={categoryPrefs[cat.key] !== false}
-                      onValueChange={(v) => handleCategoryToggle(cat.key, v)}
-                      trackColor={{ true: colors.brand.orange }}
-                      style={{ transform: [{ scale: 0.85 }] }}
-                    />
-                  }
-                />
-              ))}
-            </View>
-          )}
-        </Card>
-
-        {/* SMS Alerts section */}
-        <Card variant="outlined" padding="md" className="mb-6">
-          <MenuRow
+        {/* SMS alerts */}
+        <ProfileSection>
+          <ProfileRow
             icon="chatbubble-ellipses-outline"
-            iconBg="primary"
+            tint="#FF4D00"
             label={t('profile.notif_sms')}
             subtitle={t('profile.notif_sms_desc')}
-            showChevron={false}
-            showBorder={false}
+            isLast
             right={
               <Switch
                 value={smsEnabled}
@@ -245,44 +230,25 @@ export default function SettingsScreen() {
                     setSmsLoading(false);
                   }
                 }}
-                trackColor={{ true: colors.brand.orange }}
+                trackColor={{ false: tokens.line, true: tokens.accent.orange }}
+                thumbColor="#FFFFFF"
+                ios_backgroundColor={tokens.line}
               />
             }
           />
-        </Card>
+        </ProfileSection>
 
-        {/* Account deletion - Danger Zone */}
-        <Text variant="caption" className="mb-2 uppercase tracking-wider font-semibold px-1 text-red-500">
-          {t('profile.danger_zone', { defaultValue: 'Zona de peligro' })}
-        </Text>
-        <Card variant="outlined" padding="md" className="mb-8 border-red-200 dark:border-red-900">
-          <View className="flex-row items-center mb-3">
-            <View
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 10,
-                backgroundColor: 'rgba(239, 68, 68, 0.10)',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Ionicons name="warning-outline" size={20} color={colors.error.DEFAULT} />
-            </View>
-            <View className="ml-3 flex-1">
-              <Text variant="body" className="font-semibold text-red-600 dark:text-red-400">
-                {t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
-              </Text>
-              <Text variant="caption" color="tertiary" className="mt-0.5">
-                {t('profile.delete_account_desc', {
-                  defaultValue:
-                    'Esta acción es inmediata e irreversible. Se eliminarán permanentemente tu cuenta, perfil y saldo. El historial de viajes se conserva anonimizado por requisitos de auditoría financiera.',
-                })}
-              </Text>
-            </View>
-          </View>
-          <Pressable
-            className="bg-red-500 rounded-xl py-3 items-center"
+        {/* Danger zone — delete account */}
+        <ProfileSection title={t('profile.danger_zone', { defaultValue: 'Zona de peligro' })} marginBottom={32}>
+          <ProfileRow
+            icon="warning-outline"
+            destructive
+            label={t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
+            subtitle={t('profile.delete_account_desc', {
+              defaultValue:
+                'Esta acción es inmediata e irreversible. Se eliminarán permanentemente tu cuenta, perfil y saldo. El historial de viajes se conserva anonimizado por requisitos de auditoría financiera.',
+            })}
+            isLast
             onPress={() => {
               Alert.alert(
                 t('profile.delete_account_confirm_title', { defaultValue: '¿Eliminar cuenta?' }),
@@ -312,12 +278,8 @@ export default function SettingsScreen() {
                 ],
               );
             }}
-          >
-            <Text variant="body" className="text-white font-semibold">
-              {t('profile.delete_account', { defaultValue: 'Eliminar cuenta' })}
-            </Text>
-          </Pressable>
-        </Card>
+          />
+        </ProfileSection>
       </View>
     </Screen>
   );
