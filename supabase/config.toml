@@ -227,47 +227,49 @@ otp_expiry = 3600
 # sender_name = "Admin"
 
 # ── Custom email templates (TriciGo) ──
-# Templates live in ./supabase/templates/*.html. The path is relative
-# to the project root (where `supabase` commands run), NOT the supabase/
-# dir — there is no ./templates/ at the root, so a bare ./templates/...
-# path silently fails to load and GoTrue falls back to emitting the raw
-# notification key (e.g. "security_new_device") as the email body.
-# Brand-consistent HTML (logo header, orange #F97316 hero, body, footer),
-# Go template syntax: {{ .Email }}, {{ .ConfirmationURL }}, etc.
-# History: PR #272 added the HTML bodies; PR #275 prefixed ./supabase/ on
-# the [auth.email.template.*] blocks but MISSED the [auth.email.notification.*]
-# blocks below, leaving password_changed / email_change / signed_in_new_device
-# with the broken ./templates/ path. Fixed here.
+# ⚠️ DO NOT run `supabase config push` for this project. config.toml is a
+# LOCAL-DEV config: its [auth] site_url / additional_redirect_urls are
+# localhost, and a push OVERWRITES prod's real values (https://tricigo.com +
+# the tricigo:// / tricigo-driver:// deep-link schemes) — breaking every auth
+# redirect, magic link and OAuth return. Prod auth settings, email templates
+# AND the security-notification toggles are managed in the Supabase Dashboard
+# (Authentication → URL Config / Emails). These entries exist for local
+# `supabase start` (Inbucket) testing only.
+#
+# content_path quirk — the CLI resolves it from DIFFERENT bases per section:
+#   [auth.email.template.*]     → relative to the repo ROOT     → "supabase/templates/X.html"
+#   [auth.email.notification.*] → relative to the supabase/ DIR → "templates/X.html"
+# Files live in supabase/templates/*.html. Go syntax: {{ .Email }}, {{ .ConfirmationURL }}.
 
 [auth.email.template.invite]
 subject = "Te han invitado a TriciGo"
-content_path = "./supabase/templates/invite.html"
+content_path = "supabase/templates/invite.html"
 
 [auth.email.template.recovery]
 subject = "Restablecé tu contraseña de TriciGo"
-content_path = "./supabase/templates/recovery.html"
+content_path = "supabase/templates/recovery.html"
 
 [auth.email.template.magic_link]
 subject = "Tu enlace mágico para entrar a TriciGo"
-content_path = "./supabase/templates/magic_link.html"
+content_path = "supabase/templates/magic_link.html"
 
 [auth.email.template.email_change]
 subject = "Confirmá tu nuevo correo en TriciGo"
-content_path = "./supabase/templates/email_change.html"
+content_path = "supabase/templates/email_change.html"
 
 [auth.email.template.reauthentication]
 subject = "Verificá tu identidad en TriciGo"
-content_path = "./supabase/templates/reauthentication.html"
+content_path = "supabase/templates/reauthentication.html"
 
 [auth.email.notification.password_changed]
 enabled = true
 subject = "Tu contraseña de TriciGo fue cambiada"
-content_path = "./supabase/templates/password_changed_notification.html"
+content_path = "templates/password_changed_notification.html"
 
 [auth.email.notification.email_change]
 enabled = true
 subject = "Tu correo en TriciGo fue cambiado"
-content_path = "./supabase/templates/email_change_notification.html"
+content_path = "templates/email_change_notification.html"
 
 # Disabled: replaced by our own new-device detection (EF
 # register-login-device + table user_known_devices). GoTrue's native
@@ -275,10 +277,13 @@ content_path = "./supabase/templates/email_change_notification.html"
 # for OTP login on mobile — so it flagged the user's same phone as "new"
 # on every sign-in. Our detection keys off a stable per-install device_id
 # and only emails on a genuinely unseen device.
+# NOTE: enabled=false here is local-dev only. To stop it in PROD, toggle
+# off "Signed in from a new device" in Dashboard → Authentication → Emails
+# (config push is unsafe — see header warning).
 [auth.email.notification.signed_in_new_device]
 enabled = false
 subject = "Nuevo inicio de sesión en tu cuenta TriciGo"
-content_path = "./supabase/templates/signed_in_new_device_notification.html"
+content_path = "templates/signed_in_new_device_notification.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
