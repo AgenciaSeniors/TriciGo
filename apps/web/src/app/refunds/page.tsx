@@ -56,7 +56,9 @@ export default function RefundsPage() {
           Los créditos TriciCoin —tanto los del pasajero como los del conductor— son un crédito
           prepago de transporte de uso interno (closed-loop). No son reembolsables: una vez
           adquiridos no se devuelven al método de pago, ni en efectivo, ni al cierre de la cuenta.
-          Tampoco se pueden transferir a otros usuarios ni convertir a dinero. Se usan
+          Tampoco son convertibles a dinero. Pueden enviarse como regalo a otra persona
+          usuaria de TriciGo (función «Regalo»), pero el saldo regalado conserva las mismas
+          condiciones: no es reembolsable ni canjeable por dinero, y solo sirve para viajes. Se usan
           exclusivamente para pagar viajes —en el caso del pasajero— o comisiones de plataforma
           —en el caso del conductor— dentro de TriciGo.
         </p>

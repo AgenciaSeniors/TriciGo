@@ -57,10 +57,14 @@ export default function AmlPage() {
         <p>
           Los créditos TriciCoin son un crédito de viaje prepago de uso interno
           (closed-loop): solo pueden utilizarse para pagar viajes dentro de la
-          plataforma TriciGo. No son dinero, no son transferibles a otros usuarios
-          ni convertibles a efectivo. Está prohibido usar la plataforma o los
-          créditos para cualquier fin distinto del transporte —en particular, para
-          mover, ocultar o transferir valor entre personas.
+          plataforma TriciGo y no son convertibles a efectivo. Pueden enviarse como
+          regalo a otra persona usuaria registrada de TriciGo mediante la función
+          «Regalo», pero el saldo regalado mantiene su carácter de circuito cerrado
+          (solo gastable en viajes, no canjeable por dinero). Está prohibido usar la
+          plataforma o los créditos para cualquier fin distinto del transporte —en
+          particular, para mover, ocultar o convertir valor en dinero entre personas.
+          Monitoreamos los regalos y nos reservamos el derecho de revertir o congelar
+          saldos ante cualquier indicio de uso indebido.
         </p>
       </Section>
 
