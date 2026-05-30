@@ -5,14 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { Input } from '@tricigo/ui/Input';
 import { EmptyState } from '@tricigo/ui/EmptyState';
-import { colors } from '@tricigo/theme';
+import { useTokens } from '@/hooks/useTokens';
+import { useThemeStore } from '@/stores/theme.store';
 import { useTranslation } from '@tricigo/i18n';
 import { supportService } from '@tricigo/api';
 import { getErrorMessage, logger, triggerHaptic, formatTimestamp } from '@tricigo/utils';
@@ -45,6 +45,15 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; key: string }> =
 
 export default function HelpScreen() {
   const { t } = useTranslation('common');
+  const tokens = useTokens();
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  };
   const userId = useAuthStore((s) => s.user?.id);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [faqSearch, setFaqSearch] = useState('');
@@ -147,13 +156,13 @@ export default function HelpScreen() {
     const status = STATUS_COLORS[item.status] ?? { bg: 'bg-yellow-100', text: 'text-yellow-700', key: 'profile.help_status_open' };
     return (
       <Pressable onPress={() => router.push(`/profile/ticket-detail?ticketId=${item.id}`)}>
-        <Card variant="outlined" padding="md" className="mb-2">
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 14, padding: 14, marginBottom: 8, ...CARD_SHADOW }}>
           <View className="flex-row items-start justify-between">
             <View className="flex-1 mr-2">
-              <Text variant="body" className="font-semibold" numberOfLines={1}>
+              <Text variant="body" className="font-semibold" numberOfLines={1} style={{ color: tokens.ink.primary }}>
                 {item.subject}
               </Text>
-              <Text variant="caption" color="tertiary" className="mt-0.5">
+              <Text variant="caption" style={{ color: tokens.ink.subtle, marginTop: 2 }}>
                 {formatTimestamp(item.created_at, 'short')}
               </Text>
             </View>
@@ -162,7 +171,7 @@ export default function HelpScreen() {
               variant={item.status === 'resolved' ? 'success' : item.status === 'closed' ? 'neutral' : item.status === 'in_progress' ? 'info' : item.status === 'waiting_user' ? 'warning' : 'warning'}
             />
           </View>
-        </Card>
+        </View>
       </Pressable>
     );
   };
@@ -179,7 +188,7 @@ export default function HelpScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderTicket}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.brand.orange} />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={tokens.accent.orange} />
           }
           ListHeaderComponent={
             <View>
@@ -216,44 +225,44 @@ export default function HelpScreen() {
                   const answerKey = key.replace('_q', '_a');
                   const isExpanded = expandedIdx === idx;
                   return (
-                    <Card key={key} variant="outlined" padding="md" className="mb-3">
+                    <View key={key} style={{ backgroundColor: tokens.bg.elev1, borderRadius: 14, padding: 14, marginBottom: 12, ...CARD_SHADOW }}>
                       <Pressable
                         onPress={() => setExpandedIdx(isExpanded ? null : idx)}
                         className="flex-row items-center justify-between"
                         accessibilityRole="button"
                         accessibilityState={{ expanded: isExpanded }}
                       >
-                        <Text variant="body" className="flex-1 mr-2">
+                        <Text variant="body" className="flex-1 mr-2" style={{ color: tokens.ink.primary }}>
                           {t(`profile.${key}`)}
                         </Text>
                         <Ionicons
                           name={isExpanded ? 'chevron-up' : 'chevron-down'}
                           size={20}
-                          color={colors.neutral[400]}
+                          color={tokens.ink.subtle}
                         />
                       </Pressable>
                       {isExpanded && (
-                        <Text variant="bodySmall" color="secondary" className="mt-2">
+                        <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginTop: 8 }}>
                           {t(`profile.${answerKey}`)}
                         </Text>
                       )}
-                    </Card>
+                    </View>
                   );
                 });
               })()}
 
               {/* Contact info */}
-              <Card variant="outlined" padding="md" className="mt-1 mb-6">
-                <Text variant="body" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
+              <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginTop: 4, marginBottom: 24, ...CARD_SHADOW }}>
+                <Text variant="body" className="font-semibold mb-2" style={{ color: tokens.ink.primary }}>{t('profile.help_contact')}</Text>
                 <View className="flex-row items-center mb-1">
-                  <Ionicons name="mail-outline" size={18} color={colors.neutral[600]} />
-                  <Text variant="bodySmall" color="secondary" className="ml-2">soporte@tricigo.com</Text>
+                  <Ionicons name="mail-outline" size={18} color={tokens.ink.secondary} />
+                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>soporte@tricigo.com</Text>
                 </View>
                 <View className="flex-row items-center">
-                  <Ionicons name="call-outline" size={18} color={colors.neutral[600]} />
-                  <Text variant="bodySmall" color="secondary" className="ml-2">+53 5XXXXXXX</Text>
+                  <Ionicons name="call-outline" size={18} color={tokens.ink.secondary} />
+                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>+53 5XXXXXXX</Text>
                 </View>
-              </Card>
+              </View>
 
               {/* Create ticket button */}
               <Button
@@ -296,24 +305,25 @@ export default function HelpScreen() {
           {/* Category picker */}
           <Text variant="bodySmall" color="secondary" className="mb-2">{t('profile.help_category_label')}</Text>
           <View className="flex-row flex-wrap gap-2 mb-4">
-            {CATEGORY_KEYS.map((cat) => (
-              <Pressable
-                key={cat.value}
-                onPress={() => setCategory(cat.value)}
-                className={`px-3 py-1.5 rounded-full ${
-                  category === cat.value ? 'bg-primary-500' : 'bg-neutral-100 dark:bg-neutral-800'
-                }`}
-              >
-                <Text
-                  variant="caption"
-                  className={`font-medium ${
-                    category === cat.value ? 'text-white' : 'text-neutral-600 dark:text-neutral-300'
-                  }`}
+            {CATEGORY_KEYS.map((cat) => {
+              const active = category === cat.value;
+              return (
+                <Pressable
+                  key={cat.value}
+                  onPress={() => setCategory(cat.value)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 999,
+                    backgroundColor: active ? tokens.accent.orange : tokens.bg.elev2,
+                  }}
                 >
-                  {t(cat.key)}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text variant="caption" style={{ fontWeight: '600', color: active ? '#FFFFFF' : tokens.ink.secondary }}>
+                    {t(cat.key)}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           {/* Subject */}

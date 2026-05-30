@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, FlatList, Pressable, RefreshControl, Alert, Image } from 'react-native';
+import { View, FlatList, Pressable, RefreshControl, Alert, Image, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -34,6 +34,9 @@ import { vehicleSelectionImages } from '@/utils/vehicleImages';
 import { Platform, useColorScheme } from 'react-native';
 
 const PAGE_SIZE = 20;
+
+// Tabular-nums for monetary alignment (mirrors driver trips.tsx).
+const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nums'] };
 
 // Web rides: uses real data from Supabase
 type WebFilterTab = 'all' | 'completed' | 'canceled';
@@ -431,6 +434,15 @@ function NativeRidesScreen() {
   const tokens = useTokens();
   const userId = useAuthStore((s) => s.user?.id);
 
+  // Dynamic card shadow (mirrors driver trips.tsx): stronger in dark, soft in light.
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  };
+
   const [rides, setRides] = useState<Ride[]>([]);
   const [scheduledRides, setScheduledRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
@@ -588,78 +600,136 @@ function NativeRidesScreen() {
     // helper `riderChargedTotal(item)` ya retorna CUP (incluye tip).
     const rate = item.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE;
     const fareUsd = cupToUsd(iCup ?? 0, rate);
+    const isCompleted = item.status === 'completed';
+    const statusColor = isCompleted ? '#22C55E' : '#EF4444';
+    const statusDarker = isCompleted ? '#16A34A' : '#DC2626';
 
     return (
       <AnimatedCard delay={Math.min(index * 60, 300)}>
         <Pressable
           onPress={() => router.push(`/ride/${item.id}`)}
           accessibilityRole="button"
-          accessibilityLabel={`${getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}, ${item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${fareLabel}`}
+          accessibilityLabel={`${getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}, ${isCompleted ? t('rides_history.completed') : t('rides_history.canceled')}, ${item.pickup_address} → ${item.dropoff_address}, ${fareLabel}`}
+          style={({ pressed }) => [
+            {
+              backgroundColor: tokens.bg.elev1,
+              borderRadius: 16,
+              marginBottom: 12,
+              ...CARD_SHADOW,
+            },
+            pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] },
+          ]}
         >
-          {/* Cuban Modern card \u2014 bg.elev1 surface, subtle hairline,
-              soft shadow in light mode only. */}
+          {/* Date + status pill */}
           <View
             style={{
-              backgroundColor: tokens.bg.elev1,
-              borderColor: tokens.line,
-              borderWidth: 1,
-              borderRadius: 16,
-              padding: 16,
-              marginBottom: 12,
-              ...(isDark
-                ? {}
-                : {
-                    shadowColor: '#1A1414',
-                    shadowOpacity: 0.04,
-                    shadowRadius: 12,
-                    shadowOffset: { width: 0, height: 2 },
-                    elevation: 1,
-                  }),
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 14,
+              paddingTop: 14,
+              paddingBottom: 10,
             }}
           >
-            <View className="flex-row items-center justify-between mb-3">
-              <View className="flex-row items-center gap-2">
-                {item.service_type && vehicleSelectionImages[item.service_type as ServiceTypeSlug] && (
-                  <Image
-                    source={vehicleSelectionImages[item.service_type as ServiceTypeSlug]}
-                    style={{ width: 28, height: 28 }}
-                    resizeMode="contain"
-                  />
-                )}
-                <Text
-                  variant="captionMono"
-                  style={{ color: tokens.ink.secondary }}
-                >
-                  {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
-                </Text>
-              </View>
-              <StatusBadge
-                label={item.status === 'completed' ? t('rides_history.completed') : t('rides_history.canceled')}
-                variant={item.status === 'completed' ? 'success' : 'error'}
-              />
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              {item.service_type && vehicleSelectionImages[item.service_type as ServiceTypeSlug] && (
+                <Image
+                  source={vehicleSelectionImages[item.service_type as ServiceTypeSlug]}
+                  style={{ width: 28, height: 28, marginRight: 8 }}
+                  resizeMode="contain"
+                />
+              )}
+              <Text style={{ color: tokens.ink.secondary, fontSize: 12, fontWeight: '600' }}>
+                {getRelativeDay(item.created_at, t('common.today'), t('common.yesterday'))}
+              </Text>
             </View>
+            <View
+              style={{
+                backgroundColor: `${statusColor}22`,
+                borderRadius: 9999,
+                paddingHorizontal: 10,
+                paddingVertical: 3,
+              }}
+            >
+              <Text
+                style={{
+                  color: statusDarker,
+                  fontSize: 10,
+                  fontWeight: '800',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.6,
+                }}
+              >
+                {isCompleted ? t('rides_history.completed') : t('rides_history.canceled')}
+              </Text>
+            </View>
+          </View>
 
-            <RouteSummary
-              pickupAddress={item.pickup_address}
-              dropoffAddress={item.dropoff_address}
-              compact
-              className="mb-3"
-            />
+          {/* Pickup -> dropoff */}
+          <View style={{ flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 12 }}>
+            <View style={{ width: 12, alignItems: 'center', paddingTop: 5 }}>
+              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#22C55E' }} />
+              <View
+                style={{ width: 2, flex: 1, backgroundColor: tokens.line, marginVertical: 3, minHeight: 16 }}
+              />
+              <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: colors.brand.orange }} />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={{ color: tokens.ink.primary, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>
+                {item.pickup_address}
+              </Text>
+              <View style={{ height: 14 }} />
+              <Text style={{ color: tokens.ink.primary, fontSize: 14, fontWeight: '500' }} numberOfLines={1}>
+                {item.dropoff_address}
+              </Text>
+            </View>
+          </View>
 
-            <View className="flex-row justify-between items-center">
-              <View>
-                {/* Fare in JetBrains Mono \u2014 gives prices an honest, technical feel. */}
-                <Text
-                  variant="numberMono"
-                  style={{ color: tokens.ink.primary, fontWeight: '600' }}
-                >
-                  {fareLabel}
-                </Text>
-                <Text variant="caption" style={{ color: tokens.ink.subtle }}>
-                  {'\u2248'} {formatUSD(fareUsd)}
-                </Text>
-              </View>
-              <Text variant="caption" style={{ color: tokens.ink.subtle }}>
+          {/* Fare + payment */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-end',
+              justifyContent: 'space-between',
+              paddingHorizontal: 14,
+              paddingTop: 12,
+              paddingBottom: 14,
+              borderTopWidth: StyleSheet.hairlineWidth,
+              borderTopColor: tokens.line,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: tokens.ink.primary,
+                  fontFamily: 'Montserrat_800ExtraBold',
+                  fontSize: 20,
+                  letterSpacing: -0.5,
+                  ...TABULAR,
+                }}
+              >
+                {fareLabel}
+              </Text>
+              <Text style={{ color: tokens.ink.subtle, fontSize: 11, marginTop: 3, ...TABULAR }}>
+                {'\u2248'} {formatUSD(fareUsd)}
+              </Text>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: tokens.bg.elev2,
+                borderRadius: 9999,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+              }}
+            >
+              <Ionicons
+                name={item.payment_method === 'cash' ? 'cash-outline' : 'wallet-outline'}
+                size={11}
+                color={tokens.ink.secondary}
+                style={{ marginRight: 4 }}
+              />
+              <Text style={{ color: tokens.ink.secondary, fontSize: 11, fontWeight: '600' }}>
                 {item.payment_method === 'cash' ? t('payment.cash') : t('payment.tricicoin')}
               </Text>
             </View>
@@ -667,7 +737,7 @@ function NativeRidesScreen() {
         </Pressable>
       </AnimatedCard>
     );
-  }, [t, tokens, isDark]);
+  }, [t, tokens, isDark, CARD_SHADOW]);
 
   return (
     <Screen bg="cuban" padded>
@@ -676,31 +746,27 @@ function NativeRidesScreen() {
         style={{ backgroundColor: tokens.bg.paper }}
       >
         <View className="flex-row items-center justify-between mb-4">
-          <Text variant="h4" style={{ color: tokens.ink.primary }}>
+          <Text style={{ color: tokens.ink.primary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
             {t('rides_history.title')}
           </Text>
           {rides.length > 0 && (
             <Pressable
               onPress={handleExportCSV}
-              style={{
-                backgroundColor: tokens.bg.elev2,
-                borderRadius: 999,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-              }}
+              style={({ pressed }) => [
+                {
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  backgroundColor: tokens.bg.elev2,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
+                pressed && { transform: [{ scale: 0.94 }] },
+              ]}
               accessibilityRole="button"
               accessibilityLabel={t('rides_history.export_csv', { defaultValue: 'Export CSV' })}
             >
-              <Ionicons name="download-outline" size={14} color={tokens.ink.secondary} />
-              <Text
-                variant="caption"
-                style={{ color: tokens.ink.secondary, fontWeight: '500' }}
-              >
-                CSV
-              </Text>
+              <Ionicons name="download-outline" size={18} color={tokens.ink.secondary} />
             </Pressable>
           )}
         </View>

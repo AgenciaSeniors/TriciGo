@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, ScrollView, RefreshControl } from 'react-native';
+import { View, Pressable, ScrollView, RefreshControl, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Screen } from '@tricigo/ui/Screen';
@@ -14,11 +14,13 @@ import { router } from 'expo-router';
 import type { UserLevel } from '@tricigo/types';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
-import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
+import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { Platform } from 'react-native';
-import { colors, darkColors } from '@tricigo/theme';
+import { colors } from '@tricigo/theme';
 import { useThemeStore, setThemeMode } from '@/stores/theme.store';
 import { useTokens } from '@/hooks/useTokens';
+import { ProfileSection } from '@/components/profile/ProfileSection';
+import { ProfileRow } from '@/components/profile/ProfileRow';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Switch } from 'react-native';
 
@@ -151,6 +153,39 @@ function NativeProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Cuban Modern shadows (mirror driver profile).
+  const HERO_SHADOW = {
+    shadowColor: '#FF4D00',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: isDark ? 0.28 : 0.16,
+    shadowRadius: 24,
+    elevation: 12,
+  };
+  const CARD_SHADOW = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  };
+  const GLOW_DANGER = {
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    elevation: 10,
+  };
+  const tintFor = (bg?: string): string => {
+    switch (bg) {
+      case 'primary': return '#FF4D00';
+      case 'info': return '#3B82F6';
+      case 'success': return '#22C55E';
+      case 'warning': return '#F59E0B';
+      case 'error': return '#EF4444';
+      default: return tokens.ink.secondary;
+    }
+  };
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -246,144 +281,169 @@ function NativeProfileScreen() {
           className="pt-4"
           style={{ backgroundColor: tokens.bg.paper, flex: 1 }}
         >
-          {/* iOS-style small title — Inter h4 (20pt) instead of Bricolage 28pt */}
           <View className="flex-row items-center justify-between mb-4">
-            <Text variant="h4" style={{ color: tokens.ink.primary }}>
+            <Text style={{ color: tokens.ink.primary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }}>
               {t('profile.title')}
             </Text>
           </View>
 
-          {/* User info card — compact Cuban surface with quick dark-mode
-              toggle inline (instant access from any session). */}
+          {/* Identity hero — 3-layer (gradient base + orange glow), driver
+              parity, no stats row. Avatar keeps its photo + gradient ring. */}
           <AnimatedCard delay={0}>
-            <View
-              style={{
-                backgroundColor: tokens.bg.elev1,
-                borderColor: tokens.line,
-                borderWidth: 1,
-                borderRadius: 16,
-                padding: 14,
-                marginBottom: 8,
-                ...(isDark ? {} : {
-                  shadowColor: '#1A1414',
-                  shadowOpacity: 0.04,
-                  shadowRadius: 12,
-                  shadowOffset: { width: 0, height: 2 },
-                  elevation: 1,
-                }),
-              }}
-            >
-              <View className="flex-row items-center">
-                <View className="mr-3">
-                  <LinearGradient
-                    colors={[colors.primary[500], colors.primary[300]]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ borderRadius: 28, padding: 2.5 }}
-                  >
-                    <View style={{ borderRadius: 25.5, overflow: 'hidden' }}>
-                      <Avatar
-                        uri={user?.avatar_url}
-                        name={user?.full_name ?? 'U'}
-                        size={48}
-                        onPress={() => router.push('/profile/edit')}
-                        showEditBadge
-                      />
-                    </View>
-                  </LinearGradient>
-                </View>
-                <View className="flex-1">
-                  <View className="flex-row items-center gap-2">
-                    <Text variant="body" style={{ color: tokens.ink.primary, fontWeight: '600' }}>
-                      {user?.full_name ?? 'Usuario'}
-                    </Text>
-                    {user?.level && (
-                      <StatusBadge
-                        label={t(`profile.level_${user.level}`)}
-                        variant={user.level === 'oro' ? 'warning' : user.level === 'plata' ? 'neutral' : 'warning'}
-                      />
-                    )}
-                  </View>
-                  <Text
-                    variant="caption"
-                    style={{ color: tokens.ink.secondary, marginTop: 2 }}
-                  >
-                    {user?.phone ?? '+53 5XXXXXXX'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Quick dark mode toggle — iOS-native Switch, sits inside the
-                  user card so it's reachable in 1 tap from anywhere. The
-                  full Theme settings (system / light / dark) still live in
-                  Settings sub-page for power users. */}
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginTop: 12,
-                  paddingTop: 12,
-                  borderTopWidth: 1,
-                  borderTopColor: tokens.line,
-                }}
-              >
-                <View className="flex-row items-center gap-2">
-                  <Ionicons
-                    name={isDark ? 'moon' : 'sunny-outline'}
-                    size={18}
-                    color={tokens.accent.orange}
-                  />
-                  <Text variant="bodySmall" style={{ color: tokens.ink.primary }}>
-                    {t('profile.dark_mode', { defaultValue: 'Modo oscuro' })}
-                  </Text>
-                </View>
-                <Switch
-                  value={isDark}
-                  onValueChange={(v) => setThemeMode(v ? 'dark' : 'light')}
-                  trackColor={{ false: tokens.line, true: tokens.accent.orange }}
-                  thumbColor="#FFFFFF"
-                  ios_backgroundColor={tokens.line}
+            <View style={{ borderRadius: 24, marginBottom: 12, ...HERO_SHADOW }}>
+              <View style={{ borderRadius: 24, overflow: 'hidden' }}>
+                <LinearGradient
+                  colors={isDark ? ['#11172A', '#18203A'] : ['#FFFFFF', '#FFFBF5']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
                 />
+                <LinearGradient
+                  colors={[tokens.accent.orangeGlow, 'transparent']}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0.3, y: 0.7 }}
+                  style={{ position: 'absolute', top: 0, right: 0, width: 180, height: 180 }}
+                  pointerEvents="none"
+                />
+                <View style={{ padding: 20, flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ marginRight: 16 }}>
+                    <LinearGradient
+                      colors={[colors.primary[500], colors.primary[300]]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{ borderRadius: 35.5, padding: 2.5 }}
+                    >
+                      <View style={{ borderRadius: 33, overflow: 'hidden' }}>
+                        <Avatar
+                          uri={user?.avatar_url}
+                          name={user?.full_name ?? 'U'}
+                          size={62}
+                          onPress={() => router.push('/profile/edit')}
+                          showEditBadge
+                        />
+                      </View>
+                    </LinearGradient>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View className="flex-row items-center gap-2">
+                      <Text
+                        style={{ color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 20, letterSpacing: -0.4 }}
+                        numberOfLines={1}
+                      >
+                        {user?.full_name ?? 'Usuario'}
+                      </Text>
+                      {user?.level && (
+                        <StatusBadge
+                          label={t(`profile.level_${user.level}`)}
+                          variant={user.level === 'oro' ? 'warning' : user.level === 'plata' ? 'neutral' : 'warning'}
+                        />
+                      )}
+                    </View>
+                    <Text style={{ color: tokens.ink.secondary, fontSize: 13, marginTop: 3 }}>
+                      {user?.phone ?? '+53 5XXXXXXX'}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => router.push('/profile/edit')}
+                    style={({ pressed }) => [
+                      {
+                        width: 40,
+                        height: 40,
+                        borderRadius: 12,
+                        backgroundColor: tokens.bg.elev2,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      },
+                      pressed && { transform: [{ scale: 0.94 }] },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profile.edit_profile')}
+                  >
+                    <Ionicons name="pencil" size={16} color={tokens.ink.secondary} />
+                  </Pressable>
+                </View>
               </View>
             </View>
           </AnimatedCard>
 
-          {/* Menu sections — captionMono labels for that mono-tag feel */}
-          <StaggeredList staggerDelay={40}>
-            {menuSections.map((section) => (
-              <View key={section.title}>
-                <Text
-                  variant="captionMono"
-                  style={{ color: tokens.ink.subtle, marginTop: 20, marginBottom: 8 }}
-                >
-                  {section.title}
+          {/* Quick dark mode toggle — own Cuban card, reachable in 1 tap. */}
+          <AnimatedCard delay={60}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: tokens.bg.elev1,
+                borderRadius: 16,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                marginBottom: 8,
+                ...CARD_SHADOW,
+              }}
+            >
+              <View className="flex-row items-center gap-2">
+                <Ionicons name={isDark ? 'moon' : 'sunny-outline'} size={18} color={tokens.accent.orange} />
+                <Text variant="bodySmall" style={{ color: tokens.ink.primary }}>
+                  {t('profile.dark_mode', { defaultValue: 'Modo oscuro' })}
                 </Text>
-                {section.items.map((item, idx) => (
-                  <MenuRow
-                    key={item.label}
-                    icon={item.icon}
-                    label={item.label}
-                    iconBg={item.iconBg}
-                    onPress={item.onPress}
-                    showBorder={idx < section.items.length - 1}
-                  />
-                ))}
               </View>
-            ))}
-          </StaggeredList>
+              <Switch
+                value={isDark}
+                onValueChange={(v) => setThemeMode(v ? 'dark' : 'light')}
+                trackColor={{ false: tokens.line, true: tokens.accent.orange }}
+                thumbColor="#FFFFFF"
+                ios_backgroundColor={tokens.line}
+              />
+            </View>
+          </AnimatedCard>
 
-          {/* Logout */}
-          <View className="mt-8 mb-6">
-            <MenuRow
-              icon="log-out-outline"
-              label={loggingOut ? t('auth.logging_out') : t('auth.logout')}
+          {/* Menu sections — Cuban cards with tinted icon-box rows. */}
+          {menuSections.map((section) => (
+            <ProfileSection key={section.title} title={section.title}>
+              {section.items.map((item, idx) => (
+                <ProfileRow
+                  key={item.label}
+                  icon={item.icon}
+                  tint={tintFor(item.iconBg)}
+                  label={item.label}
+                  onPress={item.onPress}
+                  isLast={idx === section.items.length - 1}
+                />
+              ))}
+            </ProfileSection>
+          ))}
+
+          {/* Logout — red gradient glow CTA (driver parity). */}
+          <View style={{ marginTop: 8, marginBottom: 24, ...GLOW_DANGER }}>
+            <Pressable
               onPress={handleLogout}
-              destructive
-              showChevron={false}
-              showBorder={false}
               disabled={loggingOut}
-            />
+              accessibilityRole="button"
+              accessibilityLabel={t('auth.logout')}
+              style={({ pressed }) => [
+                { borderRadius: 20, overflow: 'hidden', opacity: loggingOut ? 0.7 : 1 },
+                pressed && { transform: [{ scale: 0.97 }], opacity: 0.95 },
+              ]}
+            >
+              <LinearGradient
+                colors={['#EF4444', '#F87171']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 16,
+                  paddingHorizontal: 24,
+                  minHeight: 56,
+                }}
+              >
+                <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 16, marginLeft: 10, letterSpacing: 0.3 }}>
+                  {loggingOut ? t('auth.logging_out') : t('auth.logout')}
+                </Text>
+              </LinearGradient>
+            </Pressable>
           </View>
         </View>
       </ScrollView>

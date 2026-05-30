@@ -14,6 +14,9 @@ import { useAuthStore } from '@/stores/auth.store';
 import { triggerHaptic } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
+import { LinearGradient } from 'expo-linear-gradient';
+import { colors } from '@tricigo/theme';
+import { useTokens } from '@/hooks/useTokens';
 
 interface PendingCrop {
   uri: string;
@@ -23,6 +26,7 @@ interface PendingCrop {
 
 export default function EditProfileScreen() {
   const { t } = useTranslation('common');
+  const tokens = useTokens();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
@@ -183,36 +187,46 @@ export default function EditProfileScreen() {
       <View className="pt-4">
         <ScreenHeader title={t('profile.edit_profile')} onBack={() => router.back()} />
 
-        {/* Avatar */}
-        <View className="items-center mb-6">
-          <Avatar
-            uri={avatarUrl}
-            size={96}
-            name={fullName || user?.full_name}
-            onPress={handleAvatarPress}
-            showEditBadge
-            loading={uploadingAvatar}
-          />
-          <Pressable onPress={handleAvatarPress} className="mt-2">
+        {/* Avatar with gradient ring (profile parity) */}
+        <View className="items-center mb-6 mt-2">
+          <LinearGradient
+            colors={[colors.primary[500], colors.primary[300]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ borderRadius: 54, padding: 3 }}
+          >
+            <Avatar
+              uri={avatarUrl}
+              size={96}
+              name={fullName || user?.full_name}
+              onPress={handleAvatarPress}
+              showEditBadge
+              loading={uploadingAvatar}
+            />
+          </LinearGradient>
+          <Pressable onPress={handleAvatarPress} className="mt-3">
             <Text variant="bodySmall" color="accent">
               {t('profile.change_photo', { defaultValue: 'Cambiar foto' })}
             </Text>
           </Pressable>
         </View>
 
-        <Input
-          label={t('profile.name')}
-          value={fullName}
-          onChangeText={setFullName}
-        />
-        <Input
-          label={t('profile.email')}
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <Input label={t('profile.phone')} value={user?.phone ?? ''} editable={false} />
+        {/* Form fields grouped on a Cuban surface */}
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16 }}>
+          <Input
+            label={t('profile.name')}
+            value={fullName}
+            onChangeText={setFullName}
+          />
+          <Input
+            label={t('profile.email')}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <Input label={t('profile.phone')} value={user?.phone ?? ''} editable={false} />
+        </View>
 
         <View className="mt-4">
           <Button
