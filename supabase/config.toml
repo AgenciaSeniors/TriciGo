@@ -406,17 +406,70 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
-# ── Per-function overrides ──
-# Most TriciGo functions default to verify_jwt=true (set in Supabase dashboard).
-# The two below are public-facing (signup OTP + DLR webhook) and use internal
-# auth (rate limiter + shared secret), so they must NOT require Supabase JWT.
-# Without these entries, `supabase functions deploy` would silently regress
-# them to verify_jwt=true, breaking signup flows.
+# ── Per-function verify_jwt (pinned to the live project values) ──
+# Pinned so `supabase functions deploy` can't silently flip a function's
+# gateway auth. verify_jwt=false = the gateway does NOT require a Supabase
+# JWT: those are public webhooks (no JWT to send), the signup/login OTP
+# path, or handlers that do their OWN auth inside (e.g. delete-account
+# verifies the Bearer token via auth.getUser). Captured 2026-05-30.
+
+# Public webhooks / signup-login / self-authenticating handlers:
 [functions.send-sms-otp]
 verify_jwt = false
-
+[functions.verify-otp]
+verify_jwt = false
+[functions.verify-whatsapp-otp]
+verify_jwt = false
 [functions.process-sms-dlr]
 verify_jwt = false
+[functions.process-netopia-webhook]
+verify_jwt = false
+[functions.health-check]
+verify_jwt = false
+[functions.delete-account]
+verify_jwt = false
+
+# Internal / cron functions currently verify_jwt=false in prod. They must
+# rely on their OWN service-role/secret checks — TODO: audit each handler
+# confirms internal authorization (see PR review note).
+[functions.send-email]
+verify_jwt = false
+[functions.send-push]
+verify_jwt = false
+[functions.generate-recharge-receipt]
+verify_jwt = false
+[functions.broadcast-emergency]
+verify_jwt = false
+[functions.behavioral-emails]
+verify_jwt = false
+
+# Require a valid Supabase JWT at the gateway:
+[functions.create-netopia-payment-intent]
+verify_jwt = true
+[functions.create-ride-payment-link]
+verify_jwt = true
+[functions.search-places-google]
+verify_jwt = true
+[functions.verify-selfie]
+verify_jwt = true
+[functions.auto-admin]
+verify_jwt = true
+[functions.cancel-stale-rides]
+verify_jwt = true
+[functions.sync-exchange-rate]
+verify_jwt = true
+[functions.sync-weather]
+verify_jwt = true
+[functions.send-sms]
+verify_jwt = true
+[functions.send-bulk-sms]
+verify_jwt = true
+[functions.send-bulk-email]
+verify_jwt = true
+[functions.notify-business-movement]
+verify_jwt = true
+[functions.import-mapbox-poi]
+verify_jwt = true
 
 [analytics]
 enabled = true
