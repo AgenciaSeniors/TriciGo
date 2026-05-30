@@ -262,15 +262,14 @@ export const reviewService = {
       .from('reviews')
       .select(`
         *,
-        reviewer:users!reviewer_id(first_name, avatar_url),
+        reviewer:users!reviewer_id(full_name, avatar_url),
         review_tags(
-          tag_key,
-          tag_def:review_tag_definitions!tag_key(
-            key,
+          tag_id,
+          tag_def:review_tag_definitions!tag_id(
+            tag_key,
             label_es,
             label_en,
-            label_pt,
-            sentiment
+            is_positive
           )
         )
       `)
@@ -294,16 +293,20 @@ export const reviewService = {
         is_visible: row.is_visible as boolean,
         created_at: row.created_at as string,
         tags: row.tags as string[] | undefined,
-        reviewer_first_name: (reviewer?.first_name as string) ?? '',
+        // users has full_name (no first_name) — show the first token only.
+        reviewer_first_name: ((reviewer?.full_name as string) ?? '').trim().split(/\s+/)[0] ?? '',
         reviewer_avatar_url: (reviewer?.avatar_url as string) ?? null,
         review_tags: tags.map((t) => {
+          // review_tag_definitions has tag_key/label_es/label_en/is_positive
+          // (no `key`, `label_pt`, or `sentiment` columns) — bridge them here.
           const def = t.tag_def as Record<string, unknown> | null;
+          const labelEs = (def?.label_es as string) ?? '';
           return {
-            key: (def?.key as string) ?? (t.tag_key as string),
-            label_es: (def?.label_es as string) ?? '',
+            key: (def?.tag_key as string) ?? '',
+            label_es: labelEs,
             label_en: (def?.label_en as string) ?? '',
-            label_pt: (def?.label_pt as string) ?? '',
-            sentiment: (def?.sentiment as string) ?? 'positive',
+            label_pt: labelEs,
+            sentiment: (def?.is_positive ? 'positive' : 'negative'),
           };
         }),
       } as ReviewWithReviewer;
