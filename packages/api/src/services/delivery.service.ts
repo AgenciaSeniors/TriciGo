@@ -4,6 +4,7 @@
 // ============================================================
 
 import { getSupabaseClient } from '../client';
+import { uploadFileFromUri } from './_storage-upload';
 import type { PackageCategory, VehicleType } from '@tricigo/types';
 
 export interface DeliveryDetails {
@@ -220,15 +221,14 @@ export const deliveryService = {
     const fileName = `${phase}-${rideId}-${Date.now()}.jpg`;
     const storagePath = `delivery-photos/${rideId}/${fileName}`;
 
-    // Fetch the local file as blob
-    const response = await fetch(localUri);
-    const blob = await response.blob();
-
-    const { error: uploadError } = await supabase.storage
-      .from('driver-documents')
-      .upload(storagePath, blob, { upsert: true });
-
-    if (uploadError) throw new Error(uploadError.message);
+    // Upload via FormData (RN-safe). fetch(uri).blob() throws
+    // "Network request failed" on native because fetch() doesn't support
+    // file:// / content:// schemes. See _storage-upload.ts.
+    await uploadFileFromUri('driver-documents', storagePath, localUri, {
+      fileName,
+      mimeType: 'image/jpeg',
+      upsert: true,
+    });
 
     // Get public URL
     const { data: urlData } = supabase.storage

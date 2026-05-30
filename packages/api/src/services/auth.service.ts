@@ -5,6 +5,7 @@
 
 import type { User } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { uploadFileFromUri } from './_storage-upload';
 
 declare const __DEV__: boolean | undefined;
 
@@ -136,22 +137,12 @@ export const authService = {
 
     const filePath = `${userId}/avatar.jpg`;
 
-    // React Native: use FormData to upload file URI (fetch+blob fails on Android)
-    const formData = new FormData();
-    formData.append('', {
-      uri: fileUri,
-      name: 'avatar.jpg',
-      type: 'image/jpeg',
-    } as any);
-
-    // Upload (upsert) to avatars bucket
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, formData, {
-        contentType: 'multipart/form-data',
-        upsert: true,
-      });
-    if (uploadError) throw uploadError;
+    // RN-safe upload via FormData (fetch+blob fails on Android — see _storage-upload.ts).
+    await uploadFileFromUri('avatars', filePath, fileUri, {
+      fileName: 'avatar.jpg',
+      mimeType: 'image/jpeg',
+      upsert: true,
+    });
 
     // Get public URL
     const { data: urlData } = supabase.storage
