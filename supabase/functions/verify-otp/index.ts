@@ -85,7 +85,8 @@ Deno.serve(async (req) => {
         );
       }
 
-      console.log('Cuba OTP verified for:', normalizedPhone);
+      // Do not log the phone number (PII). The user id is logged later if needed.
+      console.log('Cuba OTP verified');
 
     } else {
       // ── Rest of world → Twilio Verify Check API ──
