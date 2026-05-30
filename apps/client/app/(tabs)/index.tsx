@@ -3,7 +3,6 @@ import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -2899,7 +2898,6 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     swapPickupDropoff,
     setServiceType,
     setPaymentMethod,
-    setScheduledAt,
     setDeliveryField,
     setPassengerCount,
     setShareRide,
@@ -2940,6 +2938,24 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   // Compute selectedEstimate from allFareEstimates for the current service type
   const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
 
+  // Live discount preview (promo + "Compartir viaje"). Mirrors the
+  // server-side trigger 00347 exactly so the shown fare = what the server
+  // will charge: shareDiscount = floor(gross × freeSeats × 7%), freeSeats =
+  // cap − occupied with occupied clamped to [1, cap−1]. passengerCount does
+  // NOT trigger a re-estimate, so gross stays stable while only the overlay
+  // changes. The server is still authoritative; this is just the preview.
+  const SHARE_PCT = 7;
+  const grossCup = selectedEstimate?.estimated_fare_cup ?? 0;
+  const shareOcc = Math.min(Math.max(draft.passengerCount || 1, 1), 3);
+  const shareFreeSeats = (draft.serviceType === 'triciclo_basico' && draft.shareRide) ? (4 - shareOcc) : 0;
+  const shareDiscountCup = Math.floor((grossCup * shareFreeSeats * SHARE_PCT) / 100);
+  const promoDiscountCup = promoResult?.valid ? (promoResult.discountAmount ?? 0) : 0;
+  const totalDiscountCup = Math.min(promoDiscountCup + shareDiscountCup, grossCup);
+  const netCup = Math.max(0, grossCup - totalDiscountCup);
+  const netTrc = (selectedEstimate?.estimated_fare_trc != null && grossCup > 0)
+    ? Math.round(selectedEstimate.estimated_fare_trc * (netCup / grossCup))
+    : selectedEstimate?.estimated_fare_trc;
+
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
   // Includes 'waypoint' to match the existing UI branches that
   // handle stop-search. The setter for 'waypoint' isn't wired yet
@@ -2948,8 +2964,6 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   // aligned lets those code paths live without dead-comparison
   // warnings, and keeps the search UI future-proof.
   const [searchingField, setSearchingField] = useState<'pickup' | 'dropoff' | 'waypoint' | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickupSuggestion, setPickupSuggestion] = useState<{
     latitude: number; longitude: number; address: string;
   } | null>(null);
@@ -3119,8 +3133,6 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     !!draft.delivery.deliveryVehicleType
   );
   const canEstimate = draft.pickup && draft.dropoff && deliveryValid;
-
-  const minScheduleDate = new Date(Date.now() + 30 * 60 * 1000); // at least 30 min from now
 
   return (
     <View style={{ flex: 1 }}>
@@ -3474,18 +3486,28 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               <View style={{ borderWidth: 2, borderColor: colors.brand.orange, borderRadius: 12, padding: 12, marginBottom: 8, backgroundColor: 'rgba(255,77,0,0.03)' }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text variant="caption" color="secondary">{t('ride.estimated_fare', { defaultValue: 'Tarifa estimada' })}</Text>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.brand.orange }}>{formatFare(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                    {totalDiscountCup > 0 && (
+                      <Text style={{ fontSize: 13, color: colors.neutral[400], textDecorationLine: 'line-through' }}>{formatFare(grossCup, selectedEstimate.estimated_fare_trc)}</Text>
+                    )}
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: colors.brand.orange }}>{formatFare(netCup, netTrc)}</Text>
+                  </View>
                 </View>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
                   <Text variant="caption" color="tertiary">{(selectedEstimate.estimated_distance_m / 1000).toFixed(1)} km</Text>
                   <Text variant="caption" color="tertiary">{Math.ceil(selectedEstimate.estimated_duration_s / 60)} min</Text>
                   {selectedEstimate.exchange_rate_usd_cup ? (
-                    <Text variant="caption" color="tertiary">~${(selectedEstimate.estimated_fare_cup / selectedEstimate.exchange_rate_usd_cup).toFixed(2)} USD</Text>
+                    <Text variant="caption" color="tertiary">~${(netCup / selectedEstimate.exchange_rate_usd_cup).toFixed(2)} USD</Text>
                   ) : null}
                 </View>
                 {selectedEstimate.estimated_distance_m > 0 && (
                   <Text variant="caption" color="tertiary" style={{ marginTop: 4 }}>
                     {Math.round(selectedEstimate.estimated_fare_cup / (selectedEstimate.estimated_distance_m / 1000))} CUP por km
+                  </Text>
+                )}
+                {shareDiscountCup > 0 && (
+                  <Text variant="caption" style={{ color: MAP_COLORS.pickup, marginTop: 4, fontWeight: '600' }}>
+                    {t('ride.share_ride_toggle', { defaultValue: 'Compartir viaje' })} · −{formatCUP(shareDiscountCup)} (−{shareFreeSeats * SHARE_PCT}%)
                   </Text>
                 )}
                 {(selectedEstimate as any).surge_multiplier > 1 && (
@@ -3576,8 +3598,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                       {t('ride.share_ride_toggle', { defaultValue: 'Compartir viaje' })}
                     </Text>
                     <Text variant="caption" color="tertiary">
-                      {draft.shareRide && Math.max(0, 4 - (draft.passengerCount || 1)) > 0
-                        ? t('ride.share_ride_active', { defaultValue: '{{seats}} asientos libres · −{{pct}}%', seats: Math.max(0, 4 - (draft.passengerCount || 1)), pct: Math.max(0, 4 - (draft.passengerCount || 1)) * 7 })
+                      {draft.shareRide && shareFreeSeats > 0
+                        ? t('ride.share_ride_active', { defaultValue: '{{seats}} asientos libres · −{{pct}}%', seats: shareFreeSeats, pct: shareFreeSeats * SHARE_PCT })
                         : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagás menos' })}
                     </Text>
                   </View>
@@ -3605,23 +3627,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               </View>
             )}
 
-            {/* Schedule ride */}
-            <Pressable onPress={() => setScheduledAt(draft.scheduledAt ? null : minScheduleDate)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, marginBottom: 4 }}>
-              <Ionicons name={draft.scheduledAt ? 'checkbox' : 'square-outline'} size={22} color={draft.scheduledAt ? colors.brand.orange : colors.neutral[400]} />
-              <Text variant="caption" color="secondary">{t('ride.schedule_ride', { defaultValue: 'Programar viaje' })}</Text>
-            </Pressable>
-            {draft.scheduledAt && (
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                <Pressable onPress={() => setShowDatePicker(true)} style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, paddingVertical: 14, alignItems: 'center', minHeight: 44 }}>
-                  <Text variant="caption" color="secondary">{draft.scheduledAt.toLocaleDateString('es')}</Text>
-                </Pressable>
-                <Pressable onPress={() => setShowTimePicker(true)} style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, paddingVertical: 14, alignItems: 'center', minHeight: 44 }}>
-                  <Text variant="caption" color="secondary">{draft.scheduledAt.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</Text>
-                </Pressable>
-              </View>
-            )}
           </ScrollView>
-          <Button title={selectedEstimate ? `${draft.scheduledAt ? 'Programar' : 'Solicitar'} ${t(`service_type.${draft.serviceType}` as const)} · ${formatFare(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
+          <Button title={selectedEstimate ? `${t('ride.request', { defaultValue: 'Solicitar' })} ${t(`service_type.${draft.serviceType}` as const)} · ${formatFare(netCup, netTrc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
         </View>
       )}
     </View>
