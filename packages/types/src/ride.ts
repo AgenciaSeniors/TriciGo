@@ -109,6 +109,11 @@ export interface Ride {
   promo_code_id: string | null;
   discount_amount_cup: number;
 
+  // Compartir viaje (shared ride) — 00347
+  shared_ride?: boolean;
+  shared_ride_seats_occupied?: number | null;
+  shared_ride_discount_cup?: number;
+
   // Surge & Tips
   surge_multiplier: number;
   tip_amount: number;

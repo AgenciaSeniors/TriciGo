@@ -60,6 +60,12 @@ export const createRideSchema = z.object({
   // Ratio of fare to pay via wallet (TriciCoin) vs cash, for mixed payment.
   // 0 = all cash, 1 = all wallet. Defaults to 0 on rides without wallet split.
   wallet_ratio: z.number().min(0).max(1).optional(),
+  // "Compartir viaje" (shared ride): the rider lets the driver fill empty
+  // seats with other (off-platform) passengers. declared_passengers = how
+  // many seats the rider occupies (incl. themselves). The per-free-seat
+  // discount is computed server-side (trigger 00347) — not trusted here.
+  share_ride: z.boolean().optional(),
+  declared_passengers: z.number().int().min(1).max(8).optional(),
   delivery_details: z.object({
     package_description: z.string().min(1).max(1000),
     recipient_name: z.string().min(1).max(200),
