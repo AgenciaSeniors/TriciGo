@@ -32,30 +32,39 @@
 // Color
 // ──────────────────────────────────────────────────────────
 
-/** Driver — submodo mapa activo (home idle, home online, trip view) */
+/** Driver — submodo mapa activo (home idle, home online, trip view)
+ *
+ * "Cuban dark" fusion: alineado con `cubanDark` (el palette que ya usa el
+ * Perfil del conductor) para que TODA la app driver comparta la misma
+ * identidad oscura cubana — navy profundo + texto crema tibia (no white
+ * clínico) + líneas crema. Antes era un dark frío (negro azulado, texto
+ * blanco-azul) que se sentía de otra app. El accent naranja se mantiene;
+ * el dorado cálido vive en `accent.warm` para precios/badges. */
 export const midnightEmberMap = {
   bg: {
-    /** Lo más oscuro — fondo del mapa cuando hay overlay. */
-    canvas: '#08080C',
-    /** Cards/sheets sobre canvas. */
-    surface: '#12131A',
-    /** Sheets levantadas (incoming ride card, bottom sheet alta). */
-    elevated: '#1B1D26',
+    /** Lo más oscuro — fondo del mapa cuando hay overlay. Navy casi negro. */
+    canvas: '#070A12',
+    /** Cards/sheets sobre canvas. Navy (cubanDark.bg.elev1). */
+    surface: '#11172A',
+    /** Sheets levantadas (incoming ride card, bottom sheet alta). Navy elevado. */
+    elevated: '#18203A',
     /** Inputs, áreas presionadas. */
-    sunken: '#05060A',
+    sunken: '#05070E',
   },
   text: {
-    primary: '#F5F6FA',
-    secondary: '#9CA3B5',
-    tertiary: '#5C6478',
-    inverse: '#08080C',
+    /** Crema tibia — no white clínico (cubanDark.ink.primary). */
+    primary: '#F4F0EA',
+    secondary: '#B7C4CF',
+    tertiary: '#6B7F8F',
+    inverse: '#070A12',
     /** Texto sobre accent (orange). */
     onAccent: '#FFFFFF',
   },
   line: {
-    hairline: 'rgba(255,255,255,0.06)',
-    default: 'rgba(255,255,255,0.12)',
-    strong: 'rgba(255,255,255,0.20)',
+    /** Líneas crema tibia (cubanDark.line) — no blanco frío. */
+    hairline: 'rgba(244,240,234,0.06)',
+    default: 'rgba(244,240,234,0.12)',
+    strong: 'rgba(244,240,234,0.20)',
   },
 } as const;
 
@@ -99,6 +108,10 @@ export const midnightEmberAccent = {
   900: '#7A2400',
   /** Halo para CTA hero (incoming card, primary button glow). */
   glow: 'rgba(255,77,0,0.18)',
+  /** Dorado cálido cubano — precios/valor/badges (cubanDark.accent.warm).
+   *  Dinero en dorado; el naranja queda para acción/CTA. */
+  warm: '#FFB547',
+  warmGlow: 'rgba(255,181,71,0.18)',
 } as const;
 
 /**

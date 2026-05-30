@@ -386,6 +386,8 @@ function IncomingRideCardInner({
           borderRadius: midnightEmber.radius.hero,
           borderWidth: 1,
           borderColor: midnightEmber.map.line.default,
+          // Premium depth: top edge catches the light (subtle "lit-from-above").
+          borderTopColor: midnightEmber.map.line.strong,
           padding: 18,
           ...midnightEmber.shadow.hero,
         }}
@@ -429,7 +431,7 @@ function IncomingRideCardInner({
         >
           <RNText style={{
             ...midnightEmber.text.hero,
-            color: midnightEmber.accent[500],
+            color: midnightEmber.accent.warm,
           }}>
             ${netEarnings.toLocaleString()}
           </RNText>
@@ -488,8 +490,16 @@ function IncomingRideCardInner({
             .join('  •  ')}
         </RNText>
 
-        {/* ── Pickup → Dropoff con dots verticales ── */}
-        <View style={{ marginBottom: 16 }}>
+        {/* ── Pickup → Dropoff en superficie anidada (route block) ── */}
+        <View style={{
+          marginBottom: 16,
+          backgroundColor: midnightEmber.map.bg.surface,
+          borderRadius: midnightEmber.radius.input,
+          borderWidth: 1,
+          borderColor: midnightEmber.map.line.hairline,
+          paddingVertical: 12,
+          paddingHorizontal: 12,
+        }}>
           <View
             style={{ flexDirection: 'row', alignItems: 'center' }}
             accessible
@@ -652,6 +662,8 @@ function IncomingRideCardInner({
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: midnightEmber.radius.card,
+              borderWidth: 1,
+              borderColor: midnightEmber.map.line.default,
             }}
             onPress={handleReject}
             accessibilityRole="button"
@@ -798,9 +810,9 @@ function Chip({ icon, label, variant = 'default' }: ChipProps) {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 5,
-        paddingHorizontal: 10,
+        paddingHorizontal: 11,
         paddingVertical: 6,
-        borderRadius: midnightEmber.radius.tap,
+        borderRadius: midnightEmber.radius.pill,
         backgroundColor: isAccent
           ? midnightEmber.accent[300]
           : midnightEmber.map.bg.surface,

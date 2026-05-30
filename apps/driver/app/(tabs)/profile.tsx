@@ -460,7 +460,7 @@ function NativeDriverProfileScreen() {
                   style={{
                     backgroundColor: palette.bg.elev1,
                     borderRadius: 16,
-                    paddingVertical: 8,
+                    padding: 8,
                     borderWidth: StyleSheet.hairlineWidth,
                     borderColor: palette.line,
                     overflow: 'hidden',

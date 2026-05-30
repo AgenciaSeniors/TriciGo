@@ -3,7 +3,6 @@
 // which aren't appropriate to pull into the shared @tricigo packages.
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import type { RegisterLoginDeviceInput } from '@tricigo/api';
 
@@ -43,11 +42,23 @@ export async function getOrCreateDeviceId(): Promise<string> {
 
 /** Device metadata sent at login for new-device detection. */
 export async function getDeviceInfo(): Promise<RegisterLoginDeviceInput> {
+  // expo-device's native module ('ExpoDevice') may be absent in a dev client
+  // that wasn't rebuilt with it (CLAUDE.md tolerance pattern). Lazy-require +
+  // try/catch so we never throw; model/os_version just come back null.
+  let model: string | null = null;
+  let osVersion: string | null = null;
+  try {
+    const Device = require('expo-device') as typeof import('expo-device');
+    model = Device.modelName ?? null;
+    osVersion = Device.osVersion ?? null;
+  } catch {
+    /* native module missing — leave model/os null */
+  }
   return {
     device_id: await getOrCreateDeviceId(),
     platform: Platform.OS,
-    model: Device.modelName ?? null,
-    os_version: Device.osVersion ?? null,
+    model,
+    os_version: osVersion,
     app_version: Constants.expoConfig?.version ?? null,
   };
 }

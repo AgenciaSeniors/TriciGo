@@ -503,7 +503,7 @@ export function DriverTripView() {
   // accent glow. The stepper already conveys phase via the active dot
   // color (which shares the same accent intensity scale), so the
   // container background no longer needs to encode status.
-  const stepperTint = midnightEmber.accent.glow;
+  const stepperTint = midnightEmber.map.bg.surface;
 
   if (!activeTrip) return null;
 
@@ -666,12 +666,13 @@ export function DriverTripView() {
       <View
         style={{
           marginBottom: 12,
-          paddingVertical: 10,
+          paddingVertical: 12,
           paddingHorizontal: 14,
           backgroundColor: midnightEmber.map.bg.elevated,
-          borderRadius: midnightEmber.radius.card,
+          borderRadius: midnightEmber.radius.sheet,
           borderWidth: 1,
           borderColor: midnightEmber.map.line.hairline,
+          borderTopColor: midnightEmber.map.line.strong,
         }}
       >
         {(() => {
