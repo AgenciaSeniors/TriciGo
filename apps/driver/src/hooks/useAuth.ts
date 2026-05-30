@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { configureStorage, createStorageAdapter, authService, driverService, getSupabaseClient } from '@tricigo/api';
+import { configureStorage, createStorageAdapter, authService, driverService, getSupabaseClient, realtimeStatusLogger } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
 import { identifyUser, resetAnalytics } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -300,7 +300,7 @@ export function useAuthInit() {
               }
             },
           )
-          .subscribe();
+          .subscribe(realtimeStatusLogger('driver_profile'));
       } catch {
         // Best effort — profile sync is non-critical
       }

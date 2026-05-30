@@ -5,6 +5,7 @@
 
 import type { NearbyVehicle, VehicleType } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { realtimeStatusLogger } from './_realtime-status';
 
 export const nearbyService = {
   /**
@@ -91,6 +92,6 @@ export const nearbyService = {
           });
         },
       )
-      .subscribe();
+      .subscribe(realtimeStatusLogger('nearby_drivers'));
   },
 };

@@ -52,6 +52,7 @@ import { matchingService } from './matching.service';
 import { notificationService } from './notification.service';
 import { validate, createRideSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
+import { realtimeStatusLogger } from './_realtime-status';
 import { AuthError, ValidationError, ForbiddenError } from '../errors';
 import { deliveryService } from './delivery.service';
 
@@ -1531,7 +1532,7 @@ export const rideService = {
           onUpdate({ id: offer.ride_id, status: offer.status === 'accepted' ? 'accepted' : 'canceled' } as unknown as Ride);
         },
       )
-      .subscribe();
+      .subscribe(realtimeStatusLogger('ride_offers'));
   },
 
   // ==================== PUBLIC / SHARE TOKEN ====================
@@ -2044,7 +2045,7 @@ export const rideService = {
         },
         (payload) => onUpdate(payload.new),
       )
-      .subscribe();
+      .subscribe(realtimeStatusLogger('waypoints'));
   },
 
   // ============================================================
@@ -2215,7 +2216,7 @@ export const rideService = {
         { event: 'UPDATE', schema: 'public', table: 'ride_splits', filter: `ride_id=eq.${rideId}` },
         (payload) => onUpdate(payload.new),
       )
-      .subscribe();
+      .subscribe(realtimeStatusLogger('splits'));
   },
 
   /**
