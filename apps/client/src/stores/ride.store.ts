@@ -93,6 +93,8 @@ interface RideRequestDraft {
   insuranceSelected: boolean;
   ridePreferences: RidePreferences;
   passengerCount: number;
+  /** "Compartir viaje": rider lets the driver fill empty seats (triciclo only). */
+  shareRide: boolean;
   walletRatio: number;
 }
 
@@ -108,6 +110,7 @@ const defaultDraft: RideRequestDraft = {
   insuranceSelected: false,
   ridePreferences: {},
   passengerCount: 1,
+  shareRide: false,
   walletRatio: 0.5,
 };
 
@@ -173,6 +176,7 @@ interface RideState {
   updateWaypoint: (index: number, address: string, location: GeoPoint) => void;
   setInsurance: (selected: boolean) => void;
   setPassengerCount: (count: number) => void;
+  setShareRide: (shareRide: boolean) => void;
   setRidePreferences: (prefs: RidePreferences) => void;
   setPrefetchedPickup: (pickup: LocationDraft | null) => void;
   swapPickupDropoff: () => void;
@@ -386,6 +390,8 @@ export const useRideStore = create<RideState>((set, get) => ({
     set((s) => ({ draft: { ...s.draft, insuranceSelected } })),
   setPassengerCount: (passengerCount) =>
     set((s) => ({ draft: { ...s.draft, passengerCount } })),
+  setShareRide: (shareRide) =>
+    set((s) => ({ draft: { ...s.draft, shareRide } })),
   setRidePreferences: (ridePreferences) =>
     set((s) => ({ draft: { ...s.draft, ridePreferences } })),
   setPrefetchedPickup: (prefetchedPickup) => set({ prefetchedPickup }),
