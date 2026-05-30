@@ -48,50 +48,59 @@ export const notificationService = {
       return { successCount: 0, errorCount: 0 };
     }
 
-    const messages = tokens.map((token) => ({
-      to: token,
-      title,
-      body,
-      sound: 'default' as const,
-      ...(data ? { data } : {}),
-    }));
+    // Send one message per request. A user can have push tokens from multiple
+    // Expo projects (the client and driver are separate Expo apps), and Expo's
+    // push API rejects a batch that mixes experience IDs with a 400
+    // (PUSH_TOO_MANY_EXPERIENCE_IDS). One token per request guarantees a single
+    // project per call, so a multi-app user (e.g. someone who is both a rider
+    // and a driver) still gets notified instead of the whole batch failing.
+    const results = await Promise.all(
+      tokens.map(async (token) => {
+        try {
+          const response = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: token,
+              title,
+              body,
+              sound: 'default' as const,
+              ...(data ? { data } : {}),
+            }),
+          });
 
-    try {
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(messages),
-      });
+          if (!response.ok) {
+            const errBody = await response.text().catch(() => '');
+            console.error(
+              `[notification] Expo push API returned status ${response.status}${errBody ? ` — ${errBody.slice(0, 200)}` : ''}`,
+            );
+            return false;
+          }
 
-      if (!response.ok) {
-        console.error(
-          `[notification] Expo push API returned status ${response.status}`,
-        );
-        return { successCount: 0, errorCount: tokens.length };
-      }
-
-      const result = (await response.json()) as {
-        data: Array<{ status: 'ok' | 'error'; id?: string; message?: string }>;
-      };
-
-      let successCount = 0;
-      let errorCount = 0;
-      for (const ticket of result.data) {
-        if (ticket.status === 'ok') {
-          successCount++;
-        } else {
-          errorCount++;
+          // A single-message POST returns `data` as one ticket object; an array
+          // POST returns an array. Handle both defensively.
+          const result = (await response.json()) as {
+            data?:
+              | { status?: 'ok' | 'error'; id?: string; message?: string }
+              | Array<{ status?: 'ok' | 'error'; id?: string; message?: string }>;
+          };
+          const ticket = Array.isArray(result.data) ? result.data[0] : result.data;
+          if (ticket?.status === 'ok') {
+            return true;
+          }
           console.warn(
-            `[notification] Push ticket error: ${ticket.message ?? 'unknown'}`,
+            `[notification] Push ticket error: ${ticket?.message ?? 'unknown'}`,
           );
+          return false;
+        } catch (err) {
+          console.error('[notification] Failed to send push notification:', err);
+          return false;
         }
-      }
+      }),
+    );
 
-      return { successCount, errorCount };
-    } catch (err) {
-      console.error('[notification] Failed to send push notifications:', err);
-      return { successCount: 0, errorCount: tokens.length };
-    }
+    const successCount = results.filter(Boolean).length;
+    return { successCount, errorCount: results.length - successCount };
   },
 
   async notifyUser(

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Pressable, ScrollView, Share, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -156,9 +155,17 @@ export default function GiftScreen() {
 
   const handleCopyCode = async () => {
     if (!myCode) return;
-    await Clipboard.setStringAsync(myCode);
-    Toast.show({ type: 'success', text1: t('copied', { defaultValue: 'Copiado' }) });
-    triggerHaptic('light');
+    try {
+      // Lazy + guarded: a dev-client build that doesn't bundle the
+      // expo-clipboard native module would otherwise throw at import time
+      // and break the whole gift route. Fall back to the share sheet.
+      const Clipboard = require('expo-clipboard');
+      await Clipboard.setStringAsync(myCode);
+      Toast.show({ type: 'success', text1: t('copied', { defaultValue: 'Copiado' }) });
+      triggerHaptic('light');
+    } catch {
+      await handleShareCode();
+    }
   };
 
   const handleShareCode = async () => {

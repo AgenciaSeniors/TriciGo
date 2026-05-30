@@ -155,16 +155,12 @@ describe('notificationService', () => {
   });
 
   describe('sendPushNotification', () => {
-    it('sends push notification to Expo API with correct shape', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          data: [
-            { status: 'ok', id: 'ticket-1' },
-            { status: 'ok', id: 'ticket-2' },
-          ],
-        }),
-      });
+    it('sends one request per token with the correct shape', async () => {
+      // One request per token avoids Expo's PUSH_TOO_MANY_EXPERIENCE_IDS 400
+      // when a user has tokens from multiple Expo projects.
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { status: 'ok', id: 'ticket-1' } }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { status: 'ok', id: 'ticket-2' } }) });
 
       const result = await notificationService.sendPushNotification(
         ['ExponentPushToken[aaa]', 'ExponentPushToken[bbb]'],
@@ -173,29 +169,24 @@ describe('notificationService', () => {
         { rideId: 'ride-123' },
       );
 
+      expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch).toHaveBeenCalledWith(
         'https://exp.host/--/api/v2/push/send',
-        {
+        expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify([
-            {
-              to: 'ExponentPushToken[aaa]',
-              title: 'Viaje aceptado',
-              body: 'Tu conductor esta en camino',
-              sound: 'default',
-              data: { rideId: 'ride-123' },
-            },
-            {
-              to: 'ExponentPushToken[bbb]',
-              title: 'Viaje aceptado',
-              body: 'Tu conductor esta en camino',
-              sound: 'default',
-              data: { rideId: 'ride-123' },
-            },
-          ]),
-        },
+        }),
       );
+      const body0 = JSON.parse(mockFetch.mock.calls[0]![1]!.body);
+      const body1 = JSON.parse(mockFetch.mock.calls[1]![1]!.body);
+      expect(body0).toEqual({
+        to: 'ExponentPushToken[aaa]',
+        title: 'Viaje aceptado',
+        body: 'Tu conductor esta en camino',
+        sound: 'default',
+        data: { rideId: 'ride-123' },
+      });
+      expect(body1.to).toBe('ExponentPushToken[bbb]');
 
       expect(result.successCount).toBe(2);
       expect(result.errorCount).toBe(0);
@@ -213,7 +204,9 @@ describe('notificationService', () => {
     });
 
     it('handles network error gracefully', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      mockFetch
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new Error('Network error'));
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -232,7 +225,8 @@ describe('notificationService', () => {
     it('handles non-ok HTTP response', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
-        status: 500,
+        status: 400,
+        text: async () => '{"errors":[{"code":"PUSH_TOO_MANY_EXPERIENCE_IDS"}]}',
       });
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -244,21 +238,18 @@ describe('notificationService', () => {
       );
 
       expect(result).toEqual({ successCount: 0, errorCount: 1 });
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Expo push API returned status 400'),
+      );
 
       consoleSpy.mockRestore();
     });
 
-    it('counts mixed success and error tickets', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          data: [
-            { status: 'ok', id: 'ticket-1' },
-            { status: 'error', message: 'DeviceNotRegistered' },
-            { status: 'ok', id: 'ticket-3' },
-          ],
-        }),
-      });
+    it('counts mixed success and error tickets across per-token requests', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { status: 'ok', id: 'ticket-1' } }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { status: 'error', message: 'DeviceNotRegistered' } }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { status: 'ok', id: 'ticket-3' } }) });
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -268,6 +259,7 @@ describe('notificationService', () => {
         'Body',
       );
 
+      expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(result.successCount).toBe(2);
       expect(result.errorCount).toBe(1);
 
@@ -277,9 +269,7 @@ describe('notificationService', () => {
     it('omits data field from message when not provided', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: [{ status: 'ok', id: 'ticket-1' }],
-        }),
+        json: async () => ({ data: { status: 'ok', id: 'ticket-1' } }),
       });
 
       await notificationService.sendPushNotification(
@@ -289,8 +279,8 @@ describe('notificationService', () => {
       );
 
       const fetchBody = JSON.parse(mockFetch.mock.calls[0]![1]!.body);
-      expect(fetchBody[0]).not.toHaveProperty('data');
-      expect(fetchBody[0]).toEqual({
+      expect(fetchBody).not.toHaveProperty('data');
+      expect(fetchBody).toEqual({
         to: 'ExponentPushToken[aaa]',
         title: 'Title',
         body: 'Body',
@@ -316,16 +306,10 @@ describe('notificationService', () => {
         select: mockSelectFn,
       });
 
-      // Mock fetch for sendPushNotification
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          data: [
-            { status: 'ok', id: 'ticket-1' },
-            { status: 'ok', id: 'ticket-2' },
-          ],
-        }),
-      });
+      // Mock fetch for sendPushNotification (one request per token)
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { status: 'ok', id: 'ticket-1' } }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { status: 'ok', id: 'ticket-2' } }) });
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -341,7 +325,8 @@ describe('notificationService', () => {
       expect(mockSelectFn).toHaveBeenCalledWith('push_token');
       expect(mockEqFn).toHaveBeenCalledWith('user_id', 'user-1');
 
-      // Verify sendPushNotification was called via fetch
+      // Verify sendPushNotification fired one request per token
+      expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch).toHaveBeenCalledWith(
         'https://exp.host/--/api/v2/push/send',
         expect.objectContaining({
@@ -350,14 +335,14 @@ describe('notificationService', () => {
         }),
       );
 
-      // Verify the fetch body contains the correct tokens and message
-      const fetchBody = JSON.parse(mockFetch.mock.calls[0]![1]!.body);
-      expect(fetchBody).toHaveLength(2);
-      expect(fetchBody[0].to).toBe('ExponentPushToken[aaa]');
-      expect(fetchBody[1].to).toBe('ExponentPushToken[bbb]');
-      expect(fetchBody[0].title).toBe('Viaje completado');
-      expect(fetchBody[0].body).toBe('Gracias por usar TriciGo');
-      expect(fetchBody[0].data).toEqual({ rideId: 'ride-456' });
+      // Verify each per-token body carries the correct token + message
+      const body0 = JSON.parse(mockFetch.mock.calls[0]![1]!.body);
+      const body1 = JSON.parse(mockFetch.mock.calls[1]![1]!.body);
+      expect(body0.to).toBe('ExponentPushToken[aaa]');
+      expect(body1.to).toBe('ExponentPushToken[bbb]');
+      expect(body0.title).toBe('Viaje completado');
+      expect(body0.body).toBe('Gracias por usar TriciGo');
+      expect(body0.data).toEqual({ rideId: 'ride-456' });
 
       consoleSpy.mockRestore();
     });
