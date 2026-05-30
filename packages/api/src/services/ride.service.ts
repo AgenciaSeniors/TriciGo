@@ -93,6 +93,10 @@ export interface CreateRideParams {
   rider_preferences?: RidePreferences;
   wallet_ratio?: number;
   ride_mode?: 'passenger' | 'cargo';
+  /** "Compartir viaje": rider allows the driver to fill empty seats. */
+  share_ride?: boolean;
+  /** Seats the rider occupies (incl. themselves); drives the free-seat discount. */
+  declared_passengers?: number;
   delivery_details?: {
     package_description: string;
     recipient_name: string;
@@ -506,6 +510,11 @@ export const rideService = {
         rider_preferences: validParams.rider_preferences ?? null,
         ride_mode: validParams.ride_mode ?? 'passenger',
         wallet_ratio: validParams.wallet_ratio ?? 0,
+        // Shared-ride opt-in + declared seats. The discount itself is
+        // computed server-side by the rides_validate_promo_discount
+        // trigger (00347) — never trusted from the client.
+        shared_ride: validParams.share_ride ?? false,
+        shared_ride_seats_occupied: validParams.share_ride ? (validParams.declared_passengers ?? 1) : null,
         status: 'searching' as RideStatus,
       })
       .select()
