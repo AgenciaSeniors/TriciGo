@@ -177,6 +177,7 @@ Deno.serve(async (req: Request) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unknown_error';
     console.error('[delete-account] failed for user', userId, ':', msg);
-    return jsonResponse(req, { error: msg }, 500);
+    // Don't leak internal error details to the client.
+    return jsonResponse(req, { error: 'deletion_failed' }, 500);
   }
 });
