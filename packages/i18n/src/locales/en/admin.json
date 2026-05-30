@@ -1079,7 +1079,8 @@
     "stripe_fee_usd_help": "Service fee in USD per recharge",
     "stripe_fee_type_help": "Fee type: fixed or percentage",
     "cash_enabled_help": "Enable/disable cash payments",
-    "wallet_enabled_help": "Enable/disable trip credit payments"
+    "wallet_enabled_help": "Enable/disable trip credit payments",
+    "shared_ride_discount_per_seat_pct_help": "Discount per free seat when the rider shares the trip (tricycle only). Default 7%"
   },
   "exchange_rate": {
     "title": "Exchange Rate",
