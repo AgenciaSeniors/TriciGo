@@ -95,6 +95,19 @@ export function useNotificationSetup(userId: string | null | undefined) {
 
     async function register() {
       try {
+        // Android: ensure the high-importance 'rides' channel exists so
+        // killed-app pushes (the server sends channelId:'rides') make
+        // sound + heads-up. Channel creation needs no permission and is
+        // idempotent, so do it first — before the pref/permission gates.
+        // Mirrors the client (apps/client/src/services/push.service.ts).
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('rides', {
+            name: 'Viajes y ofertas',
+            importance: Notifications.AndroidImportance.HIGH,
+            vibrationPattern: [0, 250, 250, 250],
+          });
+        }
+
         const pref = await AsyncStorage.getItem(NOTIF_PREF_KEY);
         if (pref === 'false') return;
 
