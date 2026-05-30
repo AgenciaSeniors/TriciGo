@@ -721,8 +721,6 @@ function NativeDriverHomeScreen() {
     prevFatigueLevelRef.current = fatigueLevel;
   }, [fatigueLevel, sessionHours]);
 
-  const perHour = sessionHours >= 0.5 ? Math.round(todayEarnings.amount / sessionHours) : 0;
-
   // ── Handlers ──────────────────────────────────────────────────────────────────
   const handleToggleOnline = useCallback(async () => {
     if (toggling) return;
@@ -1201,7 +1199,6 @@ function NativeDriverHomeScreen() {
         selfieLoading={selfieLoading}
         todayEarnings={todayEarnings}
         yesterdayEarnings={yesterdayEarnings}
-        perHour={perHour}
         userName={user?.full_name?.split(' ')[0] ?? user?.full_name}
         navCountdown={navCountdown}
         nearestHotZone={nearestHotZone}
@@ -1268,7 +1265,7 @@ function FloatingHeader({ isOnline, unreadCount, notifEnabled, t }: FloatingHead
       <View style={[styles.logoCard, Platform.OS === 'web' && { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } as any]}>
         <Image
           source={require('../../assets/logo-wordmark-white.png')}
-          style={{ width: 90, height: 24 }}
+          style={{ width: 76, height: 24 }}
           resizeMode="contain"
         />
         <View style={styles.logoDivider} />
@@ -1356,13 +1353,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
     alignItems: 'center',
-    backgroundColor: 'rgba(14,14,26,0.9)',
+    backgroundColor: 'rgba(17,23,42,0.92)',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
     gap: 0,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: 'rgba(244,240,234,0.08)',
   },
   logoTrici: {
     fontSize: 20,
@@ -1382,17 +1379,18 @@ const styles = StyleSheet.create({
   logoDivider: {
     width: 1,
     height: 14,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginHorizontal: 8,
+    backgroundColor: 'rgba(244,240,234,0.12)',
+    marginHorizontal: 6,
     alignSelf: 'center',
   },
   logoSub: {
     fontSize: 11,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(244,240,234,0.5)',
     fontFamily: 'Inter',
     alignSelf: 'flex-end',
     marginBottom: 1,
+    flexShrink: 1,
   },
   headerActions: {
     flexDirection: 'row',

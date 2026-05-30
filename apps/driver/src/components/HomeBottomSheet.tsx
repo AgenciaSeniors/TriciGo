@@ -73,7 +73,6 @@ export interface HomeBottomSheetProps {
   // ── Data ──
   todayEarnings: { amount: number; trips: number };
   yesterdayEarnings: { amount: number; trips: number } | null;
-  perHour: number;
   userName?: string;
 
   // ── Auto-nav ──
@@ -203,7 +202,6 @@ function SheetContent({
   selfieLoading,
   todayEarnings,
   yesterdayEarnings,
-  perHour,
   userName,
   navCountdown,
   nearestHotZone,
@@ -522,14 +520,6 @@ function SheetContent({
             <RNText style={{ fontSize: 13, color: palette.ink.secondary, ...TABULAR }}>
               {t('home.trips_count', { count: todayEarnings.trips, defaultValue: '{{count}} viajes' })}
             </RNText>
-            {perHour > 0 && (
-              <>
-                <RNText style={{ fontSize: 13, color: palette.ink.subtle }}>·</RNText>
-                <RNText style={{ fontSize: 13, color: palette.accent.warm, fontWeight: '700', ...TABULAR }}>
-                  ${perHour.toLocaleString()}{t('home.per_hour_short', { defaultValue: '/h' })}
-                </RNText>
-              </>
-            )}
           </View>
         </View>
       </View>

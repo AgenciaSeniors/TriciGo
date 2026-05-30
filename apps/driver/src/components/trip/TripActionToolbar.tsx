@@ -58,9 +58,13 @@ function ToolbarButton({
       style={{
         padding: 10,
         minHeight: 56,
-        minWidth: 56,
+        minWidth: 60,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: midnightEmber.map.bg.surface,
+        borderRadius: midnightEmber.radius.card,
+        borderWidth: 1,
+        borderColor: midnightEmber.map.line.hairline,
       }}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}

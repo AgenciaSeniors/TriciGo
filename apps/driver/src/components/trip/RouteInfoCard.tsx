@@ -68,8 +68,9 @@ export function RouteInfoCard({
   const expandedCardStyle = {
     backgroundColor: midnightEmber.map.bg.elevated,
     borderColor: midnightEmber.map.line.hairline,
+    borderTopColor: midnightEmber.map.line.strong,
     borderWidth: 1,
-    borderRadius: midnightEmber.radius.card,
+    borderRadius: midnightEmber.radius.sheet,
     padding: 14,
     marginTop: 8,
     marginBottom: 16,
@@ -78,8 +79,9 @@ export function RouteInfoCard({
   const collapsedCardStyle = {
     backgroundColor: midnightEmber.map.bg.elevated,
     borderColor: midnightEmber.map.line.hairline,
+    borderTopColor: midnightEmber.map.line.strong,
     borderWidth: 1,
-    borderRadius: midnightEmber.radius.card,
+    borderRadius: midnightEmber.radius.sheet,
     padding: 14,
     marginBottom: 16,
   };
