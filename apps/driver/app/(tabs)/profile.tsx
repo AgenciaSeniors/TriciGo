@@ -270,7 +270,7 @@ function NativeDriverProfileScreen() {
   return (
     <Screen scroll bg={isDark ? 'dark' : 'white'} statusBarStyle={isDark ? 'light-content' : 'dark-content'}>
       <View style={{ flex: 1, backgroundColor: palette.bg.paper }}>
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 }}>
           {/* Page title */}
           <Text
             style={{
@@ -442,7 +442,7 @@ function NativeDriverProfileScreen() {
           {/* ── Menu sections ── */}
           <Animated.View style={sectionStyle(2)}>
             {menuSections.map((section) => (
-              <View key={section.title} style={{ marginBottom: 18 }}>
+              <View key={section.title} style={{ marginBottom: 24 }}>
                 <Text
                   style={{
                     color: palette.ink.secondary,
@@ -450,7 +450,7 @@ function NativeDriverProfileScreen() {
                     fontWeight: '700',
                     textTransform: 'uppercase',
                     letterSpacing: 1.2,
-                    marginBottom: 8,
+                    marginBottom: 10,
                     marginLeft: 4,
                   }}
                 >
@@ -460,8 +460,11 @@ function NativeDriverProfileScreen() {
                   style={{
                     backgroundColor: palette.bg.elev1,
                     borderRadius: 16,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: palette.line,
                     overflow: 'hidden',
                     ...CARD_SHADOW,
+                    shadowOpacity: isDark ? 0.4 : 0.1,
                   }}
                 >
                   {section.items.map((item, i) => renderMenuRow(item, i === section.items.length - 1))}
