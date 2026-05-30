@@ -7,10 +7,11 @@ import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
-import { authService, driverService } from '@tricigo/api';
+import { authService, deviceService, driverService } from '@tricigo/api';
 import { isValidOTP } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
+import { getDeviceInfo } from '@/lib/device';
 
 export default function VerifyOTPScreen() {
   const { t } = useTranslation('common');
@@ -46,6 +47,11 @@ export default function VerifyOTPScreen() {
       await authService.verifyOTP(phone!, code);
       const user = await authService.getCurrentUser();
       setUser(user);
+      // Record this device for new-device login detection. Best-effort:
+      // never block login on it.
+      getDeviceInfo()
+        .then((info) => deviceService.registerLoginDevice(info))
+        .catch(() => {});
       if (user) {
         try {
           const dp = await driverService.getProfile(user.id);
