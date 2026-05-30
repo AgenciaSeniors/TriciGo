@@ -9,7 +9,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { disputeService, getSupabaseClient } from '@tricigo/api';
+import { disputeService, getSupabaseClient, uploadFileFromUri } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
 import { useAuth } from '@/lib/useAuth';
@@ -95,15 +95,16 @@ export default function DisputeFormScreen() {
 
     for (let i = 0; i < evidenceUris.length; i++) {
       const uri = evidenceUris[i]!;
-      const response = await fetch(uri);
-      const blob = await response.blob();
       const ext = uri.split('.').pop() || 'jpg';
-      const storagePath = `disputes/${rideId}/${userId}/${Date.now()}_${i}.${ext}`;
+      const fileName = `${Date.now()}_${i}.${ext}`;
+      const storagePath = `disputes/${rideId}/${userId}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('dispute-evidence')
-        .upload(storagePath, blob, { contentType: `image/${ext}` });
-      if (uploadError) throw uploadError;
+      // RN-safe upload via FormData. fetch(uri).blob() throws
+      // "Network request failed" on native. See _storage-upload.ts.
+      await uploadFileFromUri('dispute-evidence', storagePath, uri, {
+        fileName,
+        mimeType: `image/${ext}`,
+      });
 
       const { data: urlData } = supabase.storage
         .from('dispute-evidence')

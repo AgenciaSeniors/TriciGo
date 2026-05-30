@@ -14,6 +14,7 @@ export { queryKeys } from './queries/keys';
 export { createStorageAdapter } from './storage';
 export type { StorageAdapter } from './storage';
 export { configureStorage } from './client';
+export { uploadFileFromUri } from './services/_storage-upload';
 export { customerService } from './services/customer.service';
 export { chatService } from './services/chat.service';
 export { incidentService } from './services/incident.service';

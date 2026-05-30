@@ -10,11 +10,14 @@ const mockStorage = { from: mockStorageFrom };
 // Stub realtime broadcast chain used by updateLocation's best-effort broadcast.
 const mockChannelSend = vi.fn(() => Promise.resolve({ error: null }));
 const mockChannelBuilder = vi.fn(() => ({ send: mockChannelSend }));
+// Stub functions.invoke used by uploadSelfieCheck's fire-and-forget verify-selfie call.
+const mockFunctionsInvoke = vi.fn(() => Promise.resolve({ data: null, error: null }));
 const mockSupabase = {
   from: mockFrom,
   rpc: mockRpc,
   storage: mockStorage,
   channel: mockChannelBuilder,
+  functions: { invoke: mockFunctionsInvoke },
 };
 
 vi.mock('../../client', () => ({
@@ -163,6 +166,46 @@ describe('driverService', () => {
 
       await expect(
         driverService.uploadDocument('d-1', 'license', 'file:///path/to/license.jpg', 'license.jpg'),
+      ).rejects.toEqual(uploadErr);
+    });
+  });
+
+  // ==================== uploadSelfieCheck ====================
+  //
+  // Same RN-safe FormData path as uploadDocument: the implementation no longer
+  // uses `fetch(uri).blob()` (which throws "Network request failed" on native).
+  describe('uploadSelfieCheck', () => {
+    it('uploads selfie via FormData and marks the check processing', async () => {
+      mockStorageUpload.mockResolvedValueOnce({ error: null });
+
+      const mockCheck = { id: 'chk-1', driver_id: 'd-1', status: 'processing' };
+      const chain = createMockQueryChain();
+      chain.single.mockResolvedValue({ data: mockCheck, error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      const result = await driverService.uploadSelfieCheck(
+        'chk-1',
+        'd-1',
+        'file:///tmp/selfie.jpg',
+        'selfie.jpg',
+      );
+
+      expect(mockStorageFrom).toHaveBeenCalledWith('driver-documents');
+      expect(mockStorageUpload).toHaveBeenCalledWith(
+        'selfie-checks/d-1/chk-1/selfie.jpg',
+        expect.any(FormData),
+        { contentType: 'multipart/form-data', upsert: true },
+      );
+      expect(mockFrom).toHaveBeenCalledWith('selfie_checks');
+      expect(result).toEqual(mockCheck);
+    });
+
+    it('throws on storage upload error', async () => {
+      const uploadErr = { message: 'Network request failed', code: '500' };
+      mockStorageUpload.mockResolvedValueOnce({ error: uploadErr });
+
+      await expect(
+        driverService.uploadSelfieCheck('chk-1', 'd-1', 'file:///tmp/selfie.jpg', 'selfie.jpg'),
       ).rejects.toEqual(uploadErr);
     });
   });

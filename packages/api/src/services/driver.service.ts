@@ -23,6 +23,7 @@ import type {
 import type { DriverStatus, RideStatus } from '@tricigo/types';
 import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
+import { uploadFileFromUri } from './_storage-upload';
 import { notificationService } from './notification.service';
 
 /**
@@ -87,24 +88,13 @@ export const driverService = {
   ): Promise<DriverDocument> {
     const supabase = getSupabaseClient();
 
-    // Upload file to Supabase Storage.
-    // Use FormData with the native file URI (works on both iOS and Android).
-    // fetch(uri).blob() fails on Android because fetch() doesn't support file:// or content:// schemes.
+    // Upload file to Supabase Storage (RN-safe via FormData — see _storage-upload.ts).
     const storagePath = `driver-docs/${driverId}/${documentType}/${fileName}`;
-    const formData = new FormData();
-    formData.append('', {
-      uri: filePath,
-      name: fileName,
-      type: mimeType,
-    } as unknown as Blob);
-
-    const { error: uploadError } = await supabase.storage
-      .from('driver-documents')
-      .upload(storagePath, formData, {
-        contentType: 'multipart/form-data',
-        upsert: true,
-      });
-    if (uploadError) throw uploadError;
+    await uploadFileFromUri('driver-documents', storagePath, filePath, {
+      fileName,
+      mimeType,
+      upsert: true,
+    });
 
     // Create document record
     const { data, error } = await supabase
@@ -1188,15 +1178,13 @@ export const driverService = {
   ): Promise<SelfieCheck> {
     const supabase = getSupabaseClient();
 
-    // Upload to storage
-    const response = await fetch(filePath);
-    const blob = await response.blob();
+    // Upload to storage (RN-safe via FormData — see _storage-upload.ts).
+    // fetch(uri).blob() throws "Network request failed" on native.
     const storagePath = `selfie-checks/${driverId}/${checkId}/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('driver-documents')
-      .upload(storagePath, blob, { upsert: true });
-    if (uploadError) throw uploadError;
+    await uploadFileFromUri('driver-documents', storagePath, filePath, {
+      fileName,
+      upsert: true,
+    });
 
     // Update check record
     const { data, error } = await supabase
