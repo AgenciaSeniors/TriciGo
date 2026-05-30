@@ -131,6 +131,11 @@ export default function AccountDeletePage() {
       </section>
 
       <section>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+          {t('account_delete.operator_note', {
+            defaultValue: 'TriciGo es un servicio operado por MACH DIGITAL TECH S.R.L. (Brașov, Rumanía).',
+          })}
+        </p>
         <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>
           {t('account_delete.see_also', { defaultValue: 'Más detalles en nuestra' })}{' '}
           <a href="/privacy" style={{ color: 'var(--primary, #FF4D00)', textDecoration: 'underline' }}>

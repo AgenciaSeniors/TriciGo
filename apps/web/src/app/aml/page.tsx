@@ -35,8 +35,11 @@ export default function AmlPage() {
       <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
         Política de Prevención de Lavado de Dinero y Uso Aceptable
       </h1>
-      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '2.5rem' }}>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
         Cómo TriciGo previene el uso indebido de la plataforma y de los créditos de viaje.
+      </p>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '2.5rem' }}>
+        Última actualización: 30 de mayo de 2026
       </p>
 
       <Section title="Compromiso con la prevención del lavado de dinero">
@@ -54,10 +57,14 @@ export default function AmlPage() {
         <p>
           Los créditos TriciCoin son un crédito de viaje prepago de uso interno
           (closed-loop): solo pueden utilizarse para pagar viajes dentro de la
-          plataforma TriciGo. No son dinero, no son transferibles a otros usuarios
-          ni convertibles a efectivo. Está prohibido usar la plataforma o los
-          créditos para cualquier fin distinto del transporte —en particular, para
-          mover, ocultar o transferir valor entre personas.
+          plataforma TriciGo y no son convertibles a efectivo. Pueden enviarse como
+          regalo a otra persona usuaria registrada de TriciGo mediante la función
+          «Regalo», pero el saldo regalado mantiene su carácter de circuito cerrado
+          (solo gastable en viajes, no canjeable por dinero). Está prohibido usar la
+          plataforma o los créditos para cualquier fin distinto del transporte —en
+          particular, para mover, ocultar o convertir valor en dinero entre personas.
+          Monitoreamos los regalos y nos reservamos el derecho de revertir o congelar
+          saldos ante cualquier indicio de uso indebido.
         </p>
       </Section>
 
