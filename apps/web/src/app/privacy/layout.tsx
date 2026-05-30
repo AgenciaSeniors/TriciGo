@@ -1,16 +1,16 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Politica de Privacidad — TriciGo',
+  title: 'Política de Privacidad',
   description:
-    'Conoce como TriciGo protege tus datos personales. Politica de privacidad y tratamiento de datos.',
+    'Conoce cómo TriciGo protege tus datos personales. Política de privacidad y tratamiento de datos.',
   alternates: {
     canonical: 'https://tricigo.com/privacy',
   },
   openGraph: {
-    title: 'Politica de Privacidad — TriciGo',
+    title: 'Política de Privacidad — TriciGo',
     description:
-      'Conoce como TriciGo protege tus datos personales.',
+      'Conoce cómo TriciGo protege tus datos personales.',
     url: 'https://tricigo.com/privacy',
   },
 };
