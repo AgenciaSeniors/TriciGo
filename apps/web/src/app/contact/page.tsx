@@ -41,21 +41,21 @@ export default function ContactPage() {
 
       <Section title="Correo de soporte">
         <p>
-          Para dudas, incidencias o solicitudes, escribenos a{' '}
+          Para dudas, incidencias o solicitudes, escríbenos a{' '}
           <a
             href="mailto:soporte@tricigo.com"
             style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}
           >
             soporte@tricigo.com
           </a>
-          . Nuestro equipo de soporte revisa cada mensaje y te respondera lo antes posible.
+          . Nuestro equipo de soporte revisa cada mensaje y te responderá lo antes posible.
         </p>
       </Section>
 
       {CONTACT_PHONE && (
-        <Section title="Telefono">
+        <Section title="Teléfono">
           <p>
-            Tambien puedes comunicarte con nosotros por telefono al{' '}
+            También puedes comunicarte con nosotros por teléfono al{' '}
             <a
               href={`tel:${CONTACT_PHONE}`}
               style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}

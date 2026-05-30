@@ -34,8 +34,11 @@ export default function CookiesPage() {
       <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
         Política de Cookies
       </h1>
-      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '2.5rem' }}>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
         Qué cookies y tecnologías de almacenamiento usamos, y cómo controlarlas.
+      </p>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '2.5rem' }}>
+        Última actualización: 30 de mayo de 2026
       </p>
 
       <Section title="Qué son las cookies">
@@ -92,6 +95,13 @@ export default function CookiesPage() {
             soporte@tricigo.com
           </a>
           .
+        </p>
+      </Section>
+
+      <Section title="Datos del operador">
+        <p>
+          Esta Política de Cookies es aplicada por MACH DIGITAL TECH S.R.L., operador de
+          TriciGo (Brașov, Rumanía).
         </p>
       </Section>
 

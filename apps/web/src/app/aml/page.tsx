@@ -35,8 +35,11 @@ export default function AmlPage() {
       <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
         Política de Prevención de Lavado de Dinero y Uso Aceptable
       </h1>
-      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '2.5rem' }}>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
         Cómo TriciGo previene el uso indebido de la plataforma y de los créditos de viaje.
+      </p>
+      <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginBottom: '2.5rem' }}>
+        Última actualización: 30 de mayo de 2026
       </p>
 
       <Section title="Compromiso con la prevención del lavado de dinero">
