@@ -12,7 +12,7 @@
     "notifications": "Notifications"
   },
   "footer": {
-    "location": "Havana, Cuba",
+    "location": "Cuba",
     "book_ride": "Book a ride",
     "login": "Sign in",
     "download": "Download the app for the full experience",
@@ -21,17 +21,17 @@
     "blog": "Blog"
   },
   "home": {
-    "tagline": "Book your ride in Havana. Fast, safe, and affordable.",
+    "tagline": "Book your ride in Cuba. Fast, safe, and affordable.",
     "cta": "Book a ride",
     "feature_triciclos": "Triciclos",
-    "feature_triciclos_desc": "Havana's iconic transport",
+    "feature_triciclos_desc": "Cuba's iconic transport",
     "feature_motos": "Motos",
     "feature_motos_desc": "Fast for short distances",
     "feature_autos": "Autos",
     "feature_autos_desc": "Comfort for longer trips",
     "download_title": "Download the app",
     "download_subtitle": "Available on Android and iOS. Book your ride in seconds.",
-    "hero_title_1": "Your taxi in Havana,",
+    "hero_title_1": "Your taxi in Cuba,",
     "hero_title_2": "one tap away",
     "hero_cta": "Book a ride",
     "hero_subtitle": "Request triciclos, motos, and cars — fast, safe, and affordable. The #1 taxi app in Cuba.",
@@ -46,7 +46,7 @@
     "services_title": "Our services",
     "services_subtitle": "The right vehicle for every need",
     "service_triciclo": "Triciclo",
-    "service_triciclo_desc": "Havana's iconic transport. Comfortable and affordable.",
+    "service_triciclo_desc": "Cuba's iconic transport. Comfortable and affordable.",
     "service_moto": "Moto",
     "service_moto_desc": "Fast and agile for short distances.",
     "service_auto": "Car",
