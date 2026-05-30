@@ -203,48 +203,60 @@ Deno.serve(async (req) => {
       ...(category ? { type: category } : {}),
     };
 
-    // Send via Expo push API
-    const messages = tokens.map((token) => ({
-      to: token,
-      title,
-      body,
-      sound: 'default' as const,
-      badge: 1,
-      ...(Object.keys(pushData).length > 0 ? { data: pushData } : {}),
-    }));
-
-    const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(messages),
-    });
-
-    const pushResult = await pushResponse.json();
-
+    // Send via Expo push API — one request per token. Tokens can belong to
+    // different Expo projects (the client and driver are separate Expo apps),
+    // and Expo rejects a batch that mixes experience IDs with a 400
+    // (PUSH_TOO_MANY_EXPERIENCE_IDS). One token per request keeps each call to a
+    // single project so multi-app users still get notified.
     let sent = 0;
     let failed = 0;
     const deadTokens: string[] = [];
-    if (Array.isArray(pushResult.data)) {
-      pushResult.data.forEach((ticket: { status?: string; message?: string; details?: { error?: string } }, idx: number) => {
-        if (ticket.status === 'ok') {
+
+    await Promise.all(tokens.map(async (token: string) => {
+      try {
+        const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: token,
+            title,
+            body,
+            sound: 'default' as const,
+            badge: 1,
+            ...(Object.keys(pushData).length > 0 ? { data: pushData } : {}),
+          }),
+        });
+
+        if (!pushResponse.ok) {
+          failed++;
+          const errBody = await pushResponse.text().catch(() => '');
+          console.warn(`[send-push] Expo push API returned status ${pushResponse.status}${errBody ? ' — ' + errBody.slice(0, 200) : ''}`);
+          return;
+        }
+
+        const pushResult = await pushResponse.json();
+        // Single-message POST → `data` is one ticket object; array → array.
+        const ticket = Array.isArray(pushResult.data) ? pushResult.data[0] : pushResult.data;
+        if (ticket?.status === 'ok') {
           sent++;
           return;
         }
         failed++;
-        const errCode = ticket.details?.error;
-        const tokenForTicket = tokens[idx];
-        if (errCode === 'DeviceNotRegistered' && tokenForTicket) {
-          // The user uninstalled the app, disabled notifications, or
-          // the token rotated. Drop the dead row so future pushes don't
-          // waste Expo API calls on it.
-          deadTokens.push(tokenForTicket);
+        const errCode = ticket?.details?.error;
+        if (errCode === 'DeviceNotRegistered') {
+          // The user uninstalled the app, disabled notifications, or the token
+          // rotated. Drop the dead row so future pushes don't waste API calls.
+          deadTokens.push(token);
         } else if (errCode === 'InvalidCredentials') {
           console.error('[send-push] InvalidCredentials from Expo — FCM/APNs creds need to be re-uploaded in eas credentials');
         } else if (errCode) {
-          console.warn(`[send-push] Expo ticket error: ${errCode}${ticket.message ? ' — ' + ticket.message : ''}`);
+          console.warn(`[send-push] Expo ticket error: ${errCode}${ticket?.message ? ' — ' + ticket.message : ''}`);
         }
-      });
-    }
+      } catch (sendErr) {
+        failed++;
+        console.warn('[send-push] Failed to send push:', (sendErr as Error).message);
+      }
+    }));
 
     if (deadTokens.length > 0) {
       const { error: cleanupErr } = await supabase
