@@ -345,6 +345,9 @@ importers:
       '@react-native-async-storage/async-storage':
         specifier: ^2.2.0
         version: 2.2.0(react-native@0.83.4(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))
+      '@react-native-community/datetimepicker':
+        specifier: 8.6.0
+        version: 8.6.0(expo@55.0.14)(react-native@0.83.4(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       '@react-native-community/netinfo':
         specifier: ^11.5.2
         version: 11.5.2(react-native@0.83.4(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -405,6 +408,9 @@ importers:
       expo-dev-client:
         specifier: ~55.0.28
         version: 55.0.28(expo@55.0.14)
+      expo-device:
+        specifier: ~55.0.6
+        version: 55.0.14(expo@55.0.14)
       expo-document-picker:
         specifier: ~55.0.5
         version: 55.0.13(expo@55.0.14)
