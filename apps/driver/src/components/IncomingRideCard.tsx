@@ -578,6 +578,16 @@ function IncomingRideCardInner({
               variant="accent"
             />
           )}
+          {ride.shared_ride && (
+            <Chip
+              icon="people-outline"
+              label={t('home.shared_ride_chip', {
+                count: Math.max(0, 4 - (ride.shared_ride_seats_occupied ?? 1)),
+                defaultValue: 'Comparte · {{count}} asientos',
+              })}
+              variant="accent"
+            />
+          )}
           {ride.waypoints && ride.waypoints.length > 0 && (
             <Chip
               icon="flag-outline"
