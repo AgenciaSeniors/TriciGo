@@ -228,7 +228,7 @@ function NativeDriverProfileScreen() {
         {
           flexDirection: 'row',
           alignItems: 'center',
-          paddingVertical: 14,
+          paddingVertical: 16,
           paddingHorizontal: 14,
           borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
           borderBottomColor: palette.line,
@@ -251,7 +251,7 @@ function NativeDriverProfileScreen() {
       >
         <Ionicons name={item.icon} size={18} color={item.tint} />
       </View>
-      <Text style={{ flex: 1, color: palette.ink.primary, fontSize: 15, fontWeight: '500' }}>
+      <Text numberOfLines={1} style={{ flex: 1, color: palette.ink.primary, fontSize: 15, fontWeight: '500' }}>
         {item.label}
       </Text>
       <Ionicons name="chevron-forward" size={18} color={palette.ink.subtle} />
