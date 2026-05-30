@@ -149,6 +149,33 @@ cd C:\Users\Eduardo\TriciGo\apps\client
 npx expo start --dev-client --port 8081 --clear
 ```
 
+### Worktrees frescos: copiar `.env` antes de levantar Metro (verificado 2026-05-28)
+
+**Bug verificado.** Al levantar Metro desde un worktree recién creado (`.claude/worktrees/<nombre>`), las apps cargan pero **el mapa crashea** (`MapboxConfigurationException: requires a valid access token`) y **no conectan al backend** (login/datos fallan).
+
+**Causa raíz:** los `.env` de `apps/client` y `apps/driver` están **gitignored**, así que un worktree fresco NO los tiene (los worktrees solo checkoutean archivos *tracked*). Toda la config de runtime vive ahí: `EXPO_PUBLIC_MAPBOX_TOKEN`, `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_SENTRY_DSN`, `EXPO_PUBLIC_POSTHOG_API_KEY`, `EXPO_PUBLIC_DEMO_MODE/CITY`. Esos valores también están en `eas.json` (`build.base.env`) **pero solo se inyectan en `eas build`, NUNCA en `npx expo start`** — en local Expo los carga del `.env`. Sin `.env`, Metro inlinea cada `EXPO_PUBLIC_*` como **vacío** → token Mapbox vacío + Supabase URL vacía → apps rotas.
+
+**Fix canónico (antes de levantar Metro en un worktree):**
+```powershell
+$main = "C:\Users\Eduardo\TriciGo"
+$wt   = "C:\Users\Eduardo\TriciGo\.claude\worktrees\<nombre>"
+Copy-Item "$main\apps\client\.env" "$wt\apps\client\.env" -Force
+Copy-Item "$main\apps\driver\.env" "$wt\apps\driver\.env" -Force
+# luego arrancar Metro normalmente
+```
+El `.env` copiado queda gitignored (no ensucia `git status`). **Verificación:** el output de Metro debe imprimir `env: load .env` seguido de `env: export EXPO_PUBLIC_MAPBOX_TOKEN ... EXPO_PUBLIC_SUPABASE_URL ...`. Si esa línea NO aparece, el `.env` falta y el mapa va a crashear.
+
+**Diagnóstico si reaparece:** el driver crashea inmediato (su home es mapa); el cliente blanquea/crashea al abrir una pantalla con mapa. Confirmar en el crash buffer:
+```powershell
+$adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+& $adb logcat -d -b crash -t 80 -v time | Select-String "Mapbox|tricigo"
+# → MapboxConfigurationException ... requires ... a valid access token
+```
+
+**Levantar los 2 Metros a la vez (cliente 8081 + driver 8082):** limpiar el cache **una sola vez** antes (`Remove-Item ... metro-* / haste-map-*`) y arrancar **sin `--clear`** en ambos — dos `--clear` simultáneos chocan por `metro-cache\<n>` y tiran `EPERM, Permission denied` (uno de los dos Metro muere al boot). Verificado 2026-05-28.
+
+> Nota: `google-services.json` también es gitignored y falta en worktrees frescos, pero su warning (`Could not parse Expo config: android.googleServicesFile`) es **benigno** para el dev client — ese archivo solo se usa en build/prebuild (ya está horneado en el APK), no afecta el bundle JS servido por Metro.
+
 ### Tres caminos para testear desde el celu
 
 **A. Dev client APK ya instalado (lo más común)** — Buscar en el celu el icono "TriciGo" o "TriciGo (Dev)". Abrirlo, "Enter URL manually", `exp://192.168.x.x:8081`, reload. Funciona TODO (Mapbox, NETOPIA WebBrowser, Sentry, expo-dev-client). El proyecto importa varios módulos nativos así que esto es el camino canónico para QA real.
@@ -1053,6 +1080,29 @@ override fun onUserLeaveHint() {
 
 **Si el bug reaparece post-fix:** el plugin no aplicó. Verificar con `eas build --profile development --platform android` que el APK tiene el override (grep `TriciGo:user-leave-hint-safe` en logcat al lanzar).
 
+#### Follow-up SDK 55: el anchor del plugin inyectaba el override FUERA de la clase (PR #288, 2026-05-29)
+
+**Bug verificado.** Tras subir a Expo SDK 55 / RN 0.83.x, el APK dejó de compilar:
+
+```
+MainActivity.kt:51:5 Unresolved reference: override
+> Task :app:compileDebugKotlin FAILED
+```
+
+**Causa raíz:** `with-user-leave-hint-safe.js` ancla la inyección después de `getMainComponentName()` con un regex `getMainComponentName\(\)[^}]*}`. En SDK ≤54 ese método tenía cuerpo con llaves (`{ return "main" }`), así que el `}` matcheaba el cierre del método. En **SDK 55** Expo migró el template de `MainActivity.kt` a **expression-body** (`override fun getMainComponentName(): String = "main"`, **sin llaves**). El `[^}]*}` entonces corría hasta la PRIMERA llave que encontraba — la del **cierre de la clase** — e inyectaba el `override fun onUserLeaveHint()` *después* de cerrar la clase → método suelto a nivel de archivo → `Unresolved reference: override`.
+
+**Fix canónico (PR #288):** anclar al **header de la clase** en lugar de a un método, e insertar justo después de la llave de apertura de la clase:
+
+```js
+// Anchor robusto: la declaración de la clase + su llave de apertura.
+const classHeader = /(class\s+\w+\s*:\s*ReactActivity\s*\([^)]*\)\s*\{)/;
+// Insertar el override inmediatamente DESPUÉS de `{` → siempre dentro de la clase,
+// sin importar si los métodos usan block-body o expression-body.
+contents = contents.replace(classHeader, `$1\n${OVERRIDE_SNIPPET}`);
+```
+
+**Lección general:** los config plugins que parchean `MainActivity.kt`/`AppDelegate.swift` por regex **no deben anclar a cuerpos de método** (cambian entre SDKs: block-body ↔ expression-body). Anclar a estructuras estables: el header de la clase + su `{`. Verificar el plugin con un test Node que corra el `.replace` sobre el template del SDK nuevo y assertee que el snippet quedó **dentro** del bloque de la clase (contar llaves, o regex `class ... { ... <snippet> ... }`). Aplicado a cliente + driver (plugins duplicados per-app).
+
 ---
 
 ### Search de direcciones — estado canónico (Tier 1.5 + 1.6 + 1.7 cerrados 2026-05-27)
@@ -1392,6 +1442,66 @@ El admin app (`apps/admin/`) usa **react-leaflet** para mapas (`live-map`, `flee
 - `dynamic` import con `ssr: false` (Leaflet toca `window`)
 - `MapContainer` + `TileLayer` + `CircleMarker` + `Popup` (no GeoJSON sources tipo Mapbox)
 - Realtime via Supabase channel + 30s polling fallback
+
+---
+
+### Feature "Regalo" (gift P2P closed-loop) — estado canónico (cerrado 2026-05-29)
+
+**Qué es.** Un usuario envía saldo TriciCoin a un amigo dentro de la app, posicionado como **"Regalo"** (no "transferencia de dinero"). Disponible en cliente, conductor y admin. Esto **revierte deliberadamente** la decisión de `00274_remove_p2p_transfer.sql` (que eliminó el P2P libre por riesgo e-money), reposicionándolo como **closed-loop**: el destinatario debe ser un usuario TriciGo activo, el saldo regalado solo se gasta en viajes (no cash-out), y el admin puede revertir/congelar.
+
+**Mecánica.** El regalo es una **transferencia atómica de doble entrada** (misma plantilla que el `transfer_wallet_p2p` removido). Wallet origen/destino **según rol**: pasajero → `customer_cash`, conductor → `tricicoin` (cross-type permitido por el ledger). Resuelto server-side por el helper `_gift_wallet_type(user_id)`.
+
+**Migraciones `00343`–`00346` (aplicadas a prod + verificadas).** RPCs vivos:
+| RPC | Qué hace | Gate |
+|---|---|---|
+| `send_gift(from, to, amount, note)` | débito wallet-rol emisor + crédito wallet-rol receptor; `wallet_transfers.kind='gift'` | `is_admin() OR auth.uid()=from`; valida `amount>0`, no-self, receptor `is_active`, saldo, no-frozen |
+| `find_user_by_phone(phone)` | restaurado verbatim de `00216` | auth + `check_rate_limit(...,30,3600)` + match exacto + revoke anon (anti-enumeración BUG-195) |
+| `find_user_by_gift_code(code)` | resuelve `referral_codes.code → user` | auth + mismo rate-limit |
+| `admin_send_gift(...)` | regalo manual desde `platform_promotions` | doble gate admin (`auth.uid()=admin_id` + rol) + `admin_actions` audit |
+| `admin_reverse_gift(transfer_id, admin_id)` | **asiento de compensación** (receptor→emisor), marca `reversed_at/reversed_by` | gate admin; ledger inmutable (nunca UPDATE) |
+| `get_gift_stats()` | KPIs globales (total, reversed, volumen, 7d, distinct senders) | `is_admin()` |
+| `freeze_wallet` / `unfreeze_wallet` | congelar/descongelar wallet de abusador | reusados de `00013`; `send_gift` falla con "wallet frozen" |
+
+**QR (Fase 2).** Generar: `react-native-qrcode-svg` (JS puro sobre `react-native-svg` ya presente → **NO requiere rebuild**), render con guard `Platform.OS !== 'web'`. Escanear: `expo-camera` (`CameraView` + `barcodeScannerSettings={{barcodeTypes:['qr']}}`) en `apps/<app>/src/components/GiftQrScanner.tsx` (**NO** en `packages/ui`, para no meter `expo-camera` como dep del paquete compartido) → **requiere rebuild APK**. Deep link `tricigo://gift/<code>` (driver: `tricigo-driver://`): `apps/<app>/app/gift/[code].tsx` **resuelve** el código → usuario y abre la pantalla de regalo pre-cargada (NO "redime" como referido — el código identifica al **destinatario**).
+
+**Service layer.** `walletService.sendGift/findUserByPhone/findUserByGiftCode/getGifts`; `adminService.getGiftStats/freezeWallet/unfreezeWallet` (toman el admin via `getUser()` internamente). Schemas `sendGiftSchema` + `giftCodeSchema` (`/^[A-Za-z0-9]{6,16}$/`) reemplazaron al huérfano `transferP2PSchema`. PRs Fase 1: #279/#280/#281/#282; Fase 2 extendió esos mismos PRs + #287 (admin) + #288 (plugin fix).
+
+---
+
+### Feature "Compartir viaje" (shared ride) — estado canónico (cerrado 2026-05-29)
+
+**Qué es.** Para viajes en **triciclo** (`triciclo_basico`, único triciclo de pasajeros), el pasajero activa "Compartir viaje": acepta que el conductor recoja otros pasajeros (efectivo, **fuera de la app**) en los asientos libres. Por cada asiento libre que ofrece, el pasajero recibe un **descuento por adelantado** (7% por asiento, configurable). El conductor lo ve **solo informativo** (badge "Comparte · N asientos") y cobra sobre la tarifa con descuento; su incentivo es el efectivo extra.
+
+**El punto clave de seguridad.** `rides.discount_amount_cup` **NO se confía del cliente** — el trigger `tg_rides_validate_promo_discount` (BUG-115, `00172`, endurecido en `00320/00322`) lo recomputa server-side en cada INSERT/UPDATE. Por eso el descuento por compartir **no se puede sumar desde el cliente**. **Solución: extender ese mismo trigger** (`00347`) para que sume promo + compartir en `discount_amount_cup`. Así `complete_ride_and_pay` y el estimate snapshot **NO cambian** (su `final = snapshot.total − discount_amount_cup + wait` ya resta el total).
+
+**Migración `00347` (aplicada a prod + verificada).**
+1. `UPDATE service_type_configs SET max_passengers = 4 WHERE slug='triciclo_basico'` (estaba en 8).
+2. `INSERT platform_config ('shared_ride_discount_per_seat_pct','7') ON CONFLICT DO NOTHING`.
+3. Columnas en `rides`: `shared_ride BOOL`, `shared_ride_seats_occupied INT`, `shared_ride_discount_cup INT` (audit/display).
+4. `CREATE OR REPLACE tg_rides_validate_promo_discount()` con un bloque shared-ride al inicio (clamp `seats_occupied` a `[1, cap−1]`, `free = cap−occ`, `v_shared = FLOOR(estimated_fare × free × pct/100)`) y **cada** asignación de `discount_amount_cup` arrastra `v_shared` (aplica con o sin promo). Final: `LEAST(promo + shared, estimated_fare)`. Trigger recreado con `UPDATE OF ..., shared_ride, shared_ride_seats_occupied`.
+
+**Verificado en prod** (transacción rolleada): triciclo fare 2200, 1 asiento ocupado → 3 libres → `shared_ride_discount_cup = FLOOR(2200×3×7/100) = 462` ✓. **Anti-tamper**: cliente manda `discount_amount_cup=9999` en ride no-compartido → recomputado a **0** ✓.
+
+**Frontend.** Cliente: `ride.store.ts` (`shareRide` + `setShareRide`, reusa `passengerCount` como asientos ocupados); toggle "Compartir viaje" en `app/(tabs)/index.tsx` (solo `serviceType==='triciclo_basico'` y tarifa>0) con preview en vivo; `useRide.ts` pasa `share_ride`+`declared_passengers` (solo triciclo). Conductor: badge en `IncomingRideCard.tsx`. Admin: `shared_ride_discount_per_seat_pct` en `KNOWN_KEYS` (super_admin edita). PRs #289 (backend) / #290 (driver) / #291 (cliente) / #292 (admin).
+
+---
+
+### Patrones reutilizables (de las features Regalo + Compartir viaje)
+
+**1. Extender un trigger de validación de descuento server-side (en vez de confiar del cliente).** Cuando un campo monetario es server-authoritative vía trigger (`discount_amount_cup` lo recomputa `tg_rides_validate_promo_discount`), **no agregues una segunda fuente sumable desde el cliente** — el trigger la borraría. En su lugar **extendé el trigger** para que calcule la pieza nueva server-side y la sume. Reglas:
+- Verificá la versión **LIVE** vía `pg_get_functiondef(oid)` ANTES de hacer `CREATE OR REPLACE` — el cuerpo puede haber sido endurecido en migraciones posteriores (acá: claim atómico de promo de `00320/00322`). Copiá el cuerpo vivo, no la migración original.
+- La pieza nueva se calcula al inicio y se arrastra en **todas** las ramas de salida (incluyendo las de "no hay promo" / "promo inválida"), no solo en la rama feliz.
+- Cap final defensivo: `LEAST(suma, COALESCE(estimated_fare,0))` → nunca deja la tarifa negativa downstream.
+- Recreá el TRIGGER agregando las columnas nuevas al `UPDATE OF` (sino no dispara cuando solo cambian esas columnas).
+- Test anti-tamper en transacción rolleada: mandá un valor inflado desde el "cliente" y confirmá que el trigger lo recomputa.
+
+**2. Config numérica editable por admin vía `platform_config` + `get_platform_config_numeric`.** Para un parámetro que el admin debe poder cambiar sin deploy (acá: `shared_ride_discount_per_seat_pct`):
+- Migración: `INSERT INTO platform_config (key,value) VALUES ('mi_key','default') ON CONFLICT (key) DO NOTHING`.
+- Server (trigger/RPC): leer con `get_platform_config_numeric('mi_key', <fallback>)` — nunca hardcodear el valor.
+- Admin UI: agregar `mi_key: { type: 'number', helpKey: 'platform_config.mi_key_help' }` al registro `KNOWN_KEYS` de `apps/admin/src/app/settings/platform-config/page.tsx` + help text en es/en/pt `admin.json`. La pantalla ya renderiza/persiste las known keys; escritura gated a `super_admin` (mig `00292`).
+- Preview en cliente: leer el mismo valor con `walletService.getConfigValue(...)` para que el preview coincida con lo que el server aplicará.
+
+**3. Cadena de PRs apilados por capa, rebasados tras el merge del base.** Features que tocan backend+apps se entregan en cadena (PR-1 migración+service+types → PR-2 cliente → PR-3 driver → PR-4 admin), cada branch desde `origin/master`. Cuando los dependientes se ramifican del backend, **tras mergear el backend (squash)**: `git fetch`; por cada dependiente `git rebase --onto origin/master <sha-base-viejo>` (dropea el commit de backend ya squasheado) + `git push --force-with-lease`. Resultado: cada PR queda con su diff limpio de 1 commit. Autorización **explícita per-PR** para cada merge/force-push/apply (MCP guard + classifier).
 
 ---
 
