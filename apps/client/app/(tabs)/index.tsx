@@ -2902,6 +2902,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     setScheduledAt,
     setDeliveryField,
     setPassengerCount,
+    setShareRide,
     setCorporateAccount,
     setWalletRatio,
     setFlowStep,
@@ -3556,6 +3557,51 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               <View style={{ backgroundColor: '#f0fdf4', borderRadius: 8, padding: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="checkmark-circle" size={16} color={MAP_COLORS.pickup} />
                 <Text variant="caption" style={{ color: MAP_COLORS.pickup }}>{'¡'}Descuento de {formatCUP(promoResult.discountAmount)} aplicado!</Text>
+              </View>
+            )}
+
+            {/* Compartir viaje (solo triciclo) — descuento por asiento libre */}
+            {draft.serviceType === 'triciclo_basico' && selectedEstimate && selectedEstimate.estimated_fare_cup > 0 && (
+              <View style={{ marginBottom: 8 }}>
+                <Pressable
+                  onPress={() => { triggerHaptic('light'); setShareRide(!draft.shareRide); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, borderWidth: draft.shareRide ? 1 : 0, borderColor: colors.brand.orange, backgroundColor: draft.shareRide ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev2 : colors.neutral[50]) }}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: draft.shareRide }}
+                  accessibilityLabel={t('ride.share_ride_toggle', { defaultValue: 'Compartir viaje' })}
+                >
+                  <Ionicons name="people-outline" size={22} color={draft.shareRide ? colors.brand.orange : colors.neutral[400]} />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="caption" style={{ fontWeight: '600', color: draft.shareRide ? colors.brand.orange : (mode === 'dark' ? tokens.ink.secondary : colors.neutral[700]) }}>
+                      {t('ride.share_ride_toggle', { defaultValue: 'Compartir viaje' })}
+                    </Text>
+                    <Text variant="caption" color="tertiary">
+                      {draft.shareRide && Math.max(0, 4 - (draft.passengerCount || 1)) > 0
+                        ? t('ride.share_ride_active', { defaultValue: '{{seats}} asientos libres · −{{pct}}%', seats: Math.max(0, 4 - (draft.passengerCount || 1)), pct: Math.max(0, 4 - (draft.passengerCount || 1)) * 7 })
+                        : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagás menos' })}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={draft.shareRide}
+                    onValueChange={(val) => setShareRide(val)}
+                    trackColor={{ false: '#D1D5DB', true: colors.brand.orange }}
+                    thumbColor="white"
+                  />
+                </Pressable>
+                {draft.shareRide && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingHorizontal: 4 }}>
+                    <Text variant="caption" color="secondary">{t('ride.share_ride_seats_q', { defaultValue: '¿Cuántos van con vos?' })}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <Pressable onPress={() => { triggerHaptic('light'); setPassengerCount(Math.max(1, (draft.passengerCount || 1) - 1)); }} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>−</Text>
+                      </Pressable>
+                      <Text variant="body" style={{ minWidth: 20, textAlign: 'center', fontWeight: '700' }}>{draft.passengerCount || 1}</Text>
+                      <Pressable onPress={() => { triggerHaptic('light'); setPassengerCount(Math.min(3, (draft.passengerCount || 1) + 1)); }} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>+</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
               </View>
             )}
 
