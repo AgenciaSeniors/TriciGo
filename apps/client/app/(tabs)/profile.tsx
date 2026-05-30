@@ -327,7 +327,7 @@ function NativeProfileScreen() {
                   <View style={{ flex: 1 }}>
                     <View className="flex-row items-center gap-2">
                       <Text
-                        style={{ color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 20, letterSpacing: -0.4 }}
+                        style={{ flexShrink: 1, color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 20, letterSpacing: -0.4 }}
                         numberOfLines={1}
                       >
                         {user?.full_name ?? 'Usuario'}

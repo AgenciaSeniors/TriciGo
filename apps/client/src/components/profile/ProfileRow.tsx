@@ -68,7 +68,7 @@ export function ProfileRow({
         <Ionicons name={icon} size={18} color={effectiveTint} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: labelColor, fontSize: 15, fontWeight: '500' }}>{label}</Text>
+        <Text numberOfLines={1} style={{ color: labelColor, fontSize: 15, fontWeight: '500' }}>{label}</Text>
         {subtitle ? (
           <Text style={{ color: tokens.ink.secondary, fontSize: 12, marginTop: 2 }}>{subtitle}</Text>
         ) : null}

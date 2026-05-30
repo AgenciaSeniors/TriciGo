@@ -1272,7 +1272,7 @@ function FloatingHeader({ isOnline, unreadCount, notifEnabled, t }: FloatingHead
           resizeMode="contain"
         />
         <View style={styles.logoDivider} />
-        <RNText style={styles.logoSub}>{t('common.driver_label', { defaultValue: 'conductor' })}</RNText>
+        <RNText numberOfLines={1} style={styles.logoSub}>{t('common.driver_label', { defaultValue: 'conductor' })}</RNText>
       </View>
 
       {/* Right actions */}
@@ -1303,7 +1303,7 @@ function FloatingHeader({ isOnline, unreadCount, notifEnabled, t }: FloatingHead
         {/* Online status pill */}
         <View style={[styles.statusPill, isOnline ? styles.statusPillOnline : styles.statusPillOffline]}>
           <View style={[styles.statusDot, { backgroundColor: isOnline ? '#22c55e' : '#737373' }]} />
-          <RNText style={[styles.statusPillText, { color: isOnline ? '#4ade80' : '#9ca3af' }]}>
+          <RNText numberOfLines={1} style={[styles.statusPillText, { color: isOnline ? '#4ade80' : '#9ca3af' }]}>
             {isOnline ? t('home.online') : t('home.offline')}
           </RNText>
         </View>
@@ -1353,6 +1353,8 @@ const styles = StyleSheet.create({
   },
   logoCard: {
     flexDirection: 'row',
+    flexShrink: 1,
+    minWidth: 0,
     alignItems: 'center',
     backgroundColor: 'rgba(14,14,26,0.9)',
     paddingHorizontal: 14,
@@ -1394,6 +1396,7 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
+    flexShrink: 0,
     alignItems: 'center',
     gap: 10,
   },
