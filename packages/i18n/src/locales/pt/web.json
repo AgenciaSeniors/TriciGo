@@ -12,7 +12,7 @@
     "notifications": "Notificações"
   },
   "footer": {
-    "location": "Havana, Cuba",
+    "location": "Cuba",
     "book_ride": "Pedir viagem",
     "login": "Entrar",
     "download": "Baixe o app para a experiência completa",
@@ -21,17 +21,17 @@
     "blog": "Blog"
   },
   "home": {
-    "tagline": "Peça sua viagem em Havana. Rápido, seguro e ao melhor preço.",
+    "tagline": "Peça sua viagem em Cuba. Rápido, seguro e ao melhor preço.",
     "cta": "Pedir viagem",
     "feature_triciclos": "Triciclos",
-    "feature_triciclos_desc": "O transporte emblemático de Havana",
+    "feature_triciclos_desc": "O transporte emblemático de Cuba",
     "feature_motos": "Motos",
     "feature_motos_desc": "Rápido para curtas distâncias",
     "feature_autos": "Carros",
     "feature_autos_desc": "Conforto para trajetos longos",
     "download_title": "Baixe o app",
     "download_subtitle": "Disponível para Android e iOS. Peça sua viagem em segundos.",
-    "hero_title_1": "Seu táxi em Havana,",
+    "hero_title_1": "Seu táxi em Cuba,",
     "hero_title_2": "a um toque",
     "hero_subtitle": "Peça triciclos, motos e carros — rápido, seguro e acessível. O app de táxi #1 em Cuba.",
     "hero_cta": "Pedir viagem",
@@ -46,7 +46,7 @@
     "services_title": "Nossos serviços",
     "services_subtitle": "O veículo ideal para cada necessidade",
     "service_triciclo": "Triciclo",
-    "service_triciclo_desc": "O transporte emblemático de Havana. Confortável e econômico.",
+    "service_triciclo_desc": "O transporte emblemático de Cuba. Confortável e econômico.",
     "service_moto": "Moto",
     "service_moto_desc": "Rápido e ágil para curtas distâncias.",
     "service_auto": "Carro",
