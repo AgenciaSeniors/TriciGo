@@ -227,14 +227,17 @@ otp_expiry = 3600
 # sender_name = "Admin"
 
 # ── Custom email templates (TriciGo) ──
-# All templates use ./templates/*.html with brand-consistent HTML
-# (logo header, orange #F97316 hero, body, footer). Templates use
+# Templates live in ./supabase/templates/*.html. The path is relative
+# to the project root (where `supabase` commands run), NOT the supabase/
+# dir — there is no ./templates/ at the root, so a bare ./templates/...
+# path silently fails to load and GoTrue falls back to emitting the raw
+# notification key (e.g. "security_new_device") as the email body.
+# Brand-consistent HTML (logo header, orange #F97316 hero, body, footer),
 # Go template syntax: {{ .Email }}, {{ .ConfirmationURL }}, etc.
-# Variables available depend on the template type — see Supabase
-# Auth (GoTrue) docs. PR #261 (2026-05-28) added these to close
-# the bug where the "signed_in_new_device" email arrived with
-# subject set but body empty (only subject had been customized via
-# dashboard, content was left blank).
+# History: PR #272 added the HTML bodies; PR #275 prefixed ./supabase/ on
+# the [auth.email.template.*] blocks but MISSED the [auth.email.notification.*]
+# blocks below, leaving password_changed / email_change / signed_in_new_device
+# with the broken ./templates/ path. Fixed here.
 
 [auth.email.template.invite]
 subject = "Te han invitado a TriciGo"
@@ -259,17 +262,23 @@ content_path = "./supabase/templates/reauthentication.html"
 [auth.email.notification.password_changed]
 enabled = true
 subject = "Tu contraseña de TriciGo fue cambiada"
-content_path = "./templates/password_changed_notification.html"
+content_path = "./supabase/templates/password_changed_notification.html"
 
 [auth.email.notification.email_change]
 enabled = true
 subject = "Tu correo en TriciGo fue cambiado"
-content_path = "./templates/email_change_notification.html"
+content_path = "./supabase/templates/email_change_notification.html"
 
+# Disabled: replaced by our own new-device detection (EF
+# register-login-device + table user_known_devices). GoTrue's native
+# heuristic infers the device from request IP/user-agent — both unstable
+# for OTP login on mobile — so it flagged the user's same phone as "new"
+# on every sign-in. Our detection keys off a stable per-install device_id
+# and only emails on a genuinely unseen device.
 [auth.email.notification.signed_in_new_device]
-enabled = true
+enabled = false
 subject = "Nuevo inicio de sesión en tu cuenta TriciGo"
-content_path = "./templates/signed_in_new_device_notification.html"
+content_path = "./supabase/templates/signed_in_new_device_notification.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.

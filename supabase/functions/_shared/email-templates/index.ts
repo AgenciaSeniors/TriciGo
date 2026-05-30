@@ -31,13 +31,31 @@ import {
   driverUnderReviewSubject,
   type DriverUnderReviewData,
 } from './driver_under_review.ts';
+import {
+  passwordResetHtml,
+  passwordResetSubject,
+  type PasswordResetData,
+} from './password_reset.ts';
+import {
+  emailVerificationHtml,
+  emailVerificationSubject,
+  type EmailVerificationData,
+} from './email_verification.ts';
+import {
+  newDeviceLoginHtml,
+  newDeviceLoginSubject,
+  type NewDeviceLoginData,
+} from './new_device_login.ts';
 
 export type TemplateKey =
   | 'welcome'
   | 'win_back'
   | 'wallet_receipt'
   | 'ride_receipt'
-  | 'driver_under_review';
+  | 'driver_under_review'
+  | 'password_reset'
+  | 'email_verification'
+  | 'new_device_login';
 
 export interface RenderedTemplate {
   subject: string;
@@ -91,6 +109,27 @@ export function renderTemplate(
         html: driverUnderReviewHtml(d),
       };
     }
+    case 'password_reset': {
+      const d = data as PasswordResetData;
+      return {
+        subject: subjectOverride ?? passwordResetSubject,
+        html: passwordResetHtml(d),
+      };
+    }
+    case 'email_verification': {
+      const d = data as EmailVerificationData;
+      return {
+        subject: subjectOverride ?? emailVerificationSubject,
+        html: emailVerificationHtml(d),
+      };
+    }
+    case 'new_device_login': {
+      const d = data as NewDeviceLoginData;
+      return {
+        subject: subjectOverride ?? newDeviceLoginSubject,
+        html: newDeviceLoginHtml(d),
+      };
+    }
     default: {
       // Exhaustiveness check — TS will flag this if a TemplateKey
       // case is missing above.
@@ -113,7 +152,10 @@ export function isTemplateKey(key: string): key is TemplateKey {
     key === 'win_back' ||
     key === 'wallet_receipt' ||
     key === 'ride_receipt' ||
-    key === 'driver_under_review'
+    key === 'driver_under_review' ||
+    key === 'password_reset' ||
+    key === 'email_verification' ||
+    key === 'new_device_login'
   );
 }
 
