@@ -222,6 +222,15 @@ Deno.serve(async (req) => {
             title,
             body,
             sound: 'default' as const,
+            // FCM high priority: wakes the device and shows a heads-up
+            // notification even when the app is in Doze / killed.
+            priority: 'high' as const,
+            // Android: route to the high-importance 'rides' channel both
+            // apps create (driver: useNotifications.ts, client:
+            // push.service.ts). Without this, killed-app pushes land on
+            // the low-importance default channel and stay silent. iOS
+            // ignores channelId.
+            channelId: 'rides',
             badge: 1,
             ...(Object.keys(pushData).length > 0 ? { data: pushData } : {}),
           }),
