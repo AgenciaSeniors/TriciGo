@@ -10,6 +10,8 @@ import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 import { useDriverPosition } from '../../../hooks/useDriverPosition';
 import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing';
+import { useSearchingRide } from '../../../hooks/useSearchingRide';
+import { useSearchingDrivers } from '../../../hooks/useSearchingDrivers';
 import { fetchRoute } from '../../../services/geoService';
 import { TipFlow } from '../../../components/TipFlow';
 import './track.css';
@@ -149,6 +151,18 @@ export default function TrackRidePage() {
   // Share the rider's location with the driver during the pickup phase so the
   // driver app shows the rider's pin (parity con useRiderLocationSharing móvil).
   useRiderLocationSharing(ride?.id, ride?.status, userId);
+
+  // Persistent driver search: heartbeat + radius-expansion while searching
+  // (parity con el loop de useRide.ts). Never auto-cancels.
+  const { searchRound } = useSearchingRide(ride?.id, ride?.status === 'searching');
+
+  // Presence of drivers reviewing the request + fast accept broadcast
+  // (parity con useSearchingDrivers). Best-effort; polling stays authoritative.
+  const { drivers: searchingDrivers } = useSearchingDrivers(
+    ride?.id,
+    ride?.status === 'searching',
+    () => { fetchRide(); },
+  );
 
   // Dynamic ETA (min) recomputed from the driver's live position toward the
   // current target (pickup before in_progress, dropoff during the trip).
@@ -402,13 +416,17 @@ export default function TrackRidePage() {
                 width: 8,
                 height: 8,
                 borderRadius: '50%',
-                background: nearbyVehicles.length > 0 ? '#00C853' : 'var(--primary, #FF4D00)',
+                background: (searchingDrivers.length > 0 || nearbyVehicles.length > 0) ? '#00C853' : 'var(--primary, #FF4D00)',
                 display: 'inline-block',
-                animation: nearbyVehicles.length === 0 ? 'searchPulse 1.5s ease-in-out infinite' : 'none',
+                animation: (searchingDrivers.length === 0 && nearbyVehicles.length === 0) ? 'searchPulse 1.5s ease-in-out infinite' : 'none',
               }} />
-              {nearbyVehicles.length > 0
-                ? `${nearbyVehicles.length} conductor${nearbyVehicles.length > 1 ? 'es' : ''} cerca`
-                : 'Buscando conductores cercanos...'}
+              {searchingDrivers.length > 0
+                ? t('track.drivers_reviewing', { defaultValue: `${searchingDrivers.length} conductor${searchingDrivers.length > 1 ? 'es' : ''} revisando tu solicitud` })
+                : searchRound > 0
+                  ? t('track.search_expanding', { defaultValue: 'Ampliando la búsqueda…' })
+                  : nearbyVehicles.length > 0
+                    ? `${nearbyVehicles.length} conductor${nearbyVehicles.length > 1 ? 'es' : ''} cerca`
+                    : 'Buscando conductores cercanos...'}
             </div>
           )}
         </div>
@@ -449,6 +467,31 @@ export default function TrackRidePage() {
           ) : (
             <div className="track-card">
               <StatusStepper steps={statusSteps} currentIdx={currentStepIdx} />
+            </div>
+          )}
+
+          {/* Driver GPS unavailable — rider consent (parity con RideActiveView) */}
+          {ride.driver_gps_status === 'unavailable' && (
+            <div className="track-card" style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.35)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ color: '#dc2626', flexShrink: 0 }}><IconAlert /></span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                  {t('track.gps_unavailable_title', { defaultValue: 'El GPS de tu conductor no está disponible' })}
+                </span>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 0.75rem' }}>
+                {t('track.gps_unavailable_body', { defaultValue: 'No podremos mostrar su ubicación en vivo. ¿Continuar igual o cancelar sin cargo?' })}
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" onClick={() => { rideService.riderRespondToGpsUnavailable(rideId, true).then(() => fetchRide()).catch(() => {}); }}
+                  style={{ flex: 1, padding: '0.6rem', borderRadius: '0.6rem', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {t('track.gps_continue', { defaultValue: 'Continuar igual' })}
+                </button>
+                <button type="button" onClick={() => { rideService.riderRespondToGpsUnavailable(rideId, false).then(() => fetchRide()).catch(() => {}); }}
+                  style={{ flex: 1, padding: '0.6rem', borderRadius: '0.6rem', border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700 }}>
+                  {t('track.gps_cancel_free', { defaultValue: 'Cancelar sin cargo' })}
+                </button>
+              </div>
             </div>
           )}
 
@@ -748,17 +791,27 @@ export default function TrackRidePage() {
                   className="track-action-btn track-action-btn--cancel"
                   disabled={canceling}
                   onClick={async () => {
-                    // Status-aware cancel preview: a fee typically applies only once
-                    // the driver is en route. Mirrors the mobile cancel sheet copy.
-                    const mayCharge = ride.status === 'driver_en_route';
-                    const confirmMsg = mayCharge
-                      ? t('track.cancel_confirm_fee', { defaultValue: 'El conductor ya está en camino. Cancelar ahora puede aplicar una tarifa de cancelación. ¿Continuar?' })
-                      : t('track.cancel_confirm_free', { defaultValue: '¿Seguro que quieres cancelar este viaje? Aún no se aplica ninguna tarifa.' });
+                    if (!userId) return;
+                    // Real cancellation fee + penalty preview (parity con el cancel
+                    // sheet móvil) — fetched before confirming so the rider sees the
+                    // exact charge, not just a generic warning.
+                    let confirmMsg = t('track.cancel_confirm_free', { defaultValue: '¿Seguro que quieres cancelar este viaje? Aún no se aplica ninguna tarifa.' });
+                    try {
+                      const fee = await rideService.previewCancellationFee(rideId, userId);
+                      const penalty = await rideService.previewCancelPenalty(userId).catch(() => null);
+                      if (fee && !fee.is_free && fee.fee_cup > 0) {
+                        confirmMsg = t('track.cancel_confirm_fee_amount', { defaultValue: `Cancelar ahora aplica una tarifa de ${formatCUP(fee.fee_cup)}. ¿Continuar?` });
+                      }
+                      if (penalty && penalty.penaltyAmount > 0) {
+                        confirmMsg += ' ' + t('track.cancel_penalty_note', { defaultValue: `Llevas ${penalty.cancelCount24h} cancelaciones en 24h (penalización ${formatCUP(penalty.penaltyAmount)}).` });
+                      }
+                    } catch {
+                      confirmMsg = t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje? Puede aplicarse una tarifa de cancelación.' });
+                    }
                     if (!confirm(confirmMsg)) return;
                     setCanceling(true);
                     try {
                       await rideService.cancelRide(rideId, userId ?? undefined, 'rider_canceled');
-                      setCanceling(false);
                     } catch {
                       // Reset on error so user can retry
                     } finally {
