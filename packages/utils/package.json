@@ -21,6 +21,7 @@
     "./mapboxOffline": "./src/mapboxOffline.ts",
     "./offlineLabels": "./src/offlineLabels.ts",
     "./receipt-template": "./src/receipt-template.ts",
+    "./ride-config": "./src/ride-config.ts",
     "./sounds": "./src/sounds.ts",
     "./useDebouncePress": "./src/useDebouncePress.ts",
     "./validation": "./src/validation.ts"

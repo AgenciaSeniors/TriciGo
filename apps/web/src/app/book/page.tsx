@@ -5,11 +5,12 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
-import { rideService, nearbyService, customerService, corporateService, walletService } from '@tricigo/api';
-import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount } from '@tricigo/types';
+import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService } from '@tricigo/api';
+import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
+import { useDestinationPredictions } from '../../hooks/useDestinationPredictions';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
 import { useAuth } from '../providers';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
@@ -52,6 +53,16 @@ const SERVICE_TYPE_KEYS: { slug: ServiceTypeSlug; abbr: string; label: string; d
 ];
 
 type SelectionStep = 'pickup' | 'dropoff' | 'done';
+
+/** Unified recipient-phone validation for delivery (single source vs the 3
+ *  divergent regexes that existed before). Accepts an optional country code
+ *  and at least 6 digits total. */
+function isValidRecipientPhone(phone: string): boolean {
+  const trimmed = phone.trim();
+  if (!trimmed) return false;
+  if (!/^\+?\d{1,3}[\d\s-]{5,}$/.test(trimmed)) return false;
+  return trimmed.replace(/[^\d]/g, '').length >= 6;
+}
 
 export default function BookPage() {
   const router = useRouter();
@@ -98,7 +109,6 @@ export default function BookPage() {
   });
   const [walletRatio, setWalletRatio] = useState(0.5);
   const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [walletBalanceError, setWalletBalanceError] = useState(false);
   const [estimate, setEstimate] = useState<FareEstimate | null>(null);
   const [allEstimates, setAllEstimates] = useState<Record<string, FareEstimate | null>>({});
   const [estimateLoading, setEstimateLoading] = useState(false);
@@ -135,8 +145,16 @@ export default function BookPage() {
   const [promoValidating, setPromoValidating] = useState(false);
   const [promoResult, setPromoResult] = useState<{ valid: boolean; promoId?: string; discount: number; error?: string } | null>(null);
 
-  /* ─── Insurance state (W1.4) ─── */
-  const [insuranceSelected, setInsuranceSelected] = useState(false);
+  /* ─── Shared ride (triciclo only) + passenger count ─── */
+  const [shareRide, setShareRide] = useState(false);
+  const [passengerCount, setPassengerCount] = useState(1);
+
+  /* ─── Estimate freshness (X1.3: reject stale > FARE_ESTIMATE_TTL_MS) ─── */
+  const fareEstimatedAtRef = useRef<number | null>(null);
+
+  /* ─── Double-submit guards (sync refs — state updates are async) ─── */
+  const isSubmittingRef = useRef(false);
+  const pendingRequestIdRef = useRef<string | null>(null);
 
   /* ─── Delivery state ─── */
   const [deliveryDetails, setDeliveryDetails] = useState({
@@ -147,6 +165,9 @@ export default function BookPage() {
     estimated_weight_kg: '',
     special_instructions: '',
     client_accompanies: false,
+    package_length_cm: '',
+    package_width_cm: '',
+    package_height_cm: '',
   });
 
   /* ─── Nearby vehicles state ─── */
@@ -179,8 +200,9 @@ export default function BookPage() {
           lat: pickup!.latitude,
           lng: pickup!.longitude,
           vehicleType: null,
-          radiusM: 15000,
-          limit: 50,
+          // Match the mobile client's useNearbyVehicles (5km / 30) for parity.
+          radiusM: 5000,
+          limit: 30,
         });
         if (cancelled) return;
         setNearbyVehicles(vehicles);
@@ -297,6 +319,9 @@ export default function BookPage() {
   } = useGeolocation();
   const userLocation = userLat && userLng ? { latitude: userLat, longitude: userLng } : null;
 
+  /* ─── Destination predictions (clustered from completed-ride history) ─── */
+  const { predictions: destinationPredictions } = useDestinationPredictions(user?.id);
+
   /* ─── Auto-set pickup from user location (like Uber) ─── */
   const autoSetPickupRef = useRef(false);
 
@@ -333,10 +358,9 @@ export default function BookPage() {
     if (!user?.id) return;
     walletService.getBalance(user.id).then(({ available }) => {
       setWalletBalance(available);
-      setWalletBalanceError(false);
     }).catch(() => {
-      // BUG-014 fix: distinguish "balance unknown" from "balance is 0"
-      setWalletBalanceError(true);
+      // Cached balance is only used for the mixed-payment slider clamp; the
+      // authoritative check re-fetches fresh balance at confirm time.
     });
   }, [user?.id]);
 
@@ -442,8 +466,10 @@ export default function BookPage() {
     setWaypoints([]);
     setPromoCode('');
     setPromoResult(null);
-    setInsuranceSelected(false);
-    setDeliveryDetails({ recipient_name: '', recipient_phone: '', package_description: '', package_category: 'paquete_pequeno', estimated_weight_kg: '', special_instructions: '', client_accompanies: false });
+    setShareRide(false);
+    setPassengerCount(1);
+    fareEstimatedAtRef.current = null;
+    setDeliveryDetails({ recipient_name: '', recipient_phone: '', package_description: '', package_category: 'paquete_pequeno', estimated_weight_kg: '', special_instructions: '', client_accompanies: false, package_length_cm: '', package_width_cm: '', package_height_cm: '' });
   }
 
   function handleSwapLocations() {
@@ -534,6 +560,7 @@ export default function BookPage() {
         estimates[st] = r.status === 'fulfilled' ? r.value : null;
       });
       setAllEstimates(estimates);
+      fareEstimatedAtRef.current = Date.now();
     } catch {
       // Silently fail — user can retry
     } finally {
@@ -585,49 +612,87 @@ export default function BookPage() {
   async function handleRequest() {
     if (!pickup || !dropoff || !selectedEstimate) return;
 
-    // Validate TriciCoin balance (BUG-014 fix: check for balance load failure)
-    if (paymentMethod === 'tricicoin') {
-      if (walletBalanceError) {
-        alert(t('book.wallet_balance_error', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo.' }));
-        return;
-      }
-      const requiredAmount = selectedEstimate.estimated_fare_trc ?? selectedEstimate.estimated_fare_cup;
-      if (walletBalance < requiredAmount) {
-        router.push('/wallet');
-        return;
-      }
+    // Double-submit guard — sync refs (state updates are async). Mirrors client useRide.
+    if (isSubmittingRef.current || pendingRequestIdRef.current !== null) return;
+
+    // Minimum distance 200m (guards pickup≈dropoff). Mirrors client Bug 25.
+    const confirmDist = haversineDistance(
+      { latitude: pickup.latitude, longitude: pickup.longitude },
+      { latitude: dropoff.latitude, longitude: dropoff.longitude },
+    );
+    if (confirmDist < RIDE_CONFIG.MIN_DISTANCE_M) {
+      setError(t('book.too_close', { defaultValue: 'El destino está a menos de 200m del punto de recogida. Selecciona un destino más lejano.' }));
+      return;
     }
 
-    // Validate mixed payment balance
-    if (paymentMethod === 'mixed') {
-      if (walletBalanceError) {
-        alert(t('book.wallet_balance_error', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo.' }));
-        return;
-      }
-      const walletPart = selectedEstimate.estimated_fare_cup * walletRatio;
-      if (walletBalance < walletPart * 1.2) {
-        alert(t('book.insufficient_balance_mixed', { defaultValue: 'Saldo insuficiente para la parte wallet del pago mixto. Ajusta el porcentaje o recarga tu wallet.' }));
-        return;
-      }
+    // Block while a promo is still validating (Bug 12/24).
+    if (promoValidating) {
+      setError(t('book.wait_promo', { defaultValue: 'Espera, validando código...' }));
+      return;
     }
 
-    // Validate delivery fields
+    // Validate delivery fields (cheap, sync) before entering the submitting state.
     if (serviceType === 'mensajeria') {
       if (!deliveryDetails.recipient_name.trim()) {
-        setError('Ingresa el nombre del destinatario');
+        setError(t('book.delivery_name_required', { defaultValue: 'Ingresa el nombre del destinatario' }));
         return;
       }
-      if (!deliveryDetails.recipient_phone.trim() || !/^\+?\d{1,3}[\d\s-]{5,}$/.test(deliveryDetails.recipient_phone.trim()) || (deliveryDetails.recipient_phone.replace(/[^\d]/g, '').length < 6)) {
-        setError('Ingresa un numero de telefono valido para el destinatario');
+      if (!isValidRecipientPhone(deliveryDetails.recipient_phone)) {
+        setError(t('book.delivery_phone_invalid', { defaultValue: 'Ingresa un número de teléfono válido para el destinatario' }));
         return;
       }
     }
 
+    const requestId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    pendingRequestIdRef.current = requestId;
+    isSubmittingRef.current = true;
     setIsRequesting(true);
     setError(null);
+
     try {
-      // Re-estimate fare at request time to catch pricing changes (surge, time-based rules)
       const activeSlug = serviceType === 'mensajeria' ? deliveryVehicle : serviceType;
+      const isDelivery = serviceType === 'mensajeria';
+
+      // ─── Balance validation with fresh fetch + 1.2× surge buffer (Bug 9/26) ───
+      if (paymentMethod === 'tricicoin' || paymentMethod === 'mixed') {
+        let available: number;
+        try {
+          const bal = await walletService.getBalance(user!.id);
+          available = bal.available;
+        } catch {
+          setError(t('book.balance_check_failed', { defaultValue: 'No se pudo verificar tu saldo. Intenta de nuevo o cambia a efectivo.' }));
+          return;
+        }
+        if (paymentMethod === 'tricicoin') {
+          const requiredTrc = selectedEstimate.estimated_fare_trc ?? selectedEstimate.estimated_fare_cup;
+          if (available < requiredTrc * 1.2) {
+            router.push('/wallet');
+            return;
+          }
+        } else {
+          const walletPart = selectedEstimate.estimated_fare_cup * walletRatio;
+          if (available < walletPart * 1.2) {
+            setError(t('book.insufficient_balance_mixed', { defaultValue: 'Saldo insuficiente para la parte wallet del pago mixto. Ajusta el porcentaje o recarga tu wallet.' }));
+            return;
+          }
+        }
+      }
+
+      // ─── Corporate budget re-check (BUG-073) ───
+      if (paymentMethod === 'corporate' && selectedCorporateId) {
+        try {
+          const fresh = await corporateService.getAccount(selectedCorporateId);
+          const remaining = (fresh?.monthly_budget_trc ?? 0) - (fresh?.current_month_spent ?? 0);
+          if (remaining < (selectedEstimate.estimated_fare_trc ?? 0)) {
+            setError(t('book.corporate_budget_exceeded', { defaultValue: 'El presupuesto corporativo disponible no cubre este viaje.' }));
+            return;
+          }
+        } catch {
+          // Allow ride to proceed — server enforces budget limits.
+        }
+      }
+
+      // ─── Re-estimate at request time (fresh price); abort if Δ>5% (X1.3 freshness) ───
       let freshEstimate = selectedEstimate;
       try {
         const reEstimated = await rideService.getLocalFareEstimate({
@@ -637,35 +702,42 @@ export default function BookPage() {
           dropoff_lat: dropoff.latitude,
           dropoff_lng: dropoff.longitude,
         });
-        // Update stored estimate with fresh price
         setAllEstimates(prev => ({ ...prev, [activeSlug]: reEstimated }));
+        fareEstimatedAtRef.current = Date.now();
         freshEstimate = reEstimated;
-
-        // If price changed significantly (>5%), warn the user and abort
         const oldFare = selectedEstimate.estimated_fare_cup;
         const newFare = reEstimated.estimated_fare_cup;
         if (oldFare > 0 && Math.abs(newFare - oldFare) / oldFare > 0.05) {
-          setError(`El precio se actualizo de ${oldFare.toLocaleString()} a ${newFare.toLocaleString()} CUP. Revisa y confirma de nuevo.`);
-          setIsRequesting(false);
+          setError(`El precio se actualizó de ${oldFare.toLocaleString()} a ${newFare.toLocaleString()} CUP. Revisa y confirma de nuevo.`);
           return;
         }
       } catch {
-        // If re-estimation fails, proceed with original estimate
+        // If re-estimation fails, proceed with original estimate.
       }
 
       const ride = await rideService.createRide({
         service_type: activeSlug,
+        ride_mode: isDelivery ? 'cargo' : 'passenger',
         payment_method: paymentMethod,
         pickup_latitude: pickup.latitude,
         pickup_longitude: pickup.longitude,
-        pickup_address: `${pickup.label} — ${pickup.address}`,
+        pickup_address: pickup.address || pickup.label,
         dropoff_latitude: dropoff.latitude,
         dropoff_longitude: dropoff.longitude,
-        dropoff_address: `${dropoff.label} — ${dropoff.address}`,
+        dropoff_address: dropoff.address || dropoff.label,
         estimated_fare_cup: freshEstimate.estimated_fare_cup,
         estimated_distance_m: freshEstimate.estimated_distance_m,
         estimated_duration_s: freshEstimate.estimated_duration_s,
-        // W1.1: Waypoints
+        // Price snapshot breakdown so complete_ride_and_pay charges the same
+        // rates the rider saw (parity surge + pricing_rule_id + rates).
+        base_fare_cup: freshEstimate.base_fare_cup,
+        per_km_rate_cup: freshEstimate.per_km_rate_cup,
+        per_minute_rate_cup: freshEstimate.per_minute_rate_cup,
+        min_fare_cup: freshEstimate.min_fare_cup,
+        surge_multiplier: freshEstimate.surge_multiplier,
+        pricing_rule_id: freshEstimate.pricing_rule_id || undefined,
+        promo_code_id: promoResult?.valid ? promoResult.promoId : undefined,
+        discount_amount_cup: promoResult?.valid ? Math.max(0, promoResult.discount ?? 0) : undefined,
         ...(waypoints.length > 0 && {
           waypoints: waypoints.map((wp, i) => ({
             sort_order: i + 1,
@@ -674,30 +746,41 @@ export default function BookPage() {
             address: wp.address || wp.label,
           })),
         }),
-        // W1.3: Promo code
-        ...(promoResult?.valid && promoResult.promoId && {
-          promo_code_id: promoResult.promoId,
-          discount_amount_cup: promoResult.discount,
-        }),
-        // W1.4: Insurance
-        insurance_selected: insuranceSelected,
-        // Corporate account
         ...(selectedCorporateId && { corporate_account_id: selectedCorporateId }),
-        // Delivery details
-        ...(serviceType === 'mensajeria' && {
-          ride_mode: 'cargo' as const,
-          delivery_details: {
+        // "Compartir viaje" — only the tricycle. Server trigger (00347) computes
+        // the discount; declared_passengers = seats the rider occupies.
+        share_ride: serviceType === 'triciclo_basico' ? shareRide : false,
+        declared_passengers: shareRide && serviceType === 'triciclo_basico' ? passengerCount : undefined,
+      });
+
+      // Delivery details as a blocking step — cancel the ride if it fails so it
+      // never exists without its delivery metadata (mirrors client Bug 30).
+      if (isDelivery) {
+        try {
+          await deliveryService.createDeliveryDetails({
+            ride_id: ride.id,
+            package_description: deliveryDetails.package_description || 'Delivery',
             recipient_name: deliveryDetails.recipient_name,
             recipient_phone: deliveryDetails.recipient_phone,
-            package_description: deliveryDetails.package_description || 'Paquete',
-            package_category: deliveryDetails.package_category,
-            estimated_weight_kg: parseFloat(deliveryDetails.estimated_weight_kg) || null,
-            special_instructions: deliveryDetails.special_instructions || null,
+            estimated_weight_kg: deliveryDetails.estimated_weight_kg ? parseFloat(deliveryDetails.estimated_weight_kg) : undefined,
+            special_instructions: deliveryDetails.special_instructions || undefined,
+            package_category: (deliveryDetails.package_category as PackageCategory) || undefined,
+            package_length_cm: deliveryDetails.package_length_cm ? parseInt(deliveryDetails.package_length_cm, 10) : undefined,
+            package_width_cm: deliveryDetails.package_width_cm ? parseInt(deliveryDetails.package_width_cm, 10) : undefined,
+            package_height_cm: deliveryDetails.package_height_cm ? parseInt(deliveryDetails.package_height_cm, 10) : undefined,
             client_accompanies: deliveryDetails.client_accompanies,
-            delivery_vehicle_type: deliveryVehicle,
-          },
-        }),
-      });
+            delivery_vehicle_type: serviceTypeToVehicleType(deliveryVehicle) ?? undefined,
+          });
+        } catch (deliveryErr) {
+          try {
+            await rideService.cancelRide(ride.id, 'delivery_details_failed');
+          } catch { /* best-effort cleanup */ }
+          console.error('[Book] delivery details failed — ride cancelled:', deliveryErr);
+          setError(t('book.delivery_details_failed', { defaultValue: 'No se pudieron guardar los detalles del envío. Intenta de nuevo.' }));
+          return;
+        }
+      }
+
       router.push(`/track/${ride.id}`);
     } catch (err) {
       console.error('[Book] createRide failed:', err);
@@ -713,6 +796,8 @@ export default function BookPage() {
         setError(`Error al solicitar viaje: ${msg}`);
       }
     } finally {
+      isSubmittingRef.current = false;
+      pendingRequestIdRef.current = null;
       setIsRequesting(false);
     }
   }
@@ -833,6 +918,26 @@ export default function BookPage() {
             }}
           />
         </div>
+
+        {/* ═══ Destination predictions (quick-picks from completed-ride history) ═══ */}
+        {!dropoff && destinationPredictions.length > 0 && (
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', width: '100%' }}>
+              {t('book.suggested_destinations', { defaultValue: 'Destinos sugeridos' })}
+            </span>
+            {destinationPredictions.slice(0, 4).map((p, i) => (
+              <button
+                key={`${p.latitude},${p.longitude},${i}`}
+                type="button"
+                onClick={() => handleSetDropoff({ label: p.address, address: p.address, latitude: p.latitude, longitude: p.longitude })}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.75rem', borderRadius: '2rem', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--text-secondary)', maxWidth: '100%' }}
+              >
+                <span>{p.reason === 'frequent' ? '⭐' : p.reason === 'time_pattern' ? '🕐' : '📍'}</span>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>{p.address}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ═══ MAP ═══ */}
         <BookingMap
@@ -1160,7 +1265,7 @@ export default function BookPage() {
           {serviceType === 'mensajeria' && (() => {
             const nameEmpty = !deliveryDetails.recipient_name.trim();
             const phoneEmpty = !deliveryDetails.recipient_phone.trim();
-            const phoneInvalid = deliveryDetails.recipient_phone.trim().length > 0 && !/^\+?[\d\s-]{6,}$/.test(deliveryDetails.recipient_phone.trim());
+            const phoneInvalid = deliveryDetails.recipient_phone.trim().length > 0 && !isValidRecipientPhone(deliveryDetails.recipient_phone);
             const inputBase = {
               width: '100%', padding: '0.6rem 0.75rem', borderRadius: '0.6rem',
               fontSize: '0.85rem', boxSizing: 'border-box' as const, marginTop: '0.25rem',
@@ -1273,6 +1378,27 @@ export default function BookPage() {
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, estimated_weight_kg: e.target.value }))}
                       placeholder="0.5" min="0.1" step="0.1"
                       style={{ ...inputBase, border: '1px solid var(--border)' }}
+                    />
+                  </div>
+                </div>
+                {/* Package dimensions (cm) — optional */}
+                <div>
+                  <label style={labelStyle}>Dimensiones (cm) — opcional</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                    <input type="number" value={deliveryDetails.package_length_cm}
+                      onChange={(e) => setDeliveryDetails(d => ({ ...d, package_length_cm: e.target.value }))}
+                      placeholder="Largo" min="1" step="1" aria-label="Largo en cm"
+                      style={{ ...inputBase, marginTop: 0, border: '1px solid var(--border)' }}
+                    />
+                    <input type="number" value={deliveryDetails.package_width_cm}
+                      onChange={(e) => setDeliveryDetails(d => ({ ...d, package_width_cm: e.target.value }))}
+                      placeholder="Ancho" min="1" step="1" aria-label="Ancho en cm"
+                      style={{ ...inputBase, marginTop: 0, border: '1px solid var(--border)' }}
+                    />
+                    <input type="number" value={deliveryDetails.package_height_cm}
+                      onChange={(e) => setDeliveryDetails(d => ({ ...d, package_height_cm: e.target.value }))}
+                      placeholder="Alto" min="1" step="1" aria-label="Alto en cm"
+                      style={{ ...inputBase, marginTop: 0, border: '1px solid var(--border)' }}
                     />
                   </div>
                 </div>
@@ -1669,6 +1795,65 @@ export default function BookPage() {
               </p>
             )}
           </div>
+
+          {/* ═══ Trip options — parity con app móvil ═══ */}
+          {selectedEstimate && (() => {
+            const shareOcc = Math.min(Math.max(passengerCount, 1), 3);
+            const shareFreeSeats = (serviceType === 'triciclo_basico' && shareRide) ? (4 - shareOcc) : 0;
+            const shareDiscount = shareFreeSeats > 0 ? Math.floor(selectedEstimate.estimated_fare_cup * shareFreeSeats * 0.07) : 0;
+            const sectionLabel = { fontSize: '0.85rem', fontWeight: 600 as const, color: 'var(--text-secondary)' };
+            const rowStyle = (active: boolean) => ({
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '0.75rem', borderRadius: '0.6rem', width: '100%', textAlign: 'left' as const,
+              border: active ? '2px solid var(--primary)' : '1px solid var(--border)',
+              background: active ? 'rgba(255,77,0,0.06)' : 'var(--bg-card)', cursor: 'pointer',
+            });
+            const stepBtn = {
+              width: 32, height: 32, borderRadius: 16, border: '1px solid var(--border)',
+              background: 'var(--bg-card)', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 700,
+              color: 'var(--text-secondary)', lineHeight: 1,
+            };
+            const Toggle = ({ on }: { on: boolean }) => (
+              <div style={{ width: 40, height: 22, borderRadius: 11, position: 'relative', flexShrink: 0, background: on ? 'var(--primary)' : 'var(--border)', transition: 'background 0.2s' }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: on ? 20 : 2, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+              </div>
+            );
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
+                {/* Compartir viaje (solo triciclo) */}
+                {serviceType === 'triciclo_basico' && (
+                  <div>
+                    <button type="button" onClick={() => setShareRide((v) => !v)} aria-pressed={shareRide} style={rowStyle(shareRide)}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <span style={{ fontSize: '1.1rem' }}>👥</span>
+                        <div>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {t('book.share_ride', { defaultValue: 'Compartir viaje' })}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
+                            {shareRide && shareFreeSeats > 0
+                              ? t('book.share_ride_savings', { defaultValue: `Ahorras ${formatCUP(shareDiscount)} · ${shareFreeSeats} asiento(s) libre(s)` })
+                              : t('book.share_ride_desc', { defaultValue: 'El conductor puede recoger otros pasajeros' })}
+                          </div>
+                        </div>
+                      </div>
+                      <Toggle on={shareRide} />
+                    </button>
+                    {shareRide && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.5rem', padding: '0 0.25rem' }}>
+                        <span style={sectionLabel}>{t('book.seats_you_use', { defaultValue: 'Asientos que ocupas' })}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <button type="button" onClick={() => setPassengerCount(Math.max(1, passengerCount - 1))} aria-label="Menos asientos" style={stepBtn}>−</button>
+                          <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{shareOcc}</span>
+                          <button type="button" onClick={() => setPassengerCount(Math.min(3, passengerCount + 1))} aria-label="Más asientos" style={stepBtn}>+</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
 
           {/* Request button with price */}
