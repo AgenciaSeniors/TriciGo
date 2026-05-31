@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { getSupabaseClient, referralService } from '@tricigo/api';
+import { getSupabaseClient, authService, referralService } from '@tricigo/api';
+import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuth } from '../providers';
+import { registerWebLoginDevice } from '@/lib/webDevice';
 
 type Step = 'phone' | 'otp';
 
@@ -29,6 +31,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingReferralCode, setPendingReferralCode] = useState<string | null>(null);
+  const [resendTimer, setResendTimer] = useState(0);
+  // Phone normalized to E.164 (+53…) — what we actually send/verify against.
+  const [normalizedPhone, setNormalizedPhone] = useState('');
+
+  // 60s resend countdown (parity con verify-otp móvil).
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const id = setInterval(() => setResendTimer((p) => (p <= 1 ? 0 : p - 1)), 1000);
+    return () => clearInterval(id);
+  }, [resendTimer]);
 
   // Capture ?ref=CODE on mount and persist it. The query param goes
   // first; if absent, fall back to whatever was already stashed
@@ -84,17 +96,32 @@ export default function LoginPage() {
     );
   }
 
+  // Apply referral + register device, then route by profile completeness
+  // (parity con el guard de _layout móvil): sin full_name → /complete-profile.
+  // OTP login always yields a phone, so verify-phone isn't needed here.
+  async function routeAfterAuth(uid: string) {
+    if (uid) await applyPendingReferralIfAny(uid);
+    registerWebLoginDevice();
+    try {
+      const profile = await authService.getUserById(uid);
+      if (!profile?.full_name) { router.push('/complete-profile'); return; }
+    } catch { /* fall through to /book on lookup failure */ }
+    router.push('/book');
+  }
+
   async function handleSendOtp() {
-    if (phone.length < 8) return;
+    if (!isValidCubanPhone(phone)) {
+      setError(t('auth.invalid_phone', { defaultValue: 'Número de teléfono inválido' }));
+      return;
+    }
+    const normalized = normalizeCubanPhone(phone);
+    setNormalizedPhone(normalized);
     setLoading(true);
     setError(null);
     try {
-      const supabase = getSupabaseClient();
-      const { error: otpError } = await supabase.functions.invoke('send-sms-otp', {
-        body: { phone },
-      });
-      if (otpError) throw otpError;
+      await authService.sendOTP(normalized);
       setStep('otp');
+      setResendTimer(60);
     } catch (err) {
       setError(t('auth.send_otp_failed'));
       console.error(err);
@@ -103,35 +130,34 @@ export default function LoginPage() {
     }
   }
 
-  async function handleVerifyOtp() {
-    if (otp.length < 4) return;
+  async function handleVerifyOtp(codeArg?: string) {
+    const code = codeArg ?? otp;
+    if (code.length < 6 || loading) return;
     setLoading(true);
     setError(null);
     try {
-      const supabase = getSupabaseClient();
-      const { data, error: verifyError } = await supabase.functions.invoke('verify-otp', {
-        body: { phone, code: otp },
-      });
-      if (verifyError) throw verifyError;
+      const data = await authService.verifyOTP(normalizedPhone || normalizeCubanPhone(phone), code);
       if (data?.error) throw new Error(data.error);
-      if (data?.session) {
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
-        // Apply the pending referral code (if any) before routing.
-        // Fire-and-forget would race with /book's data load, so we
-        // await — the call is best-effort and capped at one network
-        // round trip.
-        const uid = data.session.user?.id;
-        if (uid) await applyPendingReferralIfAny(uid);
-      }
-      router.push('/book');
+      const uid = data?.session?.user?.id as string | undefined;
+      if (uid) await routeAfterAuth(uid);
+      else router.push('/book');
     } catch (err) {
       setError(t('auth.invalid_otp'));
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    if (resendTimer > 0) return;
+    setError(null);
+    try {
+      await authService.sendOTP(normalizedPhone || normalizeCubanPhone(phone));
+      setResendTimer(60);
+    } catch (err) {
+      setError(t('auth.send_otp_failed'));
+      console.error(err);
     }
   }
 
@@ -273,8 +299,8 @@ export default function LoginPage() {
             </div>
             <button
               onClick={handleSendOtp}
-              disabled={phone.length < 8 || loading}
-              style={btnStyle(phone.length >= 8 && !loading)}
+              disabled={!isValidCubanPhone(phone) || loading}
+              style={btnStyle(isValidCubanPhone(phone) && !loading)}
             >
               {loading ? t('auth.sending') : t('auth.send_code')}
             </button>
@@ -290,19 +316,43 @@ export default function LoginPage() {
             </p>
             <input
               type="text"
+              inputMode="numeric"
               value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+                setOtp(v);
+                // Auto-submit when the 6th digit lands (parity con verify-otp móvil).
+                if (v.length === 6 && !loading) handleVerifyOtp(v);
+              }}
               placeholder="000000"
               maxLength={6}
+              autoFocus
               className="input-base"
               style={{ fontSize: '1.5rem', textAlign: 'center', letterSpacing: '0.3em' }}
             />
             <button
-              onClick={handleVerifyOtp}
-              disabled={otp.length < 4 || loading}
-              style={btnStyle(otp.length >= 4 && !loading)}
+              onClick={() => handleVerifyOtp()}
+              disabled={otp.length < 6 || loading}
+              style={btnStyle(otp.length === 6 && !loading)}
             >
               {loading ? t('auth.verifying') : t('auth.verify')}
+            </button>
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resendTimer > 0}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: resendTimer > 0 ? 'var(--text-tertiary)' : 'var(--primary)',
+                cursor: resendTimer > 0 ? 'default' : 'pointer',
+                fontSize: '0.875rem',
+                textAlign: 'center',
+              }}
+            >
+              {resendTimer > 0
+                ? `${t('auth.resend_code', { defaultValue: 'Reenviar código' })} (${resendTimer}s)`
+                : t('auth.resend_code', { defaultValue: 'Reenviar código' })}
             </button>
             <button
               type="button"

@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useState, createContext, useContext } from 'react';
+import React, { useEffect, useState, useRef, createContext, useContext } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { initI18n } from '@tricigo/i18n';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, authService } from '@tricigo/api';
 import type { User } from '@supabase/supabase-js';
 
 let i18nInitialized = false;
@@ -60,9 +61,42 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, signOut }}>
-      {children}
+      <ProfileGuard>{children}</ProfileGuard>
     </AuthContext.Provider>
   );
+}
+
+// App routes that require a complete profile (full_name + phone). Marketing,
+// legal, auth and onboarding routes are intentionally NOT here so the guard
+// can never trap a user or loop.
+const APP_ROUTES = ['/book', '/track', '/wallet', '/profile', '/chat', '/rides', '/notifications', '/gift'];
+
+/**
+ * Session guard — parity con el guard de apps/client/app/_layout.tsx. If an
+ * authenticated user with an incomplete profile lands on an app route (e.g.
+ * they closed the tab mid-onboarding), send them to finish: no full_name →
+ * /complete-profile, OAuth without phone → /verify-phone. Checks once per user.
+ */
+function ProfileGuard({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const checkedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !user?.id || !pathname) return;
+    const onAppRoute = APP_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
+    if (!onAppRoute) return;
+    if (checkedRef.current === user.id) return;
+    checkedRef.current = user.id;
+    authService.getUserById(user.id).then((p) => {
+      if (!p) return;
+      if (!p.full_name) router.replace('/complete-profile');
+      else if (!p.phone) router.replace('/verify-phone');
+    }).catch(() => { /* best-effort — never block the app */ });
+  }, [isLoading, isAuthenticated, user?.id, pathname, router]);
+
+  return <>{children}</>;
 }
 
 // ── Combined Provider ──
