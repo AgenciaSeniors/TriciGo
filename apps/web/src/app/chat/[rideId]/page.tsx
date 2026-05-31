@@ -19,7 +19,11 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import { getQuickRepliesForRole } from '@tricigo/utils';
 import { useChat } from '@/hooks/useChat';
+
+const MAX_CHARS = 500;
+const CHAR_WARN = 400;
 
 export default function ChatPage() {
   const { rideId } = useParams<{ rideId: string }>();
@@ -31,6 +35,19 @@ export default function ChatPage() {
   const [driverName, setDriverName] = useState('Conductor');
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+
+  // Connectivity banner (parity con el banner offline del chat móvil).
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+
+  const quickReplies = getQuickRepliesForRole('rider');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -79,10 +96,28 @@ export default function ChatPage() {
     e.preventDefault();
     if (!text.trim() || !userId || !rideId || sending) return;
     setSending(true);
-    const content = text.trim();
+    const content = text.trim().slice(0, MAX_CHARS);
     setText('');
     try {
       await sendMessage(content);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const QUICK_REPLY_DEFAULTS: Record<string, string> = {
+    five_more_min: '5 minutos más',
+    on_my_way: 'Voy en camino',
+    wait_please: 'Espérame por favor',
+    thank_you: '¡Gracias!',
+  };
+
+  async function sendQuick(key: string) {
+    if (!userId || !rideId || sending) return;
+    const body = t('chat.quick_' + key, { defaultValue: QUICK_REPLY_DEFAULTS[key] ?? key });
+    setSending(true);
+    try {
+      await sendMessage(body);
     } finally {
       setSending(false);
     }
@@ -212,6 +247,41 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Offline banner — honest about manual retry (parity con chat móvil) */}
+      {!isOnline && (
+        <div style={{ padding: '0.5rem 1rem', background: 'rgba(245,158,11,0.12)', color: '#b45309', fontSize: '0.8rem', textAlign: 'center', borderTop: '1px solid rgba(245,158,11,0.3)' }}>
+          {t('web.chat_offline', { defaultValue: 'Sin conexión — los mensajes se enviarán al reconectar.' })}
+        </div>
+      )}
+
+      {/* Quick replies — visible cuando el input está vacío */}
+      {!text.trim() && quickReplies.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.4rem', padding: '0.5rem 1rem 0', overflowX: 'auto', background: 'var(--bg-card)' }}>
+          {quickReplies.map((qr) => (
+            <button
+              key={qr.key}
+              type="button"
+              disabled={sending}
+              onClick={() => sendQuick(qr.key)}
+              style={{
+                whiteSpace: 'nowrap', padding: '0.4rem 0.8rem', borderRadius: '999px',
+                border: '1px solid var(--border)', background: 'var(--bg-page)',
+                color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: sending ? 'not-allowed' : 'pointer', flexShrink: 0,
+              }}
+            >
+              {t('chat.quick_' + qr.key, { defaultValue: QUICK_REPLY_DEFAULTS[qr.key] ?? qr.key })}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Char counter — near limit */}
+      {text.length >= CHAR_WARN && (
+        <div style={{ padding: '0.25rem 1rem 0', textAlign: 'right', fontSize: '0.7rem', color: text.length >= MAX_CHARS ? 'var(--error, #dc2626)' : 'var(--text-tertiary)', background: 'var(--bg-card)' }}>
+          {text.length}/{MAX_CHARS}
+        </div>
+      )}
+
       {/* Input */}
       <form
         onSubmit={handleSend}
@@ -226,8 +296,9 @@ export default function ChatPage() {
         <input
           type="text"
           value={text}
+          maxLength={MAX_CHARS}
           onChange={(e) => {
-            setText(e.target.value);
+            setText(e.target.value.slice(0, MAX_CHARS));
             // Notify typing on every keystroke; the hook debounces
             // broadcasts to once every 2s so we don't spam the channel.
             notifyTyping();
