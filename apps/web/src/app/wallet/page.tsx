@@ -292,6 +292,29 @@ export default function WalletPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Refetch balance + transactions when the tab regains focus ──
+  // Parity con el `useFocusEffect` del wallet móvil: el saldo puede haber
+  // cambiado en otra pestaña o por un viaje mientras el wallet estaba en
+  // segundo plano, así que refrescamos al volver al foco.
+  useEffect(() => {
+    if (!userId) return;
+    const refresh = () => {
+      if (document.hidden) return;
+      walletService.getBalance(userId).then(setBalance).catch(() => {});
+      if (account) {
+        walletService.getTransactions(account.id, 0, 20)
+          .then((d) => { setTransactions(d as LedgerTransaction[]); setTxPage(0); setTxHasMore(d.length >= 20); })
+          .catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [userId, account]);
+
   // ── Auth gate ──
   if (authLoading) {
     return (
@@ -698,7 +721,14 @@ export default function WalletPage() {
 
         {/* ═══ Transaction history ═══ */}
         <div>
-          <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.75rem' }}>Historial de transacciones</p>
+          {/* Persistent receipts link — antes /wallet/receipts sólo era
+              alcanzable tras una recarga; ahora siempre desde el wallet. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 0.75rem' }}>
+            <p style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Historial de transacciones</p>
+            <Link href="/wallet/receipts" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', flexShrink: 0 }}>
+              {'Ver recibos →'}
+            </Link>
+          </div>
 
           <div className="wallet-filter-tabs" role="tablist" aria-label="Filtrar transacciones">
             {FILTER_TABS.map((tab) => (
@@ -768,11 +798,17 @@ export default function WalletPage() {
                         <span style={{ fontSize: '0.9rem', fontWeight: 700, color: amount > 0 ? '#16a34a' : '#dc2626' }}>
                           {amount > 0 ? '+' : ''}{formatTRC(Math.abs(amount))}
                         </span>
-                        {balance.migrationRate ? (
-                          <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
-                            &asymp; {amount > 0 ? '+' : '-'}${(Math.abs(amount) / balance.migrationRate).toFixed(2)}
-                          </span>
-                        ) : null}
+                        {(() => {
+                          // USD caption — usa la tasa de migración si existe, si no
+                          // cae a la tasa de cambio en vivo (parity con `migrationRate ?? exchangeRate`
+                          // del wallet móvil), así las wallets pre-migración igual muestran ≈ $X.
+                          const usdRate = balance.migrationRate ?? exchangeRate;
+                          return usdRate ? (
+                            <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
+                              &asymp; {amount > 0 ? '+' : '-'}${(Math.abs(amount) / usdRate).toFixed(2)}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                     )}
                   </div>

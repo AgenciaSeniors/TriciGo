@@ -293,3 +293,50 @@ Fuente de verdad = `app/chat/[rideId].tsx` + `useChat`/`useUnreadChatCount` móv
 **Fixes en este PR:** punto de entrada al chat + badge de no-leídos (`useUnreadChatCount` web + `stampChatRead`) + header con vehículo/placa. Cierra los pendientes "Chat unread badge / last-read sealing; driver header vehicle+plate" de la Fase 2. **Aclaración:** la "cola offline" no es un comportamiento del client (su banner dice reintentá manual) — la web ya la tiene y va por delante.
 
 **Verificación Área 4:** `pnpm --filter @tricigo/web check-types` verde; `/track/[id]` + `/chat/[rideId]` render 200 en dev sin error markers.
+
+## Área 5 — Wallet (`wallet/page.tsx`, `wallet/receipts`)
+
+Fuente de verdad = `NativeWalletScreen` (`app/(tabs)/wallet.tsx`) + `walletService`/`paymentService`. La web ya estaba **muy completa y por delante** en varias cosas (Wallet v2 USD-cents, banner de migración, `translateNetopiaError`, `deviceFingerprint`, provider dinámico, página dedicada de recibos, paginación, UI de recarga multi-paso). Cerrados los gaps reales de freshness + acceso a recibos.
+
+### 5.1 Saldo
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| USD-cents primario (`availableUsdCents`) + subtítulo TRC/CUP | ✅ | |
+| Saldo retenido (USD-cents aware) | ✅ | |
+| Banner de migración + bono | ✅ | |
+| **Refetch al volver al foco** | ✅ FIX | nuevo effect `visibilitychange`/`focus` → refresca saldo + transacciones (parity con `useFocusEffect` móvil); antes sólo refrescaba al volver de NETOPIA |
+| Animación count-up del saldo | n/a | cosmético — diseño web propio |
+| Card "Este mes" (gastado/viajes/promedio) | ❌ follow-up | feature informativa ausente |
+
+### 5.2 Recarga
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| NETOPIA: presets + monto custom (USD) | ✅ | |
+| Desglose USD neto + fee | ✅ | helpers idénticos |
+| `translateNetopiaError` en fallo | ✅ | |
+| Polling del intent al volver (20×2s) | ✅ | |
+| `deviceFingerprint` | ✅ | **web por delante** (el nativo no lo manda) |
+| Provider dinámico + CTA deshabilitada si off | ✅ | **web por delante** (el nativo hardcodea netopia) |
+| Estados redirecting/verifying/success/failed | ✅ | **web por delante** (el nativo usa toasts) |
+| `recharge_type` → customer por defecto | ✅ | la web lo omite (correcto) |
+
+### 5.3 Recibos
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Poll del PDF post-recarga (6×2s) | ✅ | |
+| Página/lista de recibos + abrir (signed URL) | ✅ | **web por delante** — `/wallet/receipts` (el nativo no tiene lista) |
+| **Acceso persistente a recibos desde el wallet** | ✅ FIX | antes `/wallet/receipts` sólo era alcanzable tras una recarga; ahora link "Ver recibos →" siempre visible en el header de transacciones |
+| Chip inline "Comprobante" por transacción | n/a | el nativo lo usa porque NO tiene página de lista; la web cubre el acceso con la lista + el link persistente. Además `LedgerTransaction` no trae `payment_intent_id` (mapear chip↔recibo sería frágil) |
+
+### 5.4 Transacciones
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Lista + filtros (Todos/Recargas/Viajes/Bonos/Ajustes) | ✅ | mismos 5 chips |
+| **Caption USD por transacción (≈ $X)** | ✅ FIX | antes requería `migrationRate`; ahora cae a la tasa de cambio en vivo (`migrationRate ?? exchangeRate`) como el nativo → wallets pre-migración igual muestran ≈ $X |
+| Paginación / cargar más | ✅ | **web por delante** (el nativo carga 1 página de 20) |
+| Empty state | ⚠️ | web sin CTA de acción (el nativo ofrece "Recargar"/"Mostrar todos") — menor |
+| Íconos por tipo de transacción | n/a | el nativo mapea Ionicons; la web usa punto de color — diseño web propio |
+
+**Fixes en este PR:** refetch-on-focus (#3) + link persistente "Ver recibos" + caption USD con fallback a tasa en vivo (#6). **Follow-ups:** card "Este mes" (insights mensuales), CTA en empty state. **Diferencias de diseño aceptadas:** count-up del saldo, íconos por tipo. **Web por delante:** deviceFingerprint, provider dinámico, página de recibos, paginación, UI de recarga.
+
+**Verificación Área 5:** `pnpm --filter @tricigo/web check-types` verde; `/wallet` + `/wallet/receipts` render 200 en dev sin error markers.
