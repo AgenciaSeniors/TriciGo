@@ -340,3 +340,42 @@ Fuente de verdad = `NativeWalletScreen` (`app/(tabs)/wallet.tsx`) + `walletServi
 **Fixes en este PR:** refetch-on-focus (#3) + link persistente "Ver recibos" + caption USD con fallback a tasa en vivo (#6). **Follow-ups:** card "Este mes" (insights mensuales), CTA en empty state. **Diferencias de diseño aceptadas:** count-up del saldo, íconos por tipo. **Web por delante:** deviceFingerprint, provider dinámico, página de recibos, paginación, UI de recarga.
 
 **Verificación Área 5:** `pnpm --filter @tricigo/web check-types` verde; `/wallet` + `/wallet/receipts` render 200 en dev sin error markers.
+
+## Área 6 — Rides (historial) (`rides/page.tsx`, `rides/[id]/page.tsx`)
+
+Fuente de verdad = `NativeRidesScreen` (`app/(tabs)/rides.tsx`) + `app/ride/[id].tsx`. El **detalle** ya está por delante del nativo en muchas cosas (badge por estado, avatar, timeline con íconos, líneas surge/espera/propina/cancelación, tasa de cambio, recibo descargar/email, TipFlow). Los gaps reales estaban en la **lista**.
+
+### 6.1 Lista de historial
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Agrupación por fecha (Hoy/Ayer) | ✅ | web con headers explícitos de fecha (por delante) |
+| Filtro de estado (Todos/Completados/Cancelados) | ✅ | |
+| **Tarifa por fila — currency-aware + con propina** | ✅ FIX | antes `formatTRC(final_fare_trc)` para todos (mostraba TRC en efectivo, omitía propina); ahora `riderChargedTotal`/`riderChargedTotalTrc` → CUP en efectivo/mixto/corporativo, TRC en tricicoin (parity con el nativo) |
+| Distancia por fila | ✅ | web la muestra (por delante) |
+| Paginación / cargar más | ✅ | |
+| **Refetch al volver al foco** | ✅ FIX | nuevo effect `visibilitychange`/`focus` (parity con el pull-to-refresh del nativo) |
+| **Estado de error + reintentar** | ✅ FIX | antes tragaba el error y mostraba "sin viajes"; ahora muestra error + botón Reintentar |
+| **Export CSV** | ✅ FIX | botón "Exportar CSV" (reusa `generateHistoryCSV`; en web descarga el archivo) |
+| Tap fila → detalle, skeleton, empty state | ✅ | |
+| Filtros extra (tipo de servicio / método de pago / rango de fechas) | ❌ follow-up | el nativo los tiene; la web sólo filtra por estado |
+| Sección de viajes programados | n/a | feature **retirada** (programados) — correctamente ausente |
+| Íconos por tipo de vehículo (premium/confort/cargo) | ⚠️ | web usa 4 PNGs por prefijo — menor |
+
+### 6.2 Detalle de viaje
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Badge de estado / direcciones / conductor (nombre/rating/vehículo/placa) | ✅ | web por delante (color por estado, avatar, color/año) |
+| Timeline de timestamps | ✅ | web por delante (íconos + motivo de cancelación) |
+| Desglose de tarifa (descuento/surge/espera/propina/cancelación/total) | ✅ | web por delante en líneas de ítems |
+| Método de pago / stats distancia-duración | ✅ | |
+| Recibo descargar + email | ✅ | **web por delante** (el detalle nativo no los tiene) |
+| TipFlow (no-efectivo) | ✅ | **web por delante** |
+| Mapa de la ruta en el detalle | ❌ follow-up | el nativo dibuja la ruta; la web no tiene mapa en el detalle |
+| Bloque cargo/delivery (OTP + share del destinatario) | ❌ follow-up | ausente en la web para viajes de mensajería |
+| Desglose CUP por-km/por-min + tachado estimado-vs-final | ⚠️ follow-up | la web muestra km/min como unidades, no como cargos CUP |
+| Copiar ID / compartir viaje en el detalle | ⚠️ | menor |
+| Links de disputa / objeto perdido | n/a | **retirados** — correctamente ausentes (el detalle nativo aún arrastra el código) |
+
+**Fixes en este PR:** tarifa por fila currency-aware + con propina (#6, corrige regresión), estado de error + reintentar, refetch-on-focus, export CSV. **Follow-ups:** filtros extra de la lista, mapa + bloque cargo + desglose CUP/tachado en el detalle. **Retirados (correctamente ausentes):** viajes programados, disputa/objeto-perdido.
+
+**Verificación Área 6:** `pnpm --filter @tricigo/web check-types` verde; `/rides` + `/rides/[id]` render 200 en dev sin error markers.
