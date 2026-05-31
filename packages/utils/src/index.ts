@@ -1,6 +1,7 @@
 export * from './currency';
 export * from './date';
 export * from './validation';
+export * from './ride-config';
 export * from './cuba-geo';
 export * from './geo';
 export * from './fareCalculator';
