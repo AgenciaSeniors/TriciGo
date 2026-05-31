@@ -22,7 +22,7 @@ import {
 import { useThemeStore } from '@/stores/theme.store';
 import { useTokens } from '@/hooks/useTokens';
 
-const vehicleRow = require('../../assets/vehicles/selection/triciclo.png');
+const vehicleRow = require('../../assets/login-hero.png');
 
 export default function LoginScreen() {
   const { t } = useTranslation('common');
@@ -107,11 +107,11 @@ export default function LoginScreen() {
                 {t('auth.tagline', { defaultValue: 'Tu plataforma de movilidad en La Habana' })}
               </Text>
 
-              {/* Vehicle illustration */}
+              {/* Vehicle illustration — small, subtle, right-aligned (hi-res, bg removed) */}
               <View style={{ alignItems: 'flex-end', marginTop: 16 }}>
                 <Image
                   source={vehicleRow}
-                  style={{ width: 120, height: 120, opacity: 0.9 }}
+                  style={{ width: 200, height: 76, opacity: 0.9 }}
                   resizeMode="contain"
                 />
               </View>
