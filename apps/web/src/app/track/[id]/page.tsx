@@ -582,19 +582,6 @@ export default function TrackRidePage() {
             <TipFlow rideId={ride.id} userId={userId} onTipSubmitted={fetchRide} />
           )}
 
-          {/* Post-completion links */}
-          {ride.status === 'completed' && (
-            <div className="track-card" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-              <a href={`/rides/${ride.id}/dispute`} style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
-                {t('track.report_problem', { defaultValue: 'Reportar problema' })}
-              </a>
-              <span style={{ color: 'var(--border-light)' }}>|</span>
-              <a href={`/rides/${ride.id}/lost-item`} style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
-                {t('track.lost_item', { defaultValue: 'Objeto perdido' })}
-              </a>
-            </div>
-          )}
-
           {/* Route Card */}
           <div className="track-card">
             <div className="track-route">
