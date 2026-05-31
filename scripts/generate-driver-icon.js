@@ -32,7 +32,7 @@ const SRC = path.join(DIR, 'driver-icon-design.png');
 
 const SIZE = 1024;
 const NOTIF = 96;
-const SYMBOL_RATIO = 0.6; // symbol size relative to the icon (within 66% safe zone)
+const SYMBOL_RATIO = 0.454; // symbol height as fraction of canvas — matches the client adaptive icon (45.4%) so both apps' logos look the same size on the home screen
 const BLACK = { r: 0, g: 0, b: 0, alpha: 1 };
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 
