@@ -145,9 +145,6 @@ export default function BookPage() {
   const [promoValidating, setPromoValidating] = useState(false);
   const [promoResult, setPromoResult] = useState<{ valid: boolean; promoId?: string; discount: number; error?: string } | null>(null);
 
-  /* ─── Insurance state (W1.4) ─── */
-  const [insuranceSelected, setInsuranceSelected] = useState(false);
-
   /* ─── Shared ride (triciclo only) + passenger count ─── */
   const [shareRide, setShareRide] = useState(false);
   const [passengerCount, setPassengerCount] = useState(1);
@@ -469,7 +466,6 @@ export default function BookPage() {
     setWaypoints([]);
     setPromoCode('');
     setPromoResult(null);
-    setInsuranceSelected(false);
     setShareRide(false);
     setPassengerCount(1);
     fareEstimatedAtRef.current = null;
@@ -751,8 +747,6 @@ export default function BookPage() {
           })),
         }),
         ...(selectedCorporateId && { corporate_account_id: selectedCorporateId }),
-        insurance_selected: insuranceSelected,
-        insurance_premium_cup: insuranceSelected ? (freshEstimate.insurance_premium_cup ?? 0) : 0,
         // "Compartir viaje" — only the tricycle. Server trigger (00347) computes
         // the discount; declared_passengers = seats the rider occupies.
         share_ride: serviceType === 'triciclo_basico' ? shareRide : false,
@@ -1807,7 +1801,6 @@ export default function BookPage() {
             const shareOcc = Math.min(Math.max(passengerCount, 1), 3);
             const shareFreeSeats = (serviceType === 'triciclo_basico' && shareRide) ? (4 - shareOcc) : 0;
             const shareDiscount = shareFreeSeats > 0 ? Math.floor(selectedEstimate.estimated_fare_cup * shareFreeSeats * 0.07) : 0;
-            const insuranceAvailable = !!selectedEstimate.insurance_available && (selectedEstimate.insurance_premium_cup ?? 0) > 0;
             const sectionLabel = { fontSize: '0.85rem', fontWeight: 600 as const, color: 'var(--text-secondary)' };
             const rowStyle = (active: boolean) => ({
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1857,25 +1850,6 @@ export default function BookPage() {
                       </div>
                     )}
                   </div>
-                )}
-
-                {/* Seguro de viaje */}
-                {insuranceAvailable && (
-                  <button type="button" onClick={() => setInsuranceSelected((v) => !v)} aria-pressed={insuranceSelected} style={rowStyle(insuranceSelected)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <span style={{ fontSize: '1.1rem' }}>🛡️</span>
-                      <div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {t('book.insurance', { defaultValue: 'Seguro de viaje' })}
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
-                          {selectedEstimate.insurance_coverage_desc || t('book.insurance_desc', { defaultValue: 'Cobertura ante imprevistos durante el viaje' })}
-                          {' · +'}{formatPrice(selectedEstimate.insurance_premium_cup ?? 0, selectedEstimate.insurance_premium_trc)}
-                        </div>
-                      </div>
-                    </div>
-                    <Toggle on={insuranceSelected} />
-                  </button>
                 )}
               </div>
             );
