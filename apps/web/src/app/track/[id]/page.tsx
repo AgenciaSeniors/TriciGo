@@ -8,6 +8,10 @@ import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
+import { useDriverPosition } from '../../../hooks/useDriverPosition';
+import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing';
+import { fetchRoute } from '../../../services/geoService';
+import { TipFlow } from '../../../components/TipFlow';
 import './track.css';
 
 const TrackingMap = dynamic(() => import('../TrackingMap'), {
@@ -57,7 +61,8 @@ function useStatusSteps() {
     { key: 'driver_en_route' as RideStatus, label: t('track.step_en_route', { defaultValue: 'En camino a recogerte' }), stepNumber: 3 },
     { key: 'arrived_at_pickup' as RideStatus, label: t('track.step_arrived', { defaultValue: 'Llego al punto' }), stepNumber: 4 },
     { key: 'in_progress' as RideStatus, label: t('track.step_in_progress', { defaultValue: 'Viaje en curso' }), stepNumber: 5 },
-    { key: 'completed' as RideStatus, label: t('track.step_completed', { defaultValue: 'Viaje completado' }), stepNumber: 6 },
+    { key: 'arrived_at_destination' as RideStatus, label: t('track.step_arrived_destination', { defaultValue: 'Llegando a destino' }), stepNumber: 6 },
+    { key: 'completed' as RideStatus, label: t('track.step_completed', { defaultValue: 'Viaje completado' }), stepNumber: 7 },
   ], [t]);
 }
 
@@ -125,7 +130,6 @@ export default function TrackRidePage() {
   const [ride, setRide] = useState<RideWithDriver | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [deliveryDetails, setDeliveryDetails] = useState<{
@@ -135,12 +139,28 @@ export default function TrackRidePage() {
   } | null>(null);
   const statusSteps = useStatusSteps();
 
+  // Driver position via polling RPC (BUG-277 — the broadcast channel is dead;
+  // the GPS loop only writes via update_driver_position). Active only while a
+  // driver is assigned and the ride is in flight.
+  const driverActive = !!ride && ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress'].includes(ride.status);
+  const driverPos = useDriverPosition(ride?.driver_id, driverActive);
+  const driverLocation = driverPos.position ? { lat: driverPos.position.latitude, lng: driverPos.position.longitude } : null;
+
+  // Share the rider's location with the driver during the pickup phase so the
+  // driver app shows the rider's pin (parity con useRiderLocationSharing móvil).
+  useRiderLocationSharing(ride?.id, ride?.status, userId);
+
+  // Dynamic ETA (min) recomputed from the driver's live position toward the
+  // current target (pickup before in_progress, dropoff during the trip).
+  const [dynamicEtaMin, setDynamicEtaMin] = useState<number | null>(null);
+
   // Nearby vehicles (shown during searching)
   const [nearbyVehicles, setNearbyVehicles] = useState<Array<{ latitude: number; longitude: number; heading?: number | null; vehicle_type?: string }>>([]);
 
   // Review form state
   const [rating, setRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
+  const [reviewTags, setReviewTags] = useState<string[]>([]);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
@@ -148,12 +168,16 @@ export default function TrackRidePage() {
     if (!rating || !ride?.driver_id || !userId) return;
     setReviewSubmitting(true);
     try {
+      // Fold the selected categorized tags into the comment (parity with the
+      // mobile RideCompleteView tag chips; reviewService has no tags column).
+      const tagsText = reviewTags.length ? `[${reviewTags.join(', ')}] ` : '';
+      const combinedComment = (tagsText + reviewComment.trim()).trim();
       await reviewService.submitReview({
         ride_id: rideId,
         reviewer_id: userId,
         reviewee_id: ride.driver_id,
         rating: rating as 1 | 2 | 3 | 4 | 5,
-        comment: reviewComment.trim() || undefined,
+        comment: combinedComment || undefined,
       });
       setReviewSubmitted(true);
     } catch (err) {
@@ -252,16 +276,29 @@ export default function TrackRidePage() {
     }).catch(() => {});
   }, [ride?.ride_mode, rideId]);
 
+  // Dynamic ETA: throttled OSRM route from the driver's live position to the
+  // current target. Mirrors the mobile client's useETA (recompute on driver
+  // movement, ~30s throttle). Falls back to the static estimate when we have
+  // no live position yet.
+  const etaThrottleRef = useRef(0);
   useEffect(() => {
-    if (!ride?.driver_id) return;
-    const supabase = getSupabaseClient();
-    const channel = supabase.channel(`driver-location-${ride.driver_id}`)
-      .on('broadcast', { event: 'location' }, (payload: { payload: { latitude: number; longitude: number } }) => {
-        setDriverLocation({ lat: payload.payload.latitude, lng: payload.payload.longitude });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [ride?.driver_id]);
+    if (!ride || !driverLocation || !driverActive) { setDynamicEtaMin(null); return; }
+    const now = Date.now();
+    if (now - etaThrottleRef.current < 30_000) return;
+    etaThrottleRef.current = now;
+    const inProgress = ride.status === 'in_progress';
+    const pLat = typeof ride.pickup_location === 'object' ? ride.pickup_location.latitude : 0;
+    const pLng = typeof ride.pickup_location === 'object' ? ride.pickup_location.longitude : 0;
+    const dLat = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.latitude : 0;
+    const dLng = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.longitude : 0;
+    const target = inProgress ? { lat: dLat, lng: dLng } : { lat: pLat, lng: pLng };
+    if (!target.lat || !target.lng) return;
+    let cancelled = false;
+    fetchRoute({ lat: driverLocation.lat, lng: driverLocation.lng }, target)
+      .then((r) => { if (!cancelled && r) setDynamicEtaMin(Math.max(1, Math.ceil(r.duration_s / 60))); })
+      .catch(() => { /* keep last ETA */ });
+    return () => { cancelled = true; };
+  }, [ride, driverLocation, driverActive]);
 
   /* ── Loading State ── */
   // Auth gate — block render until authenticated (BUG-004 fix)
@@ -343,11 +380,18 @@ export default function TrackRidePage() {
             style={{ width: '100%', height: '100%', borderRadius: 0 }}
           />
 
-          {/* ETA Badge floating on map */}
-          {!isTerminal && ride.estimated_duration_s > 0 && (
+          {/* ETA Badge floating on map — dynamic (from live driver position) when available */}
+          {!isTerminal && (dynamicEtaMin != null || ride.estimated_duration_s > 0) && (
             <div className="track-eta-badge">
               <IconClock />
-              <span>~{Math.ceil(ride.estimated_duration_s / 60)} min</span>
+              <span>
+                ~{dynamicEtaMin ?? Math.ceil(ride.estimated_duration_s / 60)} min
+                {dynamicEtaMin != null && (
+                  <span style={{ opacity: 0.7, marginLeft: 4 }}>
+                    {ride.status === 'in_progress' ? t('track.eta_to_dest', { defaultValue: 'a destino' }) : t('track.eta_to_pickup', { defaultValue: 'al punto' })}
+                  </span>
+                )}
+              </span>
             </div>
           )}
 
@@ -408,6 +452,18 @@ export default function TrackRidePage() {
             </div>
           )}
 
+          {/* Tracking health banner — parity con los banners de RideActiveView */}
+          {driverActive && (driverPos.isStale || !driverPos.position) && (
+            <div className="track-card" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ color: '#f59e0b', flexShrink: 0 }}><IconAlert /></span>
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                {!driverPos.position
+                  ? t('track.waiting_driver_location', { defaultValue: 'Esperando la ubicación del conductor...' })
+                  : t('track.signal_stale', { defaultValue: 'La señal del conductor está intermitente. Mostrando su última ubicación conocida.' })}
+              </span>
+            </div>
+          )}
+
           {/* Ride Completion + Rating */}
           {ride.status === 'completed' && !reviewSubmitted && ride.driver_id && (
             <div className="track-card" style={{ textAlign: 'center' }}>
@@ -444,6 +500,30 @@ export default function TrackRidePage() {
               {/* Comment + Submit */}
               {rating > 0 && (
                 <>
+                  {/* Categorized rating tags (adapt to score) — parity con RideCompleteView */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.75rem' }}>
+                    {(rating >= 4
+                      ? [t('track.tag_punctual', { defaultValue: 'Puntual' }), t('track.tag_kind', { defaultValue: 'Amable' }), t('track.tag_safe', { defaultValue: 'Conducción segura' }), t('track.tag_clean', { defaultValue: 'Vehículo limpio' })]
+                      : [t('track.tag_late', { defaultValue: 'Tardó mucho' }), t('track.tag_rough', { defaultValue: 'Conducción brusca' }), t('track.tag_unkind', { defaultValue: 'Poco amable' }), t('track.tag_dirty', { defaultValue: 'Vehículo sucio' })]
+                    ).map((tag) => {
+                      const on = reviewTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setReviewTags((prev) => prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag])}
+                          style={{
+                            padding: '0.35rem 0.7rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                            border: on ? '2px solid var(--primary)' : '1px solid var(--border)',
+                            background: on ? 'rgba(255,77,0,0.08)' : 'var(--bg-card)',
+                            color: on ? 'var(--primary)' : 'var(--text-secondary)',
+                          }}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <textarea
                     value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)}
@@ -495,6 +575,11 @@ export default function TrackRidePage() {
                 {t('track.review_helps', { defaultValue: 'Tu opinión ayuda a mejorar la experiencia.' })}
               </p>
             </div>
+          )}
+
+          {/* Propina post-viaje — parity con RideCompleteView (no en efectivo, sin propina previa) */}
+          {ride.status === 'completed' && ride.payment_method !== 'cash' && !ride.tip_amount && userId && (
+            <TipFlow rideId={ride.id} userId={userId} onTipSubmitted={fetchRide} />
           )}
 
           {/* Post-completion links */}
@@ -676,7 +761,13 @@ export default function TrackRidePage() {
                   className="track-action-btn track-action-btn--cancel"
                   disabled={canceling}
                   onClick={async () => {
-                    if (!confirm(t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje? Puede aplicarse una tarifa de cancelación.' }))) return;
+                    // Status-aware cancel preview: a fee typically applies only once
+                    // the driver is en route. Mirrors the mobile cancel sheet copy.
+                    const mayCharge = ride.status === 'driver_en_route';
+                    const confirmMsg = mayCharge
+                      ? t('track.cancel_confirm_fee', { defaultValue: 'El conductor ya está en camino. Cancelar ahora puede aplicar una tarifa de cancelación. ¿Continuar?' })
+                      : t('track.cancel_confirm_free', { defaultValue: '¿Seguro que quieres cancelar este viaje? Aún no se aplica ninguna tarifa.' });
+                    if (!confirm(confirmMsg)) return;
                     setCanceling(true);
                     try {
                       await rideService.cancelRide(rideId, userId ?? undefined, 'rider_canceled');

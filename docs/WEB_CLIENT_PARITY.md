@@ -41,15 +41,21 @@ Verification: `pnpm check-types` green (4 apps); `/book` compiles + renders 200 
 authenticated booking E2E pending (needs live OTP session on device).
 
 ## Fase 2 — Tracking + Chat (`track/[id]`, `chat/[rideId]`)
-- [ ] **[CRITICAL]** Driver position: migrate `/track/[id]` from dead broadcast to polling RPC (`get_driver_position`).
-- [ ] Dynamic ETA (OSRM throttle 30s + haversine fallback).
-- [ ] Rider location sharing in pickup.
-- [ ] `arrived_at_destination` state in stepper.
-- [ ] Tracking health banners (stale/not-moving/cached).
-- [ ] Cancel with penalty/fare preview.
-- [ ] Add stop mid-ride; GPS modals.
-- [ ] `RideCompleteView`: tip, receipt PDF/email, rating tags, split, first-ride.
-- [ ] Chat: quick replies, unread count, char counter, offline banner, driver header (vehicle/plate).
+- [x] **[CRITICAL]** Driver position: `/track/[id]` migrated from dead broadcast to polling RPC `get_driver_position` (new `useDriverPosition` web hook, 1 Hz + timeout/retry).
+- [x] Dynamic ETA (OSRM via `fetchRoute`, 30s throttle, from live driver position to pickup/dropoff).
+- [x] Rider location sharing in pickup (new `useRiderLocationSharing` web hook → `rider-location:${rideId}` broadcast).
+- [x] `arrived_at_destination` state in stepper.
+- [x] Tracking health banners (waiting-for-location / stale signal).
+- [x] Cancel with status-aware preview copy (fee warning when driver en route).
+- [x] `RideCompleteView`: tip (`TipFlow`) + categorized rating tags.
+- [x] Chat: quick replies (`getQuickRepliesForRole`), char counter (400/500), offline banner.
+Remaining (deferred — lower-frequency / heavier):
+- [ ] Cancel **exact** fee amount preview (only status-aware copy done).
+- [ ] Add stop mid-ride; driver-no-GPS / confirm-arrival modals.
+- [ ] Split fare management; receipt PDF/email in the completion view.
+- [ ] Chat unread badge / last-read sealing; driver header vehicle+plate.
+
+Verification: `pnpm check-types` green (4 apps); `/track/[id]` + `/chat/[rideId]` compile + render 200 in Next dev. Live driver-marker movement E2E pending (needs an active ride with a driver streaming GPS).
 
 ## Fase 3 — Wallet (`wallet/page.tsx`, `wallet/receipts`)
 - [ ] USD-cents / Wallet v2 (`availableUsdCents`/`migrationRate`) + migration banner.
