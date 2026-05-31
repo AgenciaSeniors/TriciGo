@@ -10,6 +10,7 @@ import { formatCUP } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus } from '@tricigo/types';
 import { useDriverPosition } from '../../../hooks/useDriverPosition';
 import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing';
+import { useSearchingRide } from '../../../hooks/useSearchingRide';
 import { fetchRoute } from '../../../services/geoService';
 import { TipFlow } from '../../../components/TipFlow';
 import './track.css';
@@ -149,6 +150,10 @@ export default function TrackRidePage() {
   // Share the rider's location with the driver during the pickup phase so the
   // driver app shows the rider's pin (parity con useRiderLocationSharing móvil).
   useRiderLocationSharing(ride?.id, ride?.status, userId);
+
+  // Persistent driver search: heartbeat + radius-expansion while searching
+  // (parity con el loop de useRide.ts). Never auto-cancels.
+  const { searchRound } = useSearchingRide(ride?.id, ride?.status === 'searching');
 
   // Dynamic ETA (min) recomputed from the driver's live position toward the
   // current target (pickup before in_progress, dropoff during the trip).
@@ -406,9 +411,11 @@ export default function TrackRidePage() {
                 display: 'inline-block',
                 animation: nearbyVehicles.length === 0 ? 'searchPulse 1.5s ease-in-out infinite' : 'none',
               }} />
-              {nearbyVehicles.length > 0
-                ? `${nearbyVehicles.length} conductor${nearbyVehicles.length > 1 ? 'es' : ''} cerca`
-                : 'Buscando conductores cercanos...'}
+              {searchRound > 0
+                ? t('track.search_expanding', { defaultValue: 'Ampliando la búsqueda…' })
+                : nearbyVehicles.length > 0
+                  ? `${nearbyVehicles.length} conductor${nearbyVehicles.length > 1 ? 'es' : ''} cerca`
+                  : 'Buscando conductores cercanos...'}
             </div>
           )}
         </div>
