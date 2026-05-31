@@ -11,6 +11,7 @@ import type { RideWithDriver, RideStatus } from '@tricigo/types';
 import { useDriverPosition } from '../../../hooks/useDriverPosition';
 import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing';
 import { useSearchingRide } from '../../../hooks/useSearchingRide';
+import { useSearchingDrivers } from '../../../hooks/useSearchingDrivers';
 import { fetchRoute } from '../../../services/geoService';
 import { TipFlow } from '../../../components/TipFlow';
 import './track.css';
@@ -154,6 +155,14 @@ export default function TrackRidePage() {
   // Persistent driver search: heartbeat + radius-expansion while searching
   // (parity con el loop de useRide.ts). Never auto-cancels.
   const { searchRound } = useSearchingRide(ride?.id, ride?.status === 'searching');
+
+  // Presence of drivers reviewing the request + fast accept broadcast
+  // (parity con useSearchingDrivers). Best-effort; polling stays authoritative.
+  const { drivers: searchingDrivers } = useSearchingDrivers(
+    ride?.id,
+    ride?.status === 'searching',
+    () => { fetchRide(); },
+  );
 
   // Dynamic ETA (min) recomputed from the driver's live position toward the
   // current target (pickup before in_progress, dropoff during the trip).
@@ -407,15 +416,17 @@ export default function TrackRidePage() {
                 width: 8,
                 height: 8,
                 borderRadius: '50%',
-                background: nearbyVehicles.length > 0 ? '#00C853' : 'var(--primary, #FF4D00)',
+                background: (searchingDrivers.length > 0 || nearbyVehicles.length > 0) ? '#00C853' : 'var(--primary, #FF4D00)',
                 display: 'inline-block',
-                animation: nearbyVehicles.length === 0 ? 'searchPulse 1.5s ease-in-out infinite' : 'none',
+                animation: (searchingDrivers.length === 0 && nearbyVehicles.length === 0) ? 'searchPulse 1.5s ease-in-out infinite' : 'none',
               }} />
-              {searchRound > 0
-                ? t('track.search_expanding', { defaultValue: 'Ampliando la búsqueda…' })
-                : nearbyVehicles.length > 0
-                  ? `${nearbyVehicles.length} conductor${nearbyVehicles.length > 1 ? 'es' : ''} cerca`
-                  : 'Buscando conductores cercanos...'}
+              {searchingDrivers.length > 0
+                ? t('track.drivers_reviewing', { defaultValue: `${searchingDrivers.length} conductor${searchingDrivers.length > 1 ? 'es' : ''} revisando tu solicitud` })
+                : searchRound > 0
+                  ? t('track.search_expanding', { defaultValue: 'Ampliando la búsqueda…' })
+                  : nearbyVehicles.length > 0
+                    ? `${nearbyVehicles.length} conductor${nearbyVehicles.length > 1 ? 'es' : ''} cerca`
+                    : 'Buscando conductores cercanos...'}
             </div>
           )}
         </div>
