@@ -135,3 +135,66 @@ Las Fase 0–6 de arriba quedaron **gruesas y desactualizadas** (marcaban Wallet
 | Limpiar stores de dominio al logout | n/a | La web no tiene stores zustand globales (estado por página); `signOut` limpia sesión Supabase |
 
 **Verificación Área 1:** `pnpm --filter @tricigo/web check-types` verde; `/login`, `/complete-profile`, `/verify-phone` render 200 en dev sin error markers. Demo mode se ejercita con `NEXT_PUBLIC_DEMO_MODE=true`.
+
+## Área 2 — Booking (`book/page.tsx`, `BookingMap`, `AddressAutocomplete`)
+
+Fuente de verdad = flujo **nativo** del client `SelectingView` (`app/(tabs)/index.tsx`) + `useRide.ts` `confirmRide`. (El `WebHomeScreen`/`ReviewingView` del client son su propio fallback Expo-web / código muerto — NO son la referencia.) Resultado: **paridad esencialmente completa**; la web incluso va por delante en varias cosas. Único gap real cerrado: el TTL del estimado.
+
+### 2.1 Selector de servicio + disponibilidad
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| 5 tipos de servicio | ✅ | `page.tsx` WEB_SERVICES |
+| ETA por tipo (conductor más cercano) | ✅ | Web usa ruta real (`fetchETAsToPickup`+`adjustETAForVehicle`) — más preciso que el haversine del client |
+| Vehículos cercanos | ✅ | 5km/30; render como markers (ninguna pantalla activa muestra conteo) |
+| Deshabilitar grid hasta tener origen+destino | ✅ | gate por `pickup && dropoff` |
+
+### 2.2 Búsqueda de origen
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Recientes / guardados / predicciones | ✅ | `AddressAutocomplete` (localStorage + saved + predictions) |
+| POIs / calles / cruces / parsing cubano | ✅ | |
+| Abort / cache / session-token | ✅ | |
+| "Usar mi ubicación" + reverse-geocode | ✅ | Web lo pone en el mapa (botón) en vez de fila en el dropdown — equivalente |
+| Confirmar pin en mapa | ✅ | `BookingMap` center pin + `handleConfirmLocation` |
+
+### 2.3 Destino + predicciones + waypoints
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Quick-picks por historial (solo destino) | ✅ | |
+| Pin de destino en mapa | ✅ | |
+| Agregar paradas ≤3 al reservar | ✅ | `< 3` + payload de waypoints |
+
+### 2.4 Estimado + desglose
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Estimado por tipo | ✅ | `handleEstimateAll` |
+| Tarjeta de desglose (km/min/per-km/surge/USD) | ✅ | Web muestra per-km + tasa de cambio; ninguna pantalla activa muestra base/min_fare itemizado |
+| Buffer surge 1.2× en chequeo TriciCoin | ✅ | `requiredTrc * 1.2` |
+| Re-estimación al confirmar + abort Δ>5% | ✅ | |
+| **TTL de frescura (>5 min → rechazar/refrescar)** | ✅ FIX | `fareEstimatedAtRef` se seteaba pero **nunca se leía**; ahora el confirm rechaza estimados viejos (`RIDE_CONFIG.FARE_ESTIMATE_TTL_MS`) y auto-refresca (parity con `useRide.ts` X1.3) |
+| Fetch fresco de saldo al confirmar | ✅ | |
+
+### 2.5 Opciones
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Pago: efectivo / TriciCoin (saldo vivo) / mixto (slider) | ✅ | |
+| Selector corporativo | ✅ | Web tiene MÁS (no está en el `SelectingView` activo del client) |
+| Promo + preview de descuento | ✅ | |
+| Compartir viaje + asientos + descuento (triciclo) | ✅ | misma fórmula `floor(gross×freeSeats×7%)` |
+| Mensajería: categoría/peso/dims/destinatario/instrucciones/acompaña | ✅ | Web incluye dims (≥ client) |
+
+### 2.6 Guards de confirmación + transición
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Distancia mín 200m | ✅ | `RIDE_CONFIG.MIN_DISTANCE_M` |
+| Chequeo saldo TriciCoin / mixto | ✅ | |
+| Re-chequeo presupuesto corporativo (`getAccount`) | ✅ | |
+| Anti-doble-submit (refs sync) | ✅ | `isSubmittingRef`/`pendingRequestIdRef` |
+| Snapshot de precio en createRide (6 campos) | ✅ | base/per_km/per_min/min_fare/surge/pricing_rule_id |
+| `ride_mode` explícito | ✅ | |
+| Transición a búsqueda | ✅ | Web navega a `/track/[id]` (arquitectura distinta, equivalente) |
+| Detalles de entrega bloqueantes + cancel-on-fail | ✅ | |
+
+**Retirados (correctamente ausentes en web):** viaje programado, preferencias de viaje, seguro. (El client aún arrastra `scheduled_at`/`insurance_*` en el payload de `useRide`, pero su UI activa no los expone; la web no los manda.)
+
+**Verificación Área 2:** `pnpm --filter @tricigo/web check-types` verde; `/book` render 200 en dev sin error markers. El gap del TTL se cerró; el resto ya estaba a la par (varios ítems con la web por delante).

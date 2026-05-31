@@ -615,6 +615,17 @@ export default function BookPage() {
     // Double-submit guard — sync refs (state updates are async). Mirrors client useRide.
     if (isSubmittingRef.current || pendingRequestIdRef.current !== null) return;
 
+    // Reject a stale fare estimate (>FARE_ESTIMATE_TTL_MS, 5 min). Mirrors the
+    // client's X1.3 guard (useRide.ts:424-432): a rider who left the tab open
+    // shouldn't book at a price computed long ago. We auto-refresh the estimate
+    // and ask them to re-confirm at the fresh price.
+    const estimatedAt = fareEstimatedAtRef.current;
+    if (!estimatedAt || Date.now() - estimatedAt > RIDE_CONFIG.FARE_ESTIMATE_TTL_MS) {
+      setError(t('book.estimate_expired', { defaultValue: 'El precio expiró por inactividad. Actualizamos la tarifa — revisá y confirmá de nuevo.' }));
+      handleEstimateAll();
+      return;
+    }
+
     // Minimum distance 200m (guards pickup≈dropoff). Mirrors client Bug 25.
     const confirmDist = haversineDistance(
       { latitude: pickup.latitude, longitude: pickup.longitude },
