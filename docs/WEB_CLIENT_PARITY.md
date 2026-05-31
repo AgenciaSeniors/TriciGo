@@ -198,3 +198,71 @@ Fuente de verdad = flujo **nativo** del client `SelectingView` (`app/(tabs)/inde
 **Retirados (correctamente ausentes en web):** viaje programado, preferencias de viaje, seguro. (El client aún arrastra `scheduled_at`/`insurance_*` en el payload de `useRide`, pero su UI activa no los expone; la web no los manda.)
 
 **Verificación Área 2:** `pnpm --filter @tricigo/web check-types` verde; `/book` render 200 en dev sin error markers. El gap del TTL se cerró; el resto ya estaba a la par (varios ítems con la web por delante).
+
+## Área 3 — Tracking (`track/[id]/page.tsx`, `TrackingMap`, hooks)
+
+Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La página recibió mucho trabajo reciente (#329/#333), así que gran parte ya está a la par. Principio: **features/lógica deben coincidir; la web mantiene su diseño** (animaciones/confeti/haptics/pulse = aceptable que difieran).
+
+### 3.1 Búsqueda
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Heartbeat + rondas de reintento + expansión de radio | ✅ | `useSearchingRide` (10s + retry) |
+| Presencia "N conductores revisando" + fast-accept | ✅ | `useSearchingDrivers` |
+| Marcadores cercanos + "Ampliando la búsqueda…" | ✅ | |
+| Cancelar durante búsqueda; nunca auto-cancela | ✅ | |
+| Pantalla dura "sin conductor" a los 120s | n/a | Era del `WebSearchingState` (fallback Expo-web del client); **no existe status `no_driver_found`** (no es un `RideStatus`). La retroalimentación de reintento/expansión es el equivalente nativo |
+| Rotación de mensajes de búsqueda | ⚠️ | Web usa estados por `searchRound` (no rotación libre) — menor |
+
+### 3.2 Aceptado / en-camino
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Tarjeta de conductor (nombre/rating/vehículo/placa) + link a perfil | ✅ | |
+| ETA dinámica (ruta, throttle 30s) | ✅ | |
+| Compartir ubicación del rider en pickup | ✅ | `useRiderLocationSharing` |
+| **Banner de proximidad ("conductor llegando")** | ✅ FIX | `haversineDistance` driver→pickup <300m (parity con `ProximityBanner`) |
+| Polyline conductor→pickup (pre-viaje) | ❌ follow-up | `TrackingMap` dibuja sólo pickup→dropoff estático; falta la línea driver→pickup |
+| Foto de conductor/vehículo | ⚠️ | Web muestra avatar con inicial — menor |
+| Pulse ETA <3min / slide-up / "ver más" | n/a | Animaciones — diseño web propio |
+
+### 3.3 Llegada + en-curso
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Stepper con `arrived_at_destination` | ✅ | |
+| Agregar parada (≤3) + preview de tarifa | ✅ | |
+| Lista de paradas con estado | ✅ | |
+| Polyline en vivo conductor→destino (en viaje) | ✅ | `TrackingMap` live route |
+| **Banner llegada/llegando a destino** | ✅ FIX | cubierto por el banner de proximidad (driver→dropoff <300m) |
+| Tarjeta de llegada + confeti | n/a | Confeti = diseño; el aviso textual lo da el banner |
+| Barra de progreso del viaje (% + km restante) | ❌ follow-up | feature informativa ausente |
+
+### 3.4 Modales GPS
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Consentimiento conductor-sin-GPS (continuar/cancelar-sin-cargo) | ✅ | |
+| Confirmar-llegada ("¿Tu conductor está acá?") + "No lo veo" | ✅ | |
+
+### 3.5 Completado
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Estrellas + tags categorizados | ✅ | |
+| Propina (presets+custom, no-efectivo) | ✅ | `TipFlow` |
+| Recibo descargar (HTML/PDF) + email | ✅ | |
+| SMS "llegó seguro" una vez (guard) | ✅ | |
+| Recordatorio de calificación (5 min) | ✅ | banner (sin notif local — aceptable) |
+| Persistir tags en `review_tags` | ⚠️ follow-up | Web los mete en el texto del comentario; `reviewService.submitReview` **sí** acepta `tags` — falta alinear las **tag_keys** con el client antes de enviarlas |
+| Stats distancia/duración + línea de descuento | ⚠️ | Web muestra sólo tarifa — menor |
+| Desglose de fare-split | ❌ | feature deferida (split fare) |
+
+### 3.6 Seguridad / compartir / cancelar
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Cancelar con preview de fee + penalización | ✅ | `previewCancellationFee`+`previewCancelPenalty` |
+| SOS en cascada (reporte+broadcast+tel:106) | ✅ | |
+| Banners de salud (esperando/señal intermitente) | ✅ | |
+| **Compartir viaje** | ✅ FIX | Antes sólo copiaba un token existente; ahora **genera** el token al vuelo (`generateShareToken`) si falta, luego copia (parity con `handleShareTrip`) |
+| Revocar token / dejar de compartir | ❌ | menor; el token expira 24h tras completar |
+| Banners "conductor no se mueve (5min)" / "última vez hace X" | ❌ follow-up | feature de baja frecuencia |
+
+**Fixes en este PR:** banner de proximidad (#2) + generación de token al compartir (#6). **Falsos positivos descartados:** estado `no_driver_found` (no es un `RideStatus`). **Follow-ups funcionales** (otra pasada): polyline conductor→pickup, barra de progreso, tags por `tag_key`, banners de inactividad del conductor, fare-split. **Diferencias de diseño aceptadas:** confeti, pulse, slide-up, haptics, foto de conductor.
+
+**Verificación Área 3:** `pnpm --filter @tricigo/web check-types` verde; `/track/[id]` render 200 en dev sin error markers.
