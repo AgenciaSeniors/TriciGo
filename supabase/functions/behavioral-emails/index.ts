@@ -80,7 +80,7 @@ async function processWelcomeEmails(supabase: ReturnType<typeof getSupabase>): P
 
   // Find new users who haven't received a welcome email yet
   const { data: newUsers, error: usersError } = await supabase
-    .from('profiles')
+    .from('users')
     .select('id, email, full_name')
     .gte('created_at', cutoff);
 
@@ -129,61 +129,50 @@ async function processWelcomeEmails(supabase: ReturnType<typeof getSupabase>): P
 // ── Job B: Win-back email for inactive users (last ride 7+ days ago) ──
 async function processWinBackEmails(supabase: ReturnType<typeof getSupabase>): Promise<number> {
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-
-  // Find users whose most recent completed ride was 7+ days ago
-  // Using raw SQL for the subquery/join
-  const { data: inactiveUsers, error: queryError } = await supabase.rpc('get_inactive_riders', {
-    cutoff_date: sevenDaysAgo,
-  }).select('*');
-
-  // If the RPC doesn't exist yet, fall back to a simpler approach
-  if (queryError) {
-    console.warn('[behavioral-emails] RPC not available, using fallback query:', queryError.message);
-    return await processWinBackFallback(supabase, sevenDaysAgo);
-  }
-
-  if (!inactiveUsers?.length) return 0;
-
-  return await sendWinBackBatch(supabase, inactiveUsers);
+  // "Inactive" = a customer with a completed ride, but none in the last 7
+  // days. Aggregated in-memory from the rides table — no dedicated RPC
+  // needed at current volume.
+  return await processWinBackInactive(supabase, sevenDaysAgo);
 }
 
-async function processWinBackFallback(
+async function processWinBackInactive(
   supabase: ReturnType<typeof getSupabase>,
   sevenDaysAgo: string,
 ): Promise<number> {
-  // Find riders who have completed rides but none in the last 7 days
+  // Customers who completed a ride within the last 7 days — excluded below.
   const { data: recentRiders } = await supabase
     .from('rides')
-    .select('rider_id')
+    .select('customer_id')
     .eq('status', 'completed')
     .gte('completed_at', sevenDaysAgo);
 
-  const recentRiderIds = new Set((recentRiders ?? []).map((r: { rider_id: string }) => r.rider_id));
+  const recentRiderIds = new Set((recentRiders ?? []).map((r: { customer_id: string }) => r.customer_id));
 
-  // Get riders with older completed rides
+  // Customers with older completed rides (newest first).
   const { data: allRiders } = await supabase
     .from('rides')
-    .select('rider_id, completed_at')
+    .select('customer_id, completed_at')
     .eq('status', 'completed')
     .lt('completed_at', sevenDaysAgo)
     .order('completed_at', { ascending: false });
 
   if (!allRiders?.length) return 0;
 
-  // Deduplicate: keep only the most recent ride per rider
-  const latestByRider = new Map<string, { rider_id: string; completed_at: string }>();
+  // Deduplicate: keep only the most recent ride per customer, skipping
+  // anyone who also has a ride within the last 7 days.
+  const latestByRider = new Map<string, { customer_id: string; completed_at: string }>();
   for (const ride of allRiders) {
-    if (!latestByRider.has(ride.rider_id) && !recentRiderIds.has(ride.rider_id)) {
-      latestByRider.set(ride.rider_id, ride);
+    if (!latestByRider.has(ride.customer_id) && !recentRiderIds.has(ride.customer_id)) {
+      latestByRider.set(ride.customer_id, ride);
     }
   }
 
   if (latestByRider.size === 0) return 0;
 
-  // Get user profiles
+  // Resolve user records (name + email) for the inactive customers.
   const riderIds = Array.from(latestByRider.keys());
   const { data: profiles } = await supabase
-    .from('profiles')
+    .from('users')
     .select('id, email, full_name')
     .in('id', riderIds);
 
