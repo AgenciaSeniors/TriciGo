@@ -12,6 +12,7 @@ import { authService, getSupabaseClient } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuth } from '../providers';
+import { DEMO_MODE, DEMO_DIAL_CODES, isValidDemoPhone, normalizeDemoPhone } from '@/config/demo';
 
 type Step = 'phone' | 'otp';
 
@@ -21,7 +22,8 @@ export default function VerifyPhonePage() {
   const { user, isLoading, isAuthenticated } = useAuth();
 
   const [step, setStep] = useState<Step>('phone');
-  const [phone, setPhone] = useState('+53');
+  const [phone, setPhone] = useState(DEMO_MODE ? '' : '+53');
+  const [dialCode, setDialCode] = useState<string>(DEMO_MODE ? DEMO_DIAL_CODES[0]!.code : '+53');
   const [otp, setOtp] = useState('');
   const [normalizedPhone, setNormalizedPhone] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,11 +41,12 @@ export default function VerifyPhonePage() {
   }, [resendTimer]);
 
   async function handleSendCode() {
-    if (!isValidCubanPhone(phone)) {
+    const valid = DEMO_MODE ? isValidDemoPhone(phone) : isValidCubanPhone(phone);
+    if (!valid) {
       setError(t('auth.invalid_phone', { defaultValue: 'Número de teléfono inválido' }));
       return;
     }
-    const normalized = normalizeCubanPhone(phone);
+    const normalized = DEMO_MODE ? normalizeDemoPhone(phone, dialCode) : normalizeCubanPhone(phone);
     setNormalizedPhone(normalized);
     setLoading(true);
     setError(null);
@@ -121,17 +124,42 @@ export default function VerifyPhonePage() {
 
         {step === 'phone' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => { setPhone(e.target.value); setError(null); }}
-              placeholder="+53 5XXXXXXX"
-              className="input-base"
-              autoFocus
-              style={{ width: '100%', fontSize: '1.125rem', letterSpacing: '0.05em' }}
-            />
+            {DEMO_MODE ? (
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <select
+                  value={dialCode}
+                  onChange={(e) => setDialCode(e.target.value)}
+                  className="input-base"
+                  style={{ width: 'auto', fontSize: '1rem', fontWeight: 600 }}
+                  aria-label={t('auth.dial_code', { defaultValue: 'Código de país' })}
+                >
+                  {DEMO_DIAL_CODES.map((d) => (
+                    <option key={d.code} value={d.code}>{d.emoji} {d.code}</option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => { setPhone(e.target.value); setError(null); }}
+                  placeholder="999999999"
+                  className="input-base"
+                  autoFocus
+                  style={{ flex: 1, fontSize: '1.125rem', letterSpacing: '0.05em' }}
+                />
+              </div>
+            ) : (
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => { setPhone(e.target.value); setError(null); }}
+                placeholder="+53 5XXXXXXX"
+                className="input-base"
+                autoFocus
+                style={{ width: '100%', fontSize: '1.125rem', letterSpacing: '0.05em' }}
+              />
+            )}
             {error && <p style={{ color: 'var(--error)', fontSize: '0.875rem', textAlign: 'center' }}>{error}</p>}
-            <button onClick={handleSendCode} disabled={!isValidCubanPhone(phone) || loading} style={btnStyle(isValidCubanPhone(phone) && !loading)}>
+            <button onClick={handleSendCode} disabled={(DEMO_MODE ? !isValidDemoPhone(phone) : !isValidCubanPhone(phone)) || loading} style={btnStyle((DEMO_MODE ? isValidDemoPhone(phone) : isValidCubanPhone(phone)) && !loading)}>
               {loading ? t('auth.sending', { defaultValue: 'Enviando...' }) : t('auth.send_code', { defaultValue: 'Enviar código' })}
             </button>
           </div>

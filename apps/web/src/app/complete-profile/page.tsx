@@ -15,7 +15,7 @@ import { useAuth } from '../providers';
 export default function CompleteProfilePage() {
   const router = useRouter();
   const { t } = useTranslation('common');
-  const { user, isLoading, isAuthenticated } = useAuth();
+  const { user, isLoading, isAuthenticated, signOut } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -126,6 +126,17 @@ export default function CompleteProfilePage() {
             }}
           >
             {saving ? t('auth.saving', { defaultValue: 'Guardando...' }) : t('continue', { defaultValue: 'Continuar' })}
+          </button>
+
+          {/* Escape hatch (parity con SwitchAccountFooter móvil, BUG-299b): un
+              usuario que entró con la cuenta OAuth equivocada puede cerrar
+              sesión sin quedar atrapado completando el perfil. */}
+          <button
+            type="button"
+            onClick={async () => { await signOut(); router.replace('/login'); }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: '0.8rem', cursor: 'pointer', marginTop: '0.25rem' }}
+          >
+            {t('auth.not_you_sign_out', { defaultValue: '¿No sos vos? Cerrar sesión' })}
           </button>
         </div>
       </div>
