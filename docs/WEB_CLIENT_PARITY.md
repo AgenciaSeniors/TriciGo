@@ -266,3 +266,30 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 **Fixes en este PR:** banner de proximidad (#2) + generación de token al compartir (#6). **Falsos positivos descartados:** estado `no_driver_found` (no es un `RideStatus`). **Follow-ups funcionales** (otra pasada): polyline conductor→pickup, barra de progreso, tags por `tag_key`, banners de inactividad del conductor, fare-split. **Diferencias de diseño aceptadas:** confeti, pulse, slide-up, haptics, foto de conductor.
 
 **Verificación Área 3:** `pnpm --filter @tricigo/web check-types` verde; `/track/[id]` render 200 en dev sin error markers.
+
+## Área 4 — Chat (`chat/[rideId]/page.tsx`, `useChat`, `track/[id]`)
+
+Fuente de verdad = `app/chat/[rideId].tsx` + `useChat`/`useUnreadChatCount` móvil. El núcleo del chat ya estaba sólido; los gaps eran el **punto de entrada** y el **badge de no-leídos**.
+
+### 4.1 Chat núcleo
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Mensajes (`ride_messages`) | ✅ | `useChat` |
+| Realtime + polling 8s fallback | ✅ | `useChat` |
+| Indicador de tipeo + `notifyTyping` (debounced) | ✅ | |
+| Quick replies por rol | ✅ | `getQuickRepliesForRole('rider')` |
+| Contador de chars 400/500 | ✅ | |
+| Banner offline | ✅ | la web **además** tiene cola offline que drena al reconectar (el client NO encola — sólo avisa); web por delante |
+| Empty state / loading / auto-scroll / pendiente | ✅ | |
+
+### 4.2 Chat — entrada + no-leídos + header
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Botón de chat in-app desde el viaje activo | ✅ FIX | La web **no tenía punto de entrada** (sólo WhatsApp externo); ahora `/track/[id]` muestra "Mensajes" → `/chat/[id]` cuando hay conductor |
+| Badge de no-leídos | ✅ FIX | nuevo `useUnreadChatCount` web (poll 12s, `chat_last_read_<id>` en localStorage, cuenta mensajes del otro > last-read) |
+| Sellado de last-read (al abrir/cerrar el chat) | ✅ FIX | `stampChatRead` en mount+unmount del chat |
+| Header del conductor: nombre + vehículo/placa | ✅ FIX | Antes sólo "Chat del viaje"; ahora nombre (1er nombre) + marca/modelo/placa vía `getRideWithDriver` |
+
+**Fixes en este PR:** punto de entrada al chat + badge de no-leídos (`useUnreadChatCount` web + `stampChatRead`) + header con vehículo/placa. Cierra los pendientes "Chat unread badge / last-read sealing; driver header vehicle+plate" de la Fase 2. **Aclaración:** la "cola offline" no es un comportamiento del client (su banner dice reintentá manual) — la web ya la tiene y va por delante.
+
+**Verificación Área 4:** `pnpm --filter @tricigo/web check-types` verde; `/track/[id]` + `/chat/[rideId]` render 200 en dev sin error markers.

@@ -17,10 +17,11 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, rideService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { getQuickRepliesForRole } from '@tricigo/utils';
 import { useChat } from '@/hooks/useChat';
+import { stampChatRead } from '@/hooks/useUnreadChatCount';
 
 const MAX_CHARS = 500;
 const CHAR_WARN = 400;
@@ -33,6 +34,7 @@ export default function ChatPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [driverName, setDriverName] = useState('Conductor');
+  const [driverSubtitle, setDriverSubtitle] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
@@ -63,26 +65,36 @@ export default function ChatPage() {
     if (!authLoading && !userId) router.replace('/login');
   }, [authLoading, userId, router]);
 
-  // Driver name lookup (one-shot, from the rides + driver_profiles + users join)
+  // Driver header lookup — name + vehicle/plate (parity con el header del chat
+  // móvil, que muestra nombre + marca/modelo/placa). Reusa getRideWithDriver
+  // (misma fuente que /track) en vez de un join crudo a medias.
   useEffect(() => {
     if (!rideId) return;
     let cancelled = false;
     (async () => {
       try {
-        const { data: rideRaw } = await getSupabaseClient()
-          .from('rides')
-          .select('driver:driver_profiles(user:users(full_name))')
-          .eq('id', rideId)
-          .single();
-        if (cancelled) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ride = rideRaw as any;
-        if (ride?.driver?.user?.full_name) setDriverName(ride.driver.user.full_name);
+        const ride = await rideService.getRideWithDriver(rideId);
+        if (cancelled || !ride) return;
+        if (ride.driver_name) setDriverName(ride.driver_name.split(' ')[0] || ride.driver_name);
+        const veh = [
+          ride.vehicle_make,
+          ride.vehicle_model,
+          ride.vehicle_plate ? `· ${ride.vehicle_plate}` : null,
+        ].filter(Boolean).join(' ');
+        if (veh) setDriverSubtitle(veh);
       } catch {
         /* fallback to default driverName */
       }
     })();
     return () => { cancelled = true; };
+  }, [rideId]);
+
+  // Stamp last-read on mount + unmount so the tracking-screen unread badge
+  // clears (parity con el sellado de last-read del chat móvil).
+  useEffect(() => {
+    if (!rideId) return;
+    stampChatRead(rideId);
+    return () => stampChatRead(rideId);
   }, [rideId]);
 
   const { messages, loading, remoteTyping, sendMessage, notifyTyping } = useChat(rideId, userId);
@@ -155,7 +167,7 @@ export default function ChatPage() {
         <div>
           <h1 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{driverName}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-            {t('web.chat_ride', { defaultValue: 'Chat del viaje' })}
+            {driverSubtitle ?? t('web.chat_ride', { defaultValue: 'Chat del viaje' })}
           </p>
         </div>
       </div>
