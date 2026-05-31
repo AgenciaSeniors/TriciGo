@@ -12,6 +12,7 @@ import {
   computeRechargeFeeUsd,
   computeRechargeChargeUsd,
   RECHARGE_LIMITS,
+  translateNetopiaError,
 } from '@tricigo/utils';
 import type { LedgerTransaction, WalletAccount, PaymentProviderConfig } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -106,8 +107,21 @@ export default function WalletPage() {
 
   // ── Wallet state ──
   const [account, setAccount] = useState<WalletAccount | null>(null);
-  const [balance, setBalance] = useState<{ available: number; held: number }>({ available: 0, held: 0 });
+  const [balance, setBalance] = useState<{
+    available: number; held: number;
+    availableUsdCents: number | null; heldUsdCents: number | null;
+    migrationRate: number | null; migrationBonusPct: number | null;
+  }>({ available: 0, held: 0, availableUsdCents: null, heldUsdCents: null, migrationRate: null, migrationBonusPct: null });
   const [balanceLoading, setBalanceLoading] = useState(true);
+
+  // Wallet v2 migration banner (one-time, dismissible — parity con WalletMigrationBanner).
+  const [migrationDismissed, setMigrationDismissed] = useState(true);
+  useEffect(() => {
+    setMigrationDismissed(localStorage.getItem('tricigo_wallet_migration_ack') === '1');
+  }, []);
+
+  // Receipt readiness after a recharge (poll the PDF generation, 6×2s).
+  const [receiptReady, setReceiptReady] = useState(false);
 
   // ── Transactions state ──
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
@@ -228,6 +242,7 @@ export default function WalletPage() {
         if (cancelled) return;
         if (intent.status === 'completed') {
           setSuccessIntentId(intentId);
+          setReceiptReady(false);
           setRechargeStep('success');
           // Refresh balance + transactions so the new credit shows.
           if (userId) {
@@ -239,9 +254,23 @@ export default function WalletPage() {
                 if (!cancelled) setTransactions(txns as LedgerTransaction[]);
               }
             } catch { /* ignore — visual refresh, not critical */ }
+            // Poll for the receipt PDF (generated async post-webhook), 6×2s —
+            // fire-and-forget so it doesn't block the success UI. Mirrors the
+            // mobile wallet's post-recharge receipt poll.
+            (async () => {
+              for (let i = 0; i < 6; i++) {
+                if (cancelled) return;
+                try {
+                  const receipts = await walletService.getReceipts(userId);
+                  const r = receipts.find((x) => x.payment_intent_id === intentId);
+                  if (r?.pdf_generated_at) { if (!cancelled) setReceiptReady(true); return; }
+                } catch { /* ignore */ }
+                await new Promise((res) => setTimeout(res, 2000));
+              }
+            })();
           }
         } else if (intent.status === 'failed') {
-          setRechargeError(intent.error_message ?? 'El pago no pudo ser procesado');
+          setRechargeError(intent.error_message ? translateNetopiaError(intent.error_message) : 'El pago no pudo ser procesado');
           setRechargeStep('failed');
         } else {
           // Still pending after poll exhausted — soft success (webhook will land soon)
@@ -377,6 +406,32 @@ export default function WalletPage() {
           Mis créditos de viaje
         </h1>
 
+        {/* ═══ Wallet v2 migration banner (dismissible) ═══ */}
+        {!migrationDismissed && balance.availableUsdCents != null && balance.migrationBonusPct != null && (() => {
+          const bonusPct = balance.migrationBonusPct ?? 0;
+          const usdCents = balance.availableUsdCents ?? 0;
+          const showsBonus = bonusPct > 0;
+          const bonusUsd = (usdCents / 100 / (1 + bonusPct / 100)) * (bonusPct / 100);
+          return (
+            <div role="alert" style={{ marginBottom: '1rem', borderRadius: '1rem', border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)', padding: '1rem' }}>
+              <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#b45309', margin: '0 0 0.25rem' }}>
+                {showsBonus ? '🎁 ¡Nuevo TriciCoin con bono!' : 'TriciCoin actualizado'}
+              </p>
+              <p style={{ fontSize: '0.8rem', color: '#92400e', margin: '0 0 0.75rem', lineHeight: 1.4 }}>
+                {showsBonus
+                  ? `Tu saldo ahora se muestra en USD (1 TC ≡ 1 USD). Te regalamos ~$${bonusUsd.toFixed(2)} (${bonusPct.toFixed(0)}%) como bienvenida al nuevo modelo.`
+                  : 'Tu saldo ahora se muestra en USD (1 TC ≡ 1 USD). Mismo importe, nueva unidad para reflejar el valor real.'}
+              </p>
+              <button
+                onClick={() => { localStorage.setItem('tricigo_wallet_migration_ack', '1'); setMigrationDismissed(true); }}
+                style={{ background: '#ea580c', color: '#fff', border: 'none', borderRadius: '999px', padding: '0.4rem 1rem', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Entendido
+              </button>
+            </div>
+          );
+        })()}
+
         {/* ═══ Balance card ═══ */}
         <div className="wallet-balance-card">
           {balanceLoading ? (
@@ -389,13 +444,25 @@ export default function WalletPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
                 Saldo disponible
               </p>
-              <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.25rem' }}>
-                {formatTRC(balance.available)}
-              </p>
+              {/* Wallet v2: show USD as the unit of account with a CUP subtitle. */}
+              {balance.availableUsdCents != null ? (
+                <>
+                  <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.1rem' }}>
+                    ${(balance.availableUsdCents / 100).toFixed(2)} <span style={{ fontSize: '1rem', fontWeight: 600, opacity: 0.85 }}>USD</span>
+                  </p>
+                  <p style={{ fontSize: '0.8rem', opacity: 0.85, margin: 0 }}>
+                    &asymp; {formatTRC(balance.available)}
+                  </p>
+                </>
+              ) : (
+                <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.25rem' }}>
+                  {formatTRC(balance.available)}
+                </p>
+              )}
               {balance.held > 0 && (
                 <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.15)', borderRadius: '0.5rem' }}>
                   <p style={{ fontSize: '0.75rem', opacity: 0.8, margin: 0 }}>
-                    Retenido: {formatTRC(balance.held)}
+                    Retenido: {balance.heldUsdCents != null ? `$${(balance.heldUsdCents / 100).toFixed(2)} USD` : formatTRC(balance.held)}
                   </p>
                 </div>
               )}
@@ -561,9 +628,9 @@ export default function WalletPage() {
                     href="/wallet/receipts"
                     aria-label="Ver mis comprobantes de recarga"
                     className="btn-base btn-primary-solid"
-                    style={{ cursor: 'pointer', textDecoration: 'none' }}
+                    style={{ cursor: 'pointer', textDecoration: 'none', opacity: receiptReady ? 1 : 0.85 }}
                   >
-                    Ver recibo
+                    {receiptReady ? 'Ver recibo' : 'Generando recibo…'}
                   </Link>
                 )}
                 <button
@@ -682,12 +749,16 @@ export default function WalletPage() {
                       </p>
                     </div>
                     {amount != null && (
-                      <span style={{
-                        fontSize: '0.9rem', fontWeight: 700, flexShrink: 0, marginLeft: '0.5rem',
-                        color: amount > 0 ? '#16a34a' : '#dc2626',
-                      }}>
-                        {amount > 0 ? '+' : ''}{formatTRC(Math.abs(amount))}
-                      </span>
+                      <div style={{ flexShrink: 0, marginLeft: '0.5rem', textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: amount > 0 ? '#16a34a' : '#dc2626' }}>
+                          {amount > 0 ? '+' : ''}{formatTRC(Math.abs(amount))}
+                        </span>
+                        {balance.migrationRate ? (
+                          <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
+                            &asymp; {amount > 0 ? '+' : '-'}${(Math.abs(amount) / balance.migrationRate).toFixed(2)}
+                          </span>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 );
