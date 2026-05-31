@@ -49,13 +49,16 @@ authenticated booking E2E pending (needs live OTP session on device).
 - [x] Cancel with status-aware preview copy (fee warning when driver en route).
 - [x] `RideCompleteView`: tip (`TipFlow`) + categorized rating tags.
 - [x] Chat: quick replies (`getQuickRepliesForRole`), char counter (400/500), offline banner.
+- [x] Cancel **exact** fee + penalty preview (`previewCancellationFee` + `previewCancelPenalty` in the confirm dialog).
+- [x] Driver-no-GPS consent + confirm-arrival modal (`gps_override_*` + `riderConfirmDriverArrival`; `Ride` type extended with `gps_override_requested_at`/`gps_override_confirmed_at`/`gps_check_distance_m`).
+- [x] Add stop mid-ride (`getRideWaypoints` list + `AddressAutocomplete` → `estimateWaypointAddition` preview → `addWaypointToActiveRide`, máx 3).
+- [x] Receipt download (HTML → print/PDF) + email (`getReceiptData` + `generateReceiptHTML` / `sendRideReceipt`) in `/track/[id]` completed view **and** `/rides/[id]`.
+- [x] "Llegó seguro" auto-share contact SMS on completion (once, `localStorage` guard) + lightweight rating reminder banner (5 min, scrolls to rating).
 Remaining (deferred — lower-frequency / heavier):
-- [ ] Cancel **exact** fee amount preview (only status-aware copy done).
-- [ ] Add stop mid-ride; driver-no-GPS / confirm-arrival modals.
-- [ ] Split fare management; receipt PDF/email in the completion view.
+- [ ] Split fare management.
 - [ ] Chat unread badge / last-read sealing; driver header vehicle+plate.
 
-Verification: `pnpm check-types` green (4 apps); `/track/[id]` + `/chat/[rideId]` compile + render 200 in Next dev. Live driver-marker movement E2E pending (needs an active ride with a driver streaming GPS).
+Verification: `pnpm check-types` green (4 apps); `/track/[id]` + `/rides/[id]` + `/chat/[rideId]` compile + render 200 in Next dev. Live driver-marker movement + GPS/confirm-arrival modal trigger E2E pending (needs an active ride with the `gps_override_*` flags set / a driver streaming GPS).
 
 ## Fase 3 — Wallet (`wallet/page.tsx`, `wallet/receipts`)
 - [ ] USD-cents / Wallet v2 (`availableUsdCents`/`migrationRate`) + migration banner.
