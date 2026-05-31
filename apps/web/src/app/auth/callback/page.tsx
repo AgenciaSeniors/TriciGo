@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabaseClient, referralService } from '@tricigo/api';
+import { getSupabaseClient, authService, referralService } from '@tricigo/api';
+import { registerWebLoginDevice } from '@/lib/webDevice';
 
 // Mirror of LoginPage's PENDING_REFERRAL_KEY — the referral code may
 // have been stashed before the OAuth round-trip, and now (with a
@@ -38,7 +39,17 @@ export default function AuthCallbackPage() {
     async function finishAndRedirect(uid: string | undefined) {
       if (handled.current) return;
       handled.current = true;
-      if (uid) await applyPendingReferralIfAny(uid);
+      if (uid) {
+        await applyPendingReferralIfAny(uid);
+        registerWebLoginDevice();
+        // Route by profile completeness (parity con el guard de _layout móvil):
+        // OAuth users often lack a name and always lack a phone at first login.
+        try {
+          const profile = await authService.getUserById(uid);
+          if (!profile?.full_name) { router.replace('/complete-profile'); return; }
+          if (!profile?.phone) { router.replace('/verify-phone'); return; }
+        } catch { /* fall through to /book on lookup failure */ }
+      }
       router.replace('/book');
     }
 
