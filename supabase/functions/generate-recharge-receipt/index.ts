@@ -172,6 +172,21 @@ Deno.serve(async (req) => {
     if (userErr) throw userErr;
     const userRow = user as UserRow;
 
+    // Receipt recipient: prefer public.users.email, but fall back to the
+    // canonical auth.users.email. Phone-signup users often have an email
+    // only there (kept in sync going forward by migration 00358); without
+    // this fallback the user's receipt was silently skipped.
+    let recipientEmail: string | null = userRow.email ?? null;
+    if (!recipientEmail) {
+      const { data: authUser } = await supabase.auth.admin.getUserById(piRow.user_id);
+      recipientEmail = authUser?.user?.email ?? null;
+    }
+    if (!recipientEmail) {
+      console.warn(
+        `[generate-recharge-receipt] no email for user ${piRow.user_id} — user receipt NOT sent (admin copy still sent)`,
+      );
+    }
+
     // 2. Idempotency check — reuse existing receipt_no if any
     const { data: existing } = await supabase
       .from('wallet_receipts')
@@ -213,7 +228,7 @@ Deno.serve(async (req) => {
         amounts,
         pdf_size_bytes: pdfBytes.byteLength,
         pdf_base64_first_120: encodeBase64(pdfBytes.slice(0, 120)),
-        user_email: userRow.email,
+        user_email: recipientEmail,
       });
     }
 
@@ -266,15 +281,15 @@ Deno.serve(async (req) => {
 
     const dateLabel = formatDateLong(dateISO);
 
-    const userEmailResult = userRow.email && !existingRow?.email_sent_at_user
+    const userEmailResult = recipientEmail && !existingRow?.email_sent_at_user
       ? await sendResend({
-          to: userRow.email,
+          to: recipientEmail,
           subject: walletReceiptSubject(receiptNo, 'user'),
           html: walletReceiptHtml({
             audience: 'user',
             receiptNo,
             dateLabel,
-            user: { full_name: userRow.full_name, email: userRow.email, id: userRow.id },
+            user: { full_name: userRow.full_name, email: recipientEmail, id: userRow.id },
             amounts,
           }),
           attachmentBase64: pdfBase64,
