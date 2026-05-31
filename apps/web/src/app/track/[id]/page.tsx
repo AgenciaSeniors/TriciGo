@@ -6,7 +6,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService, notificationService } from '@tricigo/api';
-import { formatCUP, generateReceiptHTML } from '@tricigo/utils';
+import { formatCUP, generateReceiptHTML, haversineDistance } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus, Waypoint } from '@tricigo/types';
 import { useDriverPosition } from '../../../hooks/useDriverPosition';
 import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing';
@@ -146,6 +146,7 @@ export default function TrackRidePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [deliveryDetails, setDeliveryDetails] = useState<{
     recipient_name?: string; recipient_phone?: string; package_description?: string;
@@ -541,6 +542,16 @@ export default function TrackRidePage() {
   const dropoffLat = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.latitude : 0;
   const dropoffLng = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.longitude : 0;
 
+  // Proximity feedback (parity con ProximityBanner del client): cuando el
+  // conductor entra en ~300m del punto activo, avisamos al pasajero.
+  const PROXIMITY_THRESHOLD_M = 300;
+  const showArrivingPickup = !!driverLocation
+    && ['accepted', 'driver_en_route'].includes(ride.status)
+    && haversineDistance({ latitude: driverLocation.lat, longitude: driverLocation.lng }, { latitude: pickupLat, longitude: pickupLng }) < PROXIMITY_THRESHOLD_M;
+  const showApproachingDropoff = !!driverLocation
+    && ride.status === 'in_progress'
+    && haversineDistance({ latitude: driverLocation.lat, longitude: driverLocation.lng }, { latitude: dropoffLat, longitude: dropoffLng }) < PROXIMITY_THRESHOLD_M;
+
   const statusBadgeClass = isCanceled ? 'track-status-badge--canceled'
     : ride.status === 'completed' ? 'track-status-badge--completed'
     : ride.status === 'searching' ? 'track-status-badge--searching'
@@ -643,6 +654,19 @@ export default function TrackRidePage() {
           ) : (
             <div className="track-card">
               <StatusStepper steps={statusSteps} currentIdx={currentStepIdx} />
+            </div>
+          )}
+
+          {/* Proximity banner — el conductor entró en ~300m del punto activo
+              (parity con ProximityBanner del client). */}
+          {(showArrivingPickup || showApproachingDropoff) && (
+            <div className="track-card" style={{ background: 'rgba(0,200,83,0.1)', border: '1px solid rgba(0,200,83,0.4)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: '1.2rem' }} aria-hidden="true">📍</span>
+              <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {showArrivingPickup
+                  ? t('track.driver_arriving', { defaultValue: 'Tu conductor está llegando al punto de recogida' })
+                  : t('track.approaching_dest', { defaultValue: 'Estás llegando a tu destino' })}
+              </span>
             </div>
           )}
 
@@ -1104,20 +1128,34 @@ export default function TrackRidePage() {
           {/* Action Buttons */}
           {!isTerminal && (
             <div className="track-actions">
-              {ride.share_token && (
-                <button
-                  className="track-action-btn track-action-btn--share"
-                  onClick={() => {
-                    const url = `https://tricigo.com/track/share/${ride.share_token}`;
-                    navigator.clipboard.writeText(url).then(() => {
-                      setShareCopied(true);
-                      setTimeout(() => setShareCopied(false), 2000);
-                    });
-                  }}
-                >
-                  {shareCopied ? <><IconCheck /> Enlace copiado</> : <><IconShare /> Compartir viaje</>}
-                </button>
-              )}
+              {/* Compartir viaje: si aún no hay token, lo generamos al vuelo
+                  (parity con handleShareTrip del client, que auto-genera el
+                  token cuando falta) y luego copiamos el enlace. */}
+              <button
+                className="track-action-btn track-action-btn--share"
+                disabled={sharing}
+                onClick={async () => {
+                  let token = ride.share_token;
+                  if (!token) {
+                    setSharing(true);
+                    try {
+                      token = await rideService.generateShareToken(rideId);
+                      fetchRide();
+                    } catch {
+                      setSharing(false);
+                      return;
+                    }
+                    setSharing(false);
+                  }
+                  const url = `https://tricigo.com/track/share/${token}`;
+                  navigator.clipboard.writeText(url).then(() => {
+                    setShareCopied(true);
+                    setTimeout(() => setShareCopied(false), 2000);
+                  });
+                }}
+              >
+                {shareCopied ? <><IconCheck /> Enlace copiado</> : <><IconShare /> {sharing ? 'Generando…' : 'Compartir viaje'}</>}
+              </button>
               {ride.driver_phone && (
                 <a
                   className="track-action-btn track-action-btn--whatsapp"
