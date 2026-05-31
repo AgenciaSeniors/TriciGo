@@ -141,6 +141,13 @@ export default function EditProfilePage() {
       await supabase.auth.updateUser({
         data: { full_name: fullName.trim(), phone: phone.trim() },
       });
+      // Mirror the name to public.users so driver/listing views (which read
+      // users.full_name, NOT auth user_metadata) see the change — same pattern
+      // as the avatar mirror above. Without this, a web name edit was invisible
+      // to drivers. Parity con authService.updateProfile (escribe en users).
+      try {
+        await supabase.from('users').update({ full_name: fullName.trim() }).eq('id', userId);
+      } catch { /* RLS may block; auth metadata remains the fallback source */ }
 
       if (email.trim() !== originalEmail) {
         await supabase.auth.updateUser({ email: email.trim() });

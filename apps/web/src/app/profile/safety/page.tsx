@@ -91,9 +91,16 @@ export default function SafetyPage() {
           </div>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#c53030' }}>{t('web.sos_button', { defaultValue: 'Boton SOS' })}</h2>
         </div>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 1rem', lineHeight: 1.5 }}>
           {t('web.sos_description', { defaultValue: 'Durante un viaje, puedes presionar el boton SOS para alertar a tus contactos de confianza y compartir tu ubicacion en tiempo real. Tu seguridad es nuestra prioridad.' })}
         </p>
+        {/* Llamada directa a emergencias (parity con el botón tel:106 del safety móvil). */}
+        <a
+          href="tel:106"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0.6rem 1.2rem', borderRadius: '0.6rem', background: '#e53e3e', color: '#fff', fontWeight: 700, fontSize: '0.875rem', textDecoration: 'none' }}
+        >
+          📞 {t('web.call_emergency', { defaultValue: 'Llamar a emergencias (106)' })}
+        </a>
       </div>
 
       {/* Emergency Contact */}
@@ -137,7 +144,7 @@ export default function SafetyPage() {
               </div>
             </div>
             <button
-              onClick={() => router.push('/profile/trusted-contacts')}
+              onClick={() => router.push('/profile/emergency-contact')}
               style={{
                 padding: '0.5rem 1rem',
                 background: 'var(--primary)',

@@ -91,6 +91,11 @@ export default function SettingsPage() {
     i18n.changeLanguage(code);
     localStorage.setItem('tricigo_language', code);
     document.documentElement.lang = code;
+    // Persist to public.users so the language syncs across devices (parity con
+    // el users.preferred_language del settings móvil). Best-effort.
+    if (userId) {
+      void getSupabaseClient().from('users').update({ preferred_language: code }).eq('id', userId).then(() => {}, () => {});
+    }
   }
 
   if (authLoading) {
@@ -290,6 +295,21 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Danger zone — eliminar cuenta (parity con el settings móvil). La
+          página /account/delete ya existía pero no estaba enlazada desde aquí. */}
+      <div style={{ marginTop: '2rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--error, #dc2626)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+          {t('web.account', { defaultValue: 'Cuenta' })}
+        </h2>
+        <Link
+          href="/account/delete"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid rgba(239,68,68,0.3)', textDecoration: 'none', color: 'var(--error, #dc2626)', fontSize: '0.95rem', fontWeight: 600 }}
+        >
+          {t('web.delete_account', { defaultValue: 'Eliminar mi cuenta' })}
+          <span aria-hidden="true">›</span>
+        </Link>
       </div>
     </main>
   );

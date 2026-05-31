@@ -267,13 +267,17 @@ export default function SupportPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {tickets.map((ticket) => (
-            <div
+            <Link
               key={ticket.id}
+              href={`/support/${ticket.id}`}
               style={{
+                display: 'block',
                 background: 'var(--bg-card)',
                 borderRadius: '1rem',
                 border: '1px solid var(--border-light)',
                 padding: '1.25rem',
+                textDecoration: 'none',
+                color: 'inherit',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
@@ -299,7 +303,7 @@ export default function SupportPage() {
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>
                 {ticket.category === 'ride_issue' ? 'Viaje' : ticket.category === 'payment' ? 'Pago' : ticket.category === 'safety' ? 'Seguridad' : ticket.category === 'account' ? 'Cuenta' : 'Otro'}
               </p>
-            </div>
+            </Link>
           ))}
         </div>
       )}
