@@ -8,6 +8,7 @@ import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuth } from '../providers';
 import { registerWebLoginDevice } from '@/lib/webDevice';
+import { DEMO_MODE, DEMO_DIAL_CODES, isValidDemoPhone, normalizeDemoPhone } from '@/config/demo';
 
 type Step = 'phone' | 'otp';
 
@@ -26,10 +27,13 @@ export default function LoginPage() {
   const { t } = useTranslation('common');
   const { isAuthenticated, isLoading } = useAuth();
   const [step, setStep] = useState<Step>('phone');
-  const [phone, setPhone] = useState('+53');
+  // Demo mode: local number + dial-code picker (CU/BR). Prod: prefilled +53.
+  const [phone, setPhone] = useState(DEMO_MODE ? '' : '+53');
+  const [dialCode, setDialCode] = useState<string>(DEMO_MODE ? DEMO_DIAL_CODES[0]!.code : '+53');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resendConfirm, setResendConfirm] = useState(false);
   const [pendingReferralCode, setPendingReferralCode] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
   // Phone normalized to E.164 (+53…) — what we actually send/verify against.
@@ -110,11 +114,12 @@ export default function LoginPage() {
   }
 
   async function handleSendOtp() {
-    if (!isValidCubanPhone(phone)) {
+    const valid = DEMO_MODE ? isValidDemoPhone(phone) : isValidCubanPhone(phone);
+    if (!valid) {
       setError(t('auth.invalid_phone', { defaultValue: 'Número de teléfono inválido' }));
       return;
     }
-    const normalized = normalizeCubanPhone(phone);
+    const normalized = DEMO_MODE ? normalizeDemoPhone(phone, dialCode) : normalizeCubanPhone(phone);
     setNormalizedPhone(normalized);
     setLoading(true);
     setError(null);
@@ -155,6 +160,9 @@ export default function LoginPage() {
     try {
       await authService.sendOTP(normalizedPhone || normalizeCubanPhone(phone));
       setResendTimer(60);
+      // Inline confirmation (parity con el toast "Código reenviado" móvil).
+      setResendConfirm(true);
+      setTimeout(() => setResendConfirm(false), 3000);
     } catch (err) {
       setError(t('auth.send_otp_failed'));
       console.error(err);
@@ -288,22 +296,60 @@ export default function LoginPage() {
               <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
                 {t('auth.phone_label')}
               </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+53 5XXXXXXX"
-                className="input-base"
-                style={{ fontSize: '1.125rem', letterSpacing: '0.05em' }}
-              />
+              {DEMO_MODE ? (
+                // Demo mode: dial-code picker (CU/BR) + local number, mirroring
+                // the client login so QA from abroad (e.g. Brasil) can sign in.
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <select
+                    value={dialCode}
+                    onChange={(e) => setDialCode(e.target.value)}
+                    className="input-base"
+                    style={{ width: 'auto', fontSize: '1rem', fontWeight: 600 }}
+                    aria-label={t('auth.dial_code', { defaultValue: 'Código de país' })}
+                  >
+                    {DEMO_DIAL_CODES.map((d) => (
+                      <option key={d.code} value={d.code}>{d.emoji} {d.code}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => { setPhone(e.target.value); setError(null); }}
+                    placeholder="999999999"
+                    className="input-base"
+                    style={{ flex: 1, fontSize: '1.125rem', letterSpacing: '0.05em' }}
+                  />
+                </div>
+              ) : (
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => { setPhone(e.target.value); setError(null); }}
+                  placeholder="+53 5XXXXXXX"
+                  className="input-base"
+                  style={{ fontSize: '1.125rem', letterSpacing: '0.05em' }}
+                />
+              )}
             </div>
             <button
               onClick={handleSendOtp}
-              disabled={!isValidCubanPhone(phone) || loading}
-              style={btnStyle(isValidCubanPhone(phone) && !loading)}
+              disabled={(DEMO_MODE ? !isValidDemoPhone(phone) : !isValidCubanPhone(phone)) || loading}
+              style={btnStyle((DEMO_MODE ? isValidDemoPhone(phone) : isValidCubanPhone(phone)) && !loading)}
             >
               {loading ? t('auth.sending') : t('auth.send_code')}
             </button>
+
+            {/* Legal notice (parity con el aviso de términos del login móvil). */}
+            <p style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem', textAlign: 'center', lineHeight: 1.5, margin: 0 }}>
+              {t('auth.terms_notice', { defaultValue: 'Al continuar, aceptas nuestros' })}{' '}
+              <Link href="/terms" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+                {t('auth.terms_link', { defaultValue: 'Términos de Servicio' })}
+              </Link>{' '}
+              {t('auth.and', { defaultValue: 'y' })}{' '}
+              <Link href="/privacy" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+                {t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
+              </Link>
+            </p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -321,6 +367,8 @@ export default function LoginPage() {
               onChange={(e) => {
                 const v = e.target.value.replace(/\D/g, '').slice(0, 6);
                 setOtp(v);
+                // Clear stale error as the user retypes (parity con verify-otp móvil).
+                if (error) setError(null);
                 // Auto-submit when the 6th digit lands (parity con verify-otp móvil).
                 if (v.length === 6 && !loading) handleVerifyOtp(v);
               }}
@@ -354,6 +402,11 @@ export default function LoginPage() {
                 ? `${t('auth.resend_code', { defaultValue: 'Reenviar código' })} (${resendTimer}s)`
                 : t('auth.resend_code', { defaultValue: 'Reenviar código' })}
             </button>
+            {resendConfirm && (
+              <p style={{ color: 'var(--success, #16a34a)', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
+                {t('auth.resend_success_body', { defaultValue: 'Código reenviado. Revisá tus mensajes.' })}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => { setStep('phone'); setOtp(''); setError(null); }}

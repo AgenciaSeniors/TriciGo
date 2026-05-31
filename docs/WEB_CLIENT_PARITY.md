@@ -87,3 +87,51 @@ Parity pass (existing): `settings`, `saved-locations`, `safety`, `trusted-contac
 - [ ] "Regalar" button in `/wallet`.
 - [ ] Reuse `walletService.sendGift/findUserByPhone/findUserByGiftCode/getTransfers`, `referralService.getOrCreateReferralCode`.
 - [ ] Web QR (lib) + code-text fallback.
+
+---
+
+# Re-auditoría a grano fino (2026-05-31)
+
+Las Fase 0–6 de arriba quedaron **gruesas y desactualizadas** (marcaban Wallet/Auth/Gift como "pendientes" cuando ya estaban implementadas). Esta sección las **reemplaza** con micro-fases por comportamiento: cada una lleyó el client (fuente de verdad) y la web, y dejó una tabla de diff `✅` a la par / `⚠️` parcial / `❌` falta. Orden de la app; 1 PR por área.
+
+## Área 1 — Auth (`login`, `complete-profile`, `verify-phone`, `auth/callback`, `providers`)
+
+### 1.1 Login — entrada de teléfono
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Validación/normalización cubana | ✅ | `isValidCubanPhone`/`normalizeCubanPhone` |
+| Modo demo: picker de prefijo (CU/BR) + validación permisiva | ✅ FIX | Infra ya existía en `config/demo.ts`; ahora el login la usa (`DEMO_MODE`/`DEMO_DIAL_CODES`/`isValidDemoPhone`/`normalizeDemoPhone`) |
+| `authService.sendOTP` | ✅ | |
+| OAuth Google/Apple | ✅ | `signInWithOAuth` → `/auth/callback` |
+| Captura de referral (puente sessionStorage) | ✅ | `PENDING_REFERRAL_KEY` |
+| Aviso legal (Términos/Privacidad) | ✅ FIX | Links a `/terms` y `/privacy` añadidos |
+| Feedback "teléfono incompleto" | ✅ | Web deshabilita el botón (patrón web equivalente al toast móvil) |
+
+### 1.2 Login — verificación OTP
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Validación 6 dígitos + `verifyOTP` | ✅ | |
+| `registerLoginDevice` post-login | ✅ | `registerWebLoginDevice` en `routeAfterAuth` |
+| Auto-submit al 6º dígito | ✅ | |
+| Timer de reenvío 60s | ✅ | |
+| Confirmación de reenvío | ✅ FIX | Mensaje inline "Código reenviado" (equivalente al toast móvil) |
+| Limpiar error al re-tipear | ✅ FIX | `setError(null)` en onChange del OTP |
+
+### 1.3 Complete-profile
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Nombre mín. 2 + hint inline | ✅ | |
+| `updateProfile` → home; redirect si ya completo | ✅ | |
+| Avatar (opcional) | ⚠️ | Web ofrece email (opcional) en su lugar; avatar editable luego en `profile/edit` — adaptación web aceptada |
+| Escape hatch (cambiar/cerrar cuenta) | ✅ FIX | Link "¿No sos vos? Cerrar sesión" (parity con `SwitchAccountFooter`, BUG-299b) |
+
+### 1.4 OAuth + guard de sesión + logout
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| OAuth Google/Apple | ✅ | |
+| Routing del callback (sin nombre→complete, sin teléfono→verify-phone) | ✅ | `auth/callback` con timeout 5s |
+| Guard de sesión en rutas de app | ✅ | `ProfileGuard` en `providers.tsx` |
+| Pantalla verify-phone (linkPhone/verifyPhoneLink) | ✅ | Web incluso agrega auto-submit; demo picker añadido (FIX) |
+| Limpiar stores de dominio al logout | n/a | La web no tiene stores zustand globales (estado por página); `signOut` limpia sesión Supabase |
+
+**Verificación Área 1:** `pnpm --filter @tricigo/web check-types` verde; `/login`, `/complete-profile`, `/verify-phone` render 200 en dev sin error markers. Demo mode se ejercita con `NEXT_PUBLIC_DEMO_MODE=true`.
