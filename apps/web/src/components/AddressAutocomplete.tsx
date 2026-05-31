@@ -41,6 +41,9 @@ interface AddressAutocompleteProps {
   onClear?: () => void;
   mapboxToken: string;
   savedLocations?: SavedLocationItem[];
+  /** Predicted destinations from ride history (shown as a tier when the field
+   *  is empty, like the mobile AddressSearchInput priority tier). */
+  predictions?: { address: string; latitude: number; longitude: number }[];
   proximity?: { latitude: number; longitude: number };
   enrichAddress?: (lat: number, lng: number) => Promise<{ address: string; latitude: number; longitude: number } | null>;
 }
@@ -180,7 +183,7 @@ function formatSecondaryAddress(result: AddressResult): string {
   return full;
 }
 
-export function AddressAutocomplete({ label, placeholder, value, onSelect, onClear, mapboxToken, savedLocations, proximity, enrichAddress }: AddressAutocompleteProps) {
+export function AddressAutocomplete({ label, placeholder, value, onSelect, onClear, mapboxToken, savedLocations, predictions, proximity, enrichAddress }: AddressAutocompleteProps) {
   const { t } = useTranslation('web');
   const [query, setQuery] = useState(value || '');
   const [results, setResults] = useState<AddressResult[]>([]);
@@ -652,7 +655,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   }
 
   const showNoResults = query.length >= 8 && !loading && results.length === 0 && isOpen;
-  const hasSavedToShow = query.length === 0 && ((savedLocations && savedLocations.length > 0) || recentAddresses.length > 0);
+  const hasSavedToShow = query.length === 0 && ((savedLocations && savedLocations.length > 0) || recentAddresses.length > 0 || (!!predictions && predictions.length > 0));
   const showDropdown = isOpen && (results.length > 0 || showNoResults || hasSavedToShow);
   const activeDescendant = activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined;
 
@@ -707,7 +710,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
           onChange={handleChange}
           onFocus={() => {
             // Show saved locations when empty, or search results when typing
-            if (query.length === 0 && ((savedLocations && savedLocations.length > 0) || recentAddresses.length > 0)) {
+            if (query.length === 0 && ((savedLocations && savedLocations.length > 0) || recentAddresses.length > 0 || (!!predictions && predictions.length > 0))) {
               setIsOpen(true);
             } else if (results.length > 0 || (query.length >= 2 && !loading && results.length === 0)) {
               setIsOpen(true);
@@ -822,6 +825,29 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             transition: 'opacity 0.15s ease',
           }}
         >
+          {/* Predicted destinations (from ride history) when query is empty */}
+          {query.length === 0 && predictions && predictions.length > 0 && (
+            <>
+              <li style={{ padding: '0.5rem 0.75rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {t('web.suggested_destinations', { defaultValue: 'Sugeridos para ti' })}
+              </li>
+              {predictions.slice(0, 3).map((p, i) => (
+                <li
+                  key={`pred-${i}`}
+                  role="option"
+                  onClick={() => handleSelect({ address: p.address, latitude: p.latitude, longitude: p.longitude, place_name: p.address })}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.65rem 0.75rem', minHeight: 48, cursor: 'pointer', transition: 'background 0.1s ease' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(var(--primary-rgb, 255,140,0), 0.08)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ flexShrink: 0, fontSize: '1.1rem' }} aria-hidden="true">⭐</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: '0.88rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.address}</div>
+                  </div>
+                </li>
+              ))}
+            </>
+          )}
           {/* Saved locations when query is empty */}
           {query.length === 0 && savedLocations && savedLocations.length > 0 && (
             <>

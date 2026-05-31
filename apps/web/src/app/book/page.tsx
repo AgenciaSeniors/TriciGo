@@ -902,6 +902,7 @@ export default function BookPage() {
             value={dropoffAddress || ''}
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
+            predictions={destinationPredictions}
             proximity={mapCenter}
             enrichAddress={enrichWithCrossStreets}
             onSelect={(r) => {
@@ -919,25 +920,8 @@ export default function BookPage() {
           />
         </div>
 
-        {/* ═══ Destination predictions (quick-picks from completed-ride history) ═══ */}
-        {!dropoff && destinationPredictions.length > 0 && (
-          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', width: '100%' }}>
-              {t('book.suggested_destinations', { defaultValue: 'Destinos sugeridos' })}
-            </span>
-            {destinationPredictions.slice(0, 4).map((p, i) => (
-              <button
-                key={`${p.latitude},${p.longitude},${i}`}
-                type="button"
-                onClick={() => handleSetDropoff({ label: p.address, address: p.address, latitude: p.latitude, longitude: p.longitude })}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.75rem', borderRadius: '2rem', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--text-secondary)', maxWidth: '100%' }}
-              >
-                <span>{p.reason === 'frequent' ? '⭐' : p.reason === 'time_pattern' ? '🕐' : '📍'}</span>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>{p.address}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Destination predictions now render as a tier inside the dropoff
+            AddressAutocomplete dropdown (predictions prop), like the client. */}
 
         {/* ═══ MAP ═══ */}
         <BookingMap
