@@ -37,7 +37,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#111111"
+        "backgroundColor": "#000000"
       },
       "googleServicesFile": "./google-services.json",
       "package": "app.tricigo.driver",
@@ -82,7 +82,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#111111"
+          "color": "#FF4D00"
         }
       ],
       [
