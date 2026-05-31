@@ -5,15 +5,16 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService } from '@tricigo/api';
-import { formatCUP } from '@tricigo/utils';
-import type { RideWithDriver, RideStatus } from '@tricigo/types';
+import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService, notificationService } from '@tricigo/api';
+import { formatCUP, generateReceiptHTML } from '@tricigo/utils';
+import type { RideWithDriver, RideStatus, Waypoint } from '@tricigo/types';
 import { useDriverPosition } from '../../../hooks/useDriverPosition';
 import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing';
 import { useSearchingRide } from '../../../hooks/useSearchingRide';
 import { useSearchingDrivers } from '../../../hooks/useSearchingDrivers';
 import { fetchRoute } from '../../../services/geoService';
 import { TipFlow } from '../../../components/TipFlow';
+import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
 import './track.css';
 
 const TrackingMap = dynamic(() => import('../TrackingMap'), {
@@ -52,6 +53,18 @@ const IconArrowLeft = () => (
 );
 const IconPackage = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21" /><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg>
+);
+const IconNavigate = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polygon points="16 8 10 14 8 16 14 10" /><polygon points="16 8 14 14 10 16 12 10" fill="currentColor" /></svg>
+);
+const IconPlus = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+);
+const IconReceipt = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" /><path d="M12 17.5v-11" /></svg>
+);
+const IconMail = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
 );
 
 /* ── Status Steps Hook ── */
@@ -178,6 +191,27 @@ export default function TrackRidePage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
+  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+
+  // Add-stop mid-ride state (parity con RideActiveView). Waypoints come from
+  // getRideWaypoints (RPC extracts lat/lng from the opaque GEOGRAPHY column).
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+  const [addStopOpen, setAddStopOpen] = useState(false);
+  const [estimatingStop, setEstimatingStop] = useState(false);
+  const [addingStop, setAddingStop] = useState(false);
+  const [pendingStop, setPendingStop] = useState<
+    | { address: string; latitude: number; longitude: number; extraDistanceKm: number; extraFareCup: number }
+    | null
+  >(null);
+  const [maxStopsReached, setMaxStopsReached] = useState(false);
+  const [gpsCheckSaidNo, setGpsCheckSaidNo] = useState(false);
+
+  // Completion extras state (parity con RideCompleteView).
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [receiptEmailed, setReceiptEmailed] = useState(false);
+  const [showRatingReminder, setShowRatingReminder] = useState(false);
+
   const handleSubmitReview = async () => {
     if (!rating || !ride?.driver_id || !userId) return;
     setReviewSubmitting(true);
@@ -213,6 +247,101 @@ export default function TrackRidePage() {
       setLoading(false);
     }
   }, [rideId, t, userId]);
+
+  const refetchWaypoints = useCallback(() => {
+    rideService.getRideWaypoints(rideId).then(setWaypoints).catch(() => {});
+  }, [rideId]);
+
+  // Add-stop flow (parity con RideActiveView): pick address → estimate the
+  // fare delta → confirm → addWaypointToActiveRide → refetch the list.
+  const handleSelectStop = async (result: { address: string; latitude: number; longitude: number }) => {
+    setMaxStopsReached(false);
+    setEstimatingStop(true);
+    try {
+      const existing = waypoints.map((w) => ({ latitude: w.location.latitude, longitude: w.location.longitude }));
+      const { extraDistanceKm, extraFareCup } = await rideService.estimateWaypointAddition(
+        rideId, result.latitude, result.longitude, existing,
+      );
+      setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm, extraFareCup });
+    } catch {
+      // Fall back to adding without preview rather than blocking the feature.
+      setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm: 0, extraFareCup: 0 });
+    } finally {
+      setEstimatingStop(false);
+      setAddStopOpen(false);
+    }
+  };
+
+  const confirmAddStop = async () => {
+    if (!pendingStop) return;
+    setAddingStop(true);
+    try {
+      await rideService.addWaypointToActiveRide(rideId, pendingStop.address, pendingStop.latitude, pendingStop.longitude);
+      setPendingStop(null);
+      refetchWaypoints();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String((err as { message?: string } | null)?.message ?? '');
+      if (msg === 'MAX_WAYPOINTS_REACHED') {
+        setMaxStopsReached(true);
+        setPendingStop(null);
+      }
+    } finally {
+      setAddingStop(false);
+    }
+  };
+
+  // Receipt download — fetch the receipt data, render the shared HTML5
+  // template and open it in a new tab to print/save as PDF (parity con
+  // handleDownloadReceipt en RideCompleteView, que usa Print + Share).
+  const handleDownloadReceipt = async () => {
+    if (downloadingReceipt) return;
+    setDownloadingReceipt(true);
+    // Open the tab synchronously inside the click gesture so popup blockers
+    // don't kill it after the await.
+    const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+    try {
+      const data = await rideService.getReceiptData(rideId, 'passenger');
+      const html = generateReceiptHTML(data);
+      if (win) {
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { try { win.print(); } catch { /* user can print manually */ } }, 500);
+      } else {
+        // Popup blocked → fall back to a blob download.
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `recibo-tricigo-${rideId.slice(0, 8)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      if (win) win.close();
+      alert(t('track.receipt_error', { defaultValue: 'No se pudo generar el recibo. Probá de nuevo en un momento.' }));
+    } finally {
+      setDownloadingReceipt(false);
+    }
+  };
+
+  const handleEmailReceipt = async () => {
+    if (!userId || sendingEmail) return;
+    setSendingEmail(true);
+    try {
+      await notificationService.sendRideReceipt(rideId, userId);
+      setReceiptEmailed(true);
+    } catch {
+      alert(t('track.receipt_email_failed', { defaultValue: 'No se pudo enviar el recibo' }));
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const ratingCardRef = useRef<HTMLDivElement>(null);
 
   const rideStatusRef = useRef(ride?.status);
   rideStatusRef.current = ride?.status;
@@ -313,6 +442,53 @@ export default function TrackRidePage() {
       .catch(() => { /* keep last ETA */ });
     return () => { cancelled = true; };
   }, [ride, driverLocation, driverActive]);
+
+  // Fetch waypoints while the ride is active (parity con RideActiveView).
+  // Re-runs on each status change; confirmAddStop also refetches immediately.
+  useEffect(() => {
+    if (!ride) return;
+    const active = ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'].includes(ride.status);
+    if (!active) { setWaypoints([]); return; }
+    refetchWaypoints();
+  }, [ride?.id, ride?.status, refetchWaypoints]);
+
+  // "Llegó seguro": al detectar la transición a completed, avisar UNA sola vez
+  // a los contactos de confianza con auto_share (parity con useRide.ts:962-975).
+  // Guard por localStorage para no re-disparar en cada refetch del polling.
+  useEffect(() => {
+    if (!ride || ride.status !== 'completed' || !userId || typeof window === 'undefined') return;
+    const key = `tricigo_arrived_notified_${rideId}`;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+    (async () => {
+      try {
+        const contacts = await trustedContactService.getAutoShareContacts(userId);
+        if (contacts.length === 0) return;
+        let name = 'Tu contacto';
+        try {
+          const { data: profile } = await getSupabaseClient().from('users').select('full_name').eq('id', userId).maybeSingle();
+          if (profile?.full_name) name = profile.full_name as string;
+        } catch { /* keep fallback */ }
+        await notificationService.notifyTrustedContacts({
+          contacts: contacts.map((c) => ({ name: c.name, phone: c.phone })),
+          message: `✅ ${name} llegó a su destino de forma segura.`,
+          eventType: 'trip_completed_safe',
+        });
+      } catch { /* best-effort, swallow errors */ }
+    })();
+  }, [ride?.status, rideId, userId]);
+
+  // Recordatorio de calificación (versión liviana — el form ya está visible):
+  // si sigue sin calificar 5 min después de completar, mostramos un banner que
+  // hace scroll al rating. Sin notificación local (no aplica en web).
+  useEffect(() => {
+    if (!ride || ride.status !== 'completed' || reviewSubmitted || !ride.driver_id) {
+      setShowRatingReminder(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowRatingReminder(true), 5 * 60_000);
+    return () => clearTimeout(timer);
+  }, [ride?.status, reviewSubmitted, ride?.driver_id]);
 
   /* ── Loading State ── */
   // Auth gate — block render until authenticated (BUG-004 fix)
@@ -495,6 +671,43 @@ export default function TrackRidePage() {
             </div>
           )}
 
+          {/* Confirmar llegada del conductor — el conductor dice que llegó pero
+              su GPS lo ubica lejos del punto; el pasajero confirma visualmente
+              (parity con RideActiveView BUG-244). Complementa el card de GPS no
+              disponible: este aplica cuando hay GPS pero está fuera de rango. */}
+          {ride.gps_override_requested_at && !ride.gps_override_confirmed_at && ride.driver_gps_status !== 'unavailable' && (
+            <div className="track-card" style={{ background: 'rgba(255,77,0,0.08)', border: '1px solid var(--primary, #FF4D00)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ color: 'var(--primary, #FF4D00)', flexShrink: 0 }}><IconNavigate /></span>
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {t('track.gps_check_title', { defaultValue: '¿Tu conductor está acá?' })}
+                </span>
+              </div>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0 0 0.75rem' }}>
+                {t('track.gps_check_body', {
+                  driverName: ride.driver_name ?? 'Tu conductor',
+                  distance: ride.gps_check_distance_m ?? '?',
+                  defaultValue: `${ride.driver_name ?? 'Tu conductor'} dice que llegó (${ride.gps_check_distance_m ?? '?'}m según su GPS). Confirmá si lo ves cerca.`,
+                })}
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" onClick={() => { rideService.riderConfirmDriverArrival(rideId).then(() => fetchRide()).catch(() => {}); }}
+                  style={{ flex: 1, padding: '0.6rem', borderRadius: '0.6rem', border: 'none', background: 'var(--primary, #FF4D00)', color: '#fff', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700 }}>
+                  {t('track.gps_check_yes', { defaultValue: 'Sí, lo veo' })}
+                </button>
+                <button type="button" onClick={() => setGpsCheckSaidNo(true)}
+                  style={{ flex: 1, padding: '0.6rem', borderRadius: '0.6rem', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {t('track.gps_check_no', { defaultValue: 'No lo veo' })}
+                </button>
+              </div>
+              {gpsCheckSaidNo && (
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', margin: '0.6rem 0 0', textAlign: 'center' }}>
+                  {t('track.gps_check_dismissed', { defaultValue: 'Le pedimos que se acerque más.' })}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Tracking health banner — parity con los banners de RideActiveView */}
           {driverActive && (driverPos.isStale || !driverPos.position) && (
             <div className="track-card" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -507,9 +720,28 @@ export default function TrackRidePage() {
             </div>
           )}
 
+          {/* Recordatorio de calificación — aparece 5 min después de completar
+              si el viaje sigue sin calificar (parity liviano con el rating
+              reminder de useRide.ts, sin la notificación local). */}
+          {showRatingReminder && !reviewSubmitted && ride.status === 'completed' && ride.driver_id && (
+            <div className="track-card" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.4)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: '1.2rem' }} aria-hidden="true">⭐</span>
+              <span style={{ flex: 1, fontSize: '0.84rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                {t('track.rating_reminder', { defaultValue: 'No olvides calificar tu viaje' })}
+              </span>
+              <button
+                type="button"
+                onClick={() => { ratingCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setShowRatingReminder(false); }}
+                style={{ padding: '0.4rem 0.8rem', borderRadius: '0.5rem', border: 'none', background: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}
+              >
+                {t('track.rate_now', { defaultValue: 'Calificar' })}
+              </button>
+            </div>
+          )}
+
           {/* Ride Completion + Rating */}
           {ride.status === 'completed' && !reviewSubmitted && ride.driver_id && (
-            <div className="track-card" style={{ textAlign: 'center' }}>
+            <div ref={ratingCardRef} className="track-card" style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎉</div>
               <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.25rem' }}>
                 {t('track.ride_completed', { defaultValue: '¡Viaje completado!' })}
@@ -646,6 +878,83 @@ export default function TrackRidePage() {
             </div>
           </div>
 
+          {/* Paradas intermedias + agregar parada (parity con RideActiveView).
+              La lista se muestra si hay paradas; el botón "Agregar parada" solo
+              durante in_progress (como el cliente), máx 3. */}
+          {(waypoints.length > 0 || ride.status === 'in_progress') && !isTerminal && (
+            <div className="track-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: waypoints.length > 0 ? 10 : 0 }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t('track.stops', { defaultValue: 'Paradas' })}
+                </span>
+                {waypoints.length > 0 && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{waypoints.length}/3</span>
+                )}
+              </div>
+
+              {waypoints.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: ride.status === 'in_progress' && waypoints.length < 3 ? 12 : 0 }}>
+                  {[...waypoints].sort((a, b) => a.sort_order - b.sort_order).map((wp, idx) => {
+                    const done = !!wp.departed_at;
+                    const current = !!wp.arrived_at && !wp.departed_at;
+                    return (
+                      <div key={wp.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, background: done ? '#00C853' : current ? 'var(--primary, #FF4D00)' : 'var(--bg-light)', color: (done || current) ? '#fff' : 'var(--text-tertiary)', border: (done || current) ? 'none' : '1px solid var(--border)' }}>
+                          {done ? <IconCheck /> : idx + 1}
+                        </span>
+                        <span style={{ flex: 1, fontSize: '0.82rem', color: done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: done ? 'line-through' : 'none' }}>
+                          {wp.address}
+                        </span>
+                        {current && (
+                          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--primary, #FF4D00)' }}>{t('track.stop_current', { defaultValue: 'Actual' })}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {ride.status === 'in_progress' && waypoints.length < 3 && (
+                !addStopOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => { setAddStopOpen(true); setMaxStopsReached(false); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.6rem', borderRadius: '0.6rem', border: '1px dashed var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: 'var(--primary, #FF4D00)' }}
+                  >
+                    <IconPlus /> {t('track.add_stop', { defaultValue: 'Agregar parada' })}
+                  </button>
+                ) : (
+                  <div>
+                    <AddressAutocomplete
+                      placeholder={t('track.search_address', { defaultValue: 'Buscar dirección...' })}
+                      mapboxToken={mapboxToken}
+                      proximity={{ latitude: pickupLat, longitude: pickupLng }}
+                      onSelect={handleSelectStop}
+                    />
+                    {estimatingStop && (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', margin: '0.5rem 0 0', textAlign: 'center' }}>
+                        {t('track.estimating_stop', { defaultValue: 'Calculando costo adicional...' })}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setAddStopOpen(false)}
+                      style={{ width: '100%', marginTop: 8, padding: '0.5rem', borderRadius: '0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--text-tertiary)' }}
+                    >
+                      {t('common.cancel', { defaultValue: 'Cancelar' })}
+                    </button>
+                  </div>
+                )
+              )}
+
+              {maxStopsReached && (
+                <p style={{ fontSize: '0.78rem', color: '#dc2626', margin: '0.5rem 0 0', textAlign: 'center' }}>
+                  {t('track.max_stops', { defaultValue: 'Máximo de paradas alcanzado' })}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Driver Card — clickable when we have the driver_user_id, mirroring
               the mobile app's tap-on-driver-card → /driver-profile/[userId] flow. */}
           {ride.driver_name && (
@@ -758,6 +1067,39 @@ export default function TrackRidePage() {
               </span>
             </div>
           </div>
+
+          {/* Recibo — descargar (HTML imprimible → PDF) o enviar por email.
+              Solo en viajes completados (parity con RideCompleteView). */}
+          {ride.status === 'completed' && (
+            <div className="track-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ color: 'var(--text-secondary)' }}><IconReceipt /></span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t('track.receipt_title', { defaultValue: 'Recibo del viaje' })}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={handleDownloadReceipt}
+                  disabled={downloadingReceipt}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.65rem', borderRadius: '0.6rem', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: downloadingReceipt ? 'not-allowed' : 'pointer', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', opacity: downloadingReceipt ? 0.6 : 1 }}
+                >
+                  <IconReceipt /> {downloadingReceipt ? t('track.receipt_generating', { defaultValue: 'Generando...' }) : t('track.receipt_download', { defaultValue: 'Descargar recibo' })}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEmailReceipt}
+                  disabled={sendingEmail || receiptEmailed}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.65rem', borderRadius: '0.6rem', border: '1px solid var(--border)', background: receiptEmailed ? 'rgba(0,200,83,0.1)' : 'var(--bg-card)', cursor: (sendingEmail || receiptEmailed) ? 'default' : 'pointer', fontSize: '0.82rem', fontWeight: 600, color: receiptEmailed ? '#00C853' : 'var(--text-primary)', opacity: sendingEmail ? 0.6 : 1 }}
+                >
+                  {receiptEmailed
+                    ? <><IconCheck /> {t('track.receipt_emailed', { defaultValue: 'Enviado' })}</>
+                    : <><IconMail /> {sendingEmail ? t('track.receipt_sending', { defaultValue: 'Enviando...' }) : t('track.receipt_email', { defaultValue: 'Enviar por email' })}</>}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           {!isTerminal && (
@@ -916,6 +1258,55 @@ export default function TrackRidePage() {
           )}
         </div>
       </div>
+
+      {/* Confirmar parada — preview del delta de tarifa antes de agregar
+          (parity con el BottomSheet de RideActiveView). */}
+      {pendingStop && (
+        <div
+          onClick={() => { if (!addingStop) setPendingStop(null); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg-card, #fff)', borderRadius: 16, padding: 20, maxWidth: 380, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 6px', color: 'var(--text-primary)' }}>
+              {t('track.confirm_stop_title', { defaultValue: '¿Agregar esta parada?' })}
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 14px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              {pendingStop.address}
+            </p>
+            <div style={{ background: 'var(--bg-light)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_distance', { defaultValue: 'Distancia adicional' })}</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>+{pendingStop.extraDistanceKm.toFixed(1)} km</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_fare', { defaultValue: 'Tarifa adicional estimada' })}</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary, #FF4D00)' }}>+{formatCUP(pendingStop.extraFareCup)}</span>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)', margin: '0 0 14px', textAlign: 'center' }}>
+              {t('track.confirm_stop_note', { defaultValue: 'Es una estimación. El total final se calcula según la ruta real.' })}
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setPendingStop(null)}
+                disabled={addingStop}
+                style={{ flex: 1, padding: '0.7rem', borderRadius: '0.6rem', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: addingStop ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}
+              >
+                {t('common.cancel', { defaultValue: 'Cancelar' })}
+              </button>
+              <button
+                type="button"
+                onClick={confirmAddStop}
+                disabled={addingStop}
+                style={{ flex: 1, padding: '0.7rem', borderRadius: '0.6rem', border: 'none', background: 'var(--primary, #FF4D00)', color: '#fff', cursor: addingStop ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: 700, opacity: addingStop ? 0.7 : 1 }}
+              >
+                {addingStop ? t('track.adding_stop', { defaultValue: 'Agregando...' }) : t('track.confirm_add_stop', { defaultValue: 'Confirmar parada' })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

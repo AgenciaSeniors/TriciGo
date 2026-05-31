@@ -179,6 +179,14 @@ export interface Ride {
   // RPC when the driver's GPS is broken mid-ride. The rider sees a consent modal.
   driver_gps_status?: 'unavailable' | 'rider_consented' | 'resolved' | null;
 
+  // GPS override / confirm-arrival flow — set when the driver reports arrival
+  // but their GPS puts them too far from the pickup. The rider gets a modal
+  // ("¿Tu conductor está acá?") and confirms via rider_confirm_driver_arrival.
+  gps_override_requested_at?: string | null;
+  gps_override_confirmed_at?: string | null;
+  /** Distance (m) between the driver's reported GPS and the pickup point. */
+  gps_check_distance_m?: number | null;
+
   // BUG-222: excess distance fields — set by complete_ride_and_pay when the
   // driver traveled more than 1.3× the estimated distance.
   excess_distance_uncharged_m?: number | null;

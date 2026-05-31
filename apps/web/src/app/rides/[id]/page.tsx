@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { rideService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
+import { rideService, getSupabaseClient, notificationService } from '@tricigo/api';
+import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE, generateReceiptHTML } from '@tricigo/utils';
 import type { RideWithDriver } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { TipFlow } from '@/components/TipFlow';
@@ -50,6 +50,11 @@ export default function RideDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Receipt state (parity con RideCompleteView) ──
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [receiptEmailed, setReceiptEmailed] = useState(false);
+
   // ── Auth effect ──
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -83,6 +88,52 @@ export default function RideDetailPage() {
   useEffect(() => {
     loadRide();
   }, [loadRide]);
+
+  // ── Receipt: descargar (HTML imprimible → PDF) o enviar por email ──
+  const handleDownloadReceipt = async () => {
+    if (!rideId || downloadingReceipt) return;
+    setDownloadingReceipt(true);
+    const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+    try {
+      const data = await rideService.getReceiptData(rideId, 'passenger');
+      const html = generateReceiptHTML(data);
+      if (win) {
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { try { win.print(); } catch { /* user can print manually */ } }, 500);
+      } else {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `recibo-tricigo-${rideId.slice(0, 8)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      if (win) win.close();
+      alert('No se pudo generar el recibo. Probá de nuevo en un momento.');
+    } finally {
+      setDownloadingReceipt(false);
+    }
+  };
+
+  const handleEmailReceipt = async () => {
+    if (!userId || !rideId || sendingEmail) return;
+    setSendingEmail(true);
+    try {
+      await notificationService.sendRideReceipt(rideId, userId);
+      setReceiptEmailed(true);
+    } catch {
+      alert('No se pudo enviar el recibo');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   // ── Auth gate (after all hooks) ──
   if (authLoading) {
@@ -417,6 +468,32 @@ export default function RideDetailPage() {
                   userId={userId}
                   onTipSubmitted={loadRide}
                 />
+              )}
+
+              {/* Recibo — descargar (HTML imprimible → PDF) o enviar por email.
+                  Solo en viajes completados (parity con RideCompleteView). */}
+              {ride.status === 'completed' && (
+                <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Recibo</p>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={handleDownloadReceipt}
+                      disabled={downloadingReceipt}
+                      style={{ flex: 1, padding: '0.65rem', borderRadius: '0.6rem', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: downloadingReceipt ? 'not-allowed' : 'pointer', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', opacity: downloadingReceipt ? 0.6 : 1 }}
+                    >
+                      {downloadingReceipt ? 'Generando...' : 'Descargar recibo'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleEmailReceipt}
+                      disabled={sendingEmail || receiptEmailed}
+                      style={{ flex: 1, padding: '0.65rem', borderRadius: '0.6rem', border: '1px solid var(--border)', background: receiptEmailed ? 'rgba(0,200,83,0.1)' : 'var(--bg-card)', cursor: (sendingEmail || receiptEmailed) ? 'default' : 'pointer', fontSize: '0.82rem', fontWeight: 600, color: receiptEmailed ? '#00C853' : 'var(--text-primary)', opacity: sendingEmail ? 0.6 : 1 }}
+                    >
+                      {receiptEmailed ? '✓ Enviado' : sendingEmail ? 'Enviando...' : 'Enviar por email'}
+                    </button>
+                  </div>
+                </div>
               )}
 
             </div>
