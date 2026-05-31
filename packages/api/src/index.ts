@@ -59,4 +59,5 @@ export { disputeService } from './services/dispute.service';
 export { lostItemService } from './services/lost-item.service';
 export { recurringRideService } from './services/recurring-ride.service';
 export { cityService } from './services/city.service';
+export { suggestionsService } from './services/suggestions.service';
 export { trackValidationEvent } from './services/validation.service';

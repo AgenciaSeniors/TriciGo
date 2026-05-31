@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { rideService } from '@tricigo/api';
+import { rideService, suggestionsService } from '@tricigo/api';
 import {
   clusterDestinations,
   scorePredictions,
@@ -15,7 +15,9 @@ import {
 
 const MIN_RIDES = 3;
 
-export function useDestinationPredictions() {
+export function useDestinationPredictions(
+  near?: { latitude: number; longitude: number } | null,
+) {
   const userId = useAuthStore((s) => s.user?.id);
   const [predictions, setPredictions] = useState<PredictedDestination[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,6 +30,23 @@ export function useDestinationPredictions() {
 
     setIsLoading(true);
     try {
+      // RPC-first: server-side suggestions (personal history + popular
+      // fallback). Falls through to the local heuristic when the RPC is
+      // absent (migration not yet applied) or errors.
+      try {
+        const rpc = await suggestionsService.getDestinationSuggestions({
+          userId,
+          lat: near?.latitude ?? null,
+          lng: near?.longitude ?? null,
+          hour: new Date().getHours(),
+          limit: 5,
+        });
+        setPredictions(rpc);
+        return;
+      } catch {
+        /* fall through to the local heuristic below */
+      }
+
       // Fetch completed rides for clustering
       const rides = await rideService.getRideHistoryFiltered({
         userId,
@@ -88,7 +107,7 @@ export function useDestinationPredictions() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, near?.latitude, near?.longitude]);
 
   // Initial load
   useEffect(() => {
