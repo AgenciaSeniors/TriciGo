@@ -16,7 +16,7 @@ import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
-const vehicleRow = require('../../assets/vehicles/selection/triciclo.png');
+const vehicleRow = require('../../assets/login-hero.png');
 
 export default function LoginScreen() {
   const { t } = useTranslation('common');
@@ -125,11 +125,11 @@ export default function LoginScreen() {
                 </Text>
               </Animated.View>
 
-              {/* Vehicle illustration */}
+              {/* Vehicle illustration — small, subtle, right-aligned (original design) */}
               <Animated.View style={{ alignItems: 'flex-end', marginTop: 16, opacity: fadeAnim }}>
                 <Image
                   source={vehicleRow}
-                  style={{ width: 120, height: 120, opacity: 0.5 }}
+                  style={{ width: 200, height: 76, opacity: 1 }}
                   resizeMode="contain"
                 />
               </Animated.View>
