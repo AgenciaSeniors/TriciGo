@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient } from '@tricigo/api';
-import { formatTRC, getRelativeDay, formatTime } from '@tricigo/utils';
+import { formatTRC, formatCUP, getRelativeDay, formatTime, riderChargedTotal, riderChargedTotalTrc, generateHistoryCSV } from '@tricigo/utils';
 import type { Ride } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
@@ -70,6 +70,7 @@ export default function RidesPage() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
@@ -84,7 +85,7 @@ export default function RidesPage() {
 
   // Load rides
   const loadRides = useCallback(async (uid: string, tab: TabFilter, pg: number, append: boolean) => {
-    if (!append) setLoading(true);
+    if (!append) { setLoading(true); setError(null); }
     else setLoadingMore(true);
 
     try {
@@ -103,6 +104,9 @@ export default function RidesPage() {
       setPage(pg);
     } catch (err) {
       console.error('Failed to load rides:', err);
+      // Surface the failure (parity con el ErrorState + retry del rides móvil)
+      // en vez de mostrar un "sin viajes" engañoso.
+      if (!append) setError('No se pudieron cargar tus viajes. Revisá tu conexión e intentá de nuevo.');
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -112,6 +116,19 @@ export default function RidesPage() {
   useEffect(() => {
     if (!userId) return;
     loadRides(userId, activeTab, 0, false);
+  }, [userId, activeTab, loadRides]);
+
+  // Refetch when the tab regains focus (parity con el pull-to-refresh móvil) —
+  // un viaje recién completado/cancelado en otra pestaña aparece al volver.
+  useEffect(() => {
+    if (!userId) return;
+    const refresh = () => { if (!document.hidden) loadRides(userId, activeTab, 0, false); };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
   }, [userId, activeTab, loadRides]);
 
   // Redirect if not authenticated
@@ -145,6 +162,22 @@ export default function RidesPage() {
     setPage(0);
   };
 
+  // Export history to CSV (parity con generateHistoryCSV + share del rides móvil).
+  // En web descargamos el archivo en vez de compartirlo.
+  const handleExportCsv = () => {
+    if (rides.length === 0) return;
+    const csv = generateHistoryCSV(rides, 'es');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tricigo-viajes-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const dateGroups = groupRidesByDate(rides);
   let globalCardIdx = 0;
 
@@ -155,9 +188,21 @@ export default function RidesPage() {
           &larr; Inicio
         </Link>
 
-        <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, marginTop: '1rem', marginBottom: '1.25rem' }}>
-          Historial de viajes
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginTop: '1rem', marginBottom: '1.25rem' }}>
+          <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, margin: 0 }}>
+            Historial de viajes
+          </h1>
+          {rides.length > 0 && (
+            <button
+              onClick={handleExportCsv}
+              aria-label="Exportar historial a CSV"
+              className="btn-base btn-secondary-outline"
+              style={{ cursor: 'pointer', fontSize: '0.8rem', flexShrink: 0, padding: '0.4rem 0.8rem' }}
+            >
+              Exportar CSV
+            </button>
+          )}
+        </div>
 
         {/* Filter Tabs */}
         <div className="rides-filter-tabs">
@@ -176,8 +221,22 @@ export default function RidesPage() {
         {/* Loading */}
         {loading && <WebSkeletonList count={4} />}
 
+        {/* Error + retry (parity con el ErrorState del rides móvil) */}
+        {!loading && error && (
+          <div style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
+            <p style={{ fontSize: '0.95rem', fontWeight: 600, color: '#dc2626', margin: '0 0 1rem' }}>{error}</p>
+            <button
+              onClick={() => loadRides(userId, activeTab, 0, false)}
+              className="btn-base btn-secondary-outline"
+              style={{ cursor: 'pointer' }}
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
         {/* Empty */}
-        {!loading && rides.length === 0 && (
+        {!loading && !error && rides.length === 0 && (
           <WebEmptyState
             icon="🚗"
             title={activeTab === 'all' ? 'Sin viajes todavía' : activeTab === 'completed' ? 'Sin viajes completados' : 'Sin viajes cancelados'}
@@ -252,7 +311,14 @@ export default function RidesPage() {
                         {/* Footer */}
                         <div className="ride-card-footer">
                           <span className="ride-fare">
-                            {ride.final_fare_trc != null ? formatTRC(ride.final_fare_trc) : formatTRC(ride.estimated_fare_trc ?? 0)}
+                            {(() => {
+                              // Currency-aware + tip-inclusive (parity con riderChargedTotal del
+                              // rides móvil): efectivo/mixto/corporativo en CUP, tricicoin en TRC.
+                              // Antes mostraba TRC para todos (incl. efectivo) y omitía la propina.
+                              const cup = riderChargedTotal(ride);
+                              const trc = riderChargedTotalTrc(ride);
+                              return ride.payment_method === 'tricicoin' ? formatTRC(trc ?? cup) : formatCUP(cup);
+                            })()}
                           </span>
                           <div className="ride-card-footer-right">
                             {ride.estimated_distance_m != null && ride.estimated_distance_m > 0 && (
