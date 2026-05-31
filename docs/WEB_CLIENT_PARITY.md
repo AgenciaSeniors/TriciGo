@@ -25,9 +25,9 @@ Logic divergences:
 - [x] Double-submit guard with sync refs (`isSubmittingRef`/`pendingRequestIdRef`).
 - [x] Price snapshot breakdown in `createRide` (base/per_km/per_min/min_fare/surge/pricing_rule_id).
 Missing features:
-- [x] Scheduled ride (≥15min, `datetime-local` picker).
+- [dropped] ~~Scheduled ride (≥15min)~~ — feature retired, no longer used; not ported to web.
 - [x] Shared ride (triciclo: `share_ride`/`declared_passengers` + seats stepper + discount preview).
-- [x] Ride preferences (`rider_preferences`: quiet/chat/luggage/temperature chips).
+- [dropped] ~~Ride preferences (`rider_preferences`)~~ — feature retired, no longer used; not ported to web.
 - [x] Destination prediction (`useDestinationPredictions` web hook → quick-pick chips).
 - [x] Delivery: package dims (L/W/H) + `deliveryService.createDeliveryDetails` (cancel-on-failure).
 - [n/a] Notify trusted contacts — fires at *arrival* in client, belongs to Fase 2 (tracking), not booking.
@@ -69,7 +69,7 @@ authenticated booking E2E pending (needs live OTP session on device).
 - [ ] Clear domain stores on logout.
 
 ## Fase 5 — Profile + secondary screens
-Build (missing): `ride-preferences`, `recurring-rides`, `emergency-contact`, `ticket-detail`.
+Build (missing): ~~`ride-preferences`~~ (dropped — retired), ~~`recurring-rides`~~ (dropped — retired), `emergency-contact`, `ticket-detail`.
 Parity pass (existing): `settings`, `saved-locations`, `safety`, `trusted-contacts`, `corporate`, `help`, `about`, `referral`, `support`, `driver-profile/[userId]`, `promo/[code]`, `refer/[code]`, `notifications`.
 
 ## Fase 6 — Gift P2P (new)

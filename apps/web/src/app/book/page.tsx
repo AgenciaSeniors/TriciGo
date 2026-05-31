@@ -8,7 +8,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService } from '@tricigo/api';
-import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, RidePreferences, PackageCategory } from '@tricigo/types';
+import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useDestinationPredictions } from '../../hooks/useDestinationPredictions';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
@@ -148,15 +148,9 @@ export default function BookPage() {
   /* ─── Insurance state (W1.4) ─── */
   const [insuranceSelected, setInsuranceSelected] = useState(false);
 
-  /* ─── Scheduled ride (BUG-074: must be ≥15min in the future) ─── */
-  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
-
   /* ─── Shared ride (triciclo only) + passenger count ─── */
   const [shareRide, setShareRide] = useState(false);
   const [passengerCount, setPassengerCount] = useState(1);
-
-  /* ─── Ride preferences ─── */
-  const [ridePreferences, setRidePreferences] = useState<RidePreferences>({});
 
   /* ─── Estimate freshness (X1.3: reject stale > FARE_ESTIMATE_TTL_MS) ─── */
   const fareEstimatedAtRef = useRef<number | null>(null);
@@ -476,10 +470,8 @@ export default function BookPage() {
     setPromoCode('');
     setPromoResult(null);
     setInsuranceSelected(false);
-    setScheduledAt(null);
     setShareRide(false);
     setPassengerCount(1);
-    setRidePreferences({});
     fareEstimatedAtRef.current = null;
     setDeliveryDetails({ recipient_name: '', recipient_phone: '', package_description: '', package_category: 'paquete_pequeno', estimated_weight_kg: '', special_instructions: '', client_accompanies: false, package_length_cm: '', package_width_cm: '', package_height_cm: '' });
   }
@@ -637,12 +629,6 @@ export default function BookPage() {
       return;
     }
 
-    // Scheduled ride must be ≥15 min in the future (BUG-074).
-    if (scheduledAt && scheduledAt.getTime() < Date.now() + 15 * 60 * 1000) {
-      setError(t('book.schedule_too_soon', { defaultValue: 'Programa el viaje con al menos 15 minutos de antelación.' }));
-      return;
-    }
-
     // Block while a promo is still validating (Bug 12/24).
     if (promoValidating) {
       setError(t('book.wait_promo', { defaultValue: 'Espera, validando código...' }));
@@ -756,7 +742,6 @@ export default function BookPage() {
         pricing_rule_id: freshEstimate.pricing_rule_id || undefined,
         promo_code_id: promoResult?.valid ? promoResult.promoId : undefined,
         discount_amount_cup: promoResult?.valid ? Math.max(0, promoResult.discount ?? 0) : undefined,
-        scheduled_at: scheduledAt ? scheduledAt.toISOString() : undefined,
         ...(waypoints.length > 0 && {
           waypoints: waypoints.map((wp, i) => ({
             sort_order: i + 1,
@@ -768,7 +753,6 @@ export default function BookPage() {
         ...(selectedCorporateId && { corporate_account_id: selectedCorporateId }),
         insurance_selected: insuranceSelected,
         insurance_premium_cup: insuranceSelected ? (freshEstimate.insurance_premium_cup ?? 0) : 0,
-        rider_preferences: Object.keys(ridePreferences).length > 0 ? ridePreferences : undefined,
         // "Compartir viaje" — only the tricycle. Server trigger (00347) computes
         // the discount; declared_passengers = seats the rider occupies.
         share_ride: serviceType === 'triciclo_basico' ? shareRide : false,
@@ -1836,30 +1820,11 @@ export default function BookPage() {
               background: 'var(--bg-card)', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 700,
               color: 'var(--text-secondary)', lineHeight: 1,
             };
-            const chip = (active: boolean) => ({
-              display: 'flex', alignItems: 'center', gap: '0.3rem',
-              padding: '0.4rem 0.7rem', borderRadius: '2rem', fontSize: '0.78rem', fontWeight: 600 as const,
-              border: active ? '2px solid var(--primary)' : '1px solid var(--border)',
-              background: active ? 'rgba(255,77,0,0.08)' : 'var(--bg-card)',
-              color: active ? 'var(--primary)' : 'var(--text-secondary)', cursor: 'pointer',
-            });
             const Toggle = ({ on }: { on: boolean }) => (
               <div style={{ width: 40, height: 22, borderRadius: 11, position: 'relative', flexShrink: 0, background: on ? 'var(--primary)' : 'var(--border)', transition: 'background 0.2s' }}>
                 <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: on ? 20 : 2, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
               </div>
             );
-            const togglePref = (key: 'quiet_mode' | 'conversation_ok' | 'luggage_trunk') =>
-              setRidePreferences((p) => ({ ...p, [key]: !p[key] }));
-            const setTemp = (val: 'cool' | 'warm') =>
-              setRidePreferences((p) => ({ ...p, temperature: p.temperature === val ? 'no_preference' : val }));
-            const pad = (n: number) => String(n).padStart(2, '0');
-            const schedInput = scheduledAt
-              ? `${scheduledAt.getFullYear()}-${pad(scheduledAt.getMonth() + 1)}-${pad(scheduledAt.getDate())}T${pad(scheduledAt.getHours())}:${pad(scheduledAt.getMinutes())}`
-              : '';
-            const minSched = (() => {
-              const d = new Date(Date.now() + 15 * 60 * 1000);
-              return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-            })();
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
                 {/* Compartir viaje (solo triciclo) */}
@@ -1893,36 +1858,6 @@ export default function BookPage() {
                     )}
                   </div>
                 )}
-
-                {/* Preferencias del viaje */}
-                <div>
-                  <div style={sectionLabel}>{t('book.ride_preferences', { defaultValue: 'Preferencias del viaje' })}</div>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
-                    <button type="button" onClick={() => togglePref('quiet_mode')} style={chip(!!ridePreferences.quiet_mode)}>🔇 {t('book.pref_quiet', { defaultValue: 'Silencio' })}</button>
-                    <button type="button" onClick={() => togglePref('conversation_ok')} style={chip(!!ridePreferences.conversation_ok)}>💬 {t('book.pref_chat', { defaultValue: 'Conversación' })}</button>
-                    <button type="button" onClick={() => togglePref('luggage_trunk')} style={chip(!!ridePreferences.luggage_trunk)}>🧳 {t('book.pref_luggage', { defaultValue: 'Maletero' })}</button>
-                    <button type="button" onClick={() => setTemp('cool')} style={chip(ridePreferences.temperature === 'cool')}>❄️ {t('book.pref_cool', { defaultValue: 'Fresco' })}</button>
-                    <button type="button" onClick={() => setTemp('warm')} style={chip(ridePreferences.temperature === 'warm')}>☀️ {t('book.pref_warm', { defaultValue: 'Cálido' })}</button>
-                  </div>
-                </div>
-
-                {/* Programar viaje */}
-                <div>
-                  <label style={sectionLabel}>{t('book.schedule_ride', { defaultValue: 'Programar para más tarde (opcional)' })}</label>
-                  <input
-                    type="datetime-local"
-                    value={schedInput}
-                    min={minSched}
-                    onChange={(e) => setScheduledAt(e.target.value ? new Date(e.target.value) : null)}
-                    aria-label="Programar viaje"
-                    style={{ width: '100%', marginTop: '0.35rem', padding: '0.6rem 0.75rem', borderRadius: '0.6rem', border: '1px solid var(--border)', background: 'var(--bg-card)', fontSize: '0.85rem', boxSizing: 'border-box', color: 'var(--text-primary)' }}
-                  />
-                  {scheduledAt && (
-                    <button type="button" onClick={() => setScheduledAt(null)} style={{ marginTop: '0.35rem', background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}>
-                      {t('book.schedule_clear', { defaultValue: 'Quitar programación (viajar ahora)' })}
-                    </button>
-                  )}
-                </div>
 
                 {/* Seguro de viaje */}
                 {insuranceAvailable && (
