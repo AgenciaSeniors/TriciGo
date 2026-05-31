@@ -405,3 +405,35 @@ Fuente de verdad = `app/(tabs)/profile.tsx` + `app/profile/*`. La más grande. *
 **Fixes en este PR:** 2 pantallas nuevas (emergency-contact, ticket-detail) + sus enlaces; edit→`public.users`; settings idioma-persist + enlace eliminar-cuenta; safety `tel:106` + entrada emergency-contact. **Follow-ups funcionales** (otra pasada, features más pesadas): corporate request/onboarding + gestión de empleados; safety historial de incidentes + compartir viaje activo; settings selector de método de pago. **Retirados (correctamente ausentes):** ride-preferences, recurring-rides, disputas, objetos perdidos.
 
 **Verificación Área 7:** `pnpm --filter @tricigo/web check-types` verde; `/profile/emergency-contact`, `/support/[ticketId]`, `/profile/settings`, `/profile/safety`, `/profile/edit` render 200 en dev sin error markers.
+
+## Área 8 — Regalo P2P (`wallet/gift`, `gift/[code]`)
+
+Fuente de verdad = `app/wallet/gift.tsx` + `app/gift/[code].tsx`. **Resultado: ya está a la par** — no requirió cambios de código. (Construida en Fase 6; esta auditoría lo confirma comportamiento-por-comportamiento contra el fallback **web** del client.)
+
+### 8.1 Enviar regalo
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| Saldo (`customer_cash`) | ✅ | `walletService.getBalance(_, 'customer_cash')` |
+| Buscar destinatario por código (`findUserByGiftCode`) / teléfono (`findUserByPhone`) + toggle | ✅ | |
+| Guard anti-self + "usuario no encontrado" | ✅ | |
+| Monto (>0, ≤ saldo) + nota (máx 200) | ✅ | |
+| Enviar (`walletService.sendGift`) + refrescar saldo | ✅ | |
+| Mi código para recibir: mostrar + copiar + compartir | ✅ | `navigator.clipboard` / `navigator.share` |
+| QR del propio código | n/a | El client **sólo** muestra QR en **nativo** (react-native-svg); su fallback web es texto+compartir, igual que la web. Mostrar un QR escaneable en web es un **enhancement opcional** (requiere una lib de QR / dep nueva) — diferido |
+| Escanear QR de un amigo | n/a | Escáner es nativo-only en el client; en web se tipea el código (igual que el fallback web del client) |
+
+### 8.2 Landing + entrada
+| Comportamiento (client) | Web | Nota |
+|---|---|---|
+| `gift/[code]` resuelve el código → pantalla de regalo precargada (NO redime como referido) | ✅ | redirect a `/wallet/gift?code=` (idéntico al client) |
+| Botón "Regalar" en `/wallet` | ✅ | `wallet/page.tsx` enlaza a `/wallet/gift` |
+
+**Sin cambios de código** — la web ya cubre todo el comportamiento del flujo de regalo del client (incl. su fallback web). **Enhancement diferido:** QR escaneable del propio código en web (necesita una lib de QR; el client tampoco lo muestra en web).
+
+**Verificación Área 8:** revisión de código — `/wallet/gift` + `/gift/[code]` ya a la par; sin cambios necesarios.
+
+---
+
+## Estado final de la re-auditoría
+
+Las **8 áreas** (Auth, Booking, Tracking, Chat, Wallet, Rides, Perfil, Regalo) fueron auditadas a grano fino y cerradas. Hallazgo macro: la web estaba **mucho más completa** de lo que indicaba el doc grueso (Fase 0–6), e incluso **por delante** del client nativo en varios puntos (ETA por ruta real, selector corporativo, deviceFingerprint, provider dinámico, página de recibos, cola offline de chat, paginación, desgloses de tarifa). Los gaps reales cerrados fueron puntuales y de correctitud. **Follow-ups documentados** (features más pesadas, no bloqueantes): split-fare; barra de progreso + polyline conductor→pickup + banners de inactividad en tracking; corporate onboarding/empleados; safety incidentes/compartir-activo; settings selector de pago; "Este mes" en wallet; mapa + bloque cargo en detalle de viaje; QR web del regalo.
