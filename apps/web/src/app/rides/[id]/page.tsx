@@ -336,16 +336,6 @@ export default function RideDetailPage() {
                   </div>
                 )}
 
-                {/* Insurance */}
-                {ride.insurance_selected && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Seguro de viaje</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      {ride.insurance_premium_cup ? formatCUP(ride.insurance_premium_cup) : 'Incluido'}
-                    </span>
-                  </div>
-                )}
-
                 {/* Tip */}
                 {ride.tip_amount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
@@ -429,33 +419,6 @@ export default function RideDetailPage() {
                 />
               )}
 
-              {/* Post-trip actions */}
-              {ride.status === 'completed' && (
-                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                  <Link
-                    href={`/rides/${ride.id}/dispute`}
-                    style={{
-                      flex: 1, textAlign: 'center', padding: '0.75rem', borderRadius: '0.75rem',
-                      border: '1px solid var(--border-light)', background: 'var(--bg-card)',
-                      color: 'var(--text-primary)', textDecoration: 'none',
-                      fontSize: '0.85rem', fontWeight: 600,
-                    }}
-                  >
-                    Reportar problema
-                  </Link>
-                  <Link
-                    href={`/rides/${ride.id}/lost-item`}
-                    style={{
-                      flex: 1, textAlign: 'center', padding: '0.75rem', borderRadius: '0.75rem',
-                      border: '1px solid var(--border-light)', background: 'var(--bg-card)',
-                      color: 'var(--text-primary)', textDecoration: 'none',
-                      fontSize: '0.85rem', fontWeight: 600,
-                    }}
-                  >
-                    Objeto perdido
-                  </Link>
-                </div>
-              )}
             </div>
           );
         })()}
