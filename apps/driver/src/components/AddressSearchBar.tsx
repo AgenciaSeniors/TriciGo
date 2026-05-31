@@ -21,6 +21,7 @@ import {
   tricigoCategoryEmoji,
   importPoiFromSearch,
   dedupeSearchResults,
+  SEARCH_DEBOUNCE_MS,
   type GeoPoint,
   type SearchBoxResult,
 } from '@tricigo/utils';
@@ -268,7 +269,7 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
         if (firstKey !== undefined) queryCacheRef.current.delete(firstKey);
       }
       queryCacheRef.current.set(cacheKey, outcome);
-    }, 350);
+    }, SEARCH_DEBOUNCE_MS);
   }, [near]);
 
   const handleSelect = useCallback(

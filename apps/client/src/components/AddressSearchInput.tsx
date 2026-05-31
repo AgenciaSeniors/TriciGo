@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -92,6 +92,7 @@ function AddressSearchInputInner({
   // results, we surface attribution at the bottom of the dropdown per TOS.
   const [attribution, setAttribution] = useState<'google' | 'mapbox' | 'mixed' | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const lastQueryRef = useRef<string>('');
   // PR C of POI parity — Google Places session token. Generated lazily on
   // the first keystroke and reused for every keystroke + the Place Details
@@ -125,6 +126,9 @@ function AddressSearchInputInner({
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
+    // Cancel any in-flight search so a slow earlier response can't land
+    // after — and overwrite — the results for what the user types next.
+    abortRef.current?.abort();
 
     if (text.trim().length < 2) {
       setResults([]);
@@ -145,6 +149,8 @@ function AddressSearchInputInner({
 
     setIsSearching(true);
     setIsOffline(false);
+    const controller = new AbortController();
+    abortRef.current = controller;
     debounceRef.current = setTimeout(async () => {
       if (lastQueryRef.current !== text) return;
       try {
@@ -229,7 +235,7 @@ function AddressSearchInputInner({
         // Fire Google + cuba_pois in parallel — Google takes ~200-400 ms via
         // the EF, the local RPC is ~50-100 ms, so we wait on the slower one.
         const [unifiedResults, poiResults] = await Promise.all([
-          searchAddressUnified(text, getSupabaseClient(), userLocation, undefined, 10, sessionTokenRef.current ?? undefined),
+          searchAddressUnified(text, getSupabaseClient(), userLocation, controller.signal, 10, sessionTokenRef.current ?? undefined),
           searchPoisSupabase(text, userLocation, 6),
         ]);
         const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
@@ -318,13 +324,14 @@ function AddressSearchInputInner({
       } finally {
         setIsSearching(false);
       }
-    }, 500);
+    }, SEARCH_DEBOUNCE_MS);
   }, [userLocation]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
     };
   }, []);
 
