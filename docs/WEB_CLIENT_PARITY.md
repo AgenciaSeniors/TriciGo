@@ -379,3 +379,29 @@ Fuente de verdad = `NativeRidesScreen` (`app/(tabs)/rides.tsx`) + `app/ride/[id]
 **Fixes en este PR:** tarifa por fila currency-aware + con propina (#6, corrige regresión), estado de error + reintentar, refetch-on-focus, export CSV. **Follow-ups:** filtros extra de la lista, mapa + bloque cargo + desglose CUP/tachado en el detalle. **Retirados (correctamente ausentes):** viajes programados, disputa/objeto-perdido.
 
 **Verificación Área 6:** `pnpm --filter @tricigo/web check-types` verde; `/rides` + `/rides/[id]` render 200 en dev sin error markers.
+
+## Área 7 — Profile + subpantallas (`profile/*`, `support`)
+
+Fuente de verdad = `app/(tabs)/profile.tsx` + `app/profile/*`. La más grande. **Construidas las 2 pantallas faltantes** + corregidos gaps de correctitud; los gaps de features más pesados quedan como follow-ups.
+
+### 7.x Pantallas nuevas (construidas)
+| Pantalla | Estado | Nota |
+|---|---|---|
+| `profile/emergency-contact` | ✅ NEW | Form nombre/teléfono(cubano)/relación → `customerService.updateProfile` (JSONB) + upsert `trustedContactService` con `is_emergency`+`auto_share` (parity con el screen móvil). Enlazada desde `/profile/safety`. |
+| `support/[ticketId]` (ticket-detail) | ✅ NEW | Hilo de mensajes + responder (`supportService.getTicket/getMessages/sendMessage`), bloqueado si resuelto/cerrado. Las tarjetas de `/support` ahora enlazan al detalle (antes no se podía abrir un ticket). |
+
+### 7.1–7.8 Subpantallas existentes
+| Pantalla | Veredicto | Nota |
+|---|---|---|
+| Profile home | ✅ | menú/logout/nivel/avatar a la par |
+| **Edit profile** | ✅ FIX | el guardado escribía nombre sólo en `user_metadata`; ahora **espeja a `public.users`** (como ya hacía el avatar) para que los conductores/listados vean el cambio |
+| **Settings** | ✅ FIX (parcial) | + persiste idioma en `users.preferred_language` (sync cross-device) + **enlace "Eliminar cuenta"** → `/account/delete` (existía la página, faltaba el enlace; requisito store/legal). Notificaciones: la web usa modelo de 3 canales (push transaccional / email promos / sms) — adaptación web aceptada |
+| Saved locations | ✅ | CRUD + autocomplete + pick-on-map; web por delante (detección home/work) |
+| **Safety** | ✅ FIX (parcial) | + botón **`tel:106`** (llamar emergencias) + entrada al nuevo `emergency-contact`. Follow-ups: historial de incidentes, compartir viaje activo |
+| Trusted contacts | ✅ | add/remove + auto_share + máx 5 + is_emergency |
+| **Corporate** | ⚠️ follow-up | a la par para admins (presupuesto/recarga/política/empleados-reporte/factura); **falta** el flujo de solicitud/onboarding para no-miembros + alta/baja de empleados |
+| Referral | ✅ | código/compartir/aplicar/historial; web por delante (stats) |
+
+**Fixes en este PR:** 2 pantallas nuevas (emergency-contact, ticket-detail) + sus enlaces; edit→`public.users`; settings idioma-persist + enlace eliminar-cuenta; safety `tel:106` + entrada emergency-contact. **Follow-ups funcionales** (otra pasada, features más pesadas): corporate request/onboarding + gestión de empleados; safety historial de incidentes + compartir viaje activo; settings selector de método de pago. **Retirados (correctamente ausentes):** ride-preferences, recurring-rides, disputas, objetos perdidos.
+
+**Verificación Área 7:** `pnpm --filter @tricigo/web check-types` verde; `/profile/emergency-contact`, `/support/[ticketId]`, `/profile/settings`, `/profile/safety`, `/profile/edit` render 200 en dev sin error markers.
