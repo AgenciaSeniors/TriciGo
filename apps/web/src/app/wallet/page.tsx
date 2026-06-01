@@ -417,6 +417,27 @@ export default function WalletPage() {
   const previewFeeUsd = amountUsdNum > 0 ? computeRechargeFeeUsd(amountUsdNum) : 0;
   const previewChargeUsd = amountUsdNum > 0 ? computeRechargeChargeUsd(amountUsdNum) : 0;
 
+  // Monthly insights "Este mes" (parity con BUG-280 del wallet móvil): sólo
+  // cuenta débitos de `ride_payment`/`redemption` del mes actual → total
+  // gastado, # de viajes y promedio. La card se oculta si no hubo viajes este
+  // mes (evita "70k gastado / 0 viajes").
+  const monthlyInsights = (() => {
+    const now = new Date();
+    const m = now.getMonth();
+    const y = now.getFullYear();
+    const ridePaymentTypes = new Set(['ride_payment', 'redemption']);
+    const monthRideDebits = transactions.filter((tx) => {
+      const d = new Date(tx.created_at);
+      if (d.getMonth() !== m || d.getFullYear() !== y) return false;
+      if (!ridePaymentTypes.has(tx.type)) return false;
+      return (getTxAmount(tx) ?? 0) < 0;
+    });
+    const totalSpent = monthRideDebits.reduce((s, tx) => s + Math.abs(getTxAmount(tx) ?? 0), 0);
+    const ridesCount = monthRideDebits.length;
+    const avgRide = ridesCount > 0 ? Math.round(totalSpent / ridesCount) : 0;
+    return { totalSpent, ridesCount, avgRide };
+  })();
+
   return (
     <>
     <main className="page-main">
@@ -718,6 +739,28 @@ export default function WalletPage() {
             </div>
           )}
         </div>
+
+        {/* ═══ Este mes — insights mensuales (parity con el wallet móvil) ═══ */}
+        {monthlyInsights.ridesCount > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <p style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 0.5rem' }}>Este mes</p>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {[
+                { label: 'Gastado', value: formatTRC(monthlyInsights.totalSpent), usd: monthlyInsights.totalSpent },
+                { label: 'Viajes', value: String(monthlyInsights.ridesCount), usd: null as number | null },
+                { label: 'Promedio', value: formatTRC(monthlyInsights.avgRide), usd: monthlyInsights.avgRide },
+              ].map((m) => (
+                <div key={m.label} style={{ flex: 1, padding: '0.85rem 0.6rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>{m.value}</div>
+                  {m.usd != null && exchangeRate ? (
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)', marginTop: 1 }}>&asymp; ${(m.usd / exchangeRate).toFixed(2)}</div>
+                  ) : null}
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: 2 }}>{m.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ═══ Transaction history ═══ */}
         <div>

@@ -306,7 +306,7 @@ Fuente de verdad = `NativeWalletScreen` (`app/(tabs)/wallet.tsx`) + `walletServi
 | Banner de migración + bono | ✅ | |
 | **Refetch al volver al foco** | ✅ FIX | nuevo effect `visibilitychange`/`focus` → refresca saldo + transacciones (parity con `useFocusEffect` móvil); antes sólo refrescaba al volver de NETOPIA |
 | Animación count-up del saldo | n/a | cosmético — diseño web propio |
-| Card "Este mes" (gastado/viajes/promedio) | ❌ follow-up | feature informativa ausente |
+| Card "Este mes" (gastado/viajes/promedio) | ✅ FIX (PR-FU-1) | card mensual: sólo débitos `ride_payment`/`redemption` del mes → total/viajes/promedio + caption USD; se oculta si no hubo viajes (parity con BUG-280 móvil) |
 
 ### 5.2 Recarga
 | Comportamiento (client) | Web | Nota |
