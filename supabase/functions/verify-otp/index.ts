@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     // Rate limit: 10 requests per IP per minute
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
     const rl = await rateLimit(`verify-otp:${clientIP}`, 10, 60 * 1000);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, getCorsHeaders(req));
 
     const { phone, code } = await req.json();
 
@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     // brute force at 10 verify attempts per phone per 10 minutes,
     // independent of how many IPs the attacker rotates through.
     const rlPhone = await rateLimit(`verify-otp:phone:${normalizedPhone}`, 10, 10 * 60 * 1000);
-    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs);
+    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
 
     // Supabase client (needed for both Cuba and user creation)
     const supabase = createClient(

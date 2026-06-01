@@ -9,7 +9,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
-import { authService, deviceService } from '@tricigo/api';
+import { authService, deviceService, isRateLimitError } from '@tricigo/api';
 import { isValidOTP, triggerHaptic } from '@tricigo/utils';
 import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
@@ -86,8 +86,20 @@ export default function VerifyOTPScreen() {
         text2: t('auth.resend_success_body', { defaultValue: 'Revisá los mensajes del teléfono.' }),
         visibilityTime: 2500,
       });
-    } catch {
-      setError(t('errors.generic'));
+    } catch (err) {
+      // Rate limited (429): keep the button disabled for the server-provided
+      // cooldown and tell the user why, instead of a vague generic error.
+      if (isRateLimitError(err)) {
+        setResendTimer(err.retryAfterSec);
+        Toast.show({
+          type: 'error',
+          text1: t('auth.otp_rate_limited_title', { defaultValue: 'Demasiados códigos' }),
+          text2: t('auth.otp_rate_limited_body', { defaultValue: 'Esperá unos minutos antes de pedir otro código.' }),
+          visibilityTime: 3000,
+        });
+      } else {
+        setError(t('errors.generic'));
+      }
     }
   };
 
