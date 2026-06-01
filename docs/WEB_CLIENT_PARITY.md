@@ -55,7 +55,7 @@ authenticated booking E2E pending (needs live OTP session on device).
 - [x] Receipt download (HTML → print/PDF) + email (`getReceiptData` + `generateReceiptHTML` / `sendRideReceipt`) in `/track/[id]` completed view **and** `/rides/[id]`.
 - [x] "Llegó seguro" auto-share contact SMS on completion (once, `localStorage` guard) + lightweight rating reminder banner (5 min, scrolls to rating).
 Remaining (deferred — lower-frequency / heavier):
-- [ ] Split fare management.
+- [x] Split fare management. (PR-FU-6: `track/[id]` gestión + `SplitInviteBanner` en `/book` + estado en `rides/[id]`)
 - [ ] Chat unread badge / last-read sealing; driver header vehicle+plate.
 
 Verification: `pnpm check-types` green (4 apps); `/track/[id]` + `/rides/[id]` + `/chat/[rideId]` compile + render 200 in Next dev. Live driver-marker movement + GPS/confirm-arrival modal trigger E2E pending (needs an active ride with the `gps_override_*` flags set / a driver streaming GPS).
@@ -251,7 +251,7 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 | Recordatorio de calificación (5 min) | ✅ | banner (sin notif local — aceptable) |
 | Persistir tags en `review_tags` | ✅ FIX PR-FU-4 | Web pasa **tag_keys** (mismo fallback set que el móvil) como `tags` a `submitReview` — ya no los dobla en el comentario. Gateado tras `categorized_ratings_enabled` (igual que `RideCompleteView`; hoy OFF → ningún app muestra chips). **Bug latente compartido:** el insert de `submitReview` usa `tag_key` pero `review_tags` sólo tiene `tag_id` NOT NULL + `review_tag_definitions` vacía → dormido en ambos por el flag OFF; fuera de scope web |
 | Stats distancia/duración + línea de descuento | ⚠️ | Web muestra sólo tarifa — menor |
-| Desglose de fare-split | ❌ | feature deferida (split fare) |
+| Desglose de fare-split | ✅ FIX PR-FU-6 | gestión en `track/[id]` (invitar por teléfono `findUserByPhone`→`createSplitInvite`, listar/quitar `getSplitsForRide`/`removeSplitInvite`, sólo tricicoin); invitaciones entrantes en `/book` (`SplitInviteBanner`, poll `getMySplitInvites` + aceptar/rechazar); estado read-only en `rides/[id]` |
 
 ### 3.6 Seguridad / compartir / cancelar
 | Comportamiento (client) | Web | Nota |
@@ -263,7 +263,7 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 | Revocar token / dejar de compartir | ❌ | menor; el token expira 24h tras completar |
 | Banners "conductor no se mueve (5min)" / "última vez hace X" | ✅ FIX PR-FU-4 | banner único con prioridad **stuck > stale > waiting** (parity con la versión colapsada de `RideActiveView`): detección "no se mueve" (coords sin cambio >20m por 5min) + subtexto "Visto hace X" desde `driverPos.position.recordedAt` |
 
-**Fixes en este PR (Área 3):** banner de proximidad (#2) + generación de token al compartir (#6). **Fixes follow-up PR-FU-4:** polyline conductor→pickup (`approach-route`), barra de progreso (`useTripProgress` web), tags por `tag_key` (gateado tras `categorized_ratings_enabled`, paridad con móvil), banner de inactividad/última-vez. **Falsos positivos descartados:** estado `no_driver_found` (no es un `RideStatus`). **Follow-up restante:** fare-split (PR-FU-6 dedicado). **Diferencias de diseño aceptadas:** confeti, pulse, slide-up, haptics, foto de conductor.
+**Fixes en este PR (Área 3):** banner de proximidad (#2) + generación de token al compartir (#6). **Fixes follow-up PR-FU-4:** polyline conductor→pickup (`approach-route`), barra de progreso (`useTripProgress` web), tags por `tag_key` (gateado tras `categorized_ratings_enabled`, paridad con móvil), banner de inactividad/última-vez. **Falsos positivos descartados:** estado `no_driver_found` (no es un `RideStatus`). **Fix follow-up PR-FU-6:** fare-split (gestión en `track/[id]` + banner de invitaciones en `/book` + estado en `rides/[id]`). **Área 3 sin follow-ups funcionales restantes.** **Diferencias de diseño aceptadas:** confeti, pulse, slide-up, haptics, foto de conductor.
 
 **Verificación Área 3:** `pnpm --filter @tricigo/web check-types` verde; `/track/[id]` render 200 en dev sin error markers.
 

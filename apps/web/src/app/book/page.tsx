@@ -14,6 +14,7 @@ import { useDestinationPredictions } from '../../hooks/useDestinationPredictions
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
 import { useAuth } from '../providers';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { SplitInviteBanner } from '@/components/SplitInviteBanner';
 
 /* Dynamic import — Mapbox GL JS requires `window` */
 function MapLoadingFallback() {
@@ -854,6 +855,10 @@ export default function BookPage() {
           {t('book.title')}
         </h1>
         <p style={{ color: 'var(--text-tertiary)', marginBottom: '1.5rem' }}>{t('book.subtitle')}</p>
+
+        {/* Incoming fare-split invites (parity con SplitInviteCard del home
+            móvil) — polls getMySplitInvites; accept/decline inline. */}
+        <SplitInviteBanner userId={user?.id ?? null} />
 
         {/* ═══ Address Autocomplete (WF-2) ═══ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
