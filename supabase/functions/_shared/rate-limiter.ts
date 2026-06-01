@@ -84,14 +84,26 @@ export async function rateLimit(
   }
 }
 
-export function rateLimitResponse(retryAfterMs: number): Response {
+export function rateLimitResponse(
+  retryAfterMs: number,
+  corsHeaders: Record<string, string> = {},
+): Response {
+  const retryAfterSec = Math.ceil(retryAfterMs / 1000);
   return new Response(
-    JSON.stringify({ error: 'Too many requests. Try again later.' }),
+    // `retryAfterSec` is duplicated into the JSON body so a browser can read
+    // it even when it can't access the `Retry-After` response header. The
+    // header still carries it for native clients (no CORS) and standard tooling.
+    JSON.stringify({ error: 'Too many requests. Try again later.', retryAfterSec }),
     {
       status: 429,
       headers: {
+        // Spread caller CORS headers first so the 429 is readable cross-origin.
+        // Without these the browser blocks the response and the client only
+        // sees an opaque network error (can't tell it was a rate limit).
+        ...corsHeaders,
         'Content-Type': 'application/json',
-        'Retry-After': String(Math.ceil(retryAfterMs / 1000)),
+        'Retry-After': String(retryAfterSec),
+        'Access-Control-Expose-Headers': 'Retry-After',
       },
     },
   );

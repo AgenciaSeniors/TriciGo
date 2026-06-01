@@ -7,7 +7,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
-import { authService, deviceService, driverService } from '@tricigo/api';
+import { authService, deviceService, driverService, isRateLimitError } from '@tricigo/api';
 import { isValidOTP } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -96,12 +96,25 @@ export default function VerifyOTPScreen() {
       setResendTimer(60);
       Toast.show({
         type: 'success',
-        text1: t('auth.otp_resent', { defaultValue: 'Código reenviado' }),
-        visibilityTime: 2000,
+        text1: t('auth.resend_success_title', { defaultValue: 'Código reenviado' }),
+        text2: t('auth.resend_success_body', { defaultValue: 'Revisá los mensajes del teléfono.' }),
+        visibilityTime: 2500,
       });
-    } catch {
-      setError(t('errors.generic'));
-      Toast.show({ type: 'error', text1: t('errors.generic'), visibilityTime: 2500 });
+    } catch (err) {
+      // Rate limited (429): keep the button disabled for the server-provided
+      // cooldown and tell the user why, instead of a vague generic error.
+      if (isRateLimitError(err)) {
+        setResendTimer(err.retryAfterSec);
+        Toast.show({
+          type: 'error',
+          text1: t('auth.otp_rate_limited_title', { defaultValue: 'Demasiados códigos' }),
+          text2: t('auth.otp_rate_limited_body', { defaultValue: 'Esperá unos minutos antes de pedir otro código.' }),
+          visibilityTime: 3000,
+        });
+      } else {
+        setError(t('errors.generic'));
+        Toast.show({ type: 'error', text1: t('errors.generic'), visibilityTime: 2500 });
+      }
     }
   };
 
@@ -141,21 +154,15 @@ export default function VerifyOTPScreen() {
           size="lg"
         />
 
-        <View className="mt-4 items-center">
-          {resendTimer > 0 ? (
-            <Text variant="bodySmall" color="inverse" className="opacity-40">
-              {t('auth.resend_in', { seconds: resendTimer })}
-            </Text>
-          ) : (
-            <Button
-              title={t('auth.resend_code')}
-              onPress={handleResend}
-              variant="ghost"
-              size="sm"
-              forceDark
-            />
-          )}
-        </View>
+        <Button
+          title={resendTimer > 0 ? `${t('auth.resend_code')} (${resendTimer}s)` : t('auth.resend_code')}
+          variant="ghost"
+          onPress={handleResend}
+          disabled={resendTimer > 0 || loading}
+          forceDark
+          className="mt-4"
+          fullWidth
+        />
       </View>
     </Screen>
   );

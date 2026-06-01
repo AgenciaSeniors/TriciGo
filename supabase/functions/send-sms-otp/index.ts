@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     // Rate limit: 5 requests per IP per 10 minutes
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
     const rl = await rateLimit(`send-sms-otp:${clientIP}`, 5, 10 * 60 * 1000);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, getCorsHeaders(req));
 
     const { phone } = await req.json();
 
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     // for a victim's phone (annoyance + quota drain). 3 OTPs per
     // phone per 5 minutes is generous for legit retries.
     const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, 3, 5 * 60 * 1000);
-    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs);
+    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
 
     // ── Route by country: Cuba → D7 SMS (with Meta WhatsApp fallback), rest → Twilio Verify ──
     if (normalizedPhone.startsWith('+53')) {

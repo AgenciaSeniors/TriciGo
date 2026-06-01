@@ -9,6 +9,56 @@ import { uploadFileFromUri } from './_storage-upload';
 
 declare const __DEV__: boolean | undefined;
 
+/**
+ * Thrown when an OTP endpoint returns HTTP 429 (rate limited). Carries the
+ * server-provided cooldown so the UI can keep the resend button disabled for
+ * the right amount of time and tell the user how long to wait.
+ */
+export interface RateLimitError extends Error {
+  code: 'rate_limited';
+  /** Seconds the caller should wait before retrying. */
+  retryAfterSec: number;
+}
+
+export function isRateLimitError(err: unknown): err is RateLimitError {
+  return (
+    err instanceof Error &&
+    (err as RateLimitError).code === 'rate_limited' &&
+    typeof (err as RateLimitError).retryAfterSec === 'number'
+  );
+}
+
+/**
+ * Inspect a supabase-js Functions error and, if it represents a 429, return a
+ * typed RateLimitError. Returns null for any other error so callers can fall
+ * back to generic handling.
+ *
+ * supabase-js puts the raw Response on `error.context` for HTTP errors. We read
+ * the cooldown from the `Retry-After` header (works on native — no CORS), with a
+ * fallback to the `retryAfterSec` field the edge function duplicates into the
+ * JSON body (needed on web, where header access depends on CORS exposure).
+ */
+async function asRateLimitError(error: unknown): Promise<RateLimitError | null> {
+  const ctx = (error as { context?: Response } | null)?.context;
+  if (!ctx || ctx.status !== 429) return null;
+
+  let retryAfterSec = Number(ctx.headers?.get?.('Retry-After')) || 0;
+  if (!retryAfterSec) {
+    try {
+      const body = await ctx.clone().json();
+      if (typeof body?.retryAfterSec === 'number') retryAfterSec = body.retryAfterSec;
+    } catch {
+      /* body unreadable/consumed — fall through to default */
+    }
+  }
+
+  const e = new Error('rate_limited') as RateLimitError;
+  e.code = 'rate_limited';
+  // Default to the per-phone window (5 min) when the server didn't tell us.
+  e.retryAfterSec = retryAfterSec > 0 ? retryAfterSec : 300;
+  return e;
+}
+
 export const authService = {
   /**
    * Send OTP to a phone number via Twilio SMS Edge Function.
@@ -26,7 +76,13 @@ export const authService = {
       body: { phone },
     });
 
-    if (error) throw error;
+    if (error) {
+      // Surface rate-limit (429) as a typed error so the UI can show a clear
+      // "too many requests, wait N" message instead of a generic failure.
+      const rl = await asRateLimitError(error);
+      if (rl) throw rl;
+      throw error;
+    }
     if (data?.error) throw new Error(data.error);
   },
 

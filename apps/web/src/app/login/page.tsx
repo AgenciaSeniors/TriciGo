@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { getSupabaseClient, authService, referralService } from '@tricigo/api';
+import { getSupabaseClient, authService, referralService, isRateLimitError } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuth } from '../providers';
@@ -128,7 +128,15 @@ export default function LoginPage() {
       setStep('otp');
       setResendTimer(60);
     } catch (err) {
-      setError(t('auth.send_otp_failed'));
+      if (isRateLimitError(err)) {
+        // A prior code may still be valid — advance to the OTP step with the
+        // resend disabled for the server cooldown and a clear explanation.
+        setStep('otp');
+        setResendTimer(err.retryAfterSec);
+        setError(t('auth.otp_rate_limited_body', { defaultValue: 'Demasiados códigos. Esperá unos minutos antes de pedir otro.' }));
+      } else {
+        setError(t('auth.send_otp_failed'));
+      }
       console.error(err);
     } finally {
       setLoading(false);
@@ -164,7 +172,12 @@ export default function LoginPage() {
       setResendConfirm(true);
       setTimeout(() => setResendConfirm(false), 3000);
     } catch (err) {
-      setError(t('auth.send_otp_failed'));
+      if (isRateLimitError(err)) {
+        setResendTimer(err.retryAfterSec);
+        setError(t('auth.otp_rate_limited_body', { defaultValue: 'Demasiados códigos. Esperá unos minutos antes de pedir otro.' }));
+      } else {
+        setError(t('auth.send_otp_failed'));
+      }
       console.error(err);
     }
   }
