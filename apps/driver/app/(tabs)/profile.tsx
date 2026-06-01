@@ -198,6 +198,7 @@ function NativeDriverProfileScreen() {
       items: [
         { icon: 'shield-checkmark-outline', label: t('safety.title'), onPress: () => router.push('/profile/safety'), tint: '#22C55E' },
         { icon: 'people-outline', label: t('trusted_contacts.title', { defaultValue: 'Contactos de confianza' }), onPress: () => router.push('/profile/trusted-contacts'), tint: '#3B82F6' },
+        { icon: 'phone-portrait-outline', label: t('devices.title', { defaultValue: 'Tus dispositivos' }), onPress: () => router.push('/profile/devices'), tint: '#8B5CF6' },
       ],
     },
     {

@@ -60,6 +60,7 @@ function WebProfileScreen() {
       items: [
         { icon: 'shield-checkmark-outline' as const, label: t('profile.safety', { defaultValue: 'Seguridad' }), href: '/profile/safety', iconBg: 'success' as const },
         { icon: 'people-outline' as const, label: t('profile.trusted_contacts', { defaultValue: 'Contactos de confianza' }), href: '/profile/trusted-contacts', iconBg: 'info' as const },
+        { icon: 'phone-portrait-outline' as const, label: t('devices.title', { defaultValue: 'Tus dispositivos' }), href: '/profile/devices', iconBg: 'neutral' as const },
       ],
     },
     {
@@ -243,6 +244,7 @@ function NativeProfileScreen() {
       items: [
         { icon: 'people-outline' as const, label: t('trusted_contacts.title'), onPress: () => router.push('/profile/trusted-contacts'), iconBg: 'info' as const },
         { icon: 'shield-checkmark-outline' as const, label: t('safety.title'), onPress: () => router.push('/profile/safety'), iconBg: 'success' as const },
+        { icon: 'phone-portrait-outline' as const, label: t('devices.title', { defaultValue: 'Tus dispositivos' }), onPress: () => router.push('/profile/devices'), iconBg: 'neutral' as const },
       ],
     },
     {

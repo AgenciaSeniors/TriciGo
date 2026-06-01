@@ -3,7 +3,7 @@ import { deviceService } from '@tricigo/api';
 const DEVICE_ID_KEY = 'tricigo_device_id';
 
 /** Stable per-browser install id (persisted in localStorage). */
-function getWebDeviceId(): string {
+export function getWebDeviceId(): string {
   if (typeof window === 'undefined') return 'web-ssr';
   let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id) {
