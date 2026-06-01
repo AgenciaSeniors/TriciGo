@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, corporateService, paymentService, invoiceService } from '@tricigo/api';
-import type { CorporateAccount, CorporateEmployeeRole, EmployeeReport } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
+import type { CorporateAccount, CorporateEmployeeRole, CorporateEmployeeWithUser, EmployeeReport } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
-import { WebEmptyState } from '@/components/WebEmptyState';
+import CorporateRequestForm from './CorporateRequestForm';
 
 const ALL_SERVICE_TYPES = [
   'triciclo_basico', 'triciclo_premium', 'triciclo_cargo',
@@ -71,6 +72,20 @@ export default function CorporatePage() {
   });
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
+  // Onboarding (non-members): most recent request (pending/rejected/none).
+  const [requestStatus, setRequestStatus] = useState<CorporateAccount | null>(null);
+  const [requestLoading, setRequestLoading] = useState(true);
+  const [requestVersion, setRequestVersion] = useState(0);
+
+  // Employee management state (admin)
+  const [employeesAccountId, setEmployeesAccountId] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<CorporateEmployeeWithUser[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [showAddEmployee, setShowAddEmployee] = useState(false);
+  const [newEmpPhone, setNewEmpPhone] = useState('');
+  const [newEmpRole, setNewEmpRole] = useState<CorporateEmployeeRole>('employee');
+  const [addingEmployee, setAddingEmployee] = useState(false);
+
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
       setUserId(session?.user?.id ?? null);
@@ -107,6 +122,75 @@ export default function CorporatePage() {
     if (!userId) return;
     loadAccounts(userId);
   }, [userId, loadAccounts]);
+
+  // Most recent corporate request — drives the empty-state UI (form / "in
+  // review" / "rejected — resubmit"), parity con el client.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    setRequestLoading(true);
+    corporateService.getRequestStatus(userId)
+      .then((data) => { if (!cancelled) setRequestStatus(data); })
+      .catch(() => { if (!cancelled) setRequestStatus(null); })
+      .finally(() => { if (!cancelled) setRequestLoading(false); });
+    return () => { cancelled = true; };
+  }, [userId, requestVersion]);
+
+  // ─── Employee management (admin) ───
+  const loadEmployees = useCallback(async (accountId: string) => {
+    setLoadingEmployees(true);
+    try {
+      setEmployees(await corporateService.getEmployees(accountId));
+    } catch {
+      setEmployees([]);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  }, []);
+
+  const toggleEmployees = (accountId: string) => {
+    if (employeesAccountId === accountId) {
+      setEmployeesAccountId(null);
+      setEmployees([]);
+      setShowAddEmployee(false);
+    } else {
+      setEmployeesAccountId(accountId);
+      setShowAddEmployee(false);
+      loadEmployees(accountId);
+    }
+  };
+
+  const handleAddEmployee = async (accountId: string) => {
+    if (!userId || !newEmpPhone.trim()) return;
+    setAddingEmployee(true);
+    setError(null);
+    try {
+      await corporateService.addEmployee(accountId, newEmpPhone.trim(), newEmpRole, userId);
+      setNewEmpPhone('');
+      setNewEmpRole('employee');
+      setShowAddEmployee(false);
+      await loadEmployees(accountId);
+    } catch (err) {
+      const msg = getErrorMessage(err);
+      setError(msg === 'USER_NOT_FOUND'
+        ? t('corporate_employee_not_found', { defaultValue: 'No se encontró un usuario con ese teléfono' })
+        : msg === 'EMPLOYEE_ALREADY_EXISTS'
+          ? t('corporate_employee_exists', { defaultValue: 'Ese usuario ya es empleado de esta cuenta' })
+          : msg);
+    } finally {
+      setAddingEmployee(false);
+    }
+  };
+
+  const handleRemoveEmployee = async (accountId: string, empUserId: string) => {
+    if (!window.confirm(t('corporate_remove_employee_confirm', { defaultValue: '¿Remover este empleado?' }))) return;
+    try {
+      await corporateService.removeEmployee(accountId, empUserId);
+      await loadEmployees(accountId);
+    } catch {
+      setError(t('corporate_employee_remove_error', { defaultValue: 'No se pudo remover al empleado' }));
+    }
+  };
 
   const startEditing = (acc: AccountWithMeta) => {
     setEditingId(acc.id);
@@ -395,11 +479,59 @@ export default function CorporatePage() {
       {loading ? (
         <WebSkeletonList count={2} />
       ) : accounts.length === 0 ? (
-        <WebEmptyState
-          icon="🏢"
-          title={t('corporate_empty_title', { defaultValue: 'No tienes cuentas corporativas' })}
-          description={t('corporate_empty_desc', { defaultValue: 'Contacta a tu empresa para vincular tu cuenta de TriciGo.' })}
-        />
+        requestLoading ? (
+          <WebSkeletonList count={1} />
+        ) : requestStatus?.status === 'pending' ? (
+          /* In review */
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '1rem', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <span aria-hidden="true" style={{ fontSize: '1.25rem' }}>⏳</span>
+              <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                {t('corporate_request_pending_title', { defaultValue: 'Solicitud en revisión' })}
+              </h2>
+            </div>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 0.75rem' }}>
+              {t('corporate_request_pending_desc', { defaultValue: 'Recibimos tu solicitud para' })}{' '}
+              <strong>{requestStatus.name}</strong>. {t('corporate_request_pending_eta', { defaultValue: 'Nuestro equipo la está revisando y te contactaremos en 1–2 días hábiles.' })}
+            </p>
+            <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem' }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', margin: 0, fontWeight: 600 }}>{t('corporate_request_contact', { defaultValue: 'Contacto registrado' })}</p>
+              <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{requestStatus.contact_phone}</p>
+              {requestStatus.contact_email && (
+                <p style={{ margin: '0.1rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{requestStatus.contact_email}</p>
+              )}
+            </div>
+          </div>
+        ) : requestStatus?.status === 'rejected' ? (
+          /* Rejected — allow resubmit */
+          <>
+            <div style={{ background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '1rem', padding: '1.25rem', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                <span aria-hidden="true" style={{ fontSize: '1.2rem' }}>⚠️</span>
+                <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#dc2626' }}>
+                  {t('corporate_request_rejected_title', { defaultValue: 'Solicitud rechazada' })}
+                </h2>
+              </div>
+              {requestStatus.suspended_reason && (
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  {t('corporate_request_reason', { defaultValue: 'Motivo' })}: {(() => {
+                    try {
+                      const parsed = JSON.parse(requestStatus.suspended_reason);
+                      return parsed?.reason ?? requestStatus.suspended_reason;
+                    } catch { return requestStatus.suspended_reason; }
+                  })()}
+                </p>
+              )}
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.5rem 0 0' }}>
+                {t('corporate_request_resubmit', { defaultValue: 'Puedes corregir los datos y volver a enviar la solicitud.' })}
+              </p>
+            </div>
+            <CorporateRequestForm userId={userId} onSubmitted={() => setRequestVersion((v) => v + 1)} />
+          </>
+        ) : (
+          /* No request yet — show the form */
+          <CorporateRequestForm userId={userId} onSubmitted={() => setRequestVersion((v) => v + 1)} />
+        )
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {accounts.map((acc) => {
@@ -689,6 +821,148 @@ export default function CorporatePage() {
                     {t('corporate_edit_policies_btn', { defaultValue: 'Editar políticas' })}
                   </button>
                 )}
+
+                {/* Employees — everyone can view; admins add/remove */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <button
+                    onClick={() => toggleEmployees(acc.id)}
+                    style={{
+                      width: '100%', padding: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: 'transparent', border: 'none', borderTop: '1px solid var(--border-light)',
+                      cursor: 'pointer', color: 'var(--text-primary)',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                      {t('corporate_employees_section', { defaultValue: 'Empleados' })}
+                    </span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ transform: employeesAccountId === acc.id ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+
+                  {employeesAccountId === acc.id && (
+                    <div style={{ padding: '0.5rem 0' }}>
+                      {loadingEmployees ? (
+                        <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.85rem', padding: '0.75rem 0' }}>
+                          {t('loading', { defaultValue: 'Cargando...' })}
+                        </p>
+                      ) : employees.length === 0 ? (
+                        <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.85rem', padding: '0.75rem 0' }}>
+                          {t('corporate_no_employees', { defaultValue: 'No hay empleados registrados' })}
+                        </p>
+                      ) : (
+                        employees.map((emp) => (
+                          <div key={emp.id} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '0.5rem 0', borderBottom: '1px solid var(--border-light)',
+                          }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                                {emp.users?.full_name || emp.users?.phone || '—'}
+                              </p>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.15rem' }}>
+                                <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>{emp.users?.phone}</span>
+                                <span style={{
+                                  fontSize: '0.68rem', fontWeight: 600, padding: '0.1rem 0.45rem', borderRadius: '999px',
+                                  background: emp.role === 'admin' ? '#eff6ff' : 'var(--border-light)',
+                                  color: emp.role === 'admin' ? '#2563eb' : 'var(--text-secondary)',
+                                }}>
+                                  {emp.role === 'admin'
+                                    ? t('corporate_role_admin', { defaultValue: 'Administrador' })
+                                    : t('corporate_role_employee', { defaultValue: 'Empleado' })}
+                                </span>
+                              </div>
+                            </div>
+                            {isAdmin && emp.user_id !== userId && (
+                              <button
+                                onClick={() => handleRemoveEmployee(acc.id, emp.user_id)}
+                                aria-label={t('corporate_remove_employee', { defaultValue: 'Remover empleado' })}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '0.25rem', fontSize: '1.1rem', lineHeight: 1 }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      )}
+
+                      {isAdmin && (
+                        showAddEmployee ? (
+                          <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'var(--bg-light)', borderRadius: '0.5rem', border: '1px solid var(--border-light)' }}>
+                            <label style={labelStyle}>{t('corporate_employee_phone', { defaultValue: 'Teléfono del empleado' })}</label>
+                            <input
+                              type="tel"
+                              value={newEmpPhone}
+                              onChange={(e) => setNewEmpPhone(e.target.value)}
+                              placeholder="+53 5XXXXXXX"
+                              style={inputStyle}
+                            />
+                            <p style={{ ...labelStyle, marginTop: '0.6rem' }}>{t('corporate_employee_role', { defaultValue: 'Rol' })}</p>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              {(['employee', 'admin'] as const).map((role) => {
+                                const on = newEmpRole === role;
+                                return (
+                                  <button
+                                    key={role}
+                                    type="button"
+                                    onClick={() => setNewEmpRole(role)}
+                                    style={{
+                                      flex: 1, padding: '0.5rem', borderRadius: '0.4rem',
+                                      border: on ? '1.5px solid var(--primary)' : '1px solid var(--border-light)',
+                                      background: on ? 'rgba(255,77,0,0.08)' : 'var(--bg-card)',
+                                      color: on ? 'var(--primary)' : 'var(--text-secondary)',
+                                      fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+                                    }}
+                                  >
+                                    {role === 'admin'
+                                      ? t('corporate_role_admin', { defaultValue: 'Administrador' })
+                                      : t('corporate_role_employee', { defaultValue: 'Empleado' })}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                              <button
+                                onClick={() => handleAddEmployee(acc.id)}
+                                disabled={addingEmployee || !newEmpPhone.trim()}
+                                style={{
+                                  flex: 1, padding: '0.6rem', background: 'var(--primary)', color: '#fff',
+                                  border: 'none', borderRadius: '0.5rem', fontSize: '0.85rem', fontWeight: 600,
+                                  cursor: addingEmployee || !newEmpPhone.trim() ? 'not-allowed' : 'pointer',
+                                  opacity: addingEmployee || !newEmpPhone.trim() ? 0.6 : 1,
+                                }}
+                              >
+                                {addingEmployee ? t('corporate_adding', { defaultValue: 'Agregando...' }) : t('corporate_add_employee', { defaultValue: 'Agregar empleado' })}
+                              </button>
+                              <button
+                                onClick={() => { setShowAddEmployee(false); setNewEmpPhone(''); setNewEmpRole('employee'); }}
+                                style={{
+                                  padding: '0.6rem 1rem', background: 'transparent', color: 'var(--text-secondary)',
+                                  border: '1px solid var(--border-light)', borderRadius: '0.5rem', fontSize: '0.85rem', cursor: 'pointer',
+                                }}
+                              >
+                                {t('corporate_cancel', { defaultValue: 'Cancelar' })}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setShowAddEmployee(true)}
+                            style={{
+                              width: '100%', padding: '0.6rem', marginTop: '0.6rem',
+                              background: 'transparent', color: 'var(--primary)',
+                              border: '1px solid var(--primary)', borderRadius: '0.5rem',
+                              fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+                            }}
+                          >
+                            + {t('corporate_add_employee', { defaultValue: 'Agregar empleado' })}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {/* Employee Reports (admin only) */}
                 {isAdmin && (
