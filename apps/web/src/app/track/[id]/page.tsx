@@ -18,6 +18,7 @@ import { fetchRoute } from '../../../services/geoService';
 import { TipFlow } from '../../../components/TipFlow';
 import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
 import { FareSplitCard } from './FareSplitCard';
+import { StopPickerMap } from './StopPickerMap';
 import './track.css';
 
 // Categorized rating tag keys — mirror the mobile RideCompleteView fallback
@@ -271,10 +272,11 @@ export default function TrackRidePage() {
   // getRideWaypoints (RPC extracts lat/lng from the opaque GEOGRAPHY column).
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [addStopOpen, setAddStopOpen] = useState(false);
+  const [showStopMap, setShowStopMap] = useState(false);
   const [estimatingStop, setEstimatingStop] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
   const [pendingStop, setPendingStop] = useState<
-    | { address: string; latitude: number; longitude: number; extraDistanceKm: number; extraFareCup: number }
+    | { address: string; latitude: number; longitude: number; extraDistanceKm: number; extraFareCup: number; extraDurationMin: number }
     | null
   >(null);
   const [maxStopsReached, setMaxStopsReached] = useState(false);
@@ -328,6 +330,9 @@ export default function TrackRidePage() {
 
   // Add-stop flow (parity con RideActiveView): pick address → estimate the
   // fare delta → confirm → addWaypointToActiveRide → refetch the list.
+  // Extra time matches the server trigger (00341): urban 25 km/h.
+  const extraMinFromKm = (km: number) => Math.max(0, Math.round((km / 25) * 60));
+
   const handleSelectStop = async (result: { address: string; latitude: number; longitude: number }) => {
     setMaxStopsReached(false);
     setEstimatingStop(true);
@@ -336,13 +341,14 @@ export default function TrackRidePage() {
       const { extraDistanceKm, extraFareCup } = await rideService.estimateWaypointAddition(
         rideId, result.latitude, result.longitude, existing,
       );
-      setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm, extraFareCup });
+      setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm, extraFareCup, extraDurationMin: extraMinFromKm(extraDistanceKm) });
     } catch {
       // Fall back to adding without preview rather than blocking the feature.
-      setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm: 0, extraFareCup: 0 });
+      setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm: 0, extraFareCup: 0, extraDurationMin: 0 });
     } finally {
       setEstimatingStop(false);
       setAddStopOpen(false);
+      setShowStopMap(false);
     }
   };
 
@@ -353,6 +359,10 @@ export default function TrackRidePage() {
       await rideService.addWaypointToActiveRide(rideId, pendingStop.address, pendingStop.latitude, pendingStop.longitude);
       setPendingStop(null);
       refetchWaypoints();
+      // The 00341 trigger recomputed rides.estimated_distance_m/duration_s/fare
+      // + the estimate snapshot server-side — refetch the ride so the fare card,
+      // ETA and progress reflect the stop ("make it part of the trip").
+      fetchRide();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String((err as { message?: string } | null)?.message ?? '');
       if (msg === 'MAX_WAYPOINTS_REACHED') {
@@ -1137,6 +1147,15 @@ export default function TrackRidePage() {
                       proximity={{ latitude: pickupLat, longitude: pickupLng }}
                       onSelect={handleSelectStop}
                     />
+                    {/* Alternativa: marcar la parada en el mapa (parity con el
+                        map-picker del add-stop móvil). */}
+                    <button
+                      type="button"
+                      onClick={() => setShowStopMap(true)}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8, padding: '0.55rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}
+                    >
+                      📍 {t('track.pick_on_map', { defaultValue: 'Marcar en el mapa' })}
+                    </button>
                     {estimatingStop && (
                       <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', margin: '0.5rem 0 0', textAlign: 'center' }}>
                         {t('track.estimating_stop', { defaultValue: 'Calculando costo adicional...' })}
@@ -1516,6 +1535,10 @@ export default function TrackRidePage() {
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_distance', { defaultValue: 'Distancia adicional' })}</span>
                 <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>+{pendingStop.extraDistanceKm.toFixed(1)} km</span>
               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_time', { defaultValue: 'Tiempo adicional' })}</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>+{pendingStop.extraDurationMin} min</span>
+              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_fare', { defaultValue: 'Tarifa adicional estimada' })}</span>
                 <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary, #FF4D00)' }}>+{formatCUP(pendingStop.extraFareCup)}</span>
@@ -1544,6 +1567,15 @@ export default function TrackRidePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Map picker for the add-stop flow (parity con el map-picker móvil). */}
+      {showStopMap && (
+        <StopPickerMap
+          center={{ latitude: pickupLat, longitude: pickupLng }}
+          onConfirm={handleSelectStop}
+          onClose={() => setShowStopMap(false)}
+        />
       )}
     </div>
   );

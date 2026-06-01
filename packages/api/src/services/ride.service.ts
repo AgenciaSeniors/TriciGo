@@ -2270,11 +2270,28 @@ export const rideService = {
     const surgeAmountCup = surgeMult > 1 ? Math.max(0, Math.round(subtotalCup * (surgeMult - 1))) : 0;
     const exchangeRateUsdCup = ride.exchange_rate_usd_cup != null ? Number(ride.exchange_rate_usd_cup) : null;
 
+    // Intermediate stops (mid-ride waypoints) → addresses in visit order, so
+    // the receipt lists them between pickup and dropoff. Best-effort: a query
+    // failure must never break the receipt.
+    let stops: string[] | undefined;
+    try {
+      const { data: wps } = await supabase
+        .from('ride_waypoints')
+        .select('address, sort_order')
+        .eq('ride_id', rideId)
+        .order('sort_order', { ascending: true });
+      const addrs = (wps ?? [])
+        .map((w) => (w as { address?: string | null }).address)
+        .filter((a): a is string => typeof a === 'string' && a.trim().length > 0);
+      if (addrs.length > 0) stops = addrs;
+    } catch { /* no stops on the receipt */ }
+
     const base = {
       receiptNo,
       rideId: ride.id as string,
       date: dateISO,
       pickupAddress: ride.pickup_address as string,
+      stops,
       dropoffAddress: ride.dropoff_address as string,
       serviceType: ride.service_type as string,
       distanceM,
