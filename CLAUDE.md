@@ -1105,9 +1105,9 @@ contents = contents.replace(classHeader, `$1\n${OVERRIDE_SNIPPET}`);
 
 ---
 
-### Search de direcciones — estado canónico (Tier 1.5 + 1.6 + 1.7 cerrados 2026-05-27)
+### Search de direcciones — estado canónico (Tier 1.5–1.7 cerrados 2026-05-27 · fuzzy + sugerencias + emoji 2026-06-01)
 
-> Esta sección documenta el estado actual del search y los patrones aprendidos durante 3 sesiones de trabajo (7 PRs mergeados). Sirve para diagnosticar bugs futuros sin re-descubrir contexto.
+> Esta sección documenta el estado actual del search y los patrones aprendidos durante 4 sesiones de trabajo (16 PRs mergeados). Sirve para diagnosticar bugs futuros sin re-descubrir contexto.
 
 #### Estado actual en prod
 
@@ -1118,6 +1118,11 @@ contents = contents.replace(classHeader, `$1\n${OVERRIDE_SNIPPET}`);
 | EF `search-places-google` | version 5 ACTIVE | locationBias 25km + locationRestriction Cuba bbox + bbox margin ±0.2° + cache 30d + daily cap 1000 + session tokens |
 | Helpers SQL | `_street_display_name`, `_street_normalize_key`, `_street_full_display` | Inmutables, reusables. Ver migración 00332/00333 |
 | Cliente — 4 componentes search | Todos con AbortController + cache + empty state + cleanup | rider mobile, rider web, driver mobile, web landing |
+| RPC `get_destination_suggestions` | 00359 (+ 00360 fix) aplicada | Predicciones de destino history-aware; servicio RPC-first con fallback cliente |
+| RPCs de dirección cubana | 00361 unaccent + trgm | `find_intersection_point` / `suggest_cross_streets` tolerantes a acentos y typos; 00363 devuelve dirección canónica |
+| RPC `search_pois_smart` | 00362 trgm | Nombres de POI tolerantes a typos |
+| `cuba_pois.tricigo_category` | 00364 re-cat (DATA) | ~1241 filas `other` → transport/restaurant/religion/shop/park; el resto queda `other` |
+| Resolver `searchResultEmoji` | `packages/utils/src/addressSearch.ts` (PR-F1 #361) | Emoji de categoría en TODO resultado: tricigo cat → calle 🛣️ / esquina 🔀 → categoría cruda → keyword del nombre → 📍 |
 
 **Verificación rápida de salud del search:**
 
@@ -1243,6 +1248,16 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 
 **Sin este pattern**, el componente sufre: race conditions (response vieja sobrescribe nueva), calls duplicadas (re-typing gasta sesiones Google), leaks (pending fetches después de navigate).
 
+#### Novedades 2026-06-01 (fuzzy + sugerencias + emoji)
+
+**1. `searchResultEmoji(result)` — emoji de categoría en TODO resultado.** Vive en `packages/utils/src/addressSearch.ts` (módulo compartido, con tests TDD). Cadena de fallback, primer match gana: (1) `tricigoCategoryEmoji` si la tricigo-category es conocida; (2) `category==='street'` → 🛣️, dirección con " e/ " / " entre " → 🔀; (3) mapa de **categoría cruda** del provider (landmark→🏛️, public_transport→🚌, botanical_garden→🌳, retail→🛍️…); (4) **keyword español del nombre** (capitolio→🏛️, teatro→🎭, museo→🖼️…); (5) 📍 solo como último recurso. Lo usan los 4 componentes (rider/web/driver/guest) — reemplazó sus mapas locales divergentes (`getResultIcon`/`getIcon`). Garantiza el emoji en pantalla aunque la DB tenga la categoría en `other`.
+
+**2. Re-categorización de `other` (00364) — complementa al resolver.** `other` era la 2ª categoría más grande de `cuba_pois`. La migración (DATA, idempotente, conservadora) reclasificó ~1241 filas de alta confianza por su categoría cruda: public_transport→transport (~923), dining→restaurant, church→religion, retail→shop, garden/plaza→park. Lo ambiguo queda `other` y lo cubre el resolver por keyword. Verificación: `SELECT count(*) FROM cuba_pois WHERE tricigo_category='other' AND category='public_transport'` debe dar **0**; `tricigo_category='transport'` quedó en ~10.3k.
+
+**3. `get_destination_suggestions` (00359/00360) — predicciones history-aware.** Servicio en `packages/api` con patrón **RPC-first + fallback cliente** (tolera ausencia de la RPC sin romper UX). El hook `useDestinationPredictions` quedó unificado entre rider y driver.
+
+**4. Fuzzy matching cubano (00361/00362/00363).** `find_intersection_point` y `suggest_cross_streets` (00361) + `search_pois_smart` (00362) usan `unaccent` + `pg_trgm` → toleran acentos faltantes y typos. 00363 hace que `find_intersection_point` devuelva la dirección en forma **canónica** "X e/ Y y Z".
+
 #### Migraciones del search (orden cronológico)
 
 | Migration | Foco | Notas |
@@ -1256,8 +1271,13 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 | 00331 | v4 — dedup main_street | DROP municipality del DISTINCT ON |
 | 00332 | v5 — alias normalization (main) | Helpers `_street_display_name` + `_street_normalize_key` |
 | 00333 | v6 — cross_street alias también | Helper `_street_full_display` aplicado a cross |
+| 00359 / 00360 | `get_destination_suggestions` RPC (+ fix variable conflict) | Predicciones de destino history-aware (RPC-first, fallback cliente) |
+| 00361 | RPCs de dirección cubana: unaccent + trgm | `find_intersection_point` / `suggest_cross_streets` tolerantes a acento + typo |
+| 00362 | `search_pois_smart` trgm | Nombres de POI tolerantes a typos |
+| 00363 | `find_intersection_point` — dirección canónica | Devuelve la forma canónica "X e/ Y y Z" |
+| 00364 | Re-categorizar `other` cuba_pois (DATA) | ~1241 filas → transport/restaurant/religion/shop/park; conservador, idempotente |
 
-**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5`.
+**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5`. (Al cierre 2026-06-01 la última es **00366**; próxima libre **00367**. Ojo: 00365/00366 son de *device-registry/new-device email*, no de search.)
 
 #### Debugging guide cuando aparezca un bug nuevo de search
 
