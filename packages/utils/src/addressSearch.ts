@@ -79,6 +79,7 @@ export function scoreSearchResult(
   result: ScorableResult,
   query: string,
   proximity?: GeoPointLike | null,
+  frequentZones?: ReadonlyArray<GeoPointLike>,
 ): number {
   const q = stripAccents(query.toLowerCase().trim());
   const name = stripAccents((result.place_name ?? '').toLowerCase().trim());
@@ -119,7 +120,21 @@ export function scoreSearchResult(
         ? 0.4
         : 0.3;
 
-  return textScore * 0.35 + specScore * 0.25 + distScore * 0.25 + sourceScore * 0.15;
+  // History prior — a small nudge when the result sits in a zone the rider
+  // visits often (within ~600 m of a frequent destination). Kept small so it
+  // can't override a clearly better text match; rankSearchResults applies it
+  // only as an in-bucket tie-break.
+  let frequentBonus = 0;
+  if (frequentZones && frequentZones.length > 0) {
+    for (const zone of frequentZones) {
+      if (haversineDistance({ latitude: result.latitude, longitude: result.longitude }, zone) <= 600) {
+        frequentBonus = 0.1;
+        break;
+      }
+    }
+  }
+
+  return textScore * 0.35 + specScore * 0.25 + distScore * 0.25 + sourceScore * 0.15 + frequentBonus;
 }
 
 /**
@@ -132,6 +147,7 @@ export function rankSearchResults<T extends ScorableResult>(
   results: ReadonlyArray<T>,
   query: string,
   proximity?: GeoPointLike | null,
+  frequentZones?: ReadonlyArray<GeoPointLike>,
 ): T[] {
   return results
     .map((r, i) => ({
@@ -142,7 +158,7 @@ export function rankSearchResults<T extends ScorableResult>(
             haversineDistance({ latitude: r.latitude, longitude: r.longitude }, proximity),
           )
         : 0,
-      score: scoreSearchResult(r, query, proximity),
+      score: scoreSearchResult(r, query, proximity, frequentZones),
     }))
     .sort((a, b) => a.bucket - b.bucket || b.score - a.score || a.i - b.i)
     .map((x) => x.r);

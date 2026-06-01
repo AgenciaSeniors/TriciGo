@@ -122,3 +122,26 @@ describe('searchResultCap', () => {
     expect(searchResultCap('rei')).toBe(6);
   });
 });
+
+// ~1 km north of the user — a place they ride to often.
+const FREQUENT = { latitude: 23.1447, longitude: -82.3666 };
+
+describe('rankSearchResults with a frequent-zone prior', () => {
+  it('nudges a result near a frequent zone above an otherwise-equal one', () => {
+    const nearFreq = result({ place_name: 'Cafe X', latitude: FREQUENT.latitude, longitude: FREQUENT.longitude });
+    const notFreq = result({ place_name: 'Cafe X', latitude: HAVANA.latitude, longitude: HAVANA.longitude });
+
+    const ranked = rankSearchResults([notFreq, nearFreq], 'cafe x', HAVANA, [FREQUENT]);
+
+    expect(ranked[0]).toBe(nearFreq);
+  });
+
+  it('does not let the frequent-zone nudge beat a clearly better text match', () => {
+    const freqWeak = result({ place_name: 'Avenida Reina Victoria', latitude: FREQUENT.latitude, longitude: FREQUENT.longitude });
+    const exactNoFreq = result({ place_name: 'Reina', latitude: HAVANA.latitude, longitude: HAVANA.longitude });
+
+    const ranked = rankSearchResults([freqWeak, exactNoFreq], 'reina', HAVANA, [FREQUENT]);
+
+    expect(ranked[0]).toBe(exactNoFreq);
+  });
+});

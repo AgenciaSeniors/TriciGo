@@ -101,6 +101,12 @@ function AddressSearchInputInner({
   // per-request charges (see newSessionToken docs).
   const sessionTokenRef = useRef<string | null>(null);
   const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
+  // Frequent destinations (from ride history) used as a soft ranking prior:
+  // results near a zone the rider visits often get a small in-bucket nudge.
+  const frequentZonesRef = useRef<{ latitude: number; longitude: number }[]>([]);
+  useEffect(() => {
+    frequentZonesRef.current = predictions.map((p) => ({ latitude: p.latitude, longitude: p.longitude }));
+  }, [predictions]);
 
   // Fetch user location once for distance display
   useEffect(() => {
@@ -251,7 +257,7 @@ function AddressSearchInputInner({
         const dedupedPois = dedupeSearchResults(unifiedResults, poiResults);
         const primary = [...unifiedResults, ...dedupedPois];
         const dedupedStreets = dedupeSearchResults(primary, streetResults);
-        const ranked = rankSearchResults([...primary, ...dedupedStreets], text, userLocation);
+        const ranked = rankSearchResults([...primary, ...dedupedStreets], text, userLocation, frequentZonesRef.current);
 
         // Normalize for display; keep _src on external rows so handleSelect
         // can fire-and-forget import-mapbox-poi for Google selections.
