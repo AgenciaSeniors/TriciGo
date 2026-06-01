@@ -2,14 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getSupabaseClient, notificationService } from '@tricigo/api';
+import { getSupabaseClient, notificationService, customerService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import type { CustomerProfile, PaymentMethod } from '@tricigo/types';
 
 const languages = [
   { code: 'es', label: 'Espanol' },
   { code: 'en', label: 'English' },
   { code: 'pt', label: 'Portugues' },
 ];
+
+const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'tricicoin', 'mixed'];
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -22,6 +25,8 @@ export default function SettingsPage() {
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [prefsLoading, setPrefsLoading] = useState(false);
   const [darkMode, setDarkMode] = useState<'light' | 'dark' | 'system'>('system');
+  const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -57,6 +62,27 @@ export default function SettingsPage() {
       setSmsNotifications(sms);
     }).catch(() => {}).finally(() => setPrefsLoading(false));
   }, [userId]);
+
+  // Load the customer profile — the default payment method lives there
+  // (not on the auth user), parity con el settings móvil.
+  useEffect(() => {
+    if (!userId) return;
+    customerService.ensureProfile(userId).then((cp) => {
+      setCustomerProfile(cp);
+      setPaymentMethod(cp.default_payment_method);
+    }).catch(() => {});
+  }, [userId]);
+
+  async function handleSelectPayment(method: PaymentMethod) {
+    if (!customerProfile || method === paymentMethod) return;
+    const prev = paymentMethod;
+    setPaymentMethod(method); // optimistic
+    try {
+      await customerService.updateProfile(customerProfile.id, { default_payment_method: method });
+    } catch {
+      setPaymentMethod(prev); // revert on failure
+    }
+  }
 
   async function handleTogglePush() {
     const newVal = !pushNotifications;
@@ -188,6 +214,43 @@ export default function SettingsPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Default payment method (parity con el selector del settings móvil —
+          vive en customer_profiles.default_payment_method, no en el auth user). */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+          {t('web.payment_method', { defaultValue: 'Método de pago' })}
+        </h2>
+        <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', overflow: 'hidden', display: 'flex' }}>
+          {PAYMENT_METHODS.map((method) => {
+            const on = paymentMethod === method;
+            const label = method === 'cash'
+              ? t('web.payment_cash', { defaultValue: 'Efectivo' })
+              : method === 'tricicoin'
+                ? t('web.payment_tricicoin', { defaultValue: 'TriciCoin' })
+                : t('web.payment_mixed', { defaultValue: 'Mixto' });
+            return (
+              <button
+                key={method}
+                onClick={() => handleSelectPayment(method)}
+                disabled={!customerProfile}
+                style={{
+                  flex: 1, padding: '0.875rem 0.5rem',
+                  background: on ? 'var(--primary)' : 'transparent',
+                  color: on ? '#fff' : 'var(--text-primary)',
+                  border: 'none', cursor: customerProfile ? 'pointer' : 'not-allowed',
+                  fontWeight: on ? 600 : 400, fontSize: '0.875rem', transition: 'all 0.2s',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', margin: '0.5rem 0 0' }}>
+          {t('web.payment_method_hint', { defaultValue: 'Se usará por defecto al pedir un viaje.' })}
+        </p>
       </div>
 
       {/* Appearance */}
