@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient, notificationService, deliveryService } from '@tricigo/api';
 import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE, generateReceiptHTML } from '@tricigo/utils';
-import type { RideWithDriver } from '@tricigo/types';
+import type { RideWithDriver, RideSplit } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { TipFlow } from '@/components/TipFlow';
 
@@ -73,6 +73,9 @@ export default function RideDetailPage() {
   // ── Cargo/delivery details (only for ride_mode='cargo') ──
   const [cargo, setCargo] = useState<CargoDetails | null>(null);
 
+  // ── Fare-split participants (read-only status, only when is_split) ──
+  const [splits, setSplits] = useState<RideSplit[]>([]);
+
   // ── Auth effect ──
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -114,6 +117,14 @@ export default function RideDetailPage() {
       .then((d) => { if (d) setCargo(d as CargoDetails); })
       .catch(() => { /* non-critical */ });
   }, [ride?.ride_mode, ride?.id]);
+
+  // Fetch fare-split participants for split rides (read-only status).
+  useEffect(() => {
+    if (!ride || !ride.is_split) { setSplits([]); return; }
+    rideService.getSplitsForRide(ride.id)
+      .then(setSplits)
+      .catch(() => { /* non-critical */ });
+  }, [ride?.is_split, ride?.id]);
 
   // ── Receipt: descargar (HTML imprimible → PDF) o enviar por email ──
   const handleDownloadReceipt = async () => {
@@ -354,6 +365,33 @@ export default function RideDetailPage() {
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Fare-split participants (read-only, parity con el estado de
+                  división de tarifa). Sólo cuando el viaje es compartido. */}
+              {ride.is_split && splits.length > 0 && (
+                <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Tarifa dividida</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {splits.map((s) => {
+                      const fareTrc = ride.final_fare_trc ?? ride.estimated_fare_trc ?? 0;
+                      const shareTrc = fareTrc > 0 ? Math.round(fareTrc * s.share_pct / 100) : null;
+                      return (
+                        <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{s.user_name || s.user_phone || '…'}</p>
+                            <p style={{ margin: '0.1rem 0 0', fontSize: '0.74rem', color: 'var(--text-tertiary)' }}>
+                              {s.paid_at ? 'Pagado' : s.accepted_at ? 'Aceptado' : 'Pendiente'} — {s.share_pct}%
+                            </p>
+                          </div>
+                          {shareTrc != null && (
+                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formatTRC(shareTrc)}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

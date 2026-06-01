@@ -17,6 +17,7 @@ import { useTripProgress } from '../../../hooks/useTripProgress';
 import { fetchRoute } from '../../../services/geoService';
 import { TipFlow } from '../../../components/TipFlow';
 import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
+import { FareSplitCard } from './FareSplitCard';
 import './track.css';
 
 // Categorized rating tag keys — mirror the mobile RideCompleteView fallback
@@ -910,6 +911,12 @@ export default function TrackRidePage() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* Dividir tarifa — gestión del solicitante en un viaje tricicoin
+              activo (parity con FareSplitSheet). Sólo para el dueño del viaje. */}
+          {!isTerminal && ride.payment_method === 'tricicoin' && userId === ride.customer_id && (
+            <FareSplitCard rideId={ride.id} userId={userId} estimatedFareTrc={ride.estimated_fare_trc ?? 0} />
           )}
 
           {/* Recordatorio de calificación — aparece 5 min después de completar
