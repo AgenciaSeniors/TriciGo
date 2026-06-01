@@ -147,6 +147,12 @@ export default function TrackingMap({
   const lastLiveFetchAtRef = useRef(0);
   const liveFetchInFlightRef = useRef(false);
 
+  // Driver→pickup approach polyline (accepted / driver_en_route). Same
+  // deviation+throttle bookkeeping as the live driver→dropoff effect.
+  const approachRouteRef = useRef<Array<{ latitude: number; longitude: number }> | null>(null);
+  const lastApproachFetchAtRef = useRef(0);
+  const approachFetchInFlightRef = useRef(false);
+
   // Validate coordinates to prevent Mapbox NaN crash
   // Must be real numbers, not NaN, not 0, and within plausible lat/lng ranges
   const isValidCoord = (v: number) => typeof v === 'number' && isFinite(v) && v !== 0;
@@ -211,6 +217,27 @@ export default function TrackingMap({
           'line-color': ROUTE.main.color,
           'line-width': ROUTE.main.width,
           'line-opacity': ROUTE.main.opacity,
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      });
+
+      // Approach route source — the driver's path TO the pickup, drawn only
+      // during accepted/driver_en_route (parity con el polyline conductor→
+      // recogida del cliente nativo). Dashed grey so it reads as secondary
+      // to the main blue trip route.
+      map.addSource('approach-route', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'approach-route-line',
+        type: 'line',
+        source: 'approach-route',
+        paint: {
+          'line-color': '#6B7280',
+          'line-width': 3.5,
+          'line-opacity': 0.75,
+          'line-dasharray': [1.5, 1.5],
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
@@ -470,6 +497,82 @@ export default function TrackingMap({
 
     return () => { cancelled = true; };
   }, [driverLat, driverLng, dropoffLat, dropoffLng, mapReady, isLivePhase]);
+
+  /* ── Driver→pickup APPROACH polyline (accepted / driver_en_route) ──
+     Mirrors the mobile client showing the driver's path to the rider
+     during the pre-trip phase. Refetches when the driver deviates >50 m
+     from the cached approach line OR every 5 s. Cleared (empty source)
+     once the phase ends so it never lingers behind the trip route. */
+  const isApproachPhase = rideStatus === 'accepted' || rideStatus === 'driver_en_route';
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const source = map.getSource('approach-route') as mapboxgl.GeoJSONSource | undefined;
+
+    // Clear the approach line outside the approach phase or without coords.
+    if (!isApproachPhase || typeof driverLat !== 'number' || typeof driverLng !== 'number'
+      || !isValidCoord(pickupLat) || !isValidCoord(pickupLng)) {
+      if (source) source.setData({ type: 'FeatureCollection', features: [] });
+      approachRouteRef.current = null;
+      lastApproachFetchAtRef.current = 0;
+      return;
+    }
+
+    // Skip when the driver is essentially at the pickup already.
+    const distToPickup = haversineDistance(
+      { latitude: driverLat, longitude: driverLng },
+      { latitude: pickupLat, longitude: pickupLng },
+    );
+    if (distToPickup < 40) {
+      if (source) source.setData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
+
+    if (approachFetchInFlightRef.current) return;
+
+    const now = Date.now();
+    const sinceLastFetch = now - lastApproachFetchAtRef.current;
+    const isFirstFetch = lastApproachFetchAtRef.current === 0;
+    const cached = approachRouteRef.current;
+
+    let shouldFetch = false;
+    if (isFirstFetch) {
+      shouldFetch = true;
+    } else if (cached && cached.length >= 2) {
+      const offRouteM = distanceToPolyline({ latitude: driverLat, longitude: driverLng }, cached);
+      if (offRouteM > 50 && sinceLastFetch >= 5_000) shouldFetch = true;
+    } else if (sinceLastFetch >= 5_000) {
+      shouldFetch = true;
+    }
+    if (!shouldFetch) return;
+
+    let cancelled = false;
+    approachFetchInFlightRef.current = true;
+
+    (async () => {
+      const result = await fetchRoute(
+        { lat: driverLat, lng: driverLng },
+        { lat: pickupLat, lng: pickupLng },
+      );
+      if (cancelled) { approachFetchInFlightRef.current = false; return; }
+      lastApproachFetchAtRef.current = Date.now();
+      approachFetchInFlightRef.current = false;
+
+      const m = mapRef.current;
+      if (!m) return;
+      const src = m.getSource('approach-route') as mapboxgl.GeoJSONSource | undefined;
+      if (!src) return;
+
+      if (result && result.coordinates.length > 1) {
+        const coords = result.coordinates.map(([lat, lng]) => [lng, lat] as [number, number]);
+        approachRouteRef.current = result.coordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }));
+        src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverLat, driverLng, pickupLat, pickupLng, mapReady, isApproachPhase]);
 
   /* ── Waypoint markers (orange rings with number) ── */
   useEffect(() => {

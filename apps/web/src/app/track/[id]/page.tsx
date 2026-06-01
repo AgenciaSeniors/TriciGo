@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService, notificationService } from '@tricigo/api';
+import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService, notificationService, useFeatureFlag } from '@tricigo/api';
 import { formatCUP, generateReceiptHTML, haversineDistance } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus, Waypoint } from '@tricigo/types';
 import { useDriverPosition } from '../../../hooks/useDriverPosition';
@@ -13,10 +13,44 @@ import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing'
 import { useSearchingRide } from '../../../hooks/useSearchingRide';
 import { useSearchingDrivers } from '../../../hooks/useSearchingDrivers';
 import { useUnreadChatCount } from '../../../hooks/useUnreadChatCount';
+import { useTripProgress } from '../../../hooks/useTripProgress';
 import { fetchRoute } from '../../../services/geoService';
 import { TipFlow } from '../../../components/TipFlow';
 import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
 import './track.css';
+
+// Categorized rating tag keys — mirror the mobile RideCompleteView fallback
+// set (apps/client/src/components/RideCompleteView.tsx). The tag chips are
+// gated behind the `categorized_ratings_enabled` feature flag, exactly like
+// the native client; when enabled, the selected keys are passed to
+// reviewService.submitReview as `tags` (NOT folded into the comment text).
+const FALLBACK_POSITIVE_TAGS = [
+  'clean_vehicle', 'great_conversation', 'expert_navigation', 'smooth_driving', 'went_above_and_beyond',
+];
+const FALLBACK_NEGATIVE_TAGS = [
+  'dirty_vehicle', 'unsafe_driving', 'rude_behavior', 'wrong_route', 'long_wait',
+];
+const RATING_TAG_LABELS_ES: Record<string, string> = {
+  clean_vehicle: 'Vehículo limpio',
+  great_conversation: 'Gran conversación',
+  expert_navigation: 'Navegación experta',
+  smooth_driving: 'Manejo suave',
+  went_above_and_beyond: 'Fue más allá',
+  dirty_vehicle: 'Vehículo sucio',
+  unsafe_driving: 'Manejo inseguro',
+  rude_behavior: 'Comportamiento grosero',
+  wrong_route: 'Ruta incorrecta',
+  long_wait: 'Espera larga',
+};
+
+// Inline "hace X" formatter (parity con formatTimeAgo de @tricigo/utils, que
+// no está re-exportado del index del paquete). Usado por el banner "Visto hace X".
+function formatTimeAgo(timestampMs: number): string {
+  const diffMin = Math.floor((Date.now() - timestampMs) / 60000);
+  if (diffMin < 1) return 'ahora';
+  if (diffMin < 60) return `hace ${diffMin} min`;
+  return `hace ${Math.floor(diffMin / 60)}h`;
+}
 
 const TrackingMap = dynamic(() => import('../TrackingMap'), {
   ssr: false,
@@ -193,6 +227,17 @@ export default function TrackRidePage() {
   // current target (pickup before in_progress, dropoff during the trip).
   const [dynamicEtaMin, setDynamicEtaMin] = useState<number | null>(null);
 
+  // Trip progress bar (parity con useTripProgress móvil): the pickup→dropoff
+  // polyline + total distance, captured once the trip starts so the driver
+  // can be projected onto it for a monotonic progress %.
+  const [tripRoute, setTripRoute] = useState<{ coordinates: { latitude: number; longitude: number }[]; distanceM: number } | null>(null);
+
+  // "Conductor no se mueve" detection (parity con el banner stuck de
+  // RideActiveView): track when the driver's coordinates last changed.
+  const [driverStuck, setDriverStuck] = useState(false);
+  const lastMovePosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastMoveAtRef = useRef<number>(Date.now());
+
   // Nearby vehicles (shown during searching)
   const [nearbyVehicles, setNearbyVehicles] = useState<Array<{ latitude: number; longitude: number; heading?: number | null; vehicle_type?: string }>>([]);
 
@@ -202,6 +247,22 @@ export default function TrackRidePage() {
   const [reviewTags, setReviewTags] = useState<string[]>([]);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+
+  // Categorized rating tags — gated behind the same feature flag the mobile
+  // client uses, so the web matches whatever the native rider shows.
+  const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
+  const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
+  const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
+  useEffect(() => {
+    if (!categorizedRatingsEnabled) return;
+    Promise.all([
+      reviewService.getTagDefinitions('rider_to_driver', 'positive'),
+      reviewService.getTagDefinitions('rider_to_driver', 'negative'),
+    ]).then(([pos, neg]) => {
+      if (pos.length > 0) setPositiveTags(pos.map((d) => d.key));
+      if (neg.length > 0) setNegativeTags(neg.map((d) => d.key));
+    }).catch(() => { /* use fallback keys */ });
+  }, [categorizedRatingsEnabled]);
 
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
@@ -228,16 +289,16 @@ export default function TrackRidePage() {
     if (!rating || !ride?.driver_id || !userId) return;
     setReviewSubmitting(true);
     try {
-      // Fold the selected categorized tags into the comment (parity with the
-      // mobile RideCompleteView tag chips; reviewService has no tags column).
-      const tagsText = reviewTags.length ? `[${reviewTags.join(', ')}] ` : '';
-      const combinedComment = (tagsText + reviewComment.trim()).trim();
+      // Pass the selected categorized tag keys as the dedicated `tags` param
+      // (parity con el mobile RideCompleteView — reviewService los inserta en
+      // review_tags por tag_key, sin doblarlos en el comentario).
       await reviewService.submitReview({
         ride_id: rideId,
         reviewer_id: userId,
         reviewee_id: ride.driver_id,
         rating: rating as 1 | 2 | 3 | 4 | 5,
-        comment: combinedComment || undefined,
+        comment: reviewComment.trim() || undefined,
+        tags: categorizedRatingsEnabled && reviewTags.length > 0 ? reviewTags : undefined,
       });
       setReviewSubmitted(true);
     } catch (err) {
@@ -455,6 +516,68 @@ export default function TrackRidePage() {
     return () => { cancelled = true; };
   }, [ride, driverLocation, driverActive]);
 
+  // Capture the pickup→dropoff polyline once the trip starts so the progress
+  // bar can project the driver onto a fixed path (monotonic %). Fetched a
+  // single time per ride.
+  useEffect(() => {
+    if (!ride || ride.status !== 'in_progress' || tripRoute) return;
+    const pLat = typeof ride.pickup_location === 'object' ? ride.pickup_location.latitude : 0;
+    const pLng = typeof ride.pickup_location === 'object' ? ride.pickup_location.longitude : 0;
+    const dLat = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.latitude : 0;
+    const dLng = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.longitude : 0;
+    if (!pLat || !pLng || !dLat || !dLng) return;
+    let cancelled = false;
+    fetchRoute({ lat: pLat, lng: pLng }, { lat: dLat, lng: dLng })
+      .then((r) => {
+        if (cancelled || !r) return;
+        setTripRoute({
+          coordinates: r.coordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng })),
+          distanceM: r.distance_m,
+        });
+      })
+      .catch(() => { /* progress bar falls back to inactive */ });
+    return () => { cancelled = true; };
+  }, [ride, tripRoute]);
+
+  const tripProgress = useTripProgress({
+    driverLocation: driverPos.position
+      ? { latitude: driverPos.position.latitude, longitude: driverPos.position.longitude }
+      : null,
+    routeCoordinates: tripRoute?.coordinates ?? null,
+    totalDistanceM: tripRoute?.distanceM ?? null,
+    etaMinutes: dynamicEtaMin ?? (ride && ride.estimated_duration_s > 0 ? Math.ceil(ride.estimated_duration_s / 60) : null),
+    rideStatus: ride?.status ?? null,
+  });
+
+  // Driver "stuck" detection — flips on when the driver's coordinates have
+  // not changed (>20 m) for 5 minutes while still assigned (parity con el
+  // banner "no se ha movido en 5 minutos" de RideActiveView).
+  useEffect(() => {
+    if (!driverActive || !driverPos.position) {
+      lastMovePosRef.current = null;
+      lastMoveAtRef.current = Date.now();
+      setDriverStuck(false);
+      return;
+    }
+    const { latitude, longitude } = driverPos.position;
+    const prev = lastMovePosRef.current;
+    const movedM = prev
+      ? haversineDistance({ latitude: prev.lat, longitude: prev.lng }, { latitude, longitude })
+      : Infinity;
+    if (movedM > 20) {
+      lastMovePosRef.current = { lat: latitude, lng: longitude };
+      lastMoveAtRef.current = Date.now();
+      setDriverStuck(false);
+    }
+  }, [driverActive, driverPos.position]);
+  useEffect(() => {
+    if (!driverActive) { setDriverStuck(false); return; }
+    const id = setInterval(() => {
+      setDriverStuck(lastMovePosRef.current != null && Date.now() - lastMoveAtRef.current > 5 * 60_000);
+    }, 15_000);
+    return () => clearInterval(id);
+  }, [driverActive]);
+
   // Fetch waypoints while the ride is active (parity con RideActiveView).
   // Re-runs on each status change; confirmAddStop also refetches immediately.
   useEffect(() => {
@@ -627,6 +750,28 @@ export default function TrackRidePage() {
                     : 'Buscando conductores cercanos...'}
             </div>
           )}
+
+          {/* Trip progress bar — floating at the bottom of the map, only
+              during the trip (parity con TripProgressBar móvil; useTripProgress
+              proyecta el GPS del conductor sobre la polyline → % monótono). */}
+          {tripProgress.isActive && (
+            <div style={{ position: 'absolute', bottom: 16, left: 16, right: 16, background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(8px)', borderRadius: 12, padding: '0.7rem 0.9rem', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#111' }}>
+                  {tripProgress.progressPercent >= 100
+                    ? t('track.progress_arrived', { defaultValue: 'Llegando al destino' })
+                    : t('track.progress_en_route', { defaultValue: 'En camino al destino' })}
+                </span>
+                <span style={{ fontSize: '0.74rem', color: '#555' }}>
+                  {tripProgress.distanceRemainingKm} km
+                  {tripProgress.etaMinutes != null && tripProgress.etaMinutes > 0 ? ` · ~${tripProgress.etaMinutes} min` : ''}
+                </span>
+              </div>
+              <div style={{ height: 6, borderRadius: 999, background: 'rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${tripProgress.progressPercent}%`, background: 'var(--primary, #FF4D00)', borderRadius: 999, transition: 'width 0.5s ease' }} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ═══ RIGHT: Info Panel ═══ */}
@@ -743,15 +888,27 @@ export default function TrackRidePage() {
             </div>
           )}
 
-          {/* Tracking health banner — parity con los banners de RideActiveView */}
-          {driverActive && (driverPos.isStale || !driverPos.position) && (
-            <div className="track-card" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Tracking health banner — single banner, priority stuck > stale >
+              waiting (parity con la versión colapsada de RideActiveView).
+              Muestra "Visto hace X" cuando la señal está vieja o el conductor
+              no se mueve. */}
+          {driverActive && (driverStuck || driverPos.isStale || !driverPos.position) && (
+            <div className="track-card" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <span style={{ color: '#f59e0b', flexShrink: 0 }}><IconAlert /></span>
-              <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                {!driverPos.position
-                  ? t('track.waiting_driver_location', { defaultValue: 'Esperando la ubicación del conductor...' })
-                  : t('track.signal_stale', { defaultValue: 'La señal del conductor está intermitente. Mostrando su última ubicación conocida.' })}
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                  {driverStuck
+                    ? t('track.driver_not_moving', { defaultValue: 'Tu conductor no se ha movido en 5 minutos.' })
+                    : !driverPos.position
+                      ? t('track.waiting_driver_location', { defaultValue: 'Esperando la ubicación del conductor...' })
+                      : t('track.signal_stale', { defaultValue: 'La señal del conductor está intermitente. Mostrando su última ubicación conocida.' })}
+                </span>
+                {driverPos.position && (driverStuck || driverPos.isStale) && (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
+                    {t('track.last_seen', { time: formatTimeAgo(driverPos.position.recordedAt), defaultValue: 'Visto {{time}}' })}
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
@@ -810,30 +967,37 @@ export default function TrackRidePage() {
               {/* Comment + Submit */}
               {rating > 0 && (
                 <>
-                  {/* Categorized rating tags (adapt to score) — parity con RideCompleteView */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'center', marginBottom: '0.75rem' }}>
-                    {(rating >= 4
-                      ? [t('track.tag_punctual', { defaultValue: 'Puntual' }), t('track.tag_kind', { defaultValue: 'Amable' }), t('track.tag_safe', { defaultValue: 'Conducción segura' }), t('track.tag_clean', { defaultValue: 'Vehículo limpio' })]
-                      : [t('track.tag_late', { defaultValue: 'Tardó mucho' }), t('track.tag_rough', { defaultValue: 'Conducción brusca' }), t('track.tag_unkind', { defaultValue: 'Poco amable' }), t('track.tag_dirty', { defaultValue: 'Vehículo sucio' })]
-                    ).map((tag) => {
-                      const on = reviewTags.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => setReviewTags((prev) => prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag])}
-                          style={{
-                            padding: '0.35rem 0.7rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
-                            border: on ? '2px solid var(--primary)' : '1px solid var(--border)',
-                            background: on ? 'rgba(255,77,0,0.08)' : 'var(--bg-card)',
-                            color: on ? 'var(--primary)' : 'var(--text-secondary)',
-                          }}
-                        >
-                          {tag}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* Categorized rating tags by tag_key — gated behind the
+                      same `categorized_ratings_enabled` feature flag as the
+                      mobile RideCompleteView. Selected keys go to submitReview
+                      as `tags` (review_tags rows), not folded into the comment. */}
+                  {categorizedRatingsEnabled && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textAlign: 'center', margin: '0 0 0.5rem' }}>
+                        {t('track.rating_tags_title', { defaultValue: '¿Qué destacó?' })}
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'center' }}>
+                        {(rating >= 4 ? positiveTags : negativeTags).slice(0, 3).map((key) => {
+                          const on = reviewTags.includes(key);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setReviewTags((prev) => prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key])}
+                              style={{
+                                padding: '0.35rem 0.7rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                                border: on ? '2px solid var(--primary)' : '1px solid var(--border)',
+                                background: on ? 'rgba(255,77,0,0.08)' : 'var(--bg-card)',
+                                color: on ? 'var(--primary)' : 'var(--text-secondary)',
+                              }}
+                            >
+                              {t(`track.tag_${key}`, { defaultValue: RATING_TAG_LABELS_ES[key] ?? key })}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <textarea
                     value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)}

@@ -220,7 +220,7 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 | ETA dinámica (ruta, throttle 30s) | ✅ | |
 | Compartir ubicación del rider en pickup | ✅ | `useRiderLocationSharing` |
 | **Banner de proximidad ("conductor llegando")** | ✅ FIX | `haversineDistance` driver→pickup <300m (parity con `ProximityBanner`) |
-| Polyline conductor→pickup (pre-viaje) | ❌ follow-up | `TrackingMap` dibuja sólo pickup→dropoff estático; falta la línea driver→pickup |
+| Polyline conductor→pickup (pre-viaje) | ✅ FIX PR-FU-4 | `TrackingMap` dibuja `approach-route` (driver→pickup, línea gris punteada) en `accepted`/`driver_en_route`, refetch >50m/5s, se limpia fuera de fase |
 | Foto de conductor/vehículo | ⚠️ | Web muestra avatar con inicial — menor |
 | Pulse ETA <3min / slide-up / "ver más" | n/a | Animaciones — diseño web propio |
 
@@ -233,7 +233,7 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 | Polyline en vivo conductor→destino (en viaje) | ✅ | `TrackingMap` live route |
 | **Banner llegada/llegando a destino** | ✅ FIX | cubierto por el banner de proximidad (driver→dropoff <300m) |
 | Tarjeta de llegada + confeti | n/a | Confeti = diseño; el aviso textual lo da el banner |
-| Barra de progreso del viaje (% + km restante) | ❌ follow-up | feature informativa ausente |
+| Barra de progreso del viaje (% + km restante) | ✅ FIX PR-FU-4 | `useTripProgress` web (port del móvil: proyecta GPS sobre la polyline pickup→dropoff, % monótono) + barra flotante en `in_progress`/`arrived_at_destination` |
 
 ### 3.4 Modales GPS
 | Comportamiento (client) | Web | Nota |
@@ -249,7 +249,7 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 | Recibo descargar (HTML/PDF) + email | ✅ | |
 | SMS "llegó seguro" una vez (guard) | ✅ | |
 | Recordatorio de calificación (5 min) | ✅ | banner (sin notif local — aceptable) |
-| Persistir tags en `review_tags` | ⚠️ follow-up | Web los mete en el texto del comentario; `reviewService.submitReview` **sí** acepta `tags` — falta alinear las **tag_keys** con el client antes de enviarlas |
+| Persistir tags en `review_tags` | ✅ FIX PR-FU-4 | Web pasa **tag_keys** (mismo fallback set que el móvil) como `tags` a `submitReview` — ya no los dobla en el comentario. Gateado tras `categorized_ratings_enabled` (igual que `RideCompleteView`; hoy OFF → ningún app muestra chips). **Bug latente compartido:** el insert de `submitReview` usa `tag_key` pero `review_tags` sólo tiene `tag_id` NOT NULL + `review_tag_definitions` vacía → dormido en ambos por el flag OFF; fuera de scope web |
 | Stats distancia/duración + línea de descuento | ⚠️ | Web muestra sólo tarifa — menor |
 | Desglose de fare-split | ❌ | feature deferida (split fare) |
 
@@ -261,9 +261,9 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 | Banners de salud (esperando/señal intermitente) | ✅ | |
 | **Compartir viaje** | ✅ FIX | Antes sólo copiaba un token existente; ahora **genera** el token al vuelo (`generateShareToken`) si falta, luego copia (parity con `handleShareTrip`) |
 | Revocar token / dejar de compartir | ❌ | menor; el token expira 24h tras completar |
-| Banners "conductor no se mueve (5min)" / "última vez hace X" | ❌ follow-up | feature de baja frecuencia |
+| Banners "conductor no se mueve (5min)" / "última vez hace X" | ✅ FIX PR-FU-4 | banner único con prioridad **stuck > stale > waiting** (parity con la versión colapsada de `RideActiveView`): detección "no se mueve" (coords sin cambio >20m por 5min) + subtexto "Visto hace X" desde `driverPos.position.recordedAt` |
 
-**Fixes en este PR:** banner de proximidad (#2) + generación de token al compartir (#6). **Falsos positivos descartados:** estado `no_driver_found` (no es un `RideStatus`). **Follow-ups funcionales** (otra pasada): polyline conductor→pickup, barra de progreso, tags por `tag_key`, banners de inactividad del conductor, fare-split. **Diferencias de diseño aceptadas:** confeti, pulse, slide-up, haptics, foto de conductor.
+**Fixes en este PR (Área 3):** banner de proximidad (#2) + generación de token al compartir (#6). **Fixes follow-up PR-FU-4:** polyline conductor→pickup (`approach-route`), barra de progreso (`useTripProgress` web), tags por `tag_key` (gateado tras `categorized_ratings_enabled`, paridad con móvil), banner de inactividad/última-vez. **Falsos positivos descartados:** estado `no_driver_found` (no es un `RideStatus`). **Follow-up restante:** fare-split (PR-FU-6 dedicado). **Diferencias de diseño aceptadas:** confeti, pulse, slide-up, haptics, foto de conductor.
 
 **Verificación Área 3:** `pnpm --filter @tricigo/web check-types` verde; `/track/[id]` render 200 en dev sin error markers.
 
