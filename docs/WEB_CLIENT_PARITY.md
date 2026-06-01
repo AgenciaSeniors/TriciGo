@@ -399,10 +399,10 @@ Fuente de verdad = `app/(tabs)/profile.tsx` + `app/profile/*`. La más grande. *
 | Saved locations | ✅ | CRUD + autocomplete + pick-on-map; web por delante (detección home/work) |
 | **Safety** | ✅ FIX (parcial) | + botón **`tel:106`** (llamar emergencias) + entrada al nuevo `emergency-contact`. Follow-ups: historial de incidentes, compartir viaje activo |
 | Trusted contacts | ✅ | add/remove + auto_share + máx 5 + is_emergency |
-| **Corporate** | ⚠️ follow-up | a la par para admins (presupuesto/recarga/política/empleados-reporte/factura); **falta** el flujo de solicitud/onboarding para no-miembros + alta/baja de empleados |
+| **Corporate** | ✅ FIX PR-FU-5a | + **onboarding no-miembros**: empty-state ahora renderiza form de solicitud (`submitClientRequest`) / "en revisión" / "rechazada+reenviar" según `getRequestStatus` (espejo de `CorporateRequestForm`); + **gestión de empleados**: sección colapsable por cuenta con lista (`getEmployees`), alta por teléfono+rol (`addEmployee`) y baja (`removeEmployee`) gateadas a admin. Lo de admins (presupuesto/recarga/política/reportes/factura) ya estaba |
 | Referral | ✅ | código/compartir/aplicar/historial; web por delante (stats) |
 
-**Fixes en este PR:** 2 pantallas nuevas (emergency-contact, ticket-detail) + sus enlaces; edit→`public.users`; settings idioma-persist + enlace eliminar-cuenta; safety `tel:106` + entrada emergency-contact. **Follow-ups funcionales** (otra pasada, features más pesadas): corporate request/onboarding + gestión de empleados; safety historial de incidentes + compartir viaje activo; settings selector de método de pago. **Retirados (correctamente ausentes):** ride-preferences, recurring-rides, disputas, objetos perdidos.
+**Fixes en este PR (Área 7):** 2 pantallas nuevas (emergency-contact, ticket-detail) + sus enlaces; edit→`public.users`; settings idioma-persist + enlace eliminar-cuenta; safety `tel:106` + entrada emergency-contact. **Fix follow-up PR-FU-5a:** corporate onboarding (form/en-revisión/rechazada) + gestión de empleados (alta/baja). **Follow-up restante PR-FU-5b:** safety historial de incidentes + compartir viaje activo; settings selector de método de pago. **Retirados (correctamente ausentes):** ride-preferences, recurring-rides, disputas, objetos perdidos.
 
 **Verificación Área 7:** `pnpm --filter @tricigo/web check-types` verde; `/profile/emergency-contact`, `/support/[ticketId]`, `/profile/settings`, `/profile/safety`, `/profile/edit` render 200 en dev sin error markers.
 
