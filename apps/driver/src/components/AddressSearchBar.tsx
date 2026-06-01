@@ -24,7 +24,9 @@ import {
   SEARCH_DEBOUNCE_MS,
   type GeoPoint,
   type SearchBoxResult,
+  type PredictedDestination,
 } from '@tricigo/utils';
+import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -181,6 +183,9 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
   // "No se encontraron lugares cerca" empty state so it doesn't flash
   // before the first call even fires.
   const hasSearchedRef = useRef(false);
+  // Suggestions tier — server-side personal + popular destinations, shown
+  // when the input is focused but empty. Biased to the driver's vicinity.
+  const { predictions } = useDestinationPredictions(near);
 
   // Bias search results to the driver's current vicinity so closer
   // matches outrank far-away ones with similar names.
@@ -307,6 +312,17 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
     inputRef.current?.focus();
   }, []);
 
+  const handleSelectSuggestion = useCallback(
+    (p: PredictedDestination) => {
+      setQuery(p.address);
+      setResults([]);
+      setFocused(false);
+      Keyboard.dismiss();
+      onSelect({ latitude: p.latitude, longitude: p.longitude, address: p.address });
+    },
+    [onSelect],
+  );
+
   // T1.7 — show empty state when we've done at least one search for this
   // query and it returned nothing. Gated by `hasSearchedRef` to avoid
   // flashing "no results" before the debounce fires.
@@ -315,7 +331,9 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
     && results.length === 0
     && query.trim().length >= 2
     && hasSearchedRef.current;
-  const showDropdown = focused && (results.length > 0 || loading || showEmptyState);
+  // Suggestions tier shows on a focused, empty input (before the user types).
+  const showSuggestions = focused && query.trim().length === 0 && predictions.length > 0;
+  const showDropdown = focused && (results.length > 0 || loading || showEmptyState || showSuggestions);
 
   return (
     <View style={styles.wrapper}>
@@ -352,7 +370,40 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
       {/* Dropdown results */}
       {showDropdown && (
         <View style={styles.dropdown}>
-          {results.length === 0 && loading ? (
+          {showSuggestions ? (
+            <View>
+              <Text variant="caption" style={styles.suggestionsHeader}>
+                Sugeridos para ti
+              </Text>
+              {predictions.slice(0, 4).map((p, index, arr) => (
+                <Pressable
+                  key={`suggestion-${index}`}
+                  onPress={() => handleSelectSuggestion(p)}
+                  style={({ pressed }) => [
+                    styles.resultItem,
+                    index < arr.length - 1 && styles.resultItemBorder,
+                    pressed && styles.resultItemPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="sparkles-outline"
+                    size={16}
+                    color={colors.brand.orange}
+                    style={{ marginRight: 10, marginTop: 1 }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      variant="body"
+                      numberOfLines={1}
+                      style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}
+                    >
+                      {p.address}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : results.length === 0 && loading ? (
             <View style={styles.dropdownEmpty}>
               <ActivityIndicator size="small" color={colors.brand.orange} />
             </View>
@@ -432,6 +483,16 @@ const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',
     zIndex: 50,
+  },
+  suggestionsHeader: {
+    color: colors.neutral[400],
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 4,
   },
   inputRow: {
     flexDirection: 'row',

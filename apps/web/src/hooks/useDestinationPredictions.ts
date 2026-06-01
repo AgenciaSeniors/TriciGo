@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { rideService } from '@tricigo/api';
+import { rideService, suggestionsService } from '@tricigo/api';
 import {
   clusterDestinations,
   scorePredictions,
@@ -18,7 +18,10 @@ const CACHE_KEY = 'tricigo_destination_predictions';
  * frequency + time-of-day, re-scoring when the hour changes. Cached in
  * localStorage keyed by ride count so we don't refetch on every mount.
  */
-export function useDestinationPredictions(userId: string | undefined) {
+export function useDestinationPredictions(
+  userId: string | undefined,
+  near?: { latitude: number; longitude: number } | null,
+) {
   const [predictions, setPredictions] = useState<PredictedDestination[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const lastHourRef = useRef<number>(-1);
@@ -50,6 +53,23 @@ export function useDestinationPredictions(userId: string | undefined) {
     if (!userId) return;
     setIsLoading(true);
     try {
+      // RPC-first: server-side suggestions (personal history + popular
+      // fallback). Falls through to the local heuristic when the RPC is
+      // absent (migration not yet applied) or errors.
+      try {
+        const rpc = await suggestionsService.getDestinationSuggestions({
+          userId,
+          lat: near?.latitude ?? null,
+          lng: near?.longitude ?? null,
+          hour: new Date().getHours(),
+          limit: 5,
+        });
+        setPredictions(rpc);
+        return;
+      } catch {
+        /* fall through to the local heuristic below */
+      }
+
       const rides = await rideService.getRideHistoryFiltered({
         userId,
         status: ['completed'],
@@ -90,7 +110,7 @@ export function useDestinationPredictions(userId: string | undefined) {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, readCache, writeCache]);
+  }, [userId, near?.latitude, near?.longitude, readCache, writeCache]);
 
   useEffect(() => {
     computePredictions();
