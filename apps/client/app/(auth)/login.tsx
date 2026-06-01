@@ -107,11 +107,11 @@ export default function LoginScreen() {
                 {t('auth.tagline', { defaultValue: 'Tu plataforma de movilidad en La Habana' })}
               </Text>
 
-              {/* Vehicle illustration — small, subtle, right-aligned (hi-res, bg removed) */}
+              {/* Vehicle illustration — small, subtle, right-aligned (hi-res, gaps cleaned) */}
               <View style={{ alignItems: 'flex-end', marginTop: 16 }}>
                 <Image
                   source={vehicleRow}
-                  style={{ width: 200, height: 76, opacity: 0.9 }}
+                  style={{ width: 250, height: 93, opacity: 0.9 }}
                   resizeMode="contain"
                 />
               </View>

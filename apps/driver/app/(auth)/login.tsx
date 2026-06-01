@@ -125,11 +125,11 @@ export default function LoginScreen() {
                 </Text>
               </Animated.View>
 
-              {/* Vehicle illustration — small, subtle, right-aligned (original design) */}
+              {/* Vehicle illustration — small, subtle, right-aligned (hi-res, gaps cleaned) */}
               <Animated.View style={{ alignItems: 'flex-end', marginTop: 16, opacity: fadeAnim }}>
                 <Image
                   source={vehicleRow}
-                  style={{ width: 200, height: 76, opacity: 1 }}
+                  style={{ width: 250, height: 95, opacity: 1 }}
                   resizeMode="contain"
                 />
               </Animated.View>
