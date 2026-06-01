@@ -3,8 +3,24 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getSupabaseClient, customerService } from '@tricigo/api';
+import { getSupabaseClient, customerService, incidentService, rideService } from '@tricigo/api';
+import type { IncidentReport, Ride } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
+
+const INCIDENT_TYPE_LABELS: Record<string, string> = {
+  sos: 'SOS',
+  safety_concern: 'Problema de seguridad',
+  payment_dispute: 'Disputa de pago',
+  vehicle_issue: 'Problema del vehículo',
+  driver_behavior: 'Conducta del conductor',
+  passenger_behavior: 'Conducta del pasajero',
+};
+const INCIDENT_STATUS_LABELS: Record<string, string> = {
+  open: 'Abierto',
+  investigating: 'En revisión',
+  resolved: 'Resuelto',
+  dismissed: 'Descartado',
+};
 
 export default function SafetyPage() {
   const { t } = useTranslation();
@@ -13,6 +29,10 @@ export default function SafetyPage() {
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [emergencyContact, setEmergencyContact] = useState<any>(null);
+  const [activeRide, setActiveRide] = useState<Ride | null>(null);
+  const [incidents, setIncidents] = useState<IncidentReport[]>([]);
+  const [sharing, setSharing] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -31,7 +51,32 @@ export default function SafetyPage() {
     }).catch((err) => {
       console.error('Error loading emergency contact:', err);
     });
+    // Active ride (drives the "share my trip" card) + my incident history.
+    rideService.getActiveRide(userId).then(setActiveRide).catch(() => setActiveRide(null));
+    incidentService.getMyIncidents(userId).then(setIncidents).catch(() => setIncidents([]));
   }, [userId]);
+
+  const handleShareTrip = async () => {
+    if (!activeRide) return;
+    setSharing(true);
+    setShareFeedback(null);
+    try {
+      let token = await rideService.getShareTokenForRide(activeRide.id);
+      if (!token) token = await rideService.generateShareToken(activeRide.id);
+      const url = `https://tricigo.com/track/share/${token}`;
+      const message = t('web.share_trip_message', { url, defaultValue: `Sigue mi viaje de TriciGo en tiempo real: ${url}` });
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title: 'TriciGo', text: message, url });
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        setShareFeedback(t('web.share_trip_copied', { defaultValue: 'Enlace copiado al portapapeles' }));
+      }
+    } catch {
+      /* user dismissed the share sheet */
+    } finally {
+      setSharing(false);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -199,6 +244,71 @@ export default function SafetyPage() {
           >
             {t('web.add_contact_button', { defaultValue: 'Agregar contacto' })}
           </button>
+        </div>
+      </div>
+
+      {/* Share My Trip — active-trip live-share (parity con handleShareTrip móvil) */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+          {t('web.share_trip', { defaultValue: 'Compartir mi viaje' })}
+        </h2>
+        <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(59,130,246,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              {t('web.share_trip_desc', { defaultValue: 'Comparte un enlace de seguimiento en vivo con quien quieras durante tu viaje.' })}
+            </p>
+          </div>
+          {activeRide ? (
+            <button
+              onClick={handleShareTrip}
+              disabled={sharing}
+              style={{ width: '100%', padding: '0.7rem', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: sharing ? 'not-allowed' : 'pointer', opacity: sharing ? 0.7 : 1 }}
+            >
+              {sharing ? t('web.share_trip_sharing', { defaultValue: 'Compartiendo...' }) : t('web.share_now', { defaultValue: 'Compartir ahora' })}
+            </button>
+          ) : (
+            <p style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-tertiary)', margin: 0 }}>
+              {t('web.share_trip_inactive', { defaultValue: 'Disponible cuando tengas un viaje activo.' })}
+            </p>
+          )}
+          {shareFeedback && (
+            <p style={{ textAlign: 'center', fontSize: '0.8rem', color: '#16a34a', margin: '0.5rem 0 0' }}>{shareFeedback}</p>
+          )}
+        </div>
+      </div>
+
+      {/* My Safety Reports — incident history (parity con getMyIncidents móvil) */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+          {t('web.my_reports', { defaultValue: 'Mis reportes' })}
+        </h2>
+        <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', padding: '0.5rem 1.25rem' }}>
+          {incidents.length === 0 ? (
+            <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-tertiary)', padding: '1rem 0', margin: 0 }}>
+              {t('web.no_reports', { defaultValue: 'No tienes reportes de seguridad.' })}
+            </p>
+          ) : (
+            incidents.slice(0, 5).map((incident) => (
+              <div key={incident.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid var(--border-light)' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                    {t(`web.incident_type_${incident.type}`, { defaultValue: INCIDENT_TYPE_LABELS[incident.type] ?? incident.type })}
+                  </p>
+                  <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+                    {new Date(incident.created_at).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: incident.status === 'resolved' ? '#16a34a' : 'var(--text-secondary)' }}>
+                  {t(`web.incident_status_${incident.status}`, { defaultValue: INCIDENT_STATUS_LABELS[incident.status] ?? incident.status })}
+                </span>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
