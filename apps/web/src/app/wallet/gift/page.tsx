@@ -14,6 +14,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { walletService, referralService } from '@tricigo/api';
 import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
+import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../../providers';
 
 type LookupMode = 'code' | 'phone';
@@ -235,6 +236,16 @@ export default function GiftPage() {
             style={{ background: 'none', border: 'none', cursor: myCode ? 'pointer' : 'default', fontSize: '1.6rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.15em' }}>
             {myCode || '…'} {myCode ? '⧉' : ''}
           </button>
+          {/* QR escaneable del código — un amigo lo escanea con la cámara del
+              teléfono y abre /gift/<code> (landing → pantalla de regalo precargada).
+              Parity con el QR nativo, que en el client sólo existe en mobile. */}
+          {myCode ? (
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '0.75rem 0' }}>
+              <div style={{ padding: 12, background: '#fff', borderRadius: 12, lineHeight: 0 }}>
+                <QRCodeSVG value={`https://tricigo.com/gift/${myCode}`} size={150} />
+              </div>
+            </div>
+          ) : null}
           <div>
             <button type="button" onClick={handleShareCode} disabled={!myCode}
               style={{ marginTop: '0.75rem', padding: '0.55rem 1rem', borderRadius: '0.6rem', border: '1px solid var(--primary)', background: 'var(--bg-page)', color: 'var(--primary)', fontWeight: 600, cursor: myCode ? 'pointer' : 'not-allowed', opacity: myCode ? 1 : 0.6 }}>
