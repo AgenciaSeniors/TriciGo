@@ -419,7 +419,7 @@ Fuente de verdad = `app/wallet/gift.tsx` + `app/gift/[code].tsx`. **Resultado: y
 | Monto (>0, ≤ saldo) + nota (máx 200) | ✅ | |
 | Enviar (`walletService.sendGift`) + refrescar saldo | ✅ | |
 | Mi código para recibir: mostrar + copiar + compartir | ✅ | `navigator.clipboard` / `navigator.share` |
-| QR del propio código | n/a | El client **sólo** muestra QR en **nativo** (react-native-svg); su fallback web es texto+compartir, igual que la web. Mostrar un QR escaneable en web es un **enhancement opcional** (requiere una lib de QR / dep nueva) — diferido |
+| QR del propio código | ✅ FIX (PR-FU-2) | `qrcode.react` (`QRCodeSVG`) → QR de `https://tricigo.com/gift/<code>`; un amigo lo escanea con la cámara y abre el landing `/gift/[code]`. Mantiene el fallback texto+copiar/compartir. (El client sólo lo muestra en nativo; la web ahora lo tiene en escritorio.) |
 | Escanear QR de un amigo | n/a | Escáner es nativo-only en el client; en web se tipea el código (igual que el fallback web del client) |
 
 ### 8.2 Landing + entrada
