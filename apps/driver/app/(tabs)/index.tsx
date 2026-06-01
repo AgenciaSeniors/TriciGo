@@ -44,6 +44,7 @@ import * as Location from 'expo-location';
 import { useDemandHotspots } from '@/hooks/useDemandHotspots';
 import { usePopularLocations } from '@/hooks/usePopularLocations';
 import { useNearbyDrivers } from '@/hooks/useNearbyDrivers';
+import { useTestVehicles } from '@/hooks/useTestVehicles';
 import { useSurgeZones } from '@/hooks/useSurgeZones';
 import { useSmartSuggestion } from '@/hooks/useSmartSuggestion';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
@@ -540,6 +541,26 @@ function NativeDriverHomeScreen() {
     });
   }, []);
 
+  // Pre-launch QA: synthetic moving vehicles to preview marker rendering.
+  // Gated to dev/demo builds — never shown to real drivers in production.
+  const vehiclePreviewAvailable =
+    __DEV__ || process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
+  const [vehiclePreview, setVehiclePreview] = useState(false);
+  useEffect(() => {
+    if (!vehiclePreviewAvailable) return;
+    AsyncStorage.getItem('driver_vehicle_preview').then((val) => {
+      if (val === '1') setVehiclePreview(true);
+    }).catch(() => {});
+  }, [vehiclePreviewAvailable]);
+  const toggleVehiclePreview = useCallback(() => {
+    setVehiclePreview((prev) => {
+      const next = !prev;
+      AsyncStorage.setItem('driver_vehicle_preview', next ? '1' : '0').catch(() => {});
+      return next;
+    });
+  }, []);
+  const previewVehicles = useTestVehicles(mapCenter, vehiclePreview);
+
   // Peer online drivers (top-down markers on the map).
   const nearbyDrivers = useNearbyDrivers({
     center: mapCenter,
@@ -948,7 +969,7 @@ function NativeDriverHomeScreen() {
               ? []
               : surgeZones.filter((z) => z.boundary !== null).map((z) => ({ multiplier: z.multiplier, zone_name: z.zone_name, boundary: z.boundary! }))
           }
-          nearbyDrivers={simpleMapMode ? [] : nearbyDrivers}
+          nearbyDrivers={vehiclePreview ? previewVehicles : (simpleMapMode ? [] : nearbyDrivers)}
           demandHotspots={simpleMapMode ? [] : demandHotspots}
           popularLocations={popularLocations}
           height={SCREEN_HEIGHT}
@@ -1050,6 +1071,40 @@ function NativeDriverHomeScreen() {
             size={20}
             color="#FFFFFF"
           />
+        </Pressable>
+      )}
+
+      {/* Pre-launch QA — vehicle preview toggle. Dev/demo builds only
+           (never rendered in production). When ON, the map shows
+           synthetic moving vehicles so the team can preview how peer
+           markers render before real drivers are online. */}
+      {vehiclePreviewAvailable && (
+        <Pressable
+          onPress={toggleVehiclePreview}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: vehiclePreview }}
+          accessibilityLabel="Vehículos de prueba"
+          style={({ pressed }) => ({
+            position: 'absolute',
+            top: insets.top + 220,
+            right: 12,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: vehiclePreview ? '#FF4D00' : 'rgba(8, 8, 12, 0.7)',
+            borderWidth: 1,
+            borderColor: vehiclePreview ? '#FF4D00' : 'rgba(255, 255, 255, 0.12)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.25,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Ionicons name="car-sport" size={20} color="#FFFFFF" />
         </Pressable>
       )}
 

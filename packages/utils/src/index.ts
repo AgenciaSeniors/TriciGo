@@ -83,6 +83,9 @@ export { VEHICLE_MARKER_ROTATION_OFFSET_DEG, vehicleMarkerRotationOffset } from 
 // BUG-296: POI category → visual group mapping (9 restrained groups).
 export { POI_VISUAL_GROUPS, POI_OTHER_GROUP, poiVisualGroup } from './poiCategories';
 export type { PoiVisualGroup } from './poiCategories';
+// Pre-launch preview: synthetic moving vehicles for map QA (dev/demo only).
+export { TEST_VEHICLE_TYPES, generateTestVehicles, stepTestVehicles } from './test-vehicles';
+export type { TestVehicle } from './test-vehicles';
 
 /**
  * Extract initials from a name (e.g. "Carlos Garcia" → "CG").
