@@ -3192,24 +3192,25 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
           style={({ pressed }) => ({
             position: 'absolute',
             top: insets.top + 140,
-            right: 12,
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            backgroundColor: vehiclePreview ? '#FF4D00' : 'rgba(8, 8, 12, 0.7)',
-            borderWidth: 1,
-            borderColor: vehiclePreview ? '#FF4D00' : 'rgba(255, 255, 255, 0.12)',
+            left: 12,
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            backgroundColor: vehiclePreview ? '#FF4D00' : 'rgba(8, 8, 12, 0.85)',
+            borderWidth: 2,
+            borderColor: '#FFFFFF',
             alignItems: 'center',
             justifyContent: 'center',
             shadowColor: '#000',
-            shadowOpacity: 0.25,
-            shadowRadius: 6,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 4,
+            shadowOpacity: 0.35,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 16,
+            zIndex: 60,
             opacity: pressed ? 0.7 : 1,
           })}
         >
-          <Ionicons name="car-sport" size={20} color="#FFFFFF" />
+          <Ionicons name="car-sport" size={24} color="#FFFFFF" />
         </Pressable>
       )}
 
