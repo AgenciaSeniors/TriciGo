@@ -1291,6 +1291,18 @@ export default function TrackRidePage() {
                 {formatCUP(ride.final_fare_cup ?? ride.estimated_fare_cup)}
               </span>
             </div>
+            {/* Descuento aplicado (promo y/o compartir viaje) — parity con
+                RideCompleteView ("Descuento aplicado: -$X"). */}
+            {(ride.discount_amount_cup ?? 0) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                <span style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 600 }}>
+                  {t('track.discount_applied', { defaultValue: 'Descuento aplicado' })}
+                </span>
+                <span style={{ fontSize: '0.85rem', color: '#16a34a', fontWeight: 700 }}>
+                  -{formatCUP(ride.discount_amount_cup)}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Recibo — descargar (HTML imprimible → PDF) o enviar por email.

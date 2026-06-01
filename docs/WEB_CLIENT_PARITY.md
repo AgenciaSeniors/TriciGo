@@ -180,7 +180,7 @@ Fuente de verdad = flujo **nativo** del client `SelectingView` (`app/(tabs)/inde
 | Pago: efectivo / TriciCoin (saldo vivo) / mixto (slider) | ✅ | |
 | Selector corporativo | ✅ | Web tiene MÁS (no está en el `SelectingView` activo del client) |
 | Promo + preview de descuento | ✅ | |
-| Compartir viaje + asientos + descuento (triciclo) | ✅ | misma fórmula `floor(gross×freeSeats×7%)` |
+| Compartir viaje + asientos + descuento (triciclo) | ✅ FIX PR-B | toggle + stepper + envío de `share_ride`/`declared_passengers` ya estaban. **PR-B:** el descuento ahora se **resta del precio del botón "Solicitar · $X"** (ambos botones; antes sólo restaba el promo) y el **% se lee de config** (`walletService.getConfigValue('shared_ride_discount_per_seat_pct')`, fallback 7) en vez de hardcodear `0.07`. Mismo `discount_amount_cup` que aplica el trigger `00347` |
 | Mensajería: categoría/peso/dims/destinatario/instrucciones/acompaña | ✅ | Web incluye dims (≥ client) |
 
 ### 2.6 Guards de confirmación + transición
@@ -251,7 +251,7 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 | SMS "llegó seguro" una vez (guard) | ✅ | |
 | Recordatorio de calificación (5 min) | ✅ | banner (sin notif local — aceptable) |
 | Persistir tags en `review_tags` | ✅ FIX PR-FU-4 | Web pasa **tag_keys** (mismo fallback set que el móvil) como `tags` a `submitReview` — ya no los dobla en el comentario. Gateado tras `categorized_ratings_enabled` (igual que `RideCompleteView`; hoy OFF → ningún app muestra chips). **Bug latente compartido:** el insert de `submitReview` usa `tag_key` pero `review_tags` sólo tiene `tag_id` NOT NULL + `review_tag_definitions` vacía → dormido en ambos por el flag OFF; fuera de scope web |
-| Stats distancia/duración + línea de descuento | ⚠️ | Web muestra sólo tarifa — menor |
+| Línea de descuento en la tarifa | ✅ FIX PR-B | la Fare Card del estado completado ahora muestra "Descuento aplicado: -$X" cuando `discount_amount_cup > 0` (promo y/o compartir viaje), paridad con `RideCompleteView`. `rides/[id]` ya tenía su fila "Descuento"; el recibo ya renderiza `discountCup` |
 | Desglose de fare-split | ✅ FIX PR-FU-6 | gestión en `track/[id]` (invitar por teléfono `findUserByPhone`→`createSplitInvite`, listar/quitar `getSplitsForRide`/`removeSplitInvite`, sólo tricicoin); invitaciones entrantes en `/book` (`SplitInviteBanner`, poll `getMySplitInvites` + aceptar/rechazar); estado read-only en `rides/[id]` |
 
 ### 3.6 Seguridad / compartir / cancelar
