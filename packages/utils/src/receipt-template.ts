@@ -19,6 +19,8 @@ export interface BaseReceiptData {
   /** ISO timestamp — usually completed_at, falls back to created_at. */
   date: string;
   pickupAddress: string;
+  /** Intermediate stops (mid-ride waypoints), in visit order. */
+  stops?: string[];
   dropoffAddress: string;
   serviceType: string;
   distanceM: number;
@@ -87,6 +89,7 @@ interface Labels {
   vehicle: string;
   passenger: string;
   pickup: string;
+  stop: string;
   dropoff: string;
   distance: string;
   duration: string;
@@ -121,6 +124,7 @@ function getLabels(locale: Locale): Labels {
       vehicle: 'Vehicle',
       passenger: 'Passenger',
       pickup: 'Pickup',
+      stop: 'Stop',
       dropoff: 'Dropoff',
       distance: 'Distance',
       duration: 'Duration',
@@ -153,6 +157,7 @@ function getLabels(locale: Locale): Labels {
     vehicle: 'Vehículo',
     passenger: 'Pasajero',
     pickup: 'Origen',
+    stop: 'Parada',
     dropoff: 'Destino',
     distance: 'Distancia',
     duration: 'Duración',
@@ -263,6 +268,7 @@ function passengerHtml(data: PassengerReceiptData, l: Labels, locale: Locale): s
     ${data.driverName ? row(l.driver, data.driverName, { mute: true }) : ''}
     ${data.vehiclePlate ? row(l.vehicle, data.vehiclePlate, { mute: true }) : ''}
     ${row(l.pickup, data.pickupAddress, { mute: true })}
+    ${(data.stops ?? []).map((s) => row(l.stop, s, { mute: true })).join('')}
     ${row(l.dropoff, data.dropoffAddress, { mute: true })}
     ${row(`${l.distance} · ${l.duration}`, `${distKm} km · ${durStr}`, { mute: true })}
   </table>`;
@@ -303,6 +309,7 @@ function driverHtml(data: DriverReceiptData, l: Labels, locale: Locale): string 
     ${row(l.service, data.serviceType, { mute: true })}
     ${data.passengerName ? row(l.passenger, data.passengerName, { mute: true }) : ''}
     ${row(l.pickup, data.pickupAddress, { mute: true })}
+    ${(data.stops ?? []).map((s) => row(l.stop, s, { mute: true })).join('')}
     ${row(l.dropoff, data.dropoffAddress, { mute: true })}
     ${row(`${l.distance} · ${l.duration}`, `${distKm} km · ${durStr}`, { mute: true })}
   </table>`;

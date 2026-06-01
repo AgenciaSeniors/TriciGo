@@ -228,8 +228,9 @@ Fuente de verdad = `RideActiveView`/`RideCompleteView` + `useRide.ts`. La págin
 | Comportamiento (client) | Web | Nota |
 |---|---|---|
 | Stepper con `arrived_at_destination` | ✅ | |
-| Agregar parada (≤3) + preview de tarifa | ✅ | |
+| Agregar parada (≤3) + preview de tarifa | ✅ FIX PR-A | + **marcar en el mapa** (`StopPickerMap` click-to-place + `reverseGeocode`, espejo del map-picker móvil) junto a la búsqueda por dirección; preview ahora muestra **+km, +min y +precio** (tiempo calculado a 25 km/h, igual que el trigger `00341`); al confirmar refetchea el **viaje** (no sólo las paradas) → la tarjeta de tarifa/ETA/progreso reflejan la parada (la recalcula `00341` server-side) |
 | Lista de paradas con estado | ✅ | |
+| Paradas en el comprobante | ✅ FIX PR-A | `getReceiptData` trae las direcciones de `ride_waypoints` (ordenadas) → `generateReceiptHTML` las lista entre origen y destino (campo opcional `stops`, mejora también el recibo móvil). Total/distancia/tiempo ya las incluyen vía `00341` |
 | Polyline en vivo conductor→destino (en viaje) | ✅ | `TrackingMap` live route |
 | **Banner llegada/llegando a destino** | ✅ FIX | cubierto por el banner de proximidad (driver→dropoff <300m) |
 | Tarjeta de llegada + confeti | n/a | Confeti = diseño; el aviso textual lo da el banner |
