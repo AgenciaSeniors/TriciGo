@@ -357,7 +357,7 @@ Fuente de verdad = `NativeRidesScreen` (`app/(tabs)/rides.tsx`) + `app/ride/[id]
 | **Estado de error + reintentar** | ✅ FIX | antes tragaba el error y mostraba "sin viajes"; ahora muestra error + botón Reintentar |
 | **Export CSV** | ✅ FIX | botón "Exportar CSV" (reusa `generateHistoryCSV`; en web descarga el archivo) |
 | Tap fila → detalle, skeleton, empty state | ✅ | |
-| Filtros extra (tipo de servicio / método de pago / rango de fechas) | ❌ follow-up | el nativo los tiene; la web sólo filtra por estado |
+| Filtros extra (tipo de servicio / método de pago / rango de fechas) | ✅ FIX (PR-FU-3) | panel "Más filtros" → select servicio + select pago + fechas desde/hasta → `getRideHistoryFiltered` (server-side) |
 | Sección de viajes programados | n/a | feature **retirada** (programados) — correctamente ausente |
 | Íconos por tipo de vehículo (premium/confort/cargo) | ⚠️ | web usa 4 PNGs por prefijo — menor |
 
@@ -370,9 +370,9 @@ Fuente de verdad = `NativeRidesScreen` (`app/(tabs)/rides.tsx`) + `app/ride/[id]
 | Método de pago / stats distancia-duración | ✅ | |
 | Recibo descargar + email | ✅ | **web por delante** (el detalle nativo no los tiene) |
 | TipFlow (no-efectivo) | ✅ | **web por delante** |
-| Mapa de la ruta en el detalle | ❌ follow-up | el nativo dibuja la ruta; la web no tiene mapa en el detalle |
-| Bloque cargo/delivery (OTP + share del destinatario) | ❌ follow-up | ausente en la web para viajes de mensajería |
-| Desglose CUP por-km/por-min + tachado estimado-vs-final | ⚠️ follow-up | la web muestra km/min como unidades, no como cargos CUP |
+| Mapa de la ruta en el detalle | ✅ FIX (PR-FU-3) | reusa `TrackingMap` en modo estático (sin driver) con pickup/dropoff |
+| Bloque cargo/delivery (destinatario/teléfono/paquete/OTP/instrucciones/fotos) | ✅ FIX (PR-FU-3) | `deliveryService.getDeliveryDetails` → card cuando `ride_mode==='cargo'` |
+| Desglose CUP por-km/por-min + tachado estimado-vs-final | ⚠️ follow-up menor | la web muestra km/min como unidades; el desglose ya tiene surge/espera/propina/cancelación/total. Diferido (`getPricingSnapshot`) |
 | Copiar ID / compartir viaje en el detalle | ⚠️ | menor |
 | Links de disputa / objeto perdido | n/a | **retirados** — correctamente ausentes (el detalle nativo aún arrastra el código) |
 
