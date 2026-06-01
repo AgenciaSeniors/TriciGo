@@ -1,13 +1,28 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { rideService, getSupabaseClient, notificationService } from '@tricigo/api';
+import { rideService, getSupabaseClient, notificationService, deliveryService } from '@tricigo/api';
 import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE, generateReceiptHTML } from '@tricigo/utils';
 import type { RideWithDriver } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { TipFlow } from '@/components/TipFlow';
+
+// Static route map for the historical detail — reuse TrackingMap with no driver
+// props (parity con el mapa del detalle de viaje móvil). ssr:false (Leaflet/Mapbox).
+const TrackingMap = dynamic(() => import('../../track/TrackingMap'), {
+  ssr: false,
+  loading: () => <div style={{ width: '100%', height: 200, background: 'var(--bg-light)', borderRadius: '0.75rem' }} />,
+});
+
+type CargoDetails = {
+  recipient_name?: string; recipient_phone?: string; package_description?: string;
+  package_category?: string; estimated_weight_kg?: number; special_instructions?: string | null;
+  client_accompanies?: boolean; delivery_otp?: string | null;
+  pickup_photo_url?: string | null; delivery_photo_url?: string | null;
+};
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
   searching: { label: 'Buscando conductor', bg: '#fef3c7', color: '#d97706' },
@@ -55,6 +70,9 @@ export default function RideDetailPage() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [receiptEmailed, setReceiptEmailed] = useState(false);
 
+  // ── Cargo/delivery details (only for ride_mode='cargo') ──
+  const [cargo, setCargo] = useState<CargoDetails | null>(null);
+
   // ── Auth effect ──
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -88,6 +106,14 @@ export default function RideDetailPage() {
   useEffect(() => {
     loadRide();
   }, [loadRide]);
+
+  // Fetch delivery details for cargo rides (parity con el bloque cargo del detalle móvil).
+  useEffect(() => {
+    if (!ride || ride.ride_mode !== 'cargo') { setCargo(null); return; }
+    deliveryService.getDeliveryDetails(ride.id)
+      .then((d) => { if (d) setCargo(d as CargoDetails); })
+      .catch(() => { /* non-critical */ });
+  }, [ride?.ride_mode, ride?.id]);
 
   // ── Receipt: descargar (HTML imprimible → PDF) o enviar por email ──
   const handleDownloadReceipt = async () => {
@@ -233,6 +259,28 @@ export default function RideDetailPage() {
                 </div>
               </div>
 
+              {/* Route map (static, sin driver) — parity con el mapa del detalle de viaje móvil */}
+              {(() => {
+                const pLat = typeof ride.pickup_location === 'object' ? ride.pickup_location.latitude : 0;
+                const pLng = typeof ride.pickup_location === 'object' ? ride.pickup_location.longitude : 0;
+                const dLat = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.latitude : 0;
+                const dLng = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.longitude : 0;
+                if (!pLat || !dLat) return null;
+                return (
+                  <div style={{ borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid var(--border-light)', height: 200 }}>
+                    <TrackingMap
+                      pickupLat={pLat}
+                      pickupLng={pLng}
+                      dropoffLat={dLat}
+                      dropoffLng={dLng}
+                      vehicleType={ride.vehicle_type ?? undefined}
+                      rideStatus={ride.status}
+                      style={{ width: '100%', height: '100%', borderRadius: 0 }}
+                    />
+                  </div>
+                );
+              })()}
+
               {/* Driver info */}
               {ride.driver_name && (
                 <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
@@ -273,6 +321,36 @@ export default function RideDetailPage() {
                         }}>
                           {ride.vehicle_plate}
                         </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Cargo/delivery details (parity con el bloque cargo del detalle móvil) */}
+              {ride.ride_mode === 'cargo' && cargo && (
+                <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.5rem', textTransform: 'uppercase', fontWeight: 600 }}>Envío</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                    {cargo.recipient_name && <div><span style={{ color: 'var(--text-tertiary)' }}>Destinatario: </span><strong>{cargo.recipient_name}</strong></div>}
+                    {cargo.recipient_phone && <div><span style={{ color: 'var(--text-tertiary)' }}>Teléfono: </span>{cargo.recipient_phone}</div>}
+                    {cargo.package_description && <div><span style={{ color: 'var(--text-tertiary)' }}>Paquete: </span>{cargo.package_description}</div>}
+                    {cargo.delivery_otp && <div><span style={{ color: 'var(--text-tertiary)' }}>Código de entrega: </span><strong style={{ letterSpacing: '0.1em' }}>{cargo.delivery_otp}</strong></div>}
+                    {cargo.special_instructions && <div><span style={{ color: 'var(--text-tertiary)' }}>Instrucciones: </span>{cargo.special_instructions}</div>}
+                  </div>
+                  {(cargo.pickup_photo_url || cargo.delivery_photo_url) && (
+                    <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                      {cargo.pickup_photo_url && (
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginBottom: 4 }}>Recogida</div>
+                          <img src={cargo.pickup_photo_url} alt="Recogida" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8 }} />
+                        </div>
+                      )}
+                      {cargo.delivery_photo_url && (
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginBottom: 4 }}>Entrega</div>
+                          <img src={cargo.delivery_photo_url} alt="Entrega" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8 }} />
+                        </div>
                       )}
                     </div>
                   )}

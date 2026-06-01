@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient } from '@tricigo/api';
 import { formatTRC, formatCUP, getRelativeDay, formatTime, riderChargedTotal, riderChargedTotalTrc, generateHistoryCSV } from '@tricigo/utils';
-import type { Ride } from '@tricigo/types';
+import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
 
@@ -74,6 +74,11 @@ export default function RidesPage() {
 
   // Filters
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
+  const [serviceFilter, setServiceFilter] = useState<string>('all');
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
 
   // Auth
   useEffect(() => {
@@ -83,8 +88,12 @@ export default function RidesPage() {
     });
   }, []);
 
-  // Load rides
-  const loadRides = useCallback(async (uid: string, tab: TabFilter, pg: number, append: boolean) => {
+  // Load rides. Filters (status/service/payment/date) are passed as opts so
+  // the service applies them server-side (getRideHistoryFiltered ya soporta
+  // serviceType/paymentMethod/dateFrom/dateTo — parity con los filtros del
+  // rides móvil).
+  type LoadOpts = { tab: TabFilter; serviceType: string; paymentMethod: string; dateFrom: string; dateTo: string };
+  const loadRides = useCallback(async (uid: string, pg: number, append: boolean, opts: LoadOpts) => {
     if (!append) { setLoading(true); setError(null); }
     else setLoadingMore(true);
 
@@ -93,7 +102,11 @@ export default function RidesPage() {
         userId: uid,
         page: pg,
         pageSize: PAGE_SIZE,
-        ...(tab !== 'all' && { status: [tab] }),
+        ...(opts.tab !== 'all' && { status: [opts.tab] }),
+        ...(opts.serviceType !== 'all' && { serviceType: opts.serviceType as ServiceTypeSlug }),
+        ...(opts.paymentMethod !== 'all' && { paymentMethod: opts.paymentMethod as PaymentMethod }),
+        ...(opts.dateFrom && { dateFrom: new Date(opts.dateFrom).toISOString() }),
+        ...(opts.dateTo && { dateTo: new Date(`${opts.dateTo}T23:59:59`).toISOString() }),
       });
       if (append) {
         setRides((prev) => [...prev, ...data]);
@@ -113,23 +126,25 @@ export default function RidesPage() {
     }
   }, []);
 
+  const currentOpts = (): LoadOpts => ({ tab: activeTab, serviceType: serviceFilter, paymentMethod: paymentFilter, dateFrom, dateTo });
+
   useEffect(() => {
     if (!userId) return;
-    loadRides(userId, activeTab, 0, false);
-  }, [userId, activeTab, loadRides]);
+    loadRides(userId, 0, false, { tab: activeTab, serviceType: serviceFilter, paymentMethod: paymentFilter, dateFrom, dateTo });
+  }, [userId, activeTab, serviceFilter, paymentFilter, dateFrom, dateTo, loadRides]);
 
   // Refetch when the tab regains focus (parity con el pull-to-refresh móvil) —
   // un viaje recién completado/cancelado en otra pestaña aparece al volver.
   useEffect(() => {
     if (!userId) return;
-    const refresh = () => { if (!document.hidden) loadRides(userId, activeTab, 0, false); };
+    const refresh = () => { if (!document.hidden) loadRides(userId, 0, false, { tab: activeTab, serviceType: serviceFilter, paymentMethod: paymentFilter, dateFrom, dateTo }); };
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('focus', refresh);
     return () => {
       document.removeEventListener('visibilitychange', refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, [userId, activeTab, loadRides]);
+  }, [userId, activeTab, serviceFilter, paymentFilter, dateFrom, dateTo, loadRides]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -152,7 +167,7 @@ export default function RidesPage() {
 
   const handleLoadMore = () => {
     if (loadingMore) return;
-    loadRides(userId, activeTab, page + 1, true);
+    loadRides(userId, page + 1, true, currentOpts());
   };
 
   const handleTabChange = (tab: TabFilter) => {
@@ -218,6 +233,58 @@ export default function RidesPage() {
           ))}
         </div>
 
+        {/* Filtros avanzados (servicio / pago / fechas) — parity con los filtros
+            del rides móvil; getRideHistoryFiltered los aplica server-side. */}
+        <div style={{ marginBottom: '1rem' }}>
+          <button
+            type="button"
+            onClick={() => setShowFilters((s) => !s)}
+            style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', padding: '0.25rem 0' }}
+          >
+            {showFilters ? '− Menos filtros' : '+ Más filtros'}
+            {(serviceFilter !== 'all' || paymentFilter !== 'all' || dateFrom || dateTo) ? ' · activos' : ''}
+          </button>
+          {showFilters && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '0.5rem', alignItems: 'flex-end' }}>
+              <label style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                Servicio
+                <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className="input-base" style={{ fontSize: '0.82rem' }}>
+                  <option value="all">Todos</option>
+                  {Object.entries(SERVICE_LABELS).map(([slug, label]) => (
+                    <option key={slug} value={slug}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                Pago
+                <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="input-base" style={{ fontSize: '0.82rem' }}>
+                  <option value="all">Todos</option>
+                  {Object.entries(PAYMENT_LABELS).map(([m, label]) => (
+                    <option key={m} value={m}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                Desde
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input-base" style={{ fontSize: '0.82rem' }} />
+              </label>
+              <label style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                Hasta
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input-base" style={{ fontSize: '0.82rem' }} />
+              </label>
+              {(serviceFilter !== 'all' || paymentFilter !== 'all' || dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setServiceFilter('all'); setPaymentFilter('all'); setDateFrom(''); setDateTo(''); }}
+                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.45rem 0.7rem', fontSize: '0.78rem', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Loading */}
         {loading && <WebSkeletonList count={4} />}
 
@@ -226,7 +293,7 @@ export default function RidesPage() {
           <div style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
             <p style={{ fontSize: '0.95rem', fontWeight: 600, color: '#dc2626', margin: '0 0 1rem' }}>{error}</p>
             <button
-              onClick={() => loadRides(userId, activeTab, 0, false)}
+              onClick={() => loadRides(userId, 0, false, currentOpts())}
               className="btn-base btn-secondary-outline"
               style={{ cursor: 'pointer' }}
             >
