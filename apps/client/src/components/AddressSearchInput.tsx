@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -221,9 +221,6 @@ function AddressSearchInputInner({
         // name token overlap ≥0.7) are silently dropped from the secondary
         // list. PR E's cleanup already removed the worst cuba_pois offenders.
         //
-        // Streets stay as the final tier (only for non-category queries) so
-        // "Calle 23 e/ M y N" still surfaces as an address result below the
-        // POI matches from either source.
         const normalize = (r: SearchBoxResult): AddressSearchResult => ({
           address: r.address,
           latitude: r.latitude,
@@ -232,39 +229,39 @@ function AddressSearchInputInner({
           tricigoCategory: r.tricigoCategory ?? null,
         });
 
-        // Fire Google + cuba_pois in parallel — Google takes ~200-400 ms via
-        // the EF, the local RPC is ~50-100 ms, so we wait on the slower one.
-        const [unifiedResults, poiResults] = await Promise.all([
+        // Fire Google + cuba_pois + streets in parallel. Streets are always
+        // fetched now (no longer gated on a detected category) so a real
+        // street can't be hidden just because the query looked category-ish;
+        // ranking decides the order. Google ~200-400ms via the EF; the local
+        // RPCs ~50-100ms.
+        const [unifiedResults, poiResults, streetResults] = await Promise.all([
           searchAddressUnified(text, getSupabaseClient(), userLocation, controller.signal, 10, sessionTokenRef.current ?? undefined),
           searchPoisSupabase(text, userLocation, 6),
+          searchStreetsSupabase(text, userLocation, 8),
         ]);
-        const detectedCategory = poiResults.find(r => r.matchedCategory)?.matchedCategory ?? null;
-        // Streets are local and cheap — fetch only if no category keyword.
-        const streetResults: SearchBoxResult[] = detectedCategory
-          ? []
-          : await searchStreetsSupabase(text, userLocation, 5);
 
         const externalAttribution = inferAttributionSource(unifiedResults);
-        // PR 4b: attach _src so handleSelectResult can fire-and-forget
-        // import-mapbox-poi for Google-sourced selections.
-        const externalNormalized: AddressSearchResult[] = unifiedResults
-          .map((r) => ({ ...normalize(r), _src: r }));
 
-        // Dedupe cuba_pois against external results, keeping only the
-        // rows that don't already appear above. Keep the smart-RPC
-        // ordering (high-spec first, low-spec last) within the survivors.
+        // Drop cuba_pois / street rows that duplicate a higher-tier result
+        // (coord ≤100m or name-token overlap ≥0.7), then rank the survivors by
+        // proximity bucket (nearest wins) with text/specificity/source as the
+        // in-bucket tie-break: a far-province Google hit can no longer sit
+        // above a nearby street, while named places keep their edge among
+        // equally-close results (the airport-bug guard lives in the score).
         const dedupedPois = dedupeSearchResults(unifiedResults, poiResults);
-        const highSpecPois = dedupedPois.filter(r => r.specificity >= 0.8).map(normalize);
-        const lowSpecPois  = dedupedPois.filter(r => r.specificity <  0.8).map(normalize);
+        const primary = [...unifiedResults, ...dedupedPois];
+        const dedupedStreets = dedupeSearchResults(primary, streetResults);
+        const ranked = rankSearchResults([...primary, ...dedupedStreets], text, userLocation);
 
-        // Final order: Google/Mapbox first → high-spec cuba_pois →
-        // streets (non-category only) → low-spec cuba_pois.
-        const searchResults: AddressSearchResult[] = [
-          ...externalNormalized,
-          ...highSpecPois,
-          ...streetResults.map(normalize),
-          ...lowSpecPois,
-        ];
+        // Normalize for display; keep _src on external rows so handleSelect
+        // can fire-and-forget import-mapbox-poi for Google selections.
+        const searchResults: AddressSearchResult[] = ranked
+          .slice(0, searchResultCap(text))
+          .map((r) =>
+            r.source === 'google' || r.source === 'mapbox' || r.source === 'searchbox'
+              ? { ...normalize(r), _src: r }
+              : normalize(r),
+          );
 
         // Last-resort: nothing came back from anywhere → ultimate Mapbox/
         // Nominatim fallback (free, slower) so the user gets *something*.
