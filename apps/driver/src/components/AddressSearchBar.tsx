@@ -18,7 +18,7 @@ import {
   searchAddress,
   searchAddressUnified,
   newSessionToken,
-  tricigoCategoryEmoji,
+  searchResultEmoji,
   importPoiFromSearch,
   dedupeSearchResults,
   SEARCH_DEBOUNCE_MS,
@@ -108,7 +108,7 @@ async function searchUnified(query: string, near: GeoPoint | null, sessionToken:
       latitude: r.latitude,
       longitude: r.longitude,
       isPoi,
-      emoji: isPoi ? tricigoCategoryEmoji(r.tricigoCategory) : undefined,
+      emoji: searchResultEmoji(r),
     };
   };
 

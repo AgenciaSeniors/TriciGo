@@ -6,6 +6,7 @@ import {
   scoreSearchResult,
   rankSearchResults,
   searchResultCap,
+  searchResultEmoji,
   type ScorableResult,
 } from '../addressSearch';
 
@@ -143,5 +144,38 @@ describe('rankSearchResults with a frequent-zone prior', () => {
     const ranked = rankSearchResults([freqWeak, exactNoFreq], 'reina', HAVANA, [FREQUENT]);
 
     expect(ranked[0]).toBe(exactNoFreq);
+  });
+});
+
+describe('searchResultEmoji', () => {
+  it('uses the tricigo category emoji when the category is known', () => {
+    expect(searchResultEmoji({ tricigoCategory: 'hotel' })).toBe('🏨');
+  });
+
+  it('falls back to a name keyword when the category is "other" (Capitolio Nacional → monument)', () => {
+    expect(
+      searchResultEmoji({ tricigoCategory: 'other', category: 'other', place_name: 'Capitolio Nacional' }),
+    ).toBe('🏛️');
+  });
+
+  it('gives a road emoji to a plain street and a cross emoji to "X e/ Y"', () => {
+    expect(searchResultEmoji({ category: 'street', address: 'Neptuno' })).toBe('🛣️');
+    expect(searchResultEmoji({ category: 'street', address: 'Belascoaín e/ San José' })).toBe('🔀');
+  });
+
+  it('maps a raw provider category when tricigo is other (public_transport → bus)', () => {
+    expect(
+      searchResultEmoji({ tricigoCategory: 'other', category: 'public_transport', place_name: 'P-12' }),
+    ).toBe('🚌');
+  });
+
+  it('maps a raw landmark category to a monument', () => {
+    expect(
+      searchResultEmoji({ tricigoCategory: 'other', category: 'landmark_and_historical_building', place_name: 'X' }),
+    ).toBe('🏛️');
+  });
+
+  it('returns the generic pin only when there is no category signal at all', () => {
+    expect(searchResultEmoji({ place_name: 'Lugar X', category: '', address: 'una direccion cualquiera' })).toBe('📍');
   });
 });

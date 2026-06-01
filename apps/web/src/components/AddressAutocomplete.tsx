@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, newSessionToken, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, tricigoCategoryEmoji, rankSearchResults, searchResultCap, SEARCH_DEBOUNCE_MS } from '@tricigo/utils';
+import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, newSessionToken, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, searchResultEmoji, rankSearchResults, searchResultCap, SEARCH_DEBOUNCE_MS } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -72,57 +72,8 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   );
 }
 
-/** Category-to-icon map for Search Box API categories */
-const CATEGORY_ICONS: Record<string, string> = {
-  hotel: '🏨', lodging: '🏨', hostel: '🏨',
-  hospital: '🏥', clinic: '🏥', doctor: '🏥', pharmacy: '💊',
-  university: '🎓', school: '🎓', college: '🎓', education: '🎓',
-  park: '🌳', garden: '🌳', playground: '🌳', plaza: '🌳',
-  restaurant: '🍽️', cafe: '🍽️', food: '🍽️', bar: '🍸',
-  airport: '✈️', bus_station: '🚉', train_station: '🚉', transit: '🚉',
-  museum: '🏛️', monument: '🏛️', historic: '🏛️',
-  church: '⛪', place_of_worship: '⛪',
-  supermarket: '🛒', shop: '🛒', market: '🛒', store: '🛒',
-  bank: '🏦', atm: '🏦',
-  gas_station: '⛽', fuel: '⛽',
-  cinema: '🎬', theater: '🎭', theatre: '🎭',
-  library: '📚', swimming_pool: '🏊', gym: '🏋️', sports: '⚽',
-  embassy: '🏛️', government: '🏛️',
-};
-
 function getResultIcon(result: AddressResult): string {
-  // PR J (2026-05-25): primary path uses tricigoCategoryEmoji on the
-  // tricigo-vocab category (populated by providers via
-  // mapExternalCategoryToTricigo). This is the single source of truth
-  // shared with the native client + driver apps, so icons stay
-  // consistent across all three surfaces.
-  if (result.tricigoCategory) {
-    const emoji = tricigoCategoryEmoji(result.tricigoCategory);
-    if (emoji !== '📍') return emoji;
-  }
-  // Legacy fallback #1: raw category string (handles providers that
-  // pre-date PR J or pass a string that didn't survive the mapper).
-  if (result.category) {
-    const cat = result.category.toLowerCase();
-    for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
-      if (cat.includes(key)) return icon;
-    }
-  }
-  // Legacy fallback #2: keyword scan over name + address (catches
-  // hotels-by-name like "Hostal X" where the upstream type was missing).
-  const name = (result.place_name + ' ' + result.address).toLowerCase();
-  if (name.includes('hotel') || name.includes('hostal') || name.includes('casa particular')) return '🏨';
-  if (name.includes('hospital') || name.includes('clínica') || name.includes('policlínico')) return '🏥';
-  if (name.includes('universidad') || name.includes('escuela') || name.includes('instituto')) return '🎓';
-  if (name.includes('parque') || name.includes('plaza')) return '🌳';
-  if (name.includes('restaurante') || name.includes('paladar') || name.includes('cafetería')) return '🍽️';
-  if (name.includes('aeropuerto') || name.includes('terminal')) return '✈️';
-  if (name.includes('estación') || name.includes('terminal de')) return '🚉';
-  if (name.includes('museo')) return '🏛️';
-  if (name.includes('iglesia') || name.includes('catedral')) return '⛪';
-  if (name.includes('mercado') || name.includes('tienda')) return '🛒';
-  if (name.includes(' e/ ') || name.includes(' entre ')) return '🔀';
-  return '📍';
+  return searchResultEmoji(result);
 }
 
 /** Remove place_name from full address to avoid duplication in secondary line */

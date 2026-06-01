@@ -64,6 +64,7 @@ export {
   proximityBucket,
   scoreSearchResult,
   rankSearchResults,
+  searchResultEmoji,
 } from './addressSearch';
 export type { ScorableResult } from './addressSearch';
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';
