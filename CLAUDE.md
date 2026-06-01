@@ -1505,6 +1505,22 @@ El admin app (`apps/admin/`) usa **react-leaflet** para mapas (`live-map`, `flee
 
 ---
 
+### Correo de "nuevo dispositivo" con cuerpo `security_new_device` — trigger huérfano + template key desincronizada (verificado 2026-06-01)
+
+**Síntoma:** al iniciar sesión llega un correo (remitente `noreply@tricigo.com`, asunto "🔐 Inicio de sesión nuevo — TriciGo") cuyo **cuerpo es literalmente la cadena `security_new_device`**.
+
+**NO es Supabase nativo** (pista falsa que costó tiempo): los correos de auth de Supabase salen de su built-in email service (custom SMTP NO configurado), no de `noreply@tricigo.com`; y el Dashboard (Auth → Emails → Security) **no tiene** ningún toggle "Signed in from a new device" (sus notifs son password/email/phone changed, sign-in linked/removed, MFA added/removed). Tampoco es el mecanismo móvil `register-login-device`.
+
+**Causa raíz:** lo manda un **trigger HUÉRFANO en `auth.sessions`** — `trg_send_security_new_device_email` → `public.send_security_new_device_email()` (creado a mano en prod, **nunca estuvo en git**, no aparece en `grep` del repo). Hace `net.http_post` a la EF `send-email` con `template: 'security_new_device'`. Esa key **no está registrada** en `supabase/functions/_shared/email-templates/index.ts`, así que `resolveTemplate()` ([send-email/index.ts](supabase/functions/send-email/index.ts)) cae al **legacy path** que trata el string del `template` como **HTML crudo** → el cuerpo termina siendo "security_new_device". El registry se reescribió el **2026-05-12** y el template nuevo quedó como `new_device_login`, pero **nadie actualizó el trigger** → patrón "renombraron pero quedó el caller viejo" (mismo de la sección de `driver_cash`).
+
+**Fix (migración `00365`, aplicada a prod 2026-06-01):** `CREATE OR REPLACE` de la función para llamar `template: 'new_device_login'` (registrado) con data `{email, date, ip, device, os}` (+ fecha en español America/Havana). Trae el huérfano a git. Se conservó la dedup por user-agent (30d) y el `EXCEPTION WHEN OTHERS THEN RETURN NEW`.
+
+**Dos mecanismos de nuevo-dispositivo coexisten** (deuda a consolidar): (A) este trigger server-side en `auth.sessions` (heurística de user-agent, el único que dispara hoy); (B) EF `register-login-device` + `user_known_devices` (app-driven, device_id estable) — **dormido**: `user_known_devices` tiene 0 filas porque las apps móviles instaladas aún no shippean la llamada `deviceService.registerLoginDevice` (requiere release). Cuando salga el release, decidir si se elimina A para no duplicar correos.
+
+**Tips diagnósticos reutilizables:** (1) si el **cuerpo** de un correo es una key cruda, es `send-email` cayendo al legacy path por una `template` key que no pasa `isTemplateKey()` — buscá el caller (EF, **trigger DB**, cron) que manda esa key. (2) Para ver el correo real (remitente/asunto/cuerpo) usá el **MCP de Gmail** (`search_threads`/`get_thread`): el remitente distingue app (`noreply@tricigo.com`/Resend) vs Supabase. (3) Objetos huérfanos en prod (funciones/triggers creados a mano, no en migraciones) existen — confirmá con `pg_get_functiondef` + `pg_trigger`, no solo con `grep` del repo.
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
