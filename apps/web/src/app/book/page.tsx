@@ -149,6 +149,25 @@ export default function BookPage() {
   /* ─── Shared ride (triciclo only) + passenger count ─── */
   const [shareRide, setShareRide] = useState(false);
   const [passengerCount, setPassengerCount] = useState(1);
+  // Shared-ride per-seat discount % (admin-configurable; fallback 7). Read once
+  // so the displayed price matches what the server trigger (00347) applies.
+  const [sharePct, setSharePct] = useState(7);
+  useEffect(() => {
+    walletService.getConfigValue('shared_ride_discount_per_seat_pct')
+      .then((v) => { const n = v != null ? parseFloat(v) : NaN; if (Number.isFinite(n) && n > 0) setSharePct(n); })
+      .catch(() => { /* keep fallback 7% */ });
+  }, []);
+  // Shared-ride discount (triciclo only) + the price the rider actually pays =
+  // estimate − promo − shareDiscount. The server trigger (00347) applies the
+  // same shared discount to discount_amount_cup, so this mirrors the real total.
+  const shareOccSeats = Math.min(Math.max(passengerCount, 1), 3);
+  const shareFreeSeats = (serviceType === 'triciclo_basico' && shareRide) ? (4 - shareOccSeats) : 0;
+  const shareDiscountCup = selectedEstimate && shareFreeSeats > 0
+    ? Math.floor(selectedEstimate.estimated_fare_cup * shareFreeSeats * (sharePct / 100))
+    : 0;
+  const promoDiscountCup = promoResult?.valid ? Math.max(0, promoResult.discount ?? 0) : 0;
+  const displayFareCup = Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - promoDiscountCup - shareDiscountCup, 0);
+  const displayFareTrc = (promoDiscountCup > 0 || shareDiscountCup > 0) ? undefined : (selectedEstimate?.estimated_fare_trc ?? undefined);
 
   /* ─── Estimate freshness (X1.3: reject stale > FARE_ESTIMATE_TTL_MS) ─── */
   const fareEstimatedAtRef = useRef<number | null>(null);
@@ -1798,9 +1817,9 @@ export default function BookPage() {
 
           {/* ═══ Trip options — parity con app móvil ═══ */}
           {selectedEstimate && (() => {
-            const shareOcc = Math.min(Math.max(passengerCount, 1), 3);
-            const shareFreeSeats = (serviceType === 'triciclo_basico' && shareRide) ? (4 - shareOcc) : 0;
-            const shareDiscount = shareFreeSeats > 0 ? Math.floor(selectedEstimate.estimated_fare_cup * shareFreeSeats * 0.07) : 0;
+            // Use the component-level shared-ride values (single source of truth,
+            // also read by the confirm-button price below).
+            const shareOcc = shareOccSeats;
             const sectionLabel = { fontSize: '0.85rem', fontWeight: 600 as const, color: 'var(--text-secondary)' };
             const rowStyle = (active: boolean) => ({
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1832,7 +1851,7 @@ export default function BookPage() {
                           </div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
                             {shareRide && shareFreeSeats > 0
-                              ? t('book.share_ride_savings', { defaultValue: `Ahorras ${formatCUP(shareDiscount)} · ${shareFreeSeats} asiento(s) libre(s)` })
+                              ? t('book.share_ride_savings', { defaultValue: `Ahorras ${formatCUP(shareDiscountCup)} · ${shareFreeSeats} asiento(s) libre(s)` })
                               : t('book.share_ride_desc', { defaultValue: 'El conductor puede recoger otros pasajeros' })}
                           </div>
                         </div>
@@ -1877,7 +1896,7 @@ export default function BookPage() {
               {isRequesting
                 ? t('book.requesting')
                 : selectedEstimate
-                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} · ${formatPrice(promoResult?.valid ? Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - (promoResult.discount || 0), 0) : (selectedEstimate?.estimated_fare_cup ?? 0), promoResult?.valid ? undefined : selectedEstimate?.estimated_fare_trc)}`
+                  ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} · ${formatPrice(displayFareCup, displayFareTrc)}`
                   : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
               }
             </button>
@@ -1908,7 +1927,7 @@ export default function BookPage() {
             {isRequesting
               ? t('book.requesting')
               : selectedEstimate
-                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatPrice(selectedEstimate?.estimated_fare_cup ?? 0, selectedEstimate?.estimated_fare_trc)}`
+                ? `${t('book.request_ride', { defaultValue: 'Solicitar' })} ${(SERVICE_TYPE_KEYS.find(s => s.slug === serviceType)?.label || '')} \u00b7 ${formatPrice(displayFareCup, displayFareTrc)}`
                 : t('book.request_ride', { defaultValue: 'Solicitar viaje' })
             }
           </button>
