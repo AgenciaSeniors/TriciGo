@@ -57,6 +57,15 @@ export type {
   PredictedDestination,
   PredictionReason,
 } from './destinationPredictor';
+export {
+  SEARCH_DEBOUNCE_MS,
+  searchResultCap,
+  normalizeAddressLabel,
+  proximityBucket,
+  scoreSearchResult,
+  rankSearchResults,
+} from './addressSearch';
+export type { ScorableResult } from './addressSearch';
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';
 export type { QuickReply } from './chatQuickReplies';
 export { getErrorMessage } from './errors';

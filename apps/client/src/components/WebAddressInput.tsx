@@ -6,7 +6,6 @@ import {
   newSessionToken,
   importPoiFromSearch,
   searchPoisSupabase,
-  computeSpecificity,
   haversineDistance,
   stripAccents,
   fuzzyMatch,
@@ -14,6 +13,9 @@ import {
   reverseGeocode,
   parseCubanAddress,
   suggestCrossStreetsSupabase,
+  rankSearchResults,
+  searchResultCap,
+  SEARCH_DEBOUNCE_MS,
 } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
@@ -130,58 +132,6 @@ async function searchNominatimEnhanced(
 }
 
 /* ─── Scoring & Dedup ─── */
-
-function scoreResult(
-  r: SearchBoxResult,
-  query: string,
-  proximity: { latitude: number; longitude: number } | null,
-): number {
-  const q = stripAccents(query.toLowerCase());
-  const name = stripAccents((r.place_name || r.address || '').toLowerCase());
-
-  // Text score (40%)
-  let textScore = 0.3;
-  if (name === q) textScore = 1.0;
-  else if (name.startsWith(q)) textScore = 0.85;
-  else if (name.includes(q)) textScore = 0.65;
-  else {
-    // Word-by-word fallback for multi-word queries ("Hospital Nacional")
-    const words = q.split(/\s+/).filter(Boolean);
-    if (words.length > 1) {
-      const matchCount = words.filter((w) => name.includes(w)).length;
-      textScore = Math.max(textScore, 0.4 + (matchCount / words.length) * 0.3);
-    }
-  }
-
-  // Specificity (30%)
-  const specificity = r.specificity ?? computeSpecificity(r.place_name || r.address || '');
-
-  // Distance (20%) — normalize to 20km
-  let distScore = 0.5;
-  if (proximity && r.latitude && r.longitude) {
-    const dist = haversineDistance(
-      { latitude: proximity.latitude, longitude: proximity.longitude },
-      { latitude: r.latitude, longitude: r.longitude },
-    );
-    distScore = Math.max(0, 1 - dist / 20000);
-  }
-
-  // Source (10%) — PR F (2026-05-25) tiering: Google > Mapbox > local
-  // cuba_pois > Nominatim. Keeps Google/Mapbox results at the top of the
-  // dropdown so the unified provider's better Cuban coverage actually
-  // surfaces over a stale local POI. searchbox === Mapbox SearchBox.
-  const sourceScores: Record<string, number> = {
-    google: 1.0,
-    mapbox: 0.95,
-    searchbox: 0.95,
-    overpass: 0.6,
-    supabase: 0.4,
-    nominatim: 0.3,
-  };
-  const srcScore = sourceScores[r.source] ?? 0.5;
-
-  return textScore * 0.4 + specificity * 0.3 + distScore * 0.2 + srcScore * 0.1;
-}
 
 function deduplicateResults(results: SearchBoxResult[]): SearchBoxResult[] {
   const deduped: SearchBoxResult[] = [];
@@ -468,10 +418,8 @@ export function WebAddressInput({
           // Merge, dedup, rank
           const merged = [...external, ...supabase, ...nominatim];
           const deduped = deduplicateResults(merged);
-          const scored = deduped
-            .map((r) => ({ ...r, _score: scoreResult(r, searchQuery, proximity ?? null) }))
-            .sort((a, b) => (b as any)._score - (a as any)._score)
-            .slice(0, 7);
+          const scored = rankSearchResults(deduped, searchQuery, proximity ?? null)
+            .slice(0, searchResultCap(searchQuery));
 
           setResults(scored);
           // PR 4 of POI parity — derive attribution from external sources
@@ -506,7 +454,7 @@ export function WebAddressInput({
             setLoading(false);
           }
         }
-      }, 250);
+      }, SEARCH_DEBOUNCE_MS);
     },
     [proximity],
   );

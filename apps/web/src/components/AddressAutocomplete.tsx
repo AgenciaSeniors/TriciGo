@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, newSessionToken, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, tricigoCategoryEmoji } from '@tricigo/utils';
+import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, newSessionToken, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, tricigoCategoryEmoji, rankSearchResults, searchResultCap, SEARCH_DEBOUNCE_MS } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -123,52 +123,6 @@ function getResultIcon(result: AddressResult): string {
   if (name.includes('mercado') || name.includes('tienda')) return '🛒';
   if (name.includes(' e/ ') || name.includes(' entre ')) return '🔀';
   return '📍';
-}
-
-/** Multi-factor relevance score for ranking search results */
-function scoreResult(
-  result: AddressResult,
-  normalizedQuery: string,
-  proximity?: { latitude: number; longitude: number } | null,
-): number {
-  const normalizedName = stripAccents(result.place_name.toLowerCase().trim());
-
-  // Text match quality (40% weight)
-  let textScore = 0.2;
-  if (normalizedName === normalizedQuery) textScore = 1.0;
-  else if (normalizedName.startsWith(normalizedQuery)) textScore = 0.85;
-  else if (normalizedName.includes(normalizedQuery)) textScore = 0.65;
-  else {
-    // Check if query words are in the name
-    const queryWords = normalizedQuery.split(/\s+/);
-    const matchCount = queryWords.filter(w => normalizedName.includes(w)).length;
-    textScore = 0.2 + (matchCount / queryWords.length) * 0.4;
-  }
-
-  // Specificity (30% weight) — named POIs rank higher than generic categories
-  const specScore = result.specificity ?? computeSpecificity(result.place_name);
-
-  // Distance (20% weight) — closer is better, normalized to 20km range
-  let distScore = 0.5;
-  if (proximity) {
-    const dist = haversineDistance(
-      { latitude: result.latitude, longitude: result.longitude },
-      { latitude: proximity.latitude, longitude: proximity.longitude },
-    );
-    distScore = Math.max(0, 1 - dist / 20000);
-  }
-
-  // Source priority — PR F (2026-05-25): the user explicitly chose
-  // "Google primero" after the on-device airport bug where a bad
-  // cuba_pois (Supabase) result outranked the correct Google result.
-  // We give external providers a hard tier above local cuba_pois so
-  // Google/Mapbox results dominate the dropdown ordering, while still
-  // letting text/spec/dist tie-break within each tier.
-  const sourceScore = result.source === 'searchbox' ? 1.0
-    : result.source === 'supabase' ? 0.4
-    : 0.3;
-
-  return textScore * 0.4 + specScore * 0.3 + distScore * 0.2 + sourceScore * 0.1;
 }
 
 /** Remove place_name from full address to avoid duplication in secondary line */
@@ -433,7 +387,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       ];
 
       // No distance filter here — Mapbox already filters by country=cu
-      // Ranking by proximity is handled later in scoreResult()
+      // Ranking by proximity is handled later in rankSearchResults()
       const filtered = allItems;
 
       // Deduplicate: group by name similarity + spatial proximity
@@ -481,20 +435,16 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         }
       }
 
-      // ─── MULTI-FACTOR RANKING ───
+      // ─── MULTI-FACTOR RANKING (proximity-bucket dominant) ───
       if (merged.length > 1) {
         const normalizedQuery = stripAccents(q.toLowerCase().trim());
-        merged.sort((a, b) => {
-          const scoreA = scoreResult(a, normalizedQuery, proximity);
-          const scoreB = scoreResult(b, normalizedQuery, proximity);
-          return scoreB - scoreA; // Higher score first
-        });
+        merged = rankSearchResults(merged, normalizedQuery, proximity);
       }
 
       // Filter out invalid coordinates only — no distance limit (Cuba-wide app)
       merged = merged.filter(r => r.latitude && r.longitude && isFinite(r.latitude) && isFinite(r.longitude));
 
-      const initial = merged.slice(0, 7);
+      const initial = merged.slice(0, searchResultCap(q));
       setResults(initial);
       setIsOpen(true);
       setActiveIndex(-1);
@@ -554,7 +504,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
     if (sessionTokenRef.current === null) {
       sessionTokenRef.current = newSessionToken();
     }
-    debounceRef.current = setTimeout(() => search(val), 200);
+    debounceRef.current = setTimeout(() => search(val), SEARCH_DEBOUNCE_MS);
   }
 
   function saveToRecent(result: AddressResult) {

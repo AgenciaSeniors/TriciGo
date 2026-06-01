@@ -7,6 +7,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./addressSearch": "./src/addressSearch.ts",
     "./analytics": "./src/analytics.ts",
     "./animateCoordinate": "./src/animateCoordinate.ts",
     "./chatQuickReplies": "./src/chatQuickReplies.ts",
