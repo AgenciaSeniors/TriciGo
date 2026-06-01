@@ -627,6 +627,8 @@ export interface AddressSearchResult {
    * fallback rows.
    */
   tricigoCategory?: string | null;
+  /** Raw provider/OSM category (e.g. "street", "public_transport") — used by the emoji resolver as a fallback. */
+  category?: string;
   /**
    * PR 4b: original `SearchBoxResult` carried through from the
    * unified search call so the selection handler can fire-and-forget

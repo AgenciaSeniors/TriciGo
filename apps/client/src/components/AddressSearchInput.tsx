@@ -3,7 +3,7 @@ import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } f
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, tricigoCategoryEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -233,6 +233,7 @@ function AddressSearchInputInner({
           longitude: r.longitude,
           displayName: r.place_name && r.place_name !== r.address ? r.place_name : undefined,
           tricigoCategory: r.tricigoCategory ?? null,
+          category: r.category,
         });
 
         // Fire Google + cuba_pois + streets in parallel. Streets are always
@@ -529,7 +530,7 @@ function AddressSearchInputInner({
         priority: 4,
         source: r.displayName ? 'poi' : 'api',                  // ← POI vs street
         icon: r.displayName ? ('business-outline' as const) : ('location-outline' as const),
-        emoji: r.displayName ? tricigoCategoryEmoji(r.tricigoCategory) : undefined,
+        emoji: searchResultEmoji({ tricigoCategory: r.tricigoCategory, category: r.category, place_name: r.displayName ?? r.address, address: r.address }),
       }));
 
     const all = [...matchedPreds, ...matchedSvd, ...matchedRec, ...matchedApi];

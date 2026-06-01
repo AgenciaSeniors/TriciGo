@@ -15,6 +15,7 @@ import {
   suggestCrossStreetsSupabase,
   rankSearchResults,
   searchResultCap,
+  searchResultEmoji,
   SEARCH_DEBOUNCE_MS,
 } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
@@ -53,33 +54,6 @@ interface WebAddressInputProps {
   onAddRecent?: (addr: SelectResult) => void;
 }
 
-/* ─── Category Icons ─── */
-
-const CATEGORY_ICONS: Record<string, string> = {
-  hotel: '🏨', lodging: '🏨', hostel: '🏨',
-  hospital: '🏥', clinic: '🏥', doctor: '🏥', pharmacy: '💊',
-  university: '🎓', school: '🎓', college: '🎓', education: '🎓',
-  park: '🌳', garden: '🌳', playground: '🌳', plaza: '🌳',
-  restaurant: '🍽️', cafe: '🍽️', food: '🍽️', bar: '🍸',
-  airport: '✈️', bus_station: '🚉', train_station: '🚉', transit: '🚉',
-  museum: '🏛️', monument: '🏛️', historic: '🏛️',
-  church: '⛪', place_of_worship: '⛪',
-  supermarket: '🛒', shop: '🛒', market: '🛒', store: '🛒',
-  bank: '🏦', atm: '🏦',
-  gas_station: '⛽', fuel: '⛽',
-  cinema: '🎬', theater: '🎭', theatre: '🎭',
-  library: '📚', swimming_pool: '🏊', gym: '🏋️', sports: '⚽',
-  embassy: '🏛️', government: '🏛️',
-};
-
-function getIcon(category?: string): string {
-  if (!category) return '📍';
-  const cat = category.toLowerCase();
-  for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
-    if (cat.includes(key)) return icon;
-  }
-  return '📍';
-}
 
 function getSavedIcon(label: string): string {
   const lower = label.toLowerCase();
@@ -746,7 +720,7 @@ export function WebAddressInput({
                     borderBottomColor: c.divider,
                   })}
                 >
-                  <Text style={{ fontSize: 18, marginRight: 10 }}>{getIcon(r.category)}</Text>
+                  <Text style={{ fontSize: 18, marginRight: 10 }}>{searchResultEmoji(r)}</Text>
                   <View style={{ flex: 1 }}>
                     {Platform.OS === 'web' ? (
                       <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

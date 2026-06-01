@@ -11,7 +11,7 @@
 // the ranking + label + constants layer on top.
 // ============================================================
 
-import { haversineDistance, computeSpecificity, type SearchBoxResult } from './geo';
+import { haversineDistance, computeSpecificity, tricigoCategoryEmoji, type SearchBoxResult } from './geo';
 import { stripAccents } from './fuzzyMatch';
 
 /** Unified typeahead debounce. Replaces the old per-app 200/250/350/500 ms spread. */
@@ -162,4 +162,98 @@ export function rankSearchResults<T extends ScorableResult>(
     }))
     .sort((a, b) => a.bucket - b.bucket || b.score - a.score || a.i - b.i)
     .map((x) => x.r);
+}
+
+const GENERIC_PIN = '📍';
+
+// Raw provider/OSM/Foursquare category substring → emoji (first match wins).
+// Lets the long-tail of categories that aren't in the 20-word tricigo
+// vocabulary still get a meaningful icon. Order specific-before-generic.
+const RAW_CATEGORY_EMOJI: ReadonlyArray<readonly [string, string]> = [
+  ['post_office', '📮'],
+  ['public_transport', '🚌'], ['platform', '🚌'], ['stop_position', '🚌'],
+  ['bus', '🚌'], ['transit', '🚌'], ['railway', '🚉'], ['train', '🚉'], ['airport', '✈️'],
+  ['landmark', '🏛️'], ['historical', '🏛️'], ['historic', '🏛️'], ['monument', '🏛️'],
+  ['government', '🏛️'], ['civic', '🏛️'], ['embassy', '🏛️'], ['courthouse', '🏛️'], ['city_hall', '🏛️'],
+  ['accommodation', '🏨'], ['hotel', '🏨'], ['lodging', '🏨'], ['hostel', '🏨'], ['motel', '🏨'],
+  ['campground', '🏕️'],
+  ['eat_and_drink', '🍽️'], ['restaurant', '🍽️'], ['dining', '🍽️'], ['breakfast', '🍽️'],
+  ['snack', '🍽️'], ['fast_food', '🍽️'],
+  ['coffee', '☕'], ['cafe', '☕'], ['nightclub', '🍺'], ['pub', '🍺'], ['bar', '🍺'],
+  ['hospital', '🏥'], ['clinic', '🏥'], ['doctor', '🏥'], ['pharmacy', '💊'], ['spa', '💆'],
+  ['university', '🎓'], ['college', '🎓'], ['school', '🎓'], ['education', '🎓'], ['library', '📚'],
+  ['supermarket', '🛒'], ['grocery', '🛒'], ['market', '🛒'],
+  ['shopping_mall', '🛍️'], ['retail', '🛍️'], ['store', '🛍️'], ['mall', '🛍️'], ['shop', '🛍️'],
+  ['bank', '🏦'], ['atm', '🏧'], ['fuel', '⛽'], ['gas_station', '⛽'],
+  ['gallery', '🖼️'], ['museum', '🖼️'], ['theatre', '🎭'], ['theater', '🎭'], ['cinema', '🎬'],
+  ['church', '⛪'], ['worship', '⛪'], ['religious', '⛪'], ['mosque', '⛪'], ['temple', '⛪'],
+  ['botanical', '🌳'], ['garden', '🌳'], ['plaza', '🌳'], ['square', '🌳'], ['park', '🌳'],
+  ['stadium', '🏟️'], ['arena', '🏟️'], ['sports', '🏟️'], ['recreation', '🏟️'],
+  ['gym', '🏋️'], ['swimming', '🏊'], ['pool', '🏊'], ['scuba', '🤿'],
+  ['zoo', '🦁'], ['beach', '🏖️'], ['river', '🏞️'], ['fountain', '⛲'],
+  ['professional', '🏢'], ['office', '🏢'], ['engineering', '🏢'], ['legal', '🏢'], ['b2b', '🏢'],
+];
+
+// Spanish venue keywords scanned over the (accent-stripped) name. Catches
+// famous places whose stored category is generic, e.g. "Capitolio Nacional".
+const NAME_KEYWORD_EMOJI: ReadonlyArray<readonly [string, string]> = [
+  ['capitolio', '🏛️'], ['catedral', '⛪'], ['iglesia', '⛪'], ['convento', '⛪'], ['ermita', '⛪'],
+  ['museo', '🖼️'], ['teatro', '🎭'], ['cine', '🎬'], ['estadio', '🏟️'],
+  ['hospital', '🏥'], ['policlinico', '🏥'], ['clinica', '🏥'], ['farmacia', '💊'],
+  ['universidad', '🎓'], ['escuela', '🎓'], ['instituto', '🎓'], ['colegio', '🎓'], ['biblioteca', '📚'],
+  ['parque', '🌳'], ['plaza', '🌳'], ['jardin', '🌳'],
+  ['restaurante', '🍽️'], ['paladar', '🍲'], ['cafeteria', '☕'],
+  ['hotel', '🏨'], ['hostal', '🏨'], ['casa particular', '🏨'],
+  ['supermercado', '🛒'], ['mercado', '🛒'], ['tienda', '🛍️'],
+  ['gasolinera', '⛽'], ['servicentro', '⛽'], ['cupet', '⛽'],
+  ['aeropuerto', '✈️'], ['terminal', '🚉'], ['estacion', '🚉'],
+  ['banco', '🏦'], ['cadeca', '🏧'],
+  ['playa', '🏖️'], ['malecon', '🏖️'],
+  ['embajada', '🏛️'], ['ministerio', '🏛️'],
+];
+
+function hasCrossStreet(addr: string): boolean {
+  const a = addr.toLowerCase();
+  return a.includes(' e/ ') || a.includes(' entre ');
+}
+
+/**
+ * Resolve a category emoji for ANY search result, so the dropdown never falls
+ * back to a bare pin when there's a usable signal. Fallback chain (first wins):
+ *   1. the mapped tricigo category (the 20-word vocabulary)
+ *   2. street → 🛣️, "X e/ Y" → 🔀
+ *   3. the raw provider/OSM category (long tail)
+ *   4. a Spanish keyword in the name (rescues "Capitolio Nacional" → 🏛️)
+ *   5. 📍 — only when nothing else matched
+ */
+export function searchResultEmoji(result: {
+  tricigoCategory?: string | null;
+  category?: string | null;
+  place_name?: string | null;
+  address?: string | null;
+}): string {
+  if (result.tricigoCategory) {
+    const e = tricigoCategoryEmoji(result.tricigoCategory);
+    if (e !== GENERIC_PIN) return e;
+  }
+
+  const addr = result.address ?? '';
+  if (result.category === 'street') {
+    return hasCrossStreet(addr) ? '🔀' : '🛣️';
+  }
+  if (hasCrossStreet(addr)) return '🔀';
+
+  const raw = stripAccents((result.category ?? '').toLowerCase());
+  if (raw && raw !== 'other') {
+    for (const [key, emoji] of RAW_CATEGORY_EMOJI) {
+      if (raw.includes(key)) return emoji;
+    }
+  }
+
+  const name = stripAccents(`${result.place_name ?? ''} ${addr}`.toLowerCase());
+  for (const [key, emoji] of NAME_KEYWORD_EMOJI) {
+    if (name.includes(key)) return emoji;
+  }
+
+  return GENERIC_PIN;
 }
