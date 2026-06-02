@@ -1277,7 +1277,7 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 | 00363 | `find_intersection_point` — dirección canónica | Devuelve la forma canónica "X e/ Y y Z" |
 | 00364 | Re-categorizar `other` cuba_pois (DATA) | ~1241 filas → transport/restaurant/religion/shop/park; conservador, idempotente |
 
-**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5`. (Al cierre 2026-06-01 la última es **00366**; próxima libre **00367**. Ojo: 00365/00366 son de *device-registry/new-device email*, no de search.)
+**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5`. (Al cierre 2026-06-01 la última es **00367**; próxima libre **00368**. Ojo: 00365/00366 son de *device-registry* y 00367 de *launch-readiness* (restore wallet gate), no de search.)
 
 #### Debugging guide cuando aparezca un bug nuevo de search
 
