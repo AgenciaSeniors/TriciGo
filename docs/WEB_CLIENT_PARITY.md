@@ -443,7 +443,7 @@ Las **8 áreas** (Auth, Booking, Tracking, Chat, Wallet, Rides, Perfil, Regalo) 
 
 ## Ronda 2 — segunda pasada fina (2026-06-01)
 
-Tras cerrar las 8 áreas, una re-auditoría dirigida (Home del rider móvil, Notificaciones, y los `⚠️` residuales) encontró más huecos. Se atacan en PRs separados (C → Precio → Home → Web Push).
+Tras cerrar las 8 áreas, una re-auditoría dirigida (Home del rider móvil, Notificaciones, y los `⚠️` residuales) encontró más huecos. Se atacaron en PRs separados: **C** (pulidos, #370) → **Precio** (#373) → **Home** (#375). **Web Push** se evaluó y se **descartó** (decisión de producto, ver abajo).
 
 ### PR-C — Pulidos (cerrado)
 | Hueco | Fix | Archivo |
@@ -472,8 +472,13 @@ Nuevo `components/HomeDashboard.tsx` montado **debajo del formulario de `/book`*
 
 Cosméticos diferidos (no portados): clima, chip "N conductores activos", blog inline.
 
-### Pendiente de esta ronda (siguiente PR)
-- **Web Push** (infra grande): service worker + VAPID + dispatch backend, para notifs con la pestaña cerrada.
+### Web Push — DESCARTADO (decisión de producto, 2026-06-01)
+Se evaluó (service worker + VAPID + tabla `web_push_subscriptions` + extender el EF `send-push` para fan-out web) pero **no se implementa**. Razones:
+- La **app móvil ya tiene push nativo** (Expo → FCM/APNs vía `send-push`); esto sólo emparejaría la web.
+- **Alcance parcial en web**: en iOS sólo funciona como PWA instalada (16.4+); aporta poco frente al costo de infra + claves/secrets + deploy.
+- No bloquea el lanzamiento.
+
+Plan completo archivado por si se retoma (tabla de suscripciones, SW, registro de permiso, dispatch con VAPID, pasos manuales). **No re-marcar como hueco en futuras auditorías** salvo que producto lo pida.
 
 **Verificación PR-C:** `pnpm --filter @tricigo/web check-types` verde; `/notifications`, `/wallet`, `/support`, `/track/[id]` render 200 en dev sin error markers.
 **Verificación PR-Precio:** `pnpm --filter @tricigo/web check-types` verde; `/rides/[id]` render 200 en dev sin error markers.
