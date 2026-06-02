@@ -115,7 +115,7 @@ Both apps call `Sentry.captureException` in the ErrorBoundary `onError`, use `Se
 
 ## Pre-launch checklist
 
-- [~] **G1** — restore commission affordability gate in `accept_ride_v2`. *Migration `00367` written + committed; NOT yet applied to prod (pending explicit per-apply authorization). Blocking before onboarding paying drivers at volume.*
+- [x] **G1** — restore commission affordability gate in `accept_ride_v2`. *Migration `00367` **applied to prod** and verified (Luis, balance 0 → blocked; Papa → allowed).*
 - [x] **G2** — persist a sustained-offline completion via `executeOrQueue` + flush on reconnect. *Implemented (`ride.complete` handler + driver wiring + tests).*
 - [x] **G3** — error boundaries in both apps. *(already implemented)*
 - [x] **G4** — Sentry `captureException` wired. *(already implemented)*
@@ -139,3 +139,50 @@ FROM driver_profiles dp JOIN users u ON u.id=dp.user_id
 LEFT JOIN wallet_accounts wa ON wa.user_id=dp.user_id AND wa.account_type='tricicoin'
 WHERE dp.status='approved';
 ```
+
+---
+
+# Round 2 — more everyday edge cases (2026-06-01)
+
+Second pass auditing additional real-world scenarios, **grounded against prod**. Headline: at current volume (7 drivers, 173 rides, 122 canceled) **almost none of these paths have fired** — this is preventive correctness, not active bugs.
+
+## Scenario: customer / driver cancellations
+✅ **Implemented and live.** `cancel_ride` calls `apply_cancellation_fee` + `apply_cancellation_penalty` (both confirmed live).
+- **Customer fee** (`cancellation_fee_configs`): free while `searching` or within the free window after accept; then en-route / arrived / in-progress fees. **0 fees charged ever** so far (all real cancels were free-window/searching at this volume).
+- **Driver penalty** (`cancellation_penalties`): progressive amount per 24h. **Exercised: 39 rows, 18 with a charge > 0.** Works.
+- **Notification**: push + SMS triggers fire on status → canceled.
+- **Note:** `cancellation_penalties` has NO `is_blocked` column — the "block after 5th cancel" described by exploratory tooling was stale; the live table only records `amount`/`reason`.
+
+**Deferred (documented, not blocking):**
+- No auto **re-dispatch** when the *driver* cancels — the customer must re-request. *Why deferred:* UX friction, not data loss; low volume.
+- No status guard: a driver can call `cancel_ride` on an `in_progress` trip (no fee, but the progressive penalty still applies). *Why deferred:* penalty already disincentivizes; rare.
+- `cancellation_reason` is free text (no controlled vocabulary). *Why deferred:* analytics nicety.
+
+## Scenario: payment failure / negative balance
+**Dormant at current volume.** **0 negative `tricicoin` balances** (the −61,804 are legacy `driver_cash`, BUG-211). All 173 rides are `payment_status='not_applicable'` — the async ride-payment path (tropipay/netopia *for rides*) has **never** been exercised (NETOPIA is only used for wallet recharges via `payment_intents`).
+- `complete_ride_and_pay` (live 00340) debits commission from `tricicoin`; **no negative guard at completion**, so in theory a driver could go negative — but the **G1 accept-time gate (00367) now blocks accepting without enough balance**, which is the practical mitigation.
+- **Deferred:** retry/reconciliation for a stuck async ride payment. *Why deferred:* path is dormant; no real occurrences.
+
+## Scenario: app killed mid-trip (crash recovery)
+✅ **Solid.** Both apps reconcile from the server on mount (`getActiveTrip` / `getActiveRide`), keep local state on network error with retry, and the driver's background location task persists `{driverId, rideId}` to SecureStore so it survives a kill.
+- **Fixed this round (F3):** the background task kept the *old* `ride_id` after a completion (the store retains the completed trip for the earnings screen, so `useDriverLocation`'s effect cleanup didn't fire) → it could upload locations against a finished ride. Now `useDriverRide` calls `stopBgLocationTracking()` on completion (online + offline-queued paths) and on cancel.
+
+## Scenario: fraud / abuse / duplicate requests
+- **Duplicate / double-tap** ✅ — `rides_one_active_per_customer` partial unique index + trigger + client `isSubmittingRef` debounce. 2nd request gets `customer_has_active_ride`.
+- **Ride-creation rate limit** — **was missing; fixed this round (F1).** New trigger `trg_rides_rate_limit` (migration `00368`) calls `check_rate_limit('ride_create:<uid>', 6, 60)` only for customer-initiated inserts (skips cron/service_role). Complements the active-ride index (which only caps concurrent, not sequential create→cancel spam). Client maps `ride_rate_limited` to a friendly toast.
+- **Self-ride** (customer == driver) — **accepted by product** (per CLAUDE.md); commission still flows; no guard by design.
+- **GPS mock / spoofed location** — ❌ **no detection (DEFERRED).** A driver using a fake-GPS app can fake arrival/distance. `update_ride_status_v2` proximity gate checks distance, not authenticity. *Why deferred this round:* needs `expo-location` mock-flag plumbing + policy on how to react; owner chose to defer. **Recommended before scaling driver supply.**
+- **Distance fraud at completion** — mitigated: client clamp (1.5× / 100 km ceiling) + server cap (1.3× of estimate inside `complete_ride_and_pay`). Raw `actual_distance_m` stored for audit.
+- **Proximity override** — 5-min consent window, no attestation. *Deferred:* low risk at volume.
+
+## G5 — scale readiness (read-only analysis)
+Hot path: `createRide → dispatch_ride → find_best_drivers` (spatial `ST_DWithin` on `driver_profiles`) → insert N `ride_offers` → trigger `notify_driver_new_offer` (one `pg_net.http_post` **per offer**).
+- **Indexes are in place** ✅: `idx_driver_profiles_location` (GIST on `current_location`); `ride_offers` has `(driver_profile_id,status,expires_at)`, `(ride_id,status)`, and the unique `(ride_id,driver_profile_id)`. The spatial match and offer lookups are indexed — no obvious missing-index bottleneck.
+- **Primary scale risk: push fan-out.** Each dispatch round inserts ~10 offers, each firing a `pg_net.http_post` to `send-push`. At high concurrency this is the most likely pressure point (HTTP fan-out + the per-minute crons scanning `ride_offers`/`rides`).
+- **Recommended load test (NOT on prod):** on a Supabase **branch**, seed synthetic online drivers around a city center + drive N concurrent `createRide` calls; measure `dispatch_ride`/`find_best_drivers` latency and `pg_net` queue depth. Define thresholds (e.g. dispatch p95 < 2s at X concurrent requests) before opening a city. Deferred to an ops task — current volume doesn't require it yet.
+
+## Round-2 checklist
+- [x] **F1** — ride-creation rate limit (migration `00368` + client toast). *Migration committed; apply to prod pending explicit authorization.*
+- [x] **F3** — stop background location on completion/cancel (driver).
+- [ ] **GPS mock detection** — deferred; recommended before scaling driver supply.
+- [ ] **Load test on a branch** — deferred ops task; indexes already verified present.
