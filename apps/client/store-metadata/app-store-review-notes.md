@@ -8,8 +8,9 @@
 
 ```
 Login type: SMS OTP (phone number)
-Phone: +1 415 555 0100
-OTP code: 000000  (test override active in DEV/Apple Review accounts)
+Phone: +5355550100
+OTP code: 000000
+(Demo number — no real SMS is sent. Enter the fixed code above directly.)
 
 Alternative:
 Email: reviewer-rider@tricigo.com

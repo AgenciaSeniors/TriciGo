@@ -77,7 +77,7 @@ The disclosure satisfies all four Google requirements:
 | Time | Scene | Notes |
 |---|---|---|
 | 0:00 - 0:05 | Driver app home, driver toggles online with a brand-new install / freshly-granted foreground-only permissions. | Use a test device that has NEVER had background permission granted for `app.tricigo.driver` (or revoke it via Settings → Apps → TriciGo Conductor → Permissions → Location → "Allow only while using the app" before recording). |
-| 0:05 - 0:09 | A test ride from another device (or simulated via admin tool) is dispatched. Driver taps "Aceptar". | Use a pre-canned test ride with a hardcoded passenger from review credentials (`+1 415 555 0102` for example). |
+| 0:05 - 0:09 | A test ride from another device (or simulated via admin tool) is dispatched. Driver taps "Aceptar". | Use a pre-canned test ride with a hardcoded passenger from review credentials (`+5355550102` for example). |
 | 0:09 - 0:14 | Prominent disclosure `Alert.alert` appears with the full Spanish text. Camera focuses on the alert; pause briefly so the reviewer can read. | This is the key proof — make sure text is fully visible. |
 | 0:14 - 0:17 | Driver taps "Permitir". | |
 | 0:17 - 0:22 | Android system prompt appears asking "Allow TriciGo Conductor to access this device's location?". On Android 11+ the flow may be two-step (while-using → always); on Android 13+ "Allow all the time" is a direct option. Tap whichever grants Always / Background. **Test the actual flow on your target Android version before recording.** | Most reliable: record on Android 13+. |
@@ -98,8 +98,8 @@ The disclosure satisfies all four Google requirements:
 
 The Play Console reviewer needs to verify the disclosure flow themselves. Provide the same demo credentials documented in `apps/driver/store-metadata/app-store-review-notes.md`:
 
-- Phone: `+1 415 555 0101`
-- OTP code: `000000` (test override active in DEV / Apple Review accounts)
+- Phone: `+5355550101`
+- OTP code: `000000` (demo number — no real SMS sent)
 
 The reviewer account is pre-onboarded as an approved driver, currently offline, with one example completed ride in earnings history. The first time the reviewer accepts a ride from the test dispatch tool, the prominent disclosure fires as documented in §4.
 
@@ -127,7 +127,7 @@ The reviewer account is pre-onboarded as an approved driver, currently offline, 
 - [ ] Record the 25-28s video per the storyboard in §5.
 - [ ] Upload to YouTube unlisted; paste link into the Play Console form.
 - [ ] Capture the disclosure screenshot and save as `apps/driver/store-metadata/screenshots/06-bg-location-disclosure.png`.
-- [ ] Verify the demo phone `+1 415 555 0101` has OTP override active in the backend (`send-sms-otp` DEV bypass) before submission.
+- [ ] Verify the demo phone `+5355550101` has OTP override active in the backend (`send-sms-otp` DEV bypass) before submission.
 - [ ] Submit the form. Google email response typically arrives within 24-72h.
 - [ ] If rejected, the email lists the specific issue. Most common reasons:
    - Video shows the system prompt **before** the disclosure (we explicitly avoid this — but record carefully).
