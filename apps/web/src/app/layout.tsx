@@ -37,14 +37,16 @@ export const metadata: Metadata = {
     title: 'TriciGo — Pedí tu viaje',
     description:
       'Solicita un viaje con TriciGo. Triciclos, motos y autos al mejor precio.',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'TriciGo - Pedí tu viaje' }],
+    // og:image is provided by the file-based app/opengraph-image.tsx (dynamic,
+    // uses the real wordmark logo). No explicit `images` here so it isn't
+    // overridden by the old static /og-image.png.
   },
   twitter: {
     card: 'summary_large_image',
     title: 'TriciGo — Pedí tu viaje',
     description:
       'Solicita un viaje con TriciGo. Rápido, seguro y al mejor precio.',
-    images: ['/og-image.png'],
+    // twitter:image also comes from app/opengraph-image.tsx (Next reuses it for Twitter).
   },
   metadataBase: new URL('https://tricigo.com'),
   alternates: {
