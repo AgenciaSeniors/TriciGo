@@ -115,11 +115,11 @@ Both apps call `Sentry.captureException` in the ErrorBoundary `onError`, use `Se
 
 ## Pre-launch checklist
 
-- [ ] **G1** — restore commission affordability gate in `accept_ride_v2` (migration + per-PR auth + apply). *Blocking before onboarding paying drivers at volume.*
-- [ ] **G2** — persist a sustained-offline completion via `executeOrQueue` + flush on reconnect.
+- [~] **G1** — restore commission affordability gate in `accept_ride_v2`. *Migration `00367` written + committed; NOT yet applied to prod (pending explicit per-apply authorization). Blocking before onboarding paying drivers at volume.*
+- [x] **G2** — persist a sustained-offline completion via `executeOrQueue` + flush on reconnect. *Implemented (`ride.complete` handler + driver wiring + tests).*
 - [x] **G3** — error boundaries in both apps. *(already implemented)*
 - [x] **G4** — Sentry `captureException` wired. *(already implemented)*
-- [ ] **D** — run the 3 scenario tests on device (double-accept, busy driver, offline) and capture screenshots.
+- [ ] **D** — run the 3 scenario tests on device (double-accept, busy driver, offline) and capture screenshots. *Playbook: `docs/SCENARIO_TESTS.md`.*
 - [ ] Re-confirm all dispatch crons remain `active` on launch day (`SELECT jobname, active FROM cron.job`).
 - [ ] Decide a policy/automation to keep `is_financially_eligible` honest (or remove it in favor of the live accept-time gate).
 
