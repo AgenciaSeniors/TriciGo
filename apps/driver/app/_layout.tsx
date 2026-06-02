@@ -23,7 +23,7 @@ import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets, setupRuntimeLogging } from '@tricigo/utils';
-import { useMapboxOffline } from '@/hooks/useMapboxOffline';
+import { useDynamicOfflineMap } from '@/hooks/useDynamicOfflineMap';
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
 // FD1: importing for side effect — registers the TaskManager.defineTask
 // call at module scope. Must happen at JS bundle load (before the OS
@@ -189,8 +189,9 @@ function RootNavigator() {
     return () => { cancelled = true; };
   }, []);
 
-  // Download Havana offline map tiles (runs once per week)
-  useMapboxOffline();
+  // Dynamic offline maps: download the current grid cell on demand,
+  // nationwide, under Mapbox's per-device tile budget.
+  useDynamicOfflineMap();
   const router = useRouter();
   const navRef = useNavigationContainerRef();
 
