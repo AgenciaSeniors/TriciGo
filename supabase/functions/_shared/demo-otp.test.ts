@@ -6,6 +6,13 @@ describe('resolveDemoOtp', () => {
     expect(resolveDemoOtp('+5355555555', '+5355555555', '246810')).toBe('246810');
   });
 
+  it('supports a comma/space-separated DEMO_PHONE list (one demo number per app)', () => {
+    const list = '+5355550100, +5355550101';
+    expect(resolveDemoOtp('+5355550100', list, '000000')).toBe('000000');
+    expect(resolveDemoOtp('+5355550101', list, '000000')).toBe('000000');
+    expect(resolveDemoOtp('+5355559999', list, '000000')).toBeNull();
+  });
+
   it('returns null when the phone does not match DEMO_PHONE', () => {
     expect(resolveDemoOtp('+5351234567', '+5355555555', '246810')).toBeNull();
   });

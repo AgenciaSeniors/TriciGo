@@ -56,7 +56,7 @@ AVAILABILITY
 TriciGo Driver is rolling out city by city. Check the app for available service zones.
 
 DRIVER SUPPORT
-Need help? Contact us from the app or email conductores@tricigo.com
+Need help? Contact us from the app or email soporte@tricigo.com
 
 Join TriciGo Driver and start earning with your vehicle today!
 
@@ -73,5 +73,5 @@ https://tricigo.com/privacy
 Everyone
 
 ## Contact Information
-- Email: conductores@tricigo.com
+- Email: soporte@tricigo.com
 - Website: https://tricigo.com
