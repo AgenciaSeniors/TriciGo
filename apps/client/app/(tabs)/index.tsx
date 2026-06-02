@@ -26,6 +26,7 @@ import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
 import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
+import { useTestVehicles } from '@/hooks/useTestVehicles';
 import { SubmitPoiSheet } from '@tricigo/ui';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
@@ -2997,6 +2998,34 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     draft.pickup?.location?.latitude,
     draft.pickup?.location?.longitude,
   );
+
+  // Pre-launch map QA: toggle that injects synthetic moving vehicles so
+  // we can preview how peer markers render before real drivers are
+  // online. Gated to dev/demo builds — never shown to real users.
+  const vehiclePreviewAvailable =
+    __DEV__ || process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
+  const [vehiclePreview, setVehiclePreview] = useState(false);
+  useEffect(() => {
+    if (!vehiclePreviewAvailable) return;
+    AsyncStorage.getItem('client_vehicle_preview').then((val) => {
+      if (val === '1') setVehiclePreview(true);
+    }).catch(() => {});
+  }, [vehiclePreviewAvailable]);
+  const toggleVehiclePreview = useCallback(() => {
+    setVehiclePreview((prev) => {
+      const next = !prev;
+      AsyncStorage.setItem('client_vehicle_preview', next ? '1' : '0').catch(() => {});
+      return next;
+    });
+  }, []);
+  // Center the preview on the user's location (NOT on pickup — the real
+  // useNearbyVehicles needs a pickup, but the preview should work the
+  // instant the map opens).
+  const vehiclePreviewCenter = useMemo(
+    () => (userCenter ? { lat: userCenter[1], lng: userCenter[0] } : null),
+    [userCenter],
+  );
+  const previewVehicles = useTestVehicles(vehiclePreviewCenter, vehiclePreview);
   const nearestDriverETA = useMemo(() => {
     if (!draft.pickup?.location || !nearbyVehicles || nearbyVehicles.length === 0) return null;
     const distances = nearbyVehicles.map((v) => ({
@@ -3142,13 +3171,48 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         pickupLocation={draft.pickup?.location ?? null}
         dropoffLocation={draft.dropoff?.location ?? null}
         routeCoordinates={routeCoordinates ?? null}
-        nearbyVehicles={nearbyVehicles ?? []}
+        nearbyVehicles={vehiclePreview ? previewVehicles : (nearbyVehicles ?? [])}
         waypointLocations={draft.waypoints.filter((wp) => wp.location !== null).map((wp) => wp.location!)}
         // BUG-282 — open map at the user's actual location instead of the
         // demo-city fallback (São Paulo). userCenter resolves from cached
         // AsyncStorage instantly, then upgrades when GPS gives a fresh fix.
         initialUserCenter={userCenter}
       />
+
+      {/* Pre-launch map QA toggle — dev/demo only, never in production.
+          When ON, the map shows synthetic moving vehicles so the team
+          can preview how vehicle markers render before real drivers are
+          online. Mirrors the driver app's equivalent toggle. */}
+      {vehiclePreviewAvailable && (
+        <Pressable
+          onPress={toggleVehiclePreview}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: vehiclePreview }}
+          accessibilityLabel="Vehículos de prueba"
+          style={({ pressed }) => ({
+            position: 'absolute',
+            top: insets.top + 140,
+            left: 12,
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            backgroundColor: vehiclePreview ? '#FF4D00' : 'rgba(8, 8, 12, 0.85)',
+            borderWidth: 2,
+            borderColor: '#FFFFFF',
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.35,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 },
+            elevation: 16,
+            zIndex: 60,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Ionicons name="car-sport" size={24} color="#FFFFFF" />
+        </Pressable>
+      )}
 
       {/* Crowdsourcing — "Sugerir lugar" floating button (PR 3 of POI
           parity). Only visible when not searching/selecting addresses —
