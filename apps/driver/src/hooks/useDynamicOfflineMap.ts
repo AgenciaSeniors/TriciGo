@@ -74,6 +74,7 @@ async function ensurePack(region: {
     OFFLINE_PACK_MAX_ZOOM,
   );
 
+  console.log('[OfflineMap] createPack', region.cellKey, `~${tiles} tiles (z${OFFLINE_PACK_MIN_ZOOM}-${OFFLINE_PACK_MAX_ZOOM})`);
   await MapboxGL.offlineManager.createPack({
     name: region.cellKey,
     styleURL: MAP_STYLE_LIGHT,
@@ -87,6 +88,7 @@ async function ensurePack(region: {
   // just downloaded (it's where the driver is right now).
   const toDelete = planEviction(meta, OFFLINE_MAX_TILES, [region.cellKey]);
   for (const key of toDelete) {
+    console.log('[OfflineMap] evict LRU pack', key);
     await MapboxGL.offlineManager.deletePack(key).catch(() => {});
     delete meta[key];
   }
@@ -102,7 +104,10 @@ export function useDynamicOfflineMap(): void {
   const busyRef = useRef(false);
 
   useEffect(() => {
-    if (Platform.OS === 'web' || !MapboxGL || process.env.EXPO_PUBLIC_DEMO_MODE === 'true') {
+    // Native-only real feature (not a dev/demo toggle): runs in dev, demo
+    // and prod. Where there is no Cuban street data the RPC returns null
+    // and we no-op, so running everywhere is harmless.
+    if (Platform.OS === 'web' || !MapboxGL) {
       return;
     }
     let cancelled = false;
@@ -120,9 +125,14 @@ export function useDynamicOfflineMap(): void {
         // Mark resolved regardless of result so we don't hammer the RPC
         // while sitting in a streetless cell.
         lastPointRef.current = current;
-        if (region) await ensurePack(region);
-      } catch {
-        /* best-effort — map falls back to online/ambient cache */
+        if (region) {
+          console.log('[OfflineMap] region', region.cellKey, 'ensuring pack');
+          await ensurePack(region);
+        } else {
+          console.log('[OfflineMap] no street data near', latitude.toFixed(4), longitude.toFixed(4), '— no pack');
+        }
+      } catch (e) {
+        console.log('[OfflineMap] resolve failed (best-effort):', String((e as Error)?.message ?? e));
       } finally {
         busyRef.current = false;
       }
