@@ -462,9 +462,19 @@ Tras cerrar las 8 áreas, una re-auditoría dirigida (Home del rider móvil, Not
 |---|---|---|
 | Detalle sin desglose CUP por-km/por-min ni tachado | `rideService.getPricingSnapshot` → base + distancia (per_km×m/1000) + tiempo (per_min×s/60) en CUP (espejo del detalle móvil); fila "Tarifa estimada" tachada cuando el final difiere (BUG-293); fallback a unidades para rides sin snapshot | `rides/[id]/page.tsx` |
 
-### Pendientes de esta ronda (siguientes PRs)
-- **Home autenticada** (la web no tiene dashboard; el rider cae directo en `/book`): re-pedir último viaje + carrusel de promos (tocar→aplicar) + anuncios. Cosméticos diferidos: clima, chip de conductores activos, blog inline.
+### PR-Home — dashboard autenticado en /book (cerrado)
+Nuevo `components/HomeDashboard.tsx` montado **debajo del formulario de `/book`** (decisión de emplazamiento: el rider cae en `/book`, igual que el móvil donde el home ES la pantalla de reservar; sin cambiar rutas). Se auto-oculta si no hay nada. Sólo autenticado.
+| Sección | Fix | Datos |
+|---|---|---|
+| Re-pedir último viaje | card con `dropoff_address` + "Pedir de nuevo" → prefill del destino (`handleSetDropoff`) + scroll arriba | `rideService.getRideHistoryFiltered({pageSize:1, status:['completed']})` |
+| Promos | carrusel horizontal: código + `%OFF`/`centavos÷100 CUP` + "Hasta {fecha}"; tap → `/profile/referral` (igual que el móvil) | query directa `promotions` (is_active + no-expirado, 6) — no hay service |
+| Anuncios | cards imagen/título/cuerpo + CTA (interna `router.push` / externa `window.open`) | `announcementService.getActive(null, 6)` |
+
+Cosméticos diferidos (no portados): clima, chip "N conductores activos", blog inline.
+
+### Pendiente de esta ronda (siguiente PR)
 - **Web Push** (infra grande): service worker + VAPID + dispatch backend, para notifs con la pestaña cerrada.
 
 **Verificación PR-C:** `pnpm --filter @tricigo/web check-types` verde; `/notifications`, `/wallet`, `/support`, `/track/[id]` render 200 en dev sin error markers.
 **Verificación PR-Precio:** `pnpm --filter @tricigo/web check-types` verde; `/rides/[id]` render 200 en dev sin error markers.
+**Verificación PR-Home:** `pnpm --filter @tricigo/web check-types` verde; `/book` render 200 en dev sin error markers.

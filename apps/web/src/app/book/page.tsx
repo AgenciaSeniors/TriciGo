@@ -15,6 +15,7 @@ import { fetchRoute, reverseGeocode } from '../../services/geoService';
 import { useAuth } from '../providers';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { SplitInviteBanner } from '@/components/SplitInviteBanner';
+import { HomeDashboard } from '@/components/HomeDashboard';
 
 /* Dynamic import — Mapbox GL JS requires `window` */
 function MapLoadingFallback() {
@@ -1902,6 +1903,18 @@ export default function BookPage() {
             </button>
         </div>
 
+        {/* Home dashboard (parity con el home móvil NativeHomeScreen): re-pedir
+            último viaje + promos + anuncios, debajo del formulario de reserva.
+            Sólo para usuarios autenticados; se auto-oculta si no hay nada. */}
+        {user && (
+          <HomeDashboard
+            userId={user.id}
+            onRebook={(loc) => {
+              handleSetDropoff(loc);
+              if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        )}
 
         {/* Spacer for fixed bottom CTA on mobile */}
         <div style={{ height: '5rem' }} className="booking-cta-spacer" />
