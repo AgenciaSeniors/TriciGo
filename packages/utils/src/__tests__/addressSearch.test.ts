@@ -178,4 +178,19 @@ describe('searchResultEmoji', () => {
   it('returns the generic pin only when there is no category signal at all', () => {
     expect(searchResultEmoji({ place_name: 'Lugar X', category: '', address: 'una direccion cualquiera' })).toBe('📍');
   });
+
+  it('keeps a POI category emoji when its Cuban address contains "e/" (not the cross-street icon)', () => {
+    expect(
+      searchResultEmoji({
+        tricigoCategory: 'other',
+        category: 'opera_and_ballet',
+        place_name: 'Teatro Lírico Nacional de Cuba',
+        address: 'Zulueta #253 e/ Animas y Neptuno',
+      }),
+    ).toBe('🎭');
+  });
+
+  it('still returns the cross-street icon for a bare "X e/ Y" address with no POI/category signal', () => {
+    expect(searchResultEmoji({ address: 'Belascoaín e/ San Lázaro y Ánimas' })).toBe('🔀');
+  });
 });

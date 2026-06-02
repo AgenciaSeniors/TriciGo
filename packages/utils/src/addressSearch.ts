@@ -221,10 +221,11 @@ function hasCrossStreet(addr: string): boolean {
  * Resolve a category emoji for ANY search result, so the dropdown never falls
  * back to a bare pin when there's a usable signal. Fallback chain (first wins):
  *   1. the mapped tricigo category (the 20-word vocabulary)
- *   2. street → 🛣️, "X e/ Y" → 🔀
+ *   2. an explicit street result → 🛣️, or "X e/ Y" → 🔀
  *   3. the raw provider/OSM category (long tail)
  *   4. a Spanish keyword in the name (rescues "Capitolio Nacional" → 🏛️)
- *   5. 📍 — only when nothing else matched
+ *   5. a bare "X e/ Y" address with no other signal → 🔀
+ *   6. 📍 — only when nothing else matched
  */
 export function searchResultEmoji(result: {
   tricigoCategory?: string | null;
@@ -241,7 +242,6 @@ export function searchResultEmoji(result: {
   if (result.category === 'street') {
     return hasCrossStreet(addr) ? '🔀' : '🛣️';
   }
-  if (hasCrossStreet(addr)) return '🔀';
 
   const raw = stripAccents((result.category ?? '').toLowerCase());
   if (raw && raw !== 'other') {
@@ -254,6 +254,12 @@ export function searchResultEmoji(result: {
   for (const [key, emoji] of NAME_KEYWORD_EMOJI) {
     if (name.includes(key)) return emoji;
   }
+
+  // Bare intersection-style address ("X e/ Y") with no POI name, category, or
+  // keyword signal → cross-street. Comes LAST so a named POI that merely carries
+  // a Cuban "e/" address (e.g. "Teatro … e/ Animas y Neptuno") keeps its own
+  // category emoji instead of being mislabeled 🔀.
+  if (hasCrossStreet(addr)) return '🔀';
 
   return GENERIC_PIN;
 }
