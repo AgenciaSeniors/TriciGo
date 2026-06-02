@@ -438,3 +438,28 @@ Fuente de verdad = `app/wallet/gift.tsx` + `app/gift/[code].tsx`. **Resultado: y
 ## Estado final de la re-auditoría
 
 Las **8 áreas** (Auth, Booking, Tracking, Chat, Wallet, Rides, Perfil, Regalo) fueron auditadas a grano fino y cerradas. Hallazgo macro: la web estaba **mucho más completa** de lo que indicaba el doc grueso (Fase 0–6), e incluso **por delante** del client nativo en varios puntos (ETA por ruta real, selector corporativo, deviceFingerprint, provider dinámico, página de recibos, cola offline de chat, paginación, desgloses de tarifa). Los gaps reales cerrados fueron puntuales y de correctitud. **Follow-ups documentados** (features más pesadas, no bloqueantes): split-fare; barra de progreso + polyline conductor→pickup + banners de inactividad en tracking; corporate onboarding/empleados; safety incidentes/compartir-activo; settings selector de pago; "Este mes" en wallet; mapa + bloque cargo en detalle de viaje; QR web del regalo.
+
+---
+
+## Ronda 2 — segunda pasada fina (2026-06-01)
+
+Tras cerrar las 8 áreas, una re-auditoría dirigida (Home del rider móvil, Notificaciones, y los `⚠️` residuales) encontró más huecos. Se atacan en PRs separados (C → Precio → Home → Web Push).
+
+### PR-C — Pulidos (cerrado)
+| Hueco | Fix | Archivo |
+|---|---|---|
+| Notificación web no navegaba al tocar | tap → marca leída + `router.push('/rides/{ride_id}')` (parity con `handleTap` móvil) | `notifications/page.tsx` |
+| OTP de entrega no visible en track (cargo) | bloque del código de 4 dígitos en la card de envío mientras el viaje está activo (copiar al tocar), espejo de `ride/[id]` móvil; `delivery_otp` agregado al state (`getDeliveryDetails` ya lo traía con `select('*')`) | `track/[id]/page.tsx` |
+| Wallet empty-state sin CTA | "Mostrar todos" (resetea filtro) / "Recargar saldo" (scroll a `#wallet-recharge`); `WebEmptyState` extendido con `onClick` | `wallet/page.tsx`, `WebEmptyState.tsx` |
+| Completado sin stats distancia/tiempo | fila "X km · Y min" en la Fare Card al completar, con el clamp BUG-291 (cap estimado×1.3/100km) de `RideCompleteView` | `track/[id]/page.tsx` |
+| `/support` sin contacto directo | tarjetas WhatsApp (`wa.me/5355555555`) + correo (`soporte@tricigo.com`), igual que el hub móvil; el FAQ ya vive en `/help` | `support/page.tsx` |
+
+### Confirmados NO-gaps (no se tocan)
+Íconos por tipo de vehículo (web ya `getVehicleIcon`), copiar ID/compartir en detalle (diseño), rotación de copy de búsqueda (ambos estáticos), revocar token de compartir (ninguno lo implementa — expira 24h).
+
+### Pendientes de esta ronda (siguientes PRs)
+- **Precio en detalle**: desglose CUP por-km/por-min + estimado tachado vs final (`getPricingSnapshot`) en `rides/[id]`.
+- **Home autenticada** (la web no tiene dashboard; el rider cae directo en `/book`): re-pedir último viaje + carrusel de promos (tocar→aplicar) + anuncios. Cosméticos diferidos: clima, chip de conductores activos, blog inline.
+- **Web Push** (infra grande): service worker + VAPID + dispatch backend, para notifs con la pestaña cerrada.
+
+**Verificación PR-C:** `pnpm --filter @tricigo/web check-types` verde; `/notifications`, `/wallet`, `/support`, `/track/[id]` render 200 en dev sin error markers.

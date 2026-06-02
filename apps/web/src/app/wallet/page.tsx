@@ -530,7 +530,7 @@ export default function WalletPage() {
         </Link>
 
         {/* ═══ Recharge section ═══ */}
-        <div className="wallet-section-card" style={{ marginBottom: '1rem' }}>
+        <div id="wallet-recharge" className="wallet-section-card" style={{ marginBottom: '1rem' }}>
           <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>
             Comprar créditos de viaje
           </p>
@@ -808,6 +808,9 @@ export default function WalletPage() {
               icon="💰"
               title={filter !== 'all' ? 'Sin transacciones en esta categoria' : 'Sin transacciones'}
               description="Tus movimientos de TriciCoin apareceran aqui."
+              action={filter !== 'all'
+                ? { label: 'Mostrar todos', onClick: () => setFilter('all') }
+                : { label: 'Recargar saldo', onClick: () => document.getElementById('wallet-recharge')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
             />
           )}
 
