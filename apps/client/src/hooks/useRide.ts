@@ -1123,6 +1123,19 @@ export function useRideActions() {
         } catch {
           setFlowStep('selecting');
         }
+      } else if (errMsg.includes('ride_rate_limited')) {
+        // F1 (00368): server-side throttle on ride creation. Friendly,
+        // non-destructive — keep the user on 'selecting' so they can retry
+        // in a moment without losing their pickup/dropoff.
+        setFlowStep('selecting');
+        Toast.show({
+          type: 'info',
+          text1: i18next.t('rider:ride.rate_limited_title', { defaultValue: 'Esperá un momento' }),
+          text2: i18next.t('rider:ride.rate_limited_msg', {
+            defaultValue: 'Estás pidiendo viajes muy seguido. Probá de nuevo en unos segundos.',
+          }),
+          visibilityTime: 5000,
+        });
       } else {
         setError(errMsg);
         setFlowStep('selecting');
