@@ -192,6 +192,7 @@ export default function TrackRidePage() {
     recipient_name?: string; recipient_phone?: string; package_description?: string;
     package_category?: string; estimated_weight_kg?: number; client_accompanies?: boolean;
     pickup_photo_url?: string | null; delivery_photo_url?: string | null;
+    delivery_otp?: string | null;
   } | null>(null);
   const statusSteps = useStatusSteps();
 
@@ -1241,6 +1242,31 @@ export default function TrackRidePage() {
                   <span className="track-delivery-badge">Acompanando</span>
                 )}
               </div>
+              {/* Delivery OTP — visible while the cargo ride is active so the
+                  rider can hand the 4-digit code to the recipient (the driver
+                  asks for it at drop-off). Parity with mobile ride/[id]. */}
+              {!isTerminal && deliveryDetails.delivery_otp && (
+                <button
+                  type="button"
+                  onClick={() => { try { navigator.clipboard?.writeText(deliveryDetails.delivery_otp || ''); } catch { /* clipboard unavailable */ } }}
+                  title="Toca para copiar"
+                  style={{
+                    width: '100%', margin: '0 0 12px', padding: '12px',
+                    background: 'rgba(255,77,0,0.06)', border: '1px solid var(--primary)',
+                    borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 2 }}>
+                    Codigo para el destinatario
+                  </div>
+                  <div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: 8, color: 'var(--primary)' }}>
+                    {deliveryDetails.delivery_otp}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 2 }}>
+                    El conductor lo pedira al entregar · toca para copiar
+                  </div>
+                </button>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 'var(--text-sm)' }}>
                 {deliveryDetails.recipient_name && (
                   <div className="track-delivery-row"><span>Destinatario: </span><strong>{deliveryDetails.recipient_name}</strong></div>
@@ -1303,6 +1329,22 @@ export default function TrackRidePage() {
                 </span>
               </div>
             )}
+            {/* Distancia · tiempo del viaje completado (parity con RideCompleteView).
+                Mismo clamp defensivo BUG-291: cap a estimado×1.3 (o 100km) para que
+                una muestra GPS corrupta nunca muestre "24.000 km". */}
+            {ride.status === 'completed' && ride.actual_distance_m != null && (() => {
+              const HARD_CEILING_M = 100_000;
+              const estM = ride.estimated_distance_m ?? 0;
+              const capM = estM > 0 ? Math.min(estM * 1.3, HARD_CEILING_M) : HARD_CEILING_M;
+              const km = (Math.min(ride.actual_distance_m, capM) / 1000).toFixed(1);
+              const mins = Math.round((ride.actual_duration_s ?? 0) / 60);
+              return (
+                <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  <span>{km} km</span>
+                  <span>{mins} min</span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Recibo — descargar (HTML imprimible → PDF) o enviar por email.

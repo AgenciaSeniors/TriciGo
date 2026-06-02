@@ -379,7 +379,15 @@ export default function NotificationsPage() {
             {items.map((notif, index) => (
               <button
                 key={notif.id}
-                onClick={() => !notif.read && handleMarkRead(notif.id)}
+                onClick={() => {
+                  if (!notif.read) handleMarkRead(notif.id);
+                  // Deep link to the related ride (parity with mobile handleTap →
+                  // /ride/{ride_id}). Web detail route is /rides/[id].
+                  const rid = notif.data && typeof (notif.data as Record<string, unknown>).ride_id === 'string'
+                    ? (notif.data as Record<string, string>).ride_id
+                    : null;
+                  if (rid) router.push(`/rides/${rid}`);
+                }}
                 aria-label={notif.read ? notif.title : t('notifications.mark_read_aria', { title: notif.title })}
                 style={{
                   display: 'flex',
