@@ -4,6 +4,7 @@ import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus } from '@tricigo/api';
 import { triggerHaptic, playSound, logger, mapLogger } from '@tricigo/utils';
+import { stopBgLocationTracking } from '@/services/locationBackgroundTask';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -682,6 +683,10 @@ export function useDriverRideActions() {
               }),
               visibilityTime: 5000,
             });
+            // F3 — the driver is done with this trip from their side; stop the
+            // background task so it doesn't keep uploading to this ride_id while
+            // the completion sits queued for replay.
+            stopBgLocationTracking().catch(() => { /* best-effort */ });
             completingRef.current = false;
             useDriverRideStore.getState().setIsAdvancing(false);
             return;
@@ -691,6 +696,13 @@ export function useDriverRideActions() {
 
         triggerHaptic('success');
         playSound('trip_completed');
+
+        // F3 — the ride is done; stop the background location task now.
+        // The store KEEPS the completed trip (so TripCompleteView can show
+        // earnings), so `activeRideId` doesn't change and useDriverLocation's
+        // effect cleanup won't fire — without this explicit stop, background
+        // batches would keep uploading locations against the completed ride.
+        stopBgLocationTracking().catch(() => { /* best-effort */ });
 
         // Send receipt email to passenger (non-blocking)
         notificationService.sendRideReceipt(activeTrip.id, activeTrip.customer_id)
@@ -814,6 +826,9 @@ export function useDriverRideActions() {
 
     try {
       await rideService.cancelRide(activeTrip.id, user?.id, reason);
+      // F3 — stop the background location task on cancel so it doesn't keep
+      // uploading to a ride that no longer exists.
+      stopBgLocationTracking().catch(() => { /* best-effort */ });
       channelRef.current?.unsubscribe();
       channelRef.current = null;
       activeChannelIdRef.current = null;
