@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { AppState } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
-import { rideService, driverService, locationService, notificationService, presenceService } from '@tricigo/api';
+import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus } from '@tricigo/api';
 import { triggerHaptic, playSound, logger, mapLogger } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
@@ -654,7 +654,40 @@ export function useDriverRideActions() {
             }
           }
         }
-        if (!result) throw lastErr;
+        if (!result) {
+          // G2 — sustained-offline completion. The in-line retries above
+          // exhausted. If this is a network/offline failure (not a real RPC
+          // rejection), persist the completion to the offline queue so it
+          // replays automatically on reconnect (complete_ride_and_pay is
+          // idempotent — BUG-263). The trip stays in_progress locally and
+          // syncs to completed (with real fare) once the queue flushes; the
+          // one-active-ride guard correctly stops the driver taking a new
+          // ride until then. Non-network errors still throw to the catch.
+          const errMsg = String((lastErr as { message?: string })?.message ?? lastErr);
+          const isNetworkFailure =
+            !getOnlineStatus() ||
+            /network|fetch|timeout|offline|econnrefused|failed to fetch/i.test(errMsg);
+          if (isNetworkFailure) {
+            await executeOrQueue('ride.complete', {
+              rideId: activeTrip.id,
+              driverId: profile.id,
+              actualDistanceM,
+              actualDurationS,
+            });
+            triggerHaptic('success');
+            Toast.show({
+              type: 'info',
+              text1: i18next.t('driver:trip.complete_queued_offline', {
+                defaultValue: 'Sin conexión — el viaje se finalizará y cobrará al reconectar',
+              }),
+              visibilityTime: 5000,
+            });
+            completingRef.current = false;
+            useDriverRideStore.getState().setIsAdvancing(false);
+            return;
+          }
+          throw lastErr;
+        }
 
         triggerHaptic('success');
         playSound('trip_completed');
