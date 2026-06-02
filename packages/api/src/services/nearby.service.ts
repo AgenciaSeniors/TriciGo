@@ -41,6 +41,41 @@ export const nearbyService = {
   },
 
   /**
+   * Resolve the offline-map grid cell to download for a GPS point.
+   * Returns the cell bounds (clipped to where streets exist) or null when
+   * there are no streets nearby. Tolerates the RPC being absent (migration
+   * not yet applied) — returns null so the caller silently no-ops and the
+   * map falls back to online / ambient cache.
+   */
+  async getOfflineRegionForPoint(
+    lat: number,
+    lng: number,
+  ): Promise<{ cellKey: string; ne: [number, number]; sw: [number, number] } | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_offline_region_for_point', {
+      p_lat: lat,
+      p_lng: lng,
+    });
+    if (error) {
+      // Migration not applied yet → behave as "no region".
+      if (error.code === '42883' || /does not exist/i.test(error.message ?? '')) {
+        return null;
+      }
+      throw error;
+    }
+    const row = (Array.isArray(data) ? data[0] : null) as
+      | { cell_key: string; sw_lng: number; sw_lat: number; ne_lng: number; ne_lat: number }
+      | null
+      | undefined;
+    if (!row) return null;
+    return {
+      cellKey: row.cell_key,
+      ne: [row.ne_lng, row.ne_lat],
+      sw: [row.sw_lng, row.sw_lat],
+    };
+  },
+
+  /**
    * Subscribe to real-time driver position changes for map updates.
    * Listens to driver_profiles UPDATE events where is_online = true.
    */
