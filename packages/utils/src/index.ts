@@ -86,6 +86,21 @@ export type { PoiVisualGroup } from './poiCategories';
 // Pre-launch preview: synthetic moving vehicles for map QA (dev/demo only).
 export { TEST_VEHICLE_TYPES, generateTestVehicles, stepTestVehicles } from './test-vehicles';
 export type { TestVehicle } from './test-vehicles';
+// Dynamic offline map regions: grid-cell snapping + tile budgeting + LRU
+// eviction for nationwide offline coverage under Mapbox's per-device limit.
+export {
+  OFFLINE_GRID_DEG,
+  OFFLINE_MAX_TILES,
+  OFFLINE_PACK_MIN_ZOOM,
+  OFFLINE_PACK_MAX_ZOOM,
+  OFFLINE_RERESOLVE_M,
+  gridCellKey,
+  cellBounds,
+  estimateTileCount,
+  planEviction,
+  shouldReresolve,
+} from './offlineRegion';
+export type { RegionBounds, OfflinePackMeta, LatLng } from './offlineRegion';
 
 /**
  * Extract initials from a name (e.g. "Carlos Garcia" → "CG").

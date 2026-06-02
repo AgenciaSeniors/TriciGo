@@ -32,7 +32,7 @@ import { colors } from '@tricigo/theme';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets, setupRuntimeLogging } from '@tricigo/utils';
-import { useMapboxOffline } from '@/hooks/useMapboxOffline';
+import { useDynamicOfflineMap } from '@/hooks/useDynamicOfflineMap';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { registerForPushNotifications } from '@/services/push.service';
 import { useRideInit } from '@/hooks/useRide';
@@ -115,8 +115,9 @@ function RootNavigator() {
     initMapbox();
   }, []);
 
-  // Download Havana offline map tiles (runs once per week)
-  useMapboxOffline();
+  // Dynamic offline maps: download the current grid cell on demand,
+  // nationwide, under Mapbox's per-device tile budget.
+  useDynamicOfflineMap();
 
   // Process offline queue when connectivity is restored
   useOfflineSync();
