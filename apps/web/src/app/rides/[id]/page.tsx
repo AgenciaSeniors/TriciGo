@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient, notificationService, deliveryService } from '@tricigo/api';
 import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE, generateReceiptHTML } from '@tricigo/utils';
-import type { RideWithDriver, RideSplit } from '@tricigo/types';
+import type { RideWithDriver, RideSplit, RidePricingSnapshot } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { TipFlow } from '@/components/TipFlow';
 
@@ -76,6 +76,10 @@ export default function RideDetailPage() {
   // ── Fare-split participants (read-only status, only when is_split) ──
   const [splits, setSplits] = useState<RideSplit[]>([]);
 
+  // ── Pricing snapshot (base/per-km/per-min) for the CUP fare breakdown,
+  //    parity con el desglose del detalle móvil (rideService.getPricingSnapshot). ──
+  const [pricing, setPricing] = useState<RidePricingSnapshot | null>(null);
+
   // ── Auth effect ──
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -125,6 +129,14 @@ export default function RideDetailPage() {
       .then(setSplits)
       .catch(() => { /* non-critical */ });
   }, [ride?.is_split, ride?.id]);
+
+  // Fetch the pricing snapshot for the per-km/per-min CUP breakdown.
+  useEffect(() => {
+    if (!ride) { setPricing(null); return; }
+    rideService.getPricingSnapshot(ride.id)
+      .then(setPricing)
+      .catch(() => { /* non-critical — falls back to unit-only rows */ });
+  }, [ride?.id]);
 
   // ── Receipt: descargar (HTML imprimible → PDF) o enviar por email ──
   const handleDownloadReceipt = async () => {
@@ -442,36 +454,72 @@ export default function RideDetailPage() {
               <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Desglose de tarifa</p>
 
-                {/* Base: Estimated fare */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tarifa base estimada</span>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>
-                    {formatTRC(ride.estimated_fare_trc ?? 0)}
-                    <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: '0.35rem', fontSize: '0.7rem' }}>
-                      ({formatCUP(ride.estimated_fare_cup)})
+                {/* Estimado tachado cuando el final difiere (parity con móvil BUG-293). */}
+                {ride.final_fare_trc != null && ride.estimated_fare_trc != null && ride.final_fare_trc !== ride.estimated_fare_trc && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Tarifa estimada</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', textDecoration: 'line-through' }}>
+                      {formatTRC(ride.estimated_fare_trc)}
+                      <span style={{ marginLeft: '0.35rem', fontSize: '0.7rem' }}>({formatCUP(ride.estimated_fare_cup)})</span>
                     </span>
-                  </span>
-                </div>
+                  </div>
+                )}
 
-                {/* Distance charge */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Distancia</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    {ride.actual_distance_m != null
-                      ? `${(ride.actual_distance_m / 1000).toFixed(1)} km`
-                      : `${(ride.estimated_distance_m / 1000).toFixed(1)} km (est.)`}
-                  </span>
-                </div>
-
-                {/* Duration charge */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Tiempo</span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    {ride.actual_duration_s != null
-                      ? `${Math.round(ride.actual_duration_s / 60)} min`
-                      : `${Math.round(ride.estimated_duration_s / 60)} min (est.)`}
-                  </span>
-                </div>
+                {pricing ? (
+                  /* Desglose por componente desde el snapshot (CUP), parity con el detalle móvil:
+                     base + per_km×distancia + per_min×tiempo. */
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tarifa base</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{formatCUP(pricing.base_fare)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                        Distancia ({(pricing.distance_m / 1000).toFixed(1)} km)
+                      </span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {formatCUP(Math.round(pricing.per_km_rate * pricing.distance_m / 1000))}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                        Tiempo ({Math.round(pricing.duration_s / 60)} min)
+                      </span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {formatCUP(Math.round(pricing.per_minute_rate * pricing.duration_s / 60))}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  /* Fallback sin snapshot (rides viejos): estimado total + distancia/tiempo en unidades. */
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tarifa base estimada</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>
+                        {formatTRC(ride.estimated_fare_trc ?? 0)}
+                        <span style={{ color: 'var(--text-tertiary)', fontWeight: 400, marginLeft: '0.35rem', fontSize: '0.7rem' }}>
+                          ({formatCUP(ride.estimated_fare_cup)})
+                        </span>
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Distancia</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {ride.actual_distance_m != null
+                          ? `${(ride.actual_distance_m / 1000).toFixed(1)} km`
+                          : `${(ride.estimated_distance_m / 1000).toFixed(1)} km (est.)`}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>Tiempo</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {ride.actual_duration_s != null
+                          ? `${Math.round(ride.actual_duration_s / 60)} min`
+                          : `${Math.round(ride.estimated_duration_s / 60)} min (est.)`}
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {/* Surge multiplier */}
                 {ride.surge_multiplier > 1 && (

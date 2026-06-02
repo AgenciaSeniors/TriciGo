@@ -373,7 +373,7 @@ Fuente de verdad = `NativeRidesScreen` (`app/(tabs)/rides.tsx`) + `app/ride/[id]
 | TipFlow (no-efectivo) | ✅ | **web por delante** |
 | Mapa de la ruta en el detalle | ✅ FIX (PR-FU-3) | reusa `TrackingMap` en modo estático (sin driver) con pickup/dropoff |
 | Bloque cargo/delivery (destinatario/teléfono/paquete/OTP/instrucciones/fotos) | ✅ FIX (PR-FU-3) | `deliveryService.getDeliveryDetails` → card cuando `ride_mode==='cargo'` |
-| Desglose CUP por-km/por-min + tachado estimado-vs-final | ⚠️ follow-up menor | la web muestra km/min como unidades; el desglose ya tiene surge/espera/propina/cancelación/total. Diferido (`getPricingSnapshot`) |
+| Desglose CUP por-km/por-min + tachado estimado-vs-final | ✅ FIX PR-Precio | `rideService.getPricingSnapshot` → líneas base / distancia (per_km×m/1000) / tiempo (per_min×s/60) en CUP, igual que el detalle móvil; + fila "Tarifa estimada" tachada cuando el final difiere (BUG-293). Fallback a las filas km/min-en-unidades para rides sin snapshot |
 | Copiar ID / compartir viaje en el detalle | ⚠️ | menor |
 | Links de disputa / objeto perdido | n/a | **retirados** — correctamente ausentes (el detalle nativo aún arrastra el código) |
 
@@ -457,9 +457,14 @@ Tras cerrar las 8 áreas, una re-auditoría dirigida (Home del rider móvil, Not
 ### Confirmados NO-gaps (no se tocan)
 Íconos por tipo de vehículo (web ya `getVehicleIcon`), copiar ID/compartir en detalle (diseño), rotación de copy de búsqueda (ambos estáticos), revocar token de compartir (ninguno lo implementa — expira 24h).
 
+### PR-Precio — desglose CUP en el detalle (cerrado)
+| Hueco | Fix | Archivo |
+|---|---|---|
+| Detalle sin desglose CUP por-km/por-min ni tachado | `rideService.getPricingSnapshot` → base + distancia (per_km×m/1000) + tiempo (per_min×s/60) en CUP (espejo del detalle móvil); fila "Tarifa estimada" tachada cuando el final difiere (BUG-293); fallback a unidades para rides sin snapshot | `rides/[id]/page.tsx` |
+
 ### Pendientes de esta ronda (siguientes PRs)
-- **Precio en detalle**: desglose CUP por-km/por-min + estimado tachado vs final (`getPricingSnapshot`) en `rides/[id]`.
 - **Home autenticada** (la web no tiene dashboard; el rider cae directo en `/book`): re-pedir último viaje + carrusel de promos (tocar→aplicar) + anuncios. Cosméticos diferidos: clima, chip de conductores activos, blog inline.
 - **Web Push** (infra grande): service worker + VAPID + dispatch backend, para notifs con la pestaña cerrada.
 
 **Verificación PR-C:** `pnpm --filter @tricigo/web check-types` verde; `/notifications`, `/wallet`, `/support`, `/track/[id]` render 200 en dev sin error markers.
+**Verificación PR-Precio:** `pnpm --filter @tricigo/web check-types` verde; `/rides/[id]` render 200 en dev sin error markers.
