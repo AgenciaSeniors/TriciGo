@@ -1542,6 +1542,45 @@ El admin app (`apps/admin/`) usa **react-leaflet** para mapas (`live-map`, `flee
 
 ---
 
+### Feature "Tier / Niveles de lealtad" (sube con viajes completados) — estado canónico (cerrado 2026-06-03)
+
+**Qué es.** El nivel del usuario (`users.level`, enum `user_level`) **sube solo a medida que la persona completa viajes**. 5 niveles: `bronce < plata < oro < platino < diamante`. Antes la feature (de `00009`, feb 2024) estaba **huérfana**: todos quedaban en `bronce` para siempre.
+
+**Causa raíz que arregló (verificada contra prod, no solo migraciones):** (a) los contadores por usuario (`users.total_rides`/`total_spent`) nunca se incrementaban — `complete_ride_and_pay` solo toca `driver_profiles.total_rides_completed`; (b) `maybe_promote_user_level()` no tenía caller (el trigger que `00015` decía crear **no existía** entre los triggers vivos de `rides`).
+
+**Decisión del usuario (2026-06-03):** criterio = **solo viajes completados** (sin gasto); **5 niveles** (se agregó platino/diamante al enum); aplica a **pasajeros Y conductores** (un mismo `users.level`; el conteo = viajes de la persona como rider + como driver).
+
+**Migraciones (aplicadas a prod + verificadas; PR #386):**
+| Migración | Qué hace |
+|---|---|
+| `00370_user_level_add_platino_diamante.sql` | `ALTER TYPE user_level ADD VALUE 'platino'/'diamante' AFTER 'oro'/'platino'` (orden de comparación correcto) + 4 keys de umbral en `platform_config`. *(Parte 1: NO usa los valores nuevos — PG prohíbe usar un `ADD VALUE` en la misma txn que lo agrega.)* |
+| `00371_recompute_user_level_trips.sql` | `recompute_user_level(uuid)` + trigger `trg_recompute_level_on_complete` + deprecación de `maybe_promote_user_level` + backfill idempotente |
+
+**Mecánica clave.**
+- `recompute_user_level(p_user_id)` cuenta viajes `status='completed'` de la persona (como `customer_id` + como driver vía `driver_profiles.user_id`), elige nivel por umbrales, y hace `UPDATE users SET total_rides = <conteo>, level = GREATEST(level, <nuevo>)`. **SET, no `+1`** → self-healing, sin el drift del contador legacy (ver "stale precomputed field"). **Promote-only** (`GREATEST`) → nadie baja ni se pisan overrides manuales de admin.
+- Trigger `AFTER UPDATE ON rides WHEN (NEW.status='completed' AND OLD.status<>'completed')` recalcula al **pasajero y al conductor**. **Defensivo** (`EXCEPTION WHEN OTHERS THEN RETURN NEW`): un fallo de tier NUNCA bloquea el cierre del viaje.
+- Backfill idempotente recalculó a todos desde el historial. Verificado en prod: María/Carlos 120→diamante, Eduardo Admin 51 (27 rider + 24 driver)→platino, Papa 24→oro, Eduardo Daniel 18→plata, <5 viajes→bronce.
+
+**Tunables `platform_config`** (editables por admin sin redeploy, leídos con `get_platform_config_numeric`): `tier_plata_min_trips` (5), `tier_oro_min_trips` (20), `tier_platino_min_trips` (50), `tier_diamante_min_trips` (100). El ladder es **único** para riders y drivers (un driver activo sube rápido; si se quiere distinto, duplicar keys `*_driver`).
+
+**Frontend.** Tipo `UserLevel` (5 valores) en `packages/types`; i18n es/en/pt: `common.json` `profile.level_platino/diamante` (badge móvil) + `admin.json` `users.level_platinum/diamond`. Badge de tier en perfil de **pasajero** (`StatusBadge`) y **conductor** (píldora que reusa el patrón del status-pill, sin meter `StatusBadge` en el header cubano a medida). Admin: `<select>` de override con los 5 niveles + las 4 keys de umbral en platform-config. Web: el perfil ahora lee `users.level` de la DB (antes leía `user_metadata.level` stale → el badge nunca aparecía). **Los textos Platino/Diamante requieren rebuild del APK** — las builds instaladas pre-merge no tienen esas 2 keys; un build nuevo desde `master` sí.
+
+**Diagnóstico.**
+```sql
+-- estado del tier de cada usuario con viajes vs su conteo real
+SELECT u.full_name, u.level, u.total_rides AS cache,
+  (SELECT count(*) FROM rides r WHERE r.customer_id=u.id AND r.status='completed')
+  + (SELECT count(*) FROM rides r JOIN driver_profiles dp ON dp.id=r.driver_id
+       WHERE dp.user_id=u.id AND r.status='completed') AS trips_reales
+FROM users u WHERE u.total_rides>0 OR u.level<>'bronce' ORDER BY trips_reales DESC;
+-- forzar recálculo de un usuario
+SELECT recompute_user_level('<user_id>');
+```
+
+**Deuda diferida:** dropear `maybe_promote_user_level` (deprecada, sin callers) tras confirmar; `total_spent` queda como cache derivado sin uso (criterio = solo viajes).
+
+---
+
 ### Feature "Castigo por cancelar" (reputación, no dinero) — estado canónico (cerrado 2026-06-03)
 
 **Qué es.** Cancelar un viaje **ya no cobra dinero**. Una cancelación **tardía** baja las **estrellas visibles** (`rating_avg`) de quien cancela —rider o driver— y eso le cuesta **prioridad de matching**. Reemplaza deliberadamente el modelo monetario previo (`apply_cancellation_fee` que compensaba al driver + `apply_cancellation_penalty` progresiva que iba a la plataforma + bloqueo en la 5ª).
