@@ -1631,6 +1631,29 @@ FROM cancellation_rating_events ORDER BY created_at DESC LIMIT 20;
 
 **Tips diagnósticos reutilizables:** (1) si el **cuerpo** de un correo es una key cruda, es `send-email` cayendo al legacy path por una `template` key que no pasa `isTemplateKey()` — buscá el caller (EF, **trigger DB**, cron) que manda esa key. (2) Para ver el correo real (remitente/asunto/cuerpo) usá el **MCP de Gmail** (`search_threads`/`get_thread`): el remitente distingue app (`noreply@tricigo.com`/Resend) vs Supabase. (3) Objetos huérfanos en prod (funciones/triggers creados a mano, no en migraciones) existen — confirmá con `pg_get_functiondef` + `pg_trigger`, no solo con `grep` del repo.
 
+### Correo de "regalo" con cuerpo `driver_payout` — FAMILIA de 6 triggers de email huérfanos (verificado 2026-06-03, PR #392 / mig 00375)
+
+**Síntoma:** al recibir un **regalo** llega un correo (remitente `noreply@tricigo.com`, asunto "Pago recibido — TriciGo") cuyo **cuerpo es literalmente `driver_payout`**. Misma clase de bug que `security_new_device`/00365, pero **no era 1 trigger — eran 6**.
+
+**Causa raíz:** `send_gift` inserta en `wallet_transfers`, lo que dispara el trigger huérfano `trg_send_driver_payout_email` → `send_driver_payout_email()` → `net.http_post` a `send-email` con `template: 'driver_payout'`, key **no registrada** → legacy path → cuerpo crudo. El forense (`prosrc ILIKE '%send-email%'`) reveló **6 funciones de email huérfanas** (ninguna en git), todas con keys no registradas:
+
+| Trigger / tabla-evento | template key faltante |
+|---|---|
+| `trg_send_driver_payout_email` (`wallet_transfers` INSERT) | `driver_payout` |
+| `trg_send_cargo_bonus_email` (`ledger_transactions`, `cargo_bonus:%`) | `driver_payout` |
+| `trg_send_delivery_receipt` (`rides` completed cargo) | `delivery_receipt_customer` |
+| `trg_send_first_ride_email` (`rides` completed passenger 1º) | `first_ride_celebration` |
+| `trg_send_payment_failed_email` (`payment_intents`→failed) | `payment_failed` |
+| `trg_send_driver_status_email` (`driver_profiles` status) | `driver_approved`/`driver_rejected`/`driver_suspended` |
+
+**Fix (PR #392, mig 00375 + deploy send-email):** fix-forward = registrar los 8 templates faltantes en `_shared/email-templates/` (7 keys + `gift_received` dedicada para regalos, branding "Recibiste un regalo 🎁") + traer las 6 funciones+triggers a git **verbatim**. Único cambio de comportamiento: `send_driver_payout_email` ramifica `kind='gift' AND reversal_of IS NULL` → `gift_received` (con `from_name` + nota); el resto idéntico a prod.
+
+**Aprendizajes reutilizables:**
+1. **Cuando encuentres UN email-trigger huérfano roto, buscá la FAMILIA**: `SELECT proname FROM pg_proc WHERE prosrc ILIKE '%send-email%'` + extraé la `template` key de cada uno con `regexp_match(prosrc, '''template''\s*,\s*''([a-zA-Z_]+)''')` y compará contra `isTemplateKey()`. Casi nunca está roto uno solo.
+2. **Deploy de send-email (multi-file) = CLI, no MCP**: `npx supabase functions deploy send-email --project-ref lqaufszburqvlslpcuac` (resuelve los imports `_shared/` solos desde el worktree). El `config.toml` fija `[functions.send-email] verify_jwt = false`, así que la CLI no lo cambia. El MCP `deploy_edge_function` requiere mandar los 21 archivos a mano (frágil).
+3. **Verificar el render de send-email SIN exponer el service_role key**: `send-email` exige el service_role exacto (rechaza anon JWT), así que el smoke test con curl+anon **no aplica**. En su lugar, invocá la EF **desde SQL** con `SELECT net.http_post(url:='.../send-email', headers:=jsonb_build_object('Authorization','Bearer '||get_service_role_key(),...), body:=jsonb_build_object('template','gift_received',...))` → el key se resuelve en la query, nunca en texto. Luego `SELECT status_code, content FROM net._http_response WHERE id=<request_id>` (status 200 + `success:true`) y leé el HTML real con el **MCP de Gmail** (`get_thread` FULL_CONTENT). Ojo: el `snippet` de Gmail colapsa separadores (mostró "100000"); el `htmlBody`/`plaintextBody` tienen el valor real ("100,000"). `toLocaleString('es-CU')` SÍ formatea bien en el runtime Edge.
+4. **El emoji en el subject** lo codifica `encodeSubject` (RFC 2047) en [send-email/index.ts](supabase/functions/send-email/index.ts); en el HTML body, `asciiSafeHtml` (en `_layout.ts:wrapHtml`) lo colapsa a entidad numérica — seguro en cualquier cliente.
+
 ---
 
 ### Recordatorio para Claude
