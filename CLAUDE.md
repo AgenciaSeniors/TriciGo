@@ -266,6 +266,19 @@ Si el celu carga el dev client y queda en blanco/splash sin renderizar la app, *
 
 > Esta sección crece con cada sesión, igual que "Local dev". Captura las restricciones del sandbox y los patrones canónicos para evitar redescubrirlos.
 
+### Deploy web/admin: self-hosted runner en el VPS (GitHub→VPS SSH bloqueado por Hostinger) — verificado 2026-06-03
+
+**Síntoma:** `deploy-web.yml` / `deploy-admin.yml` empiezan a fallar **solos** (nadie tocó nada) con `dial tcp ***:22: i/o timeout` en el primer paso SSH (`appleboy/ssh-action` / `scp-action`). El deploy venía funcionando y de golpe deja de andar.
+
+**Causa raíz (confirmada):** **Hostinger filtra los rangos de IP de los runners de GitHub (Azure) en su red, río arriba del VPS** — probablemente su mitigación anti-abuso/DDoS automática, gatillada por la ráfaga de conexiones SSH de los deploys desde IPs de datacenter. **El box está perfecto** (`ufw` permite 22 desde Anywhere; `iptables -L INPUT` limpio; sin CrowdSec/fail2ban/ipset). Diagnóstico decisivo: en `/var/log/auth.log` los intentos SSH de GitHub **dejan de aparecer** (los paquetes ni llegan a `sshd`), mientras una IP no-datacenter (ej. el sandbox) **sí** llega al `:22`. El secret `VPS_HOST` es correcto (`187.77.214.236`, VPS Hostinger `srv1411116`, `ssh root@`).
+
+**Fix canónico (NO depende de Hostinger): self-hosted runner.** Un runner de GitHub Actions **dentro del VPS** que sale outbound hacia GitHub → inmune al filtro de entrada.
+- Runner instalado como servicio systemd (`/root/actions-runner`, `RUNNER_ALLOW_RUNASROOT=1`, `./svc.sh install && ./svc.sh start`). Corre como root (necesario: el `pm2` y `/var/www/*` son de root). Labels: `self-hosted, Linux, X64`. Sobrevive reinicios.
+- Ambos workflows = 2 jobs: **build** en `ubuntu-latest` (sube `.next/standalone` + `.next/static` + `public` como artifact) → **deploy** en `runs-on: self-hosted` (baja el artifact y hace `rsync` local + `pm2 restart`, **sin SSH/SCP**).
+- Si el runner aparece offline: `cd /root/actions-runner && ./svc.sh status` / `start`. Verificar online: `gh api repos/AgenciaSeniors/TriciGo/actions/runners`.
+
+**Para volver a SSH** (si Hostinger deja de filtrar): restaurar los pasos `appleboy/scp-action` + `ssh-action` y `runs-on: ubuntu-latest` en el job de deploy.
+
 ### Pre-flight para elegir número de migración (evitar colisiones)
 
 **Bug verificado 2026-05-27.** En sesiones paralelas dos PRs pueden elegir el mismo número de migración. Master ya tiene casos vivos:

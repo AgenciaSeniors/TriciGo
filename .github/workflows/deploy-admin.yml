@@ -1,5 +1,10 @@
 name: Deploy Admin
 
+# Same constraint as deploy-web: GitHub-hosted runners can't SSH to the VPS
+# (Hostinger filters the Azure/GitHub IP ranges at its edge). Build on a
+# GitHub-hosted runner, deploy with the SELF-HOSTED runner that lives on the
+# VPS (outbound-only → immune to the inbound filtering). No appleboy SSH/SCP.
+
 on:
   workflow_dispatch:
   push:
@@ -10,20 +15,19 @@ on:
       - '.github/workflows/deploy-admin.yml'
 
 jobs:
-  deploy:
-    name: Deploy Admin to VPS
+  build:
+    name: Build admin (GitHub-hosted)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
@@ -39,133 +43,103 @@ jobs:
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
-      - name: Copy build to VPS
-        uses: appleboy/scp-action@v0.1.7
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          source: 'apps/admin/.next/standalone/,apps/admin/.next/static/,apps/admin/public/'
-          target: '/tmp/tricigo-admin-deploy'
+          name: admin-build
+          # LCA of these paths is apps/admin → artifact root holds
+          # .next/standalone, .next/static and public.
+          path: |
+            apps/admin/.next/standalone
+            apps/admin/.next/static
+            apps/admin/public
+          retention-days: 1
+          if-no-files-found: error
+          include-hidden-files: true
 
-      - name: Deploy and restart
-        uses: appleboy/ssh-action@v1
+  deploy:
+    name: Deploy to VPS (self-hosted)
+    needs: build
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v8
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          script: |
-            set -e
-            APP_DIR=/var/www/tricigo-admin
-            DEPLOY_DIR=/tmp/tricigo-admin-deploy/apps/admin
+          name: admin-build
+          path: admin-build
 
-            # Copy standalone build
-            rsync -a --delete $DEPLOY_DIR/.next/standalone/ $APP_DIR/
+      - name: Deploy locally + restart PM2
+        run: |
+          set -e
+          APP_DIR=/var/www/tricigo-admin
+          SRC="$(pwd)/admin-build"
 
-            # Find the server.js entry point.  Next.js monorepo
-            # standalone output preserves the workspace path, so
-            # server.js lives at apps/admin/server.js and resolves
-            # static assets relative to that — meaning .next/static
-            # must be at apps/admin/.next/static, not $APP_DIR/.next/static.
-            # Until 2026-04-25 this script always copied static to
-            # $APP_DIR/.next/static, which 404'd in production for the
-            # entire monorepo lifetime (resulted in blank-screen admin).
-            cd $APP_DIR
-            if [ -f server.js ]; then
-              ENTRY=server.js
-              STATIC_DIR=$APP_DIR/.next/static
-              PUBLIC_DIR=$APP_DIR/public
-            elif [ -f apps/admin/server.js ]; then
-              ENTRY=apps/admin/server.js
-              STATIC_DIR=$APP_DIR/apps/admin/.next/static
-              PUBLIC_DIR=$APP_DIR/apps/admin/public
-            else
-              echo "server.js not found!" && ls -la $APP_DIR && ls -la $APP_DIR/apps/admin/ 2>/dev/null && exit 1
+          # Artifact root holds .next/standalone (LCA stripped); fall back to nested.
+          if [ -d "$SRC/.next/standalone" ]; then
+            BASE="$SRC"
+          elif [ -d "$SRC/apps/admin/.next/standalone" ]; then
+            BASE="$SRC/apps/admin"
+          else
+            echo "standalone build not found under $SRC"; find "$SRC" -maxdepth 4 -type d -name standalone; exit 1
+          fi
+
+          rsync -a --delete "$BASE/.next/standalone/" "$APP_DIR/"
+
+          # Monorepo standalone nests server.js under apps/admin; static must
+          # live next to it (was a prod blank-screen bug until 2026-04-25).
+          cd "$APP_DIR"
+          if [ -f server.js ]; then
+            ENTRY=server.js; STATIC_DIR="$APP_DIR/.next/static"; PUBLIC_DIR="$APP_DIR/public"
+          elif [ -f apps/admin/server.js ]; then
+            ENTRY=apps/admin/server.js; STATIC_DIR="$APP_DIR/apps/admin/.next/static"; PUBLIC_DIR="$APP_DIR/apps/admin/public"
+          else
+            echo "server.js not found!"; ls -la "$APP_DIR"; ls -la "$APP_DIR/apps/admin" 2>/dev/null; exit 1
+          fi
+
+          mkdir -p "$STATIC_DIR"
+          cp -r "$BASE/.next/static/." "$STATIC_DIR/"
+          echo "Static copied to: $STATIC_DIR"; ls "$STATIC_DIR/" | head -5
+
+          mkdir -p "$PUBLIC_DIR"
+          rsync -a "$BASE/public/" "$PUBLIC_DIR/" 2>/dev/null || true
+
+          # Port allocation on this VPS: 3001 gst, 3002 tricigo-admin, 3003 tricigo-web.
+          # nginx server_name admin.tricigo.com → 127.0.0.1:3002.
+          ADMIN_PORT=3002
+          pm2 delete tricigo-admin 2>/dev/null || true
+          fuser -k ${ADMIN_PORT}/tcp 2>/dev/null || true
+          sleep 1
+
+          cat > "$APP_DIR/.env" << ENVEOF
+          PORT=${ADMIN_PORT}
+          HOSTNAME=0.0.0.0
+          ENVEOF
+
+          cat > "$APP_DIR/ecosystem.config.js" << ECOEOF
+          module.exports = {
+            apps: [{
+              name: 'tricigo-admin',
+              script: '${ENTRY}',
+              cwd: '${APP_DIR}',
+              env: { PORT: ${ADMIN_PORT}, HOSTNAME: '0.0.0.0', NODE_ENV: 'production' }
+            }]
+          }
+          ECOEOF
+
+          pm2 start "$APP_DIR/ecosystem.config.js"
+          pm2 save
+
+          # Poll until Next binds the port (cold start can take 10-30s).
+          BOUND=0
+          for i in $(seq 1 12); do
+            if ss -tlnp | grep -qE "[: .]${ADMIN_PORT}\b"; then
+              BOUND=1; echo "✓ tricigo-admin listening on :${ADMIN_PORT} (after ${i}×5s)"; break
             fi
-
-            # Copy static assets and public folder to the correct nested path
-            mkdir -p $STATIC_DIR
-            cp -r $DEPLOY_DIR/.next/static/* $STATIC_DIR/
-            echo "Static files copied to: $STATIC_DIR"
-            ls $STATIC_DIR/ | head -5
-
-            # Use rsync (NOT `cp -r .../public/*`) so dotfiles like
-            # .well-known/* are not silently dropped by shell glob.
-            mkdir -p $PUBLIC_DIR
-            rsync -a $DEPLOY_DIR/public/ $PUBLIC_DIR/ 2>/dev/null || true
-
-            # Restart with PM2 — use ecosystem.config.js for reliable env
-            # passing.
-            #
-            # Port allocation on this VPS (per nginx + comments in
-            # deploy-web.yml):
-            #   3001  →  gst (unrelated 3rd-party app, 25d uptime)
-            #   3002  →  tricigo-admin  (THIS workflow)
-            #   3003  →  tricigo-web
-            # nginx server_name admin.tricigo.com proxies to 127.0.0.1:3002.
-            # Until 2026-04-25 this workflow was hardcoded to PORT=3000,
-            # which collided with gst and produced silent EADDRINUSE in
-            # pm2 logs while pm2 list still showed "online" — admin had
-            # been 502 in prod for an undetermined window.
-            ADMIN_PORT=3002
-            pm2 delete tricigo-admin 2>/dev/null || true
-            # Kill any process still holding our port
-            fuser -k ${ADMIN_PORT}/tcp 2>/dev/null || true
-            sleep 1
-
-            # Write .env so server.js inherits PORT/HOSTNAME even outside PM2
-            cat > $APP_DIR/.env << ENVEOF
-            PORT=${ADMIN_PORT}
-            HOSTNAME=0.0.0.0
-            ENVEOF
-
-            # Write ecosystem file with explicit env block
-            cat > $APP_DIR/ecosystem.config.js << ECOEOF
-            module.exports = {
-              apps: [{
-                name: 'tricigo-admin',
-                script: '${ENTRY}',
-                cwd: '${APP_DIR}',
-                env: {
-                  PORT: ${ADMIN_PORT},
-                  HOSTNAME: '0.0.0.0',
-                  NODE_ENV: 'production'
-                }
-              }]
-            }
-            ECOEOF
-
-            pm2 start $APP_DIR/ecosystem.config.js
-            pm2 save
-
-            # Poll until Next.js binds the port. Cold start of the
-            # standalone server.js can take 10-30s on this VPS, so a
-            # fixed sleep is fragile. Try up to 12 × 5s = 60s.
-            #
-            # NOTE on the regex: `ss -tlnp` prints LISTEN first, then
-            # the local address — e.g.
-            #   LISTEN 0 511 0.0.0.0:3002 0.0.0.0:* users:(("node",pid=...))
-            # so we just grep for the port; the -l flag of ss already
-            # restricts output to listening sockets. The earlier
-            # `:${PORT}.*LISTEN` regex never matched because LISTEN
-            # appears BEFORE the address, producing false "NOT
-            # listening" failures even when the bind succeeded.
-            BOUND=0
-            for i in $(seq 1 12); do
-              if ss -tlnp | grep -qE "[: .]${ADMIN_PORT}\b"; then
-                BOUND=1
-                echo "✓ tricigo-admin listening on :${ADMIN_PORT} (after ${i}×5s)"
-                break
-              fi
-              sleep 5
-            done
-            if [ "$BOUND" != "1" ]; then
-              echo "✗ tricigo-admin NOT listening on :${ADMIN_PORT} after 60s"
-              pm2 logs tricigo-admin --lines 30 --nostream || true
-              exit 1
-            fi
-
-            # Cleanup
-            rm -rf /tmp/tricigo-admin-deploy
+            sleep 5
+          done
+          if [ "$BOUND" != "1" ]; then
+            echo "✗ tricigo-admin NOT listening on :${ADMIN_PORT} after 60s"
+            pm2 logs tricigo-admin --lines 30 --nostream || true
+            exit 1
+          fi
