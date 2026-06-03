@@ -297,6 +297,10 @@ git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort 
 
 Elegir el siguiente número libre y confirmar antes de escribir el archivo. Si la sesión es larga, **re-checar antes del push** — otro PR podría haber landeado tu número mientras tanto.
 
+**Caso real verificado 2026-06-03 (choque resuelto con renumeración).** Dos sesiones paralelas eligieron 00370/00371: una para el feature **Tier** (`user_level` bronce→diamante, PR #386) y otra para **cancelación reputacional** (PR #387). Ambos se mergearon con el mismo número base. La resolución fue un **tercer PR de solo-renumeración** (#388, `chore(migrations): renumber…`) que movió los archivos de cancelación a `00372`/`00373`/`00374` (Tier se quedó con 00370/00371). Como el SQL de cancelación es `CREATE OR REPLACE` / `CREATE TABLE IF NOT EXISTS` idéntico, **prod no necesitó re-aplicar nada** — solo se reordenaron los archivos en git. Lección: si el choque ya se mergeó, el fix es un PR de renumeración aparte (no tocar prod), eligiendo qué feature conserva el número bajo.
+
+**Cómo se registra el `version` según el mecanismo de apply** (verificado 2026-06-03): `supabase db push` (CLI) usa el **filename** como version; pero `mcp__apply_migration` registra por **TIMESTAMP** (`20260603190204…`). Por eso, tras aplicar via MCP, buscar en `supabase_migrations.schema_migrations` por número (`WHERE version LIKE '0037%'`) devuelve **vacío** aunque la migración SÍ se aplicó — los objetos están en prod, solo el registro usa timestamp. Verificar por objeto (`pg_proc` / `information_schema.tables`), no por número de migración.
+
 ### Cadenas de `CREATE OR REPLACE FUNCTION` — verificar que el último wins no perdió features
 
 **Regresión verificada 2026-05-27.** La función `notify_ride_status_change` fue redefinida en 5 migraciones (00022, 00054, 00095, 00096, 00124). Cada `CREATE OR REPLACE` sobrescribe el cuerpo entero. Cuando 00124 cambió el header de auth para usar vault, copió y pegó la versión BASE de 00054 (sin el caso `arrived_at_destination` que 00096 había agregado, sin el fare en `completed` de 00095). Resultado: dos features perdidas silenciosamente en prod hasta el fix en 00334.
@@ -1535,6 +1539,42 @@ El admin app (`apps/admin/`) usa **react-leaflet** para mapas (`live-map`, `flee
 - Preview en cliente: leer el mismo valor con `walletService.getConfigValue(...)` para que el preview coincida con lo que el server aplicará.
 
 **3. Cadena de PRs apilados por capa, rebasados tras el merge del base.** Features que tocan backend+apps se entregan en cadena (PR-1 migración+service+types → PR-2 cliente → PR-3 driver → PR-4 admin), cada branch desde `origin/master`. Cuando los dependientes se ramifican del backend, **tras mergear el backend (squash)**: `git fetch`; por cada dependiente `git rebase --onto origin/master <sha-base-viejo>` (dropea el commit de backend ya squasheado) + `git push --force-with-lease`. Resultado: cada PR queda con su diff limpio de 1 commit. Autorización **explícita per-PR** para cada merge/force-push/apply (MCP guard + classifier).
+
+---
+
+### Feature "Castigo por cancelar" (reputación, no dinero) — estado canónico (cerrado 2026-06-03)
+
+**Qué es.** Cancelar un viaje **ya no cobra dinero**. Una cancelación **tardía** baja las **estrellas visibles** (`rating_avg`) de quien cancela —rider o driver— y eso le cuesta **prioridad de matching**. Reemplaza deliberadamente el modelo monetario previo (`apply_cancellation_fee` que compensaba al driver + `apply_cancellation_penalty` progresiva que iba a la plataforma + bloqueo en la 5ª).
+
+**Decisión del usuario (2026-06-03):** castigar sin dinero, bajando el **rating de estrellas** (NO un score separado), para **ambos roles**, consecuencia = **menor prioridad de emparejamiento**.
+
+**Migraciones (aplicadas a prod + verificadas; numeración FINAL en git tras la renumeración #388).**
+| Migración | Qué hace |
+|---|---|
+| `00372_cancellation_rating_events.sql` | Tabla `cancellation_rating_events` (1 fila por cancelación tardía; `rating_value` NULL = gracia) + `recompute_user_rating()` + `apply_user_rating()` + `update_rating_avg()` reescrito (promedia **reviews + eventos de cancelación**, ventana configurable) + trigger + 6 `platform_config` keys |
+| `00373_cancel_ride_reputation.sql` | `cancel_ride()` sin dinero (inserta evento con progresión + gracia + exención no-show) + `preview_cancellation_rating_impact()`; `apply_cancellation_fee` / `apply_cancellation_penalty` **DEPRECADAS** (no se llaman, no se dropean) |
+| `00374_dispatch_low_rating_rider_gate.sql` | `dispatch_ride()` gate suave de prioridad para riders bajo umbral (1ª ronda con menos drivers/radio; el retry loop existente los rescata) |
+
+**Mecánica clave.**
+- **Elegibilidad** (simétrica rider/driver): estado activo (`accepted`/`driver_en_route`/`arrived_at_pickup`/`in_progress`) Y fuera de `free_cancel_window_s` (120s). En `searching` (sin driver) = gracia total.
+- **Progresión** (por usuario, ventana 24h): 1ª tardía = gracia (evento con `rating_value` NULL → no baja el promedio pero cuenta para la progresión); 2ª → `cancel_rating_value_second` (3.0★); 3ª+ → `cancel_rating_value_third` (2.0★).
+- **No-show**: un driver que cancela con reason `%no_show%` NO se penaliza (el pasajero no apareció; penalizar al rider no-show queda como mejora futura — requiere prueba server-side).
+- **Recálculo**: `rating_avg` = AVG(reviews visibles + eventos no-gracia dentro de `cancel_rating_event_window_days`). Sin eventos reproduce el AVG de reviews **exacto** (no altera ratings existentes). Verificado en prod: 1 evento de 3.0★ sobre 6 reviews de 4.5 → 4.29.
+- **Menor prioridad de matching**: el driver es **automático** (su `rating_avg` ya pesa 20% en `find_best_drivers` → menos estrellas, menos ofertas); el rider es el **gate** de `dispatch_ride` (configurable, `low_rating_rider_threshold=0` lo desactiva).
+
+**Tunables `platform_config`** (sin redeploy): `cancel_rating_value_second` (3.0), `cancel_rating_value_third` (2.0), `cancel_rating_event_window_days` (90; 0 = permanente), `low_rating_rider_threshold` (3.0; **0 desactiva el gate**), `low_rating_rider_dispatch_limit` (5), `low_rating_rider_radius_m` (3000).
+
+**Frontend.** TS: `CancellationFeePreview` → `CancellationRatingImpact`; `cancelRide` devuelve `ratingImpact`; `previewCancellationImpact()` tolera RPC ausente. UI "Tu calificación bajará ★X→★Y" en `CancelRideSheet` / `RideActiveView` / `useRide` (cliente), `track/[id]` (web) y `trip.cancel_body` (driver) + i18n es/en/pt. **`cancel_ride` mantiene `fee_cup`/`penalty_amount`=0 → las apps móviles viejas muestran "gratis" sin romperse; la UI nueva requiere rebuild de las apps.**
+
+**Diagnóstico.**
+```sql
+-- ¿cancel_ride dejó de cobrar y usa reputación?
+SELECT (prosrc ILIKE '%cancellation_rating_events%' AND prosrc NOT ILIKE '%apply_cancellation_fee%') AS no_money
+FROM pg_proc WHERE proname='cancel_ride' AND pronamespace='public'::regnamespace;
+-- eventos recientes
+SELECT user_id, rating_value, role_at_event, reason, created_at
+FROM cancellation_rating_events ORDER BY created_at DESC LIMIT 20;
+```
 
 ---
 
