@@ -46,6 +46,46 @@ import {
   newDeviceLoginSubject,
   type NewDeviceLoginData,
 } from './new_device_login.ts';
+import {
+  giftReceivedHtml,
+  giftReceivedSubject,
+  type GiftReceivedData,
+} from './gift_received.ts';
+import {
+  driverPayoutHtml,
+  driverPayoutSubject,
+  type DriverPayoutData,
+} from './driver_payout.ts';
+import {
+  deliveryReceiptCustomerHtml,
+  deliveryReceiptCustomerSubject,
+  type DeliveryReceiptCustomerData,
+} from './delivery_receipt_customer.ts';
+import {
+  firstRideCelebrationHtml,
+  firstRideCelebrationSubject,
+  type FirstRideCelebrationData,
+} from './first_ride_celebration.ts';
+import {
+  paymentFailedHtml,
+  paymentFailedSubject,
+  type PaymentFailedData,
+} from './payment_failed.ts';
+import {
+  driverApprovedHtml,
+  driverApprovedSubject,
+  type DriverApprovedData,
+} from './driver_approved.ts';
+import {
+  driverRejectedHtml,
+  driverRejectedSubject,
+  type DriverRejectedData,
+} from './driver_rejected.ts';
+import {
+  driverSuspendedHtml,
+  driverSuspendedSubject,
+  type DriverSuspendedData,
+} from './driver_suspended.ts';
 
 export type TemplateKey =
   | 'welcome'
@@ -55,7 +95,15 @@ export type TemplateKey =
   | 'driver_under_review'
   | 'password_reset'
   | 'email_verification'
-  | 'new_device_login';
+  | 'new_device_login'
+  | 'gift_received'
+  | 'driver_payout'
+  | 'delivery_receipt_customer'
+  | 'first_ride_celebration'
+  | 'payment_failed'
+  | 'driver_approved'
+  | 'driver_rejected'
+  | 'driver_suspended';
 
 export interface RenderedTemplate {
   subject: string;
@@ -130,6 +178,62 @@ export function renderTemplate(
         html: newDeviceLoginHtml(d),
       };
     }
+    case 'gift_received': {
+      const d = data as GiftReceivedData;
+      return {
+        subject: subjectOverride ?? giftReceivedSubject,
+        html: giftReceivedHtml(d),
+      };
+    }
+    case 'driver_payout': {
+      const d = data as DriverPayoutData;
+      return {
+        subject: subjectOverride ?? driverPayoutSubject,
+        html: driverPayoutHtml(d),
+      };
+    }
+    case 'delivery_receipt_customer': {
+      const d = data as DeliveryReceiptCustomerData;
+      return {
+        subject: subjectOverride ?? deliveryReceiptCustomerSubject,
+        html: deliveryReceiptCustomerHtml(d),
+      };
+    }
+    case 'first_ride_celebration': {
+      const d = data as FirstRideCelebrationData;
+      return {
+        subject: subjectOverride ?? firstRideCelebrationSubject,
+        html: firstRideCelebrationHtml(d),
+      };
+    }
+    case 'payment_failed': {
+      const d = data as PaymentFailedData;
+      return {
+        subject: subjectOverride ?? paymentFailedSubject,
+        html: paymentFailedHtml(d),
+      };
+    }
+    case 'driver_approved': {
+      const d = data as DriverApprovedData;
+      return {
+        subject: subjectOverride ?? driverApprovedSubject,
+        html: driverApprovedHtml(d),
+      };
+    }
+    case 'driver_rejected': {
+      const d = data as DriverRejectedData;
+      return {
+        subject: subjectOverride ?? driverRejectedSubject,
+        html: driverRejectedHtml(d),
+      };
+    }
+    case 'driver_suspended': {
+      const d = data as DriverSuspendedData;
+      return {
+        subject: subjectOverride ?? driverSuspendedSubject,
+        html: driverSuspendedHtml(d),
+      };
+    }
     default: {
       // Exhaustiveness check — TS will flag this if a TemplateKey
       // case is missing above.
@@ -155,7 +259,15 @@ export function isTemplateKey(key: string): key is TemplateKey {
     key === 'driver_under_review' ||
     key === 'password_reset' ||
     key === 'email_verification' ||
-    key === 'new_device_login'
+    key === 'new_device_login' ||
+    key === 'gift_received' ||
+    key === 'driver_payout' ||
+    key === 'delivery_receipt_customer' ||
+    key === 'first_ride_celebration' ||
+    key === 'payment_failed' ||
+    key === 'driver_approved' ||
+    key === 'driver_rejected' ||
+    key === 'driver_suspended'
   );
 }
 
