@@ -1,5 +1,11 @@
 name: Deploy Web
 
+# GitHub-hosted runners cannot reach the VPS over SSH (Hostinger filters the
+# Azure/GitHub IP ranges at its network edge — the box firewall is open). So we
+# build on a GitHub-hosted runner and deploy with a SELF-HOSTED runner that
+# lives on the VPS: it polls GitHub outbound (no inbound SSH needed) and runs
+# the deploy locally. To swap back to SSH later, restore the appleboy/* steps.
+
 on:
   workflow_dispatch:
   push:
@@ -10,11 +16,10 @@ on:
       - '.github/workflows/deploy-web.yml'
 
 jobs:
-  deploy:
-    name: Deploy Web to VPS
+  build:
+    name: Build web (GitHub-hosted)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,141 +46,99 @@ jobs:
           NEXT_PUBLIC_MAPBOX_TOKEN: ${{ secrets.NEXT_PUBLIC_MAPBOX_TOKEN }}
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
 
-      - name: VPS diagnostics
-        uses: appleboy/ssh-action@v1
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          script: |
-            echo "=== nghttpx config ==="
-            cat /etc/nghttpx/nghttpx.conf 2>/dev/null || echo "no nghttpx.conf"
-            echo "=== all nghttpx files ==="
-            find /etc/nghttpx/ -type f 2>/dev/null | while read f; do echo "--- $f ---"; cat "$f"; done || true
-            echo "=== nginx config ==="
-            ls /etc/nginx/sites-enabled/ 2>/dev/null && cat /etc/nginx/sites-enabled/* 2>/dev/null || echo "no nginx sites"
-            echo "=== caddy ==="
-            cat /etc/caddy/Caddyfile 2>/dev/null || true
-            echo "=== running proxies ==="
-            systemctl list-units --type=service --state=running 2>/dev/null | grep -iE 'nginx|caddy|nghttpx|haproxy|traefik' || echo "none"
-            echo "=== Ports ==="
-            ss -tlnp | grep -E ':(80|443|300[0-9]|301[0-9])' || true
-            echo "=== PM2 ==="
-            pm2 list
+          name: web-build
+          # LCA of these three paths is apps/web → artifact root contains
+          # .next/standalone, .next/static and public.
+          path: |
+            apps/web/.next/standalone
+            apps/web/.next/static
+            apps/web/public
+          retention-days: 1
+          if-no-files-found: error
+          include-hidden-files: true
 
-      - name: Copy build to VPS
-        uses: appleboy/scp-action@v0.1.7
+  deploy:
+    name: Deploy to VPS (self-hosted)
+    needs: build
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          timeout: 60s
-          source: 'apps/web/.next/standalone/,apps/web/.next/static/,apps/web/public/'
-          target: '/tmp/tricigo-web-deploy'
+          name: web-build
+          path: web-build
 
-      - name: Deploy and restart
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          script: |
-            set -e
-            APP_DIR=/var/www/tricigo-web
-            DEPLOY_DIR=/tmp/tricigo-web-deploy/apps/web
+      - name: Deploy locally + restart PM2
+        run: |
+          set -e
+          APP_DIR=/var/www/tricigo-web
+          SRC="$(pwd)/web-build"
 
-            # Copy standalone build
-            rsync -a --delete $DEPLOY_DIR/.next/standalone/ $APP_DIR/
+          # The artifact root holds .next/standalone (LCA stripped). Fall back to
+          # the nested layout just in case the LCA stripping differs.
+          if [ -d "$SRC/.next/standalone" ]; then
+            BASE="$SRC"
+          elif [ -d "$SRC/apps/web/.next/standalone" ]; then
+            BASE="$SRC/apps/web"
+          else
+            echo "standalone build not found under $SRC"; find "$SRC" -maxdepth 4 -type d -name standalone; exit 1
+          fi
 
-            # Find the server.js entry point (monorepo standalone nests it)
-            cd $APP_DIR
-            if [ -f server.js ]; then
-              ENTRY=server.js
-              STATIC_DIR=$APP_DIR/.next/static
-              PUBLIC_DIR=$APP_DIR/public
-            elif [ -f apps/web/server.js ]; then
-              ENTRY=apps/web/server.js
-              STATIC_DIR=$APP_DIR/apps/web/.next/static
-              PUBLIC_DIR=$APP_DIR/apps/web/public
-            else
-              echo "server.js not found!" && ls -la $APP_DIR && ls -la $APP_DIR/apps/web/ 2>/dev/null && exit 1
-            fi
+          # Sync the standalone server into the app dir.
+          rsync -a --delete "$BASE/.next/standalone/" "$APP_DIR/"
 
-            # Copy static assets to the correct path relative to server.js
-            mkdir -p $STATIC_DIR
-            cp -r $DEPLOY_DIR/.next/static/* $STATIC_DIR/
-            echo "Static files copied to: $STATIC_DIR"
-            ls $STATIC_DIR/ | head -5
+          # The monorepo standalone output nests server.js under apps/web.
+          cd "$APP_DIR"
+          if [ -f server.js ]; then
+            ENTRY=server.js; STATIC_DIR="$APP_DIR/.next/static"; PUBLIC_DIR="$APP_DIR/public"
+          elif [ -f apps/web/server.js ]; then
+            ENTRY=apps/web/server.js; STATIC_DIR="$APP_DIR/apps/web/.next/static"; PUBLIC_DIR="$APP_DIR/apps/web/public"
+          else
+            echo "server.js not found!"; ls -la "$APP_DIR"; ls -la "$APP_DIR/apps/web" 2>/dev/null; exit 1
+          fi
 
-            # Copy public folder to the correct path.
-            # Use rsync (not `cp -r .../public/*`) so dotfiles like
-            # .well-known/assetlinks.json (Android Digital Asset Links,
-            # BUG-202) are not silently dropped by shell glob expansion.
-            mkdir -p $PUBLIC_DIR
-            rsync -a $DEPLOY_DIR/public/ $PUBLIC_DIR/ 2>/dev/null || true
-            # Sanity check — log if .well-known is present.
-            ls -la $PUBLIC_DIR/.well-known/ 2>/dev/null || echo "WARN: $PUBLIC_DIR/.well-known/ missing"
+          # Static assets to the path relative to server.js.
+          mkdir -p "$STATIC_DIR"
+          cp -r "$BASE/.next/static/." "$STATIC_DIR/"
 
-            # Find a free port (3001 is used by gst, 3002 by admin)
-            WEBPORT=3003
-            # Check nghttpx/nginx config for expected backend port
-            CFGPORT=$(grep -rhoP 'localhost:\K[0-9]+' /etc/nghttpx/ 2>/dev/null | sort -u | tr '\n' ' ' || echo "")
-            echo "=== Reverse proxy backend ports: $CFGPORT ==="
-            echo "=== Using port: $WEBPORT ==="
+          # public/ via rsync so dotfiles (.well-known/assetlinks.json) survive.
+          mkdir -p "$PUBLIC_DIR"
+          rsync -a "$BASE/public/" "$PUBLIC_DIR/"
+          ls -la "$PUBLIC_DIR/.well-known/" 2>/dev/null || echo "WARN: $PUBLIC_DIR/.well-known/ missing"
 
-            # Stop and delete tricigo-web from PM2
-            pm2 stop tricigo-web 2>/dev/null || true
-            pm2 delete tricigo-web 2>/dev/null || true
-            # Kill anything on our port
-            fuser -k ${WEBPORT}/tcp 2>/dev/null || true
-            sleep 1
+          WEBPORT=3003
+          pm2 stop tricigo-web 2>/dev/null || true
+          pm2 delete tricigo-web 2>/dev/null || true
+          fuser -k ${WEBPORT}/tcp 2>/dev/null || true
+          sleep 1
 
-            # Write .env with the correct port
-            cat > $APP_DIR/.env << ENVEOF
-            PORT=${WEBPORT}
-            HOSTNAME=0.0.0.0
-            ENVEOF
+          cat > "$APP_DIR/.env" << ENVEOF
+          PORT=${WEBPORT}
+          HOSTNAME=0.0.0.0
+          ENVEOF
 
-            # Start with PM2 using ecosystem file for reliable env passing
-            cat > $APP_DIR/ecosystem.config.js << ECOEOF
-            module.exports = {
-              apps: [{
-                name: 'tricigo-web',
-                script: '${ENTRY}',
-                cwd: '${APP_DIR}',
-                env: {
-                  PORT: ${WEBPORT},
-                  HOSTNAME: '0.0.0.0',
-                  NODE_ENV: 'production'
-                }
-              }]
-            };
-            ECOEOF
-            cd $APP_DIR
-            pm2 start ecosystem.config.js
-            sleep 3
-            pm2 logs tricigo-web --lines 20 --nostream || true
-            pm2 save
+          cat > "$APP_DIR/ecosystem.config.js" << ECOEOF
+          module.exports = {
+            apps: [{
+              name: 'tricigo-web',
+              script: '${ENTRY}',
+              cwd: '${APP_DIR}',
+              env: { PORT: ${WEBPORT}, HOSTNAME: '0.0.0.0', NODE_ENV: 'production' }
+            }]
+          };
+          ECOEOF
 
-            echo "=== Final status ==="
-            pm2 list
-            ss -tlnp | grep ":${WEBPORT} " || echo "WARNING: nothing listening on $WEBPORT"
+          cd "$APP_DIR"
+          pm2 start ecosystem.config.js
+          sleep 3
+          pm2 save
 
-            # Smoke test: check if the app responds
-            echo "=== Smoke test ==="
-            curl -sI http://localhost:${WEBPORT}/ 2>&1 | head -10 || echo "curl failed"
-            echo "=== Page body (first 500 chars) ==="
-            curl -s http://localhost:${WEBPORT}/ 2>&1 | head -c 500 || echo "curl failed"
-            echo ""
-            echo "=== Check .env content ==="
-            cat $APP_DIR/.env 2>/dev/null || echo "no .env"
-            echo "=== Check ecosystem ==="
-            cat $APP_DIR/ecosystem.config.js 2>/dev/null || echo "no ecosystem"
-            echo "=== Check NEXT_PUBLIC env in process ==="
-            cat /proc/$(pm2 pid tricigo-web)/environ 2>/dev/null | tr '\0' '\n' | grep -i "NEXT_PUBLIC\|SUPABASE\|PORT\|NODE_ENV" || echo "could not read env"
-
-            # Cleanup
-            rm -rf /tmp/tricigo-web-deploy
+          echo "=== Status ==="
+          pm2 list
+          ss -tlnp | grep ":${WEBPORT} " || echo "WARNING: nothing listening on ${WEBPORT}"
+          echo "=== Smoke test ==="
+          curl -sI http://localhost:${WEBPORT}/ 2>&1 | head -5 || echo "curl failed"
