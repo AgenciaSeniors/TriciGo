@@ -163,7 +163,7 @@
     "sos_cancel": "Cancelar",
     "sos_call_emergency": "Ligar emergência",
     "cancel_title": "Cancelar viagem",
-    "cancel_body": "Tem certeza que deseja cancelar?",
+    "cancel_body": "Cancelar esta corrida vai reduzir sua avaliação e você receberá menos corridas. Continuar?",
     "cancel_confirm": "Sim, cancelar",
     "status_update_failed": "Não foi possível atualizar o status da viagem",
     "cancel_failed": "Não foi possível cancelar a viagem",

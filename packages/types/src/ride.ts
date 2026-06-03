@@ -358,12 +358,25 @@ export interface CancellationFeeConfig {
   updated_at: string;
 }
 
-/** Preview of cancellation fee before confirming */
-export interface CancellationFeePreview {
-  fee_cup: number;
-  fee_trc: number;
-  fee_reason: string;
-  is_free: boolean;
+/**
+ * Impact of a cancellation on the canceller's VISIBLE star rating.
+ * Replaces the old money-based CancellationFeePreview: cancelling no
+ * longer charges CUP — a late cancellation lowers `rating_avg` instead
+ * (migrations 00370/00371). Symmetric for riders and drivers.
+ */
+export interface CancellationRatingImpact {
+  /** Whether cancelling now actually lowers the rating. */
+  rating_penalized: boolean;
+  /** True when this cancellation has no rating impact (no driver yet, within the grace window, or 1st of the day). */
+  is_grace: boolean;
+  /** This user's late cancellations in the last 24h (before this one). */
+  cancel_count_24h: number;
+  /** Pseudo-rating this cancellation contributes (e.g. 3.0 stars), or null in grace. */
+  rating_value: number | null;
+  /** Visible stars before the cancellation. */
+  stars_before: number | null;
+  /** Visible (or estimated, for previews) stars after the cancellation. */
+  stars_after: number | null;
 }
 
 export interface RideWithRider extends Ride {

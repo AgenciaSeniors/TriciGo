@@ -21,7 +21,7 @@ import type {
   RideOfferStats,
   TripInsuranceConfig,
   RidePreferences,
-  CancellationFeePreview,
+  CancellationRatingImpact,
   Waypoint,
   RideSplit,
   SharedRideView,
@@ -1064,21 +1064,20 @@ export const rideService = {
   },
 
   /**
-   * Cancel a ride. Delegates everything (auth check, row lock, fee
-   * calculation, penalty progression, offer supersession) to the
-   * `cancel_ride` SECURITY DEFINER RPC. The `userId` parameter is
-   * retained for backwards compatibility but IGNORED on the server —
-   * `canceled_by` is derived from `auth.uid()`. See migration 00121.
+   * Cancel a ride. Delegates everything (auth check, row lock,
+   * reputation eligibility, offer supersession) to the `cancel_ride`
+   * SECURITY DEFINER RPC. The `userId` parameter is retained for
+   * backwards compatibility but IGNORED on the server — `canceled_by`
+   * is derived from `auth.uid()`. See migrations 00121 / 00371.
+   *
+   * Cancelling no longer charges money: a late cancellation lowers the
+   * canceller's visible star rating instead (returned as `ratingImpact`).
    */
   async cancelRide(
     rideId: string,
     _userId?: string,
     reason?: string,
-  ): Promise<{
-    penaltyAmount: number;
-    isBlocked: boolean;
-    cancellationFee?: CancellationFeePreview;
-  } | null> {
+  ): Promise<{ ratingImpact: CancellationRatingImpact } | null> {
     const supabase = getSupabaseClient();
 
     const { data, error } = await supabase.rpc('cancel_ride', {
@@ -1090,11 +1089,12 @@ export const rideService = {
     const result = data as {
       success?: boolean;
       error?: string;
-      fee_cup?: number;
-      fee_trc?: number;
-      fee_reason?: string;
-      penalty_amount?: number;
-      is_blocked?: boolean;
+      rating_penalized?: boolean;
+      is_grace?: boolean;
+      cancel_count_24h?: number;
+      rating_value?: number | null;
+      stars_before?: number | null;
+      stars_after?: number | null;
     } | null;
 
     if (!result || result.error) {
@@ -1105,19 +1105,16 @@ export const rideService = {
       throw new Error(`cancel_ride failed: ${code}`);
     }
 
-    const feeCup = result.fee_cup ?? 0;
-    const cancellationFee: CancellationFeePreview = {
-      fee_cup: feeCup,
-      fee_trc: result.fee_trc ?? 0,
-      fee_reason: result.fee_reason ?? 'free_cancel',
-      is_free: feeCup === 0,
+    const ratingImpact: CancellationRatingImpact = {
+      rating_penalized: result.rating_penalized ?? false,
+      is_grace: result.is_grace ?? true,
+      cancel_count_24h: result.cancel_count_24h ?? 0,
+      rating_value: result.rating_value ?? null,
+      stars_before: result.stars_before ?? null,
+      stars_after: result.stars_after ?? null,
     };
 
-    return {
-      penaltyAmount: result.penalty_amount ?? 0,
-      isBlocked: result.is_blocked ?? false,
-      cancellationFee,
-    };
+    return { ratingImpact };
   },
 
   /**
@@ -1140,50 +1137,42 @@ export const rideService = {
   },
 
   /**
-   * Preview the cancellation fee based on ride state (without applying it).
-   * Shows the user exactly what they'd be charged before confirming.
+   * Preview the RATING impact of cancelling now (without applying it).
+   * Shows the user exactly how their visible stars would move before
+   * confirming. Tolerates the RPC being absent (migration 00371 not yet
+   * applied) by returning a grace / no-impact default — never throws.
    */
-  async previewCancellationFee(
-    rideId: string,
-    userId: string,
-  ): Promise<CancellationFeePreview> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('calculate_cancellation_fee', {
-      p_ride_id: rideId,
-      p_canceled_by: userId,
-    });
-    if (error) throw error;
-
-    const row = Array.isArray(data) ? data[0] : data;
-    return {
-      fee_cup: row?.fee_cup ?? 0,
-      fee_trc: row?.fee_trc ?? 0,
-      fee_reason: row?.fee_reason ?? 'free_cancel',
-      is_free: row?.is_free ?? true,
+  async previewCancellationImpact(rideId: string): Promise<CancellationRatingImpact> {
+    const fallback: CancellationRatingImpact = {
+      rating_penalized: false,
+      is_grace: true,
+      cancel_count_24h: 0,
+      rating_value: null,
+      stars_before: null,
+      stars_after: null,
     };
-  },
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.rpc('preview_cancellation_rating_impact', {
+        p_ride_id: rideId,
+      });
+      if (error) throw error;
 
-  /**
-   * Preview the cancellation penalty that would be applied (without applying it).
-   * Used to show the user what penalty they'd face before confirming cancellation.
-   */
-  async previewCancelPenalty(userId: string): Promise<{
-    penaltyAmount: number;
-    isBlocked: boolean;
-    cancelCount24h: number;
-  }> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('preview_cancellation_penalty', {
-      p_user_id: userId,
-    });
-    if (error) throw error;
-
-    const row = Array.isArray(data) ? data[0] : data;
-    return {
-      penaltyAmount: row?.penalty_amount ?? 0,
-      isBlocked: row?.is_blocked ?? false,
-      cancelCount24h: row?.cancel_count_24h ?? 0,
-    };
+      const row = (Array.isArray(data) ? data[0] : data) as
+        | (Partial<CancellationRatingImpact> & { error?: string })
+        | null;
+      if (!row || row.error) return fallback;
+      return {
+        rating_penalized: row.rating_penalized ?? false,
+        is_grace: row.is_grace ?? true,
+        cancel_count_24h: row.cancel_count_24h ?? 0,
+        rating_value: row.rating_value ?? null,
+        stars_before: row.stars_before ?? null,
+        stars_after: row.stars_after ?? null,
+      };
+    } catch {
+      return fallback;
+    }
   },
 
   /**
