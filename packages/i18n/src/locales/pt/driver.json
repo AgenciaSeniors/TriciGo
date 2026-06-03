@@ -142,7 +142,7 @@
     "action_finish": "Finalizar",
     "action_arrived_destination": "Cheguei",
     "tip_received": "Você recebeu uma gorjeta de {{amount}}!",
-    "surge_active": "Tarifa dinâmica {{multiplier}}x ativa",
+    "surge_active": "Tarifa por mau tempo {{multiplier}}x",
     "not_found": "Viagem não encontrada",
     "distance": "Distância",
     "duration": "Duração",

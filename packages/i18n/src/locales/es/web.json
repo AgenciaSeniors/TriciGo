@@ -137,7 +137,7 @@
     "route_info": "{{distance}} km \u00b7 {{duration}} min por carretera",
     "route_error": "No se pudo calcular la ruta",
     "address_unavailable": "Direcci\u00f3n no disponible",
-    "surge_active": "tarifa din\u00e1mica",
+    "surge_active": "mal tiempo",
     "per_km_rate": "Tarifa: {{rate}}/km",
     "cup_equivalent": "~ {{amount}} CUP",
     "exchange_rate_info": "Tasa: 1 USD = {{rate}} CUP",

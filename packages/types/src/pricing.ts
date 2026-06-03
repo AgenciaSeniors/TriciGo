@@ -17,7 +17,6 @@ export interface Zone {
   name: string;
   type: ZoneType;
   boundary: GeoJSONPolygon;
-  surge_multiplier: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -35,10 +34,6 @@ export interface PricingRule {
   per_minute_rate_cup: number;
   /** Minimum fare in CUP/TRC whole units */
   min_fare_cup: number;
-  /** Demand/supply ratio that triggers surge pricing */
-  surge_threshold: number | null;
-  /** Maximum allowed surge multiplier */
-  max_surge_multiplier: number | null;
   /** Time window for time-based pricing (HH:MM format) */
   time_window_start: string | null;
   time_window_end: string | null;
@@ -73,7 +68,8 @@ export interface ServiceTypeConfig {
   updated_at: string;
 }
 
-export type SurgeType = 'none' | 'time_based' | 'demand' | 'combined' | 'weather';
+// Only weather can move fares now (zone + demand surge were removed).
+export type SurgeType = 'none' | 'weather';
 
 /** Fare estimate returned to the client before ride request */
 export interface FareEstimate {

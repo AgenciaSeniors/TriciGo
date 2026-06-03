@@ -13,12 +13,12 @@ VALUES
   ('auto_confort', 'Confort', 'Comfort', 1800, 1200, 100, 5500, 4, 'car', true, 6, 80, 5);
 
 -- Havana zones (simplified polygons)
-INSERT INTO zones (name, type, boundary, surge_multiplier, is_active)
+INSERT INTO zones (name, type, boundary, is_active)
 VALUES
-  ('Vedado', 'operational', ST_GeomFromText('POLYGON((-82.42 23.12, -82.38 23.12, -82.38 23.14, -82.42 23.14, -82.42 23.12))', 4326), 1.00, true),
-  ('Centro Habana', 'operational', ST_GeomFromText('POLYGON((-82.38 23.13, -82.35 23.13, -82.35 23.15, -82.38 23.15, -82.38 23.13))', 4326), 1.00, true),
-  ('Habana Vieja', 'surge', ST_GeomFromText('POLYGON((-82.36 23.135, -82.34 23.135, -82.34 23.15, -82.36 23.15, -82.36 23.135))', 4326), 1.20, true),
-  ('Miramar', 'operational', ST_GeomFromText('POLYGON((-82.45 23.10, -82.40 23.10, -82.40 23.13, -82.45 23.13, -82.45 23.10))', 4326), 1.00, true);
+  ('Vedado', 'operational', ST_GeomFromText('POLYGON((-82.42 23.12, -82.38 23.12, -82.38 23.14, -82.42 23.14, -82.42 23.12))', 4326), true),
+  ('Centro Habana', 'operational', ST_GeomFromText('POLYGON((-82.38 23.13, -82.35 23.13, -82.35 23.15, -82.38 23.15, -82.38 23.13))', 4326), true),
+  ('Habana Vieja', 'operational', ST_GeomFromText('POLYGON((-82.36 23.135, -82.34 23.135, -82.34 23.15, -82.36 23.15, -82.36 23.135))', 4326), true),
+  ('Miramar', 'operational', ST_GeomFromText('POLYGON((-82.45 23.10, -82.40 23.10, -82.40 23.13, -82.45 23.13, -82.45 23.10))', 4326), true);
 
 -- Global pricing rules (4 time bands: Morning 6-12, Afternoon 12-18, Night 18-0, Dawn 0-6)
 
@@ -62,9 +62,12 @@ VALUES
   (NULL, 'auto_confort', 2700, 1800, 150, 8250, '18:00', '00:00', true),
   (NULL, 'auto_confort', 3600, 2400, 200, 11000, '00:00', '06:00', true);
 
--- Weather surge config
+-- Weather surge config (weather is the only surge left — global multiplier)
 INSERT INTO platform_config (key, value) VALUES
   ('openweather_api_key', '"YOUR_API_KEY"'),
   ('weather_surge_enabled', 'true'),
+  ('weather_surge_multiplier', '1.0'),
+  ('weather_cold_threshold_c', '12'),
+  ('weather_cold_multiplier', '1.3'),
   ('weather_last_check', 'null')
 ON CONFLICT (key) DO NOTHING;

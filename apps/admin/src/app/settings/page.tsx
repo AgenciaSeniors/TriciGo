@@ -3,12 +3,12 @@
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
 import {
-  Activity,
   ArrowRight,
   ArrowLeftRight,
   Bot,
   Building2,
   Car,
+  CloudRain,
   DollarSign,
   Flag,
   FlaskConical,
@@ -16,7 +16,6 @@ import {
   Map,
   MapPin,
   Sliders,
-  Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -41,8 +40,7 @@ export default function SettingsPage() {
     { href: '/settings/pricing', title: t('settings_hub.section_pricing_title', { defaultValue: 'Reglas de tarifa' }), description: t('settings_hub.section_pricing_desc', { defaultValue: 'Base, por km, por minuto, mínimos y cargos' }), icon: DollarSign, group: 'dinero' },
     { href: '/settings/exchange-rate', title: t('settings_hub.section_exchange_title', { defaultValue: 'Tasa de cambio' }), description: t('settings_hub.section_exchange_desc', { defaultValue: 'CUP ↔ TriciCoin y reglas de conversión' }), icon: ArrowLeftRight, group: 'dinero' },
     { href: '/settings/promotions', title: t('settings_hub.section_promotions_title', { defaultValue: 'Promociones' }), description: t('settings_hub.section_promotions_desc', { defaultValue: 'Códigos de descuento y cupones' }), icon: Gift, group: 'dinero' },
-    { href: '/settings/surge-zones', title: t('settings_hub.section_surge_zones_title', { defaultValue: 'Zonas de surge' }), description: t('settings_hub.section_surge_zones_desc', { defaultValue: 'Polígonos con multiplicador dinámico' }), icon: Zap, group: 'dinero' },
-    { href: '/settings/surge-dashboard', title: t('settings_hub.section_surge_dashboard_title', { defaultValue: 'Dashboard de surge' }), description: t('settings_hub.section_surge_dashboard_desc', { defaultValue: 'Actividad actual del pricing dinámico' }), icon: Activity, group: 'dinero' },
+    { href: '/settings/weather', title: t('settings_hub.section_weather_title', { defaultValue: 'Clima (tarifa por mal tiempo)' }), description: t('settings_hub.section_weather_desc', { defaultValue: 'Recargo por lluvia, tormenta, ciclón o frío extremo' }), icon: CloudRain, group: 'dinero' },
     { href: '/settings/automation', title: t('settings_hub.section_automation_title', { defaultValue: 'Automatización' }), description: t('settings_hub.section_automation_desc', { defaultValue: 'Reglas del motor auto-accept y auto-nav' }), icon: Bot, group: 'automatizacion' },
     { href: '/settings/feature-flags', title: t('settings_hub.section_feature_flags_title', { defaultValue: 'Feature flags' }), description: t('settings_hub.section_feature_flags_desc', { defaultValue: 'Activar o desactivar features en caliente' }), icon: Flag, group: 'experimentos' },
     { href: '/settings/experiments', title: t('settings_hub.section_experiments_title', { defaultValue: 'Experimentos' }), description: t('settings_hub.section_experiments_desc', { defaultValue: 'A/B tests activos y resultados' }), icon: FlaskConical, group: 'experimentos' },

@@ -45,7 +45,6 @@ import { useDemandHotspots } from '@/hooks/useDemandHotspots';
 import { usePopularLocations } from '@/hooks/usePopularLocations';
 import { useNearbyDrivers } from '@/hooks/useNearbyDrivers';
 import { useTestVehicles } from '@/hooks/useTestVehicles';
-import { useSurgeZones } from '@/hooks/useSurgeZones';
 import { useSmartSuggestion } from '@/hooks/useSmartSuggestion';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
 import { RideMapView } from '@/components/RideMapView';
@@ -456,9 +455,6 @@ function NativeDriverHomeScreen() {
   // GPS tracking when online
   useDriverLocationTracking(profile?.id ?? null, isOnline, activeTrip?.id ?? null);
 
-  // Active surge zones (only when online and no active trip)
-  const surgeZones = useSurgeZones(isOnline && !activeTrip);
-
   // Selfie verification check
   const { needsCheck, isProcessing, loading: selfieLoading, submitSelfie, check: selfieCheck } = useSelfieCheck();
 
@@ -636,16 +632,14 @@ function NativeDriverHomeScreen() {
   // suggestion card (see `nearestHotspot` below).
 
   // Phase 2 N1 — Smart route suggestion for HomeBottomSheet. Composes the
-  // three demand signals (live hotspots, surge zones, popular pickup
-  // clusters) into a single ranked target. Replaces the prior hotspots-only
-  // useMemo; the surge multiplier and `popular` source fall through into
-  // the bottom-sheet card so the driver gets richer context ("Hotspot a 3
-  // km · 6 viajes · +50% surge"). Returns null when no candidate scores
-  // within range.
+  // live demand signals (live hotspots + popular pickup clusters) into a
+  // single ranked target. Replaces the prior hotspots-only useMemo; the
+  // `popular` source falls through into the bottom-sheet card so the driver
+  // gets richer context ("Hotspot a 3 km · 6 viajes activos"). Returns null
+  // when no candidate scores within range.
   const nearestHotspot = useSmartSuggestion({
     driverLocation,
     hotspots: demandHotspots,
-    surgeZones,
     popularLocations,
   });
 
@@ -964,11 +958,6 @@ function NativeDriverHomeScreen() {
           ref={mapRef}
           driverLocation={driverLocation}
           driverHeading={idleHeading}
-          surgeZones={
-            simpleMapMode
-              ? []
-              : surgeZones.filter((z) => z.boundary !== null).map((z) => ({ multiplier: z.multiplier, zone_name: z.zone_name, boundary: z.boundary! }))
-          }
           nearbyDrivers={vehiclePreview ? previewVehicles : (simpleMapMode ? [] : nearbyDrivers)}
           demandHotspots={simpleMapMode ? [] : demandHotspots}
           popularLocations={popularLocations}
@@ -1200,44 +1189,6 @@ function NativeDriverHomeScreen() {
                 })}
               </RNText>
             )}
-          </View>
-        </View>
-      )}
-      {/* V4 — same simple-mode gate as the demand banner above. */}
-      {isOnline && !simpleMapMode && surgeZones.length > 0 && (
-        /* UX: surge is a real earning opportunity — make it a proper card
-             instead of a tiny 11px badge. Bigger padding, 2 lines (headline
-             + CTA context), flame icon. Still non-interactive so it doesn't
-             compete with map gestures. */
-        <View
-          style={{
-            position: 'absolute',
-            left: 16,
-            right: 16,
-            top: insets.top + (demandHotspots.length > 0 ? 92 : 64),
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 10,
-            backgroundColor: 'rgba(239,68,68,0.18)',
-            borderWidth: 1,
-            borderColor: 'rgba(239,68,68,0.45)',
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            borderRadius: 14,
-          }}
-          pointerEvents="none"
-        >
-          <Ionicons name="flame" size={20} color="#ef4444" />
-          <View style={{ flex: 1 }}>
-            <RNText style={{ color: '#fecaca', fontSize: 14, fontWeight: '700', fontFamily: 'Inter' }}>
-              {t('home.surge_active', {
-                defaultValue: `Tarifa dinámica ${Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1)}x`,
-                multiplier: Math.max(...surgeZones.map((z) => z.multiplier)).toFixed(1),
-              })}
-            </RNText>
-            <RNText style={{ color: 'rgba(252,202,202,0.7)', fontSize: 11, fontFamily: 'Inter', marginTop: 2 }}>
-              {t('home.surge_hint', { defaultValue: 'Los viajes en esta zona pagan más' })}
-            </RNText>
           </View>
         </View>
       )}

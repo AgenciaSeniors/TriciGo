@@ -142,7 +142,7 @@
     "action_finish": "Finish",
     "action_arrived_destination": "Arrived",
     "tip_received": "You received a tip of {{amount}}!",
-    "surge_active": "Surge pricing {{multiplier}}x active",
+    "surge_active": "Bad weather surcharge {{multiplier}}x",
     "not_found": "Trip not found",
     "distance": "Distance",
     "duration": "Duration",

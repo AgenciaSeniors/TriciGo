@@ -524,7 +524,7 @@ export default function RideDetailPage() {
                 {/* Surge multiplier */}
                 {ride.surge_multiplier > 1 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: '#d97706', fontWeight: 600 }}>Tarifa dinamica</span>
+                    <span style={{ fontSize: '0.8rem', color: '#d97706', fontWeight: 600 }}>Mal tiempo</span>
                     <span style={{ fontSize: '0.8rem', color: '#d97706', fontWeight: 600 }}>
                       {ride.surge_multiplier.toFixed(1)}x
                     </span>

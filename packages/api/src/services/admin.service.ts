@@ -25,7 +25,6 @@ import type {
   RidePricingSnapshot,
   RideTransition,
   ServiceTypeConfig,
-  SurgeZone,
   DriverScoreEvent,
   User,
   Vehicle,
@@ -622,8 +621,7 @@ export const adminService = {
   async updatePricingRule(
     id: string,
     updates: Partial<Pick<PricingRule,
-      'base_fare_cup' | 'per_km_rate_cup' | 'per_minute_rate_cup' | 'min_fare_cup' |
-      'surge_threshold' | 'max_surge_multiplier' | 'is_active' |
+      'base_fare_cup' | 'per_km_rate_cup' | 'per_minute_rate_cup' | 'min_fare_cup' | 'is_active' |
       'time_window_start' | 'time_window_end' | 'day_of_week'
     >>,
   ): Promise<void> {
@@ -674,57 +672,38 @@ export const adminService = {
   }> {
     const supabase = getSupabaseClient();
 
-    // Get last weather check from platform_config
-    const { data: configData } = await supabase
+    // Weather surge is global now: the current multiplier + the last check
+    // both live in platform_config (written by the sync-weather EF).
+    const { data: rows } = await supabase
       .from('platform_config')
-      .select('value')
-      .eq('key', 'weather_last_check')
-      .single();
+      .select('key, value')
+      .in('key', ['weather_last_check', 'weather_surge_multiplier']);
+    const map = new Map((rows ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
 
-    // Check if any weather surge is active
-    const { data: activeSurges } = await supabase
-      .from('surge_zones')
-      .select('id, multiplier')
-      .like('reason', 'weather_%')
-      .eq('active', true)
-      .limit(1);
+    const rawMult = map.get('weather_surge_multiplier');
+    const parsedMult = typeof rawMult === 'number'
+      ? rawMult
+      : parseFloat(String(rawMult ?? '').replace(/"/g, ''));
+    const multiplier = Number.isFinite(parsedMult) && parsedMult > 0 ? parsedMult : 1.0;
+    const surgeActive = multiplier > 1.0;
 
-    const surgeList = activeSurges ?? [];
-    const surgeActive = surgeList.length > 0;
-    const surgeMultiplier = surgeActive ? (surgeList[0]?.multiplier as number ?? 1.0) : 1.0;
-
-    if (!configData?.value || configData.value === 'null') {
-      return {
-        condition: 'unknown',
-        description: 'No data',
-        temp: 0,
-        multiplier: surgeMultiplier,
-        lastCheck: null,
-        surgeActive,
-      };
+    const rawCheck = map.get('weather_last_check');
+    if (rawCheck == null || rawCheck === 'null') {
+      return { condition: 'unknown', description: 'No data', temp: 0, multiplier, lastCheck: null, surgeActive };
     }
 
     try {
-      const parsed = typeof configData.value === 'string'
-        ? JSON.parse(configData.value)
-        : configData.value;
+      const parsed = typeof rawCheck === 'string' ? JSON.parse(rawCheck) : rawCheck;
       return {
         condition: parsed.condition ?? 'unknown',
         description: parsed.description ?? '',
         temp: parsed.temp ?? 0,
-        multiplier: surgeMultiplier > 1.0 ? surgeMultiplier : (parsed.multiplier ?? 1.0),
+        multiplier,
         lastCheck: parsed.checked_at ?? null,
         surgeActive,
       };
     } catch {
-      return {
-        condition: 'unknown',
-        description: 'Parse error',
-        temp: 0,
-        multiplier: surgeMultiplier,
-        lastCheck: null,
-        surgeActive,
-      };
+      return { condition: 'unknown', description: 'Parse error', temp: 0, multiplier, lastCheck: null, surgeActive };
     }
   },
 
@@ -743,33 +722,6 @@ export const adminService = {
       .limit(limit);
     if (error) throw error;
     return (data ?? []) as AdminAction[];
-  },
-
-  // ==================== SURGE STATUS ====================
-
-  async getSurgeStatusForZones(
-    zones: { id: string; lat: number; lng: number }[],
-  ): Promise<{ zone_id: string; zone_name: string; multiplier: number }[]> {
-    const supabase = getSupabaseClient();
-    const results: { zone_id: string; zone_name: string; multiplier: number }[] = [];
-    for (const zone of zones) {
-      try {
-        const { data } = await supabase.rpc('calculate_dynamic_surge', {
-          p_zone_id: zone.id,
-          p_lat: zone.lat,
-          p_lng: zone.lng,
-          p_radius_m: 3000,
-        });
-        results.push({
-          zone_id: zone.id,
-          zone_name: '',
-          multiplier: typeof data === 'number' ? data : 1.0,
-        });
-      } catch {
-        results.push({ zone_id: zone.id, zone_name: '', multiplier: 1.0 });
-      }
-    }
-    return results;
   },
 
   async getLiveMetrics(): Promise<{
@@ -822,31 +774,6 @@ export const adminService = {
       .in('risk_level', ['high', 'medium'])
       .order('churn_risk_score', { ascending: false })
       .limit(20);
-    if (error) throw error;
-    return data ?? [];
-  },
-
-  // ==================== SURGE PREDICTIONS ====================
-
-  async getSurgePredictions() {
-    const supabase = getSupabaseClient();
-    const now = new Date();
-    const dow = now.getDay();
-    const currentHour = now.getHours();
-
-    // Get predictions for next 6 hours
-    const hours = Array.from({ length: 6 }, (_, i) => (currentHour + i + 1) % 24);
-
-    const { data, error } = await supabase
-      .from('surge_predictions')
-      .select('*')
-      .eq('day_of_week', dow)
-      .in('hour_of_day', hours)
-      .gt('predicted_multiplier', 1.0)
-      .gte('confidence', 0.3)
-      .order('predicted_multiplier', { ascending: false })
-      .limit(5);
-
     if (error) throw error;
     return data ?? [];
   },
@@ -922,7 +849,7 @@ export const adminService = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('zones')
-      .select('id, name, type, surge_multiplier, is_active, created_at, updated_at')
+      .select('id, name, type, is_active, created_at, updated_at')
       .order('name');
     if (error) throw error;
     return data as Omit<Zone, 'boundary'>[];
@@ -930,7 +857,7 @@ export const adminService = {
 
   async updateZone(
     id: string,
-    updates: Partial<Pick<Zone, 'name' | 'surge_multiplier' | 'is_active'>>,
+    updates: Partial<Pick<Zone, 'name' | 'is_active'>>,
   ): Promise<void> {
     const supabase = getSupabaseClient();
     const { error } = await supabase
@@ -1322,60 +1249,6 @@ export const adminService = {
       target_id: rechargeId,
       reason: reason ?? null,
     });
-  },
-
-  // ==================== SURGE ZONES ====================
-
-  async getSurgeZones(): Promise<SurgeZone[]> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('surge_zones')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data as SurgeZone[];
-  },
-
-  async createSurgeZone(surge: {
-    zone_id: string | null;
-    multiplier: number;
-    reason?: string;
-    starts_at?: string;
-    ends_at?: string;
-  }): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('surge_zones')
-      .insert({
-        zone_id: surge.zone_id,
-        multiplier: surge.multiplier,
-        reason: surge.reason ?? null,
-        active: true,
-        starts_at: surge.starts_at ?? null,
-        ends_at: surge.ends_at ?? null,
-      });
-    if (error) throw error;
-  },
-
-  async updateSurgeZone(
-    id: string,
-    updates: Partial<Pick<SurgeZone, 'multiplier' | 'active' | 'reason' | 'starts_at' | 'ends_at'>>,
-  ): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('surge_zones')
-      .update(updates)
-      .eq('id', id);
-    if (error) throw error;
-  },
-
-  async deleteSurgeZone(id: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('surge_zones')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
   },
 
   // ==================== PLATFORM CONFIG ====================

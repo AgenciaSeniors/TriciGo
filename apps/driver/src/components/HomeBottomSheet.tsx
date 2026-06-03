@@ -55,7 +55,6 @@ export interface NearestHotspot {
   lng: number;
   distance: number;
   liveCount: number;
-  surgeMultiplier?: number;
   source?: 'live' | 'popular';
 }
 
@@ -663,34 +662,6 @@ function SheetContent({
                       defaultValue: 'Hotspot a {{distance}} km · {{count}} viajes activos',
                     })}
               </RNText>
-              {/* Surge multiplier badge */}
-              {nearestHotspot.surgeMultiplier !== undefined && nearestHotspot.surgeMultiplier > 1 && (
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 4,
-                    backgroundColor: palette.accent.orangeGlow,
-                    paddingHorizontal: 10,
-                    paddingVertical: 3,
-                    borderRadius: 9999,
-                    alignSelf: 'flex-start',
-                    marginTop: 8,
-                  }}
-                >
-                  <Ionicons name="flame" size={11} color={colors.brand.orange} />
-                  <RNText
-                    style={{
-                      fontSize: 11,
-                      color: colors.brand.orange,
-                      fontWeight: '800',
-                      ...TABULAR,
-                    }}
-                  >
-                    +{Math.round((nearestHotspot.surgeMultiplier - 1) * 100)}%
-                  </RNText>
-                </View>
-              )}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
                 <Ionicons name="arrow-forward" size={13} color={colors.brand.orange} />
                 <RNText

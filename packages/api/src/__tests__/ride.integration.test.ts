@@ -218,14 +218,12 @@ describe('Ride Service Integration', () => {
       tableChains['service_type_configs'] = chainable({ data: mockServiceConfig, error: null });
       // pricing_rules query returns array
       tableChains['pricing_rules'] = chainable({ data: [], error: null });
-      // surge_zones query
-      tableChains['surge_zones'] = chainable({ data: [], error: null });
       // pricing_experiments
       tableChains['pricing_experiments'] = chainable({ data: null, error: null });
       // trip_insurance_configs
       tableChains['trip_insurance_configs'] = chainable({ data: null, error: null });
 
-      // Dynamic surge RPC
+      // Weather surge RPC (get_weather_surge → 1.0 = no surge)
       mockRpc.mockResolvedValueOnce({ data: 1.0, error: null });
 
       mockGetUser.mockResolvedValueOnce({

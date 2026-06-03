@@ -255,18 +255,6 @@ export interface Tip {
   created_at: string;
 }
 
-export interface SurgeZone {
-  id: string;
-  zone_id: string | null;
-  multiplier: number;
-  reason: string | null;
-  active: boolean;
-  starts_at: string | null;
-  ends_at: string | null;
-  created_at: string;
-  created_by: string | null;
-}
-
 export interface RideTransition {
   id: string;
   ride_id: string;

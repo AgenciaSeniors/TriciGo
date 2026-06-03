@@ -1552,7 +1552,7 @@ export default function BookPage() {
                       fontSize: '0.7rem',
                     }}
                   >
-                    {(selectedEstimate?.surge_multiplier ?? 0).toFixed(1)}x {t('book.surge_active')}
+                    {(selectedEstimate?.surge_multiplier ?? 0).toFixed(1)}x {t('book.surge_active', { defaultValue: 'mal tiempo' })}
                   </span>
                 )}
               </div>

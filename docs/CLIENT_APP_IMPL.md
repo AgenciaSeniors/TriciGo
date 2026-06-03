@@ -762,7 +762,6 @@ Translation files: `packages/i18n/src/locales/{es,en,pt}/rider.json`
 | `useRiderLocationSharing` | Share location with contacts |
 | `useChat` | Chat messages & realtime |
 | `useNotifications` | Push + inbox management |
-| `useSurgeZones` | Surge pricing zones (disabled) |
 
 ---
 
