@@ -163,7 +163,7 @@
     "sos_cancel": "Cancel",
     "sos_call_emergency": "Call emergency",
     "cancel_title": "Cancel trip",
-    "cancel_body": "Are you sure you want to cancel?",
+    "cancel_body": "Cancelling this trip will lower your rating and you'll receive fewer trips. Continue?",
     "cancel_confirm": "Yes, cancel",
     "status_update_failed": "Could not update ride status",
     "cancel_failed": "Could not cancel the trip",

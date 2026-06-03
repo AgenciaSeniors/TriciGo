@@ -825,37 +825,44 @@ describe('rideService.cancelRide', () => {
     vi.clearAllMocks();
   });
 
-  it('cancels a ride and applies penalty', async () => {
-    // Service now wraps everything in a single SECDEF RPC `cancel_ride`
-    // which handles ride lookup, status transition, fee + penalty calc.
+  it('cancels a ride and returns the rating impact', async () => {
+    // Service wraps everything in a single SECDEF RPC `cancel_ride` which
+    // handles ride lookup, status transition, and the reputation (rating)
+    // penalty. Cancelling no longer charges money.
     mockRpc.mockResolvedValueOnce({
       data: {
         success: true,
-        penalty_amount: 200,
-        is_blocked: false,
-        fee_cup: 0,
-        fee_trc: 0,
-        fee_reason: 'free_cancel',
+        rating_penalized: true,
+        is_grace: false,
+        cancel_count_24h: 1,
+        rating_value: 3.0,
+        stars_before: 5.0,
+        stars_after: 4.0,
       },
       error: null,
     });
 
     const result = await rideService.cancelRide('ride-1', 'user-1', 'changed_mind');
-    expect(result).toEqual(expect.objectContaining({ penaltyAmount: 200, isBlocked: false }));
+    expect(result).toEqual(
+      expect.objectContaining({
+        ratingImpact: expect.objectContaining({ rating_penalized: true, stars_after: 4.0 }),
+      }),
+    );
     expect(mockRpc).toHaveBeenCalledWith('cancel_ride', {
       p_ride_id: 'ride-1',
       p_reason: 'changed_mind',
     });
   });
 
-  it('cancels without reason when not provided', async () => {
+  it('cancels without reason when not provided (grace)', async () => {
     mockRpc.mockResolvedValueOnce({
-      data: { success: true, penalty_amount: 0, is_blocked: false, fee_cup: 0, fee_trc: 0, fee_reason: 'free_cancel' },
+      data: { success: true, rating_penalized: false, is_grace: true },
       error: null,
     });
 
     const result = await rideService.cancelRide('ride-1');
-    expect(result).toEqual(expect.objectContaining({ penaltyAmount: 0 }));
+    expect(result?.ratingImpact.rating_penalized).toBe(false);
+    expect(result?.ratingImpact.is_grace).toBe(true);
     expect(mockRpc).toHaveBeenCalledWith('cancel_ride', { p_ride_id: 'ride-1', p_reason: null });
   });
 
@@ -876,40 +883,41 @@ describe('rideService.cancelRide', () => {
 });
 
 // ============================================================
-// previewCancelPenalty
+// previewCancellationImpact
 // ============================================================
 
-describe('rideService.previewCancelPenalty', () => {
+describe('rideService.previewCancellationImpact', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('returns penalty preview from RPC', async () => {
+  it('returns the rating impact preview from RPC', async () => {
     mockRpc.mockResolvedValue({
-      data: { penalty_amount: 100, is_blocked: false, cancel_count_24h: 2 },
+      data: {
+        eligible: true,
+        is_grace: false,
+        rating_penalized: true,
+        cancel_count_24h: 1,
+        rating_value: 3.0,
+        stars_before: 5.0,
+        stars_after: 4.0,
+      },
       error: null,
     });
 
-    const result = await rideService.previewCancelPenalty('user-1');
-    expect(result).toEqual({ penaltyAmount: 100, isBlocked: false, cancelCount24h: 2 });
-    expect(mockRpc).toHaveBeenCalledWith('preview_cancellation_penalty', { p_user_id: 'user-1' });
+    const result = await rideService.previewCancellationImpact('ride-1');
+    expect(result).toEqual(
+      expect.objectContaining({ rating_penalized: true, stars_before: 5.0, stars_after: 4.0 }),
+    );
+    expect(mockRpc).toHaveBeenCalledWith('preview_cancellation_rating_impact', { p_ride_id: 'ride-1' });
   });
 
-  it('returns blocked status when too many cancellations', async () => {
-    mockRpc.mockResolvedValue({
-      data: { penalty_amount: 500, is_blocked: true, cancel_count_24h: 5 },
-      error: null,
-    });
-
-    const result = await rideService.previewCancelPenalty('user-1');
-    expect(result.isBlocked).toBe(true);
-    expect(result.cancelCount24h).toBe(5);
-  });
-
-  it('throws on RPC error', async () => {
+  it('returns a grace default when the RPC is absent (migration not applied)', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: 'Function not found' } });
 
-    await expect(rideService.previewCancelPenalty('user-1')).rejects.toBeDefined();
+    const result = await rideService.previewCancellationImpact('ride-1');
+    expect(result.rating_penalized).toBe(false);
+    expect(result.is_grace).toBe(true);
   });
 });
 

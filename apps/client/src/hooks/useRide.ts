@@ -1165,39 +1165,29 @@ export function useRideActions() {
       channelRef.current?.unsubscribe();
       channelRef.current = null;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      const impact = result?.ratingImpact;
       trackEvent('ride_canceled', {
         ride_id: activeRide.id,
         reason,
-        cancellation_fee: result?.cancellationFee?.fee_cup ?? 0,
+        rating_penalized: impact?.rating_penalized ?? false,
+        stars_after: impact?.stars_after ?? null,
       });
       resetAll();
 
-      // Build alert message with both fee and penalty info
-      const messages: string[] = [];
-
-      // State-based cancellation fee (fee_cup is in whole CUP pesos, not centavos)
-      if (result?.cancellationFee && !result.cancellationFee.is_free) {
-        messages.push(
-          i18next.t('rider:ride.cancel_fee_charged', { amount: result.cancellationFee.fee_cup }),
-        );
-      }
-
-      // Progressive penalty (penaltyAmount is in whole CUP pesos)
-      if (result && result.penaltyAmount > 0) {
-        messages.push(
-          i18next.t('rider:ride.cancel_penalty_applied', { amount: result.penaltyAmount }),
-        );
-      }
-
-      if (result?.isBlocked) {
-        messages.push(i18next.t('rider:ride.cancel_blocked'));
-      }
-
-      if (messages.length > 0) {
+      // Cancelling no longer charges money — inform the rider about the
+      // reputation impact instead (only when their rating actually moved).
+      if (impact?.rating_penalized) {
         Toast.show({
-          type: 'success',
+          type: 'info',
           text1: i18next.t('rider:ride.cancel_title'),
-          text2: messages.join(' '),
+          text2: typeof impact.stars_after === 'number'
+            ? i18next.t('rider:ride.cancel_rating_dropped_to', {
+                stars: impact.stars_after.toFixed(1),
+                defaultValue: `Tu calificación bajó a ★${impact.stars_after.toFixed(1)}.`,
+              })
+            : i18next.t('rider:ride.cancel_rating_dropped', {
+                defaultValue: 'Tu calificación bajó por cancelar tarde.',
+              }),
         });
       }
     } catch (err) {

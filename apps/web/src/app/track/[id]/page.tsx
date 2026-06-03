@@ -1445,21 +1445,19 @@ export default function TrackRidePage() {
                   disabled={canceling}
                   onClick={async () => {
                     if (!userId) return;
-                    // Real cancellation fee + penalty preview (parity con el cancel
-                    // sheet móvil) — fetched before confirming so the rider sees the
-                    // exact charge, not just a generic warning.
-                    let confirmMsg = t('track.cancel_confirm_free', { defaultValue: '¿Seguro que quieres cancelar este viaje? Aún no se aplica ninguna tarifa.' });
+                    // Cancelling no longer charges money — a late cancel lowers
+                    // the rider's visible rating instead. Preview that impact
+                    // before confirming (parity with the mobile cancel sheet).
+                    let confirmMsg = t('track.cancel_confirm_free', { defaultValue: '¿Seguro que quieres cancelar este viaje? No afecta tu calificación.' });
                     try {
-                      const fee = await rideService.previewCancellationFee(rideId, userId);
-                      const penalty = await rideService.previewCancelPenalty(userId).catch(() => null);
-                      if (fee && !fee.is_free && fee.fee_cup > 0) {
-                        confirmMsg = t('track.cancel_confirm_fee_amount', { defaultValue: `Cancelar ahora aplica una tarifa de ${formatCUP(fee.fee_cup)}. ¿Continuar?` });
-                      }
-                      if (penalty && penalty.penaltyAmount > 0) {
-                        confirmMsg += ' ' + t('track.cancel_penalty_note', { defaultValue: `Llevas ${penalty.cancelCount24h} cancelaciones en 24h (penalización ${formatCUP(penalty.penaltyAmount)}).` });
+                      const impact = await rideService.previewCancellationImpact(rideId);
+                      if (impact?.rating_penalized) {
+                        confirmMsg = typeof impact.stars_after === 'number'
+                          ? t('track.cancel_confirm_rating', { defaultValue: `Cancelar ahora baja tu calificación a ★${impact.stars_after.toFixed(1)}. ¿Continuar?` })
+                          : t('track.cancel_confirm_rating_generic', { defaultValue: 'Cancelar ahora baja tu calificación. ¿Continuar?' });
                       }
                     } catch {
-                      confirmMsg = t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje? Puede aplicarse una tarifa de cancelación.' });
+                      confirmMsg = t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje?' });
                     }
                     if (!confirm(confirmMsg)) return;
                     setCanceling(true);

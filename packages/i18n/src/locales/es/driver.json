@@ -163,7 +163,7 @@
     "sos_cancel": "Cancelar",
     "sos_call_emergency": "Llamar emergencia",
     "cancel_title": "Cancelar viaje",
-    "cancel_body": "¿Estás seguro de que quieres cancelar?",
+    "cancel_body": "Cancelar este viaje afectará tu calificación y recibirás menos viajes. ¿Continuar?",
     "cancel_confirm": "Sí, cancelar",
     "status_update_failed": "No se pudo actualizar el estado del viaje",
     "cancel_failed": "No se pudo cancelar el viaje",

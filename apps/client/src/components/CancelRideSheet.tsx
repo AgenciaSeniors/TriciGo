@@ -4,35 +4,33 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { BottomSheet } from '@tricigo/ui/BottomSheet';
-import { formatCUP, triggerHaptic } from '@tricigo/utils';
+import { triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
-import type { CancellationFeePreview } from '@tricigo/types';
+import type { CancellationRatingImpact } from '@tricigo/types';
 
 interface CancelRideSheetProps {
   visible: boolean;
   onClose: () => void;
   onConfirm: (reason: string) => void;
-  /** Penalty amount in centavos that would be applied */
-  penaltyAmount: number;
-  /** Number of cancellations in last 24h */
-  cancelCount24h: number;
   /** Whether cancel is in progress */
   isLoading: boolean;
-  /** State-based cancellation fee preview */
-  cancellationFee?: CancellationFeePreview | null;
+  /** Projected rating impact of cancelling now (stars, not money) */
+  ratingImpact?: CancellationRatingImpact | null;
   /** Current ride status for emotional driver context */
   rideStatus?: string | null;
+}
+
+function formatStars(value: number | null | undefined): string {
+  return typeof value === 'number' ? value.toFixed(1) : '—';
 }
 
 function CancelRideSheetInner({
   visible,
   onClose,
   onConfirm,
-  penaltyAmount,
-  cancelCount24h,
   isLoading,
-  cancellationFee,
+  ratingImpact,
   rideStatus,
 }: CancelRideSheetProps) {
   const { t } = useTranslation('rider');
@@ -42,8 +40,10 @@ function CancelRideSheetInner({
     if (visible) triggerHaptic('warning');
   }, [visible]);
 
-  const hasFee = (cancellationFee && !cancellationFee.is_free) || penaltyAmount > 0;
-  const feeAmount = cancellationFee?.fee_cup ?? penaltyAmount;
+  const willPenalize = !!ratingImpact?.rating_penalized;
+  const hasStarFigures =
+    typeof ratingImpact?.stars_before === 'number' &&
+    typeof ratingImpact?.stars_after === 'number';
 
   const handleConfirm = () => {
     onConfirm('user_canceled');
@@ -53,7 +53,7 @@ function CancelRideSheetInner({
     <BottomSheet visible={visible} onClose={onClose}>
       {/* Header */}
       <View className="flex-row items-center mb-4">
-        <Ionicons name="warning" size={24} color={colors.error.DEFAULT} />
+        <Ionicons name="warning" size={24} color={colors.warning.DEFAULT} />
         <Text variant="h4" className="ml-2">
           {t('ride.cancel_title', { defaultValue: 'Cancelar viaje' })}
         </Text>
@@ -81,14 +81,32 @@ function CancelRideSheetInner({
         </View>
       )}
 
-      {/* Fee info */}
-      {hasFee ? (
-        <View className="rounded-xl px-4 py-3 mb-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
-          <Text variant="h4" className="font-bold text-red-700 dark:text-red-300">
-            {t('ride.cancel_fee_amount', { amount: formatCUP(feeAmount) })}
-          </Text>
-          <Text variant="caption" className="text-red-600 dark:text-red-400 mt-0.5">
-            {t('ride.cancel_fee_driver_compensated')}
+      {/* Rating impact (replaces the old money fee block) */}
+      {willPenalize ? (
+        <View className="rounded-xl px-4 py-3 mb-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700">
+          <View className="flex-row items-center">
+            <Ionicons name="star-half" size={18} color={colors.warning.DEFAULT} />
+            <Text variant="h4" className="ml-2 font-bold text-amber-800 dark:text-amber-200">
+              {t('ride.cancel_rating_drop', { defaultValue: 'Tu calificación bajará' })}
+            </Text>
+          </View>
+          {hasStarFigures && (
+            <View className="flex-row items-center mt-1">
+              <Ionicons name="star" size={14} color={colors.warning.DEFAULT} />
+              <Text variant="body" className="ml-1 text-amber-700 dark:text-amber-300 font-semibold">
+                {formatStars(ratingImpact?.stars_before)}
+              </Text>
+              <Ionicons name="arrow-forward" size={14} color={colors.warning.DEFAULT} style={{ marginHorizontal: 6 }} />
+              <Ionicons name="star" size={14} color={colors.warning.DEFAULT} />
+              <Text variant="body" className="ml-1 text-amber-700 dark:text-amber-300 font-semibold">
+                {formatStars(ratingImpact?.stars_after)}
+              </Text>
+            </View>
+          )}
+          <Text variant="caption" className="text-amber-600 dark:text-amber-400 mt-1">
+            {t('ride.cancel_rating_caption', {
+              defaultValue: 'Cancelar tarde baja tu reputación y la prioridad de tus próximos viajes.',
+            })}
           </Text>
         </View>
       ) : (
@@ -96,7 +114,7 @@ function CancelRideSheetInner({
           <View className="flex-row items-center">
             <Ionicons name="checkmark-circle" size={16} color={colors.success.DEFAULT} />
             <Text variant="body" className="ml-2 text-green-700 dark:text-green-300 font-medium">
-              {t('ride.cancel_no_charge', { defaultValue: 'Sin cargo' })}
+              {t('ride.cancel_no_penalty', { defaultValue: 'Sin penalización' })}
             </Text>
           </View>
         </View>

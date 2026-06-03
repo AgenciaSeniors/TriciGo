@@ -521,9 +521,8 @@ export function RideActiveView() {
 
   // Cancel sheet state
   const [cancelSheetVisible, setCancelSheetVisible] = useState(false);
-  const [penaltyPreview, setPenaltyPreview] = useState({ penaltyAmount: 0, cancelCount24h: 0 });
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [cancellationFeePreview, setCancellationFeePreview] = useState<import('@tricigo/types').CancellationFeePreview | null>(null);
+  const [ratingImpact, setRatingImpact] = useState<import('@tricigo/types').CancellationRatingImpact | null>(null);
 
   // Phase 6: Arrival card dismissed state
   const [arrivalCardDismissed, setArrivalCardDismissed] = useState(false);
@@ -629,25 +628,26 @@ export function RideActiveView() {
     }
   }, [rideWithDriver?.driver_name, slideUpAnim]);
 
-  // UBER-2.2: Emotional cancel context based on ride status
+  // UBER-2.2: Emotional cancel context based on ride status.
+  // Cancelling no longer charges money — a late cancel lowers the
+  // rider's visible rating instead, so the contextual note now warns
+  // about reputation rather than a CUP fee.
   const cancelContext = useMemo(() => {
     if (!activeRide) return { emotion: '', fee: '' };
-    // Bugfix: CancellationFeePreview exposes `fee_cup` and `fee_trc`;
-    // `fee_amount` never existed on the type so this used to read
-    // `undefined` → the `fee > 0` branch was unreachable and riders
-    // saw the "gratis" copy even for paid cancels. Pull the CUP figure
-    // (currency shown everywhere else on this screen) instead.
-    const fee = cancellationFeePreview?.fee_cup ?? 0;
+    const willPenalize = !!ratingImpact?.rating_penalized;
+    const note = willPenalize
+      ? `· ${t('ride.cancel_rating_short', { defaultValue: 'baja tu calificación' })}`
+      : '';
     if (activeRide.status === 'driver_en_route') return {
       emotion: t('ride.driver_coming', { defaultValue: 'Tu conductor ya viene en camino' }),
-      fee: fee > 0 ? `· ${t('ride.cancel_ride')} ($${fee})` : `· ${t('ride.cancel_ride')} ${t('cancel_fee_free', { ns: 'rider', defaultValue: 'gratis' })}`,
+      fee: note,
     };
     if (activeRide.status === 'arrived_at_pickup') return {
       emotion: t('ride.driver_waiting', { defaultValue: 'Tu conductor te está esperando' }),
-      fee: fee > 0 ? `· ${t('ride.cancel_ride')} ($${fee})` : '',
+      fee: note,
     };
     return { emotion: '', fee: '' };
-  }, [activeRide?.status, cancellationFeePreview, t]);
+  }, [activeRide?.status, ratingImpact, t]);
 
   if (!activeRide) return null;
 
@@ -755,38 +755,14 @@ export function RideActiveView() {
     triggerHaptic('light');
     setPreviewLoading(true);
     try {
-      // Fetch both penalty preview and cancellation fee in parallel
-      const [penaltyResult, feeResult] = await Promise.allSettled([
-        rideService.previewCancelPenalty(userId),
-        activeRide ? rideService.previewCancellationFee(activeRide.id, userId) : Promise.resolve(null),
-      ]);
-
-      setPenaltyPreview(
-        penaltyResult.status === 'fulfilled'
-          ? { penaltyAmount: penaltyResult.value.penaltyAmount, cancelCount24h: penaltyResult.value.cancelCount24h }
-          : { penaltyAmount: 0, cancelCount24h: 0 },
-      );
-
-      setCancellationFeePreview(
-        feeResult.status === 'fulfilled' ? feeResult.value : null,
-      );
-
-      /* UX: when the fee preview fetch fails, the sheet used to open
-         with fee=$0 silently — riders tapped confirm thinking cancelling
-         was free, and were sometimes charged afterwards. Surface the
-         uncertainty explicitly so they can decide whether to proceed
-         without a reliable estimate, wait a moment, or keep the ride. */
-      if (feeResult.status === 'rejected' && activeRide?.status !== 'searching') {
-        Toast.show({
-          type: 'info',
-          text1: t('ride.cancel_fee_preview_failed_title', { defaultValue: 'No se pudo calcular la tarifa' }),
-          text2: t('ride.cancel_fee_preview_failed_body', { defaultValue: 'Si cancelás ahora podría aplicarse un cargo. Esperá un momento e intentá de nuevo si preferís certeza.' }),
-          visibilityTime: 4000,
-        });
-      }
+      // Project the rating impact of cancelling now. The service tolerates
+      // the RPC being absent (returns a grace default) and never throws.
+      const impact = activeRide
+        ? await rideService.previewCancellationImpact(activeRide.id)
+        : null;
+      setRatingImpact(impact);
     } catch {
-      setPenaltyPreview({ penaltyAmount: 0, cancelCount24h: 0 });
-      setCancellationFeePreview(null);
+      setRatingImpact(null);
     } finally {
       setPreviewLoading(false);
       setCancelSheetVisible(true);
@@ -1535,10 +1511,8 @@ export function RideActiveView() {
         visible={cancelSheetVisible}
         onClose={() => setCancelSheetVisible(false)}
         onConfirm={handleCancelConfirm}
-        penaltyAmount={penaltyPreview.penaltyAmount}
-        cancelCount24h={penaltyPreview.cancelCount24h}
         isLoading={isLoading}
-        cancellationFee={cancellationFeePreview}
+        ratingImpact={ratingImpact}
         rideStatus={activeRide?.status ?? null}
       />
 
