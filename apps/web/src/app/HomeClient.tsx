@@ -136,7 +136,7 @@ export default function HomeClient() {
                   src="/images/screenshots/02-home.png"
                   alt="TriciGo - App de transporte. Pedí triciclos, motos y autos."
                   width={390}
-                  height={844}
+                  height={793}
                   priority
                 />
               </div>
