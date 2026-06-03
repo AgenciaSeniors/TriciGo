@@ -6,7 +6,7 @@
 --   * NO money. apply_cancellation_fee / apply_cancellation_penalty
 --     are no longer called (they are decommissioned below).
 --   * A "late" cancellation inserts a cancellation_rating_events row
---     (00370). Eligibility is symmetric for rider & driver: the ride
+--     (00372). Eligibility is symmetric for rider & driver: the ride
 --     was in an active state (a driver was engaged) AND outside the
 --     per-service free_cancel_window_s grace window.
 --   * Progressive in stars, mirroring the old money progression:
@@ -277,8 +277,8 @@ $function$;
 
 -- 3. Decommission the money RPCs (kept, not dropped) ------------
 COMMENT ON FUNCTION public.apply_cancellation_fee(uuid, uuid) IS
-  '00371 DEPRECATED: cancellation no longer charges money. No longer called by cancel_ride. Kept for historical reference; safe to drop once confirmed zero callers.';
+  '00373 DEPRECATED: cancellation no longer charges money. No longer called by cancel_ride. Kept for historical reference; safe to drop once confirmed zero callers.';
 COMMENT ON FUNCTION public.apply_cancellation_penalty(uuid, uuid) IS
-  '00371 DEPRECATED: cancellation no longer charges money. Replaced by cancellation_rating_events. Kept for historical reference; safe to drop once confirmed zero callers.';
+  '00373 DEPRECATED: cancellation no longer charges money. Replaced by cancellation_rating_events. Kept for historical reference; safe to drop once confirmed zero callers.';
 COMMENT ON FUNCTION public.preview_cancellation_penalty(uuid) IS
-  '00371 DEPRECATED: use preview_cancellation_rating_impact(ride_id). Kept for backward-compatible clients.';
+  '00373 DEPRECATED: use preview_cancellation_rating_impact(ride_id). Kept for backward-compatible clients.';

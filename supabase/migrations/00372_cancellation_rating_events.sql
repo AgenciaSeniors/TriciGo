@@ -5,9 +5,9 @@
 -- Decisions (user, 2026-06-03):
 --   * Punishment = lower visible stars (NOT a separate score).
 --   * Zero money in any cancellation (apply_cancellation_fee /
---     apply_cancellation_penalty are decommissioned in 00371).
+--     apply_cancellation_penalty are decommissioned in 00373).
 --   * Applies to BOTH riders and drivers (both have rating_avg).
---   * Operational consequence = lower matching priority (00372:
+--   * Operational consequence = lower matching priority (00374:
 --     driver rating already weighs 20% in find_best_drivers; the
 --     rider gets a soft first-round dispatch gate).
 --
