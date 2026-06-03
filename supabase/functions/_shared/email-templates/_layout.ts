@@ -163,22 +163,11 @@ ${preheaderBlock}
     <td align="center" style="padding: 24px 12px;">
       <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background-color: ${COLORS.bgCard}; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,0.05);">
         <tr>
-          <td style="padding: 28px 32px 20px; text-align: center;">
+          <td bgcolor="#FFFFFF" style="padding: 28px 32px 20px; text-align: center; background-color: #FFFFFF;">
             <a href="${WEB_ORIGIN}" target="_blank" rel="noopener"
-               style="display: inline-block; text-decoration: none; color: ${COLORS.ink};">
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
-                <tr>
-                  <td valign="middle" style="padding-right: 12px;">
-                    <img src="${LOGO_ICON_URL}" alt="" width="40" height="40"
-                         style="display: block; width: 40px; height: 40px; border-radius: 8px;">
-                  </td>
-                  <td valign="middle">
-                    <span style="display: inline-block; font-family: ${FONT_STACK}; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: ${COLORS.ink}; line-height: 1;">
-                      Trici<span style="color: ${COLORS.primary};">Go</span>
-                    </span>
-                  </td>
-                </tr>
-              </table>
+               style="display: inline-block; text-decoration: none;">
+              <img src="${LOGO_URL}" alt="TriciGo" height="40"
+                   style="display: block; height: 40px; width: auto; border: 0; outline: none; -ms-interpolation-mode: bicubic;">
             </a>
           </td>
         </tr>
