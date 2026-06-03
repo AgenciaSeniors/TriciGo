@@ -111,6 +111,6 @@ export type ZoneType = 'operational' | 'surge' | 'restricted';
 // mismatch with the UI.
 export type Language = 'es' | 'en' | 'pt';
 
-export type UserLevel = 'bronce' | 'plata' | 'oro';
+export type UserLevel = 'bronce' | 'plata' | 'oro' | 'platino' | 'diamante';
 
 export type PricingSnapshotType = 'estimate' | 'final';

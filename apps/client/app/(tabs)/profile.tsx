@@ -24,6 +24,20 @@ import { ProfileRow } from '@/components/profile/ProfileRow';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Switch } from 'react-native';
 
+// Loyalty tier badge styling per level (bronce -> diamante). Color is paired with
+// an icon so the tier is never conveyed by color alone (a11y). Kept intentionally
+// light; richer visuals (progress to next tier) can be layered later.
+const TIER_BADGE: Record<
+  UserLevel,
+  { variant: React.ComponentProps<typeof StatusBadge>['variant']; icon: React.ComponentProps<typeof Ionicons>['name'] }
+> = {
+  bronce: { variant: 'warning', icon: 'medal-outline' },
+  plata: { variant: 'neutral', icon: 'medal-outline' },
+  oro: { variant: 'warning', icon: 'medal' },
+  platino: { variant: 'info', icon: 'trophy' },
+  diamante: { variant: 'success', icon: 'diamond' },
+};
+
 // Web profile: uses real user data from auth store
 function WebProfileScreen() {
   const { t } = useTranslation('common');
@@ -337,7 +351,8 @@ function NativeProfileScreen() {
                       {user?.level && (
                         <StatusBadge
                           label={t(`profile.level_${user.level}`)}
-                          variant={user.level === 'oro' ? 'warning' : user.level === 'plata' ? 'neutral' : 'warning'}
+                          variant={(TIER_BADGE[user.level] ?? TIER_BADGE.bronce).variant}
+                          icon={(TIER_BADGE[user.level] ?? TIER_BADGE.bronce).icon}
                         />
                       )}
                     </View>

@@ -396,6 +396,8 @@
     "level_bronze": "Bronce",
     "level_silver": "Plata",
     "level_gold": "Oro",
+    "level_platinum": "Platino",
+    "level_diamond": "Diamante",
     "change_level": "Cambiar nivel",
     "wallet_section": "Créditos de viaje",
     "label_available_balance": "Saldo disponible",
@@ -1080,7 +1082,11 @@
     "stripe_fee_type_help": "Tipo de fee: fixed o percentage",
     "cash_enabled_help": "Habilitar/deshabilitar pagos en efectivo",
     "wallet_enabled_help": "Habilitar/deshabilitar pagos con créditos de viaje",
-    "shared_ride_discount_per_seat_pct_help": "Descuento por asiento libre cuando el pasajero comparte el viaje (solo triciclo). Por defecto 7%"
+    "shared_ride_discount_per_seat_pct_help": "Descuento por asiento libre cuando el pasajero comparte el viaje (solo triciclo). Por defecto 7%",
+    "tier_plata_min_trips_help": "Viajes completados mínimos para nivel Plata (pasajero + conductor). Por defecto 5",
+    "tier_oro_min_trips_help": "Viajes completados mínimos para nivel Oro (pasajero + conductor). Por defecto 20",
+    "tier_platino_min_trips_help": "Viajes completados mínimos para nivel Platino (pasajero + conductor). Por defecto 50",
+    "tier_diamante_min_trips_help": "Viajes completados mínimos para nivel Diamante (pasajero + conductor). Por defecto 100"
   },
   "exchange_rate": {
     "title": "Tasa de cambio",

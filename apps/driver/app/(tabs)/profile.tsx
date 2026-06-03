@@ -28,6 +28,7 @@ import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
+import type { UserLevel } from '@tricigo/types';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { authService, driverService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -35,6 +36,17 @@ import { useDriverStore } from '@/stores/driver.store';
 import { useNotificationStore } from '@/stores/notification.store';
 
 const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nums'] };
+
+// Loyalty tier pill colors (bronce -> diamante). Mirrors the existing status-pill
+// pattern (color + icon, `${color}22` bg) so it fits the bespoke Cuban header
+// without pulling in the shared StatusBadge. Drivers now earn tiers too.
+const TIER_PILL: Record<UserLevel, { color: string; icon: React.ComponentProps<typeof Ionicons>['name'] }> = {
+  bronce: { color: '#B07B4F', icon: 'medal-outline' },
+  plata: { color: '#9AA3AD', icon: 'medal-outline' },
+  oro: { color: '#E0A100', icon: 'medal' },
+  platino: { color: '#3FB6B6', icon: 'trophy' },
+  diamante: { color: '#7C5CFF', icon: 'diamond' },
+};
 
 type MenuItem = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -361,6 +373,41 @@ function NativeDriverProfileScreen() {
                       }}
                     >
                       {statusInfo.label}
+                    </Text>
+                  </View>
+                )}
+                {user?.level && (
+                  <View
+                    style={{
+                      marginTop: 8,
+                      alignSelf: 'flex-start',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: `${(TIER_PILL[user.level] ?? TIER_PILL.bronce).color}22`,
+                      borderRadius: 9999,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                    }}
+                    accessible
+                    accessibilityRole="text"
+                    accessibilityLabel={t(`profile.level_${user.level}`)}
+                  >
+                    <Ionicons
+                      name={(TIER_PILL[user.level] ?? TIER_PILL.bronce).icon}
+                      size={12}
+                      color={(TIER_PILL[user.level] ?? TIER_PILL.bronce).color}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text
+                      style={{
+                        color: (TIER_PILL[user.level] ?? TIER_PILL.bronce).color,
+                        fontSize: 11,
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      {t(`profile.level_${user.level}`)}
                     </Text>
                   </View>
                 )}

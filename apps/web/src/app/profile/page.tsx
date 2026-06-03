@@ -83,12 +83,23 @@ export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  // Loyalty tier lives in users.level; auth metadata is never synced to it, so we
+  // must read it from the DB (otherwise the badge is always missing/stale on web).
+  const [level, setLevel] = useState<string | null>(null);
 
   useEffect(() => {
-    getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
+    getSupabaseClient().auth.getSession().then(async ({ data: { session } }) => {
       setUserId(session?.user?.id ?? null);
       setUser(session?.user ?? null);
       setAuthLoading(false);
+      if (session?.user?.id) {
+        const { data } = await getSupabaseClient()
+          .from('users')
+          .select('level')
+          .eq('id', session.user.id)
+          .single();
+        setLevel(data?.level ?? null);
+      }
     });
   }, []);
 
@@ -120,7 +131,6 @@ export default function ProfilePage() {
   const avatarUrl = user?.user_metadata?.avatar_url;
   const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name || 'Usuario';
   const email = user?.email || '';
-  const level = user?.user_metadata?.level;
   const initial = fullName[0]?.toUpperCase() || '?';
 
   return (
