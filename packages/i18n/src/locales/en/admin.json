@@ -396,6 +396,8 @@
     "level_bronze": "Bronze",
     "level_silver": "Silver",
     "level_gold": "Gold",
+    "level_platinum": "Platinum",
+    "level_diamond": "Diamond",
     "change_level": "Change level",
     "wallet_section": "Trip credits",
     "label_available_balance": "Available balance",
@@ -1080,7 +1082,11 @@
     "stripe_fee_type_help": "Fee type: fixed or percentage",
     "cash_enabled_help": "Enable/disable cash payments",
     "wallet_enabled_help": "Enable/disable trip credit payments",
-    "shared_ride_discount_per_seat_pct_help": "Discount per free seat when the rider shares the trip (tricycle only). Default 7%"
+    "shared_ride_discount_per_seat_pct_help": "Discount per free seat when the rider shares the trip (tricycle only). Default 7%",
+    "tier_plata_min_trips_help": "Minimum completed trips for Silver tier (rider + driver). Default 5",
+    "tier_oro_min_trips_help": "Minimum completed trips for Gold tier (rider + driver). Default 20",
+    "tier_platino_min_trips_help": "Minimum completed trips for Platinum tier (rider + driver). Default 50",
+    "tier_diamante_min_trips_help": "Minimum completed trips for Diamond tier (rider + driver). Default 100"
   },
   "exchange_rate": {
     "title": "Exchange Rate",

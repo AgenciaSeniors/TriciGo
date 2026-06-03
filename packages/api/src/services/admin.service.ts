@@ -35,6 +35,7 @@ import type {
   SelfieCheck,
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
+import type { UserLevel } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
@@ -1145,7 +1146,7 @@ export const adminService = {
    */
   async updateUserLevel(
     userId: string,
-    level: 'bronce' | 'plata' | 'oro',
+    level: UserLevel,
   ): Promise<void> {
     const supabase = getSupabaseClient();
     const { error } = await supabase

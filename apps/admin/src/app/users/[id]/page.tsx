@@ -17,12 +17,16 @@ const levelBadgeClasses: Record<UserLevel, string> = {
   bronce: 'bg-amber-100 text-amber-800',
   plata: 'bg-surface-sunken text-ink-muted',
   oro: 'bg-yellow-100 text-yellow-800',
+  platino: 'bg-teal-100 text-teal-800',
+  diamante: 'bg-violet-100 text-violet-800',
 };
 
 const LEVEL_LABEL_KEY: Record<UserLevel, string> = {
   bronce: 'users.level_bronze',
   plata: 'users.level_silver',
   oro: 'users.level_gold',
+  platino: 'users.level_platinum',
+  diamante: 'users.level_diamond',
 };
 
 const LANG_KEY: Record<string, string> = {
@@ -305,6 +309,8 @@ export default function UserDetailPage() {
                 <option value="bronce">{t('users.level_bronze')}</option>
                 <option value="plata">{t('users.level_silver')}</option>
                 <option value="oro">{t('users.level_gold')}</option>
+                <option value="platino">{t('users.level_platinum')}</option>
+                <option value="diamante">{t('users.level_diamond')}</option>
               </select>
               <button
                 onClick={handleLevelChange}

@@ -39,6 +39,12 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
   weather_surge_enabled: { type: 'text', helpKey: 'platform_config.weather_surge_enabled_help' },
   // ── Shared ride (Compartir viaje) ──
   shared_ride_discount_per_seat_pct: { type: 'number', helpKey: 'platform_config.shared_ride_discount_per_seat_pct_help' },
+
+  // ── Loyalty tiers (min completed trips per level; rider + driver combined) ──
+  tier_plata_min_trips: { type: 'number', helpKey: 'platform_config.tier_plata_min_trips_help' },
+  tier_oro_min_trips: { type: 'number', helpKey: 'platform_config.tier_oro_min_trips_help' },
+  tier_platino_min_trips: { type: 'number', helpKey: 'platform_config.tier_platino_min_trips_help' },
+  tier_diamante_min_trips: { type: 'number', helpKey: 'platform_config.tier_diamante_min_trips_help' },
 };
 
 export default function PlatformConfigPage() {

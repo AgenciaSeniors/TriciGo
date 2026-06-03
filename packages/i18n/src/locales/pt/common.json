@@ -152,6 +152,8 @@
     "level_bronce": "Bronze",
     "level_plata": "Prata",
     "level_oro": "Ouro",
+    "level_platino": "Platina",
+    "level_diamante": "Diamante",
     "rides_completed": "{{count}} viagens",
     "total_spent_label": "Total gasto",
     "referral_title": "Indicações",
