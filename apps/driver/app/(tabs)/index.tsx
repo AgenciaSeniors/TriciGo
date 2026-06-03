@@ -70,7 +70,6 @@ function ActiveTripMap({
   screenHeight,
   followMode,
   onUserInteraction,
-  lockZoom,
 }: {
   mapRef: React.RefObject<RideMapViewRef | null>;
   driverLocation: { latitude: number; longitude: number } | null;
@@ -78,7 +77,6 @@ function ActiveTripMap({
   screenHeight: number;
   followMode: boolean;
   onUserInteraction: () => void;
-  lockZoom: boolean;
 }) {
   const { pickupLocation, dropoffLocation, riderLocation, routeCoordinates, waypointLocations, waypointStatuses } = useActiveTripMapData();
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
@@ -116,7 +114,6 @@ function ActiveTripMap({
       vehicleType={vehicleType}
       followMode={followMode}
       onUserInteraction={onUserInteraction}
-      lockZoom={lockZoom}
       // BUG-267 v3 — drive the per-status cinematic camera profile
       // (zoom/pitch tailored to accepted → in_progress).
       rideStatus={rideStatus}
@@ -931,7 +928,6 @@ function NativeDriverHomeScreen() {
             screenHeight={SCREEN_HEIGHT}
             followMode={followMode}
             onUserInteraction={handleUserMapInteraction}
-            lockZoom={!!activeTrip}
           />
         </View>
 

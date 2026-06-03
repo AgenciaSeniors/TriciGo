@@ -15,6 +15,8 @@ const MIN_MOVE_M = 50;
 export interface DriverETAResult {
   /** ETA in minutes, null if unknown */
   etaMinutes: number | null;
+  /** Remaining road distance to the current target in meters, null if unknown */
+  distanceMeters: number | null;
   /** Whether we're currently recalculating */
   isCalculating: boolean;
 }
@@ -38,6 +40,7 @@ export function useDriverETA({
   rideStatus,
 }: UseDriverETAParams): DriverETAResult {
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
+  const [distanceMeters, setDistanceMeters] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const lastCalcRef = useRef(0);
   const lastPosRef = useRef<GeoPoint | null>(null);
@@ -58,9 +61,11 @@ export function useDriverETA({
       destination = dropoffLocation;
     } else if (rideStatus === 'arrived_at_pickup') {
       setEtaMinutes(0);
+      setDistanceMeters(0);
       return;
     } else {
       setEtaMinutes(null);
+      setDistanceMeters(null);
       return;
     }
 
@@ -100,16 +105,19 @@ export function useDriverETA({
 
       if (route) {
         setEtaMinutes(Math.max(1, Math.round(route.duration_s / 60)));
+        setDistanceMeters(Math.max(0, Math.round(route.distance_m)));
       } else {
         const straight = haversineDistance(currentPos, destination);
         const road = estimateRoadDistance(straight);
         setEtaMinutes(Math.max(1, Math.round((road / FALLBACK_SPEED_MS) / 60)));
+        setDistanceMeters(Math.max(0, Math.round(road)));
       }
     } catch {
       if (!mountedRef.current) return;
       const straight = haversineDistance(currentPos, destination);
       const road = estimateRoadDistance(straight);
       setEtaMinutes(Math.max(1, Math.round((road / FALLBACK_SPEED_MS) / 60)));
+      setDistanceMeters(Math.max(0, Math.round(road)));
     } finally {
       if (mountedRef.current) setIsCalculating(false);
     }
@@ -125,5 +133,5 @@ export function useDriverETA({
     return () => clearInterval(interval);
   }, [calculateETA, rideStatus]);
 
-  return { etaMinutes, isCalculating };
+  return { etaMinutes, distanceMeters, isCalculating };
 }

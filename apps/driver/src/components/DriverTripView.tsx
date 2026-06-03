@@ -31,6 +31,7 @@ import { DraggableSheet } from '@tricigo/ui/DraggableSheet';
 import {
   formatCUP,
   formatTRC,
+  formatDistance,
   triggerHaptic,
   haversineDistance,
 } from '@tricigo/utils';
@@ -72,6 +73,7 @@ import { TripStepper } from './trip/TripStepper';
 import { RouteInfoCard } from './trip/RouteInfoCard';
 import { RiderPreferencesChips } from './trip/RiderPreferencesChips';
 import { DeliveryDetailsCard } from './trip/DeliveryDetailsCard';
+import { RiderInfoCard } from './trip/RiderInfoCard';
 import { TripActionToolbar } from './trip/TripActionToolbar';
 import { TripBadgesRow } from './trip/TripBadgesRow';
 import { WaitTimer } from './trip/WaitTimer';
@@ -476,11 +478,37 @@ export function DriverTripView() {
 
   const TRIP_STEPS = useTripSteps();
   const ACTION_LABELS = useActionLabels();
-  const { etaMinutes, isCalculating } = useDriverETA({
+  const { etaMinutes, distanceMeters, isCalculating } = useDriverETA({
     pickupLocation: activeTrip?.pickup_location ?? null,
     dropoffLocation: activeTrip?.dropoff_location ?? null,
     rideStatus: activeTrip?.status ?? null,
   });
+
+  // Passenger identity for the in-ride sheet (name / avatar / rating).
+  // Best-effort: getRideWithRider uses the membership-gated RPC
+  // get_ride_party_profiles (RLS-safe). If it fails or the rider can't be
+  // resolved, riderInfo stays null and the card is simply hidden — no crash,
+  // no blocking. Same pattern as TripCompleteView + the chat header.
+  const [riderInfo, setRiderInfo] = useState<{
+    name: string;
+    avatarUrl: string | null;
+    rating: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!activeTrip?.id) return;
+    let cancelled = false;
+    rideService.getRideWithRider(activeTrip.id)
+      .then((data) => {
+        if (cancelled || !data) return;
+        setRiderInfo({
+          name: data.rider_name ?? 'Pasajero',
+          avatarUrl: data.rider_avatar_url ?? null,
+          rating: data.rider_rating ?? 5,
+        });
+      })
+      .catch(() => { /* best-effort: hide the card if the RPC is unavailable */ });
+    return () => { cancelled = true; };
+  }, [activeTrip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // PR-B: action color per phase collapses from a 5-hue rainbow into a
   // single accent-intensity scale. The progression `accent[300]` →
@@ -698,6 +726,13 @@ export function DriverTripView() {
           } else {
             primary = t('trip.in_progress', { defaultValue: 'Viaje activo' });
           }
+          // Append remaining road distance (locale-neutral "1.2 km" / "500 m")
+          // while navigating to a target. distanceMeters comes from the same
+          // throttled OSRM fetch the ETA uses — no extra network. Shown only
+          // when we actually have a positive distance (skips arrived phases).
+          if ((isToPickup || isOnTrip) && etaMinutes !== null && distanceMeters != null && distanceMeters > 0) {
+            primary = `${primary} · ${formatDistance(distanceMeters)}`;
+          }
           // Secondary line: relevant address (pickup or dropoff)
           const secondaryAddress = (isToPickup || isAtPickup)
             ? activeTrip.pickup_address
@@ -743,6 +778,17 @@ export function DriverTripView() {
           );
         })()}
       </View>
+
+      {/* Who am I picking up? Passenger identity + quick chat. Hidden until
+          the rider profile resolves (best-effort fetch). */}
+      {riderInfo ? (
+        <RiderInfoCard
+          riderName={riderInfo.name}
+          riderAvatarUrl={riderInfo.avatarUrl}
+          riderRating={riderInfo.rating}
+          rideId={activeTrip.id}
+        />
+      ) : null}
 
       {/* BUG-244 polish: live distance hint + GPS health detection. */}
       <LiveDistanceHint

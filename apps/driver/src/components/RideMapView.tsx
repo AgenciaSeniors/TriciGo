@@ -110,13 +110,6 @@ interface RideMapViewProps {
    * zoom-16.5/pitch-45. Only consulted when `followMode` is true.
    */
   rideStatus?: string | null;
-  /**
-   * When true, prevents zoom-out beyond level 14 regardless of follow mode.
-   * Set during active trips so the driver never loses position context, even
-   * after panning. Independent of followMode so the user can still pan/zoom
-   * within the locked range.
-   */
-  lockZoom?: boolean;
   /** Bottom padding offset to shift controls above bottom sheet */
   bottomOffset?: number;
   /** Additional style for the map container */
@@ -213,7 +206,6 @@ function WebMapboxView({
   followMode,
   driverHeading,
   onUserInteraction,
-  lockZoom,
   bottomOffset = 0,
   containerStyle,
   nearbyDrivers,
@@ -723,7 +715,6 @@ function RideMapViewInner(
     followMode,
     driverHeading,
     onUserInteraction,
-    lockZoom,
     nearbyDrivers,
     demandHotspots,
     popularLocations,
@@ -1389,17 +1380,23 @@ function RideMapViewInner(
         // within a second of accepting a ride, freezing the camera for the
         // rest of the trip. onTouchStart is the same pattern the client app
         // uses and only fires on real finger contact.
-        onTouchStart={followMode ? () => onUserInteraction?.() : undefined}
+        //
+        // Fire on EVERY touch during an active trip (not only while followMode
+        // is currently true) so each gesture resets the 8s auto-resume timer in
+        // the parent. Gating on followMode detached the handler after the first
+        // touch, so the camera re-locked 8s after the FIRST gesture even while
+        // the driver kept interacting. Mirrors the client (gates on a stable
+        // "ride active" signal). Idle home passes no onUserInteraction → no-op.
+        onTouchStart={onUserInteraction ? () => onUserInteraction() : undefined}
       >
         <MapboxGL.Camera
           ref={cameraRef}
           defaultSettings={{ centerCoordinate: defaultCenter, zoomLevel: 14 }}
-          // lockZoom (active trip) prevents zoom-out below level 14 so the
-          // driver never loses position context, even after panning. This
-          // is independent of followMode — locking applies even when the
-          // user is gesturing within the allowed range. Idle home leaves
-          // zoom unrestricted.
-          {...(lockZoom ? { minZoomLevel: 14 } : {})}
+          // No minZoomLevel during the trip: clamping zoom-out to z14 made the
+          // map "spring back" when the driver pinched out to see the wider
+          // route (matches the client's BUG-231 v2 fix, which removed it for
+          // the same reason). Losing context is already prevented by the 8s
+          // follow auto-resume + the recenter button.
           {...(tripCameraProfile
             ? tripCameraProfile
             : !driverLocation && bounds
