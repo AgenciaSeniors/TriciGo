@@ -1081,26 +1081,4 @@ describe('adminService', () => {
     });
   });
 
-  // ==================== Surge Zones ====================
-  describe('getSurgeZones', () => {
-    it('returns surge zones', async () => {
-      const zones = [{ id: 'sz-1', name: 'Downtown', multiplier: 1.5 }];
-      const chain = createMockQueryChain({ data: zones, error: null });
-      mockFrom.mockReturnValueOnce(chain);
-
-      const result = await adminService.getSurgeZones();
-
-      expect(mockFrom).toHaveBeenCalledWith('surge_zones');
-      expect(result).toEqual(zones);
-    });
-
-    it('throws on supabase error', async () => {
-      const err = { message: 'DB error', code: '42P01' };
-      const chain = createMockQueryChain({ data: null, error: err });
-      mockFrom.mockReturnValueOnce(chain);
-
-      await expect(adminService.getSurgeZones()).rejects.toEqual(err);
-    });
-  });
-
 });

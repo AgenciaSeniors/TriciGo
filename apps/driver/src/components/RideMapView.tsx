@@ -87,8 +87,6 @@ interface RideMapViewProps {
    *  StopMarker pulse: the first 'current' one pulses. */
   waypointStatuses?: Array<'pending' | 'current' | 'completed'>;
   heatmapData?: { latitude: number; longitude: number; intensity: number }[];
-  /** Active surge zones with GeoJSON boundaries for polygon overlay */
-  surgeZones?: { multiplier: number; zone_name: string | null; boundary: { type: 'Polygon'; coordinates: number[][][] } }[];
   height?: number;
   /** When true, use dark navigation style (no active ride / idle) */
   darkStyle?: boolean;
@@ -198,7 +196,6 @@ function WebMapboxView({
   waypointLocations,
   waypointStatuses,
   heatmapData,
-  surgeZones,
   height = 200,
   darkStyle = false,
   onRecenter,
@@ -543,71 +540,6 @@ function WebMapboxView({
     else map.on('load', addHeatmap);
   }, [heatmapData]);
 
-  // Surge zones polygon layer (web)
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-
-    function addSurgeLayer() {
-      // Clean up previous
-      if (map.getSource('surge-zones')) {
-        if (map.getLayer('surge-fill')) map.removeLayer('surge-fill');
-        if (map.getLayer('surge-stroke')) map.removeLayer('surge-stroke');
-        map.removeSource('surge-zones');
-      }
-      if (!surgeZones?.length) return;
-
-      map.addSource('surge-zones', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: surgeZones.map((zone, i) => ({
-            type: 'Feature',
-            geometry: zone.boundary,
-            properties: {
-              multiplier: zone.multiplier,
-              name: zone.zone_name ?? `${zone.multiplier}x`,
-              fillColor:
-                zone.multiplier >= 2.0
-                  ? 'rgba(239,68,68,0.20)'
-                  : zone.multiplier >= 1.5
-                    ? 'rgba(255,77,0,0.18)'
-                    : 'rgba(234,179,8,0.15)',
-              strokeColor:
-                zone.multiplier >= 2.0
-                  ? 'rgba(239,68,68,0.6)'
-                  : zone.multiplier >= 1.5
-                    ? 'rgba(255,77,0,0.5)'
-                    : 'rgba(234,179,8,0.4)',
-            },
-          })),
-        },
-      });
-      map.addLayer({
-        id: 'surge-fill',
-        type: 'fill',
-        source: 'surge-zones',
-        paint: {
-          'fill-color': ['get', 'fillColor'],
-          'fill-opacity': 1,
-        },
-      });
-      map.addLayer({
-        id: 'surge-stroke',
-        type: 'line',
-        source: 'surge-zones',
-        paint: {
-          'line-color': ['get', 'strokeColor'],
-          'line-width': 1.5,
-          'line-dasharray': [3, 2],
-        },
-      });
-    }
-
-    if (map.isStyleLoaded()) addSurgeLayer();
-    else map.on('load', addSurgeLayer);
-  }, [surgeZones]);
-
   // Follow mode for web map
   useEffect(() => {
     if (!followMode || !driverLocation || !mapRef.current) return;
@@ -707,7 +639,6 @@ function RideMapViewInner(
     waypointLocations,
     waypointStatuses,
     heatmapData,
-    surgeZones,
     height = 200,
     darkStyle = false,
     onRecenter,
@@ -917,36 +848,6 @@ function RideMapViewInner(
       })),
     };
   }, [nearbyDrivers]);
-
-  // Build surge zones GeoJSON for polygon overlay
-  const surgeGeoJSON = useMemo(() => {
-    if (!surgeZones || surgeZones.length === 0) return null;
-    return {
-      type: 'FeatureCollection' as const,
-      features: surgeZones.map((zone, i) => ({
-        type: 'Feature' as const,
-        geometry: zone.boundary,
-        properties: {
-          id: `surge-${i}`,
-          multiplier: zone.multiplier,
-          name: zone.zone_name ?? `${zone.multiplier}x`,
-          // Color by multiplier intensity
-          fillColor:
-            zone.multiplier >= 2.0
-              ? 'rgba(239,68,68,0.20)'   // red
-              : zone.multiplier >= 1.5
-                ? 'rgba(255,77,0,0.18)'   // orange
-                : 'rgba(234,179,8,0.15)', // yellow
-          strokeColor:
-            zone.multiplier >= 2.0
-              ? 'rgba(239,68,68,0.6)'
-              : zone.multiplier >= 1.5
-                ? 'rgba(255,77,0,0.5)'
-                : 'rgba(234,179,8,0.4)',
-        },
-      })),
-    };
-  }, [surgeZones]);
 
   // Compute camera bounds — only when overview mode (followMode=false).
   // Skipping during followMode avoids the per-GPS-update recompute that
@@ -1227,7 +1128,6 @@ function RideMapViewInner(
           riderLocation={riderLocation}
           routeCoordinates={routeCoordinates}
           heatmapData={heatmapData}
-          surgeZones={surgeZones}
           height={height}
           darkStyle={darkStyle}
           onRecenter={onRecenter}
@@ -1637,25 +1537,6 @@ function RideMapViewInner(
               </View>
             </View>
           </MapboxGL.MarkerView>
-        )}
-        {surgeGeoJSON && (
-          <MapboxGL.ShapeSource id="surge-zones" shape={surgeGeoJSON}>
-            <MapboxGL.FillLayer
-              id="surge-fill"
-              style={{
-                fillColor: ['get', 'fillColor'],
-                fillOpacity: 1,
-              }}
-            />
-            <MapboxGL.LineLayer
-              id="surge-stroke"
-              style={{
-                lineColor: ['get', 'strokeColor'],
-                lineWidth: 1.5,
-                lineDasharray: [3, 2],
-              }}
-            />
-          </MapboxGL.ShapeSource>
         )}
         {heatmapGeoJSON && (
           <MapboxGL.ShapeSource id="heatmap" shape={heatmapGeoJSON}>

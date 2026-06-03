@@ -1,3 +1,11 @@
+// TriciGo — sync-weather (cron */15)
+//
+// WEATHER-ONLY SURGE. Zone-based and demand-based surge were removed
+// (migrations 00375/00376). This function writes a single GLOBAL multiplier
+// to platform_config.weather_surge_multiplier (no longer per-zone surge_zones).
+// The fare estimate reads it via the get_weather_surge() RPC. Bad weather
+// (rain / storm / extreme / cold front) is the only thing that can raise fares.
+//
 // BUG-160 + BUG-201 + BUG-199: apikey === env.SUPABASE_SERVICE_ROLE_KEY
 // (now sb_secret_*, post legacy revocation). Leaked legacy JWT
 // would not match this string-equality check.
@@ -10,8 +18,16 @@ function getCorsHeaders(req: Request) {
   return { 'Access-Control-Allow-Origin': allowedOrigin, 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 }
 
+// Weather is sampled at Havana as a national proxy (per-province weather is a
+// future enhancement). Cuba's inhabited areas never reach 0 °C, so a parsed
+// temp of 0 is treated as "unknown" rather than a real cold reading.
 const HAVANA_LAT = 23.13;
 const HAVANA_LNG = -82.38;
+
+// Defaults (overridable via platform_config).
+const DEFAULT_COLD_THRESHOLD_C = 12; // a real "norte"/cold front for Cuba
+const DEFAULT_COLD_MULTIPLIER = 1.3;
+const SURGE_MAX = 3.0;
 
 function getWeatherMultiplier(c: number) {
   if (c >= 200 && c <= 232) return { multiplier: 1.6, reason: 'weather_storm', condition: 'storm' };
@@ -23,6 +39,12 @@ function getWeatherMultiplier(c: number) {
   if (c >= 520 && c <= 531) return { multiplier: 1.4, reason: 'weather_rain', condition: 'rain' };
   if (c === 771 || c === 781) return { multiplier: 1.8, reason: 'weather_extreme', condition: 'extreme' };
   return { multiplier: 1.0, reason: 'weather_clear', condition: 'clear' };
+}
+
+function parseConfigNumber(raw: string | undefined, fallback: number): number {
+  if (raw == null) return fallback;
+  const n = parseFloat(String(raw).replace(/"/g, ''));
+  return Number.isFinite(n) ? n : fallback;
 }
 
 async function fetchOpenWeatherMap(apiKey: string) {
@@ -75,11 +97,22 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, serviceRoleKey);
-    const { data: configs } = await supabase.from('platform_config').select('key, value').in('key', ['openweather_api_key', 'weather_surge_enabled']);
+
+    // Persist the single global multiplier + a human-readable status snapshot.
+    const writeState = async (multiplier: number, status: Record<string, unknown>) => {
+      const now = new Date().toISOString();
+      await supabase.from('platform_config').upsert({ key: 'weather_surge_multiplier', value: String(multiplier), updated_at: now });
+      await supabase.from('platform_config').upsert({ key: 'weather_last_check', value: JSON.stringify({ ...status, multiplier, checked_at: now }), updated_at: now });
+    };
+
+    const { data: configs } = await supabase.from('platform_config').select('key, value')
+      .in('key', ['openweather_api_key', 'weather_surge_enabled', 'weather_cold_threshold_c', 'weather_cold_multiplier']);
     const configMap = new Map((configs ?? []).map((c: { key: string; value: string }) => [c.key, c.value]));
 
+    // Kill switch → force flat fares (reset multiplier to 1.0) and exit.
     const enabled = configMap.get('weather_surge_enabled');
     if (enabled === 'false' || enabled === '"false"') {
+      await writeState(1.0, { condition: 'disabled', description: 'weather surge disabled', temp: 0, code: 0, reason: 'disabled' });
       return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'disabled' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -89,39 +122,29 @@ Deno.serve(async (req) => {
     if (!weather) weather = await fetchWttrIn();
     if (!weather) return new Response(JSON.stringify({ ok: false, error: 'All weather sources failed' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    const { multiplier, reason, condition } = getWeatherMultiplier(weather.code);
-    const { data: zones } = await supabase.from('zones').select('id, name').eq('is_active', true);
-    const activeZones = zones ?? [];
+    const coldThreshold = parseConfigNumber(configMap.get('weather_cold_threshold_c'), DEFAULT_COLD_THRESHOLD_C);
+    const coldMultiplier = parseConfigNumber(configMap.get('weather_cold_multiplier'), DEFAULT_COLD_MULTIPLIER);
 
-    if (multiplier > 1.0) {
-      const surgeExpiry = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-      const { data: existingSurges } = await supabase.from('surge_zones').select('id, zone_id, multiplier, reason').like('reason', 'weather_%').eq('active', true);
-      const existingMap = new Map((existingSurges ?? []).map((s: { id: string; zone_id: string; multiplier: number }) => [s.zone_id, s]));
+    const cond = getWeatherMultiplier(weather.code);
+    let multiplier = cond.multiplier;
+    let reason = cond.reason;
+    let condition = cond.condition;
 
-      for (const zone of activeZones) {
-        const existing = existingMap.get(zone.id);
-        if (existing) {
-          const currentMult = existing.multiplier as number;
-          const newMult = Math.min(multiplier, currentMult + 0.3);
-          const finalMult = Math.max(newMult, currentMult - 0.3);
-          await supabase.from('surge_zones').update({ multiplier: Math.round(finalMult * 100) / 100, reason, ends_at: surgeExpiry }).eq('id', existing.id);
-        } else {
-          const initialMult = Math.min(multiplier, 1.3);
-          await supabase.from('surge_zones').insert({ zone_id: zone.id, multiplier: initialMult, reason, active: true, starts_at: new Date().toISOString(), ends_at: surgeExpiry });
-        }
-      }
-    } else {
-      const { data: activeSurges } = await supabase.from('surge_zones').select('id').like('reason', 'weather_%').eq('active', true);
-      if (activeSurges && activeSurges.length > 0) {
-        const ids = activeSurges.map((s: { id: string }) => s.id);
-        await supabase.from('surge_zones').update({ active: false }).in('id', ids);
-      }
+    // Cold front ("mucho frío"): low temperature raises surge on its own. temp
+    // of 0 means the source failed to parse it, so it is ignored (never cold).
+    const isCold = weather.temp > 0 && weather.temp <= coldThreshold;
+    if (isCold && coldMultiplier > multiplier) {
+      multiplier = coldMultiplier;
+      reason = 'weather_cold';
+      condition = 'cold';
     }
 
-    const checkStatus = JSON.stringify({ condition, description: weather.description, temp: weather.temp, code: weather.code, multiplier, checked_at: new Date().toISOString() });
-    await supabase.from('platform_config').upsert({ key: 'weather_last_check', value: checkStatus, updated_at: new Date().toISOString() });
+    multiplier = Math.min(Math.max(multiplier, 1.0), SURGE_MAX);
+    multiplier = Math.round(multiplier * 100) / 100;
 
-    return new Response(JSON.stringify({ ok: true, weather: { code: weather.code, description: weather.description, temp: weather.temp, condition, multiplier }, zones_affected: multiplier > 1.0 ? activeZones.length : 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    await writeState(multiplier, { condition, description: weather.description, temp: weather.temp, code: weather.code, reason });
+
+    return new Response(JSON.stringify({ ok: true, weather: { code: weather.code, description: weather.description, temp: weather.temp, condition, multiplier } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }

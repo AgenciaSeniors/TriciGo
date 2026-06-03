@@ -62,7 +62,7 @@ export function rideReceiptHtml(data: RideReceiptData): string {
   }
   if (surgeApplied) {
     breakdownRows.push(
-      detailRow('Demanda alta', `×${data.surge_multiplier.toFixed(2)}`, { muted: true }),
+      detailRow('Mal tiempo', `×${data.surge_multiplier.toFixed(2)}`, { muted: true }),
     );
   }
   if (discountApplied) {

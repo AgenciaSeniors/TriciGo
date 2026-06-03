@@ -14,7 +14,6 @@ import type {
   PricingRule,
   Promotion,
   Tip,
-  SurgeZone,
   SurgeType,
   DemandHotspot,
   PopularLocation,
@@ -175,7 +174,9 @@ export const rideService = {
     // request hits the wire exactly once instead of four times.
     const waypointKeyPart = params.waypoints?.map((w) => `${w.lat.toFixed(6)},${w.lng.toFixed(6)}`).join('+') ?? '';
     const routeKey = `route:${params.pickup_lat.toFixed(6)},${params.pickup_lng.toFixed(6)}->${waypointKeyPart ? waypointKeyPart + '->' : ''}${params.dropoff_lat.toFixed(6)},${params.dropoff_lng.toFixed(6)}`;
-    const surgeKey = `surge:${params.pickup_lat.toFixed(4)},${params.pickup_lng.toFixed(4)}`;
+    // Weather surge is global (city-wide), so one shared key dedupes the call
+    // across all concurrent per-service-type estimates.
+    const surgeKey = 'weather_surge';
     const exchangeKey = 'exchange:usd_cup';
 
     const allRoutePoints = [
@@ -206,13 +207,8 @@ export const rideService = {
               ).catch(() => null),
         ),
         dedupe(surgeKey, () =>
-          Promise.resolve(supabase.rpc('calculate_dynamic_surge', {
-            p_zone_id: null,
-            p_lat: params.pickup_lat,
-            p_lng: params.pickup_lng,
-            p_radius_m: 3000,
-          })).catch(() => {
-            console.warn('[ride.service] Surge RPC failed, falling back to multiplier 1.0');
+          Promise.resolve(supabase.rpc('get_weather_surge')).catch(() => {
+            console.warn('[ride.service] Weather surge RPC failed, falling back to multiplier 1.0');
             return { data: 1.0 as number, error: null };
           }),
         ),
@@ -303,31 +299,15 @@ export const rideService = {
           minimumFare: minFare,
         });
 
-    // ─── Dynamic Surge (conditional weather check) ───
+    // ─── Weather surge (global, the only surge left) ───
+    // Bad weather (rain / storm / extreme / cold front) is the sole factor that
+    // can raise fares. Zone-based and demand-based surge were removed.
     let surgeMultiplier = 1.0;
     let surgeType: SurgeType = 'none';
-
-    try {
-      const surgeData = surgeResult.data;
-      if (typeof surgeData === 'number' && surgeData > 1.0) {
-        surgeMultiplier = surgeData;
-
-        // Only check weather surge if surge is active (conditional query)
-        const { data: weatherSurge } = await supabase
-          .from('surge_zones')
-          .select('id')
-          .like('reason', 'weather_%')
-          .eq('active', true)
-          .limit(1);
-
-        const hasWeatherSurge = weatherSurge && weatherSurge.length > 0;
-        const hasTimeRule = pricingRules && (pricingRules as PricingRule[]).some(
-          (r: PricingRule) => r.time_window_start && r.time_window_end,
-        );
-        surgeType = hasWeatherSurge ? 'weather' : hasTimeRule ? 'combined' : 'demand';
-      }
-    } catch {
-      console.warn('Surge processing failed, defaulting to 1.0x');
+    const surgeData = surgeResult?.data;
+    if (typeof surgeData === 'number' && surgeData > 1.0) {
+      surgeMultiplier = surgeData;
+      surgeType = 'weather';
     }
 
     let surgedFare = applySurge(fareResult.fare, surgeMultiplier);
@@ -1743,20 +1723,6 @@ export const rideService = {
     return data as Tip[];
   },
 
-  // ==================== SURGE ====================
-
-  /**
-   * Get active surge multiplier for a zone.
-   */
-  async getSurgeForZone(zoneId: string): Promise<number> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('calculate_surge', {
-      p_zone_id: zoneId,
-    });
-    if (error) throw error;
-    return (data as number) ?? 1.0;
-  },
-
   /**
    * Fetch aggregate offer stats for a ride the caller owns (rider side).
    * Returns driver counts and dispatch-round info, NOT individual driver
@@ -1825,20 +1791,6 @@ export const rideService = {
     });
     if (error) throw error;
     return (data as PopularLocation[] | null) ?? [];
-  },
-
-  /**
-   * Get all active surge zones.
-   */
-  async getActiveSurges(): Promise<SurgeZone[]> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('surge_zones')
-      .select('*')
-      .eq('active', true)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data as SurgeZone[];
   },
 
   /**

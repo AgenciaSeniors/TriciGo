@@ -267,10 +267,10 @@ When `ride.ride_mode === 'cargo'`, the track page shows:
    - Cargo: baseFare + (durationMin × perMinRate)  // no per-km for cargo
    - Apply minimum fare floor
 
-5. Dynamic surge:
-   - RPC: calculate_dynamic_surge(pickup_location)
-   - Checks active surge_zones near pickup
-   - Returns multiplier (1.0 = no surge) and reason (weather, demand, combined)
+5. Weather surge (global; zone + demand surge removed — migs 00375/00376):
+   - RPC: get_weather_surge()  (no params, city-wide)
+   - Reads platform_config.weather_surge_multiplier (written by sync-weather EF)
+   - Returns multiplier (1.0 = no surge); only bad weather (rain/storm/cold) raises fares
 
 6. A/B pricing experiments:
    - Check pricing_experiments for active experiment on service_type

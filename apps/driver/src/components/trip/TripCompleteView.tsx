@@ -387,7 +387,7 @@ export function TripCompleteView() {
           >
             {t('trip.surge_active', {
               multiplier: activeTrip.surge_multiplier,
-              defaultValue: `Tarifa dinámica ${activeTrip.surge_multiplier}x activa`,
+              defaultValue: `Recargo por mal tiempo ${activeTrip.surge_multiplier}x`,
             })}
           </Text>
         )}

@@ -142,7 +142,7 @@
     "action_finish": "Finalizar",
     "action_arrived_destination": "Llegué",
     "tip_received": "¡Recibiste una propina de {{amount}}!",
-    "surge_active": "Tarifa dinámica {{multiplier}}x activa",
+    "surge_active": "Recargo por mal tiempo {{multiplier}}x",
     "not_found": "Viaje no encontrado",
     "distance": "Distancia",
     "duration": "Duración",

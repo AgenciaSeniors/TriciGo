@@ -69,8 +69,6 @@ import { useRideOfferStats } from '@/hooks/useRideOfferStats';
 import { DriverInfoMiniCard } from '@/components/DriverInfoMiniCard';
 import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
 import { WebActiveRideView } from '@/components/WebActiveRideView';
-// Surge is calculated backend-side but not shown to users
-// import { useSurgeZones } from '@/hooks/useSurgeZones';
 
 // Mapbox GL loaded lazily inside components — NOT at module level
 // Module-level require can crash the entire JS context if native module fails
@@ -1372,7 +1370,7 @@ function WebHomeScreen() {
                   </div>
                   {(selectedEstimate.surge_multiplier || 0) > 1 && (
                     <span style={{ display: 'inline-block', marginTop: 8, color: '#fff', background: colors.brand.orange, fontWeight: 700, padding: '2px 10px', borderRadius: 12, fontSize: 11 }}>
-                      {selectedEstimate.surge_multiplier.toFixed(1)}x surge
+                      {selectedEstimate.surge_multiplier.toFixed(1)}x · mal tiempo
                     </span>
                   )}
 
@@ -1805,8 +1803,6 @@ function IdleView() {
   } | null>(null);
   const { recentAddresses } = useRecentAddresses();
   const { predictions } = useDestinationPredictions();
-  // Surge is calculated in the backend but not shown to users
-  // const { hasActiveSurge, maxMultiplier } = useSurgeZones();
   const { data: weather } = useWeather(
     userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null,
   );
@@ -3576,9 +3572,9 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                 )}
                 {(selectedEstimate as any).surge_multiplier > 1 && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                    <Ionicons name="trending-up" size={14} color="#ef4444" />
+                    <Ionicons name="rainy" size={14} color="#ef4444" />
                     <Text variant="caption" style={{ color: '#ef4444', fontWeight: '600' }}>
-                      Tarifa dinámica ×{((selectedEstimate as any).surge_multiplier as number).toFixed(1)}
+                      {t('home.weather_surge_label', { defaultValue: 'Mal tiempo' })} ×{((selectedEstimate as any).surge_multiplier as number).toFixed(1)}
                     </Text>
                   </View>
                 )}
@@ -3970,20 +3966,20 @@ function ReviewingView() {
         </View>
       )}
 
-      {/* Surge pricing alert (always visible when active) */}
+      {/* Weather surge alert (visible when bad weather raises the fare) */}
       {fareEstimate.surge_multiplier != null && fareEstimate.surge_multiplier > 1 && (
         <View
           className="flex-row items-center rounded-xl px-4 py-3 mb-4"
           style={{ backgroundColor: '#FEF3C7' }}
           accessibilityRole="alert"
         >
-          <Ionicons name="flash" size={20} color="#D97706" />
+          <Ionicons name="rainy" size={20} color="#D97706" />
           <View className="flex-1 ml-3">
             <Text variant="bodySmall" className="font-bold" style={{ color: '#92400E' }}>
-              {t('home.surge_active_label', { defaultValue: 'Tarifa dinámica activa' })} (x{fareEstimate.surge_multiplier})
+              {t('home.surge_active_label', { defaultValue: 'Recargo por mal tiempo' })} (x{fareEstimate.surge_multiplier})
             </Text>
             <Text variant="caption" style={{ color: '#92400E' }}>
-              {t('home.surge_explanation', { defaultValue: 'Los precios son más altos debido a la alta demanda en tu zona' })}
+              {t('home.surge_explanation', { defaultValue: 'Los precios suben temporalmente por el mal tiempo (lluvia, tormenta o frío).' })}
             </Text>
           </View>
         </View>
@@ -4082,8 +4078,9 @@ function ReviewingView() {
               durationS={fareEstimate.estimated_duration_s}
               perMinRateCup={fareEstimate.per_minute_rate_cup}
               surgeMultiplier={fareEstimate.surge_multiplier ?? 1}
-              surgeLabel={fareEstimate.surge_multiplier && fareEstimate.surge_multiplier > 1 ? t('ride.surge_active', { defaultValue: 'Tarifa dinámica' }) : undefined}
+              surgeLabel={fareEstimate.surge_multiplier && fareEstimate.surge_multiplier > 1 ? t('ride.surge_active', { defaultValue: 'Mal tiempo' }) : undefined}
               surgeType={fareEstimate.surge_type}
+              weatherSurgeLabel={t('ride.surge_active', { defaultValue: 'Mal tiempo' })}
               totalCup={fareEstimate.estimated_fare_cup}
               totalTrc={fareEstimate.estimated_fare_trc}
               totalLabel={t('ride.estimated_fare')}

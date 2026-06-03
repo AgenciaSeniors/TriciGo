@@ -195,7 +195,7 @@ export default function TripDetailScreen() {
               {(ride.surge_multiplier ?? 1) > 1 && (
                 <View className="flex-row justify-between mb-1">
                   <Text variant="caption" className="text-orange-400">
-                    {t('trip.surge', { defaultValue: 'Tarifa dinámica' })} {(ride.surge_multiplier ?? 1).toFixed(1)}x
+                    {t('trip.surge', { defaultValue: 'Mal tiempo' })} {(ride.surge_multiplier ?? 1).toFixed(1)}x
                   </Text>
                   <Text variant="caption" className="text-orange-400">+{formatCUP(Math.round(fare * (1 - 1 / (ride.surge_multiplier ?? 1))))}</Text>
                 </View>

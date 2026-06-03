@@ -116,7 +116,7 @@
     "route_info": "{{distance}} km \u00b7 {{duration}} min by road",
     "route_error": "Could not calculate route",
     "address_unavailable": "Address unavailable",
-    "surge_active": "surge pricing",
+    "surge_active": "bad weather",
     "per_km_rate": "Rate: {{rate}}/km",
     "cup_equivalent": "~ {{amount}} CUP",
     "exchange_rate_info": "Rate: 1 USD = {{rate}} CUP",

@@ -192,8 +192,6 @@ export default function PricingPage() {
       per_km_rate_cup: rule.per_km_rate_cup,
       per_minute_rate_cup: rule.per_minute_rate_cup,
       min_fare_cup: rule.min_fare_cup,
-      surge_threshold: rule.surge_threshold,
-      max_surge_multiplier: rule.max_surge_multiplier,
       time_window_start: rule.time_window_start,
       time_window_end: rule.time_window_end,
       day_of_week: rule.day_of_week,
@@ -289,23 +287,6 @@ export default function PricingPage() {
         value={((editForm[field] as number) ?? 0) / 100}
         onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0') * 100) }))}
         step="0.01"
-      />
-    );
-  }
-
-  function numInput(field: keyof PricingRule, step = '0.1') {
-    const labelMap: Record<string, string> = {
-      max_surge_multiplier: t('pricing.col_surge'),
-      surge_threshold: 'Surge threshold',
-    };
-    return (
-      <input
-        type="number"
-        aria-label={labelMap[field] ?? field}
-        className="w-16 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
-        value={(editForm[field] as number) ?? ''}
-        onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value ? parseFloat(e.target.value) : null }))}
-        step={step}
       />
     );
   }
@@ -505,7 +486,6 @@ export default function PricingPage() {
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_per_km')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_per_min')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_min')}</th>
-              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_surge')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_time_window')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('pricing.col_active')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
@@ -514,7 +494,7 @@ export default function PricingPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="text-center py-12 text-ink-subtle">
+                <td colSpan={9} className="text-center py-12 text-ink-subtle">
                   {loading ? t('common.loading') : t('pricing.no_rules')}
                 </td>
               </tr>
@@ -536,16 +516,6 @@ export default function PricingPage() {
                   </td>
                   <td className="px-4 py-3">
                     {editingId === r.id ? cupInput('min_fare_cup') : formatCUP(r.min_fare_cup)}
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    {editingId === r.id ? (
-                      <div className="flex gap-1 items-center">
-                        {numInput('max_surge_multiplier', '0.1')}
-                        <span>x</span>
-                      </div>
-                    ) : (
-                      r.max_surge_multiplier ? `${r.max_surge_multiplier}x` : '\u2014'
-                    )}
                   </td>
                   <td className="px-4 py-3">
                     {editingId === r.id ? (

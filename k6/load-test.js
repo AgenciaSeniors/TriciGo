@@ -59,15 +59,11 @@ export default function () {
 
   sleep(0.5);
 
-  // 3. Calculate surge (RPC call)
+  // 3. Weather surge (global, no params)
   const surgeRes = http.post(
-    `${SUPABASE_URL}/rest/v1/rpc/calculate_dynamic_surge`,
-    JSON.stringify({
-      p_lat: 23.13,
-      p_lng: -82.38,
-      p_service_type: 'triciclo_basico',
-    }),
-    { headers, tags: { name: 'calculate_surge' } },
+    `${SUPABASE_URL}/rest/v1/rpc/get_weather_surge`,
+    JSON.stringify({}),
+    { headers, tags: { name: 'weather_surge' } },
   );
   surgeCalcTime.add(surgeRes.timings.duration);
   check(surgeRes, { 'surge_calc 200': (r) => r.status === 200 });

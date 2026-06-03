@@ -29,7 +29,7 @@ export default function ZonesPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ name: string; surge_multiplier: number }>({ name: '', surge_multiplier: 1 });
+  const [editForm, setEditForm] = useState<{ name: string }>({ name: '' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function ZonesPage() {
 
   function startEdit(zone: ZoneRow) {
     setEditingId(zone.id);
-    setEditForm({ name: zone.name, surge_multiplier: zone.surge_multiplier });
+    setEditForm({ name: zone.name });
   }
 
   async function handleSave() {
@@ -103,7 +103,6 @@ export default function ZonesPage() {
             <tr>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('zones.col_name')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('zones.col_type')}</th>
-              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('zones.col_surge_multiplier')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('zones.col_active')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
             </tr>
@@ -111,7 +110,7 @@ export default function ZonesPage() {
           <tbody>
             {zones.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-12 text-ink-subtle">
+                <td colSpan={4} className="text-center py-12 text-ink-subtle">
                   {loading ? t('common.loading') : t('zones.no_zones')}
                 </td>
               </tr>
@@ -132,24 +131,6 @@ export default function ZonesPage() {
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE[z.type] ?? 'bg-surface-sunken text-ink-muted'}`}>
                       {TYPE_LABEL_KEY[z.type] ? t(TYPE_LABEL_KEY[z.type]!) : z.type}
                     </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {editingId === z.id ? (
-                      <input
-                        type="number"
-                        aria-label={t('zones.col_surge_multiplier')}
-                        className="w-20 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
-                        value={editForm.surge_multiplier}
-                        onChange={(e) => setEditForm((f) => ({ ...f, surge_multiplier: parseFloat(e.target.value) || 1 }))}
-                        step="0.05"
-                        min="1"
-                        max="5"
-                      />
-                    ) : (
-                      <span className={z.surge_multiplier > 1 ? 'text-yellow-600 font-medium' : ''}>
-                        {z.surge_multiplier.toFixed(2)}x
-                      </span>
-                    )}
                   </td>
                   <td className="px-4 py-3">
                     <button

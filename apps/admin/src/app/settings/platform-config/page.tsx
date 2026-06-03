@@ -37,6 +37,9 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
   quota_grace_trips: { type: 'number', helpKey: 'platform_config.quota_grace_trips_help' },
   openweather_api_key: { type: 'text', helpKey: 'platform_config.openweather_api_key_help' },
   weather_surge_enabled: { type: 'text', helpKey: 'platform_config.weather_surge_enabled_help' },
+  weather_surge_multiplier: { type: 'number', helpKey: 'platform_config.weather_surge_multiplier_help' },
+  weather_cold_threshold_c: { type: 'number', helpKey: 'platform_config.weather_cold_threshold_c_help' },
+  weather_cold_multiplier: { type: 'number', helpKey: 'platform_config.weather_cold_multiplier_help' },
   // ── Shared ride (Compartir viaje) ──
   shared_ride_discount_per_seat_pct: { type: 'number', helpKey: 'platform_config.shared_ride_discount_per_seat_pct_help' },
 

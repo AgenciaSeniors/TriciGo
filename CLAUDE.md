@@ -1633,6 +1633,30 @@ FROM cancellation_rating_events ORDER BY created_at DESC LIMIT 20;
 
 ---
 
+### Surge → solo clima (global). Zona + demanda eliminados (migs 00375/00376)
+
+**Qué cambió.** Se eliminaron las "tarifas dinámicas por zona": surge geográfico por zona (`zones.surge_multiplier`, tabla `surge_zones`, `surge_predictions`) **y** surge por demanda (ratio oferta/demanda en `calculate_dynamic_surge`). El **único** multiplicador que queda es el **clima** (lluvia, tormenta, ciclón/extremo, **frío extremo**), global a toda la ciudad. La tarifa base sigue siendo base + distancia + tiempo.
+
+**Hallazgo previo:** `rides.surge_multiplier > 1` tenía **0 filas históricas** — el surge nunca se cobró (el cliente llamaba `calculate_dynamic_surge(p_zone_id=null,…)` y la rama de zona/clima hacía `WHERE zone_id = p_zone_id` → nunca matcheaba). Por eso "activar el clima de verdad" no cambió precios históricos, solo encendió un sistema dormido.
+
+**Arquitectura nueva:**
+- EF `sync-weather` (cron 24, c/15 min) ya **no** escribe `surge_zones`; escribe un único `platform_config.weather_surge_multiplier` (global) + `weather_last_check`. Agrega **frío extremo**: `temp <= weather_cold_threshold_c` (def 12 °C) → `weather_cold_multiplier` (def 1.3); factor final = `MAX(condición, frío)`. Respeta kill-switch `weather_surge_enabled='false'` (escribe 1.0 y sale).
+- RPC `get_weather_surge()` (mig 00375, `STABLE SECURITY DEFINER`, grants anon/authenticated/service_role) lee el config, clamp `[1.0, 3.0]`, devuelve 1.0 si deshabilitado. Reemplaza a `calculate_dynamic_surge` en el estimate (`ride.service.ts getLocalFareEstimate`, key de dedupe global `'weather_surge'`).
+- `complete_ride_and_pay` (00375): la rama legacy de fallback usa `get_weather_surge()` en vez de `get_surge_multiplier(pickup)`. La rama de **paridad estricta (snapshot) NO cambió**. Reproducido verbatim desde prod (24k chars, 4 chunks) con **un solo** cambio de línea.
+- Se **mantienen** `rides.surge_multiplier` y `ride_pricing_snapshots.surge_multiplier` (ahora guardan el factor de clima + paridad/auditoría).
+
+**00376 (drops, aplicar DESPUÉS de desplegar EF + apps):** `calculate_dynamic_surge`, `calculate_surge`, `get_surge_multiplier`, `calculate_surge_predictions` (+ unschedule cron 9 `calculate-surge-predictions`), tablas `surge_zones` y `surge_predictions`, columnas `zones.surge_multiplier` y `pricing_rules.{surge_threshold,max_surge_multiplier}`. Pre-flight verificado: 0 FK/vista/trigger/policy/índice dependían de esos objetos.
+
+**Secuencia de deploy (orden importa):** aplicar 00375 → deploy EF `sync-weather` → deploy apps (estimate llama `get_weather_surge` tolerante) → aplicar 00376. Aplicación gated por MCP guard: autorizar **por paso** vía AskUserQuestion.
+
+**Admin:** se borró `settings/surge-zones`; `settings/surge-dashboard` se reemplazó por `settings/weather` (estado del clima + toggle `weather_surge_enabled` + link a platform-config para `weather_cold_threshold_c`/`weather_cold_multiplier`). `zones`/`pricing` ya no editan campos de surge. `live-map` sigue usando la key i18n `surge_dashboard.last_updated` (genérica) — no la borres.
+
+**UI rider/driver/web:** los displays de `surge_multiplier > 1` se conservan pero **re-etiquetados** a "Mal tiempo"/"Recargo por mal tiempo" (i18n `*.surge_active` actualizado en es/en/pt; el driver perdió los overlays de polígonos de surge en el mapa porque el clima es global). `applySurge`/`calculateFareRange` en `@tricigo/utils` se mantienen (válidos para clima).
+
+**Verificación (2026-06-03):** `pnpm check-types` verde (4 apps); `@tricigo/api` 442 tests + `@tricigo/utils` 382 tests verdes; smoke read-only confirmó que `get_weather_surge` daría 1.0 con el estado actual. Migraciones/EF **escritos pero NO aplicados** (MCP guard).
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.

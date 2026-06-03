@@ -27,9 +27,9 @@ async function main() {
   console.log('\n=== Service Types ===');
   services.rows.forEach(r => console.log('  ' + r.slug + ' - ' + r.name_es + ' (base: ' + r.base_fare_cup + ' centavos)'));
 
-  const zones = await client.query('SELECT name, type, surge_multiplier FROM zones ORDER BY name');
+  const zones = await client.query('SELECT name, type FROM zones ORDER BY name');
   console.log('\n=== Zones ===');
-  zones.rows.forEach(r => console.log('  ' + r.name + ' (' + r.type + ', surge: ' + r.surge_multiplier + 'x)'));
+  zones.rows.forEach(r => console.log('  ' + r.name + ' (' + r.type + ')'));
 
   const configs = await client.query('SELECT key, value FROM platform_config ORDER BY key');
   console.log('\n=== Platform Config ===');

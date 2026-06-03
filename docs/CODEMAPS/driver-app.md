@@ -38,7 +38,6 @@ Custom Hooks (src/hooks/) — Data fetching & lifecycle
   ├── useDriverETA — ETA calculations
   ├── useRoutePolyline — Route geometry
   ├── useDemandHotspots — Live request clusters
-  ├── useSurgeZones — Surge polygon boundaries + multipliers
   ├── usePopularLocations — 90-day pickup/dropoff clusters (Phase 2 N5)
   ├── useSmartSuggestion — Ranked target (Phase 2 N1) → score = (live_count × surge) / sqrt(distance + 0.5)
   ├── useDriverPeakHours — Personal earnings heatmap (Phase 2 N2)
@@ -107,7 +106,6 @@ Supabase Realtime (rides table insert)
 ### Smart Route Suggestion (Phase 2 N1)
 ```
 useDemandHotspots (live clusters)
-+ useSurgeZones (polygons + multipliers)
 + usePopularLocations (90-day historical)
   → useSmartSuggestion calculates score per candidate
   → Returns top 1 with reason string
@@ -143,7 +141,7 @@ Accepted ride
 | Package | Key Exports |
 |---------|---|
 | `@tricigo/api` | `driverService`, `rideService`, `locationService`, `deliveryService`, `reviewService`, `notificationService` |
-| `@tricigo/types` | `Ride`, `Driver`, `DriverProfile`, `DemandHotspot`, `PopularLocation`, `SurgeZone`, `DriverPeakHourCell` |
+| `@tricigo/types` | `Ride`, `Driver`, `DriverProfile`, `DemandHotspot`, `PopularLocation`, `DriverPeakHourCell` |
 | `@tricigo/i18n` | `useTranslation('driver')` for all UI text |
 | `@tricigo/theme` | Colors, `midnightEmber` token, `tailwind-preset` |
 | `@tricigo/ui` | `Button`, `Input`, `Card`, `DraggableSheet`, `Text` |

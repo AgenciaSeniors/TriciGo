@@ -116,7 +116,7 @@
     "route_info": "{{distance}} km · {{duration}} min por estrada",
     "route_error": "Não foi possível calcular a rota",
     "address_unavailable": "Endereço indisponível",
-    "surge_active": "tarifa dinâmica",
+    "surge_active": "mau tempo",
     "per_km_rate": "Tarifa: {{rate}}/km",
     "cup_equivalent": "~ {{amount}} CUP",
     "exchange_rate_info": "Taxa: 1 USD = {{rate}} CUP",
