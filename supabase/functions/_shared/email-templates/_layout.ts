@@ -166,8 +166,11 @@ ${preheaderBlock}
           <td bgcolor="#FFFFFF" style="padding: 28px 32px 20px; text-align: center; background-color: #FFFFFF;">
             <a href="${WEB_ORIGIN}" target="_blank" rel="noopener"
                style="display: inline-block; text-decoration: none;">
-              <img src="${LOGO_URL}" alt="TriciGo" height="40"
-                   style="display: block; height: 40px; width: auto; border: 0; outline: none; -ms-interpolation-mode: bicubic;">
+              <!-- Email-optimized logo: composited on white + antialiased, served at 2x
+                   (336x80) and displayed at 168x40. The source wordmark PNG has 1-bit
+                   (aliased) transparency that looked jagged when scaled by mail clients. -->
+              <img src="${WEB_ORIGIN}/logo-email.png" alt="TriciGo" width="168" height="40"
+                   style="display: block; width: 168px; height: 40px; border: 0; outline: none; -ms-interpolation-mode: bicubic;">
             </a>
           </td>
         </tr>
