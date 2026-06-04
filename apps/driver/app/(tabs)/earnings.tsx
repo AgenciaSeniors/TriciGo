@@ -193,8 +193,11 @@ function NativeEarningsScreen() {
 
   const trendPct = useMemo(() => {
     if (prevPeriodEarnings == null || prevPeriodEarnings === 0) return null;
-    return Math.round(((periodStats.totalEarnings - prevPeriodEarnings) / prevPeriodEarnings) * 100);
-  }, [periodStats.totalEarnings, prevPeriodEarnings]);
+    // #2 (audit 2026-06-04): comparar NET vs NET. El hero muestra netEarnings y
+    // prevPeriodEarnings ya es net (suma de tripNetEarnings); antes usaba
+    // totalEarnings (BRUTO) → la tendencia no coincidía con el número mostrado.
+    return Math.round(((periodStats.netEarnings - prevPeriodEarnings) / prevPeriodEarnings) * 100);
+  }, [periodStats.netEarnings, prevPeriodEarnings]);
 
   const hasNoEarningsData =
     !loading && periodStats.totalEarnings === 0 && periodStats.completedCount === 0;

@@ -1366,7 +1366,7 @@ function WebHomeScreen() {
                   <div style={{ display: 'flex', gap: 12, fontSize: 12, color: c.textMuted, flexWrap: 'wrap' }}>
                     <span>{((selectedEstimate.estimated_distance_m || 0) / 1000).toFixed(1)} km</span>
                     <span>{Math.round((selectedEstimate.estimated_duration_s || 0) / 60)} min</span>
-                    <span style={{ color: c.textFaint }}>~${((selectedEstimate.estimated_fare_cup || 0) / 300).toFixed(2)} USD</span>
+                    <span style={{ color: c.textFaint }}>~${((selectedEstimate.estimated_fare_cup || 0) / (selectedEstimate.exchange_rate_usd_cup || 300)).toFixed(2)} USD</span>
                   </div>
                   {(selectedEstimate.surge_multiplier || 0) > 1 && (
                     <span style={{ display: 'inline-block', marginTop: 8, color: '#fff', background: colors.brand.orange, fontWeight: 700, padding: '2px 10px', borderRadius: 12, fontSize: 11 }}>
