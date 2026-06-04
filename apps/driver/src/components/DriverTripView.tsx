@@ -41,6 +41,7 @@ import {
   incidentService,
   deliveryService,
   rideService,
+  walletService,
   getSupabaseClient,
 } from '@tricigo/api';
 import type { DeliveryDetails } from '@tricigo/api';
@@ -246,6 +247,23 @@ export function DriverTripView() {
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const driverProfile = useDriverStore((s) => s.profile);
   const { advanceStatus, cancelTrip, isAdvancing } = useDriverRideActions();
+
+  // Fix 4 (display conductor): commission rate live from platform_config
+  // (mirrors IncomingRideCard BUG-fare-audit B4). The "accepted" fare block
+  // shows NET earnings so it matches the offer card the driver just saw (which
+  // also shows net). Default 0.15 keeps the math identical when the platform
+  // really is at 15%, so no flicker while the fetch is in flight / if it fails.
+  const [commissionRate, setCommissionRate] = useState(0.15);
+  useEffect(() => {
+    walletService.getConfigValue('commission_rate')
+      .then((val) => {
+        if (val) {
+          const parsed = parseFloat(String(val).replace(/"/g, ''));
+          if (!isNaN(parsed) && parsed > 0 && parsed < 1) setCommissionRate(parsed);
+        }
+      })
+      .catch(() => { /* best-effort: queda en 0.15 */ });
+  }, []);
 
   // ── Subscribe to rider's real-time location during pickup phase ──
   // The hook's internal effect keeps the realtime channel alive while
@@ -1034,7 +1052,7 @@ export function DriverTripView() {
             paddingHorizontal: 8,
           }}
           accessible
-          accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(activeTrip.estimated_fare_cup) })}
+          accessibilityLabel={t('a11y.fare_amount', { ns: 'common', amount: formatCUP(Math.round(activeTrip.estimated_fare_cup * (1 - commissionRate))) })}
         >
           <Text
             variant="bodySmall"
@@ -1047,14 +1065,14 @@ export function DriverTripView() {
               variant="h4"
               style={{ color: midnightEmber.accent[500] }}
             >
-              {formatCUP(activeTrip.estimated_fare_cup)}
+              {formatCUP(Math.round(activeTrip.estimated_fare_cup * (1 - commissionRate)))}
             </Text>
             {activeTrip.estimated_fare_trc != null && (
               <Text
                 variant="caption"
                 style={{ color: midnightEmber.map.text.tertiary }}
               >
-                ~{formatTRC(activeTrip.estimated_fare_trc)}
+                ~{formatTRC(Math.round(activeTrip.estimated_fare_trc * (1 - commissionRate)))}
               </Text>
             )}
           </View>
