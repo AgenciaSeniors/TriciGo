@@ -130,19 +130,51 @@ tracks; since we don't, surfacing the prompt would be misleading.
 
 Available alongside Google and SMS. Implemented via Supabase OAuth.
 
-### No payments inside this app
+### Wallet quota recharge — Guideline 3.1.1 defense
 
-The driver app does **not** process payments. Drivers receive earnings
-into an internal wallet (CUP balance, displayed in
-"Mis ganancias"). The cashout / redemption flow was removed in
-migration `00273_remove_driver_cashout.sql` to keep the wallet
-closed-loop (earnings can only be spent inside the platform — the
-target was to eliminate the OFAC-sensitive transfer surface).
+The driver app has an internal TriciCoin wallet that (a) pays the
+platform's per-ride commission ("quota") and (b) displays earnings
+("Mis ganancias"). Drivers **recharge** that balance through **NETOPIA
+Payments** (a Romanian processor) opened in a hosted checkout page via
+`WebBrowser.openAuthSessionAsync` — intentionally **not** StoreKit / IAP,
+and **no native payment SDK is bundled** in this binary (NETOPIA is a
+hosted web page, not an SDK; there is no Stripe SDK either). We believe
+this falls outside Apple's IAP requirement:
 
-There is no Stripe SDK, NETOPIA SDK, or any other payment processor
-SDK bundled in this binary. The driver wallet is purely a display of
-ledger entries written server-side by the ride completion RPC; the
-driver app never initiates a payment.
+1. **Funds a real-world business operating cost, not digital content.**
+   The quota is the commission a driver pays to operate as an independent
+   transportation provider on the platform (analogous to a marketplace
+   seller fee). It unlocks no digital content, app feature, premium tier,
+   or virtual good.
+2. **Closed-loop, no cash-out.** The balance can only be spent inside the
+   platform (commission + optionally gifting to another active user — see
+   "Regalo" below). The cash-out / redemption flow was removed in
+   `00273_remove_driver_cashout.sql`; there is no withdraw-to-bank/card path.
+3. **Reference apps:** Uber, Lyft, and DoorDash driver apps use third-party
+   processors for real-world balances without StoreKit.
+
+To test recharge: the NETOPIA POS is in sandbox; the published test card
+(`9900 0000 0000 5159` exp `01/26` cvc `123`) succeeds without a real
+charge. The hosted page returns to the app via
+`https://tricigo.com/app/driver/wallet`.
+
+### Regalo (peer-to-peer gift) — Guideline 3.1.5
+
+A driver can optionally send part of their TriciCoin balance to another
+**active TriciGo user** as a "Regalo" (gift), looked up by share-code/QR
+or phone number (`send_gift` RPC, atomic double-entry). We believe this
+fits Guideline 3.1.5(b):
+
+1. **Completely optional** — no ride, feature, or content is gated behind it.
+2. **100% goes to the receiver** — TriciGo takes no cut on the transfer.
+3. **Not tied to digital content/services** — the gifted balance is
+   redeemable only for **physical transportation** (real-world rides), so
+   the "gift tied to digital goods must use IAP" carve-out does not apply.
+4. **Closed-loop, no cash-out** — the recipient must be an existing active
+   TriciGo user; the gift cannot be sent to a bank/card/external account
+   and cannot be withdrawn to cash.
+5. **Abuse controls** — recipient lookup is server-side rate-limited
+   (anti-enumeration); frozen wallets cannot send; admins can reverse a gift.
 
 ### Data collection — see Privacy Manifest
 

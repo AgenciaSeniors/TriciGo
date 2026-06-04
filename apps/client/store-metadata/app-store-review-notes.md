@@ -48,9 +48,11 @@ wallets (Uber Cash, Starbucks, Lyft Cash):
    physical transportation services. It does not unlock digital content
    or premium features inside the app.")
 
-3. **Closed-loop and refundable.** TriciCoin credit is closed-loop: it
-   is redeemable only for TriciGo rides and is not transferable between
-   users. On account closure, any unused balance may be refunded to the
+3. **Closed-loop and no cash-out.** TriciCoin credit is closed-loop: it
+   is redeemable only for TriciGo rides. It can be optionally gifted to
+   another active TriciGo user (spend-only — see "Regalo" below), but it
+   cannot be cashed out, withdrawn to a bank/card, or sent outside the
+   platform. On account closure, any unused balance may be refunded to the
    original payment method in line with consumer-protection rules.
 
 4. **Reference apps with the same model:** Uber, Lyft, DoorDash,
@@ -64,6 +66,28 @@ real charge. The hosted page returns to the app via Universal Link
 `https://tricigo.com/app/client/wallet` after the user confirms or
 cancels. Sandbox is fully OFAC-safe; we evaluated Stripe and rejected
 it because Stripe terms prohibit servicing Cuba directly.
+
+### Regalo (peer-to-peer gift) — Guideline 3.1.5
+
+The app lets a user optionally send part of their TriciCoin balance to
+another **active TriciGo user** as a "Regalo" (gift), looked up by a
+share-code/QR or phone number (`send_gift` RPC, atomic double-entry). We
+believe this fits Guideline 3.1.5(b):
+
+1. **Completely optional** — no ride, feature, or content is gated behind
+   sending or receiving a gift.
+2. **100% goes to the receiver** — the full amount is credited to the
+   recipient's balance; TriciGo takes no cut on the transfer.
+3. **Not tied to digital content/services** — the gifted balance is
+   redeemable only for **physical transportation** (real-world rides),
+   exactly like the rest of the wallet, so the "gift tied to digital goods
+   must use IAP" carve-out does not apply.
+4. **Closed-loop, no cash-out** — the recipient must be an existing active
+   TriciGo user; the gift cannot be sent to a bank/card/external account
+   and cannot be withdrawn to cash. It can only be spent on rides.
+5. **Abuse controls** — recipient lookup is server-side rate-limited
+   (anti-enumeration); frozen wallets cannot send; admins can reverse a
+   gift and freeze abusive wallets.
 
 ### App Tracking Transparency (ATT)
 
