@@ -174,22 +174,26 @@ export default function RideDetailPage() {
       {pricing && (
         <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6 mb-8">
           <h2 className="text-lg font-bold mb-4">{t('rides.fare_breakdown')}</h2>
+          {/* A2 (2026-06-04): split de dinero (reconcilia) en vez de las tasas
+              base/per_km/per_min — el snapshot las guarda como DEFAULT del
+              servicio, no las de la pricing rule, así que no reflejan lo cobrado.
+              Total − comisión = ganancia del conductor. */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-sm text-ink-muted">{t('rides.label_base_fare')}</p>
-              <p className="text-sm font-medium">{formatCUP(pricing.base_fare)}</p>
+              <p className="text-sm text-ink-muted">{t('rides.label_trip_fare', { defaultValue: 'Tarifa del viaje' })}</p>
+              <p className="text-sm font-medium">{formatCUP(pricing.subtotal)}</p>
             </div>
             <div>
-              <p className="text-sm text-ink-muted">{t('rides.label_per_km')}</p>
-              <p className="text-sm font-medium">{formatCUP(pricing.per_km_rate)}/km</p>
-            </div>
-            <div>
-              <p className="text-sm text-ink-muted">{t('rides.label_per_minute')}</p>
-              <p className="text-sm font-medium">{formatCUP(pricing.per_minute_rate)}/min</p>
+              <p className="text-sm text-ink-muted">{t('rides.label_total_charged', { defaultValue: 'Total cobrado' })}</p>
+              <p className="text-sm font-medium">{formatCUP(ride.final_fare_cup ?? ride.estimated_fare_cup)}</p>
             </div>
             <div>
               <p className="text-sm text-ink-muted">{t('rides.label_commission')} ({(pricing.commission_rate * 100).toFixed(0)}%)</p>
               <p className="text-sm font-medium">{formatCUP(pricing.commission_amount)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-ink-muted">{t('rides.label_driver_earnings', { defaultValue: 'Conductor' })}</p>
+              <p className="text-sm font-medium">{formatCUP((ride.final_fare_cup ?? ride.estimated_fare_cup) - pricing.commission_amount)}</p>
             </div>
           </div>
           {ride.discount_amount_cup > 0 && (
