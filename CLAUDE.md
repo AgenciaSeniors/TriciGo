@@ -1680,6 +1680,45 @@ FROM cancellation_rating_events ORDER BY created_at DESC LIMIT 20;
 
 ---
 
+### Capturas de tienda (store screenshots) — workflow canónico (verificado 2026-06-04)
+
+Para refrescar `apps/<app>/store-metadata/screenshots/` (Google Play / App Store):
+
+**1. Barra de estado limpia — demo mode de Android SystemUI (por ADB).**
+```
+adb shell settings put global sysui_demo_allowed 1
+adb shell am broadcast -a com.android.systemui.demo -e command enter
+adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 1200
+adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
+adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4
+adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
+```
+Apagar: `... -e command exit` + `settings put global sysui_demo_allowed 0`. **Limitación verificada (Pixel 9):** controla reloj/batería/wifi/señal pero **NO oculta las notificaciones** (Gmail, ads del carrier). Para barra impecable: el usuario las borra (swipe) o el recorte del paso 3 saca la barra entera.
+
+**2. Bajar por ADB + identificar.** El usuario captura en el celu (NO tomamos screenshots nosotros — rompe la sesión). Bajar con **PowerShell** (NO Git Bash: convierte mal `/sdcard/...`; si hay que usar bash, `MSYS_NO_PATHCONV=1` + dest en path Windows). Listar capturas: `adb shell content query --uri content://media/external/images/media --projection _display_name:relative_path --sort '_id DESC'`. **Identificar pantalla→archivo con un SUBAGENTE aislado** (leer 5-6 PNG en la sesión principal la crashea; el subagente lo absorbe).
+
+**3. Recortar a la proporción de Google Play: MÁXIMO 2:1.** Las nativas del Pixel 9 son **1080×2424 (~2.24:1) → Play las RECHAZA**. Recortar a **1080×2160 (2:1)** con `System.Drawing` (PowerShell, sin deps): sacar la barra de estado (arriba) + barra de nav/tabs (abajo); en pantallas con contenido abajo (login) recortar más de arriba. **Verificar el recorte con un subagente** (que no cortó título/botones).
+
+**4. Seed temporal si la captura se ve vacía ($0).** Sembrar datos reales en prod (`mcp__execute_sql`, autorizar vía AskUserQuestion): viajes completados HOY con `id` fijos (`ON CONFLICT DO NOTHING`, idempotente), `driver_id` = **`driver_profiles.id`** (NO el `users.id`). El display computa earnings = `SUM(final_fare_cup) × (1−comisión)`. **Limpiar después**: `DELETE` por los ids fijos + sus `ride_pricing_snapshots` (insertar el ride directo NO toca wallet/ledger → cleanup limpio).
+
+**5. Colocar + commitear** por nombre estable (`01-login`…`05-*`). El usuario sube manual a la consola (el repo es backup/control de versión).
+
+### Worktrees compartidos: sesiones paralelas pueden cambiar tu rama (verificado 2026-06-04)
+
+Un worktree (`.claude/worktrees/<x>`) puede estar en uso por **varias sesiones**. Una sesión paralela puede hacer **checkout de otra rama** en tu worktree detrás tuyo: tu commit queda en la rama vieja, el working tree salta de rama, y tus cambios sin commitear cuelgan en la rama equivocada. **Antes de commitear/pushear SIEMPRE `git branch --show-current` + `git log -1`.**
+
+**Para commitear a una rama sin pelear con el worktree compartido → worktree temporal aislado:**
+```
+git worktree add <temp> <branch>                  # rama existente
+git worktree add -b <nueva> <temp> origin/master  # rama nueva desde master
+# editar/copiar, git add, commit, push
+git worktree remove <temp>
+```
+
+**No mergear a master una rama cuyo PR ya fue squash-merged.** Tras el squash (#NNN) la rama queda "detrás" en historia aunque su **contenido** ya esté en master. `git diff --stat origin/master..rama` (DIRECTO, dos puntos) muestra el contenido realmente distinto; si lista archivos que master tiene **más nuevos**, mergear esa rama los **revertiría**. En ese caso: rama **fresca desde `origin/master`** con SOLO el delta nuevo. (Esta sesión: #398 ya había squash-mergeado driver-launch-fixes + map-fix; los screenshots fueron a una rama fresca para no revertir #399/#400.)
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
