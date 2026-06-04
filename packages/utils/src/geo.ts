@@ -1338,7 +1338,7 @@ export async function lookupCrossStreetsSupabase(
 
 /**
  * Relaxed single-nearest-street lookup via the `get_nearest_main_street` RPC
- * (migration 00377). Unlike `get_nearest_cross_streets` it does NOT require two
+ * (migration 00378). Unlike `get_nearest_cross_streets` it does NOT require two
  * intersections of the same street, so it resolves a street name in sparse
  * provincial areas where the cross-street pair lookup comes up empty (Bug 2a).
  * The RPC may not be applied to prod yet — on 404/absence this returns null and
@@ -1376,7 +1376,7 @@ async function lookupNearestMainStreet(
     });
     clearTimeout(timeoutId);
 
-    if (!res.ok) return null; // 00377 not applied yet → caller falls through
+    if (!res.ok) return null; // 00378 not applied yet → caller falls through
     const data = await res.json();
     if (!data || !Array.isArray(data) || data.length === 0) return null;
 
@@ -1478,7 +1478,7 @@ async function lookupNearestPoi(
     const poiBody = JSON.stringify({ p_lat: lat, p_lng: lng, p_radius_m: 30 });
     // Bug 2c: prefer the quality-ranked RPC (is_admin / confidence) so a real
     // landmark beats a nearby casa particular. `lookup_nearest_poi_ranked` ships
-    // in migration 00377, which may not be applied yet — on any non-OK status we
+    // in migration 00378, which may not be applied yet — on any non-OK status we
     // retry the legacy distance-only `nearest_poi` so reverse geocoding keeps
     // working at today's quality until the migration lands.
     let res = await fetch(`${supabaseUrl}/rest/v1/rpc/lookup_nearest_poi_ranked`, {
@@ -2056,7 +2056,7 @@ export const POI_INCLUSION_THRESHOLD_M = 20;
  *   1. Supabase pre-computed cross-streets         ─┐
  *   2. Overpass cross-streets (raced 6s)            │
  *   3. Mapbox/Nominatim road name                   ├─ first hit wins, with a
- *   4. Relaxed single nearest street (RPC 00377)    │   proximity-gated POI on top
+ *   4. Relaxed single nearest street (RPC 00378)    │   proximity-gated POI on top
  *   5. Locality (municipality / province) only      │
  *   6. Nearby POI name only                         ─┘
  *
@@ -2114,7 +2114,7 @@ export async function reverseGeocodeStructured(
     }
 
     // No cross-streets and no Mapbox road → try the relaxed single-nearest-street
-    // RPC (00377; tolerates being unapplied → null) before locality / POI-only.
+    // RPC (00378; tolerates being unapplied → null) before locality / POI-only.
     let nearestStreet: { mainStreet: string; municipality?: string; province?: string } | null = null;
     if (!metadata?.road) {
       nearestStreet = await lookupNearestMainStreet(lat, lng).catch(() => null);

@@ -1,4 +1,4 @@
--- 00377_relaxed_geocode_rpcs.sql
+-- 00378_relaxed_geocode_rpcs.sql
 --
 -- Two reverse-geocoding helper RPCs that make a dropped map pin resolve to a
 -- real address far more often OUTSIDE La Habana, and surface a recognizable
