@@ -477,7 +477,7 @@ Subir a Play Console → Permission declaration → "Use of restricted permissio
 ```sql
 -- Reviewer rider account
 INSERT INTO auth.users (id, email, phone, ...) VALUES
-  (gen_random_uuid(), 'reviewer-rider@tricigo.app', '+14155550100', ...);
+  (gen_random_uuid(), 'reviewer-rider@tricigo.app', '+5355550100', ...);
 
 -- Pre-fundar wallet con $50 USD = ~26000 CUP
 INSERT INTO wallet_accounts (user_id, balance_cup, balance_usd, ...) VALUES
@@ -489,7 +489,7 @@ INSERT INTO rides (customer_id, status, ...) VALUES
 
 -- Reviewer driver account
 INSERT INTO auth.users (id, email, phone, ...) VALUES
-  (gen_random_uuid(), 'reviewer-driver@tricigo.app', '+14155550101', ...);
+  (gen_random_uuid(), 'reviewer-driver@tricigo.app', '+5355550101', ...);
 
 -- Driver profile aprobado
 INSERT INTO driver_profiles (user_id, status, ...) VALUES
@@ -500,8 +500,10 @@ INSERT INTO driver_profiles (user_id, status, ...) VALUES
 
 En el edge function de SMS OTP, agregar bypass:
 ```typescript
-// Solo para los 2 reviewer phones
-const REVIEWER_PHONES = ['+14155550100', '+14155550101'];
+// Ilustrativo. La implementación viva usa _shared/demo-otp.ts (resolveDemoOtp) con los
+// secrets DEMO_PHONE + DEMO_OTP_CODE (env-gated), no un array hardcodeado. Los números
+// demo deben empezar con +53 (la rama Cuba del EF es la que aplica el bypass).
+const REVIEWER_PHONES = ['+5355550100', '+5355550101'];
 if (REVIEWER_PHONES.includes(phone)) {
   // Aceptar OTP "000000" sin enviar SMS real
   return { otp: '000000', skip_send: true };

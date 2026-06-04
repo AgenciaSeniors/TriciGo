@@ -167,7 +167,7 @@ cd apps/driver && npx eas-cli build --profile production --platform ios --non-in
 1. App Information → Privacy Policy URL: `https://tricigo.com/privacy`.
 2. App Information → App Review → Notes: copiar contenido de `apps/client/store-metadata/app-store-review-notes.md` o `apps/driver/store-metadata/app-store-review-notes.md` según app.
 3. App Information → App Review → Demo credentials:
-   - Phone: `+1 415 555 0101`
+   - Phone: `+5355550100` (rider) / `+5355550101` (driver)
    - OTP code: `000000` (override DEV/Apple Review)
 4. App Privacy → Data Types: usar el archivo `data-safety.md` como referencia para llenar los toggles de Apple.
 5. Pricing → Free (las 2 apps).

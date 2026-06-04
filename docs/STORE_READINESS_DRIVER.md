@@ -528,7 +528,7 @@ Mostrar este modal SOLO cuando el driver toma su primer ride (NO al login). El `
 ### Performance / Quality
 | Policy | Estado | Notas |
 |---|---|---|
-| Pre-Launch Report Firebase Test Lab automatic | ⚠️ | Necesita demo credentials configuradas. `+1 415 555 0101` / OTP `000000` |
+| Pre-Launch Report Firebase Test Lab automatic | ⚠️ | Necesita demo credentials configuradas. `+5355550101` / OTP `000000` |
 | Crash-free rate >99.94% | ⚠️ | Sentry activo, monitoring on |
 | ANR rate <0.47% | ⚠️ | Validar post-launch |
 | Core App Quality | ✅ | Touch targets 48dp+, contrast |
@@ -583,7 +583,7 @@ Stack vigente driver:
 - [ ] `curl -i https://tricigo.com/.well-known/apple-app-site-association` → 200 OK con `app.tricigo.driver` incluido
 
 ### Cuentas de revisor + datos seed (driver-specific)
-- [ ] Test account `+1 415 555 0101` activo (override OTP `000000`)
+- [ ] Test account `+5355550101` activo (override OTP `000000` vía secret `DEMO_PHONE`)
 - [ ] Cuenta pre-onboarded con: docs "approved", `is_active=true`, status `online`, vehicle válido
 - [ ] 1 ride histórico completado con earnings visibles
 - [ ] Email alternative `reviewer-driver@tricigo.com` con password
