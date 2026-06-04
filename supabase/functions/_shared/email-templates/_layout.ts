@@ -182,7 +182,9 @@ ${preheaderBlock}
                    are LANCZOS-antialiased and keep transparency (no white box). -->
               <img class="logo-light" src="${WEB_ORIGIN}/logo-email-light.png" alt="TriciGo" width="168" height="40"
                    style="display: block; width: 168px; height: 40px; border: 0; outline: none; -ms-interpolation-mode: bicubic;">
-              <img class="logo-dark" src="${WEB_ORIGIN}/logo-email-dark.png" alt="TriciGo" width="168" height="40"
+              <!-- alt="" so the swap's second image doesn't duplicate "TriciGo"
+                   in inbox preview text; the visible/fallback light logo carries the alt. -->
+              <img class="logo-dark" src="${WEB_ORIGIN}/logo-email-dark.png" alt="" width="168" height="40"
                    style="display: none; width: 168px; height: 40px; border: 0; outline: none; -ms-interpolation-mode: bicubic;">
             </a>
           </td>
