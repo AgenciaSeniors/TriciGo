@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated, Share, ScrollView } from 'react-native';
+import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated, Share, ScrollView, Keyboard } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -463,6 +463,22 @@ export function RideActiveView() {
 
   const handleAddStop = async (address: string, location: GeoPoint) => {
     if (!activeRide) return;
+    // Dismiss the search keyboard before swapping to the confirm step so the
+    // "Confirmar parada" button (at the bottom of the sheet) is never hidden
+    // behind the keyboard.
+    Keyboard.dismiss();
+    // Guard against a malformed selection (geocoding miss / undefined coords):
+    // without this we'd carry NaN into ride_waypoints and the confirm would
+    // fail silently downstream.
+    if (!Number.isFinite(location?.latitude) || !Number.isFinite(location?.longitude)) {
+      Toast.show({
+        type: 'error',
+        text1: t('ride.add_stop_invalid_location', {
+          defaultValue: 'No pudimos ubicar esa dirección. Prueba con otra.',
+        }),
+      });
+      return;
+    }
     setEstimatingStop(true);
     try {
       const existing = waypoints.map((w) => ({
@@ -475,13 +491,22 @@ export function RideActiveView() {
         location.longitude,
         existing,
       );
+      // The single add-stop sheet swaps from search → confirm purely off
+      // `pendingStop`. We intentionally keep `addStopVisible` as-is (no second
+      // Modal opened/closed in the same tick) to avoid the present-while-
+      // dismissing race RN has with two overlapping modals.
       setPendingStop({ address, location, extraDistanceKm, extraFareCup });
-      setAddStopVisible(false);
     } catch (err) {
       logger.error('Failed to estimate waypoint addition', { error: String(err) });
-      // Fall back to adding without preview rather than blocking the feature.
+      // Fall back to adding without a fare preview rather than blocking the
+      // feature, but tell the user the preview is missing.
+      Toast.show({
+        type: 'info',
+        text1: t('ride.estimate_stop_failed', {
+          defaultValue: 'No pudimos calcular el costo extra. Puedes confirmar de todas formas.',
+        }),
+      });
       setPendingStop({ address, location, extraDistanceKm: 0, extraFareCup: 0 });
-      setAddStopVisible(false);
     } finally {
       setEstimatingStop(false);
     }
@@ -512,7 +537,23 @@ export function RideActiveView() {
     } catch (err: unknown) {
       const errObj = err as Record<string, unknown> | null;
       if (typeof errObj?.message === 'string' && errObj.message === 'MAX_WAYPOINTS_REACHED') {
+        // Limit reached — there's nothing the user can do from this sheet, so
+        // close it instead of leaving a confirm button that re-fails on retry.
         Alert.alert('', t('ride.max_stops_active', { defaultValue: 'Máximo de paradas alcanzado' }));
+        setPendingStop(null);
+        setAddStopVisible(false);
+      } else {
+        // Surface every other failure (RLS rejection, bad coords, network
+        // timeout) instead of swallowing it — the button used to re-enable
+        // with no feedback, which read as "confirm does nothing". Keep
+        // `pendingStop` set so the user can retry from the same sheet.
+        logger.error('addWaypointToActiveRide failed', { error: String(err) });
+        Toast.show({
+          type: 'error',
+          text1: t('ride.add_stop_failed', {
+            defaultValue: 'No pudimos agregar la parada. Inténtalo de nuevo.',
+          }),
+        });
       }
     } finally {
       setAddingStop(false);
@@ -1420,29 +1461,17 @@ export function RideActiveView() {
       {/* End of BUG-230 ScrollView. BottomSheets below render as overlays
            outside the scroll container. */}
 
-      {/* Add stop bottom sheet */}
-      <BottomSheet visible={addStopVisible} onClose={() => setAddStopVisible(false)}>
-        <Text variant="h4" className="mb-3">
-          {t('ride.add_stop', { defaultValue: 'Agregar parada' })}
-        </Text>
-        <AddressSearchInput
-          placeholder={t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
-          onSelect={handleAddStop}
-          onPickOnMap={() => { setAddStopVisible(false); setMapPickerVisible(true); }}
-        />
-        {estimatingStop && (
-          <View className="flex-row items-center justify-center mt-3">
-            <ActivityIndicator size="small" />
-            <Text variant="caption" color="secondary" className="ml-2">
-              {t('ride.estimating_stop', { defaultValue: 'Calculando costo adicional...' })}
-            </Text>
-          </View>
-        )}
-      </BottomSheet>
-
-      {/* I3: confirm-waypoint sheet with fare delta preview */}
-      <BottomSheet visible={!!pendingStop} onClose={() => setPendingStop(null)}>
-        {pendingStop && (
+      {/* Add-stop sheet — a SINGLE BottomSheet that swaps between the search
+          step and the confirm step off `pendingStop`. Keeping one Modal
+          mounted (instead of closing one and opening another in the same tick)
+          avoids the present-while-dismissing race that made the confirm step
+          flicker or fail to appear. */}
+      <BottomSheet
+        visible={addStopVisible || !!pendingStop}
+        onClose={() => { setAddStopVisible(false); setPendingStop(null); }}
+      >
+        {pendingStop ? (
+          /* Confirm step — fare delta preview */
           <View>
             <Text variant="h4" className="mb-2">
               {t('ride.confirm_stop_title', { defaultValue: '¿Agregar esta parada?' })}
@@ -1481,28 +1510,52 @@ export function RideActiveView() {
               })}
             </Text>
 
+            {/* Each Button sits in a flex-1 View rather than relying on Button's
+                fullWidth (= w-full), so the two buttons share the row and never
+                overflow on a 320px screen. */}
             <View className="flex-row gap-3">
-              {/* Bugfix: Button uses `title`, not `label`. The two
-                  buttons in this stop-confirm modal used to render
-                  with empty text because the prop was ignored. */}
-              <Button
-                title={t('common.cancel', { defaultValue: 'Cancelar' })}
-                variant="outline"
-                size="md"
-                onPress={() => setPendingStop(null)}
-                disabled={addingStop}
-                fullWidth
-              />
-              <Button
-                title={t('ride.confirm_add_stop', { defaultValue: 'Confirmar parada' })}
-                variant="primary"
-                size="md"
-                onPress={confirmAddStop}
-                loading={addingStop}
-                fullWidth
-              />
+              <View className="flex-1">
+                <Button
+                  title={t('common.cancel', { defaultValue: 'Cancelar' })}
+                  variant="outline"
+                  size="md"
+                  onPress={() => setPendingStop(null)}
+                  disabled={addingStop}
+                  fullWidth
+                />
+              </View>
+              <View className="flex-1">
+                <Button
+                  title={t('ride.confirm_add_stop', { defaultValue: 'Confirmar parada' })}
+                  variant="primary"
+                  size="md"
+                  onPress={confirmAddStop}
+                  loading={addingStop}
+                  fullWidth
+                />
+              </View>
             </View>
           </View>
+        ) : (
+          /* Search step — address lookup */
+          <>
+            <Text variant="h4" className="mb-3">
+              {t('ride.add_stop', { defaultValue: 'Agregar parada' })}
+            </Text>
+            <AddressSearchInput
+              placeholder={t('ride.search_address', { defaultValue: 'Buscar dirección...' })}
+              onSelect={handleAddStop}
+              onPickOnMap={() => { setAddStopVisible(false); setMapPickerVisible(true); }}
+            />
+            {estimatingStop && (
+              <View className="flex-row items-center justify-center mt-3">
+                <ActivityIndicator size="small" />
+                <Text variant="caption" color="secondary" className="ml-2">
+                  {t('ride.estimating_stop', { defaultValue: 'Calculando costo adicional...' })}
+                </Text>
+              </View>
+            )}
+          </>
         )}
       </BottomSheet>
 
