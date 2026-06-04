@@ -18,8 +18,8 @@
  * cache them in component state.
  *
  * Tag labels come from i18n keys following the pattern
- * `review.tag_<key>` — same pattern the existing `reviews.tsx` already
- * uses, so adding new tags doesn't need a code change here.
+ * `ride.tag_<key>` in the `driver` namespace — the same keys the
+ * `reviews.tsx` screen uses, so adding new tags doesn't need a code change here.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView } from 'react-native';
@@ -134,7 +134,7 @@ export function ReviewTagsBreakdown({ topTags }: ReviewTagsBreakdownProps) {
               {positive.map((tag) => (
                 <TagChip
                   key={tag.key}
-                  label={t(`review.tag_${tag.key}`, { defaultValue: tag.key.replace(/_/g, ' ') })}
+                  label={t(`ride.tag_${tag.key}`, { ns: 'driver', defaultValue: tag.key.replace(/_/g, ' ') })}
                   count={tag.count}
                   color={midnightEmber.state.success}
                 />
@@ -168,7 +168,7 @@ export function ReviewTagsBreakdown({ topTags }: ReviewTagsBreakdownProps) {
               {negative.map((tag) => (
                 <TagChip
                   key={tag.key}
-                  label={t(`review.tag_${tag.key}`, { defaultValue: tag.key.replace(/_/g, ' ') })}
+                  label={t(`ride.tag_${tag.key}`, { ns: 'driver', defaultValue: tag.key.replace(/_/g, ' ') })}
                   count={tag.count}
                   color={midnightEmber.state.warning}
                 />

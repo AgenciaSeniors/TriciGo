@@ -260,7 +260,7 @@ export default function HelpScreen() {
                 </View>
                 <View className="flex-row items-center">
                   <Ionicons name="call-outline" size={18} color={tokens.ink.secondary} />
-                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>+53 5XXXXXXX</Text>
+                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>+5545998622511</Text>
                 </View>
               </View>
 

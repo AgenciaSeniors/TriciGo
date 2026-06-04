@@ -1261,6 +1261,7 @@ function RideMapViewInner(
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
+        scaleBarEnabled={false}
         onDidFinishLoadingStyle={() => setStyleLoaded(true)}
         onDidFailLoadingMap={() => {
           // First-install network race or DNS not yet resolved. BUG-006 v2:

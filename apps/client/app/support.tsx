@@ -27,7 +27,7 @@ export default function SupportScreen() {
       label: 'WhatsApp',
       description: t('support.whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' }),
       color: '#25D366',
-      onPress: () => Linking.openURL('https://wa.me/5355555555'),
+      onPress: () => Linking.openURL('https://wa.me/5545998622511'),
     },
     {
       icon: 'mail-outline' as const,
