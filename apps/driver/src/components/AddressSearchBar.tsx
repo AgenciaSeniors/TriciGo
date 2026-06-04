@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
 import { colors } from '@tricigo/theme';
 import {
@@ -188,19 +189,53 @@ export function AddressSearchBar({ onSelect, placeholder = 'Buscar dirección...
   const { predictions } = useDestinationPredictions(near);
 
   // Bias search results to the driver's current vicinity so closer
-  // matches outrank far-away ones with similar names.
+  // matches outrank far-away ones with similar names. Two-stage
+  // resolution (mirrors the rider client's ConfirmLocationScreen /
+  // home map): (1) instant AsyncStorage cache read so proximity bias
+  // is available before the GPS hardware resolves, (2) fresh GPS fix
+  // that overrides the cache and re-persists it. Without stage 2, a
+  // cold start outside Havana with an empty/stale cache would leave
+  // `near` null and the driver's search would lose its proximity bias.
   useEffect(() => {
     let cancelled = false;
+
+    // Stage 1 — cache (instant). `prev ?? …` so a fresher GPS fix from
+    // stage 2 that won the race is never clobbered by the stale cache.
+    AsyncStorage.getItem('last_known_location').then((raw) => {
+      if (cancelled || !raw) return;
+      try {
+        const { latitude, longitude } = JSON.parse(raw);
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          setNear((prev) => prev ?? { latitude, longitude });
+        }
+      } catch { /* malformed cache */ }
+    }).catch(() => {});
+
+    // Stage 2 — fresh GPS (overrides the cache when it resolves).
     (async () => {
       try {
         const { status } = await Location.getForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        const pos = await Location.getLastKnownPositionAsync();
-        if (!cancelled && pos) {
-          setNear({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        if (status !== 'granted' || cancelled) return;
+        let pos = await Location.getLastKnownPositionAsync();
+        if (!pos) {
+          pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
         }
-      } catch { /* silent */ }
+        if (!pos || cancelled) return;
+        const latitude = pos.coords.latitude;
+        const longitude = pos.coords.longitude;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+        setNear({ latitude, longitude });
+        // Refresh cache so future cold starts (and the offline-map hook)
+        // benefit from the latest fix.
+        AsyncStorage.setItem(
+          'last_known_location',
+          JSON.stringify({ latitude, longitude }),
+        ).catch(() => {});
+      } catch { /* silent — fall back to cache */ }
     })();
+
     return () => { cancelled = true; };
   }, []);
 
