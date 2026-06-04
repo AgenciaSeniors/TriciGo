@@ -2,8 +2,9 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, isGenericStreetAddress, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -108,19 +109,48 @@ function AddressSearchInputInner({
     frequentZonesRef.current = predictions.map((p) => ({ latitude: p.latitude, longitude: p.longitude }));
   }, [predictions]);
 
-  // Fetch user location once for distance display
+  // Resolve the rider's location for proximity-biased search. Two stages so a
+  // null fix never silently biases search to Havana (Bug 1a): (1) instant
+  // AsyncStorage 'last_known_location' read, (2) fresh GPS — last-known then a
+  // current fix — which overrides the cache and is persisted back. Without the
+  // getCurrentPositionAsync fallback, getLastKnownPositionAsync often resolves
+  // null on a cold start in a province, leaving every search Havana-centered.
+  // Mirrors ConfirmLocationScreen's two-stage acquisition.
   useEffect(() => {
     let cancelled = false;
+
+    // Stage 1 — cache (instant). Don't clobber a fresh fix if Stage 2 won.
+    AsyncStorage.getItem('last_known_location').then((raw) => {
+      if (cancelled || !raw) return;
+      try {
+        const { latitude, longitude } = JSON.parse(raw);
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          setUserLocation((prev) => prev ?? { latitude, longitude });
+        }
+      } catch { /* malformed */ }
+    }).catch(() => {});
+
+    // Stage 2 — fresh GPS (overrides cache when it resolves)
     (async () => {
       try {
         const { status } = await Location.getForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        const pos = await Location.getLastKnownPositionAsync();
-        if (!cancelled && pos) {
-          setUserLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        if (status !== 'granted' || cancelled) return;
+        let pos = await Location.getLastKnownPositionAsync();
+        if (!pos) {
+          pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         }
-      } catch { /* silent */ }
+        if (!pos || cancelled) return;
+        const latitude = pos.coords.latitude;
+        const longitude = pos.coords.longitude;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+        setUserLocation({ latitude, longitude });
+        AsyncStorage.setItem(
+          'last_known_location',
+          JSON.stringify({ latitude, longitude }),
+        ).catch(() => {});
+      } catch { /* silent — keep cache or stay null (neutral nationwide search) */ }
     })();
+
     return () => { cancelled = true; };
   }, []);
 
@@ -286,7 +316,7 @@ function AddressSearchInputInner({
         const toEnrich = searchResults.filter(r => r.latitude && r.longitude);
         Promise.allSettled(
           toEnrich.map(async (r, idx) => {
-            if (!isGenericStreetAddress(r.address)) return null;
+            if (!shouldEnrichResult(r)) return null;
             const enriched = await enrichWithCrossStreets(r.latitude, r.longitude);
             if (enriched && lastQueryRef.current === currentQuery) {
               if (enriched.address.includes(' e/ ') || enriched.address.includes(' entre ')) {

@@ -65,6 +65,7 @@ export {
   scoreSearchResult,
   rankSearchResults,
   searchResultEmoji,
+  shouldEnrichResult,
 } from './addressSearch';
 export type { ScorableResult } from './addressSearch';
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';

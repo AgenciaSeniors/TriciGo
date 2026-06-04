@@ -709,7 +709,9 @@ async function fetchMetadataMapbox(lat: number, lng: number): Promise<GeoMetadat
 
   const url =
     `https://api.mapbox.com/search/geocode/v6/reverse` +
-    `?longitude=${lng}&latitude=${lat}&language=es&types=address,street&limit=1` +
+    // Bug 2a: include neighborhood/locality/place so a sparse provincial pin
+    // still yields a municipality/locality even when no street/address matches.
+    `?longitude=${lng}&latitude=${lat}&language=es&types=address,street,neighborhood,locality,place&limit=1` +
     `&access_token=${token}`;
 
   const controller = new AbortController();
@@ -731,12 +733,15 @@ async function fetchMetadataMapbox(lat: number, lng: number): Promise<GeoMetadat
     // Province: region, strip "provincia de" prefix
     const province = cleanProvinceName(ctx.region?.name || '');
 
-    // Validate result is geographically close to query point (<500m)
+    // Validate the result is geographically close to the query point (<500m),
+    // but ONLY for a precise street/address feature. A locality/place match
+    // (road === '') can legitimately sit far from its centroid and is our only
+    // signal outside dense areas — keep it instead of discarding (Bug 2a).
     const geom = feature.geometry;
-    if (geom?.type === 'Point' && geom.coordinates) {
+    if (road && geom?.type === 'Point' && geom.coordinates) {
       const [resLng, resLat] = geom.coordinates;
       const distM = haversineDistance({ latitude: lat, longitude: lng }, { latitude: resLat, longitude: resLng });
-      if (distM > 500) return null; // Result too far — discard
+      if (distM > 500) return null; // Precise feature too far — discard
     }
 
     return { road, municipality, province, poiName: '' };
@@ -1332,6 +1337,63 @@ export async function lookupCrossStreetsSupabase(
 }
 
 /**
+ * Relaxed single-nearest-street lookup via the `get_nearest_main_street` RPC
+ * (migration 00377). Unlike `get_nearest_cross_streets` it does NOT require two
+ * intersections of the same street, so it resolves a street name in sparse
+ * provincial areas where the cross-street pair lookup comes up empty (Bug 2a).
+ * The RPC may not be applied to prod yet — on 404/absence this returns null and
+ * reverse geocoding falls through to locality / POI-only.
+ */
+async function lookupNearestMainStreet(
+  lat: number,
+  lng: number,
+): Promise<{ mainStreet: string; municipality?: string; province?: string } | null> {
+  try {
+    const supabaseUrl =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_URL ??
+        process.env?.EXPO_PUBLIC_SUPABASE_URL
+      )) || '';
+    const supabaseKey =
+      (typeof process !== 'undefined' && (
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
+      )) || '';
+    if (!supabaseUrl || !supabaseKey) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/get_nearest_main_street`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ p_lat: lat, p_lng: lng, p_radius_m: 200 }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return null; // 00377 not applied yet → caller falls through
+    const data = await res.json();
+    if (!data || !Array.isArray(data) || data.length === 0) return null;
+
+    const row = data[0];
+    if (!row.main_street) return null;
+
+    return {
+      mainStreet: row.main_street,
+      municipality: row.municipality || undefined,
+      province: row.province || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Cache for `lookupNearestPoi`. POIs at a given location don't move; we
  * quantize input coords to a ~50m cell so a dragged pin that lands within
  * the same cell as a previous query reuses the result. TTL 24h covers the
@@ -1408,16 +1470,25 @@ async function lookupNearestPoi(
     // emergency — so hospitals, gyms, fire stations etc. would no
     // longer surface as POI labels in reverse geocoding. 00264 restores
     // the original nearest_poi function so we can keep using it here.
-    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/nearest_poi`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-      },
-      body: JSON.stringify({ p_lat: lat, p_lng: lng, p_radius_m: 30 }),
-      signal: controller.signal,
+    const poiHeaders = {
+      'Content-Type': 'application/json',
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+    };
+    const poiBody = JSON.stringify({ p_lat: lat, p_lng: lng, p_radius_m: 30 });
+    // Bug 2c: prefer the quality-ranked RPC (is_admin / confidence) so a real
+    // landmark beats a nearby casa particular. `lookup_nearest_poi_ranked` ships
+    // in migration 00377, which may not be applied yet — on any non-OK status we
+    // retry the legacy distance-only `nearest_poi` so reverse geocoding keeps
+    // working at today's quality until the migration lands.
+    let res = await fetch(`${supabaseUrl}/rest/v1/rpc/lookup_nearest_poi_ranked`, {
+      method: 'POST', headers: poiHeaders, body: poiBody, signal: controller.signal,
     });
+    if (!res.ok) {
+      res = await fetch(`${supabaseUrl}/rest/v1/rpc/nearest_poi`, {
+        method: 'POST', headers: poiHeaders, body: poiBody, signal: controller.signal,
+      });
+    }
     clearTimeout(timeoutId);
 
     if (!res.ok) return null;
@@ -1480,8 +1551,8 @@ export async function lookupIntersectionPoint(
         p_main: mainStreet,
         p_cross1: crossStreet1,
         p_cross2: crossStreet2 || null,
-        p_lat: proximity?.latitude ?? 23.1136,
-        p_lng: proximity?.longitude ?? -82.3666,
+        p_lat: proximity?.latitude ?? null, // Bug 1a: no Havana fallback (null → neutral)
+        p_lng: proximity?.longitude ?? null,
         p_radius_m: 5000,
       }),
       signal: controller.signal,
@@ -1588,8 +1659,8 @@ export async function suggestCrossStreetsSupabase(
       },
       body: JSON.stringify({
         p_main: mainStreet,
-        p_lat: proximity?.latitude ?? 23.1136,
-        p_lng: proximity?.longitude ?? -82.3666,
+        p_lat: proximity?.latitude ?? null, // Bug 1a: no Havana fallback (null → neutral)
+        p_lng: proximity?.longitude ?? null,
         p_radius_m: 3000,
       }),
       signal: controller.signal,
@@ -1825,30 +1896,118 @@ async function findCrossStreets(
 /* ─── Nominatim Reverse Geocoding ─── */
 
 /**
- * Build a full enriched address string with optional POI, municipality, and province.
- * Pattern: "street e/ cross1 y cross2, municipality, province"
- * POI is only included when we DON'T have cross-streets (i.e. the address is on a POI, not a street).
- * When cross-streets are present, the street address is specific enough — POI name is noise.
+ * Structured reverse-geocode result. Separating the POI name from the street
+ * line lets the picker render a two-line "POI / address" hierarchy (Bug 2b)
+ * while `joinStructured` still produces the legacy single comma string for the
+ * many `reverseGeocode` callers that expect `Promise<string>`.
  */
-function buildEnrichedAddress(
-  streetPart: string,
-  poiName: string,
-  municipality: string,
-  province: string,
-): string {
-  const parts: string[] = [];
-  const hasCrossStreets = streetPart.includes(' e/ ') || streetPart.includes(' entre ');
+export interface StructuredAddress {
+  /** Recognizable POI name — only set when one sits within POI_INCLUSION_THRESHOLD_M. */
+  poiName?: string;
+  /** "Belascoaín e/ San Lázaro y San Rafael" | "Calle Martí" | "" (locality / POI-only). */
+  street: string;
+  municipality?: string;
+  province?: string;
+  /** Which fallback layer produced this — for tests/telemetry, never rendered. */
+  source: 'cross_streets' | 'overpass' | 'road' | 'nearest_street' | 'locality' | 'poi_only';
+}
 
-  // Always include POI name when available (before street address)
-  if (poiName && !streetPart.includes(poiName) && poiName !== streetPart) {
-    parts.push(poiName);
+/** Format the Cuban "X e/ Y y Z" / "X y Y" / "X" street line from a main + crosses. */
+function buildStreetPart(main: string, cross: string[]): string {
+  if (cross.length >= 2) return `${main} e/ ${cross[0]} y ${cross[1]}`;
+  if (cross.length === 1) return `${main} y ${cross[0]}`;
+  return main;
+}
+
+/** Raw inputs gathered by `reverseGeocodeStructured`, fed to the pure composer. */
+export interface ReverseGeocodeParts {
+  cross: { mainStreet: string; crossStreets: string[]; municipality?: string; province?: string } | null;
+  overpass: { mainStreet: string; crossStreets: string[] } | null;
+  metadata: { road: string; municipality: string; province: string; poiName: string } | null;
+  nearestStreet: { mainStreet: string; municipality?: string; province?: string } | null;
+  poi: { name: string; distance_m: number } | null;
+}
+
+/**
+ * Pure layered selection for reverse geocoding. First layer that yields a
+ * street/locality wins; the proximity-gated POI is attached on top. Kept pure
+ * (no I/O) so the layer order, the POI threshold gate, and the municipality
+ * preference are unit-testable without mocking five network endpoints.
+ *
+ * Municipality/province PREFER the Mapbox/Nominatim value over the Supabase
+ * one, because `street_intersections.municipality` is badly mislabeled in prod
+ * (e.g. "Cojimar" stamped across Centro Habana).
+ */
+export function composeStructuredAddress(p: ReverseGeocodeParts): StructuredAddress | null {
+  const poiName =
+    (p.poi && p.poi.distance_m <= POI_INCLUSION_THRESHOLD_M ? p.poi.name : '') ||
+    (p.metadata?.poiName ?? '');
+  const poi = poiName || undefined;
+  const metaMuni = p.metadata?.municipality || '';
+  const metaProv = p.metadata?.province || '';
+
+  // Layer 1 — Supabase pre-computed cross-streets
+  if (p.cross && p.cross.crossStreets.length > 0) {
+    return {
+      poiName: poi,
+      street: buildStreetPart(p.cross.mainStreet, p.cross.crossStreets),
+      municipality: metaMuni || p.cross.municipality || undefined,
+      province: metaProv || p.cross.province || undefined,
+      source: 'cross_streets',
+    };
   }
+  // Layer 2 — Overpass-derived cross-streets
+  if (p.overpass && p.overpass.mainStreet) {
+    return {
+      poiName: poi,
+      street: buildStreetPart(p.overpass.mainStreet, p.overpass.crossStreets),
+      municipality: metaMuni || undefined,
+      province: metaProv || undefined,
+      source: 'overpass',
+    };
+  }
+  // Layer 3 — Mapbox/Nominatim road name
+  if (p.metadata?.road) {
+    return {
+      poiName: poi,
+      street: p.metadata.road,
+      municipality: metaMuni || undefined,
+      province: metaProv || undefined,
+      source: 'road',
+    };
+  }
+  // Layer 4 — relaxed single nearest street (sparse provincial coverage)
+  if (p.nearestStreet?.mainStreet) {
+    return {
+      poiName: poi,
+      street: p.nearestStreet.mainStreet,
+      municipality: metaMuni || p.nearestStreet.municipality || undefined,
+      province: metaProv || p.nearestStreet.province || undefined,
+      source: 'nearest_street',
+    };
+  }
+  // Layer 5 — locality only (municipality / province, empty street)
+  if (metaMuni || metaProv) {
+    return { poiName: poi, street: '', municipality: metaMuni || undefined, province: metaProv || undefined, source: 'locality' };
+  }
+  // Layer 6 — POI only
+  if (poiName) {
+    return { poiName, street: '', source: 'poi_only' };
+  }
+  return null;
+}
 
-  parts.push(streetPart);
-
-  if (municipality) parts.push(municipality);
-  if (province) parts.push(province);
-
+/**
+ * Flatten a StructuredAddress into the legacy "POI, street, municipality,
+ * province" comma string. Reproduces the old `buildEnrichedAddress` format so
+ * every existing `reverseGeocode` caller keeps the exact string it had before.
+ */
+export function joinStructured(s: StructuredAddress): string {
+  const parts: string[] = [];
+  if (s.poiName && s.poiName !== s.street && !s.street.includes(s.poiName)) parts.push(s.poiName);
+  if (s.street) parts.push(s.street);
+  if (s.municipality) parts.push(s.municipality);
+  if (s.province) parts.push(s.province);
   return parts.join(', ');
 }
 
@@ -1863,7 +2022,7 @@ function buildEnrichedAddress(
  * Mapbox metadata) each have their own caches at finer granularity, but
  * caching the merged final string saves the merge cost too.
  */
-const reverseGeocodeCache = new Map<string, { result: string | null; ts: number }>();
+const reverseGeocodeCache = new Map<string, { result: StructuredAddress | null; ts: number }>();
 const REVERSE_GEOCODE_CACHE_TTL = 24 * 60 * 60 * 1000;
 const REVERSE_GEOCODE_CACHE_MAX = 1000;
 
@@ -1882,47 +2041,40 @@ const REVERSE_GEOCODE_CACHE_MAX = 1000;
  *
  * Tuning notes (validado QA Round 3):
  *  - 10m: muy estricto, requiere estar literal en la puerta del POI.
- *  - 15m: balanceado, captura entrance + acera adyacente.            ← actual
- *  - 20m: permisivo, captura POIs grandes (Capitolio = ~80m de largo,
- *         estadios). Subir si en QA aparecen falsos negativos.
+ *  - 15m: balanceado, captura entrance + acera adyacente.
+ *  - 20m: captura POIs grandes (Capitolio ~80m de largo, estadios) y la       ← actual
+ *         acera de enfrente; el usuario que pidió "POI arriba + dirección"
+ *         está justo en la puerta. Subir si en QA aparecen falsos negativos.
  */
-const POI_INCLUSION_THRESHOLD_M = 15;
+export const POI_INCLUSION_THRESHOLD_M = 20;
 
 /**
- * Reverse geocode coordinates to a Cuban-style street address.
+ * Reverse geocode coordinates to a STRUCTURED Cuban address (poiName + street +
+ * municipality + province) via a layered fallback so a dropped pin almost
+ * always yields at least a street, even in sparse provincial areas (Bug 2a):
  *
- * Pipeline (parallel):
- *   Supabase pre-computed cross-streets (~5-10ms)       ─┐
- *   Mapbox metadata (~50-100ms, Nominatim fallback)     ─┤── merge → address
- *   Supabase nearest POI (~5-10ms)                      ─┤
- *   Overpass fallback (only if Supabase misses, 1-6s)   ─┘
+ *   1. Supabase pre-computed cross-streets         ─┐
+ *   2. Overpass cross-streets (raced 6s)            │
+ *   3. Mapbox/Nominatim road name                   ├─ first hit wins, with a
+ *   4. Relaxed single nearest street (RPC 00377)    │   proximity-gated POI on top
+ *   5. Locality (municipality / province) only      │
+ *   6. Nearby POI name only                         ─┘
  *
- * Format: "Calle Principal e/ Cruz1 y Cruz2, Municipio, Provincia"
- *
- * Cached in-memory for 24h keyed on a ~50m grid cell (see
- * `reverseGeocodeCache`). Subsequent drags within the same cell return
- * instantly with zero network — important on Cuban networks where each
- * full pipeline call costs ~150ms and ~5KB.
+ * Cached 24h on a ~50m grid cell. `reverseGeocode` wraps this and flattens to
+ * the legacy comma string for the existing `Promise<string>` callers.
  */
-export async function reverseGeocode(
+export async function reverseGeocodeStructured(
   lat: number,
   lng: number,
-): Promise<string | null> {
-  // Validate coordinates are finite numbers
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
-  }
-  // Cache lookup
+): Promise<StructuredAddress | null> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
   const cacheKey = quantizeCell(lat, lng);
   const cached = reverseGeocodeCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < REVERSE_GEOCODE_CACHE_TTL) {
     return cached.result;
   }
-
-  // Wrap every successful resolution path so the merged label gets memoized
-  // in the cache before being returned. The four exit points (cross-streets,
-  // Overpass, metadata-only, and the catch-all null) all funnel through here.
-  const cacheAndReturn = (result: string | null): string | null => {
+  const cacheAndReturn = (result: StructuredAddress | null): StructuredAddress | null => {
     if (reverseGeocodeCache.size >= REVERSE_GEOCODE_CACHE_MAX) {
       const oldest = reverseGeocodeCache.keys().next().value;
       if (oldest !== undefined) reverseGeocodeCache.delete(oldest);
@@ -1932,9 +2084,8 @@ export async function reverseGeocode(
   };
 
   try {
-    // 1. Run Supabase cross-streets + Mapbox metadata + POI lookup in parallel
-    //    Mapbox: ~50-100ms | Supabase cross-streets: ~5-10ms | Supabase POI: ~5-10ms
-    const [supabaseResult, metadata, nearestPoi] = await Promise.all([
+    // Supabase cross-streets + Mapbox/Nominatim metadata + nearest POI in parallel.
+    const [cross, metadata, nearestPoi] = await Promise.all([
       lookupCrossStreetsSupabase(lat, lng).catch(() => null),
       fetchMetadataMapbox(lat, lng)
         .then(r => r || fetchMetadataNominatim(lat, lng))
@@ -1942,63 +2093,52 @@ export async function reverseGeocode(
       lookupNearestPoi(lat, lng).catch(() => null),
     ]);
 
-    const road = metadata?.road || '';
-    const municipality = metadata?.municipality || '';
-    const province = metadata?.province || '';
-    // BUG-292: only include the Supabase nearest POI if it's within the
-    // proximity threshold. Distance comes precomputed from the RPC
-    // (ST_Distance on geography — exact, not approximate). If the POI is
-    // farther than the threshold we fall back to Mapbox's `poiName`
-    // (which is already heuristic-ranked by Mapbox, not radius-based).
-    const supabasePoiName =
-      nearestPoi && nearestPoi.distance_m <= POI_INCLUSION_THRESHOLD_M
-        ? nearestPoi.name
-        : '';
-    const poiName = supabasePoiName || metadata?.poiName || '';
+    const poi = nearestPoi ? { name: nearestPoi.name, distance_m: nearestPoi.distance_m } : null;
 
-    // 2. If Supabase has cross-streets, use them (instant path, ~100ms total)
-    if (supabaseResult && supabaseResult.crossStreets.length > 0) {
-      const { mainStreet, crossStreets } = supabaseResult;
-      // Prefer Supabase admin data, fall back to Mapbox/Nominatim metadata
-      const muni = supabaseResult.municipality || municipality;
-      const prov = supabaseResult.province || province;
-
-      let streetPart = mainStreet;
-      if (crossStreets.length >= 2) {
-        streetPart = `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
-      } else if (crossStreets.length === 1) {
-        streetPart = `${mainStreet} y ${crossStreets[0]}`;
-      }
-      return cacheAndReturn(buildEnrichedAddress(streetPart, poiName, muni, prov));
+    // Fast path: cross-streets present → compose immediately (skip Overpass).
+    if (cross && cross.crossStreets.length > 0) {
+      return cacheAndReturn(composeStructuredAddress({ cross, overpass: null, metadata, nearestStreet: null, poi }));
     }
 
-    // 3. Overpass fallback (for streets not in pre-computed table, 1-6s)
+    // Overpass fallback (raced 6s) for streets absent from the pre-computed table.
+    let overpass: { mainStreet: string; crossStreets: string[] } | null = null;
     try {
       let overpassTimer: ReturnType<typeof setTimeout>;
-      const overpassResult = await Promise.race([
+      overpass = await Promise.race([
         findNearestStreetAndCross(lat, lng).then(r => { clearTimeout(overpassTimer); return r; }),
         new Promise<null>(resolve => { overpassTimer = setTimeout(() => resolve(null), 6000); }),
       ]);
+    } catch { overpass = null; }
+    if (overpass && overpass.mainStreet) {
+      return cacheAndReturn(composeStructuredAddress({ cross: null, overpass, metadata, nearestStreet: null, poi }));
+    }
 
-      if (overpassResult) {
-        const { mainStreet, crossStreets } = overpassResult;
-        let streetPart = mainStreet;
-        if (crossStreets.length >= 2) {
-          streetPart = `${mainStreet} e/ ${crossStreets[0]} y ${crossStreets[1]}`;
-        } else if (crossStreets.length === 1) {
-          streetPart = `${mainStreet} y ${crossStreets[0]}`;
-        }
-        return cacheAndReturn(buildEnrichedAddress(streetPart, poiName, municipality, province));
-      }
-    } catch { /* fall through to metadata-only */ }
+    // No cross-streets and no Mapbox road → try the relaxed single-nearest-street
+    // RPC (00377; tolerates being unapplied → null) before locality / POI-only.
+    let nearestStreet: { mainStreet: string; municipality?: string; province?: string } | null = null;
+    if (!metadata?.road) {
+      nearestStreet = await lookupNearestMainStreet(lat, lng).catch(() => null);
+    }
 
-    // 4. Last resort: road name from Mapbox/Nominatim only (no cross-streets)
-    if (!metadata || !road) return cacheAndReturn(null);
-
-    return cacheAndReturn(buildEnrichedAddress(road, poiName, municipality, province));
+    return cacheAndReturn(composeStructuredAddress({ cross: null, overpass: null, metadata, nearestStreet, poi }));
   } catch {
     return cacheAndReturn(null);
   }
+}
+
+/**
+ * Reverse geocode to the legacy single-line Cuban address string. Thin wrapper
+ * over `reverseGeocodeStructured` + `joinStructured`, so every existing caller
+ * keeps the exact `Promise<string | null>` contract it had before.
+ *
+ * Format: "POI, Calle Principal e/ Cruz1 y Cruz2, Municipio, Provincia"
+ */
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+): Promise<string | null> {
+  const s = await reverseGeocodeStructured(lat, lng);
+  return s ? joinStructured(s) : null;
 }
 
 /* ─── Predictive Pickup Optimization ─── */
@@ -3377,8 +3517,11 @@ export async function searchPoisSupabase(
       )) || '';
     if (!supabaseUrl || !supabaseKey) return [];
 
-    const lat = proximity?.latitude ?? 23.1136;
-    const lng = proximity?.longitude ?? -82.3666;
+    // Bug 1a: never default to Havana center — a null proximity stays null so
+    // the RPC ranks nationally instead of sending an out-of-province rider to
+    // Havana results. Verified: search_pois_smart→[], search_streets→text-ranked.
+    const lat = proximity?.latitude ?? null;
+    const lng = proximity?.longitude ?? null;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
@@ -3476,8 +3619,11 @@ export async function searchStreetsSupabase(
       )) || '';
     if (!supabaseUrl || !supabaseKey || query.length < 2) return [];
 
-    const lat = proximity?.latitude ?? 23.1136;
-    const lng = proximity?.longitude ?? -82.3666;
+    // Bug 1a: never default to Havana center — a null proximity stays null so
+    // the RPC ranks nationally instead of sending an out-of-province rider to
+    // Havana results. Verified: search_pois_smart→[], search_streets→text-ranked.
+    const lat = proximity?.latitude ?? null;
+    const lng = proximity?.longitude ?? null;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);

@@ -18,8 +18,15 @@ import {
   newSessionToken,
   mapExternalCategoryToTricigo,
   tricigoCategoryEmoji,
+  searchPoisSupabase,
+  searchStreetsSupabase,
+  clearPoiCaches,
+  composeStructuredAddress,
+  joinStructured,
+  POI_INCLUSION_THRESHOLD_M,
   type SearchBoxResult,
   type TricigoCategory,
+  type StructuredAddress,
 } from '../geo';
 
 describe('haversineDistance', () => {
@@ -1115,5 +1122,146 @@ describe('searchAddressUnified', () => {
     const [, opts] = invokeSpy.mock.calls[0]!;
     const body = (opts as { body: { session_token?: string } }).body;
     expect(body.session_token).toBe('tok-unified-456');
+  });
+});
+
+describe('search RPC proximity (Bug 1a — never fall back to Havana center)', () => {
+  const ORIG_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const ORIG_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  let originalFetch: typeof fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'anon.test';
+    clearPoiCaches(); // searchPoisSupabase memoizes — isolate every test
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    process.env.EXPO_PUBLIC_SUPABASE_URL = ORIG_URL;
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = ORIG_KEY;
+    vi.restoreAllMocks();
+  });
+
+  function stubRpc() {
+    const spy = vi.fn(async () => new Response('[]', { status: 200 }));
+    globalThis.fetch = spy as unknown as typeof fetch;
+    return spy;
+  }
+  function bodyOf(spy: ReturnType<typeof stubRpc>) {
+    const call = spy.mock.calls[0]!;
+    return JSON.parse((call[1] as { body: string }).body) as { lat: number | null; lng: number | null };
+  }
+
+  it('searchPoisSupabase with null proximity sends null coords (not Havana 23.1136/-82.3666)', async () => {
+    const spy = stubRpc();
+    await searchPoisSupabase('parqueNullPoi', null, 6);
+    const body = bodyOf(spy);
+    expect(body.lat).toBeNull();
+    expect(body.lng).toBeNull();
+  });
+
+  it('searchPoisSupabase forwards an explicit non-Havana proximity unchanged', async () => {
+    const spy = stubRpc();
+    await searchPoisSupabase('parqueHolguin', { latitude: 20.8872, longitude: -76.2631 }, 6);
+    const body = bodyOf(spy);
+    expect(body.lat).toBeCloseTo(20.8872, 4);
+    expect(body.lng).toBeCloseTo(-76.2631, 4);
+  });
+
+  it('searchStreetsSupabase with null proximity sends null coords (not Havana)', async () => {
+    const spy = stubRpc();
+    await searchStreetsSupabase('ReinaNull', null, 8);
+    const body = bodyOf(spy);
+    expect(body.lat).toBeNull();
+    expect(body.lng).toBeNull();
+  });
+
+  it('regression: explicit Havana proximity still sends Havana coords', async () => {
+    const spy = stubRpc();
+    await searchPoisSupabase('parqueHavana', { latitude: 23.1136, longitude: -82.3666 }, 6);
+    const body = bodyOf(spy);
+    expect(body.lat).toBeCloseTo(23.1136, 4);
+    expect(body.lng).toBeCloseTo(-82.3666, 4);
+  });
+});
+
+describe('composeStructuredAddress (Bug 2 — layered reverse-geocode)', () => {
+  const META = (over: Partial<{ road: string; municipality: string; province: string; poiName: string }> = {}) =>
+    ({ road: '', municipality: '', province: '', poiName: '', ...over });
+
+  it('layer 1: cross-streets win and prefer the Mapbox municipality over the corrupt Supabase one', () => {
+    const s = composeStructuredAddress({
+      cross: { mainStreet: 'Belascoaín', crossStreets: ['San Lázaro', 'San Rafael'], municipality: 'Cojimar', province: 'La Habana' },
+      overpass: null,
+      metadata: META({ municipality: 'Centro Habana', province: 'La Habana' }),
+      nearestStreet: null,
+      poi: null,
+    });
+    expect(s).not.toBeNull();
+    expect(s!.source).toBe('cross_streets');
+    expect(s!.street).toBe('Belascoaín e/ San Lázaro y San Rafael');
+    expect(s!.municipality).toBe('Centro Habana'); // NOT the corrupt Supabase 'Cojimar'
+  });
+
+  it('includes the POI as poiName only when within the threshold', () => {
+    const base = { cross: { mainStreet: 'Brasil', crossStreets: ['San José', 'Dragones'] }, overpass: null, metadata: META(), nearestStreet: null };
+    const near = composeStructuredAddress({ ...base, poi: { name: 'Capitolio', distance_m: 12 } });
+    expect(near!.poiName).toBe('Capitolio');
+    const far = composeStructuredAddress({ ...base, poi: { name: 'Capitolio', distance_m: POI_INCLUSION_THRESHOLD_M + 5 } });
+    expect(far!.poiName).toBeUndefined();
+  });
+
+  it('layer 4: falls to the nearest single street when no cross-streets / overpass / road', () => {
+    const s = composeStructuredAddress({
+      cross: null, overpass: null,
+      metadata: META({ municipality: 'Camajuaní', province: 'Villa Clara' }),
+      nearestStreet: { mainStreet: 'Calle Martí', municipality: 'Camajuaní', province: 'Villa Clara' },
+      poi: null,
+    });
+    expect(s!.source).toBe('nearest_street');
+    expect(s!.street).toBe('Calle Martí');
+  });
+
+  it('layer 5: locality-only when only municipality / province are known', () => {
+    const s = composeStructuredAddress({
+      cross: null, overpass: null,
+      metadata: META({ municipality: 'Camajuaní', province: 'Villa Clara' }),
+      nearestStreet: null, poi: null,
+    });
+    expect(s!.source).toBe('locality');
+    expect(s!.street).toBe('');
+    expect(s!.municipality).toBe('Camajuaní');
+  });
+
+  it('layer 6: POI-only when nothing else and a close POI exists', () => {
+    const s = composeStructuredAddress({
+      cross: null, overpass: null, metadata: META(), nearestStreet: null,
+      poi: { name: 'Farmacia 23', distance_m: 6 },
+    });
+    expect(s!.source).toBe('poi_only');
+    expect(s!.poiName).toBe('Farmacia 23');
+    expect(s!.street).toBe('');
+  });
+
+  it('returns null when there is no signal at all (screen keeps lat,lng)', () => {
+    expect(composeStructuredAddress({ cross: null, overpass: null, metadata: META(), nearestStreet: null, poi: null })).toBeNull();
+  });
+});
+
+describe('joinStructured (Bug 2 — preserves the legacy comma string for existing callers)', () => {
+  it('orders POI, street, municipality, province', () => {
+    const s: StructuredAddress = { poiName: 'Capitolio', street: 'Brasil e/ San José y Dragones', municipality: 'La Habana Vieja', province: 'La Habana', source: 'cross_streets' };
+    expect(joinStructured(s)).toBe('Capitolio, Brasil e/ San José y Dragones, La Habana Vieja, La Habana');
+  });
+
+  it('does not repeat a POI name already present inside the street part', () => {
+    const s: StructuredAddress = { poiName: 'Hotel X', street: 'Hotel X', municipality: 'La Habana', source: 'poi_only' };
+    expect(joinStructured(s)).toBe('Hotel X, La Habana');
+  });
+
+  it('locality-only joins without a leading comma', () => {
+    const s: StructuredAddress = { street: '', municipality: 'Camajuaní', province: 'Villa Clara', source: 'locality' };
+    expect(joinStructured(s)).toBe('Camajuaní, Villa Clara');
   });
 });

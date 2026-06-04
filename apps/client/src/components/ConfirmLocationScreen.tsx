@@ -13,8 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 const ROUTE_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { reverseGeocode, MAP_STYLE_LIGHT } from '@tricigo/utils';
-import type { GeoPoint } from '@tricigo/utils';
+import { reverseGeocode, reverseGeocodeStructured, MAP_STYLE_LIGHT } from '@tricigo/utils';
+import type { GeoPoint, StructuredAddress } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
@@ -53,6 +53,23 @@ interface ConfirmLocationScreenProps {
   onClose: () => void;
 }
 
+/**
+ * Split a structured reverse-geocode result into the two display lines:
+ * line1 = POI name (bold, only when a POI is within a few meters), line2 = the
+ * street/locality address. Null result → show the raw coordinate on line2 so
+ * the bar is never blank (Bug 2b). Pure so it's trivially testable.
+ */
+function toDisplay(
+  s: StructuredAddress | null,
+  lat: number,
+  lng: number,
+): { line1?: string; line2: string } {
+  const coords = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  if (!s) return { line2: coords };
+  const line2 = [s.street, s.municipality, s.province].filter(Boolean).join(', ');
+  return { line1: s.poiName, line2: line2 || coords };
+}
+
 export function ConfirmLocationScreen({
   mode,
   initialLocation,
@@ -64,7 +81,9 @@ export function ConfirmLocationScreen({
   const { t } = useTranslation('rider');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
-  const [address, setAddress] = useState<string | null>(null);
+  // Two-line address display: line1 = POI name (when one sits within a few
+  // meters), line2 = the street/locality address. line1 omitted → single line.
+  const [display, setDisplay] = useState<{ line1?: string; line2: string } | null>(null);
   const centerRef = useRef<GeoPoint>(initialLocation ?? { latitude: 23.1136, longitude: -82.3666 });
   const [isGeocoding, setIsGeocoding] = useState(false);
   // Confirm button is decoupled from geocoding — see handleConfirm.
@@ -100,21 +119,21 @@ export function ConfirmLocationScreen({
     debounceRef.current = setTimeout(async () => {
       if (!mountedRef.current) return;
       setIsGeocoding(true);
-      setAddress(null); // Show shimmer
+      setDisplay(null); // Show shimmer
 
       // Retry up to 3 times
-      let result: string | null = null;
+      let result: StructuredAddress | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         if (!mountedRef.current) break;
         if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
         try {
-          result = await reverseGeocode(lat, lng);
+          result = await reverseGeocodeStructured(lat, lng);
           if (result) break;
         } catch { /* continue to next attempt */ }
       }
 
       if (mountedRef.current) {
-        setAddress(result ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        setDisplay(toDisplay(result, lat, lng));
         setIsGeocoding(false);
       }
     }, 300);
@@ -161,14 +180,17 @@ export function ConfirmLocationScreen({
     if (confirming) return; // re-entrancy guard (double-tap)
     setConfirming(true);
     const center = centerRef.current;
-    let finalAddress = address;
+    // Seed from whatever is already on screen (joined back to one string), then
+    // prefer a fresh string geocode. reverseGeocode shares the structured cache,
+    // so when the bar already resolved this spot it's an instant cache hit.
+    let finalAddress = display ? [display.line1, display.line2].filter(Boolean).join(', ') : null;
     try {
       const fresh = await Promise.race([
         reverseGeocode(center.latitude, center.longitude),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
       ]);
       if (fresh) finalAddress = fresh;
-    } catch { /* keep `address` / fallback */ }
+    } catch { /* keep current display / fallback */ }
     // User may have tapped back while the geocode was in flight.
     if (!mountedRef.current) return;
     onConfirm(finalAddress || 'Ubicación seleccionada en el mapa', center);
@@ -379,9 +401,19 @@ export function ConfirmLocationScreen({
                 opacity: shimmerOpacity,
               }}
             />
+          ) : display?.line1 ? (
+            // POI within a few meters → name on top (bold), address below (Bug 2b)
+            <>
+              <Text variant="bodySmall" numberOfLines={1} style={{ fontWeight: '700' }}>
+                {display.line1}
+              </Text>
+              <Text variant="caption" color="secondary" numberOfLines={1}>
+                {display.line2}
+              </Text>
+            </>
           ) : (
             <Text variant="bodySmall" numberOfLines={2}>
-              {address ?? t('ride.move_map', { defaultValue: 'Mueve el mapa para seleccionar' })}
+              {display?.line2 ?? t('ride.move_map', { defaultValue: 'Mueve el mapa para seleccionar' })}
             </Text>
           )}
         </View>

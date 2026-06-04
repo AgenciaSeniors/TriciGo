@@ -11,7 +11,7 @@
 // the ranking + label + constants layer on top.
 // ============================================================
 
-import { haversineDistance, computeSpecificity, tricigoCategoryEmoji, type SearchBoxResult } from './geo';
+import { haversineDistance, computeSpecificity, tricigoCategoryEmoji, isGenericStreetAddress, type SearchBoxResult } from './geo';
 import { stripAccents } from './fuzzyMatch';
 
 /** Unified typeahead debounce. Replaces the old per-app 200/250/350/500 ms spread. */
@@ -39,6 +39,21 @@ interface GeoPointLike {
 export function searchResultCap(query: string): number {
   const words = query.trim().split(/\s+/).filter(Boolean);
   return words.length >= 3 ? 8 : 6;
+}
+
+/**
+ * Whether a search-result row may be coordinate-enriched with the nearest
+ * Cuban cross-streets. ONLY pure street rows qualify: enrichment snaps the
+ * row to its exact intersection point — desirable for a street, but WRONG
+ * for a POI, where it would discard the POI's real coordinates AND its name
+ * (Bug 1b). A POI always carries a `displayName`; its `.address` is the
+ * street line and frequently begins with "Calle …", so the street-prefix
+ * heuristic alone misclassifies it — the `displayName` check is the reliable
+ * POI signal.
+ */
+export function shouldEnrichResult(r: { displayName?: string | null; address: string }): boolean {
+  if (r.displayName) return false;
+  return isGenericStreetAddress(r.address);
 }
 
 /**
