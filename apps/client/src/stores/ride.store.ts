@@ -229,7 +229,12 @@ export const useRideStore = create<RideState>((set, get) => ({
         });
         return s;
       }
-      return { draft: { ...s.draft, pickup: { address, location } } };
+      // Bug (verificado 2026-06-04, ride 6b61d130): clear the fare estimate
+      // when pickup changes so a stale estimate (from a previous location)
+      // can't be persisted by confirmRide. The TTL guard keys on
+      // fareEstimatedAt; nulling it forces a fresh requestEstimate before the
+      // ride can be confirmed. Mirrors swapPickupDropoff / addWaypoint.
+      return { draft: { ...s.draft, pickup: { address, location } }, fareEstimate: null, fareEstimatedAt: null };
     }),
 
   setDropoff: (address, location) =>
@@ -241,7 +246,11 @@ export const useRideStore = create<RideState>((set, get) => ({
         });
         return s;
       }
-      return { draft: { ...s.draft, dropoff: { address, location } } };
+      // Bug (verificado 2026-06-04): see setPickup — clear the stale estimate
+      // on dropoff change so confirmRide can't persist a fare from the
+      // previous destination. Root cause of estimated_fare_cup (e.g. 2200,
+      // far destination) not matching estimated_distance_m (near destination).
+      return { draft: { ...s.draft, dropoff: { address, location } }, fareEstimate: null, fareEstimatedAt: null };
     }),
 
   setServiceType: (serviceType) =>
