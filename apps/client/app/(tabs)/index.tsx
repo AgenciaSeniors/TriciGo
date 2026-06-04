@@ -2953,6 +2953,16 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     ? Math.round(selectedEstimate.estimated_fare_trc * (netCup / grossCup))
     : selectedEstimate?.estimated_fare_trc;
 
+  // "Compartir viaje" toggle. When enabling sharing on a tricycle, clamp the
+  // passenger count into the nested stepper's range (1–3) so the single visible
+  // control never shows an out-of-range value carried over from another service.
+  const handleShareRideToggle = (val: boolean) => {
+    setShareRide(val);
+    if (val && draft.serviceType === 'triciclo_basico' && (draft.passengerCount || 1) > 3) {
+      setPassengerCount(3);
+    }
+  };
+
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
   // Includes 'waypoint' to match the existing UI branches that
   // handle stop-search. The setter for 'waypoint' isn't wired yet
@@ -3474,8 +3484,11 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               </View>
             )}
 
-            {/* Passenger count selector */}
-            {draft.serviceType !== 'mensajeria' && (
+            {/* Passenger count selector. Hidden when the nested "Compartir
+                viaje" seats stepper is showing (tricycle + sharing on) so the
+                rider is asked the passenger count only once. */}
+            {draft.serviceType !== 'mensajeria' &&
+              !(draft.serviceType === 'triciclo_basico' && draft.shareRide && selectedEstimate && selectedEstimate.estimated_fare_cup > 0) && (
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, marginBottom: 4 }}>
                 <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>{t('ride.passengers', { defaultValue: 'Pasajeros' })}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -3646,7 +3659,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
             {draft.serviceType === 'triciclo_basico' && selectedEstimate && selectedEstimate.estimated_fare_cup > 0 && (
               <View style={{ marginBottom: 8 }}>
                 <Pressable
-                  onPress={() => { triggerHaptic('light'); setShareRide(!draft.shareRide); }}
+                  onPress={() => { triggerHaptic('light'); handleShareRideToggle(!draft.shareRide); }}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, borderWidth: draft.shareRide ? 1 : 0, borderColor: colors.brand.orange, backgroundColor: draft.shareRide ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev2 : colors.neutral[50]) }}
                   accessibilityRole="switch"
                   accessibilityState={{ checked: draft.shareRide }}
@@ -3665,7 +3678,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                   </View>
                   <Switch
                     value={draft.shareRide}
-                    onValueChange={(val) => setShareRide(val)}
+                    onValueChange={(val) => handleShareRideToggle(val)}
                     trackColor={{ false: '#D1D5DB', true: colors.brand.orange }}
                     thumbColor="white"
                   />
