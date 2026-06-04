@@ -338,43 +338,37 @@ export default function RideDetailScreen() {
         <Card variant="elevated" padding="lg" className="mb-4">
           <Text variant="h4" className="mb-3">{t('ride.fare_breakdown')}</Text>
 
-          {(() => {
-            // Strike-through the original estimate when the final differs,
-            // in the currency actually charged (BUG-293 parity).
-            const estFare = showTrc ? ride.estimated_fare_trc : ride.estimated_fare_cup;
-            const finFare = showTrc ? ride.final_fare_trc : ride.final_fare_cup;
-            if (finFare == null || estFare == null || finFare === estFare) return null;
-            return (
-              <View className="flex-row justify-between mb-2">
-                <Text variant="bodySmall" color="secondary">{t('ride.estimated_fare')}</Text>
-                <Text variant="bodySmall" color="secondary" className="line-through">
-                  {showTrc ? formatTRC(estFare) : formatCUP(estFare)}
-                </Text>
-              </View>
-            );
-          })()}
-
-          {pricing && (
-            <>
-              <View className="flex-row justify-between mb-1">
-                <Text variant="caption" color="secondary">{t('ride.base_fare')}</Text>
-                <Text variant="caption">{formatCUP(pricing.base_fare)}</Text>
-              </View>
-              <View className="flex-row justify-between mb-1">
-                <Text variant="caption" color="secondary">{t('ride.distance_charge')}</Text>
-                <Text variant="caption">{formatCUP(Math.round(pricing.per_km_rate * pricing.distance_m / 1000))}</Text>
-              </View>
-              <View className="flex-row justify-between mb-1">
-                <Text variant="caption" color="secondary">{t('ride.time_charge')}</Text>
-                <Text variant="caption">{formatCUP(Math.round(pricing.per_minute_rate * pricing.duration_s / 60))}</Text>
-              </View>
-            </>
-          )}
+          {/* A2 (2026-06-04): desglose reconciliable. Antes mostraba
+              base + per_km×distancia + per_min×tiempo, que NO suma el total
+              (la tarifa usa una duración neutra oculta — BUG-221 — y los
+              completados usan paridad estricta, no recálculo por distancia
+              real). Ahora: "Tarifa del viaje" (subtotal pre-descuento) →
+              descuento/espera/propina → total, que SÍ cuadra. Distancia y
+              duración se muestran en "Estadísticas" abajo. */}
+          <View className="flex-row justify-between mb-2">
+            <Text variant="bodySmall" color="secondary">{t('ride.trip_fare', { defaultValue: 'Tarifa del viaje' })}</Text>
+            <Text variant="bodySmall">{formatCUP(pricing?.subtotal ?? ride.estimated_fare_cup)}</Text>
+          </View>
 
           {ride.discount_amount_cup > 0 && (
             <View className="flex-row justify-between mb-2">
               <Text variant="bodySmall" className="text-green-600">{t('ride.discount')}</Text>
               <Text variant="bodySmall" className="text-green-600">-{formatCUP(ride.discount_amount_cup)}</Text>
+            </View>
+          )}
+
+          {/* A2: espera y propina como líneas explícitas para que el desglose
+              reconcilie con el Total (subtotal − descuento + espera + propina). */}
+          {(ride.wait_time_charge_cup ?? 0) > 0 && (
+            <View className="flex-row justify-between mb-1">
+              <Text variant="caption" color="secondary">{t('ride.wait_charge', { defaultValue: 'Cargo por espera' })}</Text>
+              <Text variant="caption">+{formatCUP(ride.wait_time_charge_cup)}</Text>
+            </View>
+          )}
+          {(ride.tip_amount ?? 0) > 0 && (
+            <View className="flex-row justify-between mb-1">
+              <Text variant="caption" color="secondary">{t('ride.tip', { defaultValue: 'Propina' })}</Text>
+              <Text variant="caption">+{formatCUP(ride.tip_amount)}</Text>
             </View>
           )}
 
