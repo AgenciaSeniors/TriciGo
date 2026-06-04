@@ -323,8 +323,8 @@ export function TripCompleteView() {
                 }}
               >
                 {t('trip.collect_cash_amount', {
-                  amount: formatCUP((activeTrip as any).cash_amount_cup ?? Math.round(fare * 0.5)),
-                  defaultValue: `Cobrar $${((activeTrip as any).cash_amount_cup ?? Math.round(fare * 0.5)).toLocaleString()} en efectivo`,
+                  amount: formatCUP(activeTrip.cash_amount_cup ?? Math.round(fare * 0.5)),
+                  defaultValue: `Cobrar $${(activeTrip.cash_amount_cup ?? Math.round(fare * 0.5)).toLocaleString()} en efectivo`,
                 })}
               </Text>
               <Text
@@ -332,8 +332,8 @@ export function TripCompleteView() {
                 style={{ color: midnightEmber.map.text.tertiary }}
               >
                 {t('trip.wallet_portion', {
-                  amount: formatCUP((activeTrip as any).wallet_amount_cup ?? Math.round(fare * 0.5)),
-                  defaultValue: `$${((activeTrip as any).wallet_amount_cup ?? Math.round(fare * 0.5)).toLocaleString()} del wallet del pasajero`,
+                  amount: formatCUP(activeTrip.wallet_amount_cup ?? Math.round(fare * 0.5)),
+                  defaultValue: `$${(activeTrip.wallet_amount_cup ?? Math.round(fare * 0.5)).toLocaleString()} del wallet del pasajero`,
                 })}
               </Text>
             </View>

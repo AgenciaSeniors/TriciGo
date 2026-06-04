@@ -104,13 +104,9 @@ export function FareBreakdownCard({
 }: FareBreakdownCardProps) {
   const distanceKm = distanceM / 1000;
   const durationMin = durationS / 60;
-  const distanceCharge = Math.round(distanceKm * perKmRateCup);
-  const timeCharge = Math.round(durationMin * perMinRateCup);
-  const subtotal = baseFareCup + distanceCharge + timeCharge;
   const finalTrc = totalTrc - discountTrc + insurancePremiumTrc;
   const isTrc = paymentMethod === 'tricicoin';
   const fmt = (cup: number) => isTrc ? formatTRC(cup) : formatCUP(cup);
-  const unitLabel = isTrc ? 'TRC' : 'CUP';
   const totalDisplay = isTrc ? formatTRC(finalTrc) : formatCUP(totalCup - (discountTrc) + insurancePremiumTrc);
   const totalUsdDisplay = exchangeRate > 0 ? formatUSD(trcToUsd(finalTrc, exchangeRate)) : null;
 
@@ -118,21 +114,15 @@ export function FareBreakdownCard({
     <Card variant="elevated" padding="lg">
       <Text variant="h4" className="mb-4">{title}</Text>
 
-      {/* Base fare */}
-      <Row label={labels.baseFare} value={fmt(baseFareCup)} />
-
-      {/* Distance charge */}
+      {/* A2 (2026-06-04): tarifa del viaje (pre-descuento) en vez del itemizado
+          base/distancia/tiempo — no suma el total porque la tarifa usa una
+          duración NEUTRA oculta (BUG-221), no la duración display que se ve.
+          totalCup − descuento + seguro = total, que sí reconcilia. Distancia y
+          tiempo van como detalle informativo. */}
       <Row
-        label={labels.distanceCharge}
-        value={fmt(distanceCharge)}
-        detail={`${distanceKm.toFixed(1)} km × ${perKmRateCup} ${unitLabel}/km`}
-      />
-
-      {/* Time charge */}
-      <Row
-        label={labels.timeCharge}
-        value={fmt(timeCharge)}
-        detail={`${Math.round(durationMin)} min × ${perMinRateCup} ${unitLabel}/min`}
+        label={labels.subtotal ?? labels.baseFare}
+        value={fmt(totalCup)}
+        detail={`${distanceKm.toFixed(1)} km · ${Math.round(durationMin)} min`}
       />
 
       {/* Surge indicator */}
