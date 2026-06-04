@@ -7,6 +7,7 @@ import {
   rankSearchResults,
   searchResultCap,
   searchResultEmoji,
+  shouldEnrichResult,
   type ScorableResult,
 } from '../addressSearch';
 
@@ -192,5 +193,30 @@ describe('searchResultEmoji', () => {
 
   it('still returns the cross-street icon for a bare "X e/ Y" address with no POI/category signal', () => {
     expect(searchResultEmoji({ address: 'Belascoaín e/ San Lázaro y Ánimas' })).toBe('🔀');
+  });
+});
+
+describe('shouldEnrichResult', () => {
+  // Bug 1b: the background cross-street enrichment rewrites a result's
+  // coordinates to a fuzzy intersection point. It must run ONLY for pure
+  // street rows, never for POIs — a POI carries a `displayName` but its
+  // `.address` is the street line (e.g. "Calle Heredia, …"), which starts
+  // with a street prefix and would wrongly pass the prefix heuristic alone.
+  it('skips a POI even when its street-style address starts with "Calle"', () => {
+    expect(
+      shouldEnrichResult({ displayName: 'Hotel Casagranda', address: 'Calle Heredia, Santiago de Cuba' }),
+    ).toBe(false);
+  });
+
+  it('enriches a pure street row (no POI name) so it snaps to the exact intersection', () => {
+    expect(shouldEnrichResult({ address: 'Calle 23' })).toBe(true);
+  });
+
+  it('does not enrich an address that already carries cross-streets', () => {
+    expect(shouldEnrichResult({ address: 'Reina e/ Galiano y Águila' })).toBe(false);
+  });
+
+  it('does not enrich a bare POI name that has no street prefix', () => {
+    expect(shouldEnrichResult({ displayName: 'Capitolio', address: 'Capitolio Nacional' })).toBe(false);
   });
 });
