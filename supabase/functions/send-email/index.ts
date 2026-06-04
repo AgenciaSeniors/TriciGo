@@ -64,6 +64,18 @@ interface EmailRequest {
 }
 
 /**
+ * Thrown when a caller passes a `template` that isn't a registered key
+ * AND looks like a bare slug (not raw HTML). Surfaces the mistake as a
+ * 400 instead of silently shipping an email whose body is the key.
+ */
+class UnregisteredTemplateError extends Error {
+  constructor(public readonly template: string) {
+    super(`Unregistered email template key: "${template}"`);
+    this.name = 'UnregisteredTemplateError';
+  }
+}
+
+/**
  * Decide between rendering via the typed template registry
  * (preferred — used for welcome / win_back / wallet_receipt /
  * ride_receipt / driver_under_review) and the legacy
@@ -77,6 +89,14 @@ function resolveTemplate(
 ): { subject: string; html: string } {
   if (isTemplateKey(template)) {
     return renderRegistryTemplate(template as TemplateKey, data, subjectOverride);
+  }
+  // Guardrail: a bare slug-like string (letters/digits/_/-, no HTML tags or
+  // whitespace) is almost certainly a mistyped or unregistered template KEY,
+  // not a raw HTML body. These historically slipped through the legacy path
+  // below and shipped an email whose body was the literal key (e.g.
+  // "driver_payout"). Reject loudly so the caller/log surfaces it.
+  if (/^[A-Za-z0-9_-]+$/.test(template.trim())) {
+    throw new UnregisteredTemplateError(template);
   }
   let html = template;
   for (const [key, value] of Object.entries(data)) {
@@ -164,7 +184,23 @@ Deno.serve(async (req) => {
       );
     }
 
-    const rendered = resolveTemplate(template, data ?? {}, subject);
+    let rendered: { subject: string; html: string };
+    try {
+      rendered = resolveTemplate(template, data ?? {}, subject);
+    } catch (err) {
+      if (err instanceof UnregisteredTemplateError) {
+        console.error(`[send-email] BLOCKED unregistered template "${err.template}" — not sending. Register it in _shared/email-templates/index.ts (isTemplateKey + renderTemplate switch).`);
+        return new Response(
+          JSON.stringify({
+            error: 'unregistered_template',
+            template: err.template,
+            hint: 'Register this key in _shared/email-templates/index.ts',
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      throw err;
+    }
 
     if (!rendered.subject) {
       return new Response(
