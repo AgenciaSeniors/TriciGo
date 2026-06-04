@@ -15,7 +15,7 @@ import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '@tricigo/i18n';
-import { driverService, getSupabaseClient, useFeatureFlag, notificationService, trackValidationEvent } from '@tricigo/api';
+import { driverService, getSupabaseClient, walletService, useFeatureFlag, notificationService, trackValidationEvent } from '@tricigo/api';
 import {
   HAVANA_CENTER,
   trackEvent,
@@ -270,10 +270,19 @@ function NativeDriverHomeScreen() {
   // client app + admin.
   useEffect(() => {
     if (!profile?.id) return;
-    const COMMISSION_RATE = 0.15;
     const fetchEarnings = async () => {
       try {
         const supabase = getSupabaseClient();
+        // Fix 4 (display conductor): live commission rate (was hardcoded 0.15)
+        // so the HOY net matches the earnings screen / receipt when the
+        // platform rate ≠ 15%. Default 0.15 on failure keeps the math identical
+        // at 15% (mirrors IncomingRideCard / DriverTripView B4 pattern).
+        let commissionRate = 0.15;
+        try {
+          const val = await walletService.getConfigValue('commission_rate');
+          const parsed = parseFloat(String(val ?? '').replace(/"/g, ''));
+          if (!isNaN(parsed) && parsed > 0 && parsed < 1) commissionRate = parsed;
+        } catch { /* keep 0.15 */ }
         const sinceUtc = havanaMidnightUtc();
         const { data, error } = await supabase
           .from('rides')
@@ -291,7 +300,7 @@ function NativeDriverHomeScreen() {
           (sum: number, r: { final_fare_cup: number | null }) => sum + (r.final_fare_cup ?? 0),
           0,
         );
-        const amount = Math.round(gross * (1 - COMMISSION_RATE));
+        const amount = Math.round(gross * (1 - commissionRate));
         console.log('[home/earnings] fetched', {
           driver_id: profile.id,
           since_utc: sinceUtc.toISOString(),
@@ -317,10 +326,17 @@ function NativeDriverHomeScreen() {
   // boundary re-computes after midnight.
   useEffect(() => {
     if (!profile?.id) return;
-    const COMMISSION_RATE = 0.15;
     const fetchYesterday = async () => {
       try {
         const supabase = getSupabaseClient();
+        // Fix 4 (display conductor): live commission rate (was hardcoded 0.15);
+        // keeps "Ayer" net consistent with HOY + the earnings screen.
+        let commissionRate = 0.15;
+        try {
+          const val = await walletService.getConfigValue('commission_rate');
+          const parsed = parseFloat(String(val ?? '').replace(/"/g, ''));
+          if (!isNaN(parsed) && parsed > 0 && parsed < 1) commissionRate = parsed;
+        } catch { /* keep 0.15 */ }
         const havanaOffsetHrs = (() => {
           const fmt = new Intl.DateTimeFormat('en-US', {
             timeZone: 'America/Havana',
@@ -359,7 +375,7 @@ function NativeDriverHomeScreen() {
           (sum: number, r: { final_fare_cup: number | null }) => sum + (r.final_fare_cup ?? 0),
           0,
         );
-        const amount = Math.round(gross * (1 - COMMISSION_RATE));
+        const amount = Math.round(gross * (1 - commissionRate));
         setYesterdayEarnings({ amount, trips });
       } catch (err) {
         console.warn('[home/earnings/yesterday] exception', String(err));
