@@ -66,7 +66,10 @@ export default function DriverReviewsScreen() {
       if (reset) {
         setReviews(data);
       } else {
-        setReviews((prev) => [...prev, ...data]);
+        setReviews((prev) => {
+          const seen = new Set(prev.map((r) => r.id));
+          return [...prev, ...data.filter((r) => !seen.has(r.id))];
+        });
       }
       setHasMore(data.length === PAGE_SIZE);
       setPage(pageNum);
@@ -120,7 +123,7 @@ export default function DriverReviewsScreen() {
           {item.tags.map((tag) => (
             <View key={tag} style={{ backgroundColor: palette.bg.elev2, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 }}>
               <Text style={{ fontSize: 10, color: palette.ink.secondary, fontWeight: '600' }}>
-                {t(`review.tag_${tag}`, { defaultValue: tag.replace(/_/g, ' ') })}
+                {t(`ride.tag_${tag}`, { defaultValue: tag.replace(/_/g, ' ') })}
               </Text>
             </View>
           ))}

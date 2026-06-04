@@ -132,7 +132,11 @@ function NativeTripsScreen() {
           dateTo: filters.dateTo,
         });
         if (!cancelled) {
-          setTrips((prev) => (page === 0 ? data : [...prev, ...data]));
+          setTrips((prev) => {
+            if (page === 0) return data;
+            const seen = new Set(prev.map((trip) => trip.id));
+            return [...prev, ...data.filter((trip) => !seen.has(trip.id))];
+          });
         }
       } catch (err) {
         console.error('Error fetching trips:', err);

@@ -41,6 +41,7 @@ import { DriverTripView, useActiveTripMapData } from '@/components/DriverTripVie
 import { HomeBottomSheet } from '@/components/HomeBottomSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import * as Location from 'expo-location';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useDemandHotspots } from '@/hooks/useDemandHotspots';
 import { usePopularLocations } from '@/hooks/usePopularLocations';
 import { useNearbyDrivers } from '@/hooks/useNearbyDrivers';
@@ -967,6 +968,16 @@ function NativeDriverHomeScreen() {
           <View style={styles.offlineDimOverlay} pointerEvents="none" />
         )}
       </View>
+
+      {/* ── Layer 1.5: Top scrim ── Darkens the status-bar zone so the system
+           clock and the map's own labels stay legible over the map. Before
+           this, map labels + the Mapbox scale bar collided with the status
+           bar. pointerEvents=none so map gestures pass straight through. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(8,8,12,0.65)', 'rgba(8,8,12,0)']}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top + 56 }}
+      />
 
       {/* ── Layer 2: Floating header + badges ── */}
       <View style={[styles.floatingHeaderContainer, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">

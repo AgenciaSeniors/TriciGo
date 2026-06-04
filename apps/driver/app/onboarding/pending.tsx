@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
 
 // Central support contact. Update here if ops phone/whatsapp changes.
-const SUPPORT_WHATSAPP = '+5356621636'; // WhatsApp ops line
+const SUPPORT_WHATSAPP = '+5545998622511'; // Support contact (WhatsApp / phone)
 
 export default function PendingScreen() {
   const { t } = useTranslation('driver');

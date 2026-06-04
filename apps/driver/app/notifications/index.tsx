@@ -313,7 +313,7 @@ export default function NotificationsScreen() {
         <FlatList
           data={groupedData}
           keyExtractor={(item, index) =>
-            item.type === 'header' ? `header-${item.title}` : `notif-${item.data.id}`
+            item.type === 'header' ? `header-${index}` : `notif-${item.data.id}`
           }
           renderItem={renderItem}
           refreshControl={

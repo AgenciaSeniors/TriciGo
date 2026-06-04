@@ -231,7 +231,7 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
               className="font-semibold"
               style={{ color: midnightEmber.screen.text.inverse }}
             >
-              OK
+              {t('earnings.save_goal_short', { defaultValue: 'Guardar' })}
             </Text>
           </Pressable>
           <Pressable

@@ -233,9 +233,9 @@ function NativeDriverProfileScreen() {
   ];
 
   // ── Cuban MenuRow (inline custom) ──
-  const renderMenuRow = (item: MenuItem, isLast: boolean) => (
+  const renderMenuRow = (item: MenuItem, isLast: boolean, keyId: string) => (
     <Pressable
-      key={item.label}
+      key={keyId}
       onPress={item.onPress}
       style={({ pressed }) => [
         {
@@ -347,7 +347,7 @@ function NativeDriverProfileScreen() {
                   {user?.full_name ?? td('common.driver_label')}
                 </Text>
                 <Text style={{ color: palette.ink.secondary, fontSize: 13, marginTop: 3 }}>
-                  {user?.phone ?? '+53 5XXXXXXX'}
+                  {user?.phone ?? ''}
                 </Text>
                 {statusInfo && (
                   <View
@@ -516,7 +516,7 @@ function NativeDriverProfileScreen() {
                     shadowOpacity: isDark ? 0.4 : 0.1,
                   }}
                 >
-                  {section.items.map((item, i) => renderMenuRow(item, i === section.items.length - 1))}
+                  {section.items.map((item, i) => renderMenuRow(item, i === section.items.length - 1, `${section.title}-${i}`))}
                 </View>
               </View>
             ))}

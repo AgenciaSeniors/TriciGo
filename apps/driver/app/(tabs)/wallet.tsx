@@ -120,7 +120,13 @@ export default function WalletScreen() {
         setTransactions(txData);
         setPage(1);
       } else {
-        setTransactions((prev) => [...prev, ...txData]);
+        // Dedup by id when appending: a focus-refetch or page overlap can
+        // re-deliver rows already in state, which would collide on the
+        // FlatList key (item.id) → "two children with the same key".
+        setTransactions((prev) => {
+          const seen = new Set(prev.map((tx) => tx.id));
+          return [...prev, ...txData.filter((tx) => !seen.has(tx.id))];
+        });
         setPage((prev) => prev + 1);
       }
       setHasMore(txData.length === PAGE_SIZE);
@@ -306,7 +312,7 @@ export default function WalletScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color: palette.ink.primary, fontWeight: '600', fontSize: 14 }}>
-              {t(`wallet.tx_${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') })}
+              {t(`earnings.tx_${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') })}
             </Text>
             <Text style={{ color: palette.ink.secondary, fontSize: 12, marginTop: 2 }}>
               {new Date(item.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}

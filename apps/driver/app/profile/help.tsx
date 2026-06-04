@@ -177,7 +177,7 @@ export default function DriverHelpScreen() {
                 </View>
                 <View className="flex-row items-center">
                   <Ionicons name="call-outline" size={18} color={midnightEmber.screen.text.tertiary} />
-                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">+53 5XXXXXXX</Text>
+                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">+5545998622511</Text>
                 </View>
               </Card>
 
