@@ -155,6 +155,15 @@ export function wrapHtml(opts: LayoutOptions): string {
   <meta name="color-scheme" content="light dark">
   <meta name="supported-color-schemes" content="light dark">
   <title>TriciGo</title>
+  <style>
+    /* Light/dark logo swap. Clients that honor prefers-color-scheme show the
+       white wordmark on dark backgrounds; clients that strip <style> simply
+       keep the default-visible dark wordmark (graceful fallback). */
+    @media (prefers-color-scheme: dark) {
+      .logo-light { display: none !important; }
+      .logo-dark { display: block !important; }
+    }
+  </style>
 </head>
 <body style="margin: 0; padding: 0; background-color: ${COLORS.bgPage}; font-family: ${FONT_STACK};">
 ${preheaderBlock}
@@ -163,14 +172,18 @@ ${preheaderBlock}
     <td align="center" style="padding: 24px 12px;">
       <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background-color: ${COLORS.bgCard}; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,0.05);">
         <tr>
-          <td bgcolor="#FFFFFF" style="padding: 28px 32px 20px; text-align: center; background-color: #FFFFFF;">
+          <td style="padding: 28px 32px 20px; text-align: center;">
             <a href="${WEB_ORIGIN}" target="_blank" rel="noopener"
                style="display: inline-block; text-decoration: none;">
-              <!-- Email-optimized logo: composited on white + antialiased, served at 2x
-                   (336x80) and displayed at 168x40. The source wordmark PNG has 1-bit
-                   (aliased) transparency that looked jagged when scaled by mail clients. -->
-              <img src="${WEB_ORIGIN}/logo-email.png" alt="TriciGo" width="168" height="40"
+              <!-- Transparent, antialiased wordmark (2x: 336x80, shown at 168x40).
+                   Light/dark swap: dark wordmark by default (and the fallback when a
+                   client strips the <style> rule), white wordmark on dark backgrounds
+                   via prefers-color-scheme. Source PNGs had 1-bit (jagged) alpha; these
+                   are LANCZOS-antialiased and keep transparency (no white box). -->
+              <img class="logo-light" src="${WEB_ORIGIN}/logo-email-light.png" alt="TriciGo" width="168" height="40"
                    style="display: block; width: 168px; height: 40px; border: 0; outline: none; -ms-interpolation-mode: bicubic;">
+              <img class="logo-dark" src="${WEB_ORIGIN}/logo-email-dark.png" alt="TriciGo" width="168" height="40"
+                   style="display: none; width: 168px; height: 40px; border: 0; outline: none; -ms-interpolation-mode: bicubic;">
             </a>
           </td>
         </tr>
