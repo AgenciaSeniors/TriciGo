@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, AppState } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useFonts } from 'expo-font';
 import {
@@ -19,6 +19,7 @@ import { useDriverRideStore } from '@/stores/ride.store';
 import { useLocationStore } from '@/stores/location.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { colors } from '@tricigo/theme';
+import { getSupabaseClient } from '@tricigo/api';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
@@ -136,6 +137,30 @@ function RootNavigator() {
   // initMapbox() call above.
   useEffect(() => {
     initMapbox();
+  }, []);
+
+  // Supabase RN token lifecycle (realtime CHANNEL_ERROR hardening). On React
+  // Native, `autoRefreshToken: true` alone does NOT reliably refresh the
+  // session while backgrounded (JS timers are throttled/suspended). The
+  // documented Supabase pattern drives the auto-refresh loop with AppState:
+  // start it while foregrounded, stop it when backgrounded. Without this the
+  // access token can expire in the background; on foreground the realtime
+  // socket reconnects and rejoins channels with a stale token -> CHANNEL_ERROR.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const supabase = getSupabaseClient();
+    supabase.auth.startAutoRefresh();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        supabase.auth.startAutoRefresh();
+      } else {
+        supabase.auth.stopAutoRefresh();
+      }
+    });
+    return () => {
+      sub.remove();
+      supabase.auth.stopAutoRefresh();
+    };
   }, []);
 
   // Request foreground GPS permission early and seed useLocationStore with
