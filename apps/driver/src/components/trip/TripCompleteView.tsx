@@ -94,6 +94,11 @@ export function TripCompleteView() {
   const tipAmount = activeTrip.tip_amount ?? 0;
   const netEarnings = fare - commissionAmount + tipAmount;
   const isCash = activeTrip.payment_method === 'cash' || activeTrip.payment_method === 'mixed';
+  // Viajes en TriciCoin: mostrar los montos con etiqueta TRC (1 TRC = 1 CUP,
+  // mismo número) — el conductor cobra en su saldo TriciCoin. Espeja
+  // RideCompleteView (showTrc = payment_method === 'tricicoin').
+  const isTrc = activeTrip.payment_method === 'tricicoin';
+  const fmtMoney = (cup: number) => (isTrc ? formatTRC(cup) : formatCUP(cup));
 
   // BUG-291: defensive display clamp. If actual_distance_m landed on a
   // garbage value (e.g. corrupt GPS samples summed to thousands of km)
@@ -198,7 +203,7 @@ export function TripCompleteView() {
                  cliente ven el mismo número, y el breakdown abajo aclara
                  la comisión. El i18n string también cambia: ahora dice
                  "Tarifa del viaje: $X" en lugar de "+$X este viaje". */
-              amount: `$${fare.toLocaleString()}`,
+              amount: isTrc ? formatTRC(fare) : `$${fare.toLocaleString()}`,
             })}
           </Text>
         )}
@@ -238,7 +243,7 @@ export function TripCompleteView() {
             marginBottom: distanceWasCapped ? 4 : 12,
           }}
         >
-          {formatCUP(activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup)} · {(displayDistanceM / 1000).toFixed(1)} km · {Math.ceil((activeTrip.actual_duration_s || 0) / 60)} min
+          {fmtMoney(activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup)} · {(displayDistanceM / 1000).toFixed(1)} km · {Math.ceil((activeTrip.actual_duration_s || 0) / 60)} min
         </Text>
         {distanceWasCapped && (
           <Text
@@ -262,7 +267,7 @@ export function TripCompleteView() {
               {t('trip.total_fare', { defaultValue: 'Tarifa total' })}
             </Text>
             <Text variant="bodySmall" style={{ color: midnightEmber.map.text.primary }}>
-              {formatCUP(fare)}
+              {fmtMoney(fare)}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -288,7 +293,7 @@ export function TripCompleteView() {
                 {t('trip.tip', { defaultValue: 'Propina' })}
               </Text>
               <Text variant="bodySmall" style={{ color: midnightEmber.state.success }}>
-                +{formatCUP(tipAmount)}
+                +{fmtMoney(tipAmount)}
               </Text>
             </View>
           )}
