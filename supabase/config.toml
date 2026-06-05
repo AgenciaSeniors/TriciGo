@@ -442,6 +442,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.delete-account]
 verify_jwt = false
+[functions.upload-delivery-photo]
+verify_jwt = false
 
 # Internal / cron functions currently verify_jwt=false in prod. They must
 # rely on their OWN service-role/secret checks — TODO: audit each handler
