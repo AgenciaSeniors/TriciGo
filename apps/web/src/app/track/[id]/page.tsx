@@ -1514,7 +1514,10 @@ export default function TrackRidePage() {
                       incidentService.createSOSReport({
                         ride_id: ride.id,
                         reported_by: userId,
-                        against_user_id: ride.driver_id ?? undefined,
+                        // against_user_id FK -> users(id); ride.driver_id is the
+                        // driver_profiles.id -> use driver_user_id (the FK violation
+                        // was failing the whole SOS insert).
+                        against_user_id: ride.driver_user_id ?? undefined,
                         description: 'SOS activado por pasajero (web) durante viaje',
                       }),
                       trustedContactService.broadcastEmergency({

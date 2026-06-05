@@ -766,7 +766,11 @@ export function RideActiveView() {
               incidentService.createSOSReport({
                 ride_id: activeRide.id,
                 reported_by: userId,
-                against_user_id: activeRide.driver_id ?? undefined,
+                // against_user_id is an FK to users(id). activeRide.driver_id is the
+                // driver_profiles.id (NOT a users.id), which caused an FK violation
+                // that failed the entire SOS insert ("SOS report failed"). Use the
+                // driver's USER id.
+                against_user_id: rideWithDriver?.driver_user_id ?? undefined,
                 description: 'SOS activado por pasajero durante viaje',
               }).catch((err) => {
                 logger.error('SOS report failed', { error: String(err) });
@@ -1667,12 +1671,14 @@ export function RideActiveView() {
         rideStatus={activeRide?.status ?? null}
       />
 
-      {/* Safety bottom sheet */}
+      {/* Safety bottom sheet. driverId is used ONLY for incident_reports.against_user_id
+          (FK -> users.id), so we pass the driver's USER id (rideWithDriver.driver_user_id),
+          NOT activeRide.driver_id which is the driver_profiles.id and breaks the FK. */}
       <SafetySheet
         visible={safetySheetVisible}
         onClose={() => setSafetySheetVisible(false)}
         rideId={activeRide.id}
-        driverId={activeRide.driver_id}
+        driverId={rideWithDriver?.driver_user_id ?? null}
         userId={userId!}
         emergencyContact={emergencyContact}
         driverPhone={rideWithDriver?.driver_phone ?? null}
