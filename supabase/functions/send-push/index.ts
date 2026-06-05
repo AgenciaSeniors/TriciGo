@@ -63,6 +63,14 @@ const VALID_CATEGORIES = new Set([
   'delivery',
   'system',
   'promo',
+  // Admin content notifications (00380): unblocks the "Notificar ahora"
+  // buttons + notify-on-publish on the announcement/blog/promo admin
+  // pages. broadcastToActiveUsers() forwards contentType verbatim as
+  // the category, so these must be whitelisted or the EF 400s.
+  'announcement',
+  'blog',
+  'news',
+  'campaign',
   // Legacy values kept for backward-compat with existing migrations.
   // TODO: consolidate `ride_updates` → `proximity` and remove
   // `wallet_v2_migration` after the one-shot migration RPC is dropped.
