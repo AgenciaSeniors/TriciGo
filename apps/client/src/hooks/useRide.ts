@@ -334,8 +334,17 @@ export function useRideActions() {
         .filter((w) => w.location !== null && w.address !== '')
         .map((w) => ({ lat: w.location!.latitude, lng: w.location!.longitude }));
 
+      // Mensajería se cobra al precio del VEHÍCULO elegido (alinea con la web):
+      // el estimado primario (= fareEstimate singular que alimenta botón/ETA/cobro)
+      // sale del vehículo, no del config plano de 'mensajeria'. allFareEstimates
+      // igual guarda las 5 slugs (incl. 'mensajeria' plano) vía el loop de fondo.
+      const primarySlug =
+        draft.serviceType === 'mensajeria' && draft.delivery.deliveryVehicleType
+          ? deliveryVehicleToSlug(draft.delivery.deliveryVehicleType)
+          : draft.serviceType;
+
       const estimate = await rideService.getLocalFareEstimate({
-        service_type: draft.serviceType,
+        service_type: primarySlug,
         pickup_lat: draft.pickup.location.latitude,
         pickup_lng: draft.pickup.location.longitude,
         dropoff_lat: draft.dropoff.location.latitude,
@@ -347,11 +356,11 @@ export function useRideActions() {
 
       // Estimate other service types in background for comparison UI
       const allSlugs: import('@tricigo/types').ServiceTypeSlug[] = ['moto_standard', 'triciclo_basico', 'auto_standard', 'auto_confort', 'mensajeria'];
-      const otherSlugs = allSlugs.filter((s) => s !== draft.serviceType);
+      const otherSlugs = allSlugs.filter((s) => s !== primarySlug);
       const { setAllFareEstimates } = useRideStore.getState();
       // Seed with current estimate
       const estimates: Partial<Record<import('@tricigo/types').ServiceTypeSlug, import('@tricigo/types').FareEstimate>> = {
-        [draft.serviceType]: estimate,
+        [primarySlug]: estimate,
       };
       setAllFareEstimates({ ...estimates });
       // Fire background estimates
@@ -440,7 +449,15 @@ export function useRideActions() {
     // back to the singular estimate only if the slug-specific one is
     // missing. This guarantees the persisted ride row matches the
     // service_type the user actually selected.
-    const selectedFare = allFareEstimates?.[d.serviceType] ?? fareEstimate;
+    // Mensajería (cargo): el precio = el del VEHÍCULO elegido, no el config plano.
+    // El ride se despacha a ese vehículo (effectiveServiceType) y la tarifa
+    // persistida/cobrada sale de su estimado (ya en allFareEstimates). Alinea con
+    // la web (apps/web book/page: isMensajeria ? allEstimates[vehicle] : ...).
+    const effectiveServiceType =
+      d.serviceType === 'mensajeria' && d.delivery.deliveryVehicleType
+        ? deliveryVehicleToSlug(d.delivery.deliveryVehicleType)
+        : d.serviceType;
+    const selectedFare = allFareEstimates?.[effectiveServiceType] ?? fareEstimate;
     if (!d.pickup || !d.dropoff) {
       isSubmittingRef.current = false;
       pendingRequestIdRef.current = null;
@@ -476,13 +493,13 @@ export function useRideActions() {
     }
 
     // Bug 9: Validate TRC balance before booking
-    if (d.paymentMethod === 'tricicoin' && fareEstimate) {
+    if (d.paymentMethod === 'tricicoin' && selectedFare) {
       try {
         const userId = useAuthStore.getState().user?.id;
         if (userId) {
           const bal = await walletService.getBalance(userId);
           // Bug 26: Add 20% buffer to account for surge pricing changes since estimate
-          if (bal.available < (fareEstimate.estimated_fare_trc ?? 0) * 1.2) {
+          if (bal.available < (selectedFare.estimated_fare_trc ?? 0) * 1.2) {
             isSubmittingRef.current = false;
             pendingRequestIdRef.current = null;
             Toast.show({
@@ -576,12 +593,8 @@ export function useRideActions() {
     setLoading(true);
     setError(null);
     try {
-      // For delivery, use the vehicle type's service slug for fare calculation
-      const effectiveServiceType =
-        d.serviceType === 'mensajeria' && d.delivery.deliveryVehicleType
-          ? deliveryVehicleToSlug(d.delivery.deliveryVehicleType)
-          : d.serviceType;
-
+      // effectiveServiceType ya se computó arriba (junto a selectedFare) para que
+      // mensajería persista/cobre la tarifa del vehículo elegido.
       const isDelivery = d.serviceType === 'mensajeria' || !!d.delivery.deliveryVehicleType;
 
       const ride = await rideService.createRide({
