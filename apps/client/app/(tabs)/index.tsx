@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService } from '@tricigo/api';
@@ -2459,16 +2459,29 @@ function IdleView() {
             >
               {announcements.map((a) => {
                 const handlePress = () => {
-                  const url = a.cta_url;
-                  if (!url) return;
-                  // tricigo://, https://, mailto:, tel: → system handler
-                  // /route → in-app navigation
-                  if (url.startsWith('/')) {
-                    router.push(url as never);
-                  } else {
-                    Linking.openURL(url).catch(() => {
-                      // dead link — ignore silently, the card click is best-effort
-                    });
+                  // Resolve cta_url through the shared resolver so a value like
+                  // '/book' (a web-only route) starts the in-app booking flow
+                  // instead of router.push'ing a non-existent route → 404.
+                  const action = resolveAnnouncementCta(a.cta_url);
+                  switch (action.kind) {
+                    case 'book':
+                      // '/(tabs)?service=mensajeria' → preselect mensajería;
+                      // plain '/(tabs)' → normal trip (don't inherit a stuck mode).
+                      if (action.service) setServiceType(action.service);
+                      else resetServiceSelection();
+                      setFlowStep('selecting');
+                      break;
+                    case 'route':
+                      router.push(action.path as never);
+                      break;
+                    case 'external':
+                      // tricigo://, https://, mailto:, tel: → system handler
+                      Linking.openURL(action.url).catch(() => {
+                        // dead link — best-effort, ignore silently
+                      });
+                      break;
+                    case 'none':
+                      break; // empty or unrecognised path → no-op (never 404)
                   }
                 };
                 return (
