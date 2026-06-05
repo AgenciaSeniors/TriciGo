@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { Stack, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
-import { View, ActivityIndicator, Platform, Alert, LogBox } from 'react-native';
+import { View, ActivityIndicator, Platform, Alert, LogBox, AppState } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { useFonts } from 'expo-font';
 import {
@@ -29,6 +29,7 @@ import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { DemoBanner } from '@/components/DemoBanner';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { colors } from '@tricigo/theme';
+import { getSupabaseClient } from '@tricigo/api';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets, setupRuntimeLogging } from '@tricigo/utils';
@@ -113,6 +114,30 @@ function RootNavigator() {
   // the module-level initMapbox() above.
   useEffect(() => {
     initMapbox();
+  }, []);
+
+  // Supabase RN token lifecycle (realtime CHANNEL_ERROR hardening). On React
+  // Native, `autoRefreshToken: true` alone does NOT reliably refresh the
+  // session while backgrounded (JS timers are throttled/suspended). The
+  // documented Supabase pattern drives the auto-refresh loop with AppState:
+  // start it while foregrounded, stop it when backgrounded. Without this the
+  // access token can expire in the background; on foreground the realtime
+  // socket reconnects and rejoins channels with a stale token -> CHANNEL_ERROR.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const supabase = getSupabaseClient();
+    supabase.auth.startAutoRefresh();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        supabase.auth.startAutoRefresh();
+      } else {
+        supabase.auth.stopAutoRefresh();
+      }
+    });
+    return () => {
+      sub.remove();
+      supabase.auth.stopAutoRefresh();
+    };
   }, []);
 
   // Dynamic offline maps: download the current grid cell on demand,
