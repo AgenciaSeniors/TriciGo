@@ -20,6 +20,7 @@ type FormState = {
   starts_at: string;
   ends_at: string;
   priority: number;
+  notify_on_publish: boolean;
 };
 
 const emptyForm: FormState = {
@@ -32,6 +33,7 @@ const emptyForm: FormState = {
   starts_at: '',
   ends_at: '',
   priority: 0,
+  notify_on_publish: true,
 };
 
 const PAGE_SIZE = 20;
@@ -92,13 +94,39 @@ export default function AnnouncementsAdminPage() {
     setShowForm(false);
   };
 
+  // Fire the "notify on publish" push exactly once — only when the
+  // announcement is active, opted in, and not yet notified. The manual
+  // "Notificar ahora" button (handleNotify) handles re-sends and also
+  // stamps notified_at, so the two paths can't double-fire.
+  const maybeNotifyOnPublish = async (a: HomeAnnouncement) => {
+    if (!a.is_active || !a.notify_on_publish || a.notified_at) return;
+    try {
+      const { targeted } = await notificationService.broadcastToActiveUsers({
+        title: a.title_es,
+        body: a.body_es ?? '',
+        contentType: 'announcement',
+        contentId: a.id,
+      });
+      await announcementService.update(a.id, { notified_at: new Date().toISOString() });
+      showToast('success', t('announcements.toast_auto_notified', {
+        defaultValue: 'Publicado y notificado a {{count}} usuarios',
+        count: targeted,
+      }));
+    } catch {
+      // A notify failure must not undo a successful save.
+      showToast('error', t('announcements.auto_notify_error', {
+        defaultValue: 'Guardado, pero no se pudo enviar la notificación.',
+      }));
+    }
+  };
+
   const handleSave = async () => {
     if (!form.title_es.trim()) {
       showToast('error', t('announcements.error_title_required', { defaultValue: 'El título es obligatorio' }));
       return;
     }
     try {
-      const payload = {
+      const base = {
         title_es: form.title_es.trim(),
         body_es: form.body_es.trim() || null,
         image_url: form.image_url.trim() || null,
@@ -109,13 +137,22 @@ export default function AnnouncementsAdminPage() {
         ends_at: inputToIso(form.ends_at),
         city_id: null,
         priority: Number.isFinite(form.priority) ? form.priority : 0,
+        notify_on_publish: form.notify_on_publish,
       };
       if (editingId) {
-        await announcementService.update(editingId, payload);
+        await announcementService.update(editingId, base);
         showToast('success', t('announcements.toast_updated', { defaultValue: 'Anuncio actualizado' }));
+        const prev = items.find((i) => i.id === editingId);
+        await maybeNotifyOnPublish({
+          ...(prev as HomeAnnouncement),
+          ...base,
+          id: editingId,
+          notified_at: prev?.notified_at ?? null,
+        });
       } else {
-        await announcementService.create(payload);
+        const created = await announcementService.create({ ...base, notified_at: null });
         showToast('success', t('announcements.toast_created', { defaultValue: 'Anuncio creado' }));
+        await maybeNotifyOnPublish(created);
       }
       resetForm();
       await loadItems();
@@ -135,6 +172,7 @@ export default function AnnouncementsAdminPage() {
       starts_at: isoToInput(a.starts_at),
       ends_at: isoToInput(a.ends_at),
       priority: a.priority,
+      notify_on_publish: a.notify_on_publish,
     });
     setEditingId(a.id);
     setShowForm(true);
@@ -159,6 +197,9 @@ export default function AnnouncementsAdminPage() {
         contentType: 'announcement',
         contentId: a.id,
       });
+      // Stamp notified_at so the auto "notify on publish" path won't
+      // double-fire content that was already manually notified.
+      await announcementService.update(a.id, { notified_at: new Date().toISOString() });
       showToast(
         'success',
         targeted > 0
@@ -190,6 +231,8 @@ export default function AnnouncementsAdminPage() {
         ? t('announcements.toast_deactivated', { defaultValue: 'Anuncio desactivado' })
         : t('announcements.toast_activated', { defaultValue: 'Anuncio activado' }),
       );
+      // Activating (was inactive) is a "publish" event → maybe auto-notify.
+      if (!a.is_active) await maybeNotifyOnPublish({ ...a, is_active: true });
       await loadItems();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : t('announcements.toggle_error', { defaultValue: 'No pudimos cambiar el estado.' }));
@@ -393,6 +436,17 @@ export default function AnnouncementsAdminPage() {
                   className="h-4 w-4 rounded border-line"
                 />
                 {t('announcements.active_help', { defaultValue: 'Visible en el home' })}
+              </label>
+            </Field>
+            <Field label={t('announcements.field_notify_on_publish', { defaultValue: 'Notificar al publicar' })}>
+              <label className="inline-flex items-center gap-2 text-[13px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={form.notify_on_publish}
+                  onChange={(e) => setForm({ ...form, notify_on_publish: e.target.checked })}
+                  className="h-4 w-4 rounded border-line"
+                />
+                {t('announcements.notify_on_publish_help', { defaultValue: 'Envía un push a todos al activarlo (una sola vez)' })}
               </label>
             </Field>
           </div>

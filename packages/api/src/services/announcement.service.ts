@@ -12,6 +12,10 @@ export interface HomeAnnouncement {
   ends_at: string | null;
   city_id: string | null;
   priority: number;
+  // Fase 2: "notificar al publicar". notify_on_publish is the admin's
+  // opt-in; notified_at stamps the one-time auto push (NULL = not sent).
+  notify_on_publish: boolean;
+  notified_at: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -12,6 +12,10 @@ export interface BlogPost {
   cover_image_url: string | null;
   is_published: boolean;
   published_at: string | null;
+  // Fase 2: "notificar al publicar". notify_on_publish is the admin's
+  // opt-in; notified_at stamps the one-time auto push (NULL = not sent).
+  notify_on_publish: boolean;
+  notified_at: string | null;
   author_id: string | null;
   created_at: string;
   updated_at: string;
