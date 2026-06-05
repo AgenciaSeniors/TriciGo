@@ -190,6 +190,9 @@ export function useRideInit() {
           useRideStore.getState().setFlowStep('idle');
           useRideStore.getState().setActiveRide(null);
           useRideStore.getState().setRideWithDriver(null);
+          // Sticky-serviceType fix: also reset the draft so a system-canceled
+          // mensajería order doesn't leave serviceType stuck on the next trip.
+          useRideStore.getState().resetDraft();
         } else if (fresh.id === pinned.id) {
           // BUG-287 fix B — detect mid-trip column changes that don't touch
           // status/driver_id but DO drive UI (gps_override_requested_at
@@ -230,6 +233,8 @@ export function useRideInit() {
           useRideStore.getState().setFlowStep('idle');
           useRideStore.getState().setActiveRide(null);
           useRideStore.getState().setRideWithDriver(null);
+          // Sticky-serviceType fix: reset the draft on stale-state clear too.
+          useRideStore.getState().resetDraft();
         }
       } catch (err) {
         // eslint-disable-next-line no-console

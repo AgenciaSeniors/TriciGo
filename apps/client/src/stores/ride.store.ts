@@ -193,6 +193,7 @@ interface RideState {
   clearSearchState: () => void;
   setWalletRatio: (ratio: number) => void;
   setRatingReminderId: (id: string | null) => void;
+  resetServiceSelection: () => void;
   resetDraft: () => void;
   resetAll: () => void;
 }
@@ -348,7 +349,22 @@ export const useRideStore = create<RideState>((set, get) => ({
       // F009: Persist ride ID so review screen survives app restart
       AsyncStorage.setItem('@tricigo/pending_review_ride_id', ride.id).catch(() => {});
     } else if (ride.status === 'canceled') {
-      set({ flowStep: 'idle', activeRide: null, rideWithDriver: null, error: null });
+      // Sticky-serviceType fix: also reset the draft so a canceled mensajería
+      // order doesn't leave serviceType='mensajeria' stuck on the next
+      // passenger trip. Preserve prefetchedPickup (GPS auto-fill on home).
+      set({
+        flowStep: 'idle',
+        draft: { ...defaultDraft },
+        fareEstimate: null,
+        fareEstimatedAt: null,
+        allFareEstimates: null,
+        promoCode: '',
+        promoResult: null,
+        splits: [],
+        activeRide: null,
+        rideWithDriver: null,
+        error: null,
+      });
     }
   },
 
@@ -450,6 +466,20 @@ export const useRideStore = create<RideState>((set, get) => ({
     set((s) => ({ draft: { ...s.draft, walletRatio: Math.max(0, Math.min(1, walletRatio)) } })),
 
   setRatingReminderId: (ratingReminderId) => set({ ratingReminderId }),
+
+  // Sticky-serviceType fix: reset the service-type "mode" back to the
+  // passenger default and wipe the delivery form, WITHOUT touching the
+  // chosen pickup/dropoff/waypoints or the GPS-prefetched pickup. Called by
+  // the destination-based entry points (search bar, recents, predictions,
+  // "volver a último viaje", deep link) so a previous mensajería order never
+  // leaks into a passenger trip. Wiping `delivery` makes each new envío start
+  // blank (product decision: limpiar datos del envío cada vez).
+  resetServiceSelection: () =>
+    set((s) => ({
+      draft: { ...s.draft, serviceType: 'triciclo_basico', delivery: { ...defaultDelivery } },
+      fareEstimate: null,
+      fareEstimatedAt: null,
+    })),
 
   resetDraft: () =>
     set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, allFareEstimates: null, error: null, promoCode: '', promoResult: null, splits: [], prefetchedPickup: null }),
