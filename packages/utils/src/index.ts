@@ -71,6 +71,15 @@ export type { ScorableResult } from './addressSearch';
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';
 export type { QuickReply } from './chatQuickReplies';
 export { getErrorMessage } from './errors';
+// Home announcement (CAMPAÑAS) CTA resolution — single source of truth shared
+// by the client handler and the admin editor. Prevents cta_url values that
+// would 404 (e.g. the web-only '/book' route on the mobile client).
+export {
+  resolveAnnouncementCta,
+  isValidAnnouncementCta,
+  ANNOUNCEMENT_CTA_TARGETS,
+} from './announcementCta';
+export type { AnnouncementCtaAction, AnnouncementCtaTarget } from './announcementCta';
 export { translateNetopiaError } from './netopia-errors';
 export { deliveryVehicleToSlug, isPackageCompatible, PACKAGE_CATEGORY_LABELS, INCOMPATIBILITY_REASON_LABELS } from './delivery';
 export type { PackageSpecs, VehicleCargoCapabilities, CompatibilityResult } from './delivery';

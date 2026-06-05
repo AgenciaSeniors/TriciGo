@@ -5,6 +5,7 @@ import { Megaphone, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { announcementService, notificationService } from '@tricigo/api';
 import type { HomeAnnouncement } from '@tricigo/api';
+import { ANNOUNCEMENT_CTA_TARGETS, isValidAnnouncementCta } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
@@ -123,6 +124,14 @@ export default function AnnouncementsAdminPage() {
   const handleSave = async () => {
     if (!form.title_es.trim()) {
       showToast('error', t('announcements.error_title_required', { defaultValue: 'El título es obligatorio' }));
+      return;
+    }
+    // Guard: a cta_url that isn't a known in-app destination or an external URL
+    // would render the mobile client's 404 (+not-found). Block it at the source.
+    if (!isValidAnnouncementCta(form.cta_url)) {
+      showToast('error', t('announcements.error_cta_url_invalid', {
+        defaultValue: 'Destino del botón no válido. Elegí uno de la lista o usá una URL externa (https://, tel:, mailto:).',
+      }));
       return;
     }
     try {
@@ -395,13 +404,29 @@ export default function AnnouncementsAdminPage() {
                 className={inputCls}
               />
             </Field>
-            <Field label={t('announcements.field_cta_url', { defaultValue: 'URL del botón' })}>
+            <Field label={t('announcements.field_cta_url', { defaultValue: 'Destino del botón' })}>
               <input
                 value={form.cta_url}
                 onChange={(e) => setForm({ ...form, cta_url: e.target.value })}
-                placeholder={t('announcements.placeholder_cta_url', { defaultValue: '/promo/codigo o https://…' })}
+                list="cta-url-options"
+                placeholder={t('announcements.placeholder_cta_url', { defaultValue: 'Elegí un destino o pegá una URL https://…' })}
                 className={inputCls}
+                aria-invalid={!isValidAnnouncementCta(form.cta_url)}
               />
+              <datalist id="cta-url-options">
+                {ANNOUNCEMENT_CTA_TARGETS.map((target) => (
+                  <option key={target.value} value={target.value}>
+                    {target.labelEs}
+                  </option>
+                ))}
+              </datalist>
+              {!isValidAnnouncementCta(form.cta_url) && (
+                <span className="font-mono text-[10px] text-red-500">
+                  {t('announcements.cta_url_invalid', {
+                    defaultValue: 'Ruta no válida en la app. Elegí un destino de la lista o usá una URL externa (https://, tel:, mailto:).',
+                  })}
+                </span>
+              )}
             </Field>
             <Field label={t('announcements.field_priority', { defaultValue: 'Prioridad (mayor = primero)' })}>
               <input
