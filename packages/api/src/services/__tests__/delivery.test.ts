@@ -1,22 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UUID } from './helpers/mockSupabase';
 
-// Mock the RN-safe storage upload helper so we can assert the bucket + path
-// contract that uploadDeliveryPhoto must satisfy for the storage RLS policy.
-const mockUploadFileFromUri = vi.fn();
-// Lazy factory (arrow captures the binding, read only at call time) — mirrors
-// the auth.test.ts pattern and avoids the vi.mock hoisting ReferenceError.
-vi.mock('../_storage-upload', () => ({
-  uploadFileFromUri: (...args: unknown[]) => mockUploadFileFromUri(...args),
-}));
-
-// Mock the Supabase client (getPublicUrl + delivery_details update).
-const mockGetPublicUrl = vi.fn();
-const mockStorageFrom = vi.fn(() => ({ getPublicUrl: mockGetPublicUrl }));
-const mockEq = vi.fn(() => Promise.resolve({ error: null }));
-const mockUpdate = vi.fn(() => ({ eq: mockEq }));
-const mockFrom = vi.fn(() => ({ update: mockUpdate }));
-const mockSupabase = { storage: { from: mockStorageFrom }, from: mockFrom };
+// uploadDeliveryPhoto routes through the dedicated `upload-delivery-photo` Edge
+// Function (service-role): the EF authenticates the caller, verifies they are
+// the ride's driver, uploads to the public delivery-photos bucket, records the
+// URL on delivery_details, and returns the public URL. The client only invokes
+// the EF (multipart FormData with ride_id + phase) and returns its publicUrl.
+const mockFunctionsInvoke = vi.fn();
+const mockSupabase = { functions: { invoke: mockFunctionsInvoke } };
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
 }));
@@ -31,35 +22,42 @@ const PUBLIC_URL = 'https://example.supabase.co/storage/v1/object/public/deliver
 describe('deliveryService.uploadDeliveryPhoto', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUploadFileFromUri.mockResolvedValue(undefined);
-    mockGetPublicUrl.mockReturnValue({ data: { publicUrl: PUBLIC_URL } });
+    mockFunctionsInvoke.mockResolvedValue({ data: { publicUrl: PUBLIC_URL }, error: null });
   });
 
-  it('uploads to the public "delivery-photos" bucket with the ride id as the first path segment', async () => {
+  it('invokes the upload-delivery-photo EF with ride_id + phase as multipart FormData', async () => {
     await deliveryService.uploadDeliveryPhoto(RIDE, LOCAL_URI, 'delivery');
 
-    expect(mockUploadFileFromUri).toHaveBeenCalledTimes(1);
-    const [bucket, storagePath] = mockUploadFileFromUri.mock.calls[0];
-    // Must target the dedicated public bucket, NOT 'driver-documents'.
-    expect(bucket).toBe('delivery-photos');
-    // Path's first folder must be the ride id (satisfies delivery_photos_insert
-    // policy: foldername[1] = rides.id). The legacy 'delivery-photos/' prefix is gone.
-    expect(storagePath).toMatch(new RegExp(`^${RIDE}/`));
-    expect(storagePath).not.toContain('delivery-photos/');
+    expect(mockFunctionsInvoke).toHaveBeenCalledWith('upload-delivery-photo', {
+      body: expect.any(FormData),
+    });
+    const body = mockFunctionsInvoke.mock.calls[0][1].body as FormData;
+    expect(body.get('ride_id')).toBe(RIDE);
+    expect(body.get('phase')).toBe('delivery');
   });
 
-  it('reads the public URL from the "delivery-photos" bucket', async () => {
-    await deliveryService.uploadDeliveryPhoto(RIDE, LOCAL_URI, 'delivery');
-    expect(mockStorageFrom).toHaveBeenCalledWith('delivery-photos');
-  });
-
-  it('writes delivery_photo_url for the delivery phase', async () => {
-    await deliveryService.uploadDeliveryPhoto(RIDE, LOCAL_URI, 'delivery');
-    expect(mockUpdate).toHaveBeenCalledWith({ delivery_photo_url: PUBLIC_URL });
-  });
-
-  it('writes pickup_photo_url for the pickup phase', async () => {
+  it('passes the pickup phase through', async () => {
     await deliveryService.uploadDeliveryPhoto(RIDE, LOCAL_URI, 'pickup');
-    expect(mockUpdate).toHaveBeenCalledWith({ pickup_photo_url: PUBLIC_URL });
+    const body = mockFunctionsInvoke.mock.calls[0][1].body as FormData;
+    expect(body.get('phase')).toBe('pickup');
+  });
+
+  it('returns the public URL reported by the EF', async () => {
+    const url = await deliveryService.uploadDeliveryPhoto(RIDE, LOCAL_URI, 'delivery');
+    expect(url).toBe(PUBLIC_URL);
+  });
+
+  it('throws when the EF returns a gateway error', async () => {
+    mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: new Error('not the ride driver') });
+    await expect(
+      deliveryService.uploadDeliveryPhoto(RIDE, LOCAL_URI, 'delivery'),
+    ).rejects.toThrow('not the ride driver');
+  });
+
+  it('throws when the EF body carries an error', async () => {
+    mockFunctionsInvoke.mockResolvedValueOnce({ data: { error: 'upload failed' }, error: null });
+    await expect(
+      deliveryService.uploadDeliveryPhoto(RIDE, LOCAL_URI, 'delivery'),
+    ).rejects.toThrow('upload failed');
   });
 });
