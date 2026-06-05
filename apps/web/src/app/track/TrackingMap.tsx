@@ -26,8 +26,10 @@ export interface TrackingMapProps {
   driverHeading?: number;
   vehicleType?: string;
   nearbyVehicles?: Array<{ latitude: number; longitude: number; heading?: number | null; vehicle_type?: string }>;
-  /** Intermediate stops in visit order (pickup → waypoints → dropoff). */
-  waypoints?: Array<{ latitude: number; longitude: number; sort_order?: number }>;
+  /** Intermediate stops in visit order (pickup → waypoints → dropoff).
+   *  `departed_at` is used during the live phase to thread the route only
+   *  through stops the driver still has to visit. */
+  waypoints?: Array<{ latitude: number; longitude: number; sort_order?: number; arrived_at?: string | null; departed_at?: string | null }>;
   /**
    * BUG-279-web: ride status. When 'in_progress' or 'arrived_at_destination'
    * the polyline is fetched LIVE from the driver's current position to the
@@ -146,6 +148,9 @@ export default function TrackingMap({
   const currentRouteRef = useRef<Array<{ latitude: number; longitude: number }> | null>(null);
   const lastLiveFetchAtRef = useRef(0);
   const liveFetchInFlightRef = useRef(false);
+  // Tracks the stop list the live route was last threaded through, so a
+  // newly added/removed stop forces an immediate re-thread (see live effect).
+  const liveWpKeyRef = useRef('');
 
   // Driver→pickup approach polyline (accepted / driver_en_route). Same
   // deviation+throttle bookkeeping as the live driver→dropoff effect.
@@ -436,6 +441,15 @@ export default function TrackingMap({
     if (typeof driverLat !== 'number' || typeof driverLng !== 'number') return;
     if (typeof dropoffLat !== 'number' || typeof dropoffLng !== 'number') return;
 
+    // When the rider adds/removes a stop, re-thread the live route now (the
+    // driver may still be on the old polyline, so deviation alone wouldn't
+    // trigger a refetch).
+    if (waypointsKey !== liveWpKeyRef.current) {
+      liveWpKeyRef.current = waypointsKey;
+      currentRouteRef.current = null;
+      lastLiveFetchAtRef.current = 0;
+    }
+
     // Skip when driver is essentially at the dropoff
     const distToDropoff = haversineDistance(
       { latitude: driverLat, longitude: driverLng },
@@ -466,11 +480,25 @@ export default function TrackingMap({
     let cancelled = false;
     liveFetchInFlightRef.current = true;
 
+    // Thread the live route through stops the driver still has to visit so a
+    // newly added stop is actually drawn (pickup→stops was only in the static
+    // pre-trip effect, which is a no-op during the live phase).
+    const pendingStops = (waypoints ?? [])
+      .filter((w) => !w.departed_at && typeof w.latitude === 'number' && typeof w.longitude === 'number')
+      .slice()
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
     (async () => {
-      const result = await fetchRoute(
-        { lat: driverLat, lng: driverLng },
-        { lat: dropoffLat, lng: dropoffLng },
-      );
+      const result = pendingStops.length > 0
+        ? await fetchMultiStopRoute([
+            { lat: driverLat, lng: driverLng },
+            ...pendingStops.map((w) => ({ lat: w.latitude, lng: w.longitude })),
+            { lat: dropoffLat, lng: dropoffLng },
+          ])
+        : await fetchRoute(
+            { lat: driverLat, lng: driverLng },
+            { lat: dropoffLat, lng: dropoffLng },
+          );
 
       if (cancelled) {
         liveFetchInFlightRef.current = false;
@@ -496,7 +524,7 @@ export default function TrackingMap({
     })();
 
     return () => { cancelled = true; };
-  }, [driverLat, driverLng, dropoffLat, dropoffLng, mapReady, isLivePhase]);
+  }, [driverLat, driverLng, dropoffLat, dropoffLng, mapReady, isLivePhase, waypointsKey]);
 
   /* ── Driver→pickup APPROACH polyline (accepted / driver_en_route) ──
      Mirrors the mobile client showing the driver's path to the rider

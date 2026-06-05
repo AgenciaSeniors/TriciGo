@@ -1835,8 +1835,30 @@ export const rideService = {
      * having to parse PostGIS GEOGRAPHY on the client.
      */
     existingWaypointsLatLng: Array<{ latitude: number; longitude: number }> = [],
-  ): Promise<{ extraDistanceKm: number; extraFareCup: number }> {
+  ): Promise<{ extraDistanceKm: number; extraFareCup: number; newTotalCup?: number }> {
     const supabase = getSupabaseClient();
+
+    // Server-authoritative preview (mig 00386): the same `_waypoint_pricing`
+    // helper the trigger uses to PERSIST the new fare, so the "+$Y" shown here
+    // == the increase actually charged. Falls back to the local estimate below
+    // if the RPC isn't deployed yet (migration not applied to prod).
+    try {
+      const { data, error } = await supabase.rpc('estimate_waypoint_surcharge_preview', {
+        p_ride_id: rideId,
+        p_lat: latitude,
+        p_lng: longitude,
+      });
+      if (!error && data && typeof data === 'object' && !('error' in (data as object))) {
+        const d = data as { extra_distance_km?: number; extra_fare_cup?: number; new_total_cup?: number };
+        return {
+          extraDistanceKm: Number(d.extra_distance_km ?? 0),
+          extraFareCup: Number(d.extra_fare_cup ?? 0),
+          newTotalCup: d.new_total_cup != null ? Number(d.new_total_cup) : undefined,
+        };
+      }
+    } catch {
+      // RPC missing or failed → fall through to the local estimate below.
+    }
 
     const { data: ride, error: rideErr } = await supabase
       .from('rides')
