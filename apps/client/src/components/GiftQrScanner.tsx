@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Modal, View, Pressable, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -29,6 +30,7 @@ interface GiftQrScannerProps {
  */
 export function GiftQrScanner({ visible, onClose, onScanned }: GiftQrScannerProps) {
   const { t } = useTranslation('common');
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
 
@@ -78,7 +80,7 @@ export function GiftQrScanner({ visible, onClose, onScanned }: GiftQrScannerProp
         <View style={styles.overlay} pointerEvents="box-none">
           <Pressable
             onPress={onClose}
-            style={styles.close}
+            style={[styles.close, { top: insets.top + 12 }]}
             hitSlop={12}
             accessibilityRole="button"
             accessibilityLabel={t('gift.close_scanner', { defaultValue: 'Cerrar' })}

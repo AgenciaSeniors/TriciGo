@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated, Share, ScrollView, Keyboard } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
@@ -46,6 +47,7 @@ export function RideActiveView() {
   const { t } = useTranslation('rider');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
 
   const RIDE_STEPS = [
     { key: 'accepted', label: t('ride.status_accepted') },
@@ -830,7 +832,7 @@ export function RideActiveView() {
         onPress={handleSOS}
         style={{
           position: 'absolute',
-          top: 60,
+          top: insets.top + 12,
           right: 16,
           width: 56,
           height: 56,
