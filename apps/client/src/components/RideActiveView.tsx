@@ -12,7 +12,9 @@ import { formatTRC, formatCUP, haversineDistance, logger, formatArrivalTime, bui
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
-import { incidentService, rideService, customerService, trustedContactService, getSupabaseClient } from '@tricigo/api';
+import * as Clipboard from 'expo-clipboard';
+import { incidentService, rideService, customerService, trustedContactService, getSupabaseClient, deliveryService } from '@tricigo/api';
+import type { DeliveryDetails } from '@tricigo/api';
 import type { RideSplit } from '@tricigo/types';
 import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
@@ -420,6 +422,22 @@ export function RideActiveView() {
     };
   }, [activeRide?.id]);
 
+  // Fetch delivery details for cargo rides so we can surface the OTP card
+  // (the customer shares the code with the recipient before drop-off).
+  // Non-blocking: does nothing for passenger rides or if the row isn't there.
+  const [deliveryDetails, setDeliveryDetails] = useState<DeliveryDetails | null>(null);
+  useEffect(() => {
+    if (!activeRide?.id || activeRide.ride_mode !== 'cargo') {
+      setDeliveryDetails(null);
+      return;
+    }
+    let cancelled = false;
+    deliveryService.getDeliveryDetails(activeRide.id)
+      .then((dd) => { if (!cancelled && dd) setDeliveryDetails(dd); })
+      .catch(() => { /* no delivery_details — non-blocking */ });
+    return () => { cancelled = true; };
+  }, [activeRide?.id, activeRide?.ride_mode]);
+
   // Subscribe to real-time split changes (invitations, acceptances, payments)
   useEffect(() => {
     // Clean up previous subscription before creating a new one
@@ -815,6 +833,32 @@ export function RideActiveView() {
   const handleCancelConfirm = (reason: string) => {
     setCancelSheetVisible(false);
     cancelRide(reason);
+  };
+
+  // Delivery OTP (cargo rides). isCargoActive gates the OTP card so it shows
+  // only while the package is in flight, not after completion/cancel.
+  const isCargoActive = activeRide.ride_mode === 'cargo'
+    && ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'].includes(activeRide.status);
+
+  const handleCopyOtp = async () => {
+    if (!deliveryDetails?.delivery_otp) return;
+    await Clipboard.setStringAsync(deliveryDetails.delivery_otp);
+    Toast.show({ type: 'success', text1: t('delivery.otp_copied', { defaultValue: 'Código copiado' }) });
+    triggerHaptic('light');
+  };
+
+  // Share the tracking link + 4-digit code in one message (WhatsApp/SMS) so
+  // the recipient has everything to follow the ride and unlock drop-off.
+  const handleShareDeliveryOtp = async () => {
+    if (!activeRide.share_token || !deliveryDetails?.delivery_otp) return;
+    const trackUrl = buildShareUrl(activeRide.share_token);
+    const message = t('delivery.otp_share_message', {
+      defaultValue: 'TriciGo: te envío un paquete. Sigue el viaje aquí: {{url}}\n\nCódigo para recibirlo: {{otp}}',
+      url: trackUrl,
+      otp: deliveryDetails.delivery_otp,
+    });
+    await Share.share({ message });
+    triggerHaptic('light');
   };
 
   const statusMessage: Record<string, string> = {
@@ -1367,6 +1411,58 @@ export function RideActiveView() {
           dropoffLabel={t('ride.dropoff')}
         />
       </Card>
+
+      {/* Delivery OTP — cargo rides: the customer shares this 4-digit code
+          with the recipient; the driver asks for it at drop-off. Mirrors
+          app/ride/[id].tsx so the code is reachable from the active view too. */}
+      {isCargoActive && deliveryDetails?.delivery_otp && (
+        <Card variant="elevated" padding="lg" className="mb-4">
+          <View className="flex-row items-center mb-2">
+            <Ionicons name="cube" size={18} color="#FF4D00" />
+            <Text variant="label" className="ml-2">
+              {t('delivery.share_with_recipient', { defaultValue: 'Comparte con el destinatario' })}
+            </Text>
+          </View>
+          <Text variant="caption" color="secondary" className="mb-2">
+            {t('delivery.otp_helper', {
+              defaultValue: 'El conductor pedirá este código al destinatario para confirmar la entrega.',
+            })}
+          </Text>
+          <Pressable
+            onPress={handleCopyOtp}
+            className="rounded-lg py-4 mb-3 items-center"
+            style={{ backgroundColor: isDark ? 'rgba(255,77,0,0.12)' : 'rgba(255,77,0,0.08)' }}
+            accessibilityRole="button"
+            accessibilityLabel={t('delivery.otp_copy', { defaultValue: 'Copiar código' })}
+          >
+            <Text variant="h1" color="accent" className="font-bold" style={{ letterSpacing: 8 }}>
+              {deliveryDetails.delivery_otp}
+            </Text>
+            <Text variant="caption" color="secondary" className="mt-1">
+              {t('delivery.tap_to_copy', { defaultValue: 'Toca para copiar' })}
+            </Text>
+          </Pressable>
+          {activeRide.share_token && (
+            <Button
+              title={t('delivery.share_link_and_otp', { defaultValue: 'Compartir enlace y código' })}
+              onPress={handleShareDeliveryOtp}
+              size="lg"
+              fullWidth
+            />
+          )}
+          {deliveryDetails.recipient_name && (
+            <View
+              className="flex-row justify-between mt-3 pt-3 border-t"
+              style={{ borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}
+            >
+              <Text variant="caption" color="secondary">
+                {t('delivery.recipient', { defaultValue: 'Destinatario' })}
+              </Text>
+              <Text variant="caption" className="font-semibold">{deliveryDetails.recipient_name}</Text>
+            </View>
+          )}
+        </Card>
+      )}
 
       {/* Lista de paradas — Cuban Modern, no emojis. */}
       {waypoints.length > 0 && (
