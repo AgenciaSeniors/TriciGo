@@ -24,6 +24,7 @@ export function useDeepLinkHandler() {
   const setPromoCode = useRideStore((s) => s.setPromoCode);
   const setDropoff = useRideStore((s) => s.setDropoff);
   const setFlowStep = useRideStore((s) => s.setFlowStep);
+  const resetServiceSelection = useRideStore((s) => s.resetServiceSelection);
   const processed = useRef(false);
 
   useEffect(() => {
@@ -131,6 +132,7 @@ export function useDeepLinkHandler() {
 
           if (!isNaN(lat) && !isNaN(lng)) {
             setDropoff(address, { latitude: lat, longitude: lng });
+            resetServiceSelection(); // book deep link = passenger trip — never inherit a stuck mensajería mode
             setFlowStep('selecting');
           }
         }
@@ -145,5 +147,5 @@ export function useDeepLinkHandler() {
     }).catch(() => {});
 
     return () => subscription.remove();
-  }, [setDropoff, setFlowStep]);
+  }, [setDropoff, resetServiceSelection, setFlowStep]);
 }

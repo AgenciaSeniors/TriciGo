@@ -1777,6 +1777,11 @@ function IdleView() {
   const setPickup = useRideStore((s) => s.setPickup);
   const prefetchedPickup = useRideStore((s) => s.prefetchedPickup);
   const setPrefetchedPickup = useRideStore((s) => s.setPrefetchedPickup);
+  // Sticky-serviceType fix: setServiceType fixes the slug the user tapped in
+  // SERVICIOS; resetServiceSelection normalizes destination-based entries back
+  // to passenger so a prior mensajería order never leaks into a normal trip.
+  const setServiceType = useRideStore((s) => s.setServiceType);
+  const resetServiceSelection = useRideStore((s) => s.resetServiceSelection);
   const { requestEstimate } = useRideActions();
   const [locationDenied, setLocationDenied] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -2038,8 +2043,9 @@ function IdleView() {
 
   const handleRecentTap = useCallback((addr: { address: string; latitude: number; longitude: number }) => {
     setDropoff(addr.address, { latitude: addr.latitude, longitude: addr.longitude });
+    resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
     setFlowStep('selecting');
-  }, [setDropoff, setFlowStep]);
+  }, [setDropoff, resetServiceSelection, setFlowStep]);
 
   // U1.1: One-tap booking — set pickup (current location) + dropoff, jump to estimate → selecting
   const handleOneTapPrediction = useCallback(async (pred: PredictedDestination) => {
@@ -2048,6 +2054,7 @@ function IdleView() {
       if (prefetchedPickup) {
         setPickup(prefetchedPickup.address, prefetchedPickup.location);
         setDropoff(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
+        resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
         setFlowStep('selecting');
         return;
       }
@@ -2065,12 +2072,13 @@ function IdleView() {
         { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
       );
       setDropoff(pred.address, { latitude: pred.latitude, longitude: pred.longitude });
+      resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
       setFlowStep('selecting');
     } catch {
       // Fallback: just go to selecting view with dropoff only
       handleRecentTap({ address: pred.address, latitude: pred.latitude, longitude: pred.longitude });
     }
-  }, [handleRecentTap, setPickup, setDropoff, setFlowStep, prefetchedPickup]);
+  }, [handleRecentTap, setPickup, setDropoff, resetServiceSelection, setFlowStep, prefetchedPickup]);
 
   const insets = useSafeAreaInsets();
 
@@ -2115,6 +2123,7 @@ function IdleView() {
       setPickup(prefetchedPickup.address, prefetchedPickup.location);
     }
     setDropoff(raw.address, { latitude: raw.latitude, longitude: raw.longitude });
+    resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
     // Go to `selecting` (mapa + vehicle picker) — NOT `reviewing`, which
     // would render null because fareEstimate is still null until the
     // selecting view triggers handleEstimateAll().
@@ -2235,7 +2244,7 @@ function IdleView() {
             {t('home.where_to_cuban', { defaultValue: '¿A dónde vamos hoy?' })}
           </DisplayHeading>
           <Pressable
-            onPress={() => setFlowStep('selecting')}
+            onPress={() => { resetServiceSelection(); setFlowStep('selecting'); }}
             style={{
               marginTop: 14,
               flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -2284,6 +2293,7 @@ function IdleView() {
                 if (!lastRide.dropoff_location) return;
                 triggerHaptic('light');
                 setDropoff(lastRide.dropoff_address, lastRide.dropoff_location);
+                resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
                 setFlowStep('selecting');
               }}
               style={{
@@ -2644,7 +2654,12 @@ function IdleView() {
               dense
               mode={mode}
               onPress={() => {
-                // Preselect service type then go to selecting view
+                // Preselect the tapped service type, then go to selecting view.
+                // Sticky-serviceType fix: this was missing, so every SERVICIOS
+                // button just opened SelectingView with whatever serviceType was
+                // left over (e.g. a previous mensajería order). Now the tapped
+                // slug is the source of truth.
+                setServiceType(slug);
                 setFlowStep('selecting');
               }}
             />
@@ -2902,6 +2917,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     setCorporateAccount,
     setWalletRatio,
     setFlowStep,
+    resetDraft,
     addWaypoint,
     removeWaypoint,
     updateWaypoint,
@@ -3267,8 +3283,10 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
       {/* Floating top bar: [X] + compact address summary */}
       {!searchingField && (
         <View style={{ position: 'absolute', top: insets.top + 8, left: 12, right: 12, zIndex: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-          {/* Close button — 44px touch target */}
-          <Pressable onPress={() => setFlowStep('idle')} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, marginTop: 2 }}>
+          {/* Close button — 44px touch target. Sticky-serviceType fix:
+              closing SelectingView discards the whole draft (start fresh) so a
+              half-configured mensajería order can't leak into the next trip. */}
+          <Pressable onPress={() => { resetDraft(); setFlowStep('idle'); }} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, marginTop: 2 }}>
             <Ionicons name="close" size={22} color={colors.neutral[700]} />
           </Pressable>
 
