@@ -219,12 +219,17 @@ export const deliveryService = {
     const supabase = getSupabaseClient();
 
     const fileName = `${phase}-${rideId}-${Date.now()}.jpg`;
-    const storagePath = `delivery-photos/${rideId}/${fileName}`;
+    // Path contract: ride id is the FIRST folder segment so the
+    // delivery_photos_insert storage policy (foldername[1] = rides.id) passes.
+    // Bucket 'delivery-photos' is PUBLIC, so getPublicUrl + <img src> work on
+    // the web tracking pages (incl. the anonymous share link). See migration
+    // 00380_delivery_photos_bucket.sql.
+    const storagePath = `${rideId}/${fileName}`;
 
     // Upload via FormData (RN-safe). fetch(uri).blob() throws
     // "Network request failed" on native because fetch() doesn't support
     // file:// / content:// schemes. See _storage-upload.ts.
-    await uploadFileFromUri('driver-documents', storagePath, localUri, {
+    await uploadFileFromUri('delivery-photos', storagePath, localUri, {
       fileName,
       mimeType: 'image/jpeg',
       upsert: true,
@@ -232,7 +237,7 @@ export const deliveryService = {
 
     // Get public URL
     const { data: urlData } = supabase.storage
-      .from('driver-documents')
+      .from('delivery-photos')
       .getPublicUrl(storagePath);
 
     const publicUrl = urlData.publicUrl;
