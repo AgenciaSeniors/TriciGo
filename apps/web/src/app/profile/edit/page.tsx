@@ -79,10 +79,21 @@ export default function EditProfilePage() {
     try {
       const supabase = getSupabaseClient();
       const filePath = `${userId}/avatar.jpg`;
-      const { error: uploadErr } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, blob, { contentType: 'image/jpeg', upsert: true });
+      // Upload via the storage-upload Edge Function (service-role): since the
+      // publishable-key migration the Storage service rejects the browser
+      // session's user JWT as `anon`, so a direct .upload() fails the
+      // authenticated-only RLS. The EF authenticates the caller and checks the
+      // path is their own avatar folder, then uploads with service-role.
+      // (Same fix as mobile uploadFileFromUri.)
+      const fd = new FormData();
+      fd.append('file', blob, 'avatar.jpg');
+      fd.append('bucket', 'avatars');
+      fd.append('path', filePath);
+      fd.append('upsert', 'true');
+      fd.append('contentType', 'image/jpeg');
+      const { data: upRes, error: uploadErr } = await supabase.functions.invoke('storage-upload', { body: fd });
       if (uploadErr) throw uploadErr;
+      if ((upRes as { error?: string } | null)?.error) throw new Error(String((upRes as { error?: string }).error));
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
