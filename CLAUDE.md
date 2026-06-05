@@ -1719,6 +1719,23 @@ git worktree remove <temp>
 
 ---
 
+### Storage no valida los JWT ES256 del proyecto → subidas autenticadas de cliente van por EF service-role (verificado 2026-06-05)
+
+**Síntoma:** cualquier subida autenticada cliente→Supabase Storage falla con `new row violates row-level security policy` (la RLS de INSERT rol `authenticated`). Afecta foto de entrega, **documentos de onboarding del conductor** (bloqueante para lanzar), selfie y avatar. Empezó ~2026-04/05.
+
+**Causa raíz (CONFIRMADA por construcción, no asumida):** el proyecto migró a **JWT signing keys asimétricas ES256** (`/auth/v1/.well-known/jwks.json` sirve una clave ES256; el legacy HS256 anon está disabled; el anon key del `.env` es el publishable `sb_publishable_...`). gotrue firma los access tokens con ES256. **PostgREST (Data API), Edge Functions y Realtime validan ese token; el servicio de Storage NO** → trata al usuario como `anon` (auth.uid()=NULL) → la RLS de INSERT falla. **NO es el cliente/SDK:** en `@supabase/supabase-js` 2.99.1, `DEFAULT_HEADERS` no trae Authorization y `fetchWithAuth` inyecta `apikey: <publishable>` + `Authorization: Bearer <session.access_token ES256>` en cada request; `this.rest` y `this.storage` comparten el **mismo** `this.fetch` → mandan auth idéntica. Storage recibe el mismo token válido que PostgREST y lo rechaza. La doc oficial de Supabase dice que Storage *debería* verificar asimétrico → es lag/config de storage-api del proyecto.
+
+**Workaround vigente (NO romper):** las subidas autenticadas van por **Edge Functions service-role** que autentican con `auth.getUser` + validan ownership por bucket + suben con service-role (bypassan Storage RLS):
+- `supabase/functions/storage-upload/index.ts` (PR #432) — **genérica**: buckets `avatars` / `driver-documents` (docs + selfie) / `dispute-evidence`. Allowlist estricto + authz que replica la RLS WITH CHECK de cada bucket. `verify_jwt=false` (auth propia adentro). MIME whitelist + cap de tamaño + rechazo de path traversal.
+- `supabase/functions/upload-delivery-photo/index.ts` (PR #430) — foto de entrega.
+- `packages/api/src/services/_storage-upload.ts` (`uploadFileFromUri`) rutea TODO por `storage-upload` → arregla docs/selfie/avatar móvil + dispute en un solo chokepoint. El avatar **web** (`apps/web/src/app/profile/edit/page.tsx`) invoca la EF directo. Las escrituras a DB post-subida siguen client-side por PostgREST (funcionan). Bucket `dispute-evidence` creado en mig `00385` (público, como delivery-photos).
+
+**Root fix pendiente (Supabase, no código):** ticket a Supabase support para que storage-api valide los ES256 del proyecto (draft en `.support-ticket-storage-jwt.md`, no commiteado). **Cuando lo resuelvan:** re-correr repro (una subida directa autenticada deja objeto con `owner`=user id); si verde → revertir las EFs a `supabase.storage.from().upload()` directo en `_storage-upload.ts` + `delivery.service.ts` + avatar web, y borrar las 2 EFs + sus entradas en `config.toml`. Dejar el bucket `dispute-evidence`.
+
+**GUARDRAILS:** (1) **NO rotar/revocar JWT signing keys** como "fix" — rompe todas las sesiones/servicios; es palanca de soporte. (2) Al agregar una subida **nueva**, rutearla por la EF `storage-upload` (sumar el bucket + su authz al allowlist), NUNCA por `supabase.storage.upload()` directo (fallaría como anon). (3) Diagnóstico: `curl …/auth/v1/.well-known/jwks.json` → clave `ES256` = asimétrico; `SELECT bucket_id, COUNT(*) FILTER (WHERE owner IS NOT NULL) FROM storage.objects GROUP BY 1` → 0 con owner (salvo EF/service-role) = subidas autenticadas rotas.
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
