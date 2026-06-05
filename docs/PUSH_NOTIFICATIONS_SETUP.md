@@ -1,6 +1,6 @@
 # Push Notifications Setup
 
-Status as of 2026-04-26.
+Status as of 2026-06-04.
 
 ## Architecture
 
@@ -12,29 +12,48 @@ We use **Expo Push Notifications** which abstracts FCM (Android) and APNs (iOS) 
 
 Same code path for both platforms. Vos solo tenés que aprovisionar las **credentials** una vez por plataforma.
 
-## ✅ Android (FCM) — Free
+## ✅ Android (FCM) — DONE (resolved 2026-06-04)
 
-### What's done
+Android push needs **two halves, both from the same Firebase project**
+(`tricigo-39b92`). With only the first half, the app still mints a valid
+`ExponentPushToken` and the whole backend pipeline runs — but Expo cannot
+deliver: every push fails with `InvalidCredentials` ("Unable to retrieve the
+FCM server key"), silently. Nothing reaches the device with the app closed.
 
-- `apps/client/app.json` and `apps/driver/app.json` reference `./google-services.json`
-- Backend code paths exist (`useNotifications.ts`, `push.service.ts`)
+1. **APK half — `google-services.json` baked into the build.** Lets the device
+   register with FCM. Provisioned via GitHub secrets `CLIENT_GOOGLE_SERVICES_JSON`
+   / `DRIVER_GOOGLE_SERVICES_JSON` (set 2026-05-01). The dev-client workflows
+   write them at build time; without the secret they write a placeholder
+   ("push won't work in this build").
+2. **Expo half — FCM V1 service account key uploaded to Expo.** Lets Expo's
+   servers authenticate to FCM when sending. **This was the missing piece** —
+   the original version of this doc only covered half 1. Uploaded 2026-06-04.
 
-### What's missing
+### How the Expo half was provisioned (repeat if the cred is ever lost/rotated)
 
-- The actual `google-services.json` files (one per app)
+1. Firebase Console → project **`tricigo-39b92`** (owner `edua56621636@gmail.com`)
+   → ⚙ Project settings → **Service accounts** → **Generate new private key**
+   → downloads a JSON (keep it secret — it grants FCM send + Admin SDK access).
+2. Upload that JSON to **both** Expo projects (same file works for both):
+   - https://expo.dev/accounts/edua2005/projects/tricigo-client/credentials
+   - https://expo.dev/accounts/edua2005/projects/tricigo-driver/credentials
 
-### Steps to complete
+   → Android → **FCM V1 service account key** → Add. (CLI alt:
+   `eas credentials -p android` in each app dir.)
+3. **No rebuild required** — the credential lives server-side at Expo, and the
+   installed APKs already carry the matching `google-services.json` (push
+   receipts came back `ok`, not `MismatchSenderId`). A rebuild is only needed if
+   `google-services.json` itself changes (different Firebase project).
 
-1. Create Firebase project at https://console.firebase.google.com (free)
-2. Add 2 Android apps:
-   - Package: `app.tricigo.client`
-   - Package: `app.tricigo.driver`
-3. Download `google-services.json` for each
-4. Place at:
-   - `apps/client/google-services.json`
-   - `apps/driver/google-services.json`
-5. Rebuild dev client APKs (or push v1.1.16 production builds)
-6. Verify with: open app in background, trigger ride event, push should appear in notification tray
+### Verify
+
+```bash
+curl -s -X POST https://exp.host/--/api/v2/push/send \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"ExponentPushToken[...]","title":"t","body":"b","priority":"high","channelId":"rides"}'
+# Expect ticket: {"data":{"status":"ok","id":"<ticket-id>"}}   (NOT InvalidCredentials)
+# Then POST the id to .../push/getReceipts → status "ok" = delivered to FCM.
+```
 
 ## 🚨 iOS (APNs) — REMINDER FOR LATER
 
@@ -134,6 +153,7 @@ Same code for Android and iOS. Expo handles the routing.
 
 ## Tracking
 
-- Bug reference: BUG-FCM-001 (Android), BUG-APNS-001 (iOS pending)
+- Bug reference: BUG-FCM-001 (Android) — **RESOLVED 2026-06-04** (FCM V1 service
+  account key uploaded to both Expo projects); BUG-APNS-001 (iOS — still pending)
 - Owner: Eduardo
-- Last updated: 2026-04-26
+- Last updated: 2026-06-04

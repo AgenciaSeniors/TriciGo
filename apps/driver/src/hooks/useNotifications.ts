@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { notificationService } from '@tricigo/api';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -121,7 +122,9 @@ export function useNotificationSetup(userId: string | null | undefined) {
 
         if (finalStatus !== 'granted') return;
 
-        const tokenData = await Notifications.getExpoPushTokenAsync();
+        const tokenData = await Notifications.getExpoPushTokenAsync({
+          projectId: Constants.expoConfig?.extra?.eas?.projectId,
+        });
         if (cancelled) return;
 
         await notificationService.registerPushToken(
