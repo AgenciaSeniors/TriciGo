@@ -211,6 +211,10 @@ Deno.serve(async (req) => {
     let sent = 0;
     let failed = 0;
     const deadTokens: string[] = [];
+    // Collected for the per-invocation summary log below. Without this,
+    // a delivery outage (e.g. InvalidCredentials when FCM creds are
+    // missing) is invisible unless you eyeball every per-token line.
+    const errorCodes: string[] = [];
 
     await Promise.all(tokens.map(async (token: string) => {
       try {
@@ -252,6 +256,7 @@ Deno.serve(async (req) => {
         }
         failed++;
         const errCode = ticket?.details?.error;
+        if (errCode) errorCodes.push(errCode);
         if (errCode === 'DeviceNotRegistered') {
           // The user uninstalled the app, disabled notifications, or the token
           // rotated. Drop the dead row so future pushes don't waste API calls.
@@ -293,6 +298,14 @@ Deno.serve(async (req) => {
       // Non-critical: push was already sent, inbox persistence is best-effort
       console.warn('[send-push] Failed to persist to inbox:', (inboxErr as Error).message);
     }
+
+    // Always emit a one-line summary so delivery outcomes are visible in
+    // the function logs (the {sent,failed} body alone never reaches them).
+    console.info(
+      `[send-push] summary: sent=${sent} failed=${failed} total_tokens=${tokens.length}` +
+      `${errorCodes.length ? ' errors=' + [...new Set(errorCodes)].join(',') : ''}` +
+      ` targets=${targetIds.length}${category ? ' category=' + category : ''}`,
+    );
 
     return new Response(
       JSON.stringify({ sent, failed, total_tokens: tokens.length }),

@@ -13,6 +13,7 @@ import { triggerHaptic, logger } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import type { Language, PaymentMethod, CustomerProfile } from '@tricigo/types';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
@@ -118,7 +119,9 @@ export default function SettingsScreen() {
 
     if (!enabled && userId) {
       try {
-        const tokenData = await Notifications.getExpoPushTokenAsync();
+        const tokenData = await Notifications.getExpoPushTokenAsync({
+          projectId: Constants.expoConfig?.extra?.eas?.projectId,
+        });
         await notificationService.removePushToken(userId, tokenData.data);
       } catch {
         /* best-effort */

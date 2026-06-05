@@ -49,6 +49,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsGroup } from '@/components/settings/SettingsGroup';
 
@@ -167,7 +168,9 @@ export default function DriverSettingsScreen() {
 
     if (!enabled && userId) {
       try {
-        const tokenData = await Notifications.getExpoPushTokenAsync();
+        const tokenData = await Notifications.getExpoPushTokenAsync({
+          projectId: Constants.expoConfig?.extra?.eas?.projectId,
+        });
         await notificationService.removePushToken(userId, tokenData.data);
       } catch {
         /* best-effort */

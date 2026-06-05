@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
@@ -45,7 +46,11 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   try {
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    // Pass projectId explicitly so token minting never relies on
+    // autodetect (can break in bare/prebuild dev-client contexts).
+    const token = (await Notifications.getExpoPushTokenAsync({
+      projectId: Constants.expoConfig?.extra?.eas?.projectId,
+    })).data;
     // Save to user_devices table via notificationService
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
