@@ -93,6 +93,14 @@ interface RideMapViewProps {
   darkStyle?: boolean;
   /** Called when user taps the recenter button */
   onRecenter?: () => void;
+  /**
+   * Distance (px) from the bottom edge to anchor the recenter button.
+   * When set, the button floats bottom-right (above the bottom sheet)
+   * instead of its default top-right corner — used by the driver home so
+   * it never collides with the "En Línea" header pill. Omit for the
+   * legacy top-right placement (e.g. embedded trip maps).
+   */
+  recenterBottom?: number;
   /** Vehicle type for the driver marker icon */
   vehicleType?: 'triciclo' | 'moto' | 'auto' | 'confort' | string;
   /** When true, camera follows driver position with heading rotation */
@@ -644,6 +652,7 @@ function RideMapViewInner(
     height = 200,
     darkStyle = false,
     onRecenter,
+    recenterBottom,
     vehicleType,
     followMode,
     driverHeading,
@@ -1627,7 +1636,12 @@ function RideMapViewInner(
           onPress={onRecenter}
           style={{
             position: 'absolute',
-            top: insets.top + 12,
+            // Driver home passes recenterBottom so the button floats above
+            // the bottom sheet (bottom-right) and never overlaps the
+            // "En Línea" header pill. Other callers keep the top-right spot.
+            ...(recenterBottom != null
+              ? { bottom: recenterBottom }
+              : { top: insets.top + 12 }),
             right: 12,
             width: 44,
             height: 44,
