@@ -6,11 +6,11 @@
 import type { VehicleType, ServiceTypeSlug, PackageCategory } from '@tricigo/types';
 
 // ── Map vehicle type to its default service type slug ──
-// 00263: 'confort' is a passenger tier, not a delivery vehicle —
-// but the map needs a complete Record<VehicleType, …> so we keep
-// it here for type-safety. Mensajería deliveryVehicleType chips
-// only offer moto/triciclo/auto, so 'confort' is unreachable in
-// practice for delivery flows.
+// Mensajería offers all four vehicle types: moto / triciclo / auto / confort.
+// 'confort' maps to the auto_confort service slug, so a confort delivery is
+// priced at confort rates. Driver matching reuses the auto% pool
+// (find_best_drivers: p_service_type LIKE 'auto%' → [auto, confort]), so a
+// confort delivery dispatches to auto- or confort-type drivers that accept cargo.
 const VEHICLE_TO_SLUG: Record<VehicleType, ServiceTypeSlug> = {
   moto: 'moto_standard',
   triciclo: 'triciclo_basico',

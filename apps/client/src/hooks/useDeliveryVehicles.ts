@@ -97,9 +97,9 @@ export function useDeliveryVehicles(packageSpecs: PackageSpecs) {
     return () => { mounted = false; };
   }, []);
 
-  // All 3 vehicle types, with compatibility check
+  // All 4 vehicle types, with compatibility check
   const options: DeliveryVehicleOption[] = useMemo(() => {
-    const allTypes: VehicleType[] = ['moto', 'triciclo', 'auto'];
+    const allTypes: VehicleType[] = ['moto', 'triciclo', 'auto', 'confort'];
 
     return allTypes.map((type) => {
       const caps = vehicleCaps.find((c) => c.type === type);
