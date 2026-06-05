@@ -991,14 +991,68 @@ export async function fetchRouteOSRM(
 }
 
 /**
- * Fetch route with multiple waypoints using OSRM.
- * Points should be in order: [origin, waypoint1, waypoint2, ..., destination]
+ * Fetch a multi-stop route via Mapbox Directions (better Cuba coverage).
+ * Points in order: [origin, ...waypoints, destination]. Mapbox Directions
+ * accepts up to 25 coordinates per request.
+ */
+export async function fetchMultiStopRouteMapbox(
+  points: { lat: number; lng: number }[],
+): Promise<RouteResult | null> {
+  try {
+    const token =
+      (typeof process !== 'undefined' && (
+        process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+        process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+      )) || '';
+    if (!token) return null;
+
+    const coordStr = points.map((p) => `${p.lng},${p.lat}`).join(';');
+    const url =
+      `https://api.mapbox.com/directions/v5/mapbox/driving/${coordStr}` +
+      `?overview=full&geometries=geojson&access_token=${token}`;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const route = data?.routes?.[0];
+    if (!route) return null;
+
+    return {
+      coordinates: route.geometry.coordinates.map(
+        (c: [number, number]) => [c[1], c[0]] as [number, number],
+      ),
+      distance_m: Math.round(route.distance),
+      duration_s: Math.round(route.duration),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch a route through multiple waypoints.
+ * Points in order: [origin, waypoint1, waypoint2, ..., destination].
+ *
+ * Tries Mapbox Directions FIRST (reliable Cuba coverage — same reason
+ * fetchRoute prefers Mapbox), then falls back to the public OSRM server.
+ * Was OSRM-only with a 4s timeout, which failed often in Cuba → the
+ * multi-stop polyline returned null and never re-routed through an added
+ * stop. Mapbox-first fixes the add-stop route on both client + driver.
  */
 export async function fetchMultiStopRoute(
   points: { lat: number; lng: number }[],
 ): Promise<RouteResult | null> {
   if (points.length < 2) return null;
 
+  // Mapbox first (reliable Cuba coverage).
+  const mapboxResult = await fetchMultiStopRouteMapbox(points);
+  if (mapboxResult) return mapboxResult;
+
+  // Fallback: public OSRM (free, no auth).
   const coordStr = points
     .map((p) => `${p.lng},${p.lat}`)
     .join(';');
@@ -1007,7 +1061,7 @@ export async function fetchMultiStopRoute(
 
   try {
     const _ctrl = new AbortController();
-    const _t = setTimeout(() => _ctrl.abort(), 4000);
+    const _t = setTimeout(() => _ctrl.abort(), 8000);
     const res = await fetch(url, { signal: _ctrl.signal });
     clearTimeout(_t);
     if (!res.ok) return null;
