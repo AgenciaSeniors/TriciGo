@@ -105,6 +105,17 @@ export function RideActiveView() {
       return 'pending';
     });
   }, [waypoints]);
+  /** Stops the driver still has to visit (not yet departed), in order. The
+   *  live trip route threads through these so a newly added stop is actually
+   *  drawn on the map during in_progress. */
+  const pendingWaypointPoints = useMemo(
+    () =>
+      waypoints
+        .filter((w) => !w.departed_at && typeof w.latitude === 'number' && typeof w.longitude === 'number')
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((w) => ({ latitude: w.latitude, longitude: w.longitude })),
+    [waypoints],
+  );
   const routeData = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
@@ -131,6 +142,10 @@ export function RideActiveView() {
    * with the live driver→dropoff line. We do not show both — keeps the
    * map clean and matches Uber/Lyft behavior. If we ever want to show
    * the "originally planned" route faded behind, swap to Option B.
+   *
+   * Add-stop: pendingWaypointPoints are passed so the live route threads
+   * driver → pending stops → dropoff. Without this it pointed straight at
+   * the dropoff and a newly added stop never appeared on the map.
    */
   const isInProgress = activeRide?.status === 'in_progress'
     || activeRide?.status === 'arrived_at_destination';
@@ -138,6 +153,7 @@ export function RideActiveView() {
     driverPosition,
     activeRide?.dropoff_location ?? null,
     isInProgress,
+    pendingWaypointPoints,
   );
 
   // The polyline we hand to the map: live during the trip, static otherwise.

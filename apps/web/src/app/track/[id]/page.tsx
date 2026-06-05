@@ -599,6 +599,17 @@ export default function TrackRidePage() {
     refetchWaypoints();
   }, [ride?.id, ride?.status, refetchWaypoints]);
 
+  // Realtime: re-fetch the waypoint list when the rider adds a stop or the
+  // driver arrives/departs one, so the map re-threads the route live (parity
+  // con RideActiveView — payloads carry GEOGRAPHY hex, so re-fetch via RPC).
+  useEffect(() => {
+    if (!ride?.id) return;
+    const active = ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'].includes(ride.status);
+    if (!active) return;
+    const channel = rideService.subscribeToWaypoints(rideId, refetchWaypoints, refetchWaypoints);
+    return () => { getSupabaseClient().removeChannel(channel); };
+  }, [ride?.id, ride?.status, rideId, refetchWaypoints]);
+
   // "Llegó seguro": al detectar la transición a completed, avisar UNA sola vez
   // a los contactos de confianza con auto_share (parity con useRide.ts:962-975).
   // Guard por localStorage para no re-disparar en cada refetch del polling.
@@ -723,6 +734,13 @@ export default function TrackRidePage() {
             driverLng={driverLocation?.lng}
             vehicleType={ride.vehicle_type ?? undefined}
             nearbyVehicles={nearbyVehicles}
+            waypoints={waypoints.map((w) => ({
+              latitude: w.location.latitude,
+              longitude: w.location.longitude,
+              sort_order: w.sort_order,
+              arrived_at: w.arrived_at ?? null,
+              departed_at: w.departed_at ?? null,
+            }))}
             rideStatus={ride.status}
             style={{ width: '100%', height: '100%', borderRadius: 0 }}
           />
