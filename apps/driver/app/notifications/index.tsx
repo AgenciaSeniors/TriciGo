@@ -12,21 +12,41 @@ import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
-import type { AppNotification, NotificationType } from '@tricigo/types';
+import type { AppNotification } from '@tricigo/types';
 
-const ICON_MAP: Record<NotificationType, { name: keyof typeof Ionicons.glyphMap; color: string }> = {
-  ride_update: { name: 'car', color: colors.brand.orange },
-  ride_completed: { name: 'checkmark-circle', color: '#16a34a' },
-  ride_canceled: { name: 'close-circle', color: '#dc2626' },
-  driver_assigned: { name: 'navigate', color: colors.brand.orange },
-  driver_arriving: { name: 'location', color: '#2563eb' },
-  dispute_update: { name: 'alert-circle', color: '#ea580c' },
+// Keyed by the real notification categories send-push writes to
+// notifications.type (ride, ride_offer, announcement, blog, promo…), NOT
+// the legacy NotificationType enum — otherwise every real notification fell
+// back to the generic 'system' icon. Unknown types still fall back below.
+const ICON_MAP: Record<string, { name: keyof typeof Ionicons.glyphMap; color: string }> = {
+  ride: { name: 'car', color: colors.brand.orange },
+  ride_offer: { name: 'car', color: colors.brand.orange },
+  ride_matching: { name: 'search', color: colors.brand.orange },
+  proximity: { name: 'navigate', color: '#2563eb' },
+  chat: { name: 'chatbubble', color: '#2563eb' },
+  payment: { name: 'card', color: '#16a34a' },
+  wallet_recharge: { name: 'arrow-down-circle', color: '#16a34a' },
+  wallet_recharge_refund: { name: 'arrow-undo', color: colors.brand.orange },
   wallet_credit: { name: 'arrow-down-circle', color: '#16a34a' },
   wallet_debit: { name: 'arrow-up-circle', color: '#dc2626' },
+  lost_item: { name: 'search', color: colors.brand.orange },
+  dispute_update: { name: 'alert-circle', color: '#ea580c' },
+  scheduled_ride: { name: 'calendar', color: '#2563eb' },
+  sos: { name: 'warning', color: '#dc2626' },
+  delivery: { name: 'cube', color: colors.brand.orange },
+  announcement: { name: 'megaphone', color: '#7c3aed' },
+  blog: { name: 'newspaper', color: '#2563eb' },
+  news: { name: 'newspaper', color: '#2563eb' },
   promo: { name: 'gift', color: '#7c3aed' },
-  referral_reward: { name: 'people', color: '#2563eb' },
-  quest_completed: { name: 'trophy', color: '#ca8a04' },
+  campaign: { name: 'megaphone', color: '#7c3aed' },
   system: { name: 'information-circle', color: '#6b7280' },
+};
+
+// Defensive fallback for any category not in the map above. The driver
+// tsconfig has noUncheckedIndexedAccess, so the lookup is T | undefined.
+const FALLBACK_ICON: { name: keyof typeof Ionicons.glyphMap; color: string } = {
+  name: 'information-circle',
+  color: '#6b7280',
 };
 
 function timeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
@@ -136,10 +156,17 @@ export default function NotificationsScreen() {
       } catch { /* best effort */ }
     }
 
-    // Deep link based on notification data
+    // Deep link based on notification data / category.
     const data = notif.data as Record<string, string> | null;
     if (data?.ride_id) {
       router.push(`/trip/${data.ride_id}`);
+      return;
+    }
+    if (['wallet', 'payment', 'wallet_recharge', 'wallet_recharge_refund', 'wallet_credit', 'wallet_debit'].includes(notif.type)) {
+      router.push('/(tabs)/earnings');
+    } else {
+      // Content (promo/announcement/blog/news) + fallback open home.
+      router.push('/(tabs)');
     }
   };
 
@@ -183,7 +210,7 @@ export default function NotificationsScreen() {
     }
 
     const notif = item.data;
-    const icon = ICON_MAP[notif.type] ?? ICON_MAP.system;
+    const icon = ICON_MAP[notif.type] ?? FALLBACK_ICON;
 
     return (
       <Pressable
