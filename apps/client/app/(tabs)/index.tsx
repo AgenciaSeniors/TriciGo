@@ -109,6 +109,7 @@ const DELIVERY_VEHICLES: { slug: ServiceTypeSlug; label: string; img: any }[] = 
   { slug: 'moto_standard', label: 'Moto', img: require('../../assets/vehicles/selection/moto.png') },
   { slug: 'triciclo_basico', label: 'Triciclo', img: require('../../assets/vehicles/selection/triciclo.png') },
   { slug: 'auto_standard', label: 'Auto', img: require('../../assets/vehicles/markers/auto_clasico.png') },
+  { slug: 'auto_confort', label: 'Confort', img: require('../../assets/vehicles/selection/confort.png') },
 ];
 
 const DELIVERY_CATS = [
@@ -3429,8 +3430,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                      can do its job at submit time. */}
                 <Text variant="caption" color="tertiary" style={{ marginBottom: 4 }}>{t('delivery.vehicle', { defaultValue: 'Vehículo de envío' })}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                  {(['moto', 'triciclo', 'auto'] as const).map((vt) => {
-                    const vLabel = ({ moto: 'Moto', triciclo: 'Triciclo', auto: 'Auto' } as const)[vt];
+                  {(['moto', 'triciclo', 'auto', 'confort'] as const).map((vt) => {
+                    const vLabel = ({ moto: 'Moto', triciclo: 'Triciclo', auto: 'Auto', confort: 'Confort' } as const)[vt];
                     const isSel = draft.delivery.deliveryVehicleType === vt;
                     return (
                       <Pressable key={vt} onPress={() => setDeliveryField('deliveryVehicleType', vt)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: isSel ? 2 : 1, borderColor: isSel ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isSel ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev1 : '#fff'), alignItems: 'center' }}>
