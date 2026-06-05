@@ -21,6 +21,7 @@ const emptyForm = {
   cover_image_url: '',
   is_published: false,
   published_at: null as string | null,
+  notify_on_publish: true,
   author_id: null as string | null,
 };
 
@@ -69,6 +70,32 @@ export default function BlogAdminPage() {
     setShowForm(false);
   };
 
+  // Fire the "notify on publish" push exactly once — only when the post
+  // is published, opted in, and not yet notified. Publishing happens via
+  // handleTogglePublish (the form only saves drafts), so this is invoked
+  // from there. Manual "Notificar ahora" re-sends and also stamps
+  // notified_at, so the two paths can't double-fire.
+  const maybeNotifyOnPublish = async (post: BlogPost) => {
+    if (!post.is_published || !post.notify_on_publish || post.notified_at) return;
+    try {
+      const { targeted } = await notificationService.broadcastToActiveUsers({
+        title: post.title_es || post.title_en || '(sin título)',
+        body: post.excerpt_es || post.excerpt_en || '',
+        contentType: 'blog',
+        contentId: post.id,
+      });
+      await blogService.updatePost(post.id, { notified_at: new Date().toISOString() });
+      showToast('success', t('blog.toast_auto_notified', {
+        defaultValue: 'Publicado y notificado a {{count}} usuarios',
+        count: targeted,
+      }));
+    } catch {
+      showToast('error', t('blog.auto_notify_error', {
+        defaultValue: 'Publicado, pero no se pudo enviar la notificación.',
+      }));
+    }
+  };
+
   const handleSave = async () => {
     try {
       if (editingId) {
@@ -81,6 +108,7 @@ export default function BlogAdminPage() {
           body_es: form.body_es,
           body_en: form.body_en,
           cover_image_url: form.cover_image_url || null,
+          notify_on_publish: form.notify_on_publish,
         });
         showToast('success', t('blog.toast_updated', { defaultValue: 'Post actualizado' }));
       } else {
@@ -95,6 +123,8 @@ export default function BlogAdminPage() {
           cover_image_url: form.cover_image_url || null,
           is_published: false,
           published_at: null,
+          notify_on_publish: form.notify_on_publish,
+          notified_at: null,
           author_id: null,
         });
         showToast('success', t('blog.toast_created', { defaultValue: 'Post creado' }));
@@ -118,6 +148,7 @@ export default function BlogAdminPage() {
       cover_image_url: post.cover_image_url ?? '',
       is_published: post.is_published,
       published_at: post.published_at,
+      notify_on_publish: post.notify_on_publish,
       author_id: post.author_id,
     });
     setEditingId(post.id);
@@ -143,6 +174,9 @@ export default function BlogAdminPage() {
         contentType: 'blog',
         contentId: post.id,
       });
+      // Stamp notified_at so the auto "notify on publish" path won't
+      // double-fire content that was already manually notified.
+      await blogService.updatePost(post.id, { notified_at: new Date().toISOString() });
       showToast(
         'success',
         targeted > 0
@@ -175,6 +209,8 @@ export default function BlogAdminPage() {
       } else {
         await blogService.publishPost(post.id);
         showToast('success', t('blog.toast_published', { defaultValue: 'Post publicado' }));
+        // Publishing is the "publish" event → maybe auto-notify (once).
+        await maybeNotifyOnPublish({ ...post, is_published: true });
       }
       await loadPosts();
     } catch (err) {
@@ -352,6 +388,17 @@ export default function BlogAdminPage() {
                 onChange={(e) => setForm({ ...form, body_en: e.target.value })}
                 className={textareaCls}
               />
+            </Field>
+            <Field label={t('blog.field_notify_on_publish', { defaultValue: 'Notificar al publicar' })}>
+              <label className="inline-flex items-center gap-2 text-[13px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={form.notify_on_publish}
+                  onChange={(e) => setForm({ ...form, notify_on_publish: e.target.checked })}
+                  className="h-4 w-4 rounded border-line"
+                />
+                {t('blog.notify_on_publish_help', { defaultValue: 'Envía un push a todos al publicarlo (una sola vez)' })}
+              </label>
             </Field>
           </div>
 
