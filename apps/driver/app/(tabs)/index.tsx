@@ -977,6 +977,10 @@ function NativeDriverHomeScreen() {
           height={SCREEN_HEIGHT}
           darkStyle
           onRecenter={handleRecenter}
+          // Float the recenter button bottom-right, above the sheet, so it
+          // never overlaps the "En Línea" header pill. 0.45 = HomeBottomSheet
+          // default snap ('45%'); +16 lifts it just above the sheet's edge.
+          recenterBottom={SCREEN_HEIGHT * 0.45 + 16}
           vehicleType={ownVehicleType}
         />
         {/* Subtle dim when offline */}
@@ -1001,10 +1005,11 @@ function NativeDriverHomeScreen() {
       </View>
 
       {/* N5 — popular pickup/dropoff clusters toggle. Floats on the
-           right edge below the recenter button (which lives inside
-           RideMapView). Only visible while online — when offline the
-           map overlay is hidden anyway, so the toggle would be
-           pointless context. */}
+           right edge just below the header. (The recenter button now
+           floats bottom-right above the sheet — see RideMapView's
+           recenterBottom — so it no longer shares this column.) Only
+           visible while online — when offline the map overlay is hidden
+           anyway, so the toggle would be pointless context. */}
       {isOnline && (
         <Pressable
           onPress={() => setPopularLocationsEnabled((p) => !p)}
