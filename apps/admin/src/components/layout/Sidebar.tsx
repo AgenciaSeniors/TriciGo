@@ -35,6 +35,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Sparkles,
+  Ticket,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
@@ -104,6 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
     defaultTitle: 'Crecimiento',
     items: [
       { href: '/campaigns', labelKey: 'sidebar.campaigns', defaultLabel: 'Campañas', icon: Megaphone },
+      { href: '/promotions', labelKey: 'sidebar.promotions', defaultLabel: 'Promociones', icon: Ticket },
       { href: '/segments', labelKey: 'sidebar.segments', defaultLabel: 'Segmentos', icon: Users },
       { href: '/referrals', labelKey: 'sidebar.referrals', defaultLabel: 'Referidos', icon: Gift },
       { href: '/quests', labelKey: 'sidebar.quests', defaultLabel: 'Misiones', icon: Trophy },
