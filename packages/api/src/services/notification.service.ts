@@ -606,7 +606,7 @@ export const notificationService = {
   async broadcastToActiveUsers(opts: {
     title: string;
     body: string;
-    contentType: 'announcement' | 'blog' | 'campaign';
+    contentType: 'announcement' | 'blog' | 'campaign' | 'promo';
     contentId?: string;
     deepLink?: string;
   }): Promise<{ targeted: number }> {
