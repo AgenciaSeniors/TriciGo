@@ -7,8 +7,8 @@ import {
   Dimensions,
   Pressable,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Text } from './Text';
@@ -45,6 +45,7 @@ export function AvatarCropModal({
   onConfirm,
 }: AvatarCropModalProps) {
   const [processing, setProcessing] = useState(false);
+  const insets = useSafeAreaInsets();
 
   // Compute display geometry — image's shorter side fills the frame, longer
   // side overflows. User pans along the longer axis to choose the crop.
@@ -162,7 +163,7 @@ export function AvatarCropModal({
         <View
           style={{
             position: 'absolute',
-            top: Platform.OS === 'ios' ? 56 : 24,
+            top: insets.top + 12,
             left: 16,
             right: 16,
             flexDirection: 'row',
