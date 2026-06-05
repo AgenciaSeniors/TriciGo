@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Pressable, Animated, Platform, Image, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -81,6 +82,7 @@ export function ConfirmLocationScreen({
   const { t } = useTranslation('rider');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
+  const insets = useSafeAreaInsets();
   // Two-line address display: line1 = POI name (when one sits within a few
   // meters), line2 = the street/locality address. line1 omitted → single line.
   const [display, setDisplay] = useState<{ line1?: string; line2: string } | null>(null);
@@ -365,7 +367,7 @@ export function ConfirmLocationScreen({
       <View
         style={{
           position: 'absolute',
-          top: Platform.OS === 'ios' ? 60 : 40,
+          top: insets.top + 12,
           left: 16,
           right: 16,
           backgroundColor: isDark ? darkColors.card : '#fff',

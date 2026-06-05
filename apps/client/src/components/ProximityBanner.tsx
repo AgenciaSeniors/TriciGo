@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Pressable, Animated, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@tricigo/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
@@ -31,6 +32,7 @@ const ICONS = {
  */
 export function ProximityBanner({ type, driverName, etaMinutes, onDismiss }: ProximityBannerProps) {
   const { t } = useTranslation('rider');
+  const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(-100)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const onDismissRef = useRef(onDismiss);
@@ -75,7 +77,7 @@ export function ProximityBanner({ type, driverName, etaMinutes, onDismiss }: Pro
   return (
     <Pressable
       onPress={handleDismiss}
-      style={styles.wrapper}
+      style={[styles.wrapper, { paddingTop: insets.top + 8 }]}
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
     >

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useImperativeHandle, useCallback, forwardRef } from 'react';
 import { View, Text, Animated, Pressable, StyleSheet, Platform, Image, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
@@ -209,6 +210,7 @@ function WebMapboxView({
   demandHotspots,
   popularLocations,
 }: RideMapViewProps) {
+  const insets = useSafeAreaInsets();
   // Web map doesn't render waypoint markers (web is admin/desktop-only for
   // drivers; mobile is canonical). Reference to satisfy lint without
   // shipping unused renders.
@@ -566,7 +568,7 @@ function WebMapboxView({
           }}
           style={{
             position: 'absolute',
-            top: 12,
+            top: insets.top + 12,
             right: 12,
             width: 44,
             height: 44,
@@ -653,6 +655,7 @@ function RideMapViewInner(
   }: RideMapViewProps,
   ref: React.Ref<RideMapViewRef>,
 ) {
+  const insets = useSafeAreaInsets();
   // Synchronous re-check: if Mapbox token wasn't applied at module load
   // (e.g. native bridge wasn't ready), apply it NOW before we return any
   // MapView element. Idempotent — guarded by module-scoped flag.
@@ -1624,7 +1627,7 @@ function RideMapViewInner(
           onPress={onRecenter}
           style={{
             position: 'absolute',
-            top: 12,
+            top: insets.top + 12,
             right: 12,
             width: 44,
             height: 44,
