@@ -1071,7 +1071,7 @@ export default function TrackRidePage() {
 
           {/* Propina post-viaje — parity con RideCompleteView (no en efectivo, sin propina previa) */}
           {ride.status === 'completed' && ride.payment_method !== 'cash' && !ride.tip_amount && userId && (
-            <TipFlow rideId={ride.id} userId={userId} onTipSubmitted={fetchRide} />
+            <TipFlow rideId={ride.id} userId={userId} fareCup={ride.final_fare_cup ?? ride.estimated_fare_cup ?? 0} onTipSubmitted={fetchRide} />
           )}
 
           {/* Route Card */}

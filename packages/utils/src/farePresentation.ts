@@ -71,3 +71,31 @@ export function riderChargedTotalTrc(ride: RiderChargedTotalTrcInput): number | 
   const tip = ride.tip_amount ?? 0;
   return fareTrc + tip;
 }
+
+// ──────────────────────────────────────────────
+// Tip suggestions (percentage of fare)
+// ──────────────────────────────────────────────
+
+/**
+ * Suggested tip presets, as a percentage of the ride fare. Rendered as
+ * chips in the post-ride tip UI (rider mobile + web). Single source of
+ * truth so mobile and web always offer the same amounts.
+ */
+export const TIP_PERCENT_OPTIONS = [10, 15, 20] as const;
+
+/**
+ * Tip amount in whole TRC for a given fare and percentage. Since
+ * 1 TRC = 1 CUP, the fare is in CUP and the result is in CUP/TRC.
+ *
+ * Returns 0 for any non-positive or non-finite input so a chip never
+ * renders a bogus amount (e.g. before the fare has loaded).
+ *
+ *   tipAmountForPercent(2200, 15) → 330
+ *   tipAmountForPercent(1000, 10) → 100
+ *   tipAmountForPercent(0, 15)    → 0
+ */
+export function tipAmountForPercent(fareCup: number, pct: number): number {
+  if (!Number.isFinite(fareCup) || !Number.isFinite(pct)) return 0;
+  if (fareCup <= 0 || pct <= 0) return 0;
+  return Math.round((fareCup * pct) / 100);
+}

@@ -2,13 +2,16 @@
 
 /**
  * TipFlow — post-ride tip UI for the web client (parity with mobile
- * `apps/client/src/components/RideCompleteView.tsx:582-643`).
+ * `apps/client/src/components/RideCompleteView.tsx`).
  *
- * Renders three preset amounts + an "Otro monto" expander that opens an
- * inline numeric input. Calls `rideService.addTip(rideId, userId, amount)`
- * with the amount in TRC cents (the unit the wallet ledger stores). On
- * success, surfaces a confirmation badge and notifies the parent so it
- * can refetch the ride and hide the flow.
+ * Renders percentage presets (10/15/20%) computed off the ride fare —
+ * each chip shows the resulting TRC amount — plus an "Otro monto"
+ * field with a live formatted preview. Calls
+ * `rideService.addTip(rideId, userId, amount)` with the amount in
+ * WHOLE TRC (1 TRC = 1 CUP), the unit the ledger stores and the
+ * `add_tip` RPC expects. (The old version multiplied the custom value
+ * by 100 — a leftover from the retired TRC-cents model — which charged
+ * 100× what the user typed.)
  *
  * Visibility constraints (decided by the parent — pass `visible` only
  * when they're all true):
@@ -18,25 +21,24 @@
  */
 import { useState } from 'react';
 import { rideService } from '@tricigo/api';
-import { formatTRC } from '@tricigo/utils';
+import { formatTRC, TIP_PERCENT_OPTIONS, tipAmountForPercent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 
-const PRESET_AMOUNTS_CENTS = [5000, 10000, 20000];
-// Mirror of `MAX_TIP_AMOUNT` in apps/client/src/config/ride.ts:12 — kept
-// as a plain constant here because @tricigo/utils doesn't export it and
-// duplicating an integer is cheaper than adding a config package round-trip.
-const MAX_TIP_AMOUNT_CENTS = 100_000;
+// Mirror of `MAX_TIP_AMOUNT` in packages/utils/src/ride-config.ts (whole TRC).
+const MAX_TIP_AMOUNT = 100_000;
 
 export interface TipFlowProps {
   rideId: string;
   userId: string;
+  /** Ride fare in CUP (= TRC, 1:1) used to compute the % presets. */
+  fareCup: number;
   /** Called once the tip is submitted successfully so the parent can
    *  refetch the ride (so `tip_amount` updates and this component
    *  unmounts via its visibility predicate). */
   onTipSubmitted?: () => void;
 }
 
-export function TipFlow({ rideId, userId, onTipSubmitted }: TipFlowProps) {
+export function TipFlow({ rideId, userId, fareCup, onTipSubmitted }: TipFlowProps) {
   const { t } = useTranslation('web');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,9 +46,12 @@ export function TipFlow({ rideId, userId, onTipSubmitted }: TipFlowProps) {
   const [customOpen, setCustomOpen] = useState(false);
   const [customValue, setCustomValue] = useState('');
 
-  async function submit(amountCents: number) {
+  const showPctChips = fareCup > 0;
+  const customAmount = parseInt(customValue || '0', 10) || 0;
+
+  async function submit(amount: number) {
     if (sending) return;
-    if (amountCents <= 0 || amountCents > MAX_TIP_AMOUNT_CENTS) {
+    if (amount <= 0 || amount > MAX_TIP_AMOUNT) {
       setError(t('ride.tip_amount_invalid', {
         defaultValue: 'El monto está fuera del rango permitido.',
       }));
@@ -55,7 +60,7 @@ export function TipFlow({ rideId, userId, onTipSubmitted }: TipFlowProps) {
     setSending(true);
     setError(null);
     try {
-      await rideService.addTip(rideId, userId, amountCents);
+      await rideService.addTip(rideId, userId, amount);
       setSuccess(true);
       // Give the user a beat to see the "Gracias" badge before the
       // parent refetches and unmounts us.
@@ -92,6 +97,21 @@ export function TipFlow({ rideId, userId, onTipSubmitted }: TipFlowProps) {
     );
   }
 
+  const chipBase: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.1rem',
+    flex: 1,
+    padding: '0.6rem 0.5rem',
+    borderRadius: '0.75rem',
+    border: '1px solid var(--border)',
+    background: 'var(--bg-page)',
+    color: 'var(--text-primary)',
+    cursor: sending ? 'not-allowed' : 'pointer',
+    opacity: sending ? 0.6 : 1,
+  };
+
   return (
     <section
       style={{
@@ -102,99 +122,109 @@ export function TipFlow({ rideId, userId, onTipSubmitted }: TipFlowProps) {
         background: 'var(--bg-card)',
       }}
     >
-      <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'center' }}>
+      <p style={{ margin: '0 0 0.15rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'center' }}>
         {t('ride.tip_title', { defaultValue: '¿Querés dejar propina?' })}
       </p>
+      <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', color: 'var(--text-tertiary, var(--text-secondary))', textAlign: 'center' }}>
+        {t('ride.tip_subtitle', { defaultValue: 'El 100% va para tu conductor' })}
+      </p>
 
-      {/* Preset buttons + "Otro monto" expander */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
-        {PRESET_AMOUNTS_CENTS.map((amount) => (
-          <button
-            key={amount}
-            type="button"
-            disabled={sending}
-            onClick={() => submit(amount)}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '999px',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-page)',
-              color: 'var(--text-primary)',
-              fontSize: '0.85rem',
-              cursor: sending ? 'not-allowed' : 'pointer',
-              opacity: sending ? 0.6 : 1,
-            }}
-          >
-            {formatTRC(amount)}
-          </button>
-        ))}
+      {/* Percentage presets — each chip shows the resulting TRC amount. */}
+      {showPctChips && (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {TIP_PERCENT_OPTIONS.map((pct) => {
+            const amount = tipAmountForPercent(fareCup, pct);
+            return (
+              <button
+                key={pct}
+                type="button"
+                disabled={sending}
+                onClick={() => submit(amount)}
+                aria-label={`${pct}% · ${formatTRC(amount)}`}
+                style={chipBase}
+              >
+                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>{pct}%</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatTRC(amount)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* "Otro monto" expander — only when chips are shown; without a
+          fare the free field below is already visible. */}
+      {showPctChips && (
         <button
           type="button"
           disabled={sending}
           onClick={() => setCustomOpen((v) => !v)}
           style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '999px',
-            border: '1px solid var(--border)',
-            background: 'var(--bg-page)',
-            color: 'var(--text-primary)',
-            fontSize: '0.85rem',
-            cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '0.25rem',
+            width: '100%',
+            marginTop: '0.5rem',
+            padding: '0.4rem',
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontSize: '0.8rem',
+            cursor: 'pointer',
           }}
         >
           <span aria-hidden="true">{customOpen ? '−' : '+'}</span>
           {t('ride.tip_custom', { defaultValue: 'Otro monto' })}
         </button>
-      </div>
+      )}
 
-      {customOpen && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', justifyContent: 'center' }}>
-          <input
-            type="number"
-            inputMode="numeric"
-            placeholder={t('ride.tip_custom_placeholder', { defaultValue: 'Monto en TRC' })}
-            value={customValue}
-            min={0.01}
-            step={0.01}
-            onChange={(e) => setCustomValue(e.target.value)}
-            disabled={sending}
-            style={{
-              flex: 1,
-              maxWidth: 180,
-              padding: '0.5rem 0.75rem',
-              borderRadius: '0.5rem',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-page)',
-              fontSize: '0.85rem',
-            }}
-          />
-          <button
-            type="button"
-            disabled={sending || !customValue || parseFloat(customValue) <= 0}
-            onClick={() => {
-              const trc = parseFloat(customValue);
-              if (!trc || trc <= 0) return;
-              // Same convention as transfer P2P (PR #78 B2): user types
-              // whole TRC, we convert to cents before the API call.
-              submit(Math.round(trc * 100));
-            }}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '0.5rem',
-              border: 'none',
-              background: 'var(--primary)',
-              color: 'white',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: sending ? 'not-allowed' : 'pointer',
-              opacity: sending ? 0.6 : 1,
-            }}
-          >
-            {sending ? '...' : t('ride.tip_send', { defaultValue: 'Enviar' })}
-          </button>
+      {/* Free-amount field with a live formatted preview. */}
+      {(customOpen || !showPctChips) && (
+        <div style={{ marginTop: showPctChips ? '0.25rem' : '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder={t('ride.tip_custom_placeholder', { defaultValue: 'Escribe un monto en TRC' })}
+              value={customValue}
+              onChange={(e) => setCustomValue(e.target.value.replace(/[^0-9]/g, ''))}
+              disabled={sending}
+              style={{
+                flex: 1,
+                padding: '0.5rem 0.75rem',
+                borderRadius: '0.5rem',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-page)',
+                color: 'var(--text-primary)',
+                fontSize: '0.85rem',
+              }}
+            />
+            <button
+              type="button"
+              disabled={sending || customAmount <= 0}
+              onClick={() => submit(customAmount)}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                background: 'var(--primary)',
+                color: 'white',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: sending || customAmount <= 0 ? 'not-allowed' : 'pointer',
+                opacity: sending || customAmount <= 0 ? 0.6 : 1,
+              }}
+            >
+              {sending ? '…' : t('ride.tip_send', { defaultValue: 'Enviar' })}
+            </button>
+          </div>
+          {customAmount > 0 && (
+            <p style={{ margin: '0.4rem 0 0', fontSize: '0.72rem', color: 'var(--text-secondary)', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+              {t('ride.tip_preview', { defaultValue: '= {{amount}}', amount: formatTRC(customAmount) })}
+            </p>
+          )}
         </div>
       )}
 
