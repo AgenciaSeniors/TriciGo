@@ -345,7 +345,16 @@ export const useRideStore = create<RideState>((set, get) => ({
     ) {
       set({ flowStep: 'active' });
     } else if (ride.status === 'completed') {
-      set({ flowStep: 'completed' });
+      // Sticky-serviceType fix (scenario #8): reset the service MODE the moment
+      // the trip completes, so a mensajería order doesn't stay stuck if the user
+      // leaves the rating screen without tapping "Listo". Keep flowStep='completed'
+      // and activeRide so RideCompleteView still renders the summary (it reads
+      // activeRide/rideWithDriver, NOT the draft — verified). Only the draft's
+      // mode is reset; pickup/dropoff are left untouched.
+      set((s) => ({
+        flowStep: 'completed',
+        draft: { ...s.draft, serviceType: 'triciclo_basico', delivery: { ...defaultDelivery } },
+      }));
       // F009: Persist ride ID so review screen survives app restart
       AsyncStorage.setItem('@tricigo/pending_review_ride_id', ride.id).catch(() => {});
     } else if (ride.status === 'canceled') {
