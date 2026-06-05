@@ -27,8 +27,11 @@ const PREF_KEYS: Record<string, string> = {
   payment: '@tricigo/notif_wallet',
   wallet_recharge: '@tricigo/notif_wallet',
   wallet_recharge_refund: '@tricigo/notif_wallet',
-  // Marketing
+  // Marketing / content (admin novedades, blog, promos)
   promo: '@tricigo/notif_promos',
+  announcement: '@tricigo/notif_promos',
+  blog: '@tricigo/notif_promos',
+  news: '@tricigo/notif_promos',
 };
 
 Notifications.setNotificationHandler({
@@ -79,6 +82,14 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
     case 'wallet_recharge':
     case 'wallet_recharge_refund':
       router.push('/(tabs)/wallet');
+      break;
+    case 'announcement':
+    case 'blog':
+    case 'news':
+    case 'promo':
+    case 'system':
+      // Admin content (novedades/blog/promos) lives on the home tab.
+      router.push('/(tabs)');
       break;
     default:
       break;
