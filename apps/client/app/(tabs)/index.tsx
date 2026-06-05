@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService } from '@tricigo/api';
@@ -2932,8 +2932,14 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     [userCenter],
   );
 
-  // Compute selectedEstimate from allFareEstimates for the current service type
-  const selectedEstimate = allFareEstimates?.[draft.serviceType] ?? null;
+  // Compute selectedEstimate from allFareEstimates for the current service type.
+  // Mensajería se cobra al precio del VEHÍCULO elegido (alinea con la web): resuelve
+  // al slug del vehículo en vez del config plano de 'mensajeria'.
+  const selectedEstimateSlug =
+    draft.serviceType === 'mensajeria' && draft.delivery.deliveryVehicleType
+      ? deliveryVehicleToSlug(draft.delivery.deliveryVehicleType)
+      : draft.serviceType;
+  const selectedEstimate = allFareEstimates?.[selectedEstimateSlug] ?? null;
 
   // Live discount preview (promo + "Compartir viaje"). Mirrors the
   // server-side trigger 00347 exactly so the shown fare = what the server
@@ -3370,7 +3376,12 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
             {/* Paso 1+2: Service cards — vertical stack with ETA + trip duration */}
             {(['triciclo_basico', 'moto_standard', 'auto_standard', 'auto_confort', 'mensajeria'] as const).map((slug) => {
               const meta = SERVICE_META[slug];
-              const est = allFareEstimates?.[slug];
+              // Mensajería muestra el precio del VEHÍCULO elegido (no su config
+              // plano): resuelve al slug del vehículo. Alinea con la web.
+              const est =
+                slug === 'mensajeria' && draft.delivery.deliveryVehicleType
+                  ? allFareEstimates?.[deliveryVehicleToSlug(draft.delivery.deliveryVehicleType)]
+                  : allFareEstimates?.[slug];
               const isSelected = draft.serviceType === slug;
               const eta = etaByVehicleType[slug];
               return (
@@ -3388,6 +3399,9 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                         <Text variant="body" style={{ fontWeight: '700', color: isSelected ? colors.brand.orange : tokens.ink.primary }}>{formatFare(est.estimated_fare_cup, est.estimated_fare_trc)}</Text>
                         {est.estimated_duration_s ? (
                           <Text variant="caption" color="tertiary">~{Math.ceil(est.estimated_duration_s / 60)} min de viaje</Text>
+                        ) : null}
+                        {slug === 'mensajeria' ? (
+                          <Text variant="caption" color="tertiary">{t('delivery.price_by_vehicle', { defaultValue: 'Según vehículo' })}</Text>
                         ) : null}
                       </>
                     ) : isFareEstimating ? (
@@ -3935,7 +3949,11 @@ function ReviewingView() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-2">
             {otherServices.map((slug) => {
-              const est = allFareEstimates?.[slug];
+              // Mensajería muestra el precio del vehículo elegido (alinea con la web).
+              const est =
+                slug === 'mensajeria' && draft.delivery.deliveryVehicleType
+                  ? allFareEstimates?.[deliveryVehicleToSlug(draft.delivery.deliveryVehicleType)]
+                  : allFareEstimates?.[slug];
               return (
                 <Pressable
                   key={slug}

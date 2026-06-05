@@ -17,7 +17,7 @@ import type {
   DriverAcceptedBroadcast,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
-import { logger } from '@tricigo/utils';
+import { logger, deliveryVehicleToSlug } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 
 const STATUS_NOTIFICATION_KEYS: Partial<Record<RideStatus, { title: string; body: string }>> = {
@@ -78,7 +78,10 @@ const defaultDelivery: DeliveryDraft = {
   packageWidthCm: '',
   packageHeightCm: '',
   clientAccompanies: false,
-  deliveryVehicleType: null,
+  // Mensajería: vehículo por defecto = moto (como la web) → la tarjeta muestra
+  // el precio al instante; el rider puede cambiar a triciclo/auto. Solo se usa
+  // en mensajería (en viajes de pasajero deliveryVehicleType se ignora).
+  deliveryVehicleType: 'moto',
 };
 
 interface RideRequestDraft {
@@ -269,7 +272,14 @@ export const useRideStore = create<RideState>((set, get) => ({
       // the background fetch hasn't filled that slot yet, we leave
       // `fareEstimate` alone — the next `requestEstimate` call will
       // populate it normally for the now-current service_type.
-      const candidate = s.allFareEstimates?.[serviceType] ?? null;
+      // Mensajería se cobra al precio del VEHÍCULO elegido: el fareEstimate
+      // singular (label del botón "Solicitar", ETA, prechecks mixed/corporate)
+      // debe ser el del vehículo, no el config plano de 'mensajeria'.
+      const effSlug =
+        serviceType === 'mensajeria' && s.draft.delivery.deliveryVehicleType
+          ? deliveryVehicleToSlug(s.draft.delivery.deliveryVehicleType)
+          : serviceType;
+      const candidate = s.allFareEstimates?.[effSlug] ?? null;
       if (candidate) {
         return {
           draft: { ...s.draft, serviceType },
@@ -364,7 +374,21 @@ export const useRideStore = create<RideState>((set, get) => ({
       };
     }),
   setDeliveryField: (field, value) =>
-    set((s) => ({ draft: { ...s.draft, delivery: { ...s.draft.delivery, [field]: value } } })),
+    set((s) => {
+      const delivery = { ...s.draft.delivery, [field]: value };
+      // Al cambiar el vehículo de mensajería, resincronizar el fareEstimate
+      // singular (label del botón / ETA / prechecks) al estimado de ese vehículo,
+      // ya precargado en allFareEstimates. Sin esto el botón seguiría mostrando
+      // el precio del vehículo anterior. Alinea con la web.
+      const vt = delivery.deliveryVehicleType;
+      if (field === 'deliveryVehicleType' && s.draft.serviceType === 'mensajeria' && vt) {
+        const candidate = s.allFareEstimates?.[deliveryVehicleToSlug(vt)] ?? null;
+        if (candidate) {
+          return { draft: { ...s.draft, delivery }, fareEstimate: candidate, fareEstimatedAt: Date.now() };
+        }
+      }
+      return { draft: { ...s.draft, delivery } };
+    }),
 
   addWaypoint: () =>
     set((s) => {
