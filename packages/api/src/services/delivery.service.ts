@@ -4,7 +4,6 @@
 // ============================================================
 
 import { getSupabaseClient } from '../client';
-import { uploadFileFromUri } from './_storage-upload';
 import type { PackageCategory, VehicleType } from '@tricigo/types';
 
 export interface DeliveryDetails {
@@ -218,39 +217,31 @@ export const deliveryService = {
   async uploadDeliveryPhoto(rideId: string, localUri: string, phase: 'pickup' | 'delivery' = 'delivery'): Promise<string> {
     const supabase = getSupabaseClient();
 
+    // Upload via the `upload-delivery-photo` Edge Function (service-role)
+    // instead of a direct client → Storage upload: the Storage service rejects
+    // the mobile session's user JWT (treats it as anon), so the
+    // authenticated-only delivery_photos RLS policy fails ("new row violates
+    // row-level security policy") even though PostgREST + gotrue validate the
+    // same token. The EF authenticates via gotrue, verifies the caller is the
+    // ride's driver, uploads with the service-role key, and records the URL on
+    // delivery_details. The photo is sent as multipart FormData (RN-safe file
+    // descriptor — fetch(uri).blob() throws on native file:// / content:// URIs).
     const fileName = `${phase}-${rideId}-${Date.now()}.jpg`;
-    // Path contract: ride id is the FIRST folder segment so the
-    // delivery_photos_insert storage policy (foldername[1] = rides.id) passes.
-    // Bucket 'delivery-photos' is PUBLIC, so getPublicUrl + <img src> work on
-    // the web tracking pages (incl. the anonymous share link). See migration
-    // 00380_delivery_photos_bucket.sql.
-    const storagePath = `${rideId}/${fileName}`;
+    const formData = new FormData();
+    formData.append('file', {
+      uri: localUri,
+      name: fileName,
+      type: 'image/jpeg',
+    } as unknown as Blob);
+    formData.append('ride_id', rideId);
+    formData.append('phase', phase);
 
-    // Upload via FormData (RN-safe). fetch(uri).blob() throws
-    // "Network request failed" on native because fetch() doesn't support
-    // file:// / content:// schemes. See _storage-upload.ts.
-    await uploadFileFromUri('delivery-photos', storagePath, localUri, {
-      fileName,
-      mimeType: 'image/jpeg',
-      upsert: true,
+    const { data, error } = await supabase.functions.invoke('upload-delivery-photo', {
+      body: formData,
     });
+    if (error) throw error;
+    if (data?.error) throw new Error(String(data.error));
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('delivery-photos')
-      .getPublicUrl(storagePath);
-
-    const publicUrl = urlData.publicUrl;
-
-    // Update the appropriate column in delivery_details
-    const column = phase === 'pickup' ? 'pickup_photo_url' : 'delivery_photo_url';
-    const { error: updateError } = await supabase
-      .from('delivery_details')
-      .update({ [column]: publicUrl })
-      .eq('ride_id', rideId);
-
-    if (updateError) throw new Error(updateError.message);
-
-    return publicUrl;
+    return (data?.publicUrl ?? '') as string;
   },
 };
