@@ -346,6 +346,11 @@ function NativeTripsScreen() {
                 >
                   {t('trips_history.charged_to_client', { defaultValue: 'Cobrado al cliente' })}: {formatCUP(chargedCup)}
                 </Text>
+                {(item.tip_amount ?? 0) > 0 && (
+                  <Text style={{ color: '#22C55E', fontSize: 11, fontWeight: '600', marginTop: 2, ...TABULAR }}>
+                    {t('trips_history.tip_included', { defaultValue: 'Incluye propina' })} +{formatCUP(item.tip_amount ?? 0)}
+                  </Text>
+                )}
               </>
             ) : (
               <>

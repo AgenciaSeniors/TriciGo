@@ -580,6 +580,7 @@ export default function RideDetailPage() {
                 <TipFlow
                   rideId={ride.id}
                   userId={userId}
+                  fareCup={ride.final_fare_cup ?? ride.estimated_fare_cup ?? 0}
                   onTipSubmitted={loadRide}
                 />
               )}

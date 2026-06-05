@@ -386,9 +386,16 @@ function WebRidesScreen() {
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           paddingTop: 12, borderTop: `1px solid ${c.border}`,
                         }}>
-                          <span style={{ fontSize: 18, fontWeight: 800, color: c.text, letterSpacing: '-0.02em' }}>
-                            {fareLabel}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 18, fontWeight: 800, color: c.text, letterSpacing: '-0.02em' }}>
+                              {fareLabel}
+                            </span>
+                            {(ride.tip_amount ?? 0) > 0 && (
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginTop: 2 }}>
+                                {t('ride.tip_included', { defaultValue: 'Propina incluida' })} +{rShowTrc && rTrc != null ? formatTRC(ride.tip_amount ?? 0) : formatCUP(ride.tip_amount ?? 0)}
+                              </span>
+                            )}
+                          </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.textSubtle, fontWeight: 500 }}>
                             {ride.estimated_distance_m != null && ride.estimated_distance_m > 0 && (
                               <span>{(ride.estimated_distance_m / 1000).toFixed(1)} km ·</span>
@@ -712,6 +719,11 @@ function NativeRidesScreen() {
               <Text style={{ color: tokens.ink.subtle, fontSize: 11, marginTop: 3, ...TABULAR }}>
                 {'\u2248'} {formatUSD(fareUsd)}
               </Text>
+              {(item.tip_amount ?? 0) > 0 && (
+                <Text style={{ color: '#16A34A', fontSize: 11, fontWeight: '600', marginTop: 2, ...TABULAR }}>
+                  {t('ride.tip_included', { defaultValue: 'Propina incluida' })} +{showTrc && iTrc != null ? formatTRC(item.tip_amount ?? 0) : formatCUP(item.tip_amount ?? 0)}
+                </Text>
+              )}
             </View>
             <View
               style={{

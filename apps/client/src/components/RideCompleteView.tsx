@@ -9,7 +9,7 @@ import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
-import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage, logger, buildShareUrl, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
+import { formatTRC, formatCUP, generateReceiptHTML, triggerSelection, triggerHaptic, trackEvent, getErrorMessage, logger, buildShareUrl, riderChargedTotal, riderChargedTotalTrc, TIP_PERCENT_OPTIONS, tipAmountForPercent } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
@@ -96,6 +96,11 @@ export function RideCompleteView() {
   const [showTipConfetti, setShowTipConfetti] = useState(false);
   const [customTipOpen, setCustomTipOpen] = useState(false);
   const [customTipValue, setCustomTipValue] = useState('');
+  // Selected preset tip amount (TRC). Null until the rider picks a % chip;
+  // a custom value lives in customTipValue. Either way the confirm button
+  // echoes the exact amount before charging — so "what you'll add" is
+  // always on screen (the old UI hid it behind a bare input).
+  const [selectedTipAmount, setSelectedTipAmount] = useState<number | null>(null);
   const [receiptActionsOpen, setReceiptActionsOpen] = useState(false);
   const [positiveTags, setPositiveTags] = useState<string[]>(FALLBACK_POSITIVE_TAGS);
   const [negativeTags, setNegativeTags] = useState<string[]>(FALLBACK_NEGATIVE_TAGS);
@@ -215,6 +220,18 @@ export function RideCompleteView() {
   const showTrc = activeRide.payment_method === 'tricicoin';
   const fareDisplay = showTrc && fareTrc != null ? formatTRC(fareTrc) : formatCUP(fareCup);
   const hasDriver = !!activeRide.driver_id && !!rideWithDriver?.driver_user_id;
+
+  // Tip block: percentage chips are computed off the clean fare (no tip
+  // added yet at this point). 1 TRC = 1 CUP, so the CUP fare doubles as
+  // the TRC base. When there's no fare to take a % of, fall back to the
+  // free-amount field only.
+  const tipFareBase = activeRide.final_fare_cup ?? activeRide.estimated_fare_cup ?? 0;
+  const showTipPctChips = tipFareBase > 0;
+  const tipCustomAmount = parseInt(customTipValue || '0', 10) || 0;
+  // The amount the confirm button will charge: the typed value when the
+  // custom field is in use, otherwise the picked chip.
+  const tipConfirmAmount = (customTipOpen || !showTipPctChips) ? tipCustomAmount : (selectedTipAmount ?? 0);
+  const tipConfirmValid = tipConfirmAmount > 0 && tipConfirmAmount <= RIDE_CONFIG.MAX_TIP_AMOUNT;
 
   const handleTip = async (amount: number) => {
     if (!userId || !activeRide) return;
@@ -638,67 +655,113 @@ export function RideCompleteView() {
             <Text variant="bodySmall" color="tertiary" className="text-center mt-2">{t('ride.skip_rating', { defaultValue: 'Omitir por ahora' })}</Text>
           </Pressable>
 
-          {/* Tip section (alongside rating) */}
+          {/* Tip section (alongside rating). Percentage chips compute the
+               TRC amount off the fare and a single primary CTA always
+               carries the exact amount, so the rider sees what they're
+               about to add before it's charged. */}
           {activeRide.payment_method !== 'cash' && !tipSent && (
             <View className="w-full mb-4">
-              <Text variant="bodySmall" color="secondary" className="text-center mb-2">
+              <Text variant="bodySmall" color="secondary" className="text-center">
                 {t('ride.tip_title')}
               </Text>
-              <View className="flex-row gap-2 justify-center flex-wrap">
-                {[5000, 10000, 20000].map((amount) => (
-                  <Pressable
-                    key={amount}
-                    className="px-4 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800"
-                    onPress={() => { triggerHaptic('medium'); handleTip(amount); }}
-                    disabled={sendingTip}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${t('ride.tip_title')} ${formatTRC(amount)}`}
-                  >
-                    <Text variant="bodySmall">{formatTRC(amount)}</Text>
-                  </Pressable>
-                ))}
-                {/* UX: three fixed amounts forced users who wanted to tip
-                     outside the preset range to either pick the nearest
-                     option or skip tipping entirely. "Otro monto" opens
-                     an inline input so they can dial in the exact amount
-                     without leaving the screen. */}
+              <Text variant="caption" color="tertiary" className="text-center mb-3">
+                {t('ride.tip_subtitle', { defaultValue: 'El 100% va para tu conductor' })}
+              </Text>
+
+              {showTipPctChips && (
+                <View className="flex-row gap-2">
+                  {TIP_PERCENT_OPTIONS.map((pct) => {
+                    const amount = tipAmountForPercent(tipFareBase, pct);
+                    const isSel = !customTipOpen && selectedTipAmount === amount;
+                    return (
+                      <Pressable
+                        key={pct}
+                        onPress={() => {
+                          triggerSelection();
+                          setCustomTipOpen(false);
+                          setCustomTipValue('');
+                          setSelectedTipAmount(amount);
+                        }}
+                        disabled={sendingTip}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSel }}
+                        accessibilityLabel={`${pct}% · ${formatTRC(amount)}`}
+                        className={`flex-1 items-center py-3 rounded-2xl border ${isSel ? 'bg-primary-500 border-primary-500' : 'bg-neutral-100 dark:bg-neutral-800 border-transparent'}`}
+                      >
+                        <Text variant="body" className={`font-bold ${isSel ? 'text-white' : 'text-neutral-900 dark:text-white'}`}>
+                          {pct}%
+                        </Text>
+                        <Text
+                          variant="caption"
+                          className={isSel ? 'text-white/90' : 'text-neutral-500 dark:text-neutral-400'}
+                          style={{ fontVariant: ['tabular-nums'] }}
+                        >
+                          {formatTRC(amount)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* "Otro monto" toggle — only when chips are shown; without a
+                   fare the free field below is already visible. */}
+              {showTipPctChips && (
                 <Pressable
-                  className="px-4 py-2 rounded-full bg-neutral-100 dark:bg-neutral-800 flex-row items-center gap-1"
-                  onPress={() => { triggerHaptic('light'); setCustomTipOpen((v) => !v); }}
+                  onPress={() => {
+                    triggerHaptic('light');
+                    setSelectedTipAmount(null);
+                    setCustomTipValue('');
+                    setCustomTipOpen((v) => !v);
+                  }}
                   disabled={sendingTip}
+                  className="flex-row items-center justify-center gap-1 mt-2 py-2"
                   accessibilityRole="button"
+                  accessibilityState={{ expanded: customTipOpen }}
                   accessibilityLabel={t('ride.tip_custom', { defaultValue: 'Otro monto' })}
                 >
                   <Ionicons name={customTipOpen ? 'chevron-up' : 'add'} size={14} color={isDark ? darkColors.text.secondary : '#888888'} />
-                  <Text variant="bodySmall">
+                  <Text variant="bodySmall" color="secondary">
                     {t('ride.tip_custom', { defaultValue: 'Otro monto' })}
                   </Text>
                 </Pressable>
-              </View>
-              {customTipOpen && (
-                <View className="flex-row items-center gap-2 mt-3 justify-center">
+              )}
+
+              {/* Free-amount field with a live formatted preview. */}
+              {(customTipOpen || !showTipPctChips) && (
+                <View className={showTipPctChips ? 'mt-1' : 'mt-3'}>
                   <Input
-                    placeholder={t('ride.tip_custom_placeholder', { defaultValue: 'Monto en TRC' })}
+                    placeholder={t('ride.tip_custom_placeholder', { defaultValue: 'Escribe un monto en TRC' })}
                     value={customTipValue}
                     onChangeText={(v) => setCustomTipValue(v.replace(/[^0-9]/g, ''))}
                     keyboardType="number-pad"
-                    style={{ minHeight: 40, flex: 1, maxWidth: 180 }}
+                    className="mb-0"
                   />
-                  <Button
-                    title={t('ride.tip_send', { defaultValue: 'Enviar' })}
-                    size="md"
-                    disabled={sendingTip || !customTipValue || parseInt(customTipValue, 10) <= 0}
-                    loading={sendingTip}
-                    onPress={() => {
-                      const n = parseInt(customTipValue, 10);
-                      if (!n || n <= 0) return;
-                      triggerHaptic('medium');
-                      handleTip(n);
-                      setCustomTipOpen(false);
-                      setCustomTipValue('');
-                    }}
-                  />
+                  {tipCustomAmount > 0 && (
+                    <Text
+                      variant="caption"
+                      color="tertiary"
+                      className="text-center mt-1"
+                      style={{ fontVariant: ['tabular-nums'] }}
+                    >
+                      {t('ride.tip_preview', { defaultValue: '= {{amount}}', amount: formatTRC(tipCustomAmount) })}
+                    </Text>
+                  )}
                 </View>
+              )}
+
+              {/* Single primary CTA — always carries the exact amount. */}
+              {tipConfirmAmount > 0 && (
+                <Button
+                  title={`${t('ride.tip_confirm', { defaultValue: 'Dar propina' })} · ${formatTRC(tipConfirmAmount)}`}
+                  variant="primary"
+                  size="md"
+                  fullWidth
+                  loading={sendingTip}
+                  disabled={sendingTip || !tipConfirmValid}
+                  onPress={() => { triggerHaptic('medium'); handleTip(tipConfirmAmount); }}
+                  className="mt-3"
+                />
               )}
             </View>
           )}

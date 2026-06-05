@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { riderChargedTotal, riderChargedTotalTrc } from '../farePresentation';
+import {
+  riderChargedTotal,
+  riderChargedTotalTrc,
+  TIP_PERCENT_OPTIONS,
+  tipAmountForPercent,
+} from '../farePresentation';
 
 describe('riderChargedTotal', () => {
   it('returns final_fare_cup + tip_amount when both present', () => {
@@ -54,5 +59,41 @@ describe('riderChargedTotalTrc', () => {
       estimated_fare_trc: 100,
       tip_amount: 5,
     })).toBe(105);
+  });
+});
+
+describe('TIP_PERCENT_OPTIONS', () => {
+  it('offers 10/15/20 percent presets', () => {
+    expect(TIP_PERCENT_OPTIONS).toEqual([10, 15, 20]);
+  });
+});
+
+describe('tipAmountForPercent', () => {
+  it('computes a percentage of the fare (1 TRC = 1 CUP)', () => {
+    expect(tipAmountForPercent(2200, 15)).toBe(330);
+    expect(tipAmountForPercent(1000, 10)).toBe(100);
+    expect(tipAmountForPercent(1000, 20)).toBe(200);
+    expect(tipAmountForPercent(1440, 15)).toBe(216);
+  });
+
+  it('rounds to the nearest whole TRC', () => {
+    expect(tipAmountForPercent(1234, 10)).toBe(123); // 123.4 → 123
+    expect(tipAmountForPercent(1278, 10)).toBe(128); // 127.8 → 128
+  });
+
+  it('returns 0 for a non-positive fare', () => {
+    expect(tipAmountForPercent(0, 15)).toBe(0);
+    expect(tipAmountForPercent(-100, 15)).toBe(0);
+  });
+
+  it('returns 0 for a non-positive percentage', () => {
+    expect(tipAmountForPercent(1000, 0)).toBe(0);
+    expect(tipAmountForPercent(1000, -5)).toBe(0);
+  });
+
+  it('is safe under NaN / Infinity input', () => {
+    expect(tipAmountForPercent(NaN, 15)).toBe(0);
+    expect(tipAmountForPercent(1000, NaN)).toBe(0);
+    expect(tipAmountForPercent(Infinity, 15)).toBe(0);
   });
 });
