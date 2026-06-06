@@ -124,6 +124,7 @@ function NativeEarningsScreen() {
     quests,
     driverStats,
     transactions,
+    txAccountId,
     txHasMore,
     txLoading,
     loadMoreTransactions,
@@ -424,6 +425,7 @@ function NativeEarningsScreen() {
                   <PerformanceMetricsSection stats={driverStats} />
                   <RecentActivitySection
                     transactions={transactions}
+                    accountId={txAccountId}
                     loading={txLoading}
                     hasMore={txHasMore}
                     onLoadMore={loadMoreTransactions}

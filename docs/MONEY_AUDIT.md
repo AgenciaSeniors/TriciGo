@@ -45,10 +45,10 @@ data, dormant feature paths, and minor cosmetics. **Re-run the invariants any ti
 | F3-B | 3 | logic | low | **Deferred** — 2 `auto_standard` estimates 90 below `min_fare`, both **canceled** (no charge); likely mensajería-flat quirk |
 | F4-x | 4 | data | — | **Historical/fixed** — `#c3c61627` + 1 ride: pre-00379 cup_to_trc casualties (test data) |
 | F7-A | 7 | code | — | **False positive** — client wallet `entry[0]` is correct (customer single-entry; sign from amount) |
-| F7-B | 7 | UI | low | **Deferred** — driver "Recent activity" uses `entry[0]`; 2 mixed-ride rows show gross wallet portion vs net. Totals correct via `tripNetEarnings`. Fix: `signedLedgerAmountForAccount` (needs account_id threading) |
-| F7-C | 7 | UX | low | **Deferred (needs decision)** — gift balance label: client "TC" vs driver "CUP" (branding) |
-| F7-D | 7 | UI | low | **Deferred** — `TripCompleteView` toast hardcodes `$` for cash fares (hero already uses `fmtMoney`) |
-| EF-1 | 2/7 | code | low | **Deferred** — `formatCup` duplicated in `generate-recharge-receipt` + `notify-business-movement` EFs instead of importing `@tricigo/utils` |
+| F7-B | 7 | logic | **med** | **Fixed** — was deeper than cosmetic: earnings "Recent activity" read the **deprecated `driver_cash`** wallet (frozen since April) → stale rows, hid ALL recent `tricicoin` activity. Switched to `tricicoin` + `signedLedgerAmountForAccount` (net per account) |
+| F7-C | 7 | UX | — | **Not a bug** — intentional per-app branding: client uses "TC" everywhere, driver uses "CUP" everywhere; each gift screen matches its app |
+| F7-D | 7 | UI | low | **Fixed** — `TripCompleteView` toast uses `fmtMoney` instead of hardcoded `$` |
+| EF-1 | 2/7 | code | — | **Not a bug** — `formatCup` duplicated in EFs is intentional: Edge Functions run in Deno and cannot import the Node `@tricigo/utils` (CLAUDE.md documents the mirror pattern) |
 
 ## Dormant / untested money paths (no prod usage; tests in scope if activated)
 - **Insurance** — 0 rides ever selected it; no `insurance_premium` ledger type exists.
