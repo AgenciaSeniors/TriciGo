@@ -570,6 +570,17 @@ export function RideActiveView() {
       } as typeof waypoints[number];
       setWaypoints((prev) => [...prev, wpWithCoords]);
       setPendingStop(null);
+      // The recalc trigger (mig 00386) just updated estimated_fare_cup /
+      // distance / duration server-side. Realtime is disabled (BUG-277) and
+      // the 3s watcher would otherwise lag, so refetch the ride now to show
+      // the new fare + ETA instantly. Best-effort: the watcher (which now
+      // detects estimated_* changes) covers it within ~3s if this fails.
+      try {
+        const fresh = await rideService.getActiveRide(activeRide.customer_id);
+        if (fresh) useRideStore.getState().setActiveRide(fresh);
+      } catch {
+        /* watcher will catch up */
+      }
     } catch (err: unknown) {
       const errObj = err as Record<string, unknown> | null;
       if (typeof errObj?.message === 'string' && errObj.message === 'MAX_WAYPOINTS_REACHED') {
