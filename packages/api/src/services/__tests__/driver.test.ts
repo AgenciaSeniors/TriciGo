@@ -113,13 +113,17 @@ describe('driverService', () => {
 
   // ==================== uploadDocument ====================
   //
-  // Implementation switched from `fetch(uri).blob()` → `FormData` with the
-  // native file URI, because fetch() doesn't support `file://` / `content://`
-  // schemes on Android. The upload call now includes explicit content-type
-  // options and passes a FormData body instead of a Blob.
+  // Upload now routes through the `storage-upload` Edge Function (service-role)
+  // instead of a direct `supabase.storage.from().upload()`: since the
+  // publishable-key migration the Storage service rejects the user JWT, so the
+  // `uploadFileFromUri` helper posts a FormData body to the EF via
+  // `functions.invoke('storage-upload')`. (See _storage-upload.ts / PR #430/#432.)
   describe('uploadDocument', () => {
-    it('uploads file to storage via FormData and creates document record', async () => {
-      mockStorageUpload.mockResolvedValueOnce({ error: null });
+    it('uploads file to the storage-upload EF and creates document record', async () => {
+      mockFunctionsInvoke.mockResolvedValueOnce({
+        data: { path: 'driver-docs/d-1/license/license.jpg' },
+        error: null,
+      });
 
       const mockDoc = {
         id: 'doc-1',
@@ -140,12 +144,9 @@ describe('driverService', () => {
         'license.jpg',
       );
 
-      expect(mockStorageFrom).toHaveBeenCalledWith('driver-documents');
-      expect(mockStorageUpload).toHaveBeenCalledWith(
-        'driver-docs/d-1/license/license.jpg',
-        expect.any(FormData),
-        { contentType: 'multipart/form-data', upsert: true },
-      );
+      expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
+        body: expect.any(FormData),
+      });
       expect(mockFrom).toHaveBeenCalledWith('driver_documents');
       expect(chain.insert).toHaveBeenCalledWith({
         driver_id: 'd-1',
@@ -157,12 +158,9 @@ describe('driverService', () => {
       expect(result).toEqual(mockDoc);
     });
 
-    it('throws on storage upload error', async () => {
-      const mockBlob = new Blob(['file-content']);
-      mockFetch.mockResolvedValueOnce({ blob: () => Promise.resolve(mockBlob) });
-
+    it('throws when the storage-upload EF returns an error', async () => {
       const uploadErr = { message: 'Storage full', code: '507' };
-      mockStorageUpload.mockResolvedValueOnce({ error: uploadErr });
+      mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: uploadErr });
 
       await expect(
         driverService.uploadDocument('d-1', 'license', 'file:///path/to/license.jpg', 'license.jpg'),
@@ -172,12 +170,12 @@ describe('driverService', () => {
 
   // ==================== uploadSelfieCheck ====================
   //
-  // Same RN-safe FormData path as uploadDocument: the implementation no longer
-  // uses `fetch(uri).blob()` (which throws "Network request failed" on native).
+  // Same EF-routed upload as uploadDocument (functions.invoke('storage-upload')
+  // via uploadFileFromUri), then a fire-and-forget verify-selfie invocation.
   describe('uploadSelfieCheck', () => {
-    it('uploads selfie via FormData and marks the check processing', async () => {
-      mockStorageUpload.mockResolvedValueOnce({ error: null });
-
+    it('uploads selfie via the storage-upload EF and marks the check processing', async () => {
+      // storage-upload then verify-selfie both resolve via the default
+      // mockFunctionsInvoke ({ data: null, error: null }).
       const mockCheck = { id: 'chk-1', driver_id: 'd-1', status: 'processing' };
       const chain = createMockQueryChain();
       chain.single.mockResolvedValue({ data: mockCheck, error: null });
@@ -190,19 +188,16 @@ describe('driverService', () => {
         'selfie.jpg',
       );
 
-      expect(mockStorageFrom).toHaveBeenCalledWith('driver-documents');
-      expect(mockStorageUpload).toHaveBeenCalledWith(
-        'selfie-checks/d-1/chk-1/selfie.jpg',
-        expect.any(FormData),
-        { contentType: 'multipart/form-data', upsert: true },
-      );
+      expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
+        body: expect.any(FormData),
+      });
       expect(mockFrom).toHaveBeenCalledWith('selfie_checks');
       expect(result).toEqual(mockCheck);
     });
 
-    it('throws on storage upload error', async () => {
+    it('throws when the storage-upload EF returns an error', async () => {
       const uploadErr = { message: 'Network request failed', code: '500' };
-      mockStorageUpload.mockResolvedValueOnce({ error: uploadErr });
+      mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: uploadErr });
 
       await expect(
         driverService.uploadSelfieCheck('chk-1', 'd-1', 'file:///tmp/selfie.jpg', 'selfie.jpg'),

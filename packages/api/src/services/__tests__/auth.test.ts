@@ -360,16 +360,12 @@ describe('authService', () => {
   });
 
   // ==================== uploadAvatar ====================
+  //
+  // Upload routes through the `storage-upload` Edge Function (service-role) via
+  // uploadFileFromUri; getPublicUrl + updateProfile stay client-side. (PR #430/#432.)
   describe('uploadAvatar', () => {
-    beforeEach(() => {
-      // Mock global fetch for blob conversion
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        blob: vi.fn().mockResolvedValue(new Blob(['test'], { type: 'image/jpeg' })),
-      }));
-    });
-
-    it('uploads image to storage and updates profile', async () => {
-      mockStorageUpload.mockResolvedValue({ error: null });
+    it('uploads image via the storage-upload EF and updates profile', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { path: 'user-1/avatar.jpg' }, error: null });
       mockStorageGetPublicUrl.mockReturnValue({
         data: { publicUrl: 'https://storage.supabase.co/avatars/user-1/avatar.jpg' },
       });
@@ -390,17 +386,13 @@ describe('authService', () => {
 
       const result = await authService.uploadAvatar('user-1', 'file:///tmp/photo.jpg');
 
+      expect(mockFunctions.invoke).toHaveBeenCalledWith('storage-upload', { body: expect.any(FormData) });
       expect(mockStorage.from).toHaveBeenCalledWith('avatars');
-      expect(mockStorageUpload).toHaveBeenCalledWith(
-        'user-1/avatar.jpg',
-        expect.any(FormData),
-        { contentType: 'multipart/form-data', upsert: true },
-      );
       expect(result).toContain('https://storage.supabase.co/avatars/user-1/avatar.jpg');
     });
 
-    it('throws on storage upload error', async () => {
-      mockStorageUpload.mockResolvedValue({ error: new Error('Storage full') });
+    it('throws when the storage-upload EF returns an error', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: new Error('Storage full') });
 
       await expect(authService.uploadAvatar('user-1', 'file:///tmp/photo.jpg')).rejects.toThrow('Storage full');
     });
