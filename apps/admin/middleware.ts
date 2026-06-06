@@ -49,10 +49,11 @@ export const config = {
     /*
      * Match all routes except:
      * - /login (auth page)
+     * - /auth/callback (OAuth code exchange — must run before any session exists)
      * - /_next (Next.js internals)
      * - /favicon.png, /logo-*, /icon-* (static assets)
      * - /api (API routes if any)
      */
-    '/((?!login|forgot-password|reset-password|_next|favicon\\.png|logo-|icon-|api).*)',
+    '/((?!login|forgot-password|reset-password|auth/callback|_next|favicon\\.png|logo-|icon-|api).*)',
   ],
 };
