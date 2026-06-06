@@ -140,3 +140,6 @@ END;
 $function$;
 
 GRANT EXECUTE ON FUNCTION public.send_gift(uuid, uuid, integer, text, wallet_account_type) TO authenticated, service_role;
+-- CREATE re-grants EXECUTE to PUBLIC by default; revoke to match the original
+-- least-privilege ACL (the function already self-gates on auth.uid()).
+REVOKE EXECUTE ON FUNCTION public.send_gift(uuid, uuid, integer, text, wallet_account_type) FROM PUBLIC;
