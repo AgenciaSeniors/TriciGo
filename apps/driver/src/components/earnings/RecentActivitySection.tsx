@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, signedLedgerAmountForAccount } from '@tricigo/utils';
 import { midnightEmber } from '@tricigo/theme';
 import type { LedgerTransaction } from '@tricigo/types';
 
@@ -29,6 +29,10 @@ export type TransactionWithAmount = LedgerTransaction & {
 
 interface RecentActivitySectionProps {
   transactions: TransactionWithAmount[];
+  /** Driver's wallet account id — sum entries for THIS account (a mixed-ride
+   *  txn credits the wallet portion AND debits commission; reading entry[0]
+   *  would show the gross wallet portion instead of the net). */
+  accountId?: string | null;
   loading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
@@ -47,6 +51,7 @@ const TX_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 export function RecentActivitySection({
   transactions,
+  accountId,
   loading,
   hasMore,
   onLoadMore,
@@ -112,7 +117,7 @@ export function RecentActivitySection({
               </Text>
             )}
             {transactions.map((tx) => {
-              const amount = tx.ledger_entries?.[0]?.amount ?? 0;
+              const amount = signedLedgerAmountForAccount(tx.ledger_entries, accountId);
               const isCredit = amount > 0;
               const txColor = isCredit
                 ? midnightEmber.state.success

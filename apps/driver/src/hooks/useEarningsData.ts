@@ -102,6 +102,8 @@ export interface UseEarningsDataResult {
   quests: QuestWithProgress[];
   driverStats: DriverStats | null;
   transactions: TransactionWithAmount[];
+  /** The driver's tricicoin account id — for per-account amount math in the UI. */
+  txAccountId: string | null;
   txHasMore: boolean;
   txLoading: boolean;
   /** Load the next page of recent activity. */
@@ -119,6 +121,7 @@ export function useEarningsData({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [balance, setBalance] = useState(0);
+  const [txAccountId, setTxAccountId] = useState<string | null>(null);
   const [periodTrips, setPeriodTrips] = useState<Ride[]>([]);
   const [commissionRate, setCommissionRate] = useState(0.15);
   const [avgRating, setAvgRating] = useState<number | null>(null);
@@ -250,9 +253,13 @@ export function useEarningsData({
     if (!userId || txLoading) return;
     setTxLoading(true);
     try {
-      // Driver transaction list must come from driver_cash, not customer_cash.
-      const account = await walletService.getAccount(userId, 'driver_cash');
+      // Driver wallet is `tricicoin` (single-wallet model since 00300). The old
+      // `driver_cash` is the deprecated/frozen Gen-A wallet — reading it showed
+      // stale entries while hiding ALL recent activity (tips, commissions, ride
+      // payments, cargo bonus). Switch to tricicoin to match the main wallet.
+      const account = await walletService.getAccount(userId, 'tricicoin');
       if (!account) return;
+      setTxAccountId(account.id);
       const data = await walletService.getTransactions(account.id, txPage, 10);
       if (data.length < 10) setTxHasMore(false);
       setTransactions(prev =>
@@ -292,6 +299,7 @@ export function useEarningsData({
     quests,
     driverStats,
     transactions,
+    txAccountId,
     txHasMore,
     txLoading,
     loadMoreTransactions,

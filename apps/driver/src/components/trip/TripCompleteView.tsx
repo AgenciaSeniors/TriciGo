@@ -240,7 +240,7 @@ export function TripCompleteView() {
                  cliente ven el mismo número, y el breakdown abajo aclara
                  la comisión. El i18n string también cambia: ahora dice
                  "Tarifa del viaje: $X" en lugar de "+$X este viaje". */
-              amount: isTrc ? formatTRC(fare) : `$${fare.toLocaleString()}`,
+              amount: fmtMoney(fare),
             })}
           </Text>
         )}
