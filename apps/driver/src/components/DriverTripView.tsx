@@ -162,18 +162,33 @@ export function useActiveTripMapData() {
       }));
     };
 
-    rideService.getRideWaypoints(activeTrip.id).then((wps) => {
-      const flat = (wps as any[]).map((w: any) => ({
-        latitude: w.latitude ?? w.location?.latitude ?? 0,
-        longitude: w.longitude ?? w.location?.longitude ?? 0,
-        arrived_at: w.arrived_at ?? null,
-        departed_at: w.departed_at ?? null,
-        sort_order: w.sort_order ?? 0,
-      })).filter((w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude));
-      refresh(flat);
-    }).catch(() => { /* silent — empty waypoints is fine */ });
+    const reload = () => {
+      rideService.getRideWaypoints(activeTrip.id).then((wps) => {
+        const flat = (wps as any[]).map((w: any) => ({
+          latitude: w.latitude ?? w.location?.latitude ?? 0,
+          longitude: w.longitude ?? w.location?.longitude ?? 0,
+          arrived_at: w.arrived_at ?? null,
+          departed_at: w.departed_at ?? null,
+          sort_order: w.sort_order ?? 0,
+        })).filter((w) => Number.isFinite(w.latitude) && Number.isFinite(w.longitude));
+        refresh(flat);
+      }).catch(() => { /* silent — empty waypoints is fine */ });
+    };
 
-    return () => { cancelled = true; };
+    reload();
+
+    // Realtime: re-pull when the passenger adds a stop or the driver
+    // arrives/departs one, so the map polyline + StopMarkers update live.
+    // (The one-shot fetch above used to leave the map stale.) Distinct 'map'
+    // channel suffix so it doesn't collide with the trip sheet's own waypoint
+    // subscription on the same ride.
+    const channel = rideService.subscribeToWaypoints(activeTrip.id, reload, reload, 'map');
+
+    return () => {
+      cancelled = true;
+      const supabase = getSupabaseClient();
+      supabase.removeChannel(channel);
+    };
   }, [activeTrip?.id]);
 
   // BUG-283 — live route from driver to current target (pickup during
@@ -191,7 +206,16 @@ export function useActiveTripMapData() {
   const legTo = isPickupPhase
     ? (activeTrip?.pickup_location ?? null)
     : (activeTrip?.dropoff_location ?? null);
-  const liveLegRoute = useLiveDriverRoute(driverLocationMap, legTo, !!legTo);
+  // Pending stops (not yet departed) the driver still has to visit. Passed to
+  // the live route so it threads driver → stops → dropoff during the trip
+  // instead of pointing straight at the dropoff (which ignored the stop).
+  const pendingMapWaypoints = mapWaypoints.filter((_, i) => mapWaypointStatuses[i] !== 'completed');
+  const liveLegRoute = useLiveDriverRoute(
+    driverLocationMap,
+    legTo,
+    !!legTo,
+    isOnTripPhase ? pendingMapWaypoints : undefined,
+  );
   // 00341: pass waypoints so the full pickup→dropoff polyline includes the
   // detour. The legRoute (driver→nextTarget) is still the primary display,
   // but during in_progress when driver passed pickup, the fallback route

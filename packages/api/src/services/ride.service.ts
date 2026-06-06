@@ -1984,10 +1984,13 @@ export const rideService = {
     rideId: string,
     onInsert: (wp: Record<string, unknown>) => void,
     onUpdate: (wp: Record<string, unknown>) => void,
+    // Optional suffix so two subscribers on the SAME device (e.g. the driver's
+    // trip sheet + its map-data hook) don't collide on the same channel topic.
+    channelSuffix?: string,
   ) {
     const supabase = getSupabaseClient();
     return supabase
-      .channel(`waypoints-${rideId}`)
+      .channel(`waypoints-${rideId}${channelSuffix ? `-${channelSuffix}` : ''}`)
       .on(
         'postgres_changes',
         {

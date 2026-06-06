@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { fetchRoute, haversineDistance, distanceToPolyline } from '@tricigo/utils';
+import { fetchRoute, fetchMultiStopRoute, haversineDistance, distanceToPolyline } from '@tricigo/utils';
 import type { GeoPoint } from '@tricigo/utils';
 
 /**
@@ -36,12 +36,18 @@ export function useLiveDriverRoute(
   driverPosition: GeoPoint | null,
   target: GeoPoint | null,
   enabled: boolean,
+  // Optional intermediate stops (passenger-added waypoints, in visit order).
+  // When present the live route threads driver → wp₁ → … → target via
+  // fetchMultiStopRoute so the added stop is actually drawn on the driver's
+  // map. A change in the list forces an immediate refetch.
+  waypoints?: GeoPoint[],
 ): GeoPoint[] | null {
   const [coordinates, setCoordinates] = useState<GeoPoint[] | null>(null);
   const lastFetchTimeRef = useRef(0);
   const currentRouteRef = useRef<GeoPoint[] | null>(null);
   const inFlightRef = useRef(false);
   const mountedRef = useRef(true);
+  const wpKeyRef = useRef<string>('');
 
   useEffect(() => {
     mountedRef.current = true;
@@ -59,6 +65,16 @@ export function useLiveDriverRoute(
 
   useEffect(() => {
     if (!enabled || !driverPosition || !target) return;
+
+    // When the passenger adds/removes a stop, force a fresh fetch so the route
+    // re-threads through it immediately (the driver may still be "on" the old
+    // polyline, so deviation alone wouldn't trigger a refetch).
+    const wpKey = (waypoints ?? []).map(w => `${w.latitude},${w.longitude}`).join('|');
+    if (wpKey !== wpKeyRef.current) {
+      wpKeyRef.current = wpKey;
+      currentRouteRef.current = null;
+      lastFetchTimeRef.current = 0;
+    }
 
     const distToTarget = haversineDistance(driverPosition, target);
     if (distToTarget < NEAR_TARGET_M) {
@@ -106,10 +122,16 @@ export function useLiveDriverRoute(
     inFlightRef.current = true;
 
     (async () => {
-      const result = await fetchRoute(
-        { lat: driverPosition.latitude, lng: driverPosition.longitude },
-        { lat: target.latitude, lng: target.longitude },
-      );
+      const result = (waypoints && waypoints.length > 0)
+        ? await fetchMultiStopRoute([
+            { lat: driverPosition.latitude, lng: driverPosition.longitude },
+            ...waypoints.map(w => ({ lat: w.latitude, lng: w.longitude })),
+            { lat: target.latitude, lng: target.longitude },
+          ])
+        : await fetchRoute(
+            { lat: driverPosition.latitude, lng: driverPosition.longitude },
+            { lat: target.latitude, lng: target.longitude },
+          );
 
       if (cancelled || !mountedRef.current) {
         inFlightRef.current = false;
@@ -132,12 +154,15 @@ export function useLiveDriverRoute(
     })();
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
     driverPosition?.latitude,
     driverPosition?.longitude,
     target?.latitude,
     target?.longitude,
+    // Re-thread the live route when the passenger's stop list changes (by value).
+    JSON.stringify(waypoints),
   ]);
 
   return coordinates;
