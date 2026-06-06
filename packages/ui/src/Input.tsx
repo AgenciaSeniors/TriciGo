@@ -23,10 +23,16 @@ export const Input = forwardRef<TextInput, InputProps & { className?: string }>(
     // `variant` is an explicit override; without it, follow the active theme.
     const isDark = variant ? variant === 'dark' : colorScheme === 'dark';
 
+    // NOTE: `focus:` must be present in BOTH theme branches. NativeWind upgrades
+    // a plain View to a Pressable when it sees an interaction pseudo-class; if the
+    // pseudo-class only appears in one scheme, switching theme triggers that upgrade
+    // *after* the initial render, which fires a dev-only `printUpgradeWarning` whose
+    // prop serializer walks children and throws on React Navigation's context getter
+    // ("Couldn't find a navigation context") — crashing the app on dark→light.
     const borderColor = error
       ? 'border-error'
       : isDark
-        ? 'border-neutral-600'
+        ? 'border-neutral-600 focus:border-primary-500'
         : 'border-neutral-200 focus:border-primary-500';
 
     const bgColor = isDark ? 'bg-[#141418]' : 'bg-white';
