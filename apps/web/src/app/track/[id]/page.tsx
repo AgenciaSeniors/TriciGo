@@ -1347,6 +1347,22 @@ export default function TrackRidePage() {
                 </span>
               </div>
             )}
+            {/* Pago mixto: desglose billetera/efectivo (parity con RideCompleteView).
+                wallet_amount_cup / cash_amount_cup los computa complete_ride_and_pay. */}
+            {ride.payment_method === 'mixed' && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  {t('track.paid_mixed_label', { defaultValue: 'Pago mixto' })}
+                </span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  {t('track.paid_mixed_value', {
+                    wallet: formatCUP(ride.wallet_amount_cup ?? 0),
+                    cash: formatCUP(ride.cash_amount_cup ?? 0),
+                    defaultValue: `${formatCUP(ride.wallet_amount_cup ?? 0)} TriciCoin + ${formatCUP(ride.cash_amount_cup ?? 0)} efectivo`,
+                  })}
+                </span>
+              </div>
+            )}
             {/* Distancia · tiempo del viaje completado (parity con RideCompleteView).
                 Mismo clamp defensivo BUG-291: cap a estimado×1.3 (o 100km) para que
                 una muestra GPS corrupta nunca muestre "24.000 km". */}

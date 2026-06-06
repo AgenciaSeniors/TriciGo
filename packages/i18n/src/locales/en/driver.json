@@ -352,6 +352,7 @@
     "go_online_cta": "Go to Home",
     "tx_recharge": "Recharge",
     "tx_ride_payment": "Ride payment",
+    "tx_tip": "Tip",
     "tx_commission": "Commission",
     "tx_transfer_in": "Transfer received",
     "tx_transfer_out": "Transfer sent",

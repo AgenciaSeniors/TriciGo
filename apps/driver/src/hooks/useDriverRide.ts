@@ -657,6 +657,11 @@ export function useDriverRideActions() {
                     // Antes quedaba undefined y el modal nunca aparecía si
                     // caíamos en este recovery path.
                     excess_distance_uncharged_m: fresh.excess_distance_uncharged_m ?? 0,
+                    // Mixed payment split — the completed row already has the
+                    // RPC-computed portions; surface them so the recovery path
+                    // shows the same "$X efectivo / $Y wallet" as the happy path.
+                    wallet_amount_cup: fresh.wallet_amount_cup ?? 0,
+                    cash_amount_cup: fresh.cash_amount_cup ?? 0,
                   } as unknown as Awaited<ReturnType<typeof driverService.completeRide>>;
                   break;
                 }
@@ -730,6 +735,14 @@ export function useDriverRideActions() {
           // the justification modal when the driver exceeded 1.3× estimate.
           excess_distance_uncharged_m: result.excess_distance_uncharged_m ?? 0,
           share_token: result.share_token,
+          // Mixed payment split: the RPC computes wallet/cash portions at
+          // completion and returns them. Merge so TripCompleteView shows the
+          // real "Cobrar $X efectivo / $Y del wallet" instead of $0/$0 (the
+          // ride row's pre-completion defaults). tip_amount is intentionally
+          // left from activeTrip — it's added by the rider AFTER completion
+          // and arrives via the realtime refresh in TripCompleteView.
+          wallet_amount_cup: result.wallet_amount_cup ?? activeTrip.wallet_amount_cup,
+          cash_amount_cup: result.cash_amount_cup ?? activeTrip.cash_amount_cup,
           completed_at: new Date().toISOString(),
         });
       } else {

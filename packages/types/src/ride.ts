@@ -329,6 +329,12 @@ export interface CompleteRideResult {
   quota_balance_after: number;
   /** BUG-222: meters driven beyond 1.3× the estimated distance, uncharged */
   excess_distance_uncharged_m?: number | null;
+  /** Mixed payment split the RPC computes and returns (00340): the wallet
+   *  (TriciCoin) and cash portions of the final fare, in CUP. 0 for
+   *  non-mixed rides. Used by the driver completed screen to show how much
+   *  to collect in cash vs. what came from the rider's wallet. */
+  wallet_amount_cup?: number | null;
+  cash_amount_cup?: number | null;
 }
 
 /** Ride with joined rider info for driver display */

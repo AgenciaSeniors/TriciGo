@@ -668,6 +668,13 @@ export function useRideActions() {
         // rider occupies.
         share_ride: d.serviceType === 'triciclo_basico' ? d.shareRide : false,
         declared_passengers: d.shareRide && d.serviceType === 'triciclo_basico' ? d.passengerCount : undefined,
+        // Mixed payment: forward the rider's wallet/cash split. Without this
+        // the ride is stored with wallet_ratio=0 (server default) → the
+        // wallet portion is 0, complete_ride_and_pay charges everything as
+        // cash and never debits the rider wallet → the split is invisible in
+        // both movements and the completed screen. Only send for 'mixed';
+        // other methods ignore wallet_ratio server-side.
+        wallet_ratio: d.paymentMethod === 'mixed' ? d.walletRatio : undefined,
       });
 
       // Bug 30: Save delivery details as blocking step — cancel ride if it fails.

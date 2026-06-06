@@ -783,6 +783,10 @@ export default function BookPage() {
         // the discount; declared_passengers = seats the rider occupies.
         share_ride: serviceType === 'triciclo_basico' ? shareRide : false,
         declared_passengers: shareRide && serviceType === 'triciclo_basico' ? passengerCount : undefined,
+        // Mixed payment: forward the rider's wallet/cash split. Without this the
+        // ride defaults to wallet_ratio=0 → wallet portion 0 → charged all as
+        // cash and the split never shows. Only for 'mixed'; ignored otherwise.
+        wallet_ratio: paymentMethod === 'mixed' ? walletRatio : undefined,
       });
 
       // Delivery details as a blocking step — cancel the ride if it fails so it

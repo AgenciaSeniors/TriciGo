@@ -39,7 +39,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
-import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateWalletCSV } from '@tricigo/utils';
+import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateWalletCSV, signedLedgerAmountForAccount } from '@tricigo/utils';
 import { colors, cubanLight, cubanDark } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LedgerTransaction, WalletSummary } from '@tricigo/types';
@@ -257,26 +257,30 @@ export default function WalletScreen() {
     }
   };
 
-  const getTransactionColor = (type: string): string => {
-    if (['ride_payment', 'tip', 'transfer_in', 'recharge', 'promo_credit'].includes(type)) {
-      return colors.success.DEFAULT;
-    }
-    return colors.error.DEFAULT;
-  };
-
-  const isCreditType = (type: string): boolean => {
-    return ['ride_payment', 'tip', 'transfer_in', 'recharge', 'promo_credit'].includes(type);
-  };
-
   const renderTransaction = ({ item }: {
     item: LedgerTransaction & {
-      ledger_entries?: { amount: number }[];
+      ledger_entries?: { account_id?: string; amount: number }[];
       reference_type?: string | null;
       reference_id?: string | null;
     };
   }) => {
-    const amount = (item as { ledger_entries?: { amount: number }[] }).ledger_entries?.[0]?.amount ?? 0;
-    const txColor = getTransactionColor(item.type);
+    // Net effect of this transaction on the CURRENT wallet account. A single
+    // ledger transaction can touch this account more than once (a mixed-ride
+    // payment credits the wallet portion AND debits the commission in one
+    // transaction) or touch other accounts too (a tip debits the rider and
+    // credits the driver). Reading ledger_entries[0] blindly showed the wrong
+    // entry — e.g. a received tip rendered as "Ajuste −778" instead of
+    // "Propina +778", and a mixed ride showed "+0". Sum the signed entries
+    // that belong to THIS account.
+    const entries = (item as { ledger_entries?: { account_id?: string; amount: number }[] }).ledger_entries ?? [];
+    const signedAmount = signedLedgerAmountForAccount(entries, summary?.account_id);
+    const isCredit = signedAmount >= 0;
+    const txColor = isCredit ? colors.success.DEFAULT : colors.error.DEFAULT;
+    // Tips post as type='adjustment' with reference_type='tip'; label them
+    // "Propina" instead of the generic "Ajuste".
+    const txLabel = item.reference_type === 'tip'
+      ? t('earnings.tx_tip', { defaultValue: 'Propina' })
+      : t(`earnings.tx_${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') });
     const receipt = item.type === 'recharge'
       && item.reference_type === 'payment_intent'
       && item.reference_id
@@ -294,7 +298,7 @@ export default function WalletScreen() {
           ...CARD_SHADOW,
         }}
         accessible
-        accessibilityLabel={`${item.type}: ${formatCUP(Math.abs(amount))}`}
+        accessibilityLabel={`${txLabel}: ${isCredit ? '+' : '−'}${formatCUP(Math.abs(signedAmount))}`}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 14 }}>
           <View
@@ -312,14 +316,14 @@ export default function WalletScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color: palette.ink.primary, fontWeight: '600', fontSize: 14 }}>
-              {t(`earnings.tx_${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') })}
+              {txLabel}
             </Text>
             <Text style={{ color: palette.ink.secondary, fontSize: 12, marginTop: 2 }}>
               {new Date(item.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
           <Text style={{ color: txColor, fontWeight: '700', fontSize: 15, ...TABULAR }}>
-            {isCreditType(item.type) ? '+' : '−'}{formatCUP(Math.abs(amount))}
+            {isCredit ? '+' : '−'}{formatCUP(Math.abs(signedAmount))}
           </Text>
         </View>
         {canDownload && receipt && (
