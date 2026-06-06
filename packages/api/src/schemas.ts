@@ -93,6 +93,10 @@ export const sendGiftSchema = z.object({
   toUserId: uuidSchema,
   amount: z.number().int().positive().min(1).max(100000),
   note: z.string().max(500).optional(),
+  // Source wallet the gift is debited from, by app context: the driver app
+  // sends 'tricicoin', the client/web apps send 'customer_cash'. Optional —
+  // the server falls back to the role-based wallet when omitted.
+  fromWallet: z.enum(['customer_cash', 'tricicoin']).optional(),
 }).refine(d => d.fromUserId !== d.toUserId, 'No puedes regalar a ti mismo');
 
 // Shareable gift/QR code = referral_codes.code (00319): [A-Z0-9]{6,16}.
