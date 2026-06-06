@@ -1092,7 +1092,9 @@
     "tier_plata_min_trips_help": "Viagens concluídas mínimas para o nível Prata (passageiro + motorista). Padrão 5",
     "tier_oro_min_trips_help": "Viagens concluídas mínimas para o nível Ouro (passageiro + motorista). Padrão 20",
     "tier_platino_min_trips_help": "Viagens concluídas mínimas para o nível Platina (passageiro + motorista). Padrão 50",
-    "tier_diamante_min_trips_help": "Viagens concluídas mínimas para o nível Diamante (passageiro + motorista). Padrão 100"
+    "tier_diamante_min_trips_help": "Viagens concluídas mínimas para o nível Diamante (passageiro + motorista). Padrão 100",
+    "routing_google_enabled_help": "Experimento: usar Google Directions em vez de Mapbox para as rotas. Defina 'true' para ativar (requer a chave GOOGLE_DIRECTIONS_API_KEY). Padrão false.",
+    "routing_google_daily_cap_help": "Limite diário de chamadas ao Google Directions; ao exceder, volta para o Mapbox. Padrão 2000."
   },
   "exchange_rate": {
     "title": "Taxa de câmbio",

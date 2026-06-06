@@ -468,6 +468,10 @@ verify_jwt = true
 verify_jwt = true
 [functions.search-places-google]
 verify_jwt = true
+# Routing proxy — not PII; gateway still requires the anon key, and the daily
+# cap + OFF-by-default flag are the budget guard. Called from geo.ts via fetch.
+[functions.directions-google]
+verify_jwt = false
 [functions.verify-selfie]
 verify_jwt = true
 [functions.auto-admin]
