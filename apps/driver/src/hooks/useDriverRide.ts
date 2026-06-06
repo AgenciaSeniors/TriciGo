@@ -184,10 +184,22 @@ export function useDriverRideInit() {
           (fresh as { gps_override_confirmed_at?: string | null }).gps_override_confirmed_at ?? null;
         const localConfirmedAt =
           (localTrip as { gps_override_confirmed_at?: string | null }).gps_override_confirmed_at ?? null;
-        // Update local store so the UI reflects the override fields
+        // Add-stop: when the rider adds a stop, the recalc trigger updates
+        // estimated_fare_cup / distance / duration WITHOUT changing status,
+        // so the driver's earnings (estimated_fare_cup × (1−commission)) would
+        // stay stale (realtime is a no-op, BUG-277). Detect those changes too.
+        const estimatedChanged =
+          (fresh as { estimated_fare_cup?: number | null }).estimated_fare_cup !==
+            (localTrip as { estimated_fare_cup?: number | null }).estimated_fare_cup
+          || (fresh as { estimated_distance_m?: number | null }).estimated_distance_m !==
+            (localTrip as { estimated_distance_m?: number | null }).estimated_distance_m
+          || (fresh as { estimated_duration_s?: number | null }).estimated_duration_s !==
+            (localTrip as { estimated_duration_s?: number | null }).estimated_duration_s;
+        // Update local store so the UI reflects the override fields + new fare
         if (freshConfirmedAt !== localConfirmedAt
           || (fresh as { gps_override_requested_at?: string | null }).gps_override_requested_at
-              !== (localTrip as { gps_override_requested_at?: string | null }).gps_override_requested_at) {
+              !== (localTrip as { gps_override_requested_at?: string | null }).gps_override_requested_at
+          || estimatedChanged) {
           useDriverRideStore.getState().updateActiveTrip(fresh);
         }
         // Notify the driver exactly once when the rider confirms

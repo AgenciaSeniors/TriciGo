@@ -208,6 +208,17 @@ export function useRideInit() {
           const driverGpsStatusChanged =
             (fresh as { driver_gps_status?: string | null }).driver_gps_status !==
             (pinned as { driver_gps_status?: string | null }).driver_gps_status;
+          // Add-stop: the recalc trigger updates estimated_fare_cup /
+          // estimated_distance_m / estimated_duration_s WITHOUT changing
+          // status. Without detecting these, the new fare/ETA never reaches
+          // the screen during in_progress (realtime is disabled, BUG-277).
+          const estimatedChanged =
+            (fresh as { estimated_fare_cup?: number | null }).estimated_fare_cup !==
+              (pinned as { estimated_fare_cup?: number | null }).estimated_fare_cup
+            || (fresh as { estimated_distance_m?: number | null }).estimated_distance_m !==
+              (pinned as { estimated_distance_m?: number | null }).estimated_distance_m
+            || (fresh as { estimated_duration_s?: number | null }).estimated_duration_s !==
+              (pinned as { estimated_duration_s?: number | null }).estimated_duration_s;
 
           if (
             fresh.status !== pinned.status
@@ -215,6 +226,7 @@ export function useRideInit() {
             || gpsReqChanged
             || gpsConfChanged
             || driverGpsStatusChanged
+            || estimatedChanged
           ) {
             // eslint-disable-next-line no-console
             console.log('[Watcher] ride changed', {
@@ -223,6 +235,7 @@ export function useRideInit() {
               gps_req_changed: gpsReqChanged,
               gps_conf_changed: gpsConfChanged,
               driver_gps_status_changed: driverGpsStatusChanged,
+              estimated_changed: estimatedChanged,
             });
             useRideStore.getState().updateRideFromRealtime(fresh);
           }
