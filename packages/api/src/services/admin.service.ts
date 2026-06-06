@@ -16,6 +16,7 @@ import type {
   DriverProfileWithUser,
   ExchangeRate,
   FeatureFlag,
+  IncidentReport,
   LedgerTransaction,
   OnlineFleetDriver,
   PaymentIntent,
@@ -970,6 +971,64 @@ export const adminService = {
       target_id: id,
       reason: notes ?? null,
     });
+  },
+
+  /**
+   * Full detail for a single incident: the report plus resolved display names
+   * for the reporter / accused / resolver, and a lightweight ride summary.
+   * Returns null when the incident does not exist (caller renders not-found).
+   */
+  async getIncidentDetail(id: string): Promise<{
+    incident: IncidentReport;
+    reporter: { name: string; phone: string } | null;
+    against: { name: string; phone: string } | null;
+    resolver: { name: string; phone: string } | null;
+    ride: { id: string; status: string; pickup_address: string; dropoff_address: string } | null;
+  } | null> {
+    const supabase = getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('incident_reports')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+
+    const incident = data as IncidentReport;
+
+    // Resolve reporter / accused / resolver names in a single query.
+    const userIds = [incident.reported_by, incident.against_user_id, incident.resolved_by]
+      .filter((v): v is string => Boolean(v));
+    const userMap: Record<string, { name: string; phone: string }> = {};
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, full_name, phone')
+        .in('id', userIds);
+      for (const u of (users ?? []) as { id: string; full_name: string; phone: string }[]) {
+        userMap[u.id] = { name: u.full_name, phone: u.phone };
+      }
+    }
+
+    // Lightweight ride summary if the incident is tied to a ride.
+    let ride: { id: string; status: string; pickup_address: string; dropoff_address: string } | null = null;
+    if (incident.ride_id) {
+      const { data: r } = await supabase
+        .from('rides')
+        .select('id, status, pickup_address, dropoff_address')
+        .eq('id', incident.ride_id)
+        .maybeSingle();
+      if (r) ride = r as { id: string; status: string; pickup_address: string; dropoff_address: string };
+    }
+
+    return {
+      incident,
+      reporter: userMap[incident.reported_by] ?? null,
+      against: incident.against_user_id ? (userMap[incident.against_user_id] ?? null) : null,
+      resolver: incident.resolved_by ? (userMap[incident.resolved_by] ?? null) : null,
+      ride,
+    };
   },
 
   // ==================== FEATURE FLAGS ====================
