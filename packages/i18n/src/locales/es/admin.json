@@ -1092,7 +1092,9 @@
     "tier_plata_min_trips_help": "Viajes completados mínimos para nivel Plata (pasajero + conductor). Por defecto 5",
     "tier_oro_min_trips_help": "Viajes completados mínimos para nivel Oro (pasajero + conductor). Por defecto 20",
     "tier_platino_min_trips_help": "Viajes completados mínimos para nivel Platino (pasajero + conductor). Por defecto 50",
-    "tier_diamante_min_trips_help": "Viajes completados mínimos para nivel Diamante (pasajero + conductor). Por defecto 100"
+    "tier_diamante_min_trips_help": "Viajes completados mínimos para nivel Diamante (pasajero + conductor). Por defecto 100",
+    "routing_google_enabled_help": "Experimento: usar Google Directions en vez de Mapbox para las rutas. Poné 'true' para activar (requiere la clave GOOGLE_DIRECTIONS_API_KEY). Por defecto false.",
+    "routing_google_daily_cap_help": "Tope diario de llamadas a Google Directions; superado, vuelve a Mapbox. Por defecto 2000."
   },
   "exchange_rate": {
     "title": "Tasa de cambio",

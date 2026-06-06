@@ -828,6 +828,74 @@ export function clearRouteCache(): void {
 }
 
 /**
+ * EXPERIMENT (flag-gated): fetch a route from the `directions-google` Edge
+ * Function (Google Directions, server-side key + cache + daily cap, gated by
+ * the `routing_google_enabled` platform_config flag). Returns null whenever
+ * Google is unavailable (flag off, not configured, over the daily cap, error,
+ * or no Supabase env) so the caller falls back to Mapbox/OSRM. Points are in
+ * order: [origin, ...waypoints, destination]. Coordinates come back already as
+ * [lat, lng] pairs (decoded server-side), matching RouteResult.
+ */
+export async function fetchGoogleRoute(
+  points: { lat: number; lng: number }[],
+): Promise<RouteResult | null> {
+  if (points.length < 2) return null;
+  const baseUrl =
+    (typeof process !== 'undefined' && (
+      process.env?.EXPO_PUBLIC_SUPABASE_URL ??
+      process.env?.NEXT_PUBLIC_SUPABASE_URL
+    )) || '';
+  const anonKey =
+    (typeof process !== 'undefined' && (
+      process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+      process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    )) || '';
+  if (!baseUrl || !anonKey) return null;
+
+  const origin = points[0]!;
+  const destination = points[points.length - 1]!;
+  const waypoints = points.slice(1, -1);
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(`${baseUrl}/functions/v1/directions-google`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+      },
+      body: JSON.stringify({
+        origin: { latitude: origin.lat, longitude: origin.lng },
+        destination: { latitude: destination.lat, longitude: destination.lng },
+        waypoints: waypoints.map((p) => ({ latitude: p.lat, longitude: p.lng })),
+        mode: 'driving',
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json() as {
+      coordinates?: [number, number][];
+      distance_m?: number;
+      duration_s?: number;
+      fallback?: string;
+    };
+    if (data.fallback || !Array.isArray(data.coordinates) || data.coordinates.length < 2) {
+      return null;
+    }
+    return {
+      coordinates: data.coordinates,
+      distance_m: Math.round(data.distance_m ?? 0),
+      duration_s: Math.round(data.duration_s ?? 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch route via Mapbox Directions (primary) with OSRM public infra as a
  * free fallback when Mapbox is unreachable, unconfigured, or returns no
  * route.
@@ -860,6 +928,19 @@ export async function fetchRoute(
       to: toStr,
     });
     return cached.result;
+  }
+
+  // Experiment: try Google Directions first (flag-gated server-side → returns
+  // null when off / unconfigured / over the daily cap / error, falling through
+  // to Mapbox below). Cache the result in the same local route cache.
+  const googleResult = await fetchGoogleRoute([from, to]);
+  if (googleResult) {
+    if (routeCache.size >= ROUTE_CACHE_MAX) {
+      const oldest = routeCache.keys().next().value;
+      if (oldest) routeCache.delete(oldest);
+    }
+    routeCache.set(key, { result: googleResult, ts: Date.now() });
+    return googleResult;
   }
 
   // Try Mapbox first (better Cuba one-way coverage)
@@ -1054,6 +1135,11 @@ export async function fetchMultiStopRoute(
   points: { lat: number; lng: number }[],
 ): Promise<RouteResult | null> {
   if (points.length < 2) return null;
+
+  // Experiment: try Google Directions first (flag-gated server-side → returns
+  // null when off / unconfigured / over the daily cap / error → Mapbox below).
+  const googleResult = await fetchGoogleRoute(points);
+  if (googleResult) return googleResult;
 
   // Mapbox first (reliable Cuba coverage).
   const mapboxResult = await fetchMultiStopRouteMapbox(points);

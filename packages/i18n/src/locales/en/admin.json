@@ -1092,7 +1092,9 @@
     "tier_plata_min_trips_help": "Minimum completed trips for Silver tier (rider + driver). Default 5",
     "tier_oro_min_trips_help": "Minimum completed trips for Gold tier (rider + driver). Default 20",
     "tier_platino_min_trips_help": "Minimum completed trips for Platinum tier (rider + driver). Default 50",
-    "tier_diamante_min_trips_help": "Minimum completed trips for Diamond tier (rider + driver). Default 100"
+    "tier_diamante_min_trips_help": "Minimum completed trips for Diamond tier (rider + driver). Default 100",
+    "routing_google_enabled_help": "Experiment: use Google Directions instead of Mapbox for routes. Set 'true' to enable (requires the GOOGLE_DIRECTIONS_API_KEY secret). Default false.",
+    "routing_google_daily_cap_help": "Daily cap on Google Directions calls; once exceeded, falls back to Mapbox. Default 2000."
   },
   "exchange_rate": {
     "title": "Exchange Rate",
