@@ -19,14 +19,23 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(
-    errorParam === 'unauthorized' ? t('login.error_unauthorized') : '',
+    errorParam === 'unauthorized'
+      ? t('login.error_unauthorized')
+      : errorParam === 'oauth'
+        ? t('login.error_generic')
+        : '',
   );
 
   const handleGoogleSignIn = async () => {
     const supabase = createBrowserClient();
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      // Return to the /auth/callback route handler, which exchanges the PKCE
+      // code for a session (sets auth cookies) before the middleware runs.
+      // `redirect` preserves the page the user was originally headed to.
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`,
+      },
     });
     if (oauthError) setError(oauthError.message);
   };
