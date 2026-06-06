@@ -71,8 +71,10 @@ export interface InAppNavState {
 }
 
 export interface UseInAppNavigationReturn extends InAppNavState {
-  /** Start navigating to a destination */
-  startNavigation: (destination: GeoPoint) => Promise<void>;
+  /** Start navigating to a destination, optionally through pending stops */
+  startNavigation: (destination: GeoPoint, waypoints?: GeoPoint[]) => Promise<void>;
+  /** Re-thread the active route through a new set of pending stops (no restart) */
+  updateNavWaypoints: (waypoints: GeoPoint[]) => Promise<void>;
   /** Stop navigation */
   stopNavigation: () => void;
 }
@@ -95,6 +97,10 @@ export function useInAppNavigation(
   const [isRerouting, setIsRerouting] = useState(false);
 
   const destinationRef = useRef<GeoPoint | null>(null);
+  // Pending passenger stops the active route threads through (driver → stops →
+  // destination). navWpKeyRef dedupes re-fetches when the list is unchanged.
+  const waypointsRef = useRef<GeoPoint[]>([]);
+  const navWpKeyRef = useRef<string>('');
   const lastRerouteRef = useRef(0);
   /**
    * BUG-278: separate refs for the three announce phases per step so
@@ -146,13 +152,18 @@ export function useInAppNavigation(
     return fetchNavigationRoute(
       { lat: from.latitude, lng: from.longitude },
       { lat: to.latitude, lng: to.longitude },
+      // Thread the current pending stops so both the initial fetch AND the
+      // deviation re-route keep driver → stops → destination.
+      waypointsRef.current.map((w) => ({ lat: w.latitude, lng: w.longitude })),
     );
   }, []);
 
-  const startNavigation = useCallback(async (destination: GeoPoint) => {
+  const startNavigation = useCallback(async (destination: GeoPoint, waypoints: GeoPoint[] = []) => {
     if (!driverLocation || isNavigating || isLoading) return;
     setIsLoading(true);
     destinationRef.current = destination;
+    waypointsRef.current = waypoints;
+    navWpKeyRef.current = waypoints.map((w) => `${w.latitude},${w.longitude}`).join('|');
     try {
       const result = await fetchRoute(driverLocation, destination);
       if (result && result.steps.length > 0) {
@@ -165,11 +176,37 @@ export function useInAppNavigation(
     }
   }, [driverLocation, isNavigating, isLoading, fetchRoute]);
 
+  /**
+   * Re-thread the ACTIVE navigation through a new set of pending stops (the
+   * passenger added one, or the driver departed one) WITHOUT restarting nav.
+   * Re-fetches driver → stops → destination from the current position. No-op
+   * if the list is unchanged or navigation isn't running.
+   */
+  const updateNavWaypoints = useCallback(async (waypoints: GeoPoint[]) => {
+    if (!isNavigating || !destinationRef.current || !driverLocation) return;
+    const key = waypoints.map((w) => `${w.latitude},${w.longitude}`).join('|');
+    if (key === navWpKeyRef.current) return;
+    navWpKeyRef.current = key;
+    waypointsRef.current = waypoints;
+    setIsRerouting(true);
+    try {
+      const result = await fetchRoute(driverLocation, destinationRef.current);
+      if (result && result.steps.length > 0) {
+        setRoute(result);
+        setCurrentStepIndex(0);
+      }
+    } finally {
+      setIsRerouting(false);
+    }
+  }, [isNavigating, driverLocation, fetchRoute]);
+
   const stopNavigation = useCallback(() => {
     setIsNavigating(false);
     setRoute(null);
     setCurrentStepIndex(0);
     destinationRef.current = null;
+    waypointsRef.current = [];
+    navWpKeyRef.current = '';
     departAnnouncedRef.current = false;
     preAnnouncedStepRef.current = -1;
     imminentAnnouncedStepRef.current = -1;
@@ -370,6 +407,7 @@ export function useInAppNavigation(
     isLoading,
     isRerouting,
     startNavigation,
+    updateNavWaypoints,
     stopNavigation,
   };
 }
@@ -388,7 +426,11 @@ export function buildSpokenInstructionWithDistance(
   const street = name?.trim();
   const distText = `En ${distance_m} metros`;
 
-  if (maneuver_type === 'arrive') return `${distText} llegarás a tu destino`;
+  if (maneuver_type === 'arrive') {
+    return step.waypoint_index != null
+      ? `${distText} llegarás a la Parada ${step.waypoint_index + 1}`
+      : `${distText} llegarás a tu destino`;
+  }
 
   const direction = (() => {
     switch (maneuver_modifier) {
@@ -416,7 +458,11 @@ export function buildSpokenInstruction(step: NavigationStep): string {
   const { maneuver_type, maneuver_modifier, name } = step;
   const street = name?.trim();
 
-  if (maneuver_type === 'arrive') return 'Llegaste a tu destino';
+  if (maneuver_type === 'arrive') {
+    return step.waypoint_index != null
+      ? `Llegaste a la Parada ${step.waypoint_index + 1}`
+      : 'Llegaste a tu destino';
+  }
   if (maneuver_type === 'depart') {
     return street ? `Dirígete por ${street}` : 'Inicia el recorrido';
   }

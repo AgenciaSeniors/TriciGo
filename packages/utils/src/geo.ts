@@ -597,6 +597,13 @@ export interface NavigationStep {
   maneuver_location: [number, number];
   /** Step geometry as [lat, lng] pairs */
   geometry: [number, number][];
+  /**
+   * 0-based index of the passenger waypoint this step ARRIVES at — the
+   * "arrive" maneuver ending a non-final leg in a multi-stop route. Used to
+   * announce "Llegaste a la Parada N" instead of "Llegaste a tu destino".
+   * Undefined for normal turn steps and for the final dropoff arrival.
+   */
+  waypoint_index?: number;
 }
 
 /** Route result with turn-by-turn navigation steps */
@@ -1189,55 +1196,107 @@ async function fetchETAsOSRM(
  * Fetch a driving route with turn-by-turn navigation steps using OSRM.
  * Returns the route geometry, distance, duration, and step-by-step instructions.
  */
+/**
+ * Parse a Directions route (Mapbox or OSRM — identical shape with
+ * `geometries=geojson&steps=true`) into a NavigationRouteResult. The last step
+ * of each NON-final leg is the "arrive" at passenger waypoint `legIndex`, so
+ * it's tagged with `waypoint_index` for the "Llegaste a la Parada N" voice cue.
+ */
+function parseNavigationRoute(route: {
+  geometry?: { coordinates?: [number, number][] };
+  distance?: number;
+  duration?: number;
+  legs?: Array<{ steps?: Array<Record<string, unknown>> }>;
+} | undefined | null): NavigationRouteResult | null {
+  if (!route?.geometry?.coordinates) return null;
+
+  // GeoJSON coordinates are [lng, lat] — convert to [lat, lng]
+  const coordinates: [number, number][] = route.geometry.coordinates.map(
+    (c: [number, number]) => [c[1], c[0]] as [number, number],
+  );
+
+  const legs = route.legs ?? [];
+  const steps: NavigationStep[] = [];
+  legs.forEach((leg, legIdx) => {
+    const legSteps = leg.steps ?? [];
+    legSteps.forEach((step: any, stepIdx: number) => {
+      const stepCoords: [number, number][] = (step.geometry?.coordinates ?? []).map(
+        (c: [number, number]) => [c[1], c[0]] as [number, number],
+      );
+      // Last step of a non-final leg = "arrive" at waypoint `legIdx`.
+      const isWaypointArrival =
+        stepIdx === legSteps.length - 1 && legIdx < legs.length - 1;
+      steps.push({
+        distance_m: step.distance ?? 0,
+        duration_s: step.duration ?? 0,
+        name: step.name ?? '',
+        maneuver_type: step.maneuver?.type ?? '',
+        maneuver_modifier: step.maneuver?.modifier ?? '',
+        maneuver_location: step.maneuver?.location
+          ? [step.maneuver.location[1], step.maneuver.location[0]]
+          : [0, 0],
+        geometry: stepCoords,
+        ...(isWaypointArrival ? { waypoint_index: legIdx } : {}),
+      });
+    });
+  });
+
+  return {
+    coordinates,
+    distance_m: route.distance ?? 0,
+    duration_s: route.duration ?? 0,
+    steps,
+  };
+}
+
+/**
+ * Fetch a turn-by-turn navigation route (with steps) from `from` to `to`,
+ * optionally through intermediate `waypoints` (in visit order). Tries Mapbox
+ * Directions FIRST (same provider as the drawn map line → the spoken turns
+ * match the polyline + better Cuba coverage), falling back to public OSRM.
+ */
 export async function fetchNavigationRoute(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
+  waypoints: { lat: number; lng: number }[] = [],
 ): Promise<NavigationRouteResult | null> {
+  const points = [from, ...waypoints, to];
+  const coordStr = points.map((p) => `${p.lng},${p.lat}`).join(';');
+
+  // Mapbox first (consistency with fetchMultiStopRoute + Cuba quality).
+  const token =
+    (typeof process !== 'undefined' && (
+      process.env?.EXPO_PUBLIC_MAPBOX_TOKEN ??
+      process.env?.NEXT_PUBLIC_MAPBOX_TOKEN
+    )) || '';
+  if (token) {
+    try {
+      const url =
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${coordStr}` +
+        `?overview=full&geometries=geojson&steps=true&access_token=${token}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const data = await res.json();
+        const parsed = parseNavigationRoute(data?.routes?.[0]);
+        if (parsed && parsed.steps.length > 0) return parsed;
+      }
+    } catch {
+      // fall through to OSRM
+    }
+  }
+
+  // Fallback: public OSRM (free, no auth).
   try {
     const url =
-      `https://router.project-osrm.org/route/v1/driving/` +
-      `${from.lng},${from.lat};${to.lng},${to.lat}` +
+      `https://router.project-osrm.org/route/v1/driving/${coordStr}` +
       `?overview=full&geometries=geojson&steps=true`;
-
     const res = await fetch(url);
     if (!res.ok) return null;
-
     const data = await res.json();
-    const route = data?.routes?.[0];
-    if (!route) return null;
-
-    // GeoJSON coordinates are [lng, lat] — convert to [lat, lng]
-    const coordinates: [number, number][] = route.geometry.coordinates.map(
-      (c: [number, number]) => [c[1], c[0]] as [number, number],
-    );
-
-    // Parse steps from all legs
-    const steps: NavigationStep[] = [];
-    for (const leg of route.legs ?? []) {
-      for (const step of leg.steps ?? []) {
-        const stepCoords: [number, number][] = (step.geometry?.coordinates ?? []).map(
-          (c: [number, number]) => [c[1], c[0]] as [number, number],
-        );
-        steps.push({
-          distance_m: step.distance ?? 0,
-          duration_s: step.duration ?? 0,
-          name: step.name ?? '',
-          maneuver_type: step.maneuver?.type ?? '',
-          maneuver_modifier: step.maneuver?.modifier ?? '',
-          maneuver_location: step.maneuver?.location
-            ? [step.maneuver.location[1], step.maneuver.location[0]]
-            : [0, 0],
-          geometry: stepCoords,
-        });
-      }
-    }
-
-    return {
-      coordinates,
-      distance_m: route.distance,
-      duration_s: route.duration,
-      steps,
-    };
+    return parseNavigationRoute(data?.routes?.[0]);
   } catch {
     return null;
   }

@@ -430,26 +430,26 @@ export function DriverTripView() {
   // Next incomplete waypoint (not yet departed)
   const nextWaypoint = waypoints.find((wp) => !wp.departed_at);
   const isAtWaypoint = !!nextWaypoint?.arrived_at && !nextWaypoint?.departed_at;
+  // Pending stops (not yet departed), in visit order — threaded into the
+  // continuous voice nav so it guides driver → stops → dropoff.
+  const pendingNavWaypoints = waypoints
+    .filter((wp) => !wp.departed_at)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((wp) => ({ latitude: wp.latitude, longitude: wp.longitude }));
 
-  // ── Auto-navigation (auto-start + auto-retarget) — extracted to hook ──
+  // ── Auto-navigation (auto-start + continuous trip nav) — extracted to hook ──
   useTripAutoNavigation({
     rideId: activeTrip?.id,
     status: activeTrip?.status,
     pickupLocation: activeTrip?.pickup_location ?? null,
     dropoffLocation: activeTrip?.dropoff_location ?? null,
-    nextWaypoint: nextWaypoint
-      ? {
-          id: nextWaypoint.id,
-          latitude: nextWaypoint.latitude,
-          longitude: nextWaypoint.longitude,
-          arrived_at: nextWaypoint.arrived_at ?? null,
-        }
-      : null,
+    pendingWaypoints: pendingNavWaypoints,
     driverLocation,
     inAppNav: {
       isNavigating: inAppNav.isNavigating,
       isLoading: inAppNav.isLoading,
       startNavigation: inAppNav.startNavigation,
+      updateNavWaypoints: inAppNav.updateNavWaypoints,
     },
   });
 
@@ -589,13 +589,14 @@ export function DriverTripView() {
 
   const actionLabel = ACTION_LABELS[activeTrip.status];
 
-  // Navigation target: pickup when heading to passenger, then next waypoint, then dropoff
+  // Navigation target: pickup when heading to passenger, else the dropoff —
+  // the continuous trip nav threads through the pending stops on its own.
   const navTarget =
     activeTrip.status === 'accepted' || activeTrip.status === 'driver_en_route'
       ? activeTrip.pickup_location
-      : nextWaypoint && !nextWaypoint.arrived_at
-        ? { latitude: nextWaypoint.latitude, longitude: nextWaypoint.longitude }
-        : activeTrip.dropoff_location;
+      : activeTrip.dropoff_location;
+  const isTripPhaseForNav =
+    activeTrip.status === 'in_progress' || activeTrip.status === 'arrived_at_destination';
 
   // Live distance hint target type — pickup or dropoff
   const liveHintTargetType: 'pickup' | 'dropoff' =
@@ -711,7 +712,9 @@ export function DriverTripView() {
           destinationLabel={
             activeTrip.status === 'driver_en_route' || activeTrip.status === 'accepted'
               ? `Pickup: ${activeTrip.pickup_address}`
-              : `Destino: ${nextWaypoint?.address || activeTrip.dropoff_address}`
+              : nextWaypoint
+                ? `Próxima parada: Parada ${nextWaypoint.sort_order}`
+                : `Destino: ${activeTrip.dropoff_address}`
           }
           voiceEnabled={voiceGuidanceEnabled}
           onToggleVoice={() => setVoiceGuidanceEnabled(!voiceGuidanceEnabled)}
@@ -933,7 +936,7 @@ export function DriverTripView() {
       <TripActionToolbar
         navTarget={navTarget ?? null}
         inAppNavActive={inAppNav.isNavigating}
-        onStartInAppNav={inAppNav.startNavigation}
+        onStartInAppNav={(target) => inAppNav.startNavigation(target, isTripPhaseForNav ? pendingNavWaypoints : [])}
         onSOS={handleSOS}
         rideId={activeTrip.id}
       />
