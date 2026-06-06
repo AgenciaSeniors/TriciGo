@@ -233,10 +233,12 @@ export const walletService = {
   // withdrawable to fiat. Admin can reverse a gift + freeze wallets.
 
   /**
-   * Send a gift to another user. Debits the sender's role wallet
-   * (driver→tricicoin, else customer_cash) and credits the recipient's
-   * role wallet. The `send_gift` RPC enforces caller identity, positive
-   * amount, active/non-frozen sender, sufficient balance, and atomicity.
+   * Send a gift to another user. Debits the sender's wallet and credits the
+   * recipient's role wallet. `fromWallet` selects the source wallet by app
+   * context (driver app → 'tricicoin', client/web → 'customer_cash'); when
+   * omitted the server falls back to the sender's role wallet. The `send_gift`
+   * RPC enforces caller identity, positive amount, active/non-frozen sender,
+   * sufficient balance, and atomicity.
    * @returns the new wallet_transfers id
    */
   async sendGift(
@@ -244,14 +246,18 @@ export const walletService = {
     toUserId: string,
     amount: number,
     note?: string,
+    fromWallet?: 'customer_cash' | 'tricicoin',
   ): Promise<string> {
-    const valid = validate(sendGiftSchema, { fromUserId, toUserId, amount, note });
+    const valid = validate(sendGiftSchema, { fromUserId, toUserId, amount, note, fromWallet });
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('send_gift', {
       p_from_user_id: valid.fromUserId,
       p_to_user_id: valid.toUserId,
       p_amount: valid.amount,
       p_note: valid.note ?? null,
+      // Only sent when the caller specifies the source wallet (app context).
+      // Omitted otherwise so the server uses the role-based fallback.
+      ...(valid.fromWallet ? { p_from_wallet: valid.fromWallet } : {}),
     });
     if (error) throw error;
     logger.info('gift_sent', { from: valid.fromUserId, to: valid.toUserId, amount: valid.amount });

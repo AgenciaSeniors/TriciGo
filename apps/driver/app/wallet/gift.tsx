@@ -136,7 +136,10 @@ export default function DriverGiftScreen() {
     if (!userId || !recipient || !amountValid) return;
     setSubmitting(true);
     try {
-      await walletService.sendGift(userId, recipient.id, numericAmount, note.trim() || undefined);
+      // Driver "Regalar" gifts from the driver wallet (tricicoin) — the one
+      // shown on this screen. Passing it explicitly avoids the role-based
+      // fallback debiting the wrong wallet for multi-role/admin accounts.
+      await walletService.sendGift(userId, recipient.id, numericAmount, note.trim() || undefined, 'tricicoin');
       triggerHaptic('light');
       Toast.show({
         type: 'success',

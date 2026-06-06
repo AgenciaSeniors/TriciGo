@@ -105,7 +105,8 @@ export default function GiftPage() {
     if (!user?.id || !recipient || !amountValid) return;
     setSubmitting(true);
     try {
-      await walletService.sendGift(user.id, recipient.id, numericAmount, note.trim() || undefined);
+      // Web "Regalar" is the passenger surface → gift from customer_cash.
+      await walletService.sendGift(user.id, recipient.id, numericAmount, note.trim() || undefined, 'customer_cash');
       setFeedback({ kind: 'success', text: t('gift.success_msg', { defaultValue: `Le enviaste ${formatTRC(numericAmount)} a ${recipient.full_name}` }) });
       setRecipient(null);
       setAmount('');

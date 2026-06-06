@@ -44,6 +44,18 @@ describe('walletService gifts', () => {
       expect(mockRpc).toHaveBeenCalledWith('send_gift', expect.objectContaining({ p_note: null }));
     });
 
+    it('forwards p_from_wallet when the caller specifies the source wallet', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'gift-tx-w', error: null });
+      await walletService.sendGift(FROM, TO, 500, undefined, 'tricicoin');
+      expect(mockRpc).toHaveBeenCalledWith('send_gift', expect.objectContaining({ p_from_wallet: 'tricicoin' }));
+    });
+
+    it('omits p_from_wallet when the caller does not specify it', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'gift-tx-x', error: null });
+      await walletService.sendGift(FROM, TO, 100);
+      expect(mockRpc.mock.calls[0][1]).not.toHaveProperty('p_from_wallet');
+    });
+
     it('rejects self-gift before hitting the RPC (Zod refine)', async () => {
       await expect(walletService.sendGift(FROM, FROM, 100)).rejects.toThrow();
       expect(mockRpc).not.toHaveBeenCalled();

@@ -134,7 +134,10 @@ export default function GiftScreen() {
     if (!userId || !recipient || !amountValid) return;
     setSubmitting(true);
     try {
-      await walletService.sendGift(userId, recipient.id, numericAmount, note.trim() || undefined);
+      // Client "Regalar" gifts from the passenger wallet (customer_cash) — the
+      // one shown on this screen. Passing it explicitly avoids the role-based
+      // fallback debiting tricicoin for users who are also drivers.
+      await walletService.sendGift(userId, recipient.id, numericAmount, note.trim() || undefined, 'customer_cash');
       triggerHaptic('light');
       Toast.show({
         type: 'success',
