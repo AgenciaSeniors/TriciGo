@@ -17,8 +17,9 @@
 // Fallback: returns { fallback: 'mapbox', reason } and the caller uses Mapbox.
 //
 // Configuration (Supabase secrets):
-//   - GOOGLE_DIRECTIONS_API_KEY  (required to enable; can be the same GCP key
-//     as Places IF the Directions API is enabled on that project)
+//   - GOOGLE_DIRECTIONS_API_KEY  (optional — falls back to GOOGLE_PLACES_API_KEY,
+//     so just enabling the Directions API on the Places GCP project + adding it
+//     to that key's API restrictions is enough; no new secret required)
 // platform_config:
 //   - routing_google_enabled   ('true' to turn the experiment on)
 //   - routing_google_daily_cap (default 2000)
@@ -77,7 +78,11 @@ Deno.serve(async (req: Request) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const googleApiKey = Deno.env.get('GOOGLE_DIRECTIONS_API_KEY');
+  // Reuse the existing Places key by default — same GCP project, just enable
+  // the Directions API on it + add it to the key's API restrictions (no new
+  // Supabase secret needed). Set GOOGLE_DIRECTIONS_API_KEY only if you want a
+  // dedicated key (e.g. for separate billing tracking).
+  const googleApiKey = Deno.env.get('GOOGLE_DIRECTIONS_API_KEY') ?? Deno.env.get('GOOGLE_PLACES_API_KEY');
 
   if (!supabaseUrl || !supabaseServiceRole) {
     return jsonResponse({ fallback: 'mapbox', reason: 'google_error' }, 503);
