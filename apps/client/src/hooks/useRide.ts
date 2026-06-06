@@ -600,7 +600,10 @@ export function useRideActions() {
     try {
       // effectiveServiceType ya se computó arriba (junto a selectedFare) para que
       // mensajería persista/cobre la tarifa del vehículo elegido.
-      const isDelivery = d.serviceType === 'mensajeria' || !!d.delivery.deliveryVehicleType;
+      // isDelivery must depend ONLY on serviceType. Since #419 the draft's
+      // deliveryVehicleType defaults to 'moto' (always truthy), so a passenger
+      // trip would otherwise be created as cargo. Mirrors apps/web book/page.tsx.
+      const isDelivery = d.serviceType === 'mensajeria';
 
       const ride = await rideService.createRide({
         service_type: effectiveServiceType,
@@ -654,8 +657,10 @@ export function useRideActions() {
         declared_passengers: d.shareRide && d.serviceType === 'triciclo_basico' ? d.passengerCount : undefined,
       });
 
-      // Bug 30: Save delivery details as blocking step — cancel ride if it fails
-      if (d.serviceType === 'mensajeria' || d.delivery.deliveryVehicleType) {
+      // Bug 30: Save delivery details as blocking step — cancel ride if it fails.
+      // Gate ONLY on serviceType (see isDelivery note above): deliveryVehicleType
+      // is always truthy since #419, so passenger trips must not create details.
+      if (d.serviceType === 'mensajeria') {
         try {
           await deliveryService.createDeliveryDetails({
             ride_id: ride.id,
