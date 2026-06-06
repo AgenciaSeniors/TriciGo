@@ -35,6 +35,7 @@
     },
     "production": {
       "extends": "base",
+      "environment": "production",
       "channel": "production",
       "autoIncrement": true,
       "env": {
