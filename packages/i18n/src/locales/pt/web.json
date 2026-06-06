@@ -249,6 +249,8 @@
     "to": "Até",
     "estimated_fare": "Tarifa estimada",
     "final_fare": "Tarifa final",
+    "paid_mixed_label": "Pagamento misto",
+    "paid_mixed_value": "{{wallet}} TriciCoin + {{cash}} dinheiro",
     "your_driver": "Seu motorista",
     "live_updates": "Atualizando em tempo real",
     "step_searching": "Buscando motorista",

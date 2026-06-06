@@ -249,6 +249,8 @@
     "to": "To",
     "estimated_fare": "Estimated fare",
     "final_fare": "Final fare",
+    "paid_mixed_label": "Mixed payment",
+    "paid_mixed_value": "{{wallet}} TriciCoin + {{cash}} cash",
     "your_driver": "Your driver",
     "live_updates": "Updating in real time",
     "step_searching": "Searching for driver",

@@ -668,6 +668,61 @@ describe('rideService.createRide', () => {
     expect(mockGetUser).toHaveBeenCalled();
   });
 
+  it('forwards wallet_ratio to the rides insert for mixed payments', async () => {
+    // Regression: the rider's wallet/cash slider value was never sent →
+    // every mixed ride was stored with wallet_ratio=0 and charged all as cash.
+    const rideData = { id: 'ride-mix', customer_id: 'user-1', status: 'searching' };
+    const mockInsert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data: rideData, error: null }),
+      }),
+    });
+    mockFrom.mockReturnValue({ insert: mockInsert });
+
+    await rideService.createRide({
+      service_type: 'triciclo_basico',
+      payment_method: 'mixed',
+      pickup_latitude: 23.1352,
+      pickup_longitude: -82.3599,
+      pickup_address: 'Capitolio',
+      dropoff_latitude: 23.1375,
+      dropoff_longitude: -82.3964,
+      dropoff_address: 'Hotel Nacional',
+      estimated_fare_cup: 5000,
+      wallet_ratio: 0.5,
+    });
+
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_method: 'mixed', wallet_ratio: 0.5 }),
+    );
+  });
+
+  it('defaults wallet_ratio to 0 when not provided', async () => {
+    const rideData = { id: 'ride-cash', customer_id: 'user-1', status: 'searching' };
+    const mockInsert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data: rideData, error: null }),
+      }),
+    });
+    mockFrom.mockReturnValue({ insert: mockInsert });
+
+    await rideService.createRide({
+      service_type: 'triciclo_basico',
+      payment_method: 'cash',
+      pickup_latitude: 23.1352,
+      pickup_longitude: -82.3599,
+      pickup_address: 'Capitolio',
+      dropoff_latitude: 23.1375,
+      dropoff_longitude: -82.3964,
+      dropoff_address: 'Hotel Nacional',
+      estimated_fare_cup: 5000,
+    });
+
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ wallet_ratio: 0 }),
+    );
+  });
+
   it('throws when user is not authenticated', async () => {
     mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
 

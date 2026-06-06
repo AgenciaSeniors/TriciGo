@@ -464,7 +464,13 @@ export function RideCompleteView() {
           ? t('ride.paid_cash', { defaultValue: 'Pagado en efectivo' })
           : activeRide.payment_method === 'corporate'
             ? t('payment.paid_corporate', { defaultValue: 'Cobrado a cuenta corporativa' })
-            : t('ride.paid_tricicoin', { defaultValue: 'Pagado con TriciCoin' })}
+            : activeRide.payment_method === 'mixed'
+              ? t('ride.paid_mixed', {
+                  wallet: formatCUP(activeRide.wallet_amount_cup ?? 0),
+                  cash: formatCUP(activeRide.cash_amount_cup ?? 0),
+                  defaultValue: `Pagado: ${formatCUP(activeRide.wallet_amount_cup ?? 0)} con TriciCoin + ${formatCUP(activeRide.cash_amount_cup ?? 0)} en efectivo`,
+                })
+              : t('ride.paid_tricicoin', { defaultValue: 'Pagado con TriciCoin' })}
       </Text>
       {activeRide.discount_amount_cup > 0 && (
         <Text variant="caption" className="mb-4 text-green-600">

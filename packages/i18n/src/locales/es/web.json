@@ -270,6 +270,8 @@
     "to": "Hasta",
     "estimated_fare": "Tarifa estimada",
     "final_fare": "Tarifa final",
+    "paid_mixed_label": "Pago mixto",
+    "paid_mixed_value": "{{wallet}} TriciCoin + {{cash}} efectivo",
     "your_driver": "Tu conductor",
     "live_updates": "Actualizando en tiempo real",
     "step_searching": "Buscando conductor",

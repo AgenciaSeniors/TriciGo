@@ -114,6 +114,7 @@
     "canceled_by_passenger": "Canceled by passenger",
     "paid_cash": "Paid in cash",
     "paid_tricicoin": "Paid with TriciCoin",
+    "paid_mixed": "Paid: {{wallet}} with TriciCoin + {{cash}} in cash",
     "discount_applied": "Discount applied",
     "ride_detail": "Ride detail",
     "trip_stats": "Trip stats",

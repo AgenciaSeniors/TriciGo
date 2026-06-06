@@ -76,6 +76,43 @@ export function TripCompleteView() {
       .catch(() => { /* best-effort: rating still works without rider info */ });
   }, [activeTrip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Realtime tip: the rider adds the tip AFTER the driver reaches this screen,
+  // so activeTrip.tip_amount is 0 on mount and the "¡Recibiste una propina!"
+  // banner never appeared. Poll the ride for a short window so the tip (and any
+  // late mixed-split write) shows up without leaving the screen. We poll — not
+  // postgres_changes — for parity with the rider app, which polls the rides row.
+  useEffect(() => {
+    if (!activeTrip || activeTrip.status !== 'completed') return;
+    if ((activeTrip.tip_amount ?? 0) > 0) return; // already have it
+    const rideId = activeTrip.id;
+    let cancelled = false;
+    let polls = 0;
+    const MAX_POLLS = 20; // ~2 min at 6 s
+    const interval = setInterval(async () => {
+      polls += 1;
+      if (cancelled || polls > MAX_POLLS) { clearInterval(interval); return; }
+      try {
+        const fresh = await rideService.getRideWithRider(rideId);
+        if (cancelled || !fresh) return;
+        const current = useDriverRideStore.getState().activeTrip;
+        if (!current || current.id !== rideId) { clearInterval(interval); return; }
+        const newTip = fresh.tip_amount ?? 0;
+        if (newTip > (current.tip_amount ?? 0)) {
+          triggerHaptic('success');
+          useDriverRideStore.getState().updateActiveTrip({
+            ...current,
+            tip_amount: newTip,
+            wallet_amount_cup: fresh.wallet_amount_cup ?? current.wallet_amount_cup,
+            cash_amount_cup: fresh.cash_amount_cup ?? current.cash_amount_cup,
+            updated_at: fresh.updated_at ?? current.updated_at,
+          });
+          clearInterval(interval); // got the tip — stop polling
+        }
+      } catch { /* best-effort */ }
+    }, 6000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [activeTrip?.id, activeTrip?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!activeTrip) return null;
 
   const fare = activeTrip.final_fare_cup ?? activeTrip.estimated_fare_cup;

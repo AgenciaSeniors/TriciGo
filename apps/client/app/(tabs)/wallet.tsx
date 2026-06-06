@@ -84,7 +84,15 @@ function getTransactionLabel(
   type: string,
   isCredit: boolean,
   t: (key: string, opts?: Record<string, unknown>) => string,
+  referenceType?: string | null,
 ): string {
+  // Tips post as type='adjustment' with reference_type='tip'. Surface them as
+  // "Propina recibida/enviada" instead of the generic "Reembolso"/"Comisión".
+  if (referenceType === 'tip') {
+    return isCredit
+      ? t('wallet.txn_tip_received', { defaultValue: 'Propina recibida' })
+      : t('wallet.txn_tip_sent', { defaultValue: 'Propina enviada' });
+  }
   const map: Record<string, string> = {
     // Actual LedgerEntryType values
     recharge: t('wallet.txn_recharge', { defaultValue: 'Recarga de saldo' }),
@@ -476,7 +484,7 @@ function WebWalletScreen() {
                       />
                       <View className="flex-1">
                         <Text variant="bodySmall" numberOfLines={1}>
-                          {getTransactionLabel(tx.type, isCredit, t)}
+                          {getTransactionLabel(tx.type, isCredit, t, tx.reference_type)}
                         </Text>
                         {tx.description ? (
                           <Text variant="caption" color="tertiary" numberOfLines={1}>{tx.description}</Text>
@@ -1030,7 +1038,7 @@ function NativeWalletScreen() {
                 numberOfLines={1}
                 style={{ color: tokens.ink.primary, fontWeight: '600', fontSize: 14 }}
               >
-                {item.description || getTransactionLabel(item.type, isCredit, t)}
+                {item.description || getTransactionLabel(item.type, isCredit, t, item.reference_type)}
               </Text>
               <Text style={{ color: tokens.ink.secondary, fontSize: 12, marginTop: 2 }}>
                 {getRelativeDay(item.created_at, t('today'), t('yesterday'))}
