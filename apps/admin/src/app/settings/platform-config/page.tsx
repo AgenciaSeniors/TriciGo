@@ -52,6 +52,9 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
   // ── Routing experiment (Google Directions vs Mapbox; OFF by default) ──
   routing_google_enabled: { type: 'text', helpKey: 'platform_config.routing_google_enabled_help' },
   routing_google_daily_cap: { type: 'number', helpKey: 'platform_config.routing_google_daily_cap_help' },
+
+  // ── Referral program (Referidos) ──
+  referral_bonus_cup: { type: 'number', helpKey: 'platform_config.referral_bonus_cup_help' },
 };
 
 export default function PlatformConfigPage() {
