@@ -221,7 +221,8 @@ export default function WalletScreen() {
         return;
       }
       const csv = generateWalletCSV(
-        rows as Array<LedgerTransaction & { ledger_entries?: { amount: number; balance_after?: number | null }[] }>,
+        rows as Array<LedgerTransaction & { reference_type?: string | null; metadata?: Record<string, unknown> | null; ledger_entries?: { account_id?: string | null; amount: number; balance_after?: number | null }[] }>,
+        summary.account_id,
         'es',
       );
       const cacheDir = FileSystem.cacheDirectory;

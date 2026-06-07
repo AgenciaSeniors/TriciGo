@@ -85,6 +85,49 @@ const darkModePlugin = {
         };
       },
     },
+    // ── Custom rule: no blind ledger_entries[0] reads ──────────────────────
+    // The wallet-history bug (gift direction, mixed-ride net, tip mislabel)
+    // recurred across client/driver/web/CSV because each surface read
+    // `ledger_entries[0]` blindly. Forbid it; use classifyWalletTxn /
+    // signedLedgerAmountForAccount, which sum the viewer-account net.
+    'no-blind-ledger-entry': {
+      meta: {
+        type: 'problem',
+        docs: {
+          description:
+            'Forbid blind ledger_entries[0] reads — use classifyWalletTxn / signedLedgerAmountForAccount',
+        },
+        schema: [],
+        messages: {
+          blind:
+            'Reading `ledger_entries[0]` shows the wrong entry/sign on multi-entry transactions (gifts, mixed rides, tips). Use classifyWalletTxn(tx, accountId) or signedLedgerAmountForAccount(entries, accountId) from @tricigo/utils.',
+        },
+      },
+      create(context) {
+        const filename = (context.filename || '').replace(/\\/g, '/');
+        // Tests legitimately inspect the raw entry shape.
+        if (/\/__tests__\//.test(filename) || /\.(?:test|spec)\.[tj]sx?$/.test(filename)) return {};
+        return {
+          // Matches `<x>.ledger_entries[0]` and `<x>.ledger_entries?.[0]`.
+          MemberExpression(node) {
+            if (!node.computed) return;
+            const idx = node.property;
+            if (!idx || idx.type !== 'Literal' || idx.value !== 0) return;
+            const obj = node.object;
+            if (
+              obj &&
+              obj.type === 'MemberExpression' &&
+              !obj.computed &&
+              obj.property &&
+              obj.property.type === 'Identifier' &&
+              obj.property.name === 'ledger_entries'
+            ) {
+              context.report({ node, messageId: 'blind' });
+            }
+          },
+        };
+      },
+    },
   },
 };
 
@@ -211,6 +254,7 @@ export default [
       // lint task so it is never reached. The rule only inspects JSX
       // className attributes, so non-JSX files are unaffected.
       'tricigo/require-dark-variant': 'warn',
+      'tricigo/no-blind-ledger-entry': 'error',
     },
   },
 ];

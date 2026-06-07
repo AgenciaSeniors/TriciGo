@@ -126,6 +126,8 @@ type TransactionWithAmount = LedgerTransaction & {
   ledger_entries: { account_id: string; amount: number }[];
 };
 
+const PAGE_SIZE = 20;
+
 function useDebouncePress(callback: (...args: unknown[]) => void, delayMs = 1000) {
   const lastPress = useRef(0);
   return useCallback((...args: unknown[]) => {
@@ -625,6 +627,12 @@ function NativeWalletScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<TxnFilter>('all');
+  // Pagination (mirror of WebWalletScreen / driver wallet) — without it the
+  // native history capped at the first 20 rows; older movements were
+  // unreachable on the phone.
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Wallet v2 phase 2: dismissal state for the migration banner.
   const MIGRATION_BANNER_KEY = '@tricigo/wallet_v2_banner_dismissed';
@@ -701,8 +709,10 @@ function NativeWalletScreen() {
       if (rate) setExchangeRate(rate);
 
       if (account?.id) {
-        const txns = await walletService.getTransactions(account.id, 0, 20);
+        const txns = await walletService.getTransactions(account.id, 0, PAGE_SIZE);
         setTransactions(txns as TransactionWithAmount[]);
+        setPage(0);
+        setHasMore((txns as TransactionWithAmount[]).length >= PAGE_SIZE);
       }
 
       // Wallet v2 PR 4: load user receipts for the download button.
@@ -743,6 +753,25 @@ function NativeWalletScreen() {
     await fetchData();
     setRefreshing(false);
   }, [fetchData]);
+
+  // Load the next page on reaching the list end (infinite scroll). The filter
+  // chips still filter the already-loaded set client-side, same as web/driver.
+  const loadMore = useCallback(async () => {
+    if (!accountId || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const txns = await walletService.getTransactions(accountId, nextPage * PAGE_SIZE, PAGE_SIZE);
+      const typed = txns as TransactionWithAmount[];
+      setTransactions((prev) => [...prev, ...typed]);
+      setPage(nextPage);
+      setHasMore(typed.length >= PAGE_SIZE);
+    } catch (err) {
+      logger.error('Error loading more transactions', { error: String(err) });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [accountId, page, loadingMore, hasMore]);
 
   // Recharge handlers
   const handleRecharge = () => {
@@ -1404,6 +1433,13 @@ function NativeWalletScreen() {
           data={filteredTransactions}
           keyExtractor={(item) => item.id}
           renderItem={renderTransaction}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator size="small" color={colors.brand.orange} style={{ paddingVertical: 16 }} />
+            ) : null
+          }
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand.orange} />
           }
