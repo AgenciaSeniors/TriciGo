@@ -45,12 +45,12 @@ function webTxLabel(view: { kind: string; isCredit: boolean }): string {
   switch (view.kind) {
     case 'recharge': return 'Recarga';
     case 'ride': return view.isCredit ? 'Ingreso por viaje' : 'Pago de viaje';
-    case 'commission': return 'Comision';
+    case 'commission': return 'Comisión';
     case 'gift':
     case 'transfer': return view.isCredit ? 'Regalo recibido' : 'Regalo enviado';
     case 'tip': return view.isCredit ? 'Propina recibida' : 'Propina enviada';
-    case 'penalty': return 'Penalizacion por cancelacion';
-    case 'bonus': return 'Credito promocional';
+    case 'penalty': return 'Penalización por cancelación';
+    case 'bonus': return 'Crédito promocional';
     case 'refund': return 'Reembolso';
     case 'adjustment':
     default: return 'Ajuste';
@@ -825,8 +825,8 @@ export default function WalletPage() {
           {!txLoading && filteredTx.length === 0 && (
             <WebEmptyState
               icon="💰"
-              title={filter !== 'all' ? 'Sin transacciones en esta categoria' : 'Sin transacciones'}
-              description="Tus movimientos de TriciCoin apareceran aqui."
+              title={filter !== 'all' ? 'Sin transacciones en esta categoría' : 'Sin transacciones'}
+              description="Tus movimientos de TriciCoin aparecerán aquí."
               action={filter !== 'all'
                 ? { label: 'Mostrar todos', onClick: () => setFilter('all') }
                 : { label: 'Recargar saldo', onClick: () => document.getElementById('wallet-recharge')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
