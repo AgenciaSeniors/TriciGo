@@ -249,14 +249,20 @@ export default function WalletScreen() {
   const driverTxLabel = (view: { kind: string; isCredit: boolean }): string => {
     switch (view.kind) {
       case 'recharge': return t('earnings.tx_recharge', { defaultValue: 'Recarga' });
-      case 'ride': return t('earnings.tx_ride_payment', { defaultValue: 'Ingreso por viaje' });
+      case 'ride':
+        return view.isCredit
+          ? t('earnings.tx_ride_earning', { defaultValue: 'Ingreso por viaje' })
+          : t('earnings.tx_ride_payment', { defaultValue: 'Pago de viaje' });
       case 'commission': return t('earnings.tx_commission', { defaultValue: 'Comisión' });
       case 'gift':
       case 'transfer':
         return view.isCredit
           ? t('earnings.tx_gift_received', { defaultValue: 'Regalo recibido' })
           : t('earnings.tx_gift_sent', { defaultValue: 'Regalo enviado' });
-      case 'tip': return t('earnings.tx_tip', { defaultValue: 'Propina' });
+      case 'tip':
+        return view.isCredit
+          ? t('earnings.tx_tip_received', { defaultValue: 'Propina recibida' })
+          : t('earnings.tx_tip_sent', { defaultValue: 'Propina enviada' });
       case 'penalty': return t('earnings.tx_penalty', { defaultValue: 'Penalización' });
       case 'bonus': return t('earnings.tx_bonus', { defaultValue: 'Bono' });
       case 'refund': return t('earnings.tx_refund', { defaultValue: 'Reembolso' });
