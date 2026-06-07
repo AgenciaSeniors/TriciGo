@@ -44,7 +44,7 @@ const VEHICLE_CONFIGS = [
     // Web.docx 2026-05-08: "auto es el almendrón cubano". Mirror
     // onboarding/vehicle-info.tsx so the post-onboarding edit screen
     // shows the same Auto image as the registration step.
-    image: require('../../assets/vehicles/markers/auto_clasico.png'),
+    image: require('../../assets/vehicles/selection/auto.png'),
     accent: midnightEmber.state.success,
   },
   {
@@ -137,7 +137,9 @@ export default function EditVehicleScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         quality: 0.7,
-        allowsEditing: true,
+        // Vehicle photos are rectangular — skip the forced OS square crop
+        // (the crop window was too cramped to frame the whole vehicle).
+        allowsEditing: false,
       });
 
       if (result.canceled || !result.assets?.[0]) return;

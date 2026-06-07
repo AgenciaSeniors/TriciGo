@@ -135,7 +135,10 @@ export default function DocumentsScreen() {
       : await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 0.7,
-          allowsEditing: true,
+          // Documents (ID, license, registration, vehicle photo) are rectangular.
+          // The forced OS square-crop window was far too cramped to frame a whole
+          // document, so skip editing and upload the full photo for human review.
+          allowsEditing: false,
         });
 
     if (result.canceled || !result.assets[0]) return;

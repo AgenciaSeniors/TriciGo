@@ -16,8 +16,9 @@ import { PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
 const VEHICLE_IMAGES: Record<string, any> = {
   triciclo: require('../../assets/vehicles/selection/triciclo.png'),
   moto: require('../../assets/vehicles/selection/moto.png'),
-  // Web.docx 2026-05-08: "auto es el almendrón cubano"
-  auto: require('../../assets/vehicles/markers/auto_clasico.png'),
+  // Auto card uses the side-view sedan (selection/); the top-down
+  // almendrón marker stays on the live map only.
+  auto: require('../../assets/vehicles/selection/auto.png'),
   confort: require('../../assets/vehicles/selection/confort.png'),
 };
 
