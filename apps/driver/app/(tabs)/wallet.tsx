@@ -39,7 +39,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
-import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateWalletCSV, signedLedgerAmountForAccount } from '@tricigo/utils';
+import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateWalletCSV, classifyWalletTxn, walletTxnIcon } from '@tricigo/utils';
 import { colors, cubanLight, cubanDark } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LedgerTransaction, WalletSummary } from '@tricigo/types';
@@ -242,18 +242,25 @@ export default function WalletScreen() {
     }
   }, [summary?.account_id, t]);
 
-  const getTransactionIcon = (type: string): keyof typeof Ionicons.glyphMap => {
-    switch (type) {
-      case 'ride_payment': return 'car';
-      case 'commission': return 'trending-down';
-      case 'tip': return 'heart';
-      case 'transfer_in': return 'arrow-down';
-      case 'transfer_out': return 'arrow-up';
-      case 'recharge': return 'add-circle';
-      case 'promo_credit': return 'gift';
-      case 'redemption': return 'wallet';
-      case 'adjustment': return 'swap-horizontal';
-      default: return 'swap-horizontal';
+  // Label from the shared classifier kind (fixes "Transferencia enviada" on a
+  // received gift, and tips that leaked through as "Ajuste"). Icons come from
+  // the shared walletTxnIcon(view) helper.
+  const driverTxLabel = (view: { kind: string; isCredit: boolean }): string => {
+    switch (view.kind) {
+      case 'recharge': return t('earnings.tx_recharge', { defaultValue: 'Recarga' });
+      case 'ride': return t('earnings.tx_ride_payment', { defaultValue: 'Ingreso por viaje' });
+      case 'commission': return t('earnings.tx_commission', { defaultValue: 'Comisión' });
+      case 'gift':
+      case 'transfer':
+        return view.isCredit
+          ? t('earnings.tx_gift_received', { defaultValue: 'Regalo recibido' })
+          : t('earnings.tx_gift_sent', { defaultValue: 'Regalo enviado' });
+      case 'tip': return t('earnings.tx_tip', { defaultValue: 'Propina' });
+      case 'penalty': return t('earnings.tx_penalty', { defaultValue: 'Penalización' });
+      case 'bonus': return t('earnings.tx_bonus', { defaultValue: 'Bono' });
+      case 'refund': return t('earnings.tx_refund', { defaultValue: 'Reembolso' });
+      case 'adjustment':
+      default: return t('earnings.tx_adjustment', { defaultValue: 'Ajuste' });
     }
   };
 
@@ -272,15 +279,10 @@ export default function WalletScreen() {
     // entry — e.g. a received tip rendered as "Ajuste −778" instead of
     // "Propina +778", and a mixed ride showed "+0". Sum the signed entries
     // that belong to THIS account.
-    const entries = (item as { ledger_entries?: { account_id?: string; amount: number }[] }).ledger_entries ?? [];
-    const signedAmount = signedLedgerAmountForAccount(entries, summary?.account_id);
-    const isCredit = signedAmount >= 0;
+    const view = classifyWalletTxn(item, summary?.account_id);
+    const { signedAmount, isCredit } = view;
     const txColor = isCredit ? colors.success.DEFAULT : colors.error.DEFAULT;
-    // Tips post as type='adjustment' with reference_type='tip'; label them
-    // "Propina" instead of the generic "Ajuste".
-    const txLabel = item.reference_type === 'tip'
-      ? t('earnings.tx_tip', { defaultValue: 'Propina' })
-      : t(`earnings.tx_${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') });
+    const txLabel = driverTxLabel(view);
     const receipt = item.type === 'recharge'
       && item.reference_type === 'payment_intent'
       && item.reference_id
@@ -298,7 +300,7 @@ export default function WalletScreen() {
           ...CARD_SHADOW,
         }}
         accessible
-        accessibilityLabel={`${txLabel}: ${isCredit ? '+' : '−'}${formatCUP(Math.abs(signedAmount))}`}
+        accessibilityLabel={`${txLabel}: ${view.isZero ? '' : isCredit ? '+' : '−'}${formatCUP(Math.abs(signedAmount))}`}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 14 }}>
           <View
@@ -312,7 +314,7 @@ export default function WalletScreen() {
               marginRight: 12,
             }}
           >
-            <Ionicons name={getTransactionIcon(item.type)} size={18} color={txColor} />
+            <Ionicons name={walletTxnIcon(view) as keyof typeof Ionicons.glyphMap} size={18} color={txColor} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color: palette.ink.primary, fontWeight: '600', fontSize: 14 }}>
@@ -323,7 +325,7 @@ export default function WalletScreen() {
             </Text>
           </View>
           <Text style={{ color: txColor, fontWeight: '700', fontSize: 15, ...TABULAR }}>
-            {isCredit ? '+' : '−'}{formatCUP(Math.abs(signedAmount))}
+            {view.isZero ? '' : isCredit ? '+' : '−'}{formatCUP(Math.abs(signedAmount))}
           </Text>
         </View>
         {canDownload && receipt && (

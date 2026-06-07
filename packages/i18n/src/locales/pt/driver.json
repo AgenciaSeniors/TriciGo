@@ -358,6 +358,11 @@
     "tx_promo_credit": "Crédito promocional",
     "tx_redemption": "Ajuste de saldo",
     "tx_adjustment": "Ajuste",
+    "tx_gift_received": "Presente recebido",
+    "tx_gift_sent": "Presente enviado",
+    "tx_penalty": "Penalidade",
+    "tx_bonus": "Bônus",
+    "tx_refund": "Reembolso",
     "tx_ride_hold": "Retenção de viagem",
     "tx_ride_hold_release": "Liberação de retenção",
     "view_more": "Ver mais"

@@ -28,6 +28,8 @@ import {
   RECHARGE_LIMITS,
   translateNetopiaError,
   signedLedgerAmountForAccount,
+  classifyWalletTxn,
+  walletTxnIcon,
 } from '@tricigo/utils';
 import type { LedgerTransaction, LedgerEntryType } from '@tricigo/types';
 import Toast from 'react-native-toast-message';
@@ -80,49 +82,39 @@ type TxnFilter =
   | 'bonus'
   | 'adjustment';
 
-/** Map raw ledger entry_type + credit/debit to a human-readable i18n key */
+/** Human-readable i18n label from a classified transaction view (kind + direction). */
 function getTransactionLabel(
-  type: string,
-  isCredit: boolean,
+  view: { kind: string; isCredit: boolean },
   t: (key: string, opts?: Record<string, unknown>) => string,
-  referenceType?: string | null,
 ): string {
-  // Tips post as type='adjustment' with reference_type='tip'. Surface them as
-  // "Propina recibida/enviada" instead of the generic "Reembolso"/"Comisión".
-  if (referenceType === 'tip') {
-    return isCredit
-      ? t('wallet.txn_tip_received', { defaultValue: 'Propina recibida' })
-      : t('wallet.txn_tip_sent', { defaultValue: 'Propina enviada' });
+  switch (view.kind) {
+    case 'recharge':
+      return t('wallet.txn_recharge', { defaultValue: 'Recarga de saldo' });
+    case 'ride':
+      return view.isCredit
+        ? t('wallet.txn_ride_earning', { defaultValue: 'Ingreso por viaje' })
+        : t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' });
+    case 'commission':
+      return t('wallet.txn_commission', { defaultValue: 'Comisión' });
+    case 'gift':
+    case 'transfer':
+      return view.isCredit
+        ? t('wallet.txn_gift_received', { defaultValue: 'Regalo recibido' })
+        : t('wallet.txn_gift_sent', { defaultValue: 'Regalo enviado' });
+    case 'tip':
+      return view.isCredit
+        ? t('wallet.txn_tip_received', { defaultValue: 'Propina recibida' })
+        : t('wallet.txn_tip_sent', { defaultValue: 'Propina enviada' });
+    case 'penalty':
+      return t('wallet.txn_penalty', { defaultValue: 'Penalización por cancelación' });
+    case 'bonus':
+      return t('wallet.txn_bonus', { defaultValue: 'Bonificación' });
+    case 'refund':
+      return t('wallet.txn_refund', { defaultValue: 'Reembolso' });
+    case 'adjustment':
+    default:
+      return t('wallet.txn_adjustment', { defaultValue: 'Ajuste' });
   }
-  const map: Record<string, string> = {
-    // Actual LedgerEntryType values
-    recharge: t('wallet.txn_recharge', { defaultValue: 'Recarga de saldo' }),
-    ride_payment: isCredit
-      ? t('wallet.txn_ride_earning', { defaultValue: 'Ingreso por viaje' })
-      : t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' }),
-    ride_hold: t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' }),
-    ride_hold_release: t('wallet.txn_ride_earning', { defaultValue: 'Ingreso por viaje' }),
-    commission: t('wallet.txn_commission', { defaultValue: 'Comisión' }),
-    transfer_in: t('wallet.txn_transfer_received', { defaultValue: 'Transferencia recibida' }),
-    transfer_out: t('wallet.txn_transfer_sent', { defaultValue: 'Transferencia enviada' }),
-    promo_credit: t('wallet.txn_bonus', { defaultValue: 'Bonificación' }),
-    redemption: t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' }),
-    adjustment: isCredit
-      ? t('wallet.txn_refund', { defaultValue: 'Reembolso' })
-      : t('wallet.txn_commission', { defaultValue: 'Comisión' }),
-    // Extended entry types from task spec (future-proof)
-    ride_payment_debit: t('wallet.txn_ride_payment', { defaultValue: 'Pago de viaje' }),
-    ride_payment_credit: t('wallet.txn_ride_earning', { defaultValue: 'Ingreso por viaje' }),
-    transfer_credit: t('wallet.txn_transfer_received', { defaultValue: 'Transferencia recibida' }),
-    transfer_debit: t('wallet.txn_transfer_sent', { defaultValue: 'Transferencia enviada' }),
-    commission_debit: t('wallet.txn_commission', { defaultValue: 'Comisión' }),
-    tip_credit: t('wallet.txn_tip_received', { defaultValue: 'Propina recibida' }),
-    tip_debit: t('wallet.txn_tip_sent', { defaultValue: 'Propina enviada' }),
-    refund_credit: t('wallet.txn_refund', { defaultValue: 'Reembolso' }),
-    bonus_credit: t('wallet.txn_bonus', { defaultValue: 'Bonificación' }),
-    referral_bonus: t('wallet.txn_referral_bonus', { defaultValue: 'Bonus de referido' }),
-  };
-  return map[type] ?? type;
 }
 
 // TriciCoin images
@@ -466,8 +458,8 @@ function WebWalletScreen() {
                 // bypass. Reading [0] blindly + formatTriciCoin's Math.max(0,…)
                 // clamp made every debit render "0 TC". Sum this account's
                 // entries (driver parity, PR #447).
-                const signedAmount = signedLedgerAmountForAccount(tx.ledger_entries, accountId);
-                const isCredit = signedAmount > 0;
+                const view = classifyWalletTxn(tx, accountId);
+                const { signedAmount, isCredit } = view;
                 // Wallet v2 phase 2: USD-equivalent caption per txn using
                 // the wallet's stamped migration_rate (provides a stable
                 // bridge from historical CUP-pegged amounts to the new
@@ -490,7 +482,7 @@ function WebWalletScreen() {
                       />
                       <View className="flex-1">
                         <Text variant="bodySmall" numberOfLines={1}>
-                          {getTransactionLabel(tx.type, isCredit, t, tx.reference_type)}
+                          {getTransactionLabel(view, t)}
                         </Text>
                         {tx.description ? (
                           <Text variant="caption" color="tertiary" numberOfLines={1}>{tx.description}</Text>
@@ -503,7 +495,7 @@ function WebWalletScreen() {
                           className={`font-semibold ${isCredit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
                           style={{ fontVariant: ['tabular-nums'] }}
                         >
-                          {isCredit ? '+' : '−'}{formatTriciCoin(Math.abs(signedAmount))}
+                          {view.isZero ? '' : isCredit ? '+' : '−'}{formatTriciCoin(Math.abs(signedAmount))}
                         </Text>
                         {balance.availableUsdCents != null && (
                           <Text variant="caption" color="tertiary" style={{ fontVariant: ['tabular-nums'] }}>
@@ -614,20 +606,7 @@ function NativeWalletScreen() {
     elevation: 2,
   };
 
-  const getTransactionIcon = (type: string): keyof typeof Ionicons.glyphMap => {
-    switch (type) {
-      case 'ride_payment': return 'car';
-      case 'commission': return 'trending-down';
-      case 'tip': return 'heart';
-      case 'transfer_in': return 'arrow-down';
-      case 'transfer_out': return 'arrow-up';
-      case 'recharge': return 'add-circle';
-      case 'promo_credit': return 'gift';
-      case 'redemption': return 'wallet';
-      case 'adjustment': return 'swap-horizontal';
-      default: return 'swap-horizontal';
-    }
-  };
+  // Transaction icon comes from the shared walletTxnIcon(view) helper.
 
   const [balance, setBalance] = useState<{
     available: number;
@@ -1001,8 +980,8 @@ function NativeWalletScreen() {
   const renderTransaction = ({ item, index }: { item: TransactionWithAmount; index: number }) => {
     // Net effect on THIS account (driver parity, PR #447). Reading [0] blindly
     // + formatTriciCoin's Math.max(0,…) clamp rendered every debit as "0 TC".
-    const signedAmount = signedLedgerAmountForAccount(item.ledger_entries, accountId);
-    const isCredit = signedAmount > 0;
+    const view = classifyWalletTxn(item, accountId);
+    const { signedAmount, isCredit } = view;
     // Wallet v2 phase 2: USD-equivalent caption per txn (uses the
     // wallet's stamped migration_rate as a stable bridge from
     // historical CUP-pegged amounts to the new unit-of-account).
@@ -1039,14 +1018,14 @@ function NativeWalletScreen() {
                 marginRight: 12,
               }}
             >
-              <Ionicons name={getTransactionIcon(item.type)} size={18} color={txColor} />
+              <Ionicons name={walletTxnIcon(view) as keyof typeof Ionicons.glyphMap} size={18} color={txColor} />
             </View>
             <View style={{ flex: 1 }}>
               <Text
                 numberOfLines={1}
                 style={{ color: tokens.ink.primary, fontWeight: '600', fontSize: 14 }}
               >
-                {item.description || getTransactionLabel(item.type, isCredit, t, item.reference_type)}
+                {item.description || getTransactionLabel(view, t)}
               </Text>
               <Text style={{ color: tokens.ink.secondary, fontSize: 12, marginTop: 2 }}>
                 {getRelativeDay(item.created_at, t('today'), t('yesterday'))}
@@ -1054,7 +1033,7 @@ function NativeWalletScreen() {
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={{ color: txColor, fontWeight: '700', fontSize: 15, ...TABULAR }}>
-                {isCredit ? '+' : '−'}{formatTriciCoin(Math.abs(signedAmount))}
+                {view.isZero ? '' : isCredit ? '+' : '−'}{formatTriciCoin(Math.abs(signedAmount))}
               </Text>
               {balance.availableUsdCents != null && (
                 <Text style={{ color: tokens.ink.subtle, fontSize: 11, marginTop: 2, ...TABULAR }}>

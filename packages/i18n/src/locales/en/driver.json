@@ -359,6 +359,11 @@
     "tx_promo_credit": "Promo credit",
     "tx_redemption": "Balance adjustment",
     "tx_adjustment": "Adjustment",
+    "tx_gift_received": "Gift received",
+    "tx_gift_sent": "Gift sent",
+    "tx_penalty": "Penalty",
+    "tx_bonus": "Bonus",
+    "tx_refund": "Refund",
     "tx_ride_hold": "Ride hold",
     "tx_ride_hold_release": "Hold released",
     "view_more": "View more"
