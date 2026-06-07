@@ -1736,6 +1736,32 @@ git worktree remove <temp>
 
 ---
 
+### Login con Google del panel admin (admin.tricigo.com) — 3 capas + ruta de detalle de incidente (verificado 2026-06-06)
+
+**El login con Google del admin estaba roto por TRES causas en capas distintas.** Las tres tuvieron que arreglarse. (Email+contraseña nunca se afectó: `signInWithPassword` no usa redirect.)
+
+**Síntoma 1 — Google redirige a `tricigo.com`, no entra al admin.**
+- **Causa A (config Supabase):** `https://admin.tricigo.com` NO estaba en las "Redirect URLs" de Supabase Auth. El admin pide `redirectTo: window.location.origin`; como ese destino no está en la allowlist, GoTrue lo descarta y cae al **Site URL** por defecto (`https://tricigo.com`). Caer en tricigo.com = firma inconfundible de ese fallback.
+- **Fix A (Dashboard, NO código):** Authentication → URL Configuration → Redirect URLs → agregar `https://admin.tricigo.com/**`. **NUNCA** por `config.toml`/`config push` (pisaría el Site URL de prod). También desbloquea el reset de contraseña del admin.
+
+**Síntoma 2 (tras A) — `/auth/callback` hace loop a `/login`.**
+- **Causa B (código):** el admin usa `@supabase/ssr` (flujo **PKCE server-side + cookies**, porque su `middleware.ts` exige sesión en cookies). No tenía handler para canjear el `?code=`; redirigía a `/` (protegido) con el code sin canjear → middleware sin sesión → loop. (El web NO sufre esto: usa **implicit flow** client-side, tokens en el hash.)
+- **Fix B (PR #451):** `apps/admin/src/app/auth/callback/route.ts` (route handler GET) → `exchangeCodeForSession(code)` setea las cookies ANTES del middleware; honra `x-forwarded-host` (detrás de nginx); guard de open-redirect en `redirect`. `login/page.tsx` apunta `redirectTo` a `/auth/callback?redirect=<dest>`. `middleware.ts` excluye `auth/callback` del matcher. El `code_verifier` viaja en cookie del dominio admin → el route handler server-side lo lee.
+
+**Síntoma 3 (tras A+B) — 502 en `/auth/callback`.**
+- **Causa C (nginx):** error log = `upstream sent too big header while reading response header`. Al canjear OK, Supabase emite las cookies de sesión (JWT partido en varios `Set-Cookie`); ese response excede el `proxy_buffer_size` default de nginx (4-8k). El web no lo sufre (implicit flow, sin `Set-Cookie` grandes del servidor); el admin usa PKCE server-side.
+- **Fix C (nginx VPS, NO repo):** en `/etc/nginx/sites-available/tricigo.com`, server block `admin.tricigo.com` → `location /`, agregar `proxy_buffer_size 16k;` + `proxy_buffers 8 16k;` + `proxy_busy_buffers_size 32k;`, luego `nginx -t` + `systemctl reload nginx`. (Editar el VPS con `ssh ... "echo <b64> | base64 -d | bash"` evita el quoting hell PowerShell→SSH; backup `.bak` antes; restaurar si `nginx -t` falla.)
+
+**Diagnóstico canónico:**
+- Supabase Auth log (`get_logs service=auth`): `POST /token grant_type=pkce status 200` con `remote_addr` = IP del VPS → el intercambio server-side funcionó; el 502 es post-intercambio (no es el código).
+- `tail /var/log/nginx/error.log` → `upstream sent too big header` = buffer, no la app.
+- **SSH al VPS desde el sandbox SÍ funciona** (`ssh -o BatchMode=yes root@187.77.214.236`): Hostinger filtra las IP de los runners de GitHub, pero NO el sandbox. Oro para diagnosticar prod (`pm2 describe/logs tricigo-admin`, `ss -tlnp`, nginx config/logs, `curl localhost:3002/...`).
+- Riesgo latente de deploy: el proceso PM2 `tricigo-admin` cae a PORT 3000 (default de Next standalone) si el env no llega en un restart → `EADDRINUSE` con `nghttpx` (escucha en :3000). Estable salvo durante **deploys concurrentes** (2 runs de Deploy-Admin a la vez se pisan en el `pm2 delete`/`start`).
+
+**Ruta de detalle de incidente (mismo día, PR #454):** el banner SOS (`SosAlertBanner.tsx`) enlaza a `/incidents/${id}` cuando hay **1 solo** SOS abierto, pero esa ruta de detalle **nunca existió** (solo la lista `/incidents`) → **404**. Fix: `apps/admin/src/app/incidents/[id]/page.tsx` (sigue el patrón de `rides/[id]`) + `adminService.getIncidentDetail(id)` (incidente + nombres reporter/acusado/resolver + resumen del viaje). El banner no se tocó: su enlace ahora resuelve. Lección: cuando un `Link` apunta a `/recurso/[id]`, confirmá que existe `app/recurso/[id]/page.tsx` — el admin tiene vista de detalle solo para `businesses`, `drivers`, `rides`, `users`, `incidents`.
+
+---
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
