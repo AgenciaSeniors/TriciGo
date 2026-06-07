@@ -41,7 +41,7 @@ data, dormant feature paths, and minor cosmetics. **Re-run the invariants any ti
 |---|---|---|---|---|
 | F1-A | 1 | data | low | **Won't fix** — `driver_cash` legacy 290.5k trapped + 62k debt; test accounts, frozen, no live writer (user decision) |
 | F1-B | 1 | method | — | **Not a bug** — one-sided `ride_payment` = seed data + 2-txn mixed pattern |
-| F3-A | 3 | code | low | **Deferred** — `pricing_rule_id` NULL in snapshots (traceability only; rates correct per parity) |
+| F3-A | 3 | code | low | **Fixed (00392)** — `tg_rides_create_estimate_snapshot` now records the active pricing_rule id (guarded lookup, Havana time). Traceability only — no money field changed; strict parity unaffected |
 | F3-B | 3 | logic | low | **Deferred** — 2 `auto_standard` estimates 90 below `min_fare`, both **canceled** (no charge); likely mensajería-flat quirk |
 | F4-x | 4 | data | — | **Historical/fixed** — `#c3c61627` + 1 ride: pre-00379 cup_to_trc casualties (test data) |
 | F7-A | 7 | code | — | **False positive** — client wallet `entry[0]` is correct (customer single-entry; sign from amount) |
