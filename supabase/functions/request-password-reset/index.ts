@@ -9,7 +9,7 @@
 // `auth.admin.generateLink({ type: 'recovery' })` — TTL nativo +
 // invalidación post-uso. Nosotros solo dispatch del email.
 //
-// Rate limit: 3 intentos / hora por identifier (Twilio cost guard).
+// Rate limit: 3 intentos / hora por identifier (SMS cost guard).
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
