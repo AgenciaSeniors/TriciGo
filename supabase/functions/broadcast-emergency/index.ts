@@ -17,7 +17,7 @@
 // nunca debería tenerlo. Esta función actúa de proxy con auth checks.
 //
 // Rate-limited por user_id: 1 broadcast cada 60s. Evita doble-tap o
-// scripts maliciosos vaciando el budget de Twilio.
+// scripts maliciosos vaciando el budget de SMS (D7 Networks).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';

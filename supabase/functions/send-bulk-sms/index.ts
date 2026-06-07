@@ -1,22 +1,22 @@
 // ============================================================
 // TriciGo — send-bulk-sms edge function
 //
-// Sends an SMS to many users at once via Twilio. Called from the
-// admin /campaigns page when channel='sms' or 'both'. Non-blocking
-// per-recipient.
+// Sends an SMS to many users at once via D7 Networks (sole SMS
+// provider; Twilio removed 2026-06-07). Called from the admin
+// /campaigns page when channel='sms' or 'both'. Non-blocking per-recipient.
 //
-// Throttled to ~10 SMS/sec to respect Twilio defaults.
-// Twilio credentials are read from platform_config (same flow as the
-// SMS OTP function — see docs/BLOQUEANTES.md for setup).
+// Throttled to ~10 SMS/sec. D7 credentials come from the D7_API_TOKEN
+// env secret (via the shared _shared/d7.ts helper).
 //
 // BUG-179 fix: this EF previously had NO authentication. Any
 // authenticated user could call it with arbitrary user_ids and
-// custom body, draining our Twilio quota and using us as a phishing
+// custom body, draining our SMS quota and using us as a phishing
 // channel against any user in the DB. Now requires admin role
 // (or service_role for cron/automation).
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { sendSmsViaD7 } from '../_shared/d7.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -94,49 +94,12 @@ Deno.serve(async (req) => {
 
     const recipients = (users ?? []).filter((u) => u.phone && u.phone.startsWith('+'));
 
-    // 2. Read Twilio config from platform_config
-    const { data: configs } = await supabase
-      .from('platform_config')
-      .select('key, value')
-      .in('key', ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone_number']);
-
-    const cfg: Record<string, string> = {};
-    (configs ?? []).forEach((c: { key: string; value: unknown }) => {
-      const raw = c.value;
-      cfg[c.key] = typeof raw === 'string' && raw.startsWith('"') ? JSON.parse(raw) : String(raw ?? '');
-    });
-
-    if (!cfg.twilio_account_sid || !cfg.twilio_auth_token || !cfg.twilio_phone_number) {
-      return new Response(JSON.stringify({
-        ok: false,
-        error: 'twilio_not_configured',
-        hint: 'Set twilio_account_sid, twilio_auth_token, twilio_phone_number in platform_config',
-        recipients: recipients.length,
-      }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const authHeader = 'Basic ' + btoa(`${cfg.twilio_account_sid}:${cfg.twilio_auth_token}`);
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${cfg.twilio_account_sid}/Messages.json`;
-
-    // 3. Send loop with 100ms throttle
+    // 2. Send loop via D7 Networks (sole SMS provider). ~10 SMS/sec throttle.
     let sent = 0;
     let failed = 0;
     for (const user of recipients) {
-      try {
-        const formData = new URLSearchParams();
-        formData.append('To', user.phone!);
-        formData.append('From', cfg.twilio_phone_number);
-        formData.append('Body', smsBody);
-
-        const r = await fetch(twilioUrl, {
-          method: 'POST',
-          headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: formData.toString(),
-        });
-        if (r.ok) sent++; else failed++;
-      } catch {
-        failed++;
-      }
+      const result = await sendSmsViaD7(user.phone!, smsBody, { tracker: supabase, eventType: 'bulk_campaign' });
+      if (result.ok) sent++; else failed++;
       await sleep(100);
     }
 

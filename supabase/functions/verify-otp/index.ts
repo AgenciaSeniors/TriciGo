@@ -54,78 +54,38 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // ── Route by country: Cuba → otp_codes table, rest → Twilio Verify ──
-    if (normalizedPhone.startsWith('+53')) {
-      // BUG-184 fix: atomic verify_cuba_otp RPC (lock row + check + increment
-      // inside one transaction). The previous code path had a race condition
-      // and an off-by-one that allowed OTP brute force.
-      const { data: rpcResult, error: rpcError } = await supabase.rpc('verify_cuba_otp', {
-        p_phone: normalizedPhone,
-        p_code: code,
-      });
+    // ── Verify against otp_codes via verify_cuba_otp RPC (all phones, D7-only) ──
+    // Twilio Verify removed 2026-06-07. Every phone (Cuba + rest of world) now
+    // uses the same atomic RPC (lock row + check + increment in one txn) — the
+    // RPC is phone-agnostic; the "cuba" name is historical. BUG-184: atomicity
+    // prevents the OTP brute-force race + off-by-one.
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('verify_cuba_otp', {
+      p_phone: normalizedPhone,
+      p_code: code,
+    });
 
-      if (rpcError) {
-        console.error('verify_cuba_otp RPC failed:', rpcError);
-        return new Response(
-          JSON.stringify({ error: 'Verification service unavailable' }),
-          { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
-
-      const result = rpcResult as { ok: boolean; error?: string; attempts_remaining?: number };
-      if (!result?.ok) {
-        const errCode = result?.error;
-        const userMsg =
-          errCode === 'too_many_attempts' ? 'Too many attempts. Request a new code.'
-          : errCode === 'no_active_code'  ? 'Invalid or expired code'
-          :                                 'Invalid or expired code';
-        return new Response(
-          JSON.stringify({ error: userMsg, attempts_remaining: result?.attempts_remaining }),
-          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
-
-      // Do not log the phone number (PII). The user id is logged later if needed.
-      console.log('Cuba OTP verified');
-
-    } else {
-      // ── Rest of world → Twilio Verify Check API ──
-      const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-      const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
-      const verifySid = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
-
-      if (!accountSid || !authToken || !verifySid) {
-        return new Response(
-          JSON.stringify({ error: 'Verification service not configured' }),
-          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
-
-      const twilioUrl = `https://verify.twilio.com/v2/Services/${verifySid}/VerificationCheck`;
-      const verifyBody = new URLSearchParams({
-        To: normalizedPhone,
-        Code: code,
-      });
-
-      const checkResponse = await fetch(twilioUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: verifyBody.toString(),
-      });
-
-      const checkResult = await checkResponse.json();
-      console.log('Twilio Verify Check:', JSON.stringify({ status: checkResult.status, valid: checkResult.valid }));
-
-      if (!checkResponse.ok || checkResult.status !== 'approved') {
-        return new Response(
-          JSON.stringify({ error: 'Invalid or expired code' }),
-          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
+    if (rpcError) {
+      console.error('verify_cuba_otp RPC failed:', rpcError);
+      return new Response(
+        JSON.stringify({ error: 'Verification service unavailable' }),
+        { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      );
     }
+
+    const result = rpcResult as { ok: boolean; error?: string; attempts_remaining?: number };
+    if (!result?.ok) {
+      const errCode = result?.error;
+      const userMsg =
+        errCode === 'too_many_attempts' ? 'Too many attempts. Request a new code.'
+        : 'Invalid or expired code';
+      return new Response(
+        JSON.stringify({ error: userMsg, attempts_remaining: result?.attempts_remaining }),
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Do not log the phone number (PII). The user id is logged later if needed.
+    console.log('OTP verified');
 
     // ── Code verified — create or find user (shared for both paths) ──
 

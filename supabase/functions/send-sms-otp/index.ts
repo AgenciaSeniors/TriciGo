@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { resolveDemoOtp } from '../_shared/demo-otp.ts';
+import { sendSmsViaD7 } from '../_shared/d7.ts';
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -15,6 +16,11 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+// D7 Networks is the SOLE OTP/SMS provider (Cuba + rest of world).
+// Twilio Verify + Meta WhatsApp fallback were removed 2026-06-07.
+// All phones now follow one flow: generate a 6-digit code, store it in
+// otp_codes, and deliver via D7. verify-otp validates against otp_codes
+// (verify_cuba_otp RPC) for every phone.
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: getCorsHeaders(req) });
@@ -48,252 +54,98 @@ Deno.serve(async (req) => {
     }
 
     // BUG-186: per-phone rate limit. Caps OTP-spam abuse where an
-    // attacker rotates IPs to hammer Twilio/Meta with OTP requests
-    // for a victim's phone (annoyance + quota drain). 3 OTPs per
-    // phone per 5 minutes is generous for legit retries.
+    // attacker rotates IPs to hammer the provider with OTP requests
+    // for a victim's phone. 3 OTPs per phone per 5 minutes is generous.
     const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, 3, 5 * 60 * 1000);
     if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
 
-    // ── Route by country: Cuba → D7 SMS (with Meta WhatsApp fallback), rest → Twilio Verify ──
-    if (normalizedPhone.startsWith('+53')) {
-      // ── Google Play review demo account: seed a fixed code, skip real SMS ──
-      // Env-gated: resolveDemoOtp returns null unless DEMO_PHONE + DEMO_OTP_CODE
-      // are both set, so this path is inert in normal production.
-      const demoCode = resolveDemoOtp(
-        normalizedPhone,
-        Deno.env.get('DEMO_PHONE'),
-        Deno.env.get('DEMO_OTP_CODE'),
-      );
-      if (demoCode) {
-        const supabaseDemo = createClient(
-          Deno.env.get('SUPABASE_URL')!,
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-        );
-        // Keep at most one live code for the demo phone — clear any prior
-        // unverified row so the fixed code can't accumulate concurrent rows.
-        await supabaseDemo.from('otp_codes')
-          .delete()
-          .eq('phone', normalizedPhone)
-          .is('verified_at', null);
-        const { error: demoInsertError } = await supabaseDemo.from('otp_codes').insert({
-          phone: normalizedPhone,
-          code: demoCode,
-          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-        });
-        if (demoInsertError) {
-          console.error('Failed to store demo OTP:', demoInsertError.message, demoInsertError.code);
-          return new Response(
-            JSON.stringify({ error: 'Failed to generate verification code' }),
-            { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-          );
-        }
-        // Response is byte-identical to a normal D7 Cuba send so the bypass is
-        // not observable to clients (no demo-account enumeration oracle).
-        console.log('Demo OTP seeded for Play review account');
-        return new Response(
-          JSON.stringify({ success: true, message: 'Verification sent via SMS', provider: 'd7' }),
-          { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
 
-      // ── Cuba: D7 Networks SMS preferred, Meta WhatsApp fallback ──
-      const d7Token = Deno.env.get('D7_API_TOKEN');
-      const d7Sender = Deno.env.get('D7_SENDER_ID') || 'TriciGo';
-      const metaToken = Deno.env.get('META_WHATSAPP_ACCESS_TOKEN');
-      const metaPhoneId = Deno.env.get('META_WHATSAPP_PHONE_NUMBER_ID');
-
-      const useD7 = !!d7Token;
-      const useMeta = !!(metaToken && metaPhoneId);
-
-      if (!useD7 && !useMeta) {
-        console.error(`[send-sms-otp] No Cuba OTP provider configured (need D7_API_TOKEN or META_WHATSAPP_*)`);
-        return new Response(
-          JSON.stringify({ error: 'SMS service not configured' }),
-          { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
-
-      // Generate 6-digit OTP — verify-otp reads otp_codes via verify_cuba_otp RPC
-      const code = Array.from(crypto.getRandomValues(new Uint8Array(6)))
-        .map(b => b % 10).join('');
-
-      // Store in otp_codes table (expires in 10 min)
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-      );
-
-      const { error: insertError } = await supabase.from('otp_codes').insert({
+    // ── Google Play review demo account: seed a fixed code, skip real SMS ──
+    // Env-gated: resolveDemoOtp returns null unless DEMO_PHONE + DEMO_OTP_CODE
+    // are both set and the phone matches, so this path is inert in normal use.
+    const demoCode = resolveDemoOtp(
+      normalizedPhone,
+      Deno.env.get('DEMO_PHONE'),
+      Deno.env.get('DEMO_OTP_CODE'),
+    );
+    if (demoCode) {
+      // Keep at most one live code for the demo phone — clear any prior
+      // unverified row so the fixed code can't accumulate concurrent rows.
+      await supabase.from('otp_codes')
+        .delete()
+        .eq('phone', normalizedPhone)
+        .is('verified_at', null);
+      const { error: demoInsertError } = await supabase.from('otp_codes').insert({
         phone: normalizedPhone,
-        code,
+        code: demoCode,
         expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       });
-
-      if (insertError) {
-        console.error('Failed to store OTP:', insertError);
+      if (demoInsertError) {
+        console.error('Failed to store demo OTP:', demoInsertError.message, demoInsertError.code);
         return new Response(
           JSON.stringify({ error: 'Failed to generate verification code' }),
           { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
-
-      // ── D7 Networks SMS (preferred when configured) ──
-      if (useD7) {
-        const d7Url = 'https://api.d7networks.com/messages/v1/send';
-        const d7Body = {
-          messages: [{
-            channel: 'sms',
-            recipients: [normalizedPhone],
-            content: `Tu código TriciGo es ${code}. Vence en 10 min. No lo compartas.`,
-            // Use unicode (UCS-2) so accented Spanish chars (ó, ñ) render correctly.
-            // GSM-7 ('text') would replace 'código' with 'c?digo' on delivery.
-            msg_type: 'text',
-            data_coding: 'unicode',
-          }],
-          message_globals: {
-            originator: d7Sender,
-          },
-        };
-
-        const d7Response = await fetch(d7Url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${d7Token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify(d7Body),
-        });
-
-        const d7Result = await d7Response.json().catch(() => ({}));
-        const d7RequestId = (d7Result as { request_id?: string }).request_id;
-        console.log('D7 Networks response:', JSON.stringify({
-          status: d7Response.status,
-          request_id: d7RequestId,
-          errors: (d7Result as { errors?: unknown }).errors,
-        }));
-
-        if (d7Response.ok) {
-          // Track initial delivery state in sms_deliveries (best-effort, non-blocking).
-          // process-sms-dlr upserts later via D7 DLR webhook with delivered/un_delivered/etc.
-          if (d7RequestId) {
-            try {
-              await supabase.from('sms_deliveries').insert({
-                request_id: d7RequestId,
-                recipient: normalizedPhone,
-                originator: d7Sender,
-                provider: 'd7',
-                status: 'sent',
-                sent_at: new Date().toISOString(),
-                raw_dlr: { initial_send_response: d7Result },
-              });
-            } catch (trackErr) {
-              console.error('[send-sms-otp] sms_deliveries insert failed (non-fatal):', trackErr);
-            }
-          }
-          return new Response(
-            JSON.stringify({ success: true, message: 'Verification sent via SMS', provider: 'd7' }),
-            { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-          );
-        }
-
-        // D7 failed — fall through to Meta WhatsApp if configured
-        console.error('D7 Networks failed, trying Meta fallback:', d7Result);
-        if (!useMeta) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'SMS provider failed', detail: d7Result }),
-            { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-          );
-        }
-      }
-
-      // ── Meta WhatsApp fallback / primary if D7 not set ──
-      const whatsappTo = normalizedPhone.replace('+', '');
-      const metaUrl = `https://graph.facebook.com/v21.0/${metaPhoneId}/messages`;
-
-      const metaResponse = await fetch(metaUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${metaToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: whatsappTo,
-          type: 'template',
-          template: {
-            name: 'otp_code',
-            language: { code: 'es' },
-            components: [{
-              type: 'body',
-              parameters: [{ type: 'text', text: code }],
-            }],
-          },
-        }),
-      });
-
-      const metaResult = await metaResponse.json();
-      console.log('Meta WhatsApp response:', JSON.stringify({ status: metaResponse.status, messages: metaResult.messages, error: metaResult.error }));
-
-      if (!metaResponse.ok) {
-        console.error('Meta WhatsApp error:', metaResult);
-        return new Response(
-          JSON.stringify({ success: false, error: metaResult.error?.message || 'Failed to send WhatsApp message' }),
-          { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
-
+      // Response is byte-identical to a normal D7 send so the bypass is
+      // not observable to clients (no demo-account enumeration oracle).
+      console.log('Demo OTP seeded for Play review account');
       return new Response(
-        JSON.stringify({ success: true, message: 'Verification sent via WhatsApp', provider: 'meta' }),
-        { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-      );
-
-    } else {
-      // ── Rest of world → Twilio Verify ──
-      const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-      const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
-      const verifySid = Deno.env.get('TWILIO_VERIFY_SERVICE_SID');
-
-      if (!accountSid || !authToken || !verifySid) {
-        // BUG-089: Return 503 error instead of fake success when SMS service is not configured
-        console.error(`[send-sms-otp] Twilio Verify credentials not configured`);
-        return new Response(
-          JSON.stringify({ error: 'SMS service not configured' }),
-          { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
-
-      const twilioUrl = `https://verify.twilio.com/v2/Services/${verifySid}/Verifications`;
-      const body = new URLSearchParams({
-        To: normalizedPhone,
-        Channel: 'whatsapp',
-      });
-
-      const verifyResponse = await fetch(twilioUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: body.toString(),
-      });
-
-      const verifyResult = await verifyResponse.json();
-      console.log('Twilio Verify response:', JSON.stringify({ sid: verifyResult.sid, status: verifyResult.status, channel: verifyResult.channel }));
-
-      if (!verifyResponse.ok) {
-        console.error('Twilio Verify error:', verifyResult);
-        return new Response(
-          JSON.stringify({ success: false, error: verifyResult.message || 'Failed to send verification' }),
-          { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ success: true, message: 'Verification sent via WhatsApp' }),
+        JSON.stringify({ success: true, message: 'Verification sent via SMS', provider: 'd7' }),
         { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
     }
+
+    // ── All phones → D7 Networks SMS + otp_codes (sole provider) ──
+    if (!Deno.env.get('D7_API_TOKEN')) {
+      console.error('[send-sms-otp] D7_API_TOKEN not configured');
+      return new Response(
+        JSON.stringify({ error: 'SMS service not configured' }),
+        { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Generate 6-digit OTP — verify-otp reads otp_codes via verify_cuba_otp RPC
+    const code = Array.from(crypto.getRandomValues(new Uint8Array(6)))
+      .map(b => b % 10).join('');
+
+    // Store in otp_codes table (expires in 10 min)
+    const { error: insertError } = await supabase.from('otp_codes').insert({
+      phone: normalizedPhone,
+      code,
+      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    });
+
+    if (insertError) {
+      console.error('Failed to store OTP:', insertError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to generate verification code' }),
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const result = await sendSmsViaD7(
+      normalizedPhone,
+      `Tu código TriciGo es ${code}. Vence en 10 min. No lo compartas.`,
+      { tracker: supabase, eventType: 'otp' },
+    );
+
+    if (!result.ok) {
+      console.error('[send-sms-otp] D7 send failed:', JSON.stringify(result.error));
+      return new Response(
+        JSON.stringify({ success: false, error: 'SMS provider failed' }),
+        { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, message: 'Verification sent via SMS', provider: 'd7' }),
+      { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+    );
   } catch (err) {
     console.error('send-sms-otp error:', err);
     return new Response(

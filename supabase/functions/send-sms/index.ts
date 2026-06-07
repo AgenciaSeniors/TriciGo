@@ -1,5 +1,9 @@
-// BUG-147 + BUG-201 + BUG-199: apikey === env.SUPABASE_SERVICE_ROLE_KEY (sb_secret_*).
+// send-sms — internal-only SMS sender. D7 Networks is the SOLE provider
+// (Twilio removed 2026-06-07). Used by broadcast-emergency (SOS), the
+// trusted-contact auto-share trigger (tracking link), and other
+// server-side notifications. apikey === SUPABASE_SERVICE_ROLE_KEY.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { sendSmsViaD7 } from '../_shared/d7.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,36 +26,24 @@ Deno.serve(async (req) => {
     const { user_id, phone, body, ride_id, event_type } = (await req.json()) as SmsRequest;
     if (!phone || !body) return new Response(JSON.stringify({ error: 'phone and body are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
-    const messagingServiceSid = Deno.env.get('TWILIO_MESSAGE_SERVICE_SID');
-    if (!accountSid || !authToken || !messagingServiceSid) {
-      return new Response(JSON.stringify({ error: 'SMS service not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-    const basicAuth = btoa(`${accountSid}:${authToken}`);
-    const formBody = new URLSearchParams({ To: phone, MessagingServiceSid: messagingServiceSid, Body: body });
-
-    const twilioResponse = await fetch(twilioUrl, {
-      method: 'POST',
-      headers: { 'Authorization': `Basic ${basicAuth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formBody.toString(),
-    });
-
-    const twilioResult = await twilioResponse.json();
-    const success = twilioResponse.ok;
-    const twilioSid = twilioResult.sid ?? null;
-
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, serviceRoleKey);
+
+    // ── D7 Networks (sole SMS provider, Cuba + rest of world) ──
+    const result = await sendSmsViaD7(phone, body, { tracker: supabase, eventType: event_type || 'unknown' });
+
+    // Audit log. The legacy `twilio_sid` column now stores the D7 request_id.
     await supabase.from('sms_log').insert({
       user_id: user_id || null, phone, message_body: body,
       ride_id: ride_id || null, event_type: event_type || 'unknown',
-      twilio_sid: twilioSid, status: success ? 'sent' : 'failed',
+      twilio_sid: result.requestId ?? null, status: result.ok ? 'sent' : 'failed',
     });
 
-    if (!success) return new Response(JSON.stringify({ success: false, error: twilioResult.message ?? 'Twilio error' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    return new Response(JSON.stringify({ success: true, sid: twilioSid }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!result.ok) {
+      return new Response(JSON.stringify({ success: false, error: 'SMS provider failed' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ success: true, sid: result.requestId }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
