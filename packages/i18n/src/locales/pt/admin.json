@@ -1094,7 +1094,8 @@
     "tier_platino_min_trips_help": "Viagens concluídas mínimas para o nível Platina (passageiro + motorista). Padrão 50",
     "tier_diamante_min_trips_help": "Viagens concluídas mínimas para o nível Diamante (passageiro + motorista). Padrão 100",
     "routing_google_enabled_help": "Experimento: usar Google Directions em vez de Mapbox para as rotas. Defina 'true' para ativar (requer a chave GOOGLE_DIRECTIONS_API_KEY). Padrão false.",
-    "routing_google_daily_cap_help": "Limite diário de chamadas ao Google Directions; ao exceder, volta para o Mapbox. Padrão 2000."
+    "routing_google_daily_cap_help": "Limite diário de chamadas ao Google Directions; ao exceder, volta para o Mapbox. Padrão 2000.",
+    "referral_bonus_cup_help": "Valor do bônus de indicação em CUP (creditado como TriciCoin, 1:1). Aplica-se a novas indicações; as pendentes mantêm o valor com que foram criadas. Padrão 500."
   },
   "exchange_rate": {
     "title": "Taxa de câmbio",
