@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
-import { formatCUP, signedLedgerAmountForAccount } from '@tricigo/utils';
+import { formatCUP, classifyWalletTxn, walletTxnIcon } from '@tricigo/utils';
 import { midnightEmber } from '@tricigo/theme';
 import type { LedgerTransaction } from '@tricigo/types';
 
@@ -39,15 +39,36 @@ interface RecentActivitySectionProps {
   onExpandedChange?: (expanded: boolean) => void;
 }
 
-const TX_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  recharge: 'add-circle',
-  ride_payment: 'car',
-  commission: 'cut',
-  transfer_in: 'arrow-down-circle',
-  transfer_out: 'arrow-up-circle',
-  promo_credit: 'gift',
-  redemption: 'wallet',
-};
+/** Driver-namespace label from the shared classifier kind. Mirrors the wallet
+ *  screen; the bug-prone classification (gift direction, tip detection) lives in
+ *  @tricigo/utils so the two driver surfaces stay in sync. */
+function driverTxLabel(
+  view: { kind: string; isCredit: boolean },
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  switch (view.kind) {
+    case 'recharge': return t('earnings.tx_recharge', { defaultValue: 'Recarga' });
+    case 'ride':
+      return view.isCredit
+        ? t('earnings.tx_ride_earning', { defaultValue: 'Ingreso por viaje' })
+        : t('earnings.tx_ride_payment', { defaultValue: 'Pago de viaje' });
+    case 'commission': return t('earnings.tx_commission', { defaultValue: 'Comisión' });
+    case 'gift':
+    case 'transfer':
+      return view.isCredit
+        ? t('earnings.tx_gift_received', { defaultValue: 'Regalo recibido' })
+        : t('earnings.tx_gift_sent', { defaultValue: 'Regalo enviado' });
+    case 'tip':
+      return view.isCredit
+        ? t('earnings.tx_tip_received', { defaultValue: 'Propina recibida' })
+        : t('earnings.tx_tip_sent', { defaultValue: 'Propina enviada' });
+    case 'penalty': return t('earnings.tx_penalty', { defaultValue: 'Penalización' });
+    case 'bonus': return t('earnings.tx_bonus', { defaultValue: 'Bono' });
+    case 'refund': return t('earnings.tx_refund', { defaultValue: 'Reembolso' });
+    case 'adjustment':
+    default: return t('earnings.tx_adjustment', { defaultValue: 'Ajuste' });
+  }
+}
 
 export function RecentActivitySection({
   transactions,
@@ -117,12 +138,13 @@ export function RecentActivitySection({
               </Text>
             )}
             {transactions.map((tx) => {
-              const amount = signedLedgerAmountForAccount(tx.ledger_entries, accountId);
-              const isCredit = amount > 0;
+              const view = classifyWalletTxn(tx, accountId);
+              const amount = view.signedAmount;
+              const isCredit = view.isCredit;
               const txColor = isCredit
                 ? midnightEmber.state.success
                 : midnightEmber.state.danger;
-              const iconName = TX_ICONS[tx.type] ?? 'swap-horizontal';
+              const iconName = walletTxnIcon(view) as keyof typeof Ionicons.glyphMap;
               return (
                 <View
                   key={tx.id}
@@ -138,7 +160,7 @@ export function RecentActivitySection({
                       variant="bodySmall"
                       style={{ color: midnightEmber.screen.text.primary }}
                     >
-                      {t(`earnings.tx_${tx.type}`, { defaultValue: tx.type })}
+                      {driverTxLabel(view, t)}
                     </Text>
                     <Text
                       variant="badge"
@@ -151,7 +173,7 @@ export function RecentActivitySection({
                     variant="bodySmall"
                     style={{ color: txColor, fontWeight: '600' }}
                   >
-                    {isCredit ? '+' : ''}{formatCUP(amount)}
+                    {view.isZero ? '' : isCredit ? '+' : '−'}{formatCUP(Math.abs(amount))}
                   </Text>
                 </View>
               );

@@ -13,6 +13,7 @@ import {
   computeRechargeChargeUsd,
   RECHARGE_LIMITS,
   translateNetopiaError,
+  classifyWalletTxn,
 } from '@tricigo/utils';
 import type { LedgerTransaction, WalletAccount, PaymentProviderConfig } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -36,20 +37,25 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'adjustment', label: 'Ajustes' },
 ];
 
-const TYPE_LABELS: Record<string, string> = {
-  recharge: 'Recarga',
-  ride_payment: 'Pago de viaje',
-  ride_hold: 'Retencion de viaje',
-  ride_hold_release: 'Liberacion de retencion',
-  commission: 'Comision',
-  transfer_in: 'Transferencia recibida',
-  transfer_out: 'Transferencia enviada',
-  promo_credit: 'Credito promocional',
-  redemption: 'Canje',
-  adjustment: 'Ajuste',
-};
-
-const CREDIT_TYPES = new Set(['recharge', 'transfer_in', 'promo_credit', 'ride_hold_release']);
+// Label derived from the shared classifier kind + direction (fixes received
+// gifts showing "Transferencia enviada" and tips showing "Ajuste"). Credit vs
+// debit and the amount come from the per-account net (classifyWalletTxn), not
+// from the raw type — a gift is one `transfer_out` txn for both parties.
+function webTxLabel(view: { kind: string; isCredit: boolean }): string {
+  switch (view.kind) {
+    case 'recharge': return 'Recarga';
+    case 'ride': return view.isCredit ? 'Ingreso por viaje' : 'Pago de viaje';
+    case 'commission': return 'Comision';
+    case 'gift':
+    case 'transfer': return view.isCredit ? 'Regalo recibido' : 'Regalo enviado';
+    case 'tip': return view.isCredit ? 'Propina recibida' : 'Propina enviada';
+    case 'penalty': return 'Penalizacion por cancelacion';
+    case 'bonus': return 'Credito promocional';
+    case 'refund': return 'Reembolso';
+    case 'adjustment':
+    default: return 'Ajuste';
+  }
+}
 
 function getFilterTypes(filter: FilterTab): string[] | null {
   switch (filter) {
@@ -404,10 +410,23 @@ export default function WalletPage() {
   }
 
   // ── Helper: get amount from joined entry ──
+  // Net effect on THIS account via the shared classifier (a gift/mixed ride
+  // touches several accounts; reading entries[0] showed the wrong row/sign).
+  function classifyTx(tx: LedgerTransaction) {
+    const entries =
+      (tx as unknown as { ledger_entries?: { account_id: string; amount: number }[] }).ledger_entries ?? [];
+    return classifyWalletTxn(
+      { type: tx.type, reference_type: tx.reference_type, metadata: tx.metadata, ledger_entries: entries },
+      account?.id,
+    );
+  }
+
+  // Net signed amount on the user's account, or null when the txn carries no
+  // visible ledger entries (so the amount column hides instead of showing 0).
   function getTxAmount(tx: LedgerTransaction): number | null {
-    const entries = (tx as unknown as { ledger_entries: { account_id: string; amount: number }[] }).ledger_entries;
+    const entries = (tx as unknown as { ledger_entries?: { account_id: string; amount: number }[] }).ledger_entries;
     if (!entries || entries.length === 0) return null;
-    return entries[0].amount;
+    return classifyTx(tx).signedAmount;
   }
 
   // RECARGA V2: input is USD net. Derive fee + charge for preview using
@@ -817,7 +836,8 @@ export default function WalletPage() {
           {!txLoading && filteredTx.length > 0 && (
             <div className="wallet-tx-list">
               {filteredTx.map((tx) => {
-                const isCredit = CREDIT_TYPES.has(tx.type);
+                const view = classifyTx(tx);
+                const isCredit = view.isCredit;
                 const amount = getTxAmount(tx);
                 return (
                   <div key={tx.id} className="wallet-tx-item">
@@ -828,7 +848,7 @@ export default function WalletPage() {
                     }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
-                        {TYPE_LABELS[tx.type] ?? tx.type}
+                        {webTxLabel(view)}
                       </p>
                       {tx.description && (
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', margin: '0.15rem 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -842,7 +862,7 @@ export default function WalletPage() {
                     {amount != null && (
                       <div style={{ flexShrink: 0, marginLeft: '0.5rem', textAlign: 'right' }}>
                         <span style={{ fontSize: '0.9rem', fontWeight: 700, color: amount > 0 ? '#16a34a' : '#dc2626' }}>
-                          {amount > 0 ? '+' : ''}{formatTRC(Math.abs(amount))}
+                          {amount > 0 ? '+' : amount < 0 ? '−' : ''}{formatTRC(Math.abs(amount))}
                         </span>
                         {(() => {
                           // USD caption — usa la tasa de migración si existe, si no
@@ -851,7 +871,7 @@ export default function WalletPage() {
                           const usdRate = balance.migrationRate ?? exchangeRate;
                           return usdRate ? (
                             <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
-                              &asymp; {amount > 0 ? '+' : '-'}${(Math.abs(amount) / usdRate).toFixed(2)}
+                              &asymp; {amount > 0 ? '+' : amount < 0 ? '-' : ''}${(Math.abs(amount) / usdRate).toFixed(2)}
                             </span>
                           ) : null;
                         })()}

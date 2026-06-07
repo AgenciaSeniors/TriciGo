@@ -3,6 +3,8 @@
 // Generate CSV exports for ride/trip history.
 // ============================================================
 
+import { classifyWalletTxn, type WalletTxnView } from './ledger';
+
 interface ExportableRide {
   id: string;
   status: string;
@@ -142,9 +144,12 @@ export function generateHistoryCSV(
 interface ExportableLedgerTransaction {
   id: string;
   type: string;
+  reference_type?: string | null;
+  metadata?: Record<string, unknown> | null;
   description: string | null;
   created_at: string;
   ledger_entries?: Array<{
+    account_id?: string | null;
     amount: number;
     balance_after?: number | null;
   }>;
@@ -153,57 +158,64 @@ interface ExportableLedgerTransaction {
 const WALLET_HEADERS_ES = ['Fecha', 'Tipo', 'Descripción', 'Monto (TRC)', 'Balance (TRC)'];
 const WALLET_HEADERS_EN = ['Date', 'Type', 'Description', 'Amount (TRC)', 'Balance (TRC)'];
 
-const TX_TYPE_LABELS: Record<string, Record<string, string>> = {
-  es: {
-    ride_payment: 'Pago de viaje',
-    commission: 'Comisión',
-    tip: 'Propina',
-    transfer_in: 'Transferencia recibida',
-    transfer_out: 'Transferencia enviada',
-    recharge: 'Recarga',
-    promo_credit: 'Crédito promocional',
-    redemption: 'Canje',
-    adjustment: 'Ajuste',
-    cancellation_fee: 'Tarifa de cancelación',
-  },
-  en: {
-    ride_payment: 'Ride payment',
-    commission: 'Commission',
-    tip: 'Tip',
-    transfer_in: 'Transfer received',
-    transfer_out: 'Transfer sent',
-    recharge: 'Recharge',
-    promo_credit: 'Promo credit',
-    redemption: 'Redemption',
-    adjustment: 'Adjustment',
-    cancellation_fee: 'Cancellation fee',
-  },
-};
+// Direction-aware label from the shared classifier kind (same criterion as the
+// in-app surfaces; plain strings because the CSV has no i18n `t()`).
+function walletCsvLabel(view: WalletTxnView, locale: 'es' | 'en'): string {
+  const es = locale === 'es';
+  switch (view.kind) {
+    case 'recharge': return es ? 'Recarga' : 'Recharge';
+    case 'ride': return view.isCredit
+      ? (es ? 'Ingreso por viaje' : 'Ride earning')
+      : (es ? 'Pago de viaje' : 'Ride payment');
+    case 'commission': return es ? 'Comisión' : 'Commission';
+    case 'gift':
+    case 'transfer': return view.isCredit
+      ? (es ? 'Regalo recibido' : 'Gift received')
+      : (es ? 'Regalo enviado' : 'Gift sent');
+    case 'tip': return view.isCredit
+      ? (es ? 'Propina recibida' : 'Tip received')
+      : (es ? 'Propina enviada' : 'Tip sent');
+    case 'penalty': return es ? 'Penalización por cancelación' : 'Cancellation penalty';
+    case 'bonus': return es ? 'Crédito promocional' : 'Promo credit';
+    case 'refund': return es ? 'Reembolso' : 'Refund';
+    case 'adjustment':
+    default: return es ? 'Ajuste' : 'Adjustment';
+  }
+}
 
 /**
- * Generate a CSV string from the driver's (or rider's) ledger
- * transactions. Amounts come from ledger_entries[0].amount in
- * centavos and are divided by 100 for human-readable output.
+ * Generate a CSV string from the driver's (or rider's) ledger transactions.
+ *
+ * The amount is the NET signed effect on `accountId` via the shared
+ * `classifyWalletTxn` (a gift/mixed ride touches several accounts; reading
+ * `ledger_entries[0]` showed the wrong row/sign). Amounts are whole TRC units
+ * — same as the in-app display (`formatCUP`/`formatTriciCoin`), NOT divided by
+ * 100. The label is direction-aware (gift received vs sent, tip, etc.).
+ *
+ * Note: the shared `getTransactions` query does not select `balance_after`, so
+ * the Balance column stays blank unless callers pass it explicitly.
  */
 export function generateWalletCSV(
   transactions: ExportableLedgerTransaction[],
+  accountId: string | null | undefined,
   locale: 'es' | 'en' = 'es',
 ): string {
   const headers = locale === 'es' ? WALLET_HEADERS_ES : WALLET_HEADERS_EN;
-  const labels = TX_TYPE_LABELS[locale] ?? TX_TYPE_LABELS.es!;
   const lines: string[] = [headers.join(',')];
 
   for (const tx of transactions) {
-    const entry = tx.ledger_entries?.[0];
-    const amountCentavos = entry?.amount ?? 0;
-    const balanceCentavos = entry?.balance_after ?? null;
+    const view = classifyWalletTxn(
+      { type: tx.type, reference_type: tx.reference_type, metadata: tx.metadata, ledger_entries: tx.ledger_entries },
+      accountId,
+    );
+    const balance = tx.ledger_entries?.find((e) => e.account_id === accountId)?.balance_after ?? null;
 
     const row = [
-      formatDate(tx.created_at),
-      escapeCsv(labels[tx.type] ?? tx.type),
+      escapeCsv(formatDate(tx.created_at)),
+      escapeCsv(walletCsvLabel(view, locale)),
       escapeCsv(tx.description ?? ''),
-      (amountCentavos / 100).toFixed(2),
-      balanceCentavos !== null ? (balanceCentavos / 100).toFixed(2) : '',
+      String(Math.round(view.signedAmount)),
+      balance !== null ? String(Math.round(balance)) : '',
     ];
 
     lines.push(row.join(','));
