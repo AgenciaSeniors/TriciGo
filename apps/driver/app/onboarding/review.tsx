@@ -37,11 +37,10 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
 const VEHICLE_IMAGES: Record<string, any> = {
   triciclo_basico: require('../../assets/vehicles/selection/triciclo.png'),
   moto_standard: require('../../assets/vehicles/selection/moto.png'),
-  // Web.docx 2026-05-08: "auto es el almendrón cubano". Mirror the
-  // onboarding/vehicle-info.tsx choice (uses markers/auto_clasico.png
-  // for the Auto Standard tier instead of the generic sedan in
-  // selection/).
-  auto_standard: require('../../assets/vehicles/markers/auto_clasico.png'),
+  // Mirror onboarding/vehicle-info.tsx: the Auto card uses the side-view
+  // sedan from selection/ (matches triciclo/moto/confort). The top-down
+  // almendrón marker stays on the live map only.
+  auto_standard: require('../../assets/vehicles/selection/auto.png'),
   auto_confort: require('../../assets/vehicles/selection/confort.png'),
 };
 

@@ -108,7 +108,7 @@ const WEB_SERVICES: { name: string; desc: string; slug: ServiceTypeSlug; img: an
 const DELIVERY_VEHICLES: { slug: ServiceTypeSlug; label: string; img: any }[] = [
   { slug: 'moto_standard', label: 'Moto', img: require('../../assets/vehicles/selection/moto.png') },
   { slug: 'triciclo_basico', label: 'Triciclo', img: require('../../assets/vehicles/selection/triciclo.png') },
-  { slug: 'auto_standard', label: 'Auto', img: require('../../assets/vehicles/markers/auto_clasico.png') },
+  { slug: 'auto_standard', label: 'Auto', img: require('../../assets/vehicles/selection/auto.png') },
   { slug: 'auto_confort', label: 'Confort', img: require('../../assets/vehicles/selection/confort.png') },
 ];
 

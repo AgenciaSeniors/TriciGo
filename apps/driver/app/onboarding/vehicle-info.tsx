@@ -59,10 +59,11 @@ const VEHICLE_CONFIGS = [
     descKey: 'onboarding.vehicle_auto_desc',
     defaultCapacity: 4,
     maxCapacity: 16,
-    // BUG-204: use the almendr\u00f3n (Cuban classic car) image instead of the
-    // generic sedan. The markers/ folder has the @1x/@2x/@3x variants;
-    // selection/ only had a generic sedan that didn't match the service.
-    image: require('../../assets/vehicles/markers/auto_clasico.png'),
+    // Auto card uses the side-view sedan from selection/ (renewed
+    // 2026-06-05) so it matches the side-view style of triciclo/moto/
+    // confort cards. markers/auto_clasico.png is a top-down map icon \u2014
+    // kept only for the live map (RideMapView).
+    image: require('../../assets/vehicles/selection/auto.png'),
     accent: '#22C55E',
   },
   {
