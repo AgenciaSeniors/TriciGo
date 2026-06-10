@@ -4,12 +4,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 
 // Mirror the wallet_account_type Postgres enum (see
-// supabase/migrations/00001_initial_schema.sql + 00094_trc_rebase). The
-// modal only renders toggles for the 2 cash variants today, but other
-// account types (notably 'tricicoin' for driver_quota / TC top-ups) are
-// still valid `defaultAccountType` values passed by callers like
-// drivers/[id]/page.tsx — without listing them here the build crashes
-// with "Type '"tricicoin"' is not assignable to type WalletAccountType".
+// supabase/migrations/00001_initial_schema.sql + 00094_trc_rebase).
+// For drivers the toggle offers 'tricicoin' (the LIVE single-wallet the
+// accept_ride commission gate checks — 00300/00340) and 'customer_cash'
+// (a driver can also hold rider balance). 'driver_cash' is the frozen
+// legacy wallet and is deliberately NOT offered: crediting it is invisible
+// to the driver (ADM-01 / BUG-276). The RPC whitelist accepts tricicoin
+// since migration 00396.
 export type WalletAccountType =
   | 'customer_cash'
   | 'driver_cash'
@@ -24,9 +25,9 @@ interface AdjustWalletModalProps {
   open: boolean;
   /** Target user's display name (shown in header) */
   userName: string;
-  /** If true, user is a driver — show toggle between customer_cash and driver_cash */
+  /** If true, user is a driver — show toggle between customer_cash and tricicoin */
   isDriver?: boolean;
-  /** Default account type. Defaults to 'customer_cash' for riders, 'driver_cash' for drivers */
+  /** Default account type. Defaults to 'customer_cash' for riders, 'tricicoin' for drivers */
   defaultAccountType?: WalletAccountType;
   loading?: boolean;
   onConfirm: (args: {
@@ -49,7 +50,7 @@ export function AdjustWalletModal({
   const { t } = useTranslation('admin');
 
   const [accountType, setAccountType] = useState<WalletAccountType>(
-    defaultAccountType ?? (isDriver ? 'driver_cash' : 'customer_cash'),
+    defaultAccountType ?? (isDriver ? 'tricicoin' : 'customer_cash'),
   );
   const [direction, setDirection] = useState<'credit' | 'debit'>('credit');
   const [amountStr, setAmountStr] = useState('');
@@ -59,7 +60,7 @@ export function AdjustWalletModal({
 
   useEffect(() => {
     if (open) {
-      setAccountType(defaultAccountType ?? (isDriver ? 'driver_cash' : 'customer_cash'));
+      setAccountType(defaultAccountType ?? (isDriver ? 'tricicoin' : 'customer_cash'));
       setDirection('credit');
       setAmountStr('');
       setReason('');
@@ -141,9 +142,9 @@ export function AdjustWalletModal({
               </button>
               <button
                 type="button"
-                onClick={() => setAccountType('driver_cash')}
+                onClick={() => setAccountType('tricicoin')}
                 className={`flex-1 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
-                  accountType === 'driver_cash'
+                  accountType === 'tricicoin'
                     ? 'bg-ink text-surface'
                     : 'text-ink-muted hover:text-ink'
                 }`}
@@ -235,7 +236,7 @@ export function AdjustWalletModal({
               <span className="ml-1 text-ink-muted">CUP</span>
               <span className="mx-2 text-ink-subtle">→</span>
               <span className="text-ink-muted">
-                {accountType === 'driver_cash'
+                {accountType === 'tricicoin' || accountType === 'driver_cash'
                   ? t('admin_ops.account_driver', { defaultValue: 'Cuota conductor' })
                   : t('admin_ops.account_customer', { defaultValue: 'Wallet pasajero' })}
               </span>
