@@ -8,20 +8,18 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 
-// Timestamp (ms) of the last time we surfaced the soft-ask. We re-surface at
-// most once per RESHOW_INTERVAL_MS while notifications are NOT granted, so a
-// user who dismissed or denied isn't stranded forever (the previous version
-// showed this once and never again). The OS never re-prompts after the first
-// denial — the only recovery is system Settings — so when the permission is
-// already 'denied' the primary button deep-links there instead of firing a
-// silent no-op requestPermissions().
+// Driver copy of the rider soft-ask. Push matters most for the driver: ride
+// offers arrive as pushes when the app is backgrounded. Re-surfaces at most
+// once per RESHOW_INTERVAL_MS while notifications are NOT granted so a driver
+// who denied isn't stranded — the OS never re-prompts after the first denial,
+// so when permission is already 'denied' the button deep-links to Settings.
 const PROMPT_LAST_SHOWN_KEY = '@tricigo/notification_prompt_last_shown';
 const RESHOW_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
- * Friendly bottom sheet explaining why notifications are needed. Re-surfaces
- * periodically while permission is not granted (capped to once per 7 days so
- * it informs without nagging) and routes denied users to system Settings.
+ * Friendly bottom sheet explaining why notifications are needed for drivers.
+ * Re-surfaces periodically while permission is not granted (capped to once
+ * per 7 days) and routes denied users to system Settings.
  */
 export function NotificationPermissionSheet() {
   const { t } = useTranslation('common');
@@ -34,16 +32,14 @@ export function NotificationPermissionSheet() {
     async function check() {
       try {
         const { status } = await Notifications.getPermissionsAsync();
-        if (status === 'granted') return; // already on — nothing to nudge
+        if (status === 'granted') return;
 
-        // Re-show at most once per interval so we inform without nagging.
         const lastRaw = await AsyncStorage.getItem(PROMPT_LAST_SHOWN_KEY);
         const last = lastRaw ? parseInt(lastRaw, 10) : 0;
         if (last && Number.isFinite(last) && Date.now() - last < RESHOW_INTERVAL_MS) return;
 
         if (!cancelled) {
           setDenied(status === 'denied');
-          // Show after a short delay (let the home screen load first)
           setTimeout(() => {
             if (!cancelled) setVisible(true);
           }, 1500);
@@ -67,8 +63,6 @@ export function NotificationPermissionSheet() {
 
   const handleEnable = useCallback(async () => {
     try {
-      // Re-read status fresh: if the OS already denied us, requestPermissions
-      // is a silent no-op, so the only way back is system Settings.
       const { status } = await Notifications.getPermissionsAsync();
       if (status === 'denied') {
         await Linking.openSettings();
@@ -116,18 +110,18 @@ export function NotificationPermissionSheet() {
         </View>
 
         <Text variant="h4" className="text-center mb-2">
-          {t('notifications.permission_title', { defaultValue: 'Activa las notificaciones' })}
+          {t('notifications.driver_permission_title', { defaultValue: 'Activá las notificaciones' })}
         </Text>
 
         <Text variant="body" color="secondary" className="text-center mb-6 leading-6">
           {denied
-            ? t('notifications.permission_body_denied', {
+            ? t('notifications.driver_permission_body_denied', {
                 defaultValue:
-                  'Las notificaciones están desactivadas. Activalas en Ajustes para enterarte cuando un conductor acepte tu viaje, llegue al punto de recogida, y cuando recibas mensajes.',
+                  'Las notificaciones están desactivadas. Activalas en Ajustes para no perderte las ofertas de viaje, los mensajes del pasajero y tus pagos.',
               })
-            : t('notifications.permission_body', {
+            : t('notifications.driver_permission_body', {
                 defaultValue:
-                  'Te avisaremos cuando un conductor acepte tu viaje, llegue al punto de recogida, y cuando recibas mensajes. No enviaremos spam.',
+                  'Te avisamos al instante cuando entra una oferta de viaje, cuando el pasajero te escribe y de tus pagos. Sin spam.',
               })}
         </Text>
 
@@ -136,15 +130,15 @@ export function NotificationPermissionSheet() {
           {[
             {
               icon: 'car-outline' as const,
-              text: t('notifications.benefit_ride', { defaultValue: 'Saber cuándo tu conductor está en camino' }),
+              text: t('notifications.driver_benefit_offers', { defaultValue: 'Recibir ofertas de viaje al instante' }),
             },
             {
               icon: 'chatbubble-outline' as const,
-              text: t('notifications.benefit_chat', { defaultValue: 'Recibir mensajes del conductor' }),
+              text: t('notifications.driver_benefit_chat', { defaultValue: 'Mensajes del pasajero' }),
             },
             {
               icon: 'wallet-outline' as const,
-              text: t('notifications.benefit_wallet', { defaultValue: 'Confirmaciones de pagos y recargas' }),
+              text: t('notifications.driver_benefit_earnings', { defaultValue: 'Confirmaciones de pagos y recargas' }),
             },
           ].map((item) => (
             <View key={item.icon} className="flex-row items-center gap-3">

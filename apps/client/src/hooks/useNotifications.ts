@@ -98,11 +98,13 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
 
 export function useNotificationSetup(userId: string | null | undefined) {
   const responseListenerRef = useRef<Notifications.EventSubscription | null>(null);
+  const registeredRef = useRef(false);
 
   useEffect(() => {
     if (!userId) return;
 
     let cancelled = false;
+    registeredRef.current = false;
 
     async function register() {
       try {
@@ -129,6 +131,7 @@ export function useNotificationSetup(userId: string | null | undefined) {
           tokenData.data,
           Platform.OS,
         );
+        registeredRef.current = true;
       } catch {
         // Silent — notifications are best-effort
       }
@@ -157,6 +160,11 @@ export function useNotificationSetup(userId: string | null | undefined) {
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         Notifications.setBadgeCountAsync(0);
+        // R-1: retry registration if the user just enabled notifications from
+        // system Settings (the only recovery after an initial OS denial).
+        // register() re-checks permission and is a silent no-op once we've
+        // registered this session, so this won't spam.
+        if (!registeredRef.current) register();
       }
     });
 
