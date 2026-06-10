@@ -253,7 +253,9 @@ describe('disputeService.resolveDispute', () => {
     expect(mockRpc).not.toHaveBeenCalled();
     expect(updateChain.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: 'denied',
+        // A4-DISP: no_action resolves in the driver's favor. Must be a value
+        // the ride_disputes.status CHECK accepts — 'denied' was invalid.
+        status: 'resolved_driver',
         resolution: 'no_action',
         refund_amount_trc: 0,
       }),

@@ -86,8 +86,15 @@ const REGISTRY: Record<Domain, Record<string, StatusMeta>> = {
     closed: { label: 'Cerrado', i18nKey: 'status_registry.incident.closed', tone: 'default', icon: XCircle },
   },
   dispute: {
+    // Keys match the ride_disputes.status CHECK (A4-DISP). resolved_rider =
+    // in the rider's favor (refund); resolved_driver = in the driver's favor
+    // (no refund). Legacy awaiting_response/resolved/denied/rejected kept as
+    // harmless aliases so any stale row still renders a label.
     open: { label: 'Abierta', i18nKey: 'status_registry.dispute.open', tone: 'info', icon: Scale },
     under_review: { label: 'En revisión', i18nKey: 'status_registry.dispute.under_review', tone: 'warning', icon: Clock },
+    escalated: { label: 'Escalada', i18nKey: 'status_registry.dispute.escalated', tone: 'warning', icon: Clock },
+    resolved_rider: { label: 'Resuelta (pasajero)', i18nKey: 'status_registry.dispute.resolved_rider', tone: 'success', icon: CheckCircle2 },
+    resolved_driver: { label: 'Resuelta (conductor)', i18nKey: 'status_registry.dispute.resolved_driver', tone: 'success', icon: CheckCircle2 },
     awaiting_response: { label: 'Esperando respuesta', i18nKey: 'status_registry.dispute.awaiting_response', tone: 'warning', icon: Clock },
     resolved: { label: 'Resuelta', i18nKey: 'status_registry.dispute.resolved', tone: 'success', icon: CheckCircle2 },
     denied: { label: 'Denegada', i18nKey: 'status_registry.dispute.denied', tone: 'danger', icon: XCircle },

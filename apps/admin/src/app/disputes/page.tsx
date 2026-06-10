@@ -53,9 +53,10 @@ export default function DisputesPage() {
     { id: 'all', label: t('disputes.filter_all', { defaultValue: 'Todas' }) },
     { id: 'open', label: t('disputes.filter_open', { defaultValue: 'Abiertas' }), tone: 'info' },
     { id: 'under_review', label: t('disputes.filter_under_review', { defaultValue: 'En revisión' }), tone: 'warning' },
-    { id: 'awaiting_response', label: t('disputes.filter_awaiting', { defaultValue: 'Esperando' }), tone: 'warning' },
-    { id: 'resolved', label: t('disputes.filter_resolved', { defaultValue: 'Resueltas' }), tone: 'success' },
-    { id: 'denied', label: t('disputes.filter_denied', { defaultValue: 'Denegadas' }), tone: 'danger' },
+    { id: 'escalated', label: t('disputes.filter_escalated', { defaultValue: 'Escaladas' }), tone: 'warning' },
+    { id: 'resolved_rider', label: t('disputes.filter_resolved_rider', { defaultValue: 'Resueltas (pasajero)' }), tone: 'success' },
+    { id: 'resolved_driver', label: t('disputes.filter_resolved_driver', { defaultValue: 'Resueltas (conductor)' }), tone: 'success' },
+    { id: 'closed', label: t('disputes.filter_closed', { defaultValue: 'Cerradas' }), tone: 'default' },
   ], [t]);
 
   const priorityLabel = useCallback((p: string): string => {
@@ -166,7 +167,7 @@ export default function DisputesPage() {
         amount,
         resolutionNotes,
       );
-      const nextStatus: DisputeStatus = resolution === 'no_action' ? 'denied' : 'resolved';
+      const nextStatus: DisputeStatus = resolution === 'no_action' ? 'resolved_driver' : 'resolved_rider';
       setDisputes((prev) =>
         prev.map((d) =>
           d.id === selected.id
@@ -314,8 +315,8 @@ export default function DisputesPage() {
 
   const canResolve =
     selected &&
-    selected.status !== 'resolved' &&
-    selected.status !== 'denied' &&
+    selected.status !== 'resolved_rider' &&
+    selected.status !== 'resolved_driver' &&
     selected.status !== 'closed';
   const isNumericResolution = resolution !== 'no_action' && resolution !== 'warning_issued';
 
@@ -576,7 +577,7 @@ export default function DisputesPage() {
                 </section>
               )}
 
-              {(selected.status === 'resolved' || selected.status === 'denied') &&
+              {(selected.status === 'resolved_rider' || selected.status === 'resolved_driver') &&
                 selected.resolution && (
                   <section className="px-5 py-4">
                     <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">

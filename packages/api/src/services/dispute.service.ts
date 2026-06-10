@@ -234,11 +234,14 @@ export const disputeService = {
     };
 
     if (resolution === 'no_action') {
-      // Deny without refund
+      // Resolve in the driver's favor without a refund. Must be a value the
+      // ride_disputes.status CHECK accepts — 'denied' is NOT one (it 23514'd).
+      // This mirrors process_dispute_refund's own mapping (no_action ->
+      // resolved_driver).
       const { error } = await supabase
         .from('ride_disputes')
         .update({
-          status: 'denied' as DisputeStatus,
+          status: 'resolved_driver' as DisputeStatus,
           resolution,
           resolution_notes: notes ?? null,
           refund_amount_trc: 0,
