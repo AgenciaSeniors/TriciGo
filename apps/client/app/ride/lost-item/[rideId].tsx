@@ -68,7 +68,7 @@ export default function LostItemReportScreen() {
     } catch (err: unknown) {
       const errObj = err as Record<string, unknown> | null;
       if (typeof errObj?.message === 'string' && (errObj.message.includes('duplicate') || errObj?.code === '23505')) {
-        Alert.alert(t('common.error'), t('lost_found.already_reported'));
+        Alert.alert(t('common.error'), t('lost_found.already_reported', { defaultValue: 'Ya reportaste un objeto perdido para este viaje.' }));
       } else {
         Alert.alert(t('common.error'), getErrorMessage(err));
       }

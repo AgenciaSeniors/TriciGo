@@ -474,8 +474,8 @@ function NativeRidesScreen() {
   const filterLabels = useMemo(() => ({
     filters: t('rides_history.filters', { defaultValue: 'Filtros' }),
     all: t('rides_history.all_statuses', { defaultValue: 'Todos' }),
-    completed: t('rides_history.completed'),
-    canceled: t('rides_history.canceled'),
+    completed: t('rides_history.completed', { defaultValue: 'Completado' }),
+    canceled: t('rides_history.canceled', { defaultValue: 'Cancelado' }),
     serviceType: t('rides_history.service_type', { defaultValue: 'Tipo de servicio' }),
     paymentMethod: t('rides_history.payment_method', { defaultValue: 'Método de pago' }),
     clearFilters: t('rides_history.clear_filters', { defaultValue: 'Limpiar filtros' }),

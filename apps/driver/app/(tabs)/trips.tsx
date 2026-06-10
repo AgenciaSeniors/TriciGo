@@ -393,7 +393,7 @@ function NativeTripsScreen() {
                 style={{ marginRight: 4 }}
               />
               <Text style={{ color: palette.ink.secondary, fontSize: 11, fontWeight: '600' }}>
-                {item.payment_method === 'cash' ? t('common.cash') : t('trip.tricicoin')}
+                {item.payment_method === 'cash' ? t('common.cash', { defaultValue: 'Efectivo' }) : t('trip.tricicoin')}
               </Text>
             </View>
           </View>

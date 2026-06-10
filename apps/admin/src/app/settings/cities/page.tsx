@@ -145,14 +145,14 @@ export default function CitiesPage() {
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_rides')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_bounds')}</th>
               <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('cities.col_active')}</th>
-              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions')}</th>
+              <th className="text-left px-4 py-3 font-medium text-ink-muted">{t('common.actions', { defaultValue: 'Acciones' })}</th>
             </tr>
           </thead>
           <tbody>
             {cities.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-ink-subtle">
-                  {loading ? t('common.loading') : t('cities.no_cities')}
+                  {loading ? t('common.loading') : t('cities.no_cities', { defaultValue: 'No hay ciudades configuradas' })}
                 </td>
               </tr>
             ) : (
@@ -197,7 +197,7 @@ export default function CitiesPage() {
                         city.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
-                      {city.is_active ? t('common.active') : t('common.inactive')}
+                      {city.is_active ? t('common.active', { defaultValue: 'Activa' }) : t('common.inactive', { defaultValue: 'Inactiva' })}
                     </button>
                   </td>
                   <td className="px-4 py-3">

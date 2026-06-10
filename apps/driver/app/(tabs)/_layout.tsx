@@ -48,7 +48,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: t('common.home_tab'),
+            title: t('common.home_tab', { defaultValue: 'Inicio' }),
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="navigate" size={size} color={color} />
             ),
@@ -84,7 +84,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="profile"
           options={{
-            title: t('common.profile_tab'),
+            title: t('common.profile_tab', { defaultValue: 'Perfil' }),
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="person" size={size} color={color} />
             ),
