@@ -103,15 +103,34 @@ export const reviewService = {
           .single();
 
         if (!error) {
-          // SUCCESS — insert tags then return
+          // SUCCESS — attach tags (best-effort) then return.
+          // review_tags stores tag_id (uuid FK → review_tag_definitions.id),
+          // NOT the app-facing tag_key string — resolve keys first (A1-01:
+          // inserting `tag_key` raised PGRST204 and the old rollback then
+          // DELETED the just-created review). Tags are decorative: a tag
+          // failure (or an unseeded definitions table) must never destroy
+          // the rating itself, so this block no longer rolls back or throws.
           if (validParams.tags && validParams.tags.length > 0) {
-            const { error: tagError } = await supabase
-              .from('review_tags')
-              .insert(validParams.tags.map((tag_key) => ({ review_id: data.id, tag_key })));
-            if (tagError) {
-              // Rollback to avoid orphaned review
-              try { await supabase.from('reviews').delete().eq('id', data.id); } catch { /* best effort */ }
-              throw tagError;
+            try {
+              const { data: defs, error: defError } = await supabase
+                .from('review_tag_definitions')
+                .select('id, tag_key')
+                .in('tag_key', validParams.tags);
+              if (defError) throw defError;
+              const tagRows = ((defs ?? []) as Array<{ id: string; tag_key: string }>)
+                .map((d) => ({ review_id: data.id, tag_id: d.id }));
+              if (tagRows.length > 0) {
+                const { error: tagError } = await supabase
+                  .from('review_tags')
+                  .insert(tagRows);
+                if (tagError) throw tagError;
+              }
+            } catch (tagErr) {
+              // eslint-disable-next-line no-console
+              console.warn('[reviewService] tag attach failed — review kept without tags', {
+                review_id: data.id,
+                error: String((tagErr as { message?: string })?.message ?? tagErr),
+              });
             }
           }
           return { ...data, tags: validParams.tags ?? [] } as Review;
@@ -225,15 +244,31 @@ export const reviewService = {
     sentiment: string,
   ): Promise<ReviewTagDefinition[]> {
     const supabase = getSupabaseClient();
+    // The table's real shape is tag_key/applies_to/is_positive/sort_order —
+    // there are NO direction/sentiment/is_active/display_order columns
+    // (A1-01: the old query 42703'd on every call, so the UI silently fell
+    // back to its hardcoded tags forever). applies_to is the REVIEWEE type:
+    // rating a driver (rider_to_driver) wants 'driver'+'both'; rating a
+    // rider (driver_to_rider) wants 'customer'+'both'. The app-facing DTO
+    // keeps key/direction/sentiment — map here so call sites stay untouched.
+    const appliesTo = direction === 'driver_to_rider' ? ['customer', 'both'] : ['driver', 'both'];
     const { data, error } = await supabase
       .from('review_tag_definitions')
-      .select('*')
-      .eq('direction', direction)
-      .eq('sentiment', sentiment)
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
+      .select('tag_key, applies_to, is_positive, sort_order')
+      .in('applies_to', appliesTo)
+      .eq('is_positive', sentiment === 'positive')
+      .order('sort_order', { ascending: true });
     if (error) throw error;
-    return data as ReviewTagDefinition[];
+    return ((data ?? []) as Array<{ tag_key: string; sort_order: number | null }>).map(
+      (row) =>
+        ({
+          key: row.tag_key,
+          direction,
+          sentiment,
+          display_order: row.sort_order ?? 0,
+          is_active: true,
+        }) as ReviewTagDefinition,
+    );
   },
 
   /**
