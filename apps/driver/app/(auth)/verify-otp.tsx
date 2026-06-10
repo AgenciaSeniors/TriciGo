@@ -25,6 +25,11 @@ export default function VerifyOTPScreen() {
   // Prevent the auto-submit effect from firing multiple times if code stays
   // at 6 digits (e.g. user retyped the same value).
   const autoVerifiedRef = useRef(false);
+  // R-3: once verifyOTP succeeds the single-use code is consumed and the
+  // session is set. If the *profile* fetch then fails (transient network),
+  // we must NOT re-run verifyOTP (it would fail "invalid code" and strand
+  // the driver) — this ref lets a retry resume at phase 2 only.
+  const sessionEstablishedRef = useRef(false);
 
   useEffect(() => {
     if (resendTimer <= 0) return;
@@ -44,26 +49,51 @@ export default function VerifyOTPScreen() {
 
     setLoading(true);
     try {
-      await authService.verifyOTP(phone!, code);
-      const user = await authService.getCurrentUser();
+      // Phase 1 — verify the OTP (burns the single-use code + sets the
+      // session). Skipped on retry: re-running a consumed code fails with
+      // "invalid code" and would strand the driver (R-3).
+      if (!sessionEstablishedRef.current) {
+        await authService.verifyOTP(phone!, code);
+        sessionEstablishedRef.current = true;
+      }
+      // Phase 2 — load the profile. The session is already established, so a
+      // transient network blip here must NOT be reported as an invalid code.
+      // Retry a few times before giving up.
+      let user = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          user = await authService.getCurrentUser();
+          if (user) break;
+        } catch (e) {
+          if (attempt === 3) throw e;
+        }
+        if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 600));
+      }
+      if (!user) throw new Error('profile_unavailable');
       setUser(user);
       // Record this device for new-device login detection. Best-effort:
       // never block login on it.
       getDeviceInfo()
         .then((info) => deviceService.registerLoginDevice(info))
         .catch(() => {});
-      if (user) {
-        try {
-          const dp = await driverService.getProfile(user.id);
-          setProfile(dp);
-        } catch {
-          // No driver profile yet - will redirect to onboarding
-        }
+      try {
+        const dp = await driverService.getProfile(user.id);
+        setProfile(dp);
+      } catch {
+        // No driver profile yet - will redirect to onboarding
       }
     } catch {
-      setError(t('errors.generic'));
-      Toast.show({ type: 'error', text1: t('auth.invalid_otp', { defaultValue: 'Código inválido' }), visibilityTime: 2500 });
-      // Let the user retry with a new code — reset the auto-submit guard.
+      if (sessionEstablishedRef.current) {
+        // The code was accepted; only the profile fetch failed (network).
+        // Retrying resumes at phase 2 (no OTP re-burn); the stored session
+        // also logs the driver in on a cold restart.
+        setError(t('auth.profile_fetch_retry', { defaultValue: 'Conexión inestable. Tocá "Verificar" otra vez.' }));
+        Toast.show({ type: 'error', text1: t('auth.profile_fetch_retry', { defaultValue: 'Conexión inestable. Tocá "Verificar" otra vez.' }), visibilityTime: 2500 });
+      } else {
+        setError(t('errors.generic'));
+        Toast.show({ type: 'error', text1: t('auth.invalid_otp', { defaultValue: 'Código inválido' }), visibilityTime: 2500 });
+      }
+      // Let the user retry — reset the auto-submit guard.
       autoVerifiedRef.current = false;
     } finally {
       setLoading(false);
