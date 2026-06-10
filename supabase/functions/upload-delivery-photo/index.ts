@@ -29,6 +29,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
+// PASS #3: size cap + MIME whitelist (parity with the storage-upload EF). The
+// delivery-photos bucket is PUBLIC, so accepting arbitrary content-types (e.g.
+// image/svg+xml / text/html) is a stored-XSS vector, and an unbounded body was
+// buffered fully in Deno memory before storage.
+const MAX_BYTES = 8 * 1024 * 1024; // 8 MB — generous for a compressed photo
+const ALLOWED_MIME = /^image\/(jpe?g|png|webp|heic|heif)$/i;
+
 function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') ?? '';
   const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : '';
@@ -79,6 +86,12 @@ Deno.serve(async (req: Request) => {
   });
 
   try {
+    // Reject oversized bodies before buffering the whole thing in memory.
+    const contentLength = Number(req.headers.get('content-length') ?? '0');
+    if (Number.isFinite(contentLength) && contentLength > MAX_BYTES) {
+      return jsonResponse(req, { error: 'file_too_large' }, 413);
+    }
+
     // ─── 2. Parse the multipart form ───
     const form = await req.formData();
     const file = form.get('file');
@@ -86,6 +99,13 @@ Deno.serve(async (req: Request) => {
     const phase = String(form.get('phase') ?? 'delivery');
     if (!(file instanceof File)) {
       return jsonResponse(req, { error: 'missing_file' }, 400);
+    }
+    // Size cap + MIME whitelist (see top-of-file note).
+    if (typeof file.size === 'number' && file.size > MAX_BYTES) {
+      return jsonResponse(req, { error: 'file_too_large' }, 413);
+    }
+    if (file.type && !ALLOWED_MIME.test(file.type)) {
+      return jsonResponse(req, { error: 'invalid_file_type' }, 415);
     }
     if (!rideId) {
       return jsonResponse(req, { error: 'missing_ride_id' }, 400);

@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { driverService } from '@tricigo/api';
 import type { SelfieCheck } from '@tricigo/types';
 import { useDriverStore } from '@/stores/driver.store';
+import { compressDocument } from '@/lib/compressDocument';
 
 export function useSelfieCheck() {
   const driverProfileId = useDriverStore((s) => s.profile?.id);
@@ -57,11 +58,17 @@ export function useSelfieCheck() {
       const asset = result.assets[0];
       const fileName = `selfie-${Date.now()}.jpg`;
 
+      // PASS #3 UPLOAD-SELFIE: compress before upload. A raw front-camera selfie
+      // is 2–5 MB and times out on a Cuban 3G link, blocking the driver from
+      // going online for their shift. 1600px / q0.7 JPEG → ~150–400 KB.
+      // Best-effort: compressDocument falls back to the original on failure.
+      const { uri: uploadUri } = await compressDocument(asset.uri, 'image/jpeg');
+
       // Upload and start processing
       const updated = await driverService.uploadSelfieCheck(
         activeCheck.id,
         driverProfileId,
-        asset.uri,
+        uploadUri,
         fileName,
       );
       setCheck(updated);

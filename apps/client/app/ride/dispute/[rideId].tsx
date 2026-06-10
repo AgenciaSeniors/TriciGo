@@ -11,6 +11,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { disputeService, getSupabaseClient, uploadFileFromUri } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
+import { compressImage } from '@/lib/compressImage';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
 import { useAuth } from '@/lib/useAuth';
 import { colors, darkColors } from '@tricigo/theme';
@@ -78,8 +79,14 @@ export default function DisputeFormScreen() {
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      const newUris = result.assets.map((a) => a.uri);
-      setEvidenceUris((prev) => [...prev, ...newUris].slice(0, MAX_EVIDENCE_PHOTOS));
+      // PASS #3 UPLOAD-DISPUTE: compress each image before keeping it. Gallery
+      // photos are 4–12 MP; uploading several raw over a Cuban 3G link times out
+      // and kills the whole submission. ~1600px / q0.7 JPEG → ~150–400 KB each
+      // (also normalizes iOS HEIC → JPEG so the upload MIME matches the bytes).
+      const compressed = await Promise.all(
+        result.assets.map((a) => compressImage(a.uri).then((r) => r.uri)),
+      );
+      setEvidenceUris((prev) => [...prev, ...compressed].slice(0, MAX_EVIDENCE_PHOTOS));
     }
   };
 

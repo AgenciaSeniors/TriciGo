@@ -10,6 +10,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { deliveryService } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
+import { compressDocument } from '@/lib/compressDocument';
 
 interface DeliveryPhotoSheetProps {
   rideId: string;
@@ -74,7 +75,12 @@ export function DeliveryPhotoSheet({
 
       if (result.canceled || !result.assets?.[0]) return;
 
-      setPhotoUri(result.assets[0].uri);
+      // PASS #3 UPLOAD-DELIVERY: compress before storing/uploading. A raw camera
+      // photo is 1.5–4 MB and stalls on a Cuban 3G link, stranding the driver at
+      // the customer's door (delivery can't complete without the photo). 1600px /
+      // q0.7 JPEG → ~150–400 KB. Best-effort (falls back to original on failure).
+      const { uri: compressedUri } = await compressDocument(result.assets[0].uri, 'image/jpeg');
+      setPhotoUri(compressedUri);
       triggerHaptic('light');
     } catch (err) {
       logger.error('[DeliveryPhoto] Camera error', { error: err instanceof Error ? err.message : 'unknown' });
