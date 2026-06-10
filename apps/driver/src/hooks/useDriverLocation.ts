@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import * as Location from 'expo-location';
 import { driverService, locationService, getOnlineStatus } from '@tricigo/api';
 import { smoothHeading, mapLogger } from '@tricigo/utils';
@@ -237,6 +237,21 @@ export function useDriverLocationTracking(
                 console.log('[Location] Background permission granted after disclosure');
               } else {
                 console.log('[Location] Background permission denied at system prompt');
+                // R-2: the driver tried to grant but the OS ended up denied
+                // (fresh denial, or a prior denial so the system prompt
+                // silently no-ops). The background task won't start → the
+                // rider loses the marker the moment the app is backgrounded
+                // or the screen is off. The OS never re-prompts, so the only
+                // recovery is system Settings — surface it instead of leaving
+                // the driver unaware.
+                Alert.alert(
+                  'Ubicación en segundo plano desactivada',
+                  'Sin el permiso "Siempre", el pasajero dejará de verte en el mapa cuando minimices la app o apagues la pantalla durante el viaje. Activalo en Ajustes para que te vea llegar en tiempo real.',
+                  [
+                    { text: 'Más tarde', style: 'cancel' },
+                    { text: 'Abrir Ajustes', onPress: () => { Linking.openSettings().catch(() => {}); } },
+                  ],
+                );
               }
             } else {
               console.log('[Location] Driver dismissed background disclosure');
