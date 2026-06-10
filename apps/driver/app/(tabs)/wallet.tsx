@@ -328,7 +328,7 @@ export default function WalletScreen() {
               {txLabel}
             </Text>
             <Text style={{ color: palette.ink.secondary, fontSize: 12, marginTop: 2 }}>
-              {new Date(item.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              {new Date(item.created_at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' })}
             </Text>
           </View>
           <Text style={{ color: txColor, fontWeight: '700', fontSize: 15, ...TABULAR }}>

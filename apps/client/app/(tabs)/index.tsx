@@ -656,6 +656,13 @@ function WebHomeScreen() {
   const [promoResult, setPromoResult] = useState<{ valid: boolean; discount: number; promoId?: string; error?: string } | null>(null);
   const [promoValidating, setPromoValidating] = useState(false);
 
+  // PASS #3 PROMO-STALE (web): clear a validated promo when the service type
+  // changes — the discount was validated against the previous service's fare,
+  // so leaving it would show a stale (possibly free-looking) price.
+  useEffect(() => {
+    setPromoResult(null);
+  }, [serviceType]);
+
   // Schedule
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
@@ -1531,7 +1538,7 @@ function WebHomeScreen() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>TriciCoin</span>
-            <span style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>T$ {(balance / 100).toFixed(2)}</span>
+            <span style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>{formatTRC(balance)}</span>
           </div>
         </div>
 
@@ -2369,11 +2376,12 @@ function IdleView() {
               {activePromos.map((promo) => {
                 // Build a human-readable headline from the schema fields.
                 // Promotions have no title column — synthesize one from
-                // discount_percent / discount_fixed_cup. Centavos → CUP.
+                // discount_percent / discount_fixed_cup (whole CUP, applied
+                // directly by validate_promo_code — NOT centavos).
                 const headline = promo.discount_percent
                   ? `${promo.discount_percent}% OFF`
                   : promo.discount_fixed_cup
-                    ? `${Math.round(promo.discount_fixed_cup / 100)} CUP`
+                    ? `${promo.discount_fixed_cup} CUP`
                     : '🎁';
                 const expiry = promo.valid_until
                   ? new Date(promo.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short' })
@@ -2381,7 +2389,20 @@ function IdleView() {
                 return (
                   <Pressable
                     key={promo.id}
-                    onPress={() => router.push('/profile/referral')}
+                    onPress={() => {
+                      // Prefill the promo into the booking flow (the booking
+                      // promo field reads useRideStore.promoCode). Was wrongly
+                      // routing to /profile/referral (unrelated to promos).
+                      useRideStore.getState().setPromoCode(promo.code);
+                      triggerSelection();
+                      Alert.alert(
+                        t('home.promo_ready_title', { defaultValue: 'Código listo' }),
+                        t('home.promo_ready_body', {
+                          defaultValue: 'Aplicamos "{{code}}" a tu próxima reserva. Verifícalo en el campo de código promocional.',
+                          code: promo.code,
+                        }),
+                      );
+                    }}
                     style={{
                       width: 220,
                       backgroundColor: tokens.bg.elev1,
@@ -3139,6 +3160,19 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
       if (fe) requestEstimate();
     }
   }, [draft.paymentMethod, requestEstimate]);
+
+  // PASS #3 PROMO-STALE: clear a validated promo when the service type changes.
+  // The discount was validated against the previous service's fare; leaving it
+  // would show a stale (possibly free-looking) price on the new fare. Mirrors
+  // the payment-method effect above.
+  const prevServiceRef = useRef(draft.serviceType);
+  useEffect(() => {
+    if (draft.serviceType !== prevServiceRef.current) {
+      prevServiceRef.current = draft.serviceType;
+      const store = useRideStore.getState();
+      if (store.promoResult) store.setPromoResult(null);
+    }
+  }, [draft.serviceType]);
 
   // Load saved locations from customer profile
   useEffect(() => {

@@ -12,7 +12,7 @@ import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { cubanLight, cubanDark } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { referralService } from '@tricigo/api';
+import { referralService, walletService } from '@tricigo/api';
 import { formatCUP } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Referral } from '@tricigo/types';
@@ -36,18 +36,24 @@ export default function DriverReferralScreen() {
   const [hasBeenReferred, setHasBeenReferred] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  // PASS #3 REFERRAL-HARDCODE: bonus is admin-configurable (mig 00395,
+  // platform_config.referral_bonus_cup). Default 500 until fetched.
+  const [bonusCup, setBonusCup] = useState(500);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
     try {
-      const [code, history, referred] = await Promise.all([
+      const [code, history, referred, bonusRaw] = await Promise.all([
         referralService.getOrCreateReferralCode(userId),
         referralService.getReferralHistory(userId),
         referralService.hasBeenReferred(userId),
+        walletService.getConfigValue('referral_bonus_cup').catch(() => null),
       ]);
       setMyCode(code);
       setReferrals(history);
       setHasBeenReferred(referred);
+      const parsedBonus = bonusRaw != null ? parseInt(bonusRaw, 10) : NaN;
+      if (Number.isFinite(parsedBonus) && parsedBonus > 0) setBonusCup(parsedBonus);
     } catch (err) {
       console.warn('[Referral] Failed to load:', err);
     } finally {
@@ -144,7 +150,7 @@ export default function DriverReferralScreen() {
                   disabled={!myCode}
                 />
                 <Text variant="caption" color="primary" className="mt-3 text-center opacity-50">
-                  {t('profile.referral_share_help', { bonus: formatCUP(500) })}
+                  {t('profile.referral_share_help', { bonus: formatCUP(bonusCup) })}
                 </Text>
               </Card>
 
