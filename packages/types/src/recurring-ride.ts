@@ -22,15 +22,19 @@ export interface RecurringRide {
   service_type: ServiceTypeSlug;
   payment_method: PaymentMethod;
 
-  // Schedule: ISO days (1=Mon..7=Sun), time in HH:MM local
+  // Schedule: ISO days (1=Mon..7=Sun), time in HH:MM local.
+  // The recurring_rides table has no `timezone` column — occurrences are
+  // computed in America/Havana server-side (compute_next_occurrence), so
+  // the type intentionally omits it.
   days_of_week: number[];
   time_of_day: string;
-  timezone: string;
 
   // State
   status: RecurringRideStatus;
   next_occurrence_at: string | null;
-  last_ride_created_at: string | null;
+  // Matches the real column `last_triggered_at` (was mistyped as
+  // `last_ride_created_at`, which never existed → always undefined).
+  last_triggered_at: string | null;
 
   created_at: string;
   updated_at: string;

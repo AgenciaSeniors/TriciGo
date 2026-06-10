@@ -15,16 +15,19 @@ import { recurringRideService } from '../recurring-ride.service';
 const MOCK_RECURRING = {
   id: 'rr-1',
   customer_id: 'u-1',
+  pickup_latitude: 23.11,
+  pickup_longitude: -82.36,
   pickup_address: 'Casa',
+  dropoff_latitude: 23.14,
+  dropoff_longitude: -82.39,
   dropoff_address: 'Oficina',
   service_type: 'triciclo_basico',
   payment_method: 'tricicoin',
   days_of_week: [1, 2, 3, 4, 5],
   time_of_day: '08:00',
-  timezone: 'America/Havana',
   status: 'active',
   next_occurrence_at: '2026-03-14T12:00:00Z',
-  last_ride_created_at: null,
+  last_triggered_at: null,
   created_at: '2026-03-10T00:00:00Z',
   updated_at: '2026-03-10T00:00:00Z',
 };
@@ -105,6 +108,20 @@ describe('recurringRideService', () => {
         p_time: '08:00',
         p_tz: 'America/Havana',
       });
+      // Regression guard: the insert must use the real lat/lng numeric
+      // columns, NEVER pickup_location/dropoff_location/timezone (those
+      // columns don't exist on recurring_rides → PGRST204).
+      const payload = mockInsert.mock.calls[0][0];
+      expect(payload).toMatchObject({
+        customer_id: 'u-1',
+        pickup_latitude: 23.11,
+        pickup_longitude: -82.36,
+        dropoff_latitude: 23.14,
+        dropoff_longitude: -82.39,
+      });
+      expect(payload).not.toHaveProperty('pickup_location');
+      expect(payload).not.toHaveProperty('dropoff_location');
+      expect(payload).not.toHaveProperty('timezone');
       expect(result).toEqual(MOCK_RECURRING);
     });
 

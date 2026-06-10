@@ -55,19 +55,26 @@ export const recurringRideService = {
     );
     if (rpcError) throw rpcError;
 
+    // recurring_rides stores discrete lat/lng numeric columns (NOT a
+    // geography POINT, and there is no `timezone` column) — unlike `rides`,
+    // which this insert was copy-pasted from. Writing pickup_location /
+    // dropoff_location / timezone made every create fail with PGRST204
+    // "Could not find the 'pickup_location' column" (and would 23502 on the
+    // NOT NULL lat/lng even if those were dropped). Insert the real columns.
     const { data, error } = await supabase
       .from('recurring_rides')
       .insert({
         customer_id: params.user_id,
-        pickup_location: `POINT(${params.pickup_longitude} ${params.pickup_latitude})`,
+        pickup_latitude: params.pickup_latitude,
+        pickup_longitude: params.pickup_longitude,
         pickup_address: params.pickup_address,
-        dropoff_location: `POINT(${params.dropoff_longitude} ${params.dropoff_latitude})`,
+        dropoff_latitude: params.dropoff_latitude,
+        dropoff_longitude: params.dropoff_longitude,
         dropoff_address: params.dropoff_address,
         service_type: params.service_type,
         payment_method: params.payment_method,
         days_of_week: params.days_of_week,
         time_of_day: params.time_of_day,
-        timezone: 'America/Havana',
         next_occurrence_at: nextOccurrence,
       })
       .select()
