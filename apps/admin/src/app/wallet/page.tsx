@@ -31,6 +31,29 @@ type WalletStats = {
   pending_redemptions_amount: number;
 };
 
+// PASS #3 ADMIN-LEDGER-LABEL: map raw ledger_entry_type enum → Spanish so the
+// admin ledger book is readable for non-technical support staff (was rendering
+// the bare enum like "ride_payment").
+const LEDGER_TYPE_LABELS: Record<string, string> = {
+  recharge: 'Recarga',
+  ride_payment: 'Pago de viaje',
+  ride_hold: 'Retención de viaje',
+  ride_hold_release: 'Liberación de retención',
+  commission: 'Comisión',
+  transfer_in: 'Transferencia recibida',
+  transfer_out: 'Transferencia enviada',
+  promo_credit: 'Crédito promocional',
+  redemption: 'Canje',
+  adjustment: 'Ajuste',
+  insurance_premium: 'Prima de seguro',
+  refund: 'Reembolso',
+  quota_deduction: 'Descuento de cuota',
+  quota_recharge: 'Recarga de cuota',
+};
+function ledgerTypeLabel(type: string): string {
+  return LEDGER_TYPE_LABELS[type] ?? type.replace(/_/g, ' ');
+}
+
 export default function WalletPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
@@ -217,11 +240,21 @@ export default function WalletPage() {
         id: 'type',
         header: t('wallet_admin.col_type', { defaultValue: 'Tipo' }),
         cell: (tx) => (
-          <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-[10px] text-ink-muted">
-            {tx.type}
+          <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-ink-muted">
+            {t(`wallet_admin.ltype_${tx.type}`, { defaultValue: ledgerTypeLabel(tx.type) })}
           </span>
         ),
-        width: '130px',
+        width: '160px',
+      },
+      {
+        id: 'amount',
+        header: t('wallet_admin.col_amount', { defaultValue: 'Monto' }),
+        cell: (tx) => (
+          <span className="font-medium text-ink tabular-nums">
+            {tx.amount != null ? formatTriciCoin(tx.amount) : '—'}
+          </span>
+        ),
+        width: '120px',
       },
       {
         id: 'reference_id',

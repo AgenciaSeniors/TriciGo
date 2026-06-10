@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, referralService } from '@tricigo/api';
+import { getSupabaseClient, referralService, walletService } from '@tricigo/api';
 import type { Referral } from '@tricigo/types';
 
 const STATUS_BADGE: Record<Referral['status'], { bg: string; color: string; key: string; defaultLabel: string }> = {
@@ -23,8 +23,6 @@ const STATUS_BADGE: Record<Referral['status'], { bg: string; color: string; key:
     defaultLabel: 'Invalidado',
   },
 };
-
-const BONUS_CUP = 500;
 
 function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-CU', {
@@ -49,6 +47,9 @@ export default function ReferralPage() {
   const [hasBeenReferred, setHasBeenReferred] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+  // PASS #3 REFERRAL-HARDCODE: bonus is admin-configurable
+  // (platform_config.referral_bonus_cup, mig 00395). Default 500 until fetched.
+  const [bonusCup, setBonusCup] = useState(500);
 
   // Apply-a-code form state.
   const [inputCode, setInputCode] = useState('');
@@ -71,14 +72,17 @@ export default function ReferralPage() {
     setDataLoading(true);
     setDataError(null);
     try {
-      const [code, history, referred] = await Promise.all([
+      const [code, history, referred, bonusRaw] = await Promise.all([
         referralService.getOrCreateReferralCode(uid),
         referralService.getReferralHistory(uid),
         referralService.hasBeenReferred(uid),
+        walletService.getConfigValue('referral_bonus_cup').catch(() => null),
       ]);
       setMyCode(code);
       setReferrals(history);
       setHasBeenReferred(referred);
+      const parsedBonus = bonusRaw != null ? parseInt(bonusRaw, 10) : NaN;
+      if (Number.isFinite(parsedBonus) && parsedBonus > 0) setBonusCup(parsedBonus);
     } catch (err) {
       setDataError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -216,7 +220,7 @@ export default function ReferralPage() {
         <p style={{ fontSize: '0.9rem', opacity: 0.95, margin: 0, lineHeight: 1.5 }}>
           {t('web.referral_banner_desc', {
             defaultValue: 'Compartí tu código. Cuando tu amigo complete su primer viaje, recibís {{bonus}} CUP en TriciCoins.',
-            bonus: BONUS_CUP,
+            bonus: bonusCup,
           })}
         </p>
       </div>
@@ -494,7 +498,7 @@ export default function ReferralPage() {
           { num: '2', text: t('web.referral_step_2', { defaultValue: 'Tu amigo se registra usando tu código y completa su primer viaje.' }) },
           { num: '3', text: t('web.referral_step_3', {
             defaultValue: 'Recibís {{bonus}} CUP en TriciCoins, acreditados directamente a tus créditos de viaje.',
-            bonus: BONUS_CUP,
+            bonus: bonusCup,
           }) },
         ].map((step, i, arr) => (
           <div key={step.num} style={{

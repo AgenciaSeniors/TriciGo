@@ -881,7 +881,7 @@ export default function WalletPage() {
                 );
               })}
 
-              {txHasMore && filter === 'all' && (
+              {txHasMore && (
                 <button
                   onClick={handleLoadMoreTx}
                   disabled={txLoadingMore}
