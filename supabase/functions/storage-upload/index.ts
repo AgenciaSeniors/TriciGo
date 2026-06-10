@@ -157,6 +157,43 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       return !!data?.id;
     };
+    // Corporate fleet license uploads (A6-01): the member must belong to a
+    // fleet of the corporate account named in the path, and the caller must
+    // administer that account (creator or active corp admin) — or be a
+    // platform admin.
+    const canManageFleetMemberDoc = async (corpId: string, memberId: string): Promise<boolean> => {
+      if (!corpId || !memberId) return false;
+      const { data: member } = await admin
+        .from('fleet_members')
+        .select('id, fleet:driver_fleets!fleet_id(corporate_account_id)')
+        .eq('id', memberId)
+        .maybeSingle();
+      const fleet = member?.fleet as
+        | { corporate_account_id?: string }
+        | { corporate_account_id?: string }[]
+        | null
+        | undefined;
+      const memberCorp = Array.isArray(fleet)
+        ? fleet[0]?.corporate_account_id
+        : fleet?.corporate_account_id;
+      if (!memberCorp || memberCorp !== corpId) return false;
+      if (await isAdmin()) return true;
+      const { data: corp } = await admin
+        .from('corporate_accounts')
+        .select('created_by')
+        .eq('id', corpId)
+        .maybeSingle();
+      if (corp?.created_by === user.id) return true;
+      const { data: emp } = await admin
+        .from('corporate_employees')
+        .select('id')
+        .eq('corporate_account_id', corpId)
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .eq('is_active', true)
+        .maybeSingle();
+      return !!emp?.id;
+    };
 
     let authorized = false;
 
@@ -170,6 +207,10 @@ Deno.serve(async (req: Request) => {
       // (closing the long-standing gap where selfie uploads had no INSERT policy).
       if ((segs[0] === 'driver-docs' || segs[0] === 'selfie-checks') && segs.length >= 3) {
         authorized = (await ownsDriverProfile(segs[1])) || (await isAdmin());
+      } else if (segs[0] === 'fleet-docs' && segs.length >= 4) {
+        // fleet-docs/{corporateAccountId}/{fleetMemberId}/{file} — corporate
+        // fleet member license uploads (fleet.service.uploadMemberLicense).
+        authorized = await canManageFleetMemberDoc(segs[1], segs[2]);
       }
     } else if (bucket === 'dispute-evidence') {
       // disputes/{rideId}/{userId}/{file} — uploader's own folder + party to ride.

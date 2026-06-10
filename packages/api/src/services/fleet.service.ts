@@ -142,9 +142,10 @@ export const fleetService = {
   },
 
   /**
-   * Upload a license document for a fleet_member. The storage bucket
-   * (driver-docs) is reused from the existing driver verification flow.
-   * The path includes the corporate owner so RLS can enforce ownership.
+   * Upload a license document for a fleet_member into the
+   * 'driver-documents' bucket under the fleet-docs/ prefix, via the
+   * storage-upload Edge Function. The path includes the corporate account
+   * so the EF can enforce ownership (creator / active corp admin).
    */
   async uploadMemberLicense(params: {
     fleet_member_id: string;
@@ -156,11 +157,26 @@ export const fleetService = {
     const supabase = getSupabaseClient();
     const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${params.file_name}`;
 
-    const { error: uploadErr } = await supabase.storage
-      .from('driver-docs')
-      .upload(path, params.file, { contentType: params.mime_type, upsert: true });
+    // A6-01: the old code uploaded straight to a 'driver-docs' BUCKET that
+    // doesn't exist in prod ('driver-docs' is a path PREFIX inside the
+    // 'driver-documents' bucket) — and direct authenticated Storage uploads
+    // fail RLS anyway since the ES256 signing-key migration. Route through
+    // the storage-upload EF (gotrue auth + per-path authz + service-role
+    // upload), like every other upload. Callers hold a Blob/File, so we
+    // send the multipart form directly (mirror of the web avatar flow).
+    const formData = new FormData();
+    formData.append('file', params.file, params.file_name);
+    formData.append('bucket', 'driver-documents');
+    formData.append('path', path);
+    formData.append('upsert', 'true');
+    formData.append('contentType', params.mime_type);
 
+    const { data, error: uploadErr } = await supabase.functions.invoke('storage-upload', {
+      body: formData,
+    });
     if (uploadErr) throw new Error(`License upload failed: ${uploadErr.message}`);
+    const efError = (data as { error?: string } | null)?.error;
+    if (efError) throw new Error(`License upload failed: ${efError}`);
 
     const { error: updateErr } = await supabase
       .from('fleet_members')
