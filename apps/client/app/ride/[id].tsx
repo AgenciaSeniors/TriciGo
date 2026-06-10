@@ -457,7 +457,13 @@ export default function RideDetailScreen() {
               </Text>
               <StatusBadge
                 label={t(`dispute.status_${dispute.status}`)}
-                variant={dispute.status === 'resolved' ? 'success' : dispute.status === 'denied' ? 'error' : 'warning'}
+                variant={
+                  dispute.status === 'resolved_rider'
+                    ? 'success'
+                    : dispute.status === 'resolved_driver'
+                      ? 'error'
+                      : 'warning'
+                }
               />
             </View>
             {dispute.resolution_notes && (

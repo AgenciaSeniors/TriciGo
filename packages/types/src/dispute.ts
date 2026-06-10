@@ -15,12 +15,18 @@ export type DisputeReason =
   | 'lost_item'
   | 'other';
 
+// Mirrors the ride_disputes.status CHECK constraint exactly. The previous
+// taxonomy (awaiting_response/resolved/denied) never existed in the DB —
+// the canonical process_dispute_refund RPC writes resolved_rider/
+// resolved_driver/closed, and the CHECK only accepts these six. Using the
+// old names made the no_action path 23514, and the admin filters/badges
+// match nothing (A4-DISP).
 export type DisputeStatus =
   | 'open'
   | 'under_review'
-  | 'awaiting_response'
-  | 'resolved'
-  | 'denied'
+  | 'escalated'
+  | 'resolved_rider'
+  | 'resolved_driver'
   | 'closed';
 
 export type DisputeResolution =
