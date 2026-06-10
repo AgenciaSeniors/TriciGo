@@ -151,8 +151,8 @@ export default function PricingPage() {
 
   function validatePricingForm() {
     const errors: Record<string, string> = {};
-    if (!createForm.service_type) errors.service_type = t('common.field_required');
-    if (createForm.base_fare_cup < 0) errors.base_fare_cup = t('common.must_be_positive');
+    if (!createForm.service_type) errors.service_type = t('common.field_required', { defaultValue: 'Campo obligatorio' });
+    if (createForm.base_fare_cup < 0) errors.base_fare_cup = t('common.must_be_positive', { defaultValue: 'Debe ser positivo' });
     if (createForm.per_km_rate_cup < 0) errors.per_km_rate_cup = t('common.must_be_positive');
     if (createForm.per_minute_rate_cup < 0) errors.per_minute_rate_cup = t('common.must_be_positive');
     if (createForm.min_fare_cup < 0) errors.min_fare_cup = t('common.must_be_positive');
@@ -629,13 +629,13 @@ export default function PricingPage() {
         <button
           onClick={() => setPage((p) => p - 1)}
           disabled={!canGoPrev}
-          aria-label={t('common.previous')}
+          aria-label={t('common.previous', { defaultValue: 'Anterior' })}
           className="px-4 py-2 rounded-lg text-sm border border-line text-ink disabled:opacity-30"
         >
-          {t('common.previous')}
+          {t('common.previous', { defaultValue: 'Anterior' })}
         </button>
         <span className="text-sm text-ink-muted" aria-live="polite">
-          {t('common.page')} <strong>{page + 1}</strong>
+          {t('common.page', { defaultValue: 'Página' })} <strong>{page + 1}</strong>
         </span>
         <button
           onClick={() => setPage((p) => p + 1)}

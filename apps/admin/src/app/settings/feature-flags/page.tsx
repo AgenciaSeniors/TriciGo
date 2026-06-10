@@ -145,7 +145,7 @@ export default function FeatureFlagsPage() {
               disabled={creating || !newKey.trim()}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
             >
-              {t('common.create')}
+              {t('common.create', { defaultValue: 'Crear' })}
             </button>
             <button
               onClick={() => setShowCreate(false)}

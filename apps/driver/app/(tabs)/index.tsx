@@ -754,7 +754,7 @@ function NativeDriverHomeScreen() {
   const handleToggleOnline = useCallback(async () => {
     if (toggling) return;
     if (!profile) {
-      Toast.show({ type: 'error', text1: t('common.error'), text2: t('common.status_change_failed') });
+      Toast.show({ type: 'error', text1: t('common.error'), text2: t('common.status_change_failed', { defaultValue: 'No se pudo cambiar el estado' }) });
       logger.warn('[Toggle] No driver profile loaded');
       return;
     }
