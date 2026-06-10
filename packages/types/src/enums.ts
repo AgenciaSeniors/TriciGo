@@ -54,7 +54,11 @@ export type WalletAccountType =
   | 'driver_quota'
   | 'platform_revenue'
   | 'platform_promotions'
-  | 'corporate_cash';
+  | 'corporate_cash'
+  // The live single-wallet driver balance (00300/00340). Present in the
+  // prod wallet_account_type enum; was missing here, which forced callers
+  // like AdjustWalletModal to redeclare a local type to name it.
+  | 'tricicoin';
 
 export type LedgerEntryType =
   | 'recharge'
@@ -62,6 +66,8 @@ export type LedgerEntryType =
   | 'ride_hold'
   | 'ride_hold_release'
   | 'commission'
+  | 'insurance_premium'
+  | 'refund'
   | 'quota_deduction'
   | 'quota_recharge'
   | 'transfer_in'
