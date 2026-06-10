@@ -568,13 +568,27 @@ export const adminService = {
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
+    // PASS #3 ADMIN-LEDGER-AMOUNT: ledger_transactions has no amount column
+    // (the amounts live in double-entry ledger_entries). Join them and surface
+    // the gross transaction magnitude (max abs of the entries) so the admin
+    // ledger shows a "Monto" and the CSV export is not blank.
     const { data, error } = await supabase
       .from('ledger_transactions')
-      .select('*')
+      .select('*, ledger_entries(amount)')
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
-    return data as LedgerTransaction[];
+    return (data ?? []).map((tx: Record<string, unknown>) => {
+      const entries = Array.isArray(tx.ledger_entries)
+        ? (tx.ledger_entries as Array<{ amount: number | string }>)
+        : [];
+      const amount = entries.reduce((max, e) => {
+        const a = Math.abs(Number(e.amount) || 0);
+        return a > max ? a : max;
+      }, 0);
+      const { ledger_entries: _entries, ...rest } = tx;
+      return { ...rest, amount } as LedgerTransaction;
+    });
   },
 
   // ==================== SERVICE TYPE CONFIGS ====================

@@ -147,6 +147,13 @@ export default function BookPage() {
   const [promoValidating, setPromoValidating] = useState(false);
   const [promoResult, setPromoResult] = useState<{ valid: boolean; promoId?: string; discount: number; error?: string } | null>(null);
 
+  // PASS #3 PROMO-STALE: clear a validated promo when the service type changes —
+  // the discount was validated against the previous service's fare, so leaving
+  // it would show a stale (possibly free-looking) price on the new fare.
+  useEffect(() => {
+    setPromoResult(null);
+  }, [serviceType]);
+
   /* ─── Shared ride (triciclo only) + passenger count ─── */
   const [shareRide, setShareRide] = useState(false);
   const [passengerCount, setPassengerCount] = useState(1);
@@ -616,15 +623,15 @@ export default function BookPage() {
         setPromoResult({ valid: true, promoId: result.promotion.id, discount: result.discountAmount });
       } else {
         const msgs: Record<string, string> = {
-          invalid: 'Código no válido',
-          expired: 'Código expirado',
-          max_uses: 'Código agotado',
-          already_used: 'Ya usaste este código',
+          invalid: t('book.promo_error_invalid', { defaultValue: 'Código no válido' }),
+          expired: t('book.promo_error_expired', { defaultValue: 'Código expirado' }),
+          max_uses: t('book.promo_error_max_uses', { defaultValue: 'Código agotado' }),
+          already_used: t('book.promo_error_already_used', { defaultValue: 'Ya usaste este código' }),
         };
-        setPromoResult({ valid: false, discount: 0, error: msgs[result.error || 'invalid'] || 'Código no válido' });
+        setPromoResult({ valid: false, discount: 0, error: msgs[result.error || 'invalid'] || t('book.promo_error_invalid', { defaultValue: 'Código no válido' }) });
       }
     } catch {
-      setPromoResult({ valid: false, discount: 0, error: 'Error al validar código' });
+      setPromoResult({ valid: false, discount: 0, error: t('book.promo_error_generic', { defaultValue: 'Error al validar código' }) });
     } finally {
       setPromoValidating(false);
     }

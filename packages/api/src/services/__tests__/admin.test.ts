@@ -721,17 +721,22 @@ describe('adminService', () => {
   });
 
   describe('getAdminTransactions', () => {
-    it('returns paginated ledger transactions', async () => {
-      const txns = [{ id: 'lt-1', type: 'recharge', amount: 5000 }];
+    it('returns paginated ledger transactions with gross amount from entries', async () => {
+      // PASS #3: ledger_transactions has no amount column; the service joins
+      // ledger_entries and surfaces the gross magnitude (max abs of entries),
+      // stripping the joined ledger_entries from the returned rows.
+      const txns = [
+        { id: 'lt-1', type: 'recharge', ledger_entries: [{ amount: -5000 }, { amount: 5000 }] },
+      ];
       const chain = createMockQueryChain({ data: txns, error: null });
       mockFrom.mockReturnValueOnce(chain);
 
       const result = await adminService.getAdminTransactions(0, 20);
 
       expect(mockFrom).toHaveBeenCalledWith('ledger_transactions');
-      expect(chain.select).toHaveBeenCalledWith('*');
+      expect(chain.select).toHaveBeenCalledWith('*, ledger_entries(amount)');
       expect(chain.range).toHaveBeenCalledWith(0, 19);
-      expect(result).toEqual(txns);
+      expect(result).toEqual([{ id: 'lt-1', type: 'recharge', amount: 5000 }]);
     });
 
     it('throws on supabase error', async () => {

@@ -46,6 +46,12 @@ export interface LedgerTransaction {
   metadata: Record<string, unknown> | null;
   created_by: string;
   created_at: string;
+  /**
+   * Gross transaction magnitude (max abs of its ledger_entries). Not a real
+   * column — populated by adminService.getAdminTransactions for the admin
+   * ledger view/CSV so the "Monto" is visible (PASS #3 ADMIN-LEDGER-AMOUNT).
+   */
+  amount?: number;
 }
 
 export interface LedgerEntry {
