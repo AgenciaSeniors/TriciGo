@@ -78,17 +78,27 @@ describe('reviewService', () => {
       expect(result.tags).toEqual([]);
     });
 
-    it('inserts review with tags', async () => {
+    it('inserts review with tags resolved to tag_id (A1-01)', async () => {
       const mockReview = { id: UUID.REVIEW_2, ride_id: UUID.RIDE_1, reviewer_id: UUID.USER_1, reviewee_id: UUID.USER_2, rating: 5 };
       const mockSingle = vi.fn().mockResolvedValue({ data: mockReview, error: null });
       const mockSelect = vi.fn(() => ({ single: mockSingle }));
       const mockInsert = vi.fn(() => ({ select: mockSelect }));
+      // review_tags stores tag_id (FK) — the service resolves keys via
+      // review_tag_definitions first, then inserts {review_id, tag_id}.
+      const defsChain = createMockQueryChain({
+        data: [
+          { id: 'def-clean', tag_key: 'clean_vehicle' },
+          { id: 'def-smooth', tag_key: 'smooth_driving' },
+        ],
+        error: null,
+      });
       const mockTagInsert = vi.fn().mockResolvedValue({ error: null });
 
       mockFrom
         .mockReturnValueOnce(preflightChain(null, null))      // pre-flight: no existing review
         .mockReturnValueOnce({ insert: mockInsert })          // reviews insert
-        .mockReturnValueOnce({ insert: mockTagInsert });       // review_tags insert
+        .mockReturnValueOnce(defsChain)                       // review_tag_definitions key→id lookup
+        .mockReturnValueOnce({ insert: mockTagInsert });      // review_tags insert
 
       const result = await reviewService.submitReview({
         ride_id: UUID.RIDE_1,
@@ -98,11 +108,76 @@ describe('reviewService', () => {
         tags: ['clean_vehicle', 'smooth_driving'],
       });
 
+      expect(defsChain.in).toHaveBeenCalledWith('tag_key', ['clean_vehicle', 'smooth_driving']);
       expect(mockTagInsert).toHaveBeenCalledWith([
-        { review_id: UUID.REVIEW_2, tag_key: 'clean_vehicle' },
-        { review_id: UUID.REVIEW_2, tag_key: 'smooth_driving' },
+        { review_id: UUID.REVIEW_2, tag_id: 'def-clean' },
+        { review_id: UUID.REVIEW_2, tag_id: 'def-smooth' },
       ]);
       expect(result.tags).toEqual(['clean_vehicle', 'smooth_driving']);
+    });
+
+    it('keeps the review when tag attach fails (best-effort, no rollback)', async () => {
+      const mockReview = { id: UUID.REVIEW_2, ride_id: UUID.RIDE_1, reviewer_id: UUID.USER_1, reviewee_id: UUID.USER_2, rating: 5 };
+      const mockSingle = vi.fn().mockResolvedValue({ data: mockReview, error: null });
+      const mockSelect = vi.fn(() => ({ single: mockSingle }));
+      const mockInsert = vi.fn(() => ({ select: mockSelect }));
+      const defsChain = createMockQueryChain({
+        data: [{ id: 'def-clean', tag_key: 'clean_vehicle' }],
+        error: null,
+      });
+      const mockTagInsert = vi.fn().mockResolvedValue({
+        error: { message: 'permission denied', code: '42501' },
+      });
+
+      mockFrom
+        .mockReturnValueOnce(preflightChain(null, null))
+        .mockReturnValueOnce({ insert: mockInsert })
+        .mockReturnValueOnce(defsChain)
+        .mockReturnValueOnce({ insert: mockTagInsert });
+
+      const result = await reviewService.submitReview({
+        ride_id: UUID.RIDE_1,
+        reviewer_id: UUID.USER_1,
+        reviewee_id: UUID.USER_2,
+        rating: 5,
+        tags: ['clean_vehicle'],
+      });
+
+      // The rating survives; no reviews.delete rollback happens (the old
+      // code DESTROYED the review when the tag insert failed). A rollback
+      // would need an extra from('reviews') — the once-queue is exhausted,
+      // so reaching it would throw — and would invoke .delete on a chain.
+      expect(result.id).toBe(UUID.REVIEW_2);
+      expect(defsChain.delete).not.toHaveBeenCalled();
+    });
+
+    it('skips unknown tag keys without failing (unseeded definitions)', async () => {
+      const mockReview = { id: UUID.REVIEW_2, ride_id: UUID.RIDE_1, reviewer_id: UUID.USER_1, reviewee_id: UUID.USER_2, rating: 5 };
+      const mockSingle = vi.fn().mockResolvedValue({ data: mockReview, error: null });
+      const mockSelect = vi.fn(() => ({ single: mockSingle }));
+      const mockInsert = vi.fn(() => ({ select: mockSelect }));
+      const defsChain = createMockQueryChain({ data: [], error: null }); // nothing resolves
+      const mockTagInsert = vi.fn().mockResolvedValue({ error: null });
+
+      // NOTE: review_tags insert is deliberately NOT queued — with zero
+      // resolved defs the service must never reach it (and leaving an
+      // unconsumed mockReturnValueOnce would leak into the next test:
+      // clearAllMocks doesn't drop pending once-queues).
+      mockFrom
+        .mockReturnValueOnce(preflightChain(null, null))
+        .mockReturnValueOnce({ insert: mockInsert })
+        .mockReturnValueOnce(defsChain);
+
+      const result = await reviewService.submitReview({
+        ride_id: UUID.RIDE_1,
+        reviewer_id: UUID.USER_1,
+        reviewee_id: UUID.USER_2,
+        rating: 5,
+        tags: ['not_in_db'],
+      });
+
+      expect(mockTagInsert).not.toHaveBeenCalled();
+      expect(result.id).toBe(UUID.REVIEW_2);
     });
 
     it('throws on supabase error', async () => {
@@ -249,20 +324,39 @@ describe('reviewService', () => {
 
   // ==================== getTagDefinitions ====================
   describe('getTagDefinitions', () => {
-    it('fetches tag definitions by direction and sentiment', async () => {
-      const tags = [
-        { key: 'clean_vehicle', direction: 'rider_to_driver', sentiment: 'positive', display_order: 1, is_active: true },
-        { key: 'smooth_driving', direction: 'rider_to_driver', sentiment: 'positive', display_order: 4, is_active: true },
+    // A1-01: the table's real columns are tag_key/applies_to/is_positive/
+    // sort_order — the service maps direction/sentiment to them and returns
+    // the app-facing DTO shape.
+    it('maps rider_to_driver/positive to applies_to driver+both, is_positive=true', async () => {
+      const rows = [
+        { tag_key: 'clean_vehicle', applies_to: 'driver', is_positive: true, sort_order: 10 },
+        { tag_key: 'smooth_driving', applies_to: 'driver', is_positive: true, sort_order: 40 },
       ];
-      const chain = createMockQueryChain({ data: tags, error: null });
+      const chain = createMockQueryChain({ data: rows, error: null });
       mockFrom.mockReturnValueOnce(chain);
 
       const result = await reviewService.getTagDefinitions('rider_to_driver', 'positive');
       expect(mockFrom).toHaveBeenCalledWith('review_tag_definitions');
-      expect(chain.eq).toHaveBeenCalledWith('direction', 'rider_to_driver');
-      expect(chain.eq).toHaveBeenCalledWith('sentiment', 'positive');
-      expect(chain.eq).toHaveBeenCalledWith('is_active', true);
-      expect(result).toEqual(tags);
+      expect(chain.in).toHaveBeenCalledWith('applies_to', ['driver', 'both']);
+      expect(chain.eq).toHaveBeenCalledWith('is_positive', true);
+      expect(chain.order).toHaveBeenCalledWith('sort_order', { ascending: true });
+      expect(result).toEqual([
+        { key: 'clean_vehicle', direction: 'rider_to_driver', sentiment: 'positive', display_order: 10, is_active: true },
+        { key: 'smooth_driving', direction: 'rider_to_driver', sentiment: 'positive', display_order: 40, is_active: true },
+      ]);
+    });
+
+    it('maps driver_to_rider/negative to applies_to customer+both, is_positive=false', async () => {
+      const rows = [{ tag_key: 'rude', applies_to: 'customer', is_positive: false, sort_order: 10 }];
+      const chain = createMockQueryChain({ data: rows, error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      const result = await reviewService.getTagDefinitions('driver_to_rider', 'negative');
+      expect(chain.in).toHaveBeenCalledWith('applies_to', ['customer', 'both']);
+      expect(chain.eq).toHaveBeenCalledWith('is_positive', false);
+      expect(result).toEqual([
+        { key: 'rude', direction: 'driver_to_rider', sentiment: 'negative', display_order: 10, is_active: true },
+      ]);
     });
   });
 
