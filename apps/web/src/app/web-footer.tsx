@@ -30,10 +30,59 @@ export function WebFooter() {
           <a href="/privacy" className="footer-link">{t('footer.privacy')}</a>
           <a href="/terms" className="footer-link">{t('footer.terms')}</a>
           <a href="/refunds" className="footer-link">{t('footer.refunds', { defaultValue: 'Reembolsos' })}</a>
+          <a href="/delivery-policy" className="footer-link">{t('footer.delivery_policy', { defaultValue: 'Prestación del servicio' })}</a>
           <a href="/account/delete" className="footer-link">{t('footer.delete_account', { defaultValue: 'Eliminar cuenta' })}</a>
           <a href="/aml" className="footer-link">{t('footer.aml', { defaultValue: 'Política AML' })}</a>
           <a href="/cookies" className="footer-link">{t('footer.cookies', { defaultValue: 'Cookies' })}</a>
           <a href="/contact" className="footer-link">{t('footer.contact', { defaultValue: 'Contacto' })}</a>
+        </div>
+      </div>
+
+      {/* Payment processor + Romanian consumer-protection compliance row.
+          Required by NETOPIA's POS enrollment checklist: the NETOPIA badge
+          (official assets from their mediakit CDN, POS id 165079) and the
+          ANPC SAL/SOL dispute-resolution links (MACH DIGITAL TECH S.R.L. is
+          a Romanian company). */}
+      <div className="footer-compliance">
+        <a
+          href="https://netopia-payments.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="NETOPIA Payments"
+          aria-label="NETOPIA Payments"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://mny.ro/np-black-0.svg"
+            alt="NETOPIA Payments"
+            className="netopia-badge netopia-badge-light"
+            loading="lazy"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://mny.ro/np-white-0.svg"
+            alt="NETOPIA Payments"
+            className="netopia-badge netopia-badge-dark"
+            loading="lazy"
+          />
+        </a>
+        <div className="footer-compliance-links">
+          <a
+            href="https://anpc.ro/ce-este-sal/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="footer-link"
+          >
+            ANPC — Soluționarea Alternativă a Litigiilor (SAL)
+          </a>
+          <a
+            href="https://ec.europa.eu/consumers/odr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="footer-link"
+          >
+            Soluționarea Online a Litigiilor (SOL)
+          </a>
         </div>
       </div>
 
