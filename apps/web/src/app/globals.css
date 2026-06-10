@@ -1540,6 +1540,51 @@ body {
   max-width: 300px;
 }
 
+/* ── Footer compliance row (NETOPIA badge + ANPC SAL/SOL links) ── */
+.footer-compliance {
+  max-width: var(--max-width);
+  margin: var(--space-xl) auto 0;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.footer-compliance-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: var(--text-xs);
+}
+
+.netopia-badge {
+  height: 32px;
+  width: auto;
+  display: inline-block;
+}
+
+/* Theme-aware badge swap: black logo on the light footer, white on dark.
+   Mirrors mny.ro/npId.js contrast logic without the script (hydration-safe). */
+.netopia-badge-dark {
+  display: none;
+}
+[data-theme='dark'] .netopia-badge-light {
+  display: none;
+}
+[data-theme='dark'] .netopia-badge-dark {
+  display: inline-block;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) .netopia-badge-light {
+    display: none;
+  }
+  :root:not([data-theme='light']):not([data-theme='dark']) .netopia-badge-dark {
+    display: inline-block;
+  }
+}
+
 .footer-section-title {
   font-size: var(--text-xs);
   font-weight: 700;
