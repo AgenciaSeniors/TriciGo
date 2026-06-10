@@ -840,8 +840,13 @@ function WebHomeScreen() {
       if (result.valid && result.promotion) {
         setPromoResult({ valid: true, promoId: result.promotion.id, discount: result.discountAmount });
       } else {
-        const msgs: Record<string, string> = { invalid: 'Código no válido', expired: 'Código expirado', max_uses: 'Código agotado', already_used: 'Ya usaste este código' };
-        setPromoResult({ valid: false, discount: 0, error: msgs[result.error || 'invalid'] || 'Código no válido' });
+        const msgs: Record<string, string> = {
+          invalid: t('ride.promo_error_invalid', { defaultValue: 'Código no válido' }),
+          expired: t('ride.promo_error_expired', { defaultValue: 'Código expirado' }),
+          max_uses: t('ride.promo_error_max_uses', { defaultValue: 'Código agotado' }),
+          already_used: t('ride.promo_error_already_used', { defaultValue: 'Ya usaste este código' }),
+        };
+        setPromoResult({ valid: false, discount: 0, error: msgs[result.error || 'invalid'] || t('ride.promo_error_invalid', { defaultValue: 'Código no válido' }) });
       }
     } catch {
       setPromoResult({ valid: false, discount: 0, error: 'Error al validar código' });
