@@ -2,8 +2,47 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveAnnouncementCta,
   isValidAnnouncementCta,
+  announcementCtaWebHref,
   ANNOUNCEMENT_CTA_TARGETS,
 } from '../announcementCta';
+
+describe('announcementCtaWebHref', () => {
+  it('maps booking intents to /book (with optional preselected service)', () => {
+    expect(announcementCtaWebHref('/(tabs)')).toBe('/book');
+    expect(announcementCtaWebHref('/(tabs)?service=mensajeria')).toBe('/book?service=mensajeria');
+    expect(announcementCtaWebHref('/book')).toBe('/book');
+  });
+
+  it('translates mobile-only routes to their web equivalents', () => {
+    expect(announcementCtaWebHref('/(tabs)/wallet')).toBe('/wallet');
+    expect(announcementCtaWebHref('/profile/blog')).toBe('/blog');
+    expect(announcementCtaWebHref('/ride/abc-123')).toBe('/rides/abc-123');
+  });
+
+  it('keeps shared routes verbatim', () => {
+    expect(announcementCtaWebHref('/profile/referral')).toBe('/profile/referral');
+    expect(announcementCtaWebHref('/notifications')).toBe('/notifications');
+    expect(announcementCtaWebHref('/support')).toBe('/support');
+  });
+
+  it('passes external URLs through', () => {
+    expect(announcementCtaWebHref('https://tricigo.com/blog')).toBe('https://tricigo.com/blog');
+    expect(announcementCtaWebHref('tel:+5355555555')).toBe('tel:+5355555555');
+  });
+
+  it('returns null for empty or unrecognised values (no 404s, hide the CTA)', () => {
+    expect(announcementCtaWebHref(null)).toBeNull();
+    expect(announcementCtaWebHref('')).toBeNull();
+    expect(announcementCtaWebHref('/ruta-inventada')).toBeNull();
+    expect(announcementCtaWebHref('javascript:alert(1)')).toBeNull();
+  });
+
+  it('covers every admin-offered target (none may 404 on web)', () => {
+    for (const target of ANNOUNCEMENT_CTA_TARGETS) {
+      expect(announcementCtaWebHref(target.value)).not.toBeNull();
+    }
+  });
+});
 
 describe('resolveAnnouncementCta', () => {
   it('treats /(tabs) as a booking intent without a preselected service', () => {

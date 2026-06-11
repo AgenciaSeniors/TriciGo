@@ -11,7 +11,14 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { rideService, announcementService, getSupabaseClient } from '@tricigo/api';
 import type { Ride } from '@tricigo/types';
+import { announcementCtaWebHref } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
+
+/** getRideHistoryFiltered returns the raw rides row: the geography columns
+ *  (dropoff_location) arrive as opaque WKB hex STRINGS, not {lat,lng} —
+ *  the usable coords live in the trigger-synced dropoff_lat/dropoff_lng
+ *  numeric columns (same source getRideWithDriver normalizes from). */
+type RawHistoryRide = Ride & { dropoff_lat?: number | null; dropoff_lng?: number | null };
 
 interface Promo {
   id: string;
@@ -34,7 +41,7 @@ export function HomeDashboard({ userId, onRebook }: {
   onRebook: (loc: LocationPreset) => void;
 }) {
   const router = useRouter();
-  const [lastRide, setLastRide] = useState<Ride | null>(null);
+  const [lastRide, setLastRide] = useState<RawHistoryRide | null>(null);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
@@ -43,8 +50,15 @@ export function HomeDashboard({ userId, onRebook }: {
     let cancelled = false;
 
     // Last completed ride → 1-tap re-book (parity con la "last ride card").
+    // Only keep it when the numeric dropoff coords exist — without them the
+    // re-book button would prefill a destination with undefined coordinates.
     rideService.getRideHistoryFiltered({ userId, page: 0, pageSize: 1, status: ['completed'] })
-      .then((rides) => { if (!cancelled && rides[0]) setLastRide(rides[0]); })
+      .then((rides) => {
+        const r = rides[0] as RawHistoryRide | undefined;
+        if (!cancelled && r && typeof r.dropoff_lat === 'number' && typeof r.dropoff_lng === 'number') {
+          setLastRide(r);
+        }
+      })
       .catch(() => { /* non-critical */ });
 
     // Active promos — direct query, same shape as the mobile home
@@ -67,10 +81,15 @@ export function HomeDashboard({ userId, onRebook }: {
     return () => { cancelled = true; };
   }, [userId]);
 
+  // cta_url stores MOBILE Expo Router paths (every live campaign in prod uses
+  // '/(tabs)'-style values) — pushing them raw 404'd on Next (PASS2 P1).
+  // announcementCtaWebHref translates them to real web routes, or null when
+  // there's nothing safe to open (the card then renders untappable).
   const openCta = (url: string | null) => {
-    if (!url) return;
-    if (url.startsWith('/')) router.push(url);
-    else window.open(url, '_blank', 'noopener,noreferrer');
+    const href = announcementCtaWebHref(url);
+    if (!href) return;
+    if (href.startsWith('/')) router.push(href);
+    else window.open(href, '_blank', 'noopener,noreferrer');
   };
 
   // Nothing to show → render nothing (no empty chrome).
@@ -87,8 +106,10 @@ export function HomeDashboard({ userId, onRebook }: {
             onClick={() => onRebook({
               label: lastRide.dropoff_address,
               address: lastRide.dropoff_address,
-              latitude: lastRide.dropoff_location.latitude,
-              longitude: lastRide.dropoff_location.longitude,
+              // dropoff_location on the raw history row is a WKB hex string —
+              // the numeric trigger-synced columns are the real coords.
+              latitude: lastRide.dropoff_lat as number,
+              longitude: lastRide.dropoff_lng as number,
             })}
             style={{
               display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%',
@@ -116,13 +137,16 @@ export function HomeDashboard({ userId, onRebook }: {
           <p style={sectionLabel}>Promociones</p>
           <div style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
             {promos.map((p) => {
+              // discount_fixed_cup is WHOLE CUP (validate_promo_code applies it
+              // raw against CUP fares) — dividing by 100 showed "10 CUP" for the
+              // live $1000 promo. Mirror of the PASS#3 mobile fix.
               const headline = p.discount_percent
                 ? `${p.discount_percent}% OFF`
                 : p.discount_fixed_cup
-                  ? `${Math.round(p.discount_fixed_cup / 100)} CUP`
+                  ? `${p.discount_fixed_cup} CUP`
                   : '🎁';
               const expiry = p.valid_until
-                ? new Date(p.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short' })
+                ? new Date(p.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short', timeZone: 'America/Havana' })
                 : null;
               return (
                 <button
@@ -160,7 +184,7 @@ export function HomeDashboard({ userId, onRebook }: {
           <p style={sectionLabel}>Novedades</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {announcements.map((a) => {
-              const tappable = !!a.cta_url;
+              const tappable = !!announcementCtaWebHref(a.cta_url);
               return (
                 <div
                   key={a.id}
@@ -180,7 +204,7 @@ export function HomeDashboard({ userId, onRebook }: {
                     {a.body_es && (
                       <p style={{ margin: '0.25rem 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{a.body_es}</p>
                     )}
-                    {a.cta_label_es && a.cta_url && (
+                    {a.cta_label_es && tappable && (
                       <span style={{ display: 'inline-block', marginTop: '0.6rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                         {a.cta_label_es} →
                       </span>
