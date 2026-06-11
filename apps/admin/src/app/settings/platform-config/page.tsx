@@ -55,6 +55,14 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
 
   // ── Referral program (Referidos) ──
   referral_bonus_cup: { type: 'number', helpKey: 'platform_config.referral_bonus_cup_help' },
+
+  // ── Cancellation reputation (Castigo por cancelar, migs 00372-00374) ──
+  cancel_rating_value_second: { type: 'number', helpKey: 'platform_config.cancel_rating_value_second_help' },
+  cancel_rating_value_third: { type: 'number', helpKey: 'platform_config.cancel_rating_value_third_help' },
+  cancel_rating_event_window_days: { type: 'number', helpKey: 'platform_config.cancel_rating_event_window_days_help' },
+  low_rating_rider_threshold: { type: 'number', helpKey: 'platform_config.low_rating_rider_threshold_help' },
+  low_rating_rider_dispatch_limit: { type: 'number', helpKey: 'platform_config.low_rating_rider_dispatch_limit_help' },
+  low_rating_rider_radius_m: { type: 'number', helpKey: 'platform_config.low_rating_rider_radius_m_help' },
 };
 
 export default function PlatformConfigPage() {
