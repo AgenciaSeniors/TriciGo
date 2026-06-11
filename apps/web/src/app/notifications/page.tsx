@@ -9,8 +9,17 @@ import type { AppNotification } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
 
+// Keyed by the real notification categories send-push writes to
+// notifications.type (ride, ride_offer, announcement, blog, promo…) PLUS the
+// legacy ride_update-style names, mirroring the mobile inbox icon map
+// (apps/client/app/notifications/index.tsx buildIconMap). Unknown types
+// still fall back to the bell below.
 function getNotificationIcon(type: string) {
   switch (type) {
+    case 'ride':
+    case 'ride_offer':
+    case 'ride_matching':
+    case 'scheduled_ride':
     case 'ride_update':
     case 'ride_completed':
     case 'ride_canceled':
@@ -22,12 +31,16 @@ function getNotificationIcon(type: string) {
       );
     case 'driver_assigned':
     case 'driver_arriving':
+    case 'proximity':
       return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38a169" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
           <circle cx="9" cy="7" r="4" />
         </svg>
       );
+    case 'payment':
+    case 'wallet_recharge':
+    case 'wallet_recharge_refund':
     case 'wallet_credit':
     case 'wallet_debit':
       return (
@@ -45,6 +58,49 @@ function getNotificationIcon(type: string) {
           <line x1="12" y1="22" x2="12" y2="7" />
           <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" />
           <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" />
+        </svg>
+      );
+    case 'announcement':
+    case 'campaign':
+      // Megaphone — content category from admin announcements (Fase 4 #423).
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 11l18-5v12L3 14v-3z" />
+          <path d="M11.6 16.8a3 3 0 11-5.8-1.6" />
+        </svg>
+      );
+    case 'blog':
+    case 'news':
+      // Newspaper — blog/news content category.
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      );
+    case 'chat':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+        </svg>
+      );
+    case 'delivery':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+          <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+      );
+    case 'sos':
+    case 'dispute_update':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
       );
     default:
@@ -381,12 +437,22 @@ export default function NotificationsPage() {
                 key={notif.id}
                 onClick={() => {
                   if (!notif.read) handleMarkRead(notif.id);
-                  // Deep link to the related ride (parity with mobile handleTap →
-                  // /ride/{ride_id}). Web detail route is /rides/[id].
+                  // Deep link parity with mobile handleTap (apps/client/app/
+                  // notifications/index.tsx): ride_id wins, then wallet types
+                  // → /wallet, content categories → their web surface.
                   const rid = notif.data && typeof (notif.data as Record<string, unknown>).ride_id === 'string'
                     ? (notif.data as Record<string, string>).ride_id
                     : null;
-                  if (rid) router.push(`/rides/${rid}`);
+                  if (rid) {
+                    router.push(`/rides/${rid}`);
+                  } else if (['wallet', 'payment', 'wallet_recharge', 'wallet_recharge_refund', 'wallet_credit', 'wallet_debit'].includes(notif.type)) {
+                    router.push('/wallet');
+                  } else if (['blog', 'news'].includes(notif.type)) {
+                    router.push('/blog');
+                  } else if (['announcement', 'campaign', 'promo'].includes(notif.type)) {
+                    // Campaigns render in the HomeDashboard inside /book.
+                    router.push('/book');
+                  }
                 }}
                 aria-label={notif.read ? notif.title : t('notifications.mark_read_aria', { title: notif.title })}
                 style={{

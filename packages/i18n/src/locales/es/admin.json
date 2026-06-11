@@ -1095,7 +1095,13 @@
     "tier_diamante_min_trips_help": "Viajes completados mínimos para nivel Diamante (pasajero + conductor). Por defecto 100",
     "routing_google_enabled_help": "Experimento: usar Google Directions en vez de Mapbox para las rutas. Poné 'true' para activar (requiere la clave GOOGLE_DIRECTIONS_API_KEY). Por defecto false.",
     "routing_google_daily_cap_help": "Tope diario de llamadas a Google Directions; superado, vuelve a Mapbox. Por defecto 2000.",
-    "referral_bonus_cup_help": "Monto del bono de referido en CUP (se acredita en TriciCoin, 1:1). Aplica a referidos NUEVOS; los pendientes mantienen el monto con que se crearon. Por defecto 500."
+    "referral_bonus_cup_help": "Monto del bono de referido en CUP (se acredita en TriciCoin, 1:1). Aplica a referidos NUEVOS; los pendientes mantienen el monto con que se crearon. Por defecto 500.",
+    "cancel_rating_value_second_help": "Estrellas que aporta la 2ª cancelación tardía en 24h (la 1ª es gracia). Por defecto 3.0",
+    "cancel_rating_value_third_help": "Estrellas que aporta la 3ª+ cancelación tardía en 24h. Por defecto 2.0",
+    "cancel_rating_event_window_days_help": "Días que un evento de cancelación sigue contando en el rating (0 = permanente). Por defecto 90",
+    "low_rating_rider_threshold_help": "Rating bajo el cual el pasajero recibe la 1ª ronda de despacho reducida (0 desactiva el gate). Por defecto 3.0",
+    "low_rating_rider_dispatch_limit_help": "Conductores máximos en la 1ª ronda para pasajeros bajo el umbral. Por defecto 5",
+    "low_rating_rider_radius_m_help": "Radio de búsqueda (m) en la 1ª ronda para pasajeros bajo el umbral. Por defecto 3000"
   },
   "exchange_rate": {
     "title": "Tasa de cambio",
