@@ -1762,6 +1762,24 @@ git worktree remove <temp>
 
 ---
 
+### Checklist de paridad cross-app (auditoría 2026-06-10, PRs PARITY-1/2)
+
+**Regla:** toda feature de pasajero debe existir en paridad **web ↔ app móvil**, con contraparte **driver** (si interactúa) y **admin** (si se gestiona/configura). La auditoría 2026-06-10 (informe en `~/.claude/plans/necesito-un-analisis-para-bright-hamming.md`) encontró la paridad casi perfecta — el único gap funcional era recurrentes en web (cerrado en PARITY-1) — porque ~95% de la lógica vive en `packages/api` y ambas superficies consumen los mismos services.
+
+**Todo PR que toque una feature de pasajero debe responder en su body:**
+1. ¿Existe/actualicé el equivalente en **client** Y en **web**? (si no aplica, decirlo explícitamente — ej. corporativo avanzado con facturas/reportes es web-first por decisión)
+2. ¿El **driver** ve/reacciona correctamente? (card de oferta, viaje activo, wallet, earnings)
+3. ¿El **admin** puede verlo/gestionarlo/configurarlo? (página de detalle/gestión; si agregás un tunable a `platform_config`, sumalo a `KNOWN_KEYS` de `settings/platform-config` + help text es/en/pt en `admin.json` — las filas sin metadata se renderizan crudas)
+4. ¿i18n es/en/pt en los namespaces correctos? (keys de copy real a los 3 locales; labels triviales con `defaultValue`)
+5. ¿Tipos de notificación nuevos mapeados en los **3 inboxes** (client/driver/web: icono + navegación al tocar)? Los inboxes mapean por las categorías reales que `send-push` escribe en `notifications.type` (`ride`, `announcement`, `blog`…), no por el enum legacy.
+
+**Patrón canónico para fixes cross-surface:** PRs apareados como PASS#3 — #477 (client/driver) + #478 (web/admin) — cada uno con branch fresh desde `origin/master`.
+
+**Trampas verificadas al auditar paridad (2026-06-10):**
+- Los agentes Explore reportan gaps falsos con frecuencia — **verificar cada gap con grep/Read directo antes de reportarlo**. De ~14 gaps reportados, 10 eran falsos (la web SÍ tenía shared ride, add-stop en vivo, gift+QR, preview de cancelación, tier badge, anuncios, tags de review; el driver SÍ tenía OTP de entrega+foto; el admin SÍ tenía incidents/[id] y override de nivel).
+- La página admin `settings/platform-config` lista **todas** las filas de `platform_config` (KNOWN_KEYS solo agrega tipo/help) — un tunable "ausente" del UI suele estar presente pero sin metadata.
+- Rutas web espejo de pantallas móviles: la web usa páginas con inline styles + CSS vars (`var(--primary)`, `var(--bg-card)`) y los mismos services de `@tricigo/api` — ver `apps/web/src/app/profile/recurring-rides/page.tsx` como referencia del patrón (flag check con `useFeatureFlag`, auth con `getSession`, `WebSkeletonList`/`WebEmptyState`).
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
