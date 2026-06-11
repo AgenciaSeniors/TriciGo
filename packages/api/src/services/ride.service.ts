@@ -2097,21 +2097,48 @@ export const rideService = {
 
   /**
    * Get all splits for a ride with user info.
+   *
+   * NO `users:user_id(...)` embed here: ride_splits.user_id FKs to
+   * auth.users (not exposed to PostgREST) and public.users has no
+   * raw_user_meta_data column, so the embed 400'd with PGRST200 on every
+   * call — the participant list was permanently empty (PASS2 P1).
+   * Display names come from the SECURITY DEFINER RPC (mig 00403) because
+   * users RLS only lets a caller read their own row.
    */
   async getSplitsForRide(rideId: string): Promise<RideSplit[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('ride_splits')
-      .select('*, users:user_id(raw_user_meta_data)')
+      .select('*')
       .eq('ride_id', rideId)
       .order('created_at', { ascending: true });
     if (error) throw error;
-    return (data ?? []).map((s) => ({
-      ...(s as Record<string, unknown>),
-      user_name: (s as Record<string, unknown> & { users?: { raw_user_meta_data?: { name?: string; phone?: string } } }).users?.raw_user_meta_data?.name ?? null,
-      user_phone: (s as Record<string, unknown> & { users?: { raw_user_meta_data?: { name?: string; phone?: string } } }).users?.raw_user_meta_data?.phone ?? null,
-      users: undefined,
-    })) as unknown as RideSplit[];
+    const splits = (data ?? []) as RideSplit[];
+    if (splits.length === 0) return splits;
+    try {
+      const ids = [...new Set(splits.map((s) => s.user_id))];
+      const { data: names, error: rpcError } = await supabase.rpc('get_public_display_names', {
+        p_user_ids: ids,
+      });
+      if (!rpcError && Array.isArray(names)) {
+        const byId = new Map(
+          (names as { user_id: string; full_name: string | null; avatar_url: string | null }[]).map(
+            (n) => [n.user_id, n] as const,
+          ),
+        );
+        for (const s of splits) {
+          const n = byId.get(s.user_id);
+          if (n) {
+            s.user_name = n.full_name ?? undefined;
+            s.user_avatar_url = n.avatar_url ?? undefined;
+          }
+        }
+      }
+    } catch {
+      // Migration 00403 not applied yet → names degrade to the UI fallback
+      // label; the split list itself still renders.
+    }
+    return splits;
   },
 
   /**
