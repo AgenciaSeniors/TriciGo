@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { rideService, getSupabaseClient, notificationService, deliveryService } from '@tricigo/api';
+import { rideService, getSupabaseClient, notificationService, deliveryService, disputeService, lostItemService, useFeatureFlag } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE, generateReceiptHTML, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
-import type { RideWithDriver, RideSplit, RidePricingSnapshot } from '@tricigo/types';
+import type { RideWithDriver, RideSplit, RidePricingSnapshot, RideDispute, LostItem } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { TipFlow } from '@/components/TipFlow';
 
@@ -55,6 +56,13 @@ export default function RideDetailPage() {
   const router = useRouter();
   const params = useParams();
   const rideId = params?.id as string | undefined;
+  // Shared `rider` namespace — same keys the mobile ride detail uses for the
+  // dispute / lost-item cards (PASS2 PR-J parity section below).
+  const { t } = useTranslation('rider');
+
+  // ── Dispute / lost-item flags (parity con apps/client/app/ride/[id].tsx) ──
+  const disputesEnabled = useFeatureFlag('formal_disputes_enabled');
+  const lostFoundEnabled = useFeatureFlag('lost_and_found_enabled');
 
   // ── Auth state ──
   const [userId, setUserId] = useState<string | null>(null);
@@ -79,6 +87,10 @@ export default function RideDetailPage() {
   // ── Pricing snapshot (base/per-km/per-min) for the CUP fare breakdown,
   //    parity con el desglose del detalle móvil (rideService.getPricingSnapshot). ──
   const [pricing, setPricing] = useState<RidePricingSnapshot | null>(null);
+
+  // ── Dispute + lost-item status for completed/disputed rides ──
+  const [dispute, setDispute] = useState<RideDispute | null>(null);
+  const [lostItem, setLostItem] = useState<LostItem | null>(null);
 
   // ── Auth effect ──
   useEffect(() => {
@@ -137,6 +149,24 @@ export default function RideDetailPage() {
       .then(setPricing)
       .catch(() => { /* non-critical — falls back to unit-only rows */ });
   }, [ride?.id]);
+
+  // Fetch dispute + lost-item status (parity con el detalle móvil, que los
+  // carga para viajes completed/disputed y completed respectivamente).
+  useEffect(() => {
+    if (!ride || (ride.status !== 'completed' && ride.status !== 'disputed')) {
+      setDispute(null);
+      setLostItem(null);
+      return;
+    }
+    disputeService.getDisputeByRide(ride.id)
+      .then(setDispute)
+      .catch(() => { /* non-critical — no dispute card */ });
+    if (ride.status === 'completed') {
+      lostItemService.getLostItemByRide(ride.id)
+        .then(setLostItem)
+        .catch(() => { /* non-critical — no lost-item card */ });
+    }
+  }, [ride?.status, ride?.id]);
 
   // ── Receipt: descargar (HTML imprimible → PDF) o enviar por email ──
   const handleDownloadReceipt = async () => {
@@ -616,6 +646,138 @@ export default function RideDetailPage() {
                     >
                       {receiptEmailed ? '✓ Enviado' : sendingEmail ? 'Enviando...' : 'Enviar por email'}
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Dispute status card (parity con la card del detalle móvil) */}
+              {dispute && (() => {
+                const palette = dispute.status === 'resolved_rider'
+                  ? { bg: '#dcfce7', color: '#16a34a' }
+                  : dispute.status === 'resolved_driver'
+                    ? { bg: '#fee2e2', color: '#dc2626' }
+                    : { bg: '#fef3c7', color: '#d97706' };
+                const statusLabels: Record<string, string> = {
+                  open: t('dispute.status_open', { defaultValue: 'Abierta' }),
+                  under_review: t('dispute.status_under_review', { defaultValue: 'En revisión' }),
+                  escalated: t('dispute.status_escalated', { defaultValue: 'Escalada' }),
+                  resolved_rider: t('dispute.status_resolved_rider', { defaultValue: 'Resuelta a tu favor' }),
+                  resolved_driver: t('dispute.status_resolved_driver', { defaultValue: 'Resuelta a favor del conductor' }),
+                  closed: t('dispute.status_closed', { defaultValue: 'Cerrada' }),
+                };
+                return (
+                  <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid #fed7aa', background: 'rgba(255,237,213,0.45)' }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.5rem', textTransform: 'uppercase', fontWeight: 600 }}>
+                      {t('dispute.your_dispute', { defaultValue: 'Tu disputa' })}
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        {t(`dispute.reason_${dispute.reason}`, { defaultValue: dispute.reason })}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, padding: '0.25rem 0.6rem', borderRadius: '1rem', background: palette.bg, color: palette.color, whiteSpace: 'nowrap' }}>
+                        {statusLabels[dispute.status] ?? dispute.status}
+                      </span>
+                    </div>
+                    {dispute.resolution_notes && (
+                      <div style={{ marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '1px solid #fed7aa' }}>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.2rem' }}>
+                          {t('dispute.resolution_notes', { defaultValue: 'Notas de resolución' })}
+                        </p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: 0 }}>{dispute.resolution_notes}</p>
+                      </div>
+                    )}
+                    {dispute.refund_amount_trc != null && dispute.refund_amount_trc > 0 && (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.4rem 0 0' }}>
+                        {t('dispute.refund_amount', { defaultValue: 'Monto de reembolso' })}: {formatTRC(dispute.refund_amount_trc)}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Lost item status card (parity con la card del detalle móvil) */}
+              {lostItem && (() => {
+                const palette = lostItem.status === 'returned'
+                  ? { bg: '#dcfce7', color: '#16a34a' }
+                  : lostItem.status === 'closed' || lostItem.status === 'not_found'
+                    ? { bg: '#fee2e2', color: '#dc2626' }
+                    : { bg: '#fef3c7', color: '#d97706' };
+                const statusLabels: Record<string, string> = {
+                  reported: t('lost_found.status_reported', { defaultValue: 'Reportado' }),
+                  driver_notified: t('lost_found.status_driver_notified', { defaultValue: 'Conductor notificado' }),
+                  found: t('lost_found.status_found', { defaultValue: 'Encontrado' }),
+                  not_found: t('lost_found.status_not_found', { defaultValue: 'No encontrado' }),
+                  return_arranged: t('lost_found.status_return_arranged', { defaultValue: 'Devolución coordinada' }),
+                  returned: t('lost_found.status_returned', { defaultValue: 'Devuelto' }),
+                  closed: t('lost_found.status_closed', { defaultValue: 'Cerrado' }),
+                };
+                return (
+                  <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid #fde68a', background: 'rgba(254,243,199,0.45)' }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.5rem', textTransform: 'uppercase', fontWeight: 600 }}>
+                      {t('lost_found.title', { defaultValue: 'Objetos perdidos' })}
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        {t(`lost_found.category_${lostItem.category}`, { defaultValue: lostItem.category })}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, padding: '0.25rem 0.6rem', borderRadius: '1rem', background: palette.bg, color: palette.color, whiteSpace: 'nowrap' }}>
+                        {statusLabels[lostItem.status] ?? lostItem.status}
+                      </span>
+                    </div>
+                    {lostItem.driver_found === true && lostItem.return_location && (
+                      <div style={{ marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '1px solid #fde68a' }}>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.2rem' }}>
+                          {t('lost_found.return_location', { defaultValue: 'Lugar de devolución' })}
+                        </p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', margin: 0 }}>{lostItem.return_location}</p>
+                      </div>
+                    )}
+                    {lostItem.return_fee_cup != null && lostItem.return_fee_cup > 0 && (
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.4rem 0 0' }}>
+                        {t('lost_found.return_fee', { defaultValue: 'Tarifa de devolución' })}: {formatCUP(lostItem.return_fee_cup)}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Post-ride actions: dispute + lost item (PASS2 PR-J — same
+                  gating as the mobile CTAs: completed ride, feature flag on,
+                  no existing dispute/report; lost item also needs a driver). */}
+              {ride.status === 'completed' && (disputesEnabled || lostFoundEnabled) && (!dispute || !lostItem) && (
+                <div style={{ padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>
+                    {t('ride.post_ride_help', { defaultValue: '¿Algún problema con este viaje?' })}
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {disputesEnabled && !dispute && (
+                      <Link
+                        href={`/rides/${ride.id}/dispute`}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.8rem 1rem',
+                          borderRadius: '0.75rem', border: '1px solid #fed7aa', textDecoration: 'none',
+                          color: 'var(--text-primary)', fontSize: '0.9rem', background: 'var(--bg-card)',
+                        }}
+                      >
+                        <span aria-hidden="true">⚠️</span>
+                        <span style={{ flex: 1, fontWeight: 600 }}>{t('dispute.open_dispute', { defaultValue: 'Disputar viaje' })}</span>
+                        <span aria-hidden="true" style={{ color: 'var(--text-tertiary)' }}>›</span>
+                      </Link>
+                    )}
+                    {lostFoundEnabled && !lostItem && ride.driver_user_id && (
+                      <Link
+                        href={`/rides/${ride.id}/lost-item`}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.8rem 1rem',
+                          borderRadius: '0.75rem', border: '1px solid #fde68a', textDecoration: 'none',
+                          color: 'var(--text-primary)', fontSize: '0.9rem', background: 'var(--bg-card)',
+                        }}
+                      >
+                        <span aria-hidden="true">🔍</span>
+                        <span style={{ flex: 1, fontWeight: 600 }}>{t('lost_found.report_item', { defaultValue: 'Reportar objeto perdido' })}</span>
+                        <span aria-hidden="true" style={{ color: 'var(--text-tertiary)' }}>›</span>
+                      </Link>
+                    )}
                   </div>
                 </div>
               )}
