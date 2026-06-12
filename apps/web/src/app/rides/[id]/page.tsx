@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient, notificationService, deliveryService } from '@tricigo/api';
-import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE, generateReceiptHTML } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, getRelativeDay, formatTime, formatDate, DEFAULT_EXCHANGE_RATE, generateReceiptHTML, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
 import type { RideWithDriver, RideSplit, RidePricingSnapshot } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { TipFlow } from '@/components/TipFlow';
@@ -521,23 +521,32 @@ export default function RideDetailPage() {
                   </div>
                 )}
 
-                {/* Divider + Final fare */}
-                {ride.final_fare_trc != null && (
+                {/* Divider + Final fare. riderChargedTotal sums the tip back
+                    in (add_tip only increments rides.tip_amount, never
+                    final_fare_*) so the total reconciles with the breakdown
+                    above AND with what the wallet was actually debited. CUP is
+                    the primary currency; TRC only accompanies wallet-paid
+                    rides (showing TRC as primary on a cash ride was wrong). */}
+                {ride.final_fare_cup != null && (() => {
+                  const totalCup = riderChargedTotal(ride);
+                  const totalTrc = ['tricicoin', 'mixed'].includes(ride.payment_method) ? riderChargedTotalTrc(ride) : null;
+                  return (
                   <>
                     <div style={{ borderTop: '1px solid var(--border-light)', margin: '0.75rem 0' }} />
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>Total final</span>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>
-                          {formatTRC(ride.final_fare_trc)}
+                          {formatCUP(totalCup)}
                         </span>
                         <p style={{ margin: '0.15rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                          {formatCUP(ride.final_fare_cup ?? 0)} · ~{formatTRCasUSD(ride.final_fare_trc ?? 0, ride.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE)}
+                          {totalTrc != null ? <>{formatTRC(totalTrc)} · </> : null}~{formatTRCasUSD(totalCup, ride.exchange_rate_usd_cup ?? DEFAULT_EXCHANGE_RATE)}
                         </p>
                       </div>
                     </div>
                   </>
-                )}
+                  );
+                })()}
 
                 {/* Exchange rate */}
                 {ride.exchange_rate_usd_cup && (

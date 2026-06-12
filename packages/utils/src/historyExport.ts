@@ -89,12 +89,15 @@ function escapeCsv(value: string): string {
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
+  // Server timestamps are UTC — render in Cuba time regardless of the
+  // exporting device's timezone (repo convention).
   return d.toLocaleDateString('es-CU', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'America/Havana',
   });
 }
 
@@ -126,7 +129,10 @@ export function generateHistoryCSV(
       escapeCsv(ride.pickup_address),
       escapeCsv(ride.dropoff_address),
       fare.toString(),
-      (fareTrc / 100).toFixed(2),
+      // TRC is stored 1:1 with CUP as whole units since mig 00379 — the old
+      // ÷100 was a leftover of the retired TRC-centavos model and exported
+      // amounts 100× too small.
+      fareTrc.toString(),
       distanceKm,
       durationMin.toString(),
     ];
