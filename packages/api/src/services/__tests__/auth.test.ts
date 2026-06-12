@@ -318,44 +318,89 @@ describe('authService', () => {
   });
 
   // ==================== linkPhone ====================
+  // Phone-link OTP goes through the SAME D7 chain as the login OTP
+  // (send-sms-otp EF). GoTrue's native phone_change SMS (Twilio,
+  // auth.updateUser({ phone })) does not deliver to Cuba (+53).
   describe('linkPhone', () => {
-    it('calls supabase auth.updateUser with the phone number', async () => {
-      mockAuth.updateUser.mockResolvedValue({ error: null });
+    it('invokes the send-sms-otp edge function with the phone number (D7 chain)', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { success: true }, error: null });
 
-      await authService.linkPhone('+573009876543');
+      await authService.linkPhone('+5355598765');
 
-      expect(mockAuth.updateUser).toHaveBeenCalledWith({ phone: '+573009876543' });
+      expect(mockFunctions.invoke).toHaveBeenCalledWith('send-sms-otp', {
+        body: { phone: '+5355598765' },
+      });
+      // Must never fall back to the GoTrue/Twilio phone_change path.
+      expect(mockAuth.updateUser).not.toHaveBeenCalled();
     });
 
-    it('throws on supabase error', async () => {
-      const err = { message: 'Phone already linked', code: 'phone_exists' };
-      mockAuth.updateUser.mockResolvedValue({ error: err });
+    it('throws on edge function error', async () => {
+      const err = { message: 'SMS provider failed', code: '502' };
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: err });
 
-      await expect(authService.linkPhone('+573009876543')).rejects.toEqual(err);
+      await expect(authService.linkPhone('+5355598765')).rejects.toEqual(err);
+    });
+
+    it('throws when the edge function returns an error payload', async () => {
+      mockFunctions.invoke.mockResolvedValue({
+        data: { error: 'SMS service not configured' },
+        error: null,
+      });
+
+      await expect(authService.linkPhone('+5355598765')).rejects.toThrow(
+        'SMS service not configured',
+      );
     });
   });
 
   // ==================== verifyPhoneLink ====================
+  // Validates the code via the link-phone EF (otp_codes / verify_cuba_otp —
+  // same source as verify-otp) and links the phone server-side. Replaces
+  // auth.verifyOtp({ type: 'phone_change' }) which required a GoTrue SMS.
   describe('verifyPhoneLink', () => {
-    it('calls supabase auth.verifyOtp with phone_change type', async () => {
-      const mockData = { session: { access_token: 'tok-456' }, user: { id: 'u-1' } };
-      mockAuth.verifyOtp.mockResolvedValue({ data: mockData, error: null });
+    it('invokes the link-phone edge function and resolves on success', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { success: true }, error: null });
 
-      const result = await authService.verifyPhoneLink('+573009876543', '654321');
+      const result = await authService.verifyPhoneLink('+5355598765', '654321');
 
-      expect(mockAuth.verifyOtp).toHaveBeenCalledWith({
-        phone: '+573009876543',
-        token: '654321',
-        type: 'phone_change',
+      expect(mockFunctions.invoke).toHaveBeenCalledWith('link-phone', {
+        body: { phone: '+5355598765', code: '654321' },
       });
-      expect(result).toEqual(mockData);
+      expect(result).toEqual({ success: true });
+      // Must never fall back to the GoTrue phone_change verification.
+      expect(mockAuth.verifyOtp).not.toHaveBeenCalled();
     });
 
-    it('throws on supabase error', async () => {
-      const err = { message: 'Verify failed', code: 'otp_expired' };
-      mockAuth.verifyOtp.mockResolvedValue({ data: null, error: err });
+    it('throws a clear error when the code is invalid (INVALID_CODE)', async () => {
+      // supabase-js surfaces non-2xx EF responses as a FunctionsHttpError
+      // carrying the raw Response on `context` — replicate the EF's 400.
+      const err = Object.assign(new Error('Edge Function returned a non-2xx status code'), {
+        context: new Response(JSON.stringify({ error: 'INVALID_CODE' }), { status: 400 }),
+      });
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: err });
 
-      await expect(authService.verifyPhoneLink('+573009876543', '000000')).rejects.toEqual(err);
+      await expect(authService.verifyPhoneLink('+5355598765', '000000')).rejects.toThrow(
+        'Invalid or expired code',
+      );
+    });
+
+    it('throws when another active account owns the phone (PHONE_TAKEN)', async () => {
+      const err = Object.assign(new Error('Edge Function returned a non-2xx status code'), {
+        context: new Response(JSON.stringify({ error: 'PHONE_TAKEN' }), { status: 409 }),
+      });
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: err });
+
+      await expect(authService.verifyPhoneLink('+5355598765', '654321')).rejects.toThrow(
+        /already in use/,
+      );
+    });
+
+    it('throws when the response is not an explicit success', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { success: false }, error: null });
+
+      await expect(authService.verifyPhoneLink('+5355598765', '654321')).rejects.toThrow(
+        'Phone link failed',
+      );
     });
   });
 

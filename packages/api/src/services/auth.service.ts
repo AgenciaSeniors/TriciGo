@@ -338,24 +338,81 @@ export const authService = {
   /**
    * Link a phone number to the current OAuth account.
    * Used after social login when user needs to verify their phone.
+   *
+   * Sends the OTP through the `send-sms-otp` Edge Function (D7 Networks) —
+   * the SAME chain as the login OTP. It must NOT use
+   * `supabase.auth.updateUser({ phone })`: that triggers GoTrue's native
+   * phone_change SMS via Twilio, which does not deliver to Cuba (+53).
+   * D7 is the sole SMS provider since PR #462.
    */
   async linkPhone(phone: string) {
     const supabase = getSupabaseClient();
-    const { error } = await supabase.auth.updateUser({ phone });
-    if (error) throw error;
+
+    // Send OTP via Edge Function (D7 SMS → otp_codes), same as sendOTP.
+    // No __DEV__ bypass here: verifyPhoneLink validates against otp_codes
+    // (no password-login fallback like verifyOTP has), so skipping the send
+    // would make the link flow unverifiable in dev.
+    const { data, error } = await supabase.functions.invoke('send-sms-otp', {
+      body: { phone },
+    });
+
+    if (error) {
+      // Surface rate-limit (429) as a typed error so the UI can show a clear
+      // "too many requests, wait N" message instead of a generic failure.
+      const rl = await asRateLimitError(error);
+      if (rl) throw rl;
+      throw error;
+    }
+    if (data?.error) throw new Error(data.error);
   },
 
   /**
    * Verify phone link OTP.
+   *
+   * Validates the code through the `link-phone` Edge Function, which checks
+   * it against otp_codes (`verify_cuba_otp` — the same source send-sms-otp
+   * writes and verify-otp reads), rejects phones owned by another active
+   * account (PHONE_TAKEN), and links the phone server-side (auth.users with
+   * phone_confirm + public.users mirror). Replaces
+   * `supabase.auth.verifyOtp({ type: 'phone_change' })`, which only works
+   * with GoTrue-sent SMS (Twilio — undeliverable to +53; see linkPhone).
    */
   async verifyPhoneLink(phone: string, token: string) {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone,
-      token,
-      type: 'phone_change',
+    const { data, error } = await supabase.functions.invoke('link-phone', {
+      body: { phone, code: token },
     });
-    if (error) throw error;
+
+    if (error) {
+      // supabase-js wraps non-2xx EF responses in a FunctionsHttpError with
+      // the raw Response on `context` — surface the EF's stable error code
+      // (INVALID_CODE / PHONE_TAKEN / ...) with a clear message when readable.
+      let efCode: string | null = null;
+      const ctx = (error as { context?: Response } | null)?.context;
+      if (ctx) {
+        try {
+          const body = await ctx.clone().json();
+          if (typeof body?.error === 'string') efCode = body.error;
+        } catch {
+          /* body unreadable/consumed — fall through to the raw error */
+        }
+      }
+      if (efCode) {
+        const message =
+          efCode === 'INVALID_CODE'
+            ? 'Invalid or expired code'
+            : efCode === 'PHONE_TAKEN'
+              ? 'Phone number already in use by another account'
+              : efCode;
+        const e = new Error(message) as Error & { code: string };
+        e.code = efCode;
+        throw e;
+      }
+      throw error;
+    }
+    if (data?.error || data?.success !== true) {
+      throw new Error(typeof data?.error === 'string' ? data.error : 'Phone link failed');
+    }
     return data;
   },
 };
