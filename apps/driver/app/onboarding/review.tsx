@@ -53,6 +53,7 @@ export default function ReviewScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const uploadedCount = documents.filter((d) => d.uploaded).length;
 
@@ -99,8 +100,10 @@ export default function ReviewScreen() {
         photo_url: null,
       });
 
-      // 3. Submit for verification (status → under_review)
-      await driverService.submitForVerification(driverProfileId);
+      // 3. Submit for verification (status → under_review). termsAccepted
+      // stamps driver_profiles.terms_accepted_at in the same update — the
+      // acceptance-contract trigger (00405) reads it to date the contract.
+      await driverService.submitForVerification(driverProfileId, { termsAccepted });
 
       // 4. Refresh driver profile in store
       const updatedProfile = await driverService.getProfile(user.id);
@@ -272,6 +275,42 @@ export default function ReviewScreen() {
           </View>
         </Card>
 
+        {/* Explicit T&C acceptance (00405): the timestamp is stamped
+            server-side in the same submit update, and the acceptance
+            contract PDF is generated/emailed from it. Submit stays
+            disabled until the driver checks the box. */}
+        <Card forceDark variant="surface" padding="md" className="mb-4">
+          <Pressable
+            onPress={() => setTermsAccepted((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: termsAccepted }}
+            accessibilityLabel={t('onboarding.accept_terms', {
+              defaultValue: 'He leído y acepto los Términos y Condiciones de TriciGo.',
+            })}
+            hitSlop={8}
+            className="flex-row items-start gap-2"
+          >
+            <Ionicons
+              name={termsAccepted ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={termsAccepted ? midnightEmber.accent[500] : midnightEmber.map.text.tertiary}
+              style={{ marginTop: 1 }}
+            />
+            <View className="flex-1">
+              <Text variant="bodySmall" color="inverse">
+                {t('onboarding.accept_terms', {
+                  defaultValue: 'He leído y acepto los Términos y Condiciones de TriciGo.',
+                })}
+              </Text>
+              <Pressable onPress={() => router.push('/profile/terms')} hitSlop={6}>
+                <Text variant="caption" style={{ color: midnightEmber.accent[500], marginTop: 4 }}>
+                  {t('onboarding.read_terms', { defaultValue: 'Leer los Términos y Condiciones' })}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Card>
+
         {error ? (
           <Text variant="bodySmall" color="error" className="mb-4 text-center">{error}</Text>
         ) : null}
@@ -282,7 +321,7 @@ export default function ReviewScreen() {
           fullWidth
           onPress={handleSubmit}
           loading={submitting}
-          disabled={submitting || uploadedCount < 5 || !driverProfileId}
+          disabled={submitting || uploadedCount < 5 || !driverProfileId || !termsAccepted}
         />
         {/* UX: when Submit is disabled because docs are missing, say so
              explicitly. Previously the button just looked grayed out with
@@ -292,6 +331,13 @@ export default function ReviewScreen() {
             {t('onboarding.submit_disabled_docs', {
               missing: 5 - uploadedCount,
               defaultValue: `Falta${5 - uploadedCount === 1 ? '' : 'n'} ${5 - uploadedCount} documento${5 - uploadedCount === 1 ? '' : 's'} por subir.`,
+            })}
+          </Text>
+        )}
+        {!submitting && uploadedCount >= 5 && !termsAccepted && (
+          <Text variant="caption" style={{ color: midnightEmber.state.warning, textAlign: 'center', marginTop: 8 }}>
+            {t('onboarding.submit_disabled_terms', {
+              defaultValue: 'Debes aceptar los Términos y Condiciones para enviar.',
             })}
           </Text>
         )}
