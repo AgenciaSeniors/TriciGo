@@ -11,12 +11,30 @@ import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useTranslation } from '@tricigo/i18n';
-import { authService } from '@tricigo/api';
+import { authService, getSupabaseClient } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 const vehicleRow = require('../../assets/login-hero.png');
+
+// BUG-201 fallback: openAuthSessionAsync can return the redirect URL without
+// the OS ever firing the Linking event, so useAuthDeepLink never runs and the
+// session is silently lost. Parse the tokens out of the returned URL and set
+// the session manually.
+async function setSessionFromAuthResult(result: WebBrowser.WebBrowserAuthSessionResult) {
+  if (result.type !== 'success' || !('url' in result) || !result.url?.includes('auth/callback')) return;
+  const hashIdx = result.url.indexOf('#');
+  if (hashIdx < 0) return;
+  const params = new URLSearchParams(result.url.substring(hashIdx + 1));
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  if (accessToken && refreshToken) {
+    const supabase = getSupabaseClient();
+    await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    console.log('[OAuth] Session set from openAuthSessionAsync result');
+  }
+}
 
 export default function LoginScreen() {
   const { t } = useTranslation('common');
@@ -234,20 +252,7 @@ export default function LoginScreen() {
                       // BUG-201 fallback: if browser returned with a callback URL
                       // but the OS-level handler didn't fire the Linking event,
                       // process the URL manually so the session is set anyway.
-                      if (result.type === 'success' && 'url' in result && result.url?.includes('auth/callback')) {
-                        const hashIdx = result.url.indexOf('#');
-                        if (hashIdx >= 0) {
-                          const params = new URLSearchParams(result.url.substring(hashIdx + 1));
-                          const accessToken = params.get('access_token');
-                          const refreshToken = params.get('refresh_token');
-                          if (accessToken && refreshToken) {
-                            const { getSupabaseClient } = await import('@tricigo/api');
-                            const supabase = getSupabaseClient();
-                            await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-                            console.log('[GoogleSignIn] Session set from openAuthSessionAsync result');
-                          }
-                        }
-                      }
+                      await setSessionFromAuthResult(result);
                     }
                   } catch (err) {
                     console.warn('[GoogleSignIn] error', String(err));
@@ -271,7 +276,8 @@ export default function LoginScreen() {
                     const data = await authService.signInWithApple(redirectTo);
                     if (Platform.OS !== 'web' && data?.url) {
                       // BUG-201/202 (1+2): same fix as Google — see comment above.
-                      await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+                      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+                      await setSessionFromAuthResult(result);
                     }
                   } catch {
                     setSocialLoading(false);
