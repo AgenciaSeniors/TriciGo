@@ -7,8 +7,8 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
-import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService } from '@tricigo/api';
-import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory } from '@tricigo/types';
+import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService, useFeatureFlag } from '@tricigo/api';
+import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory, RidePreferences } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useDestinationPredictions } from '../../hooks/useDestinationPredictions';
 import { fetchRoute, reverseGeocode } from '../../services/geoService';
@@ -77,6 +77,13 @@ export default function BookPage() {
   const [corporateAccounts, setCorporateAccounts] = useState<CorporateAccount[]>([]);
   const [selectedCorporateId, setSelectedCorporateId] = useState<string | null>(null);
 
+  /* ─── Ride preferences (parity con app móvil) ───
+     Saved in /profile/ride-preferences (customer_profiles.ride_preferences);
+     sent as rider_preferences on createRide so the driver sees them — same
+     source + shape as the mobile client (useRide.ts). */
+  const ridePreferencesEnabled = useFeatureFlag('ride_preferences_enabled');
+  const [ridePrefs, setRidePrefs] = useState<RidePreferences>({});
+
   useEffect(() => {
     async function loadSaved() {
       try {
@@ -87,6 +94,9 @@ export default function BookPage() {
         const profile = await customerService.getProfile(user.id);
         if (profile?.saved_locations?.length) {
           setSavedLocations(profile.saved_locations.filter((l: any) => l.latitude && l.longitude));
+        }
+        if (profile?.ride_preferences) {
+          setRidePrefs(profile.ride_preferences);
         }
         corporateService.getMyAccounts(user.id).then(setCorporateAccounts).catch(() => {});
       } catch { /* ignore — saved locations are optional */ }
@@ -816,6 +826,10 @@ export default function BookPage() {
           })),
         }),
         ...(selectedCorporateId && { corporate_account_id: selectedCorporateId }),
+        // Rider preferences saved in /profile/ride-preferences — same shape and
+        // emptiness check as the mobile client (useRide.ts), gated by the
+        // ride_preferences_enabled flag.
+        rider_preferences: ridePreferencesEnabled && Object.keys(ridePrefs).length > 0 ? ridePrefs : undefined,
         // "Compartir viaje" — only the tricycle. Server trigger (00347) computes
         // the discount; declared_passengers = seats the rider occupies.
         share_ride: serviceType === 'triciclo_basico' ? shareRide : false,
@@ -1929,6 +1943,60 @@ export default function BookPage() {
                     )}
                   </div>
                 )}
+
+                {/* Preferencias de viaje (espejo del chip móvil — index.tsx).
+                    Las preferencias se editan en /profile/ride-preferences y
+                    se envían como rider_preferences en createRide. */}
+                {ridePreferencesEnabled && (() => {
+                  const hasActive = Object.values(ridePrefs).some(Boolean);
+                  const pillStyle = {
+                    fontSize: '0.68rem', fontWeight: 600 as const, color: 'var(--primary)',
+                    background: 'rgba(255,77,0,0.12)', padding: '0.15rem 0.5rem', borderRadius: '999px',
+                  };
+                  return (
+                    <Link
+                      href="/profile/ride-preferences"
+                      aria-label={t('book.preferences_button', { defaultValue: 'Preferencias de viaje' })}
+                      style={{ ...rowStyle(hasActive), textDecoration: 'none' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1 }}>
+                        <span aria-hidden="true" style={{ fontSize: '1.1rem' }}>🎚️</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {t('book.preferences_button', { defaultValue: 'Preferencias de viaje' })}
+                          </div>
+                          {hasActive ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.3rem' }}>
+                              {ridePrefs.quiet_mode && (
+                                <span style={pillStyle}>{t('book.pref_quiet', { defaultValue: 'Silencio' })}</span>
+                              )}
+                              {ridePrefs.temperature === 'cool' && (
+                                <span style={pillStyle}>{t('book.pref_cool', { defaultValue: 'AC fresco' })}</span>
+                              )}
+                              {ridePrefs.temperature === 'warm' && (
+                                <span style={pillStyle}>{t('book.pref_warm', { defaultValue: 'Cálido' })}</span>
+                              )}
+                              {ridePrefs.conversation_ok && (
+                                <span style={pillStyle}>{t('book.pref_conversation', { defaultValue: 'Conversación' })}</span>
+                              )}
+                              {ridePrefs.luggage_trunk && (
+                                <span style={pillStyle}>{t('book.pref_trunk', { defaultValue: 'Maletero' })}</span>
+                              )}
+                              {(ridePrefs.accessibility_needs?.length ?? 0) > 0 && (
+                                <span style={pillStyle}>♿ {ridePrefs.accessibility_needs?.length}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
+                              {t('book.preferences_hint', { defaultValue: 'Silencio, A/C, equipaje, accesibilidad' })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <span aria-hidden="true" style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>›</span>
+                    </Link>
+                  );
+                })()}
               </div>
             );
           })()}
