@@ -201,7 +201,16 @@ export default function TrackRidePage() {
   // driver is assigned and the ride is in flight.
   const driverActive = !!ride && ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress'].includes(ride.status);
   const driverPos = useDriverPosition(ride?.driver_id, driverActive);
-  const driverLocation = driverPos.position ? { lat: driverPos.position.latitude, lng: driverPos.position.longitude } : null;
+  // Memoized on the primitive coords: useDriverPosition re-renders ~1/s even
+  // with an unchanged position (lastSampleAt), and a fresh object identity per
+  // render re-fired every effect depending on it (the ETA effect cancelled its
+  // own in-flight route fetch every second and never resolved).
+  const driverLat = driverPos.position?.latitude;
+  const driverLng = driverPos.position?.longitude;
+  const driverLocation = useMemo(
+    () => (driverLat != null && driverLng != null ? { lat: driverLat, lng: driverLng } : null),
+    [driverLat, driverLng],
+  );
 
   // Unread in-app chat badge (parity con useUnreadChatCount móvil) — polls while
   // a driver is assigned so the rider sees pending messages from the map view.
@@ -251,6 +260,14 @@ export default function TrackRidePage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
+  // Reset selected tags when the star rating crosses the positive/negative
+  // threshold (>=4) — otherwise a hidden negative tag picked at 3★ ships with
+  // a 5★ review. Mirrors mobile RideCompleteView's polarity reset.
+  const tagPolarity = rating >= 4;
+  useEffect(() => {
+    setReviewTags([]);
+  }, [tagPolarity]);
+
   // Categorized rating tags — gated behind the same feature flag the mobile
   // client uses, so the web matches whatever the native rider shows.
   const categorizedRatingsEnabled = useFeatureFlag('categorized_ratings_enabled');
@@ -277,7 +294,7 @@ export default function TrackRidePage() {
   const [estimatingStop, setEstimatingStop] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
   const [pendingStop, setPendingStop] = useState<
-    | { address: string; latitude: number; longitude: number; extraDistanceKm: number; extraFareCup: number; extraDurationMin: number }
+    | { address: string; latitude: number; longitude: number; extraDistanceKm: number; extraFareCup: number; extraDurationMin: number; estimateFailed?: boolean }
     | null
   >(null);
   const [maxStopsReached, setMaxStopsReached] = useState(false);
@@ -312,14 +329,27 @@ export default function TrackRidePage() {
     }
   };
 
+  const rideStatusRef = useRef(ride?.status);
+  rideStatusRef.current = ride?.status;
+
   const fetchRide = useCallback(async () => {
     if (!userId) return;
     try {
       const data = await rideService.getRideWithDriver(rideId);
-      if (data) setRide(data);
-      else setError(t('track.not_found', { defaultValue: 'Viaje no encontrado' }));
+      // A transient failure of one 3s poll must NOT take down the live view:
+      // only surface the full-page error before the FIRST successful load
+      // (rideStatusRef is set once a ride rendered). Success clears any error
+      // so the page self-heals when connectivity returns.
+      if (data) {
+        setRide(data);
+        setError(null);
+      } else if (!rideStatusRef.current) {
+        setError(t('track.not_found', { defaultValue: 'Viaje no encontrado' }));
+      }
     } catch {
-      setError(t('track.error_loading', { defaultValue: 'Error al cargar el viaje' }));
+      if (!rideStatusRef.current) {
+        setError(t('track.error_loading', { defaultValue: 'Error al cargar el viaje' }));
+      }
     } finally {
       setLoading(false);
     }
@@ -344,8 +374,11 @@ export default function TrackRidePage() {
       );
       setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm, extraFareCup, extraDurationMin: extraMinFromKm(extraDistanceKm) });
     } catch {
-      // Fall back to adding without preview rather than blocking the feature.
-      setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm: 0, extraFareCup: 0, extraDurationMin: 0 });
+      // Fall back to adding without preview rather than blocking the feature —
+      // but flag it so the modal says "estimate unavailable" instead of
+      // rendering misleading "+$0 / +0.0 km" as if it were real data (the
+      // server still charges the actual detour).
+      setPendingStop({ address: result.address, latitude: result.latitude, longitude: result.longitude, extraDistanceKm: 0, extraFareCup: 0, extraDurationMin: 0, estimateFailed: true });
     } finally {
       setEstimatingStop(false);
       setAddStopOpen(false);
@@ -369,6 +402,10 @@ export default function TrackRidePage() {
       if (msg === 'MAX_WAYPOINTS_REACHED') {
         setMaxStopsReached(true);
         setPendingStop(null);
+      } else {
+        // Any other failure (network, server rejection) was silently
+        // swallowed — the modal just stopped spinning with no feedback.
+        alert(t('track.add_stop_failed', { defaultValue: 'No se pudo agregar la parada. Intenta de nuevo.' }));
       }
     } finally {
       setAddingStop(false);
@@ -427,9 +464,6 @@ export default function TrackRidePage() {
   };
 
   const ratingCardRef = useRef<HTMLDivElement>(null);
-
-  const rideStatusRef = useRef(ride?.status);
-  rideStatusRef.current = ride?.status;
 
   useEffect(() => {
     fetchRide();
@@ -498,35 +532,45 @@ export default function TrackRidePage() {
 
   useEffect(() => {
     if (!ride || ride.ride_mode !== 'cargo') return;
+    // Re-fetch on every status transition (not just once): the driver uploads
+    // the pickup photo right before starting the trip and the delivery photo
+    // right before completing, so keying on status keeps the photos/OTP fresh
+    // without polling an extra endpoint every 3s.
     deliveryService.getDeliveryDetails(rideId).then((d) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (d) setDeliveryDetails(d as any);
     }).catch(() => {});
-  }, [ride?.ride_mode, rideId]);
+  }, [ride?.ride_mode, ride?.status, rideId]);
 
   // Dynamic ETA: throttled OSRM route from the driver's live position to the
   // current target. Mirrors the mobile client's useETA (recompute on driver
   // movement, ~30s throttle). Falls back to the static estimate when we have
   // no live position yet.
   const etaThrottleRef = useRef(0);
+  // Latest-request-wins guard instead of a cleanup `cancelled` flag: the old
+  // cleanup aborted the in-flight route fetch on EVERY re-render (deps included
+  // the per-poll `ride` object identity), so the ETA promise was discarded
+  // before resolving and the badge almost never appeared — while each aborted
+  // attempt still consumed the 30s throttle window.
+  const etaReqIdRef = useRef(0);
+  const rideStatus = ride?.status;
+  const pickupLatDep = typeof ride?.pickup_location === 'object' ? ride.pickup_location.latitude : 0;
+  const pickupLngDep = typeof ride?.pickup_location === 'object' ? ride.pickup_location.longitude : 0;
+  const dropoffLatDep = typeof ride?.dropoff_location === 'object' ? ride.dropoff_location.latitude : 0;
+  const dropoffLngDep = typeof ride?.dropoff_location === 'object' ? ride.dropoff_location.longitude : 0;
   useEffect(() => {
-    if (!ride || !driverLocation || !driverActive) { setDynamicEtaMin(null); return; }
+    if (!rideStatus || !driverLocation || !driverActive) { setDynamicEtaMin(null); return; }
     const now = Date.now();
     if (now - etaThrottleRef.current < 30_000) return;
     etaThrottleRef.current = now;
-    const inProgress = ride.status === 'in_progress';
-    const pLat = typeof ride.pickup_location === 'object' ? ride.pickup_location.latitude : 0;
-    const pLng = typeof ride.pickup_location === 'object' ? ride.pickup_location.longitude : 0;
-    const dLat = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.latitude : 0;
-    const dLng = typeof ride.dropoff_location === 'object' ? ride.dropoff_location.longitude : 0;
-    const target = inProgress ? { lat: dLat, lng: dLng } : { lat: pLat, lng: pLng };
+    const inProgress = rideStatus === 'in_progress';
+    const target = inProgress ? { lat: dropoffLatDep, lng: dropoffLngDep } : { lat: pickupLatDep, lng: pickupLngDep };
     if (!target.lat || !target.lng) return;
-    let cancelled = false;
+    const reqId = ++etaReqIdRef.current;
     fetchRoute({ lat: driverLocation.lat, lng: driverLocation.lng }, target)
-      .then((r) => { if (!cancelled && r) setDynamicEtaMin(Math.max(1, Math.ceil(r.duration_s / 60))); })
+      .then((r) => { if (etaReqIdRef.current === reqId && r) setDynamicEtaMin(Math.max(1, Math.ceil(r.duration_s / 60))); })
       .catch(() => { /* keep last ETA */ });
-    return () => { cancelled = true; };
-  }, [ride, driverLocation, driverActive]);
+  }, [rideStatus, driverLocation, driverActive, pickupLatDep, pickupLngDep, dropoffLatDep, dropoffLngDep]);
 
   // Capture the pickup→dropoff polyline once the trip starts so the progress
   // bar can project the driver onto a fixed path (monotonic %). Fetched a
@@ -1473,7 +1517,10 @@ export default function TrackRidePage() {
                   <IconWhatsApp /> Contactar
                 </a>
               )}
-              {['searching', 'accepted', 'driver_en_route'].includes(ride.status) && (
+              {/* arrived_at_pickup incluido: el backend acepta cancelar en ese
+                  estado y el móvil lo permite (RideActiveView canCancel) —
+                  ocultarlo dejaba al pasajero web sin salida. */}
+              {['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup'].includes(ride.status) && (
                 <button
                   className="track-action-btn track-action-btn--cancel"
                   disabled={canceling}
@@ -1498,7 +1545,10 @@ export default function TrackRidePage() {
                     try {
                       await rideService.cancelRide(rideId, userId ?? undefined, 'rider_canceled');
                     } catch {
-                      // Reset on error so user can retry
+                      // Surface the failure — a silent catch left the user
+                      // guessing whether the trip was canceled or not.
+                      alert(t('track.cancel_failed', { defaultValue: 'No se pudo cancelar el viaje. Verifica tu conexión e intenta de nuevo.' }));
+                      fetchRide();
                     } finally {
                       setCanceling(false);
                     }
@@ -1619,20 +1669,28 @@ export default function TrackRidePage() {
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 14px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
               {pendingStop.address}
             </p>
-            <div style={{ background: 'var(--bg-light)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_distance', { defaultValue: 'Distancia adicional' })}</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>+{pendingStop.extraDistanceKm.toFixed(1)} km</span>
+            {pendingStop.estimateFailed ? (
+              <div style={{ background: 'var(--bg-light)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                  {t('track.stop_estimate_unavailable', { defaultValue: 'No pudimos estimar el costo adicional ahora. El desvío real se calculará y cobrará al finalizar el viaje.' })}
+                </p>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_time', { defaultValue: 'Tiempo adicional' })}</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>+{pendingStop.extraDurationMin} min</span>
+            ) : (
+              <div style={{ background: 'var(--bg-light)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_distance', { defaultValue: 'Distancia adicional' })}</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>+{pendingStop.extraDistanceKm.toFixed(1)} km</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_time', { defaultValue: 'Tiempo adicional' })}</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>+{pendingStop.extraDurationMin} min</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_fare', { defaultValue: 'Tarifa adicional estimada' })}</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary, #FF4D00)' }}>+{formatCUP(pendingStop.extraFareCup)}</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('track.extra_fare', { defaultValue: 'Tarifa adicional estimada' })}</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary, #FF4D00)' }}>+{formatCUP(pendingStop.extraFareCup)}</span>
-              </div>
-            </div>
+            )}
             <p style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)', margin: '0 0 14px', textAlign: 'center' }}>
               {t('track.confirm_stop_note', { defaultValue: 'Es una estimación. El total final se calcula según la ruta real.' })}
             </p>
