@@ -9,6 +9,7 @@ import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/Adjus
 import { formatCUP } from '@tricigo/utils';
 import type {
   DriverProfile,
+  DriverContract,
   DriverDocument,
   DriverScoreEvent,
   Vehicle,
@@ -31,6 +32,7 @@ import {
   Clock,
   MoreVertical,
   ExternalLink,
+  Download,
   Shield,
   TrendingUp,
   TrendingDown,
@@ -119,6 +121,8 @@ export default function DriverDetailPage() {
   const [graceTripsReason, setGraceTripsReason] = useState('');
   const [graceTripsSubmitting, setGraceTripsSubmitting] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
+  const [contract, setContract] = useState<DriverContract | null>(null);
+  const [generatingContract, setGeneratingContract] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   // ─── Data loading ──────────────────────────────────────────
@@ -128,14 +132,17 @@ export default function DriverDetailPage() {
 
     (async () => {
       try {
-        const [data, checks, reviewSummary] = await Promise.all([
+        const [data, checks, reviewSummary, contractRow] = await Promise.all([
           adminService.getDriverDetail(id),
           adminService.getDriverSelfieChecks(id).catch(() => [] as SelfieCheck[]),
           reviewService.getReviewSummary(id).catch(() => null),
+          // Tolerates the 00405 migration not being applied yet (returns null).
+          adminService.getDriverContract(id).catch(() => null),
         ]);
         if (!cancelled) {
           setDriver(data);
           setSelfieChecks(checks);
+          setContract(contractRow);
           if (reviewSummary?.top_tags) setTopTags(reviewSummary.top_tags);
           adminService.getDriverChurnRisk(id).then((risk) => {
             if (!cancelled && risk) setChurnRisk(risk);
@@ -213,6 +220,29 @@ export default function DriverDetailPage() {
       );
     } finally {
       setVerifyingDoc(null);
+    }
+  };
+
+  const handleDownloadContract = async (storagePath: string) => {
+    try {
+      const url = await adminService.getContractSignedUrl(storagePath);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch {
+      showToast('error', t('drivers.contract_download_error', { defaultValue: 'No pudimos descargar el contrato' }));
+    }
+  };
+
+  const handleGenerateContract = async () => {
+    if (!id) return;
+    setGeneratingContract(true);
+    try {
+      const row = await adminService.generateDriverContract(id);
+      setContract(row);
+      showToast('success', t('drivers.contract_generated', { defaultValue: 'Contrato generado y enviado por email' }));
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : t('drivers.contract_generate_error', { defaultValue: 'No pudimos generar el contrato' }));
+    } finally {
+      setGeneratingContract(false);
     }
   };
 
@@ -600,6 +630,62 @@ export default function DriverDetailPage() {
                 );
               })}
             </div>
+          </section>
+
+          {/* Contract (T&C acceptance — 00405) */}
+          <section className="bg-surface-elevated rounded-xl border border-line p-5">
+            <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-3">
+              {t('drivers.contract_section', { defaultValue: 'Contrato de términos y condiciones' })}
+            </h2>
+            {contract ? (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-ink inline-flex items-center gap-2">
+                    <FileText size={14} className="text-ink-subtle" />
+                    {contract.contract_no}
+                  </p>
+                  <p className="text-xs text-ink-muted mt-1">
+                    {t('drivers.contract_accepted_at', { defaultValue: 'Aceptado' })}: {formatAdminDate(contract.accepted_at)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {contract.pdf_es_path && (
+                    <button
+                      onClick={() => handleDownloadContract(contract.pdf_es_path!)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                    >
+                      <Download size={12} />
+                      {t('drivers.contract_download_es', { defaultValue: 'Descargar (ES)' })}
+                    </button>
+                  )}
+                  {contract.pdf_ro_path && (
+                    <button
+                      onClick={() => handleDownloadContract(contract.pdf_ro_path!)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-line text-ink hover:bg-surface-sunken transition-colors"
+                    >
+                      <Download size={12} />
+                      {t('drivers.contract_download_ro', { defaultValue: 'Descargar (RO)' })}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="text-xs text-ink-muted">
+                  {t('drivers.contract_missing', { defaultValue: 'Este conductor todavía no tiene contrato generado.' })}
+                </p>
+                <button
+                  onClick={handleGenerateContract}
+                  disabled={generatingContract}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                >
+                  <FileText size={12} />
+                  {generatingContract
+                    ? t('drivers.contract_generating', { defaultValue: 'Generando…' })
+                    : t('drivers.contract_generate', { defaultValue: 'Generar contrato' })}
+                </button>
+              </div>
+            )}
           </section>
 
           {/* Selfie Checks */}
