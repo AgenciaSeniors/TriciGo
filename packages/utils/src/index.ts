@@ -78,6 +78,7 @@ export { getErrorMessage } from './errors';
 export {
   resolveAnnouncementCta,
   isValidAnnouncementCta,
+  announcementCtaWebHref,
   ANNOUNCEMENT_CTA_TARGETS,
 } from './announcementCta';
 export type { AnnouncementCtaAction, AnnouncementCtaTarget } from './announcementCta';

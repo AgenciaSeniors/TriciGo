@@ -118,6 +118,17 @@ export default function BookPage() {
   const selectedEstimate = serviceType === 'mensajeria'
     ? allEstimates[deliveryVehicle] || null
     : allEstimates[serviceType] || null;
+
+  // Deep link: /book?service=<slug> preselects the service. Campaign CTAs use
+  // it (announcementCtaWebHref maps "Enviar paquete" → /book?service=mensajeria)
+  // and it makes the booking link shareable with a service preselected.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const param = new URLSearchParams(window.location.search).get('service');
+    if (param && SERVICE_TYPE_KEYS.some((s) => s.slug === param)) {
+      setServiceType(param as ServiceTypeSlug);
+    }
+  }, []);
   const [showOptions, setShowOptions] = useState(false);
   const [isEstimating, setIsEstimating] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);

@@ -122,3 +122,37 @@ export function isValidAnnouncementCta(url: string): boolean {
   if (url.trim() === '') return true;
   return resolveAnnouncementCta(url).kind !== 'none';
 }
+
+/**
+ * Resolve a stored `cta_url` into a WEB (Next.js) href. The stored values are
+ * MOBILE Expo Router paths (see ANNOUNCEMENT_CTA_TARGETS), so the web must
+ * translate them — pushing them raw 404s on Next (PASS2 P1: every live
+ * campaign in prod stores `/(tabs)`-style paths). Returns `null` when there is
+ * nothing safe to open (caller hides/ignores the CTA). External URLs are
+ * returned as-is for the caller to window.open.
+ */
+export function announcementCtaWebHref(url: string | null | undefined): string | null {
+  const action = resolveAnnouncementCta(url);
+  switch (action.kind) {
+    case 'book':
+      return action.service ? `/book?service=${encodeURIComponent(action.service)}` : '/book';
+    case 'external':
+      return action.url;
+    case 'route': {
+      const [path = '', qs] = action.path.split('?');
+      const suffix = qs ? `?${qs}` : '';
+      // Mobile → web route translations.
+      if (path === '/(tabs)/wallet') return `/wallet${suffix}`;
+      if (path === '/(tabs)/rides') return `/rides${suffix}`;
+      if (path.startsWith('/(tabs)')) return '/book';
+      if (path === '/profile/blog') return `/blog${suffix}`;
+      if (path.startsWith('/ride/')) return `/rides/${path.slice('/ride/'.length)}${suffix}`;
+      // The remaining known prefixes (/profile/*, /notifications, /support,
+      // /promo/*, /refer/*, /gift/*, /driver-profile/*, /chat/*) exist
+      // verbatim as web routes.
+      return action.path;
+    }
+    default:
+      return null;
+  }
+}
