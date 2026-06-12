@@ -204,13 +204,29 @@ export const driverService = {
 
   /**
    * Submit driver profile for verification.
+   *
+   * `termsAccepted` stamps driver_profiles.terms_accepted_at (00405) in
+   * the SAME update as the status change, so the contract trigger sees
+   * it already set. The column may not exist yet (migration pending) —
+   * acceptance tracking must never block onboarding, so on a
+   * column-missing error we retry with the status change alone.
    */
-  async submitForVerification(driverId: string): Promise<void> {
+  async submitForVerification(driverId: string, opts?: { termsAccepted?: boolean }): Promise<void> {
     const supabase = getSupabaseClient();
+    const update: Record<string, unknown> = { status: 'under_review' as DriverStatus };
+    if (opts?.termsAccepted) update.terms_accepted_at = new Date().toISOString();
     const { error } = await supabase
       .from('driver_profiles')
-      .update({ status: 'under_review' as DriverStatus })
+      .update(update)
       .eq('id', driverId);
+    if (error && opts?.termsAccepted && /column|schema cache/i.test(error.message)) {
+      const { error: retryErr } = await supabase
+        .from('driver_profiles')
+        .update({ status: 'under_review' as DriverStatus })
+        .eq('id', driverId);
+      if (retryErr) throw retryErr;
+      return;
+    }
     if (error) throw error;
   },
 
