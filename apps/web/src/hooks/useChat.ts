@@ -155,7 +155,12 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
     };
   }, [rideId, userId]);
 
-  // ── Drain offline queue on `online` event ──
+  // ── Drain offline queue: on mount AND on the `online` event ──
+  // The browser's 'online' only fires on an offline→online TRANSITION within
+  // the same session: a page that loads already-online with a non-empty queue
+  // (user sent without signal, closed the tab, reopened later) never received
+  // it, so queued messages sat in localStorage forever. Draining on mount
+  // closes that gap.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const drain = async () => {
@@ -165,7 +170,11 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
         try {
           const msg = await chatService.sendMessage(item.rideId, item.senderId, item.body);
           removeFromQueue(item.localId);
-          // Replace the local pending bubble with the real server msg.
+          // Replace the local pending bubble with the real server msg — but
+          // ONLY when the queued item belongs to THIS ride. The queue is
+          // global; injecting another ride's message into the open thread
+          // showed a foreign bubble until reload.
+          if (item.rideId !== rideId) continue;
           setMessages((prev) => {
             const without = prev.filter((m) => m.id !== item.localId);
             if (without.some((m) => m.id === msg.id)) return without;
@@ -180,9 +189,10 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
         }
       }
     };
+    if (navigator.onLine) void drain();
     window.addEventListener('online', drain);
     return () => window.removeEventListener('online', drain);
-  }, []);
+  }, [rideId]);
 
   // ── Send (optimistic + queue on failure) ──
   const sendMessage = useCallback(async (body: string) => {
