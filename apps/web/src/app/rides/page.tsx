@@ -105,8 +105,13 @@ export default function RidesPage() {
         ...(opts.tab !== 'all' && { status: [opts.tab] }),
         ...(opts.serviceType !== 'all' && { serviceType: opts.serviceType as ServiceTypeSlug }),
         ...(opts.paymentMethod !== 'all' && { paymentMethod: opts.paymentMethod as PaymentMethod }),
-        ...(opts.dateFrom && { dateFrom: new Date(opts.dateFrom).toISOString() }),
-        ...(opts.dateTo && { dateTo: new Date(`${opts.dateTo}T23:59:59`).toISOString() }),
+        // Both bounds anchored to Cuba time (UTC−4/−5). Date-only strings
+        // parse as midnight UTC per the ECMAScript spec while 'T23:59:59'
+        // parses in the BROWSER's zone — the two ends of the same filter used
+        // different timezones and "Desde 10/06" included rides from the night
+        // of 09/06 in Havana.
+        ...(opts.dateFrom && { dateFrom: new Date(`${opts.dateFrom}T00:00:00-04:00`).toISOString() }),
+        ...(opts.dateTo && { dateTo: new Date(`${opts.dateTo}T23:59:59-04:00`).toISOString() }),
       });
       if (append) {
         setRides((prev) => [...prev, ...data]);
@@ -182,7 +187,9 @@ export default function RidesPage() {
   const handleExportCsv = () => {
     if (rides.length === 0) return;
     const csv = generateHistoryCSV(rides, 'es');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // BOM so Excel-Windows decodes the UTF-8 accents (Método, direcciones
+    // cubanas) — same as the admin's exportCsv helper.
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

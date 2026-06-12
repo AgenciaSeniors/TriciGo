@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { walletService, exchangeRateService, paymentService, getSupabaseClient } from '@tricigo/api';
@@ -52,6 +52,7 @@ function webTxLabel(view: { kind: string; isCredit: boolean }): string {
     case 'penalty': return 'Penalización por cancelación';
     case 'bonus': return 'Crédito promocional';
     case 'refund': return 'Reembolso';
+    case 'insurance': return 'Seguro de viaje';
     case 'adjustment':
     default: return 'Ajuste';
   }
@@ -226,6 +227,16 @@ export default function WalletPage() {
     return () => { cancelled = true; };
   }, [account, loadTransactions]);
 
+  // Refs so the mount-only NETOPIA-return closure below reads the CURRENT
+  // auth/wallet state when its poll resolves. The original closure captured
+  // the FIRST render's nulls (auth resolves async after mount), so the
+  // post-payment balance/receipt refresh never executed — the screen said
+  // "saldo actualizado" while showing the stale pre-credit values.
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = userId;
+  const accountRef = useRef<WalletAccount | null>(null);
+  accountRef.current = account;
+
   // ── Handle return from NETOPIA hosted payment page ──
   // NETOPIA redirects back to /wallet?intent=<id>. We poll the intent
   // until status is completed/failed (the webhook is the authoritative
@@ -250,13 +261,17 @@ export default function WalletPage() {
           setSuccessIntentId(intentId);
           setReceiptReady(false);
           setRechargeStep('success');
-          // Refresh balance + transactions so the new credit shows.
-          if (userId) {
+          // Refresh balance + transactions so the new credit shows. Read the
+          // refs (not the captured state): by the time the poll resolves the
+          // session has loaded, even though this effect mounted with nulls.
+          const uid = userIdRef.current;
+          if (uid) {
             try {
-              const bal = await walletService.getBalance(userId);
+              const bal = await walletService.getBalance(uid);
               if (!cancelled) setBalance(bal);
-              if (account) {
-                const txns = await walletService.getTransactions(account.id, 0, 20);
+              const acct = accountRef.current;
+              if (acct) {
+                const txns = await walletService.getTransactions(acct.id, 0, 20);
                 if (!cancelled) setTransactions(txns as LedgerTransaction[]);
               }
             } catch { /* ignore — visual refresh, not critical */ }
@@ -267,7 +282,7 @@ export default function WalletPage() {
               for (let i = 0; i < 6; i++) {
                 if (cancelled) return;
                 try {
-                  const receipts = await walletService.getReceipts(userId);
+                  const receipts = await walletService.getReceipts(uid);
                   const r = receipts.find((x) => x.payment_intent_id === intentId);
                   if (r?.pdf_generated_at) { if (!cancelled) setReceiptReady(true); return; }
                 } catch { /* ignore */ }

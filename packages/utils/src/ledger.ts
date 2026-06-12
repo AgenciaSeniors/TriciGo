@@ -47,7 +47,8 @@ export function signedLedgerAmountForAccount(
  */
 export type WalletTxnKind =
   | 'recharge' | 'ride' | 'commission' | 'gift' | 'tip'
-  | 'penalty' | 'bonus' | 'refund' | 'adjustment' | 'transfer';
+  | 'penalty' | 'bonus' | 'refund' | 'adjustment' | 'transfer'
+  | 'insurance';
 
 /** Minimal shape of a ledger transaction needed to classify it. */
 export interface ClassifiableTxn {
@@ -115,6 +116,16 @@ export function classifyWalletTxn(
     kind = 'commission';
   } else if (type === 'promo_credit' || ref === 'referral') {
     kind = 'bonus';
+  } else if (type === 'insurance_premium') {
+    // Real live type (mig 00398) — fell through to 'transfer', which the web
+    // labelled "Regalo enviado". The trip-insurance premium is its own thing.
+    kind = 'insurance';
+  } else if (type === 'refund') {
+    // NETOPIA recharge refunds post with type='refund' (mig 00398) — they
+    // also fell through to 'transfer'/"Regalo recibido".
+    kind = 'refund';
+  } else if (type === 'quota_purchase' || type === 'quota_deduction') {
+    kind = 'adjustment';
   } else if (type === 'adjustment') {
     kind = isCredit ? 'refund' : 'adjustment';
   } else {
@@ -148,6 +159,8 @@ export function walletTxnIcon(view: Pick<WalletTxnView, 'kind' | 'direction'>): 
       return 'gift';
     case 'refund':
       return 'refresh';
+    case 'insurance':
+      return 'shield-checkmark';
     case 'adjustment':
     default:
       return 'swap-horizontal';

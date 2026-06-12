@@ -266,6 +266,7 @@ export default function WalletScreen() {
       case 'penalty': return t('earnings.tx_penalty', { defaultValue: 'Penalización' });
       case 'bonus': return t('earnings.tx_bonus', { defaultValue: 'Bono' });
       case 'refund': return t('earnings.tx_refund', { defaultValue: 'Reembolso' });
+      case 'insurance': return t('earnings.tx_insurance', { defaultValue: 'Seguro de viaje' });
       case 'adjustment':
       default: return t('earnings.tx_adjustment', { defaultValue: 'Ajuste' });
     }

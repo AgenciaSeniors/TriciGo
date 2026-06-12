@@ -111,6 +111,8 @@ function getTransactionLabel(
       return t('wallet.txn_bonus', { defaultValue: 'Bonificación' });
     case 'refund':
       return t('wallet.txn_refund', { defaultValue: 'Reembolso' });
+    case 'insurance':
+      return t('wallet.txn_insurance', { defaultValue: 'Seguro de viaje' });
     case 'adjustment':
     default:
       return t('wallet.txn_adjustment', { defaultValue: 'Ajuste' });

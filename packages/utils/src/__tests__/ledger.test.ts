@@ -141,6 +141,25 @@ describe('classifyWalletTxn', () => {
     const tx = { type: 'adjustment', reference_type: 'wallet_unify', ledger_entries: [{ account_id: 'me', amount: 0 }] };
     expect(classifyWalletTxn(tx, 'me')).toMatchObject({ isZero: true, direction: 'neutral', isCredit: false, signedAmount: 0 });
   });
+
+  // PASS2: real live types (mig 00398) fell through to the 'transfer' fallback,
+  // which the web labelled "Regalo enviado/recibido".
+  it('insurance_premium → kind insurance (was mislabelled as a sent gift)', () => {
+    const tx = { type: 'insurance_premium', reference_type: 'ride', ledger_entries: [{ account_id: 'me', amount: -120 }] };
+    expect(classifyWalletTxn(tx, 'me')).toMatchObject({ kind: 'insurance', isCredit: false });
+  });
+
+  it('refund type → kind refund (was mislabelled as a received gift)', () => {
+    const tx = { type: 'refund', reference_type: 'payment_intent', ledger_entries: [{ account_id: 'me', amount: 5000 }] };
+    expect(classifyWalletTxn(tx, 'me')).toMatchObject({ kind: 'refund', isCredit: true });
+  });
+
+  it('quota_purchase / quota_deduction → kind adjustment, never transfer', () => {
+    const buy = { type: 'quota_purchase', ledger_entries: [{ account_id: 'me', amount: -300 }] };
+    const ded = { type: 'quota_deduction', ledger_entries: [{ account_id: 'me', amount: -50 }] };
+    expect(classifyWalletTxn(buy, 'me').kind).toBe('adjustment');
+    expect(classifyWalletTxn(ded, 'me').kind).toBe('adjustment');
+  });
 });
 
 describe('walletTxnIcon', () => {
