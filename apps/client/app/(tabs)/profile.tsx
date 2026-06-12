@@ -264,6 +264,9 @@ function NativeProfileScreen() {
     {
       title: t('profile.section_activity', { defaultValue: 'Actividad' }),
       items: [
+        // PASS2: the recurring-rides screen existed but no menu linked to it
+        // (orphan since the feature shipped) — the web hub already lists it.
+        { icon: 'repeat-outline' as const, label: t('recurring.title', { ns: 'rider', defaultValue: 'Viajes recurrentes' }), onPress: () => router.push('/profile/recurring-rides'), iconBg: 'primary' as const },
         { icon: 'business-outline' as const, label: t('profile.corporate', { defaultValue: 'Corporativo' }), onPress: () => router.push('/profile/corporate'), iconBg: 'neutral' as const },
       ],
     },
