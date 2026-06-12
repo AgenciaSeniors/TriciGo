@@ -1780,6 +1780,19 @@ git worktree remove <temp>
 - La página admin `settings/platform-config` lista **todas** las filas de `platform_config` (KNOWN_KEYS solo agrega tipo/help) — un tunable "ausente" del UI suele estar presente pero sin metadata.
 - Rutas web espejo de pantallas móviles: la web usa páginas con inline styles + CSS vars (`var(--primary)`, `var(--bg-card)`) y los mismos services de `@tricigo/api` — ver `apps/web/src/app/profile/recurring-rides/page.tsx` como referencia del patrón (flag check con `useFeatureFlag`, auth con `getSession`, `WebSkeletonList`/`WebEmptyState`).
 
+### Contrato de aceptación de T&C del conductor — estado canónico (cerrado 2026-06-12)
+
+**Qué es.** Al completar el registro (status → `under_review`), se genera un **contrato PDF de aceptación de los Términos y Condiciones** y se envía por email al conductor (español) y a administración (**español + rumano** — MACH DIGITAL TECH S.R.L. es rumana). El admin lo ve/descarga/regenera en `drivers/[id]` (sección "Contrato"). PRs #498 (backend) / #499 (admin) / #500 (checkbox app driver); migración `00405` aplicada a prod + EF `generate-driver-contract` deployada 2026-06-12.
+
+**Mecánica.** Trigger `trg_generate_driver_contract` (`AFTER UPDATE OF status`, patrón 00138: vault + `net.http_post`, `EXCEPTION → RETURN NEW`, nunca bloquea onboarding) → EF genera 2 PDFs A4 con pdf-lib (portada con datos del conductor/vehículo + declaración de aceptación + nº `CTR-YYYY-NNNNNN` vía `generate_contract_no()`; **Anexo I = T&C completos**), sube a bucket privado `driver-contracts/{user_id}/…-{es|ro}.pdf`, upsertea `driver_contracts` (UNIQUE driver_id, idempotente; `force` regenera) y manda emails vía Resend directo (from `contratos@tricigo.com`): conductor → PDF ES; admin → **ambos PDFs** a `ADMIN_CONTRACT_EMAIL` env (fallback `soporte@tricigo.com`).
+
+**Gotchas:**
+- **El anexo ES sale del `cms_content('terms').body_es` VIVO** (captura la versión aceptada); **el RO es traducción estática** en `supabase/functions/_shared/driver-contract.ts` (`TERMS_RO_BODY`, basada en el body del 2026-05-30). **Si se editan los T&C en el CMS → actualizar la traducción RO + redeploy de la EF** (el drift se detecta comparando `driver_contracts.terms_updated_at` vs `TERMS_RO_BASED_ON`).
+- **Diacríticos rumanos (ș/ț/ă) NO existen en WinAnsi** → las StandardFonts de pdf-lib no sirven. La EF fetchea DejaVu Sans (jsdelivr, override `CONTRACT_FONT_URL`) con cache por proceso y embebe **subsetted vía `@pdf-lib/fontkit`**; fallback Helvetica + strip de diacríticos para nunca fallar. Verificado: `unicode_font:true`, ~78KB por PDF.
+- **Auth dual de la EF** (`verify_jwt=false`): service-role exacto (trigger) O JWT de usuario con rol admin/super_admin (botón "Generar contrato"). Patrón storage-upload.
+- `driver_profiles.terms_accepted_at` lo estampa el checkbox del onboarding (#500, **requiere rebuild APK**); para builds viejas la EF cae al momento del submit. `submitForVerification` tolera la columna ausente (retry sin ella).
+- Verificación rápida: `SELECT contract_no, accepted_at, pdf_es_path, emailed_admin_at FROM driver_contracts ORDER BY created_at DESC LIMIT 5;` + objetos en `storage.objects WHERE bucket_id='driver-contracts'`.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
