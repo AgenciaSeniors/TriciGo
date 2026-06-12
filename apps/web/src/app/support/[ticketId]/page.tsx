@@ -181,7 +181,9 @@ export default function TicketDetailPage() {
       {isClosed ? (
         <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border-light)', background: 'var(--bg-page)', textAlign: 'center' }}>
           <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-tertiary)' }}>
-            {t('profile.ticket_closed_message', { defaultValue: `Este ticket está ${STATUS_LABELS[status]?.toLowerCase() ?? 'cerrado'}.` })}
+            {/* The key exists in common.json with a {{status}} placeholder —
+                without passing the variable the literal "{{status}}" rendered. */}
+            {t('profile.ticket_closed_message', { status: STATUS_LABELS[status]?.toLowerCase() ?? 'cerrado', defaultValue: `Este ticket está ${STATUS_LABELS[status]?.toLowerCase() ?? 'cerrado'}.` })}
           </p>
         </div>
       ) : (

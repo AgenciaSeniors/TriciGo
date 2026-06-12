@@ -79,7 +79,24 @@ export default function DriverProfilePage() {
         // (e.g. driver_profile rows missing for legacy users) doesn't
         // hide the rest of the screen.
         const [userResult, driverResult, publicProfileResult] = await Promise.allSettled([
-          authService.getUserById(driverUserId),
+          (async (): Promise<User | null> => {
+            // users RLS (users_select_own) blocks reading ANOTHER user's row,
+            // so getUserById always failed for a passenger viewing a driver
+            // and the whole page showed the error state. The SECURITY DEFINER
+            // lookup (mig 00403) returns the public display fields; getUserById
+            // stays as fallback (self/admin, or 00403 not yet applied).
+            try {
+              const { data, error: rpcError } = await getSupabaseClient()
+                .rpc('get_public_display_names', { p_user_ids: [driverUserId] });
+              const row = !rpcError && Array.isArray(data)
+                ? (data as { user_id: string; full_name: string | null; avatar_url: string | null }[])[0]
+                : null;
+              if (row) {
+                return { id: row.user_id, full_name: row.full_name ?? '', avatar_url: row.avatar_url ?? undefined } as User;
+              }
+            } catch { /* fall through */ }
+            return authService.getUserById(driverUserId);
+          })(),
           driverService.getProfile(driverUserId),
           reviewService.getDriverPublicProfile(driverUserId),
         ]);
@@ -107,7 +124,9 @@ export default function DriverProfilePage() {
     );
   }
 
-  if (error || !user) {
+  // Only hard-fail when NOTHING loaded — a missing users header (RLS,
+  // migration lag) must not hide the driver stats/reviews that did load.
+  if (error || (!user && !driverProfile && !summary)) {
     return (
       <main style={{ maxWidth: 640, margin: '0 auto', padding: '1.5rem 1rem' }}>
         <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-secondary)' }}>
@@ -133,8 +152,8 @@ export default function DriverProfilePage() {
     );
   }
 
-  const driverName = user.full_name?.trim() || user.phone || '—';
-  const avatarUrl = user.avatar_url;
+  const driverName = user?.full_name?.trim() || user?.phone || t('driver_profile.fallback_name', { defaultValue: 'Conductor' });
+  const avatarUrl = user?.avatar_url;
   const initials = getInitials(driverName);
   const rating = summary?.average_rating ?? driverProfile?.rating_avg ?? 0;
   const totalRides = driverProfile?.total_rides_completed ?? driverProfile?.total_rides ?? 0;

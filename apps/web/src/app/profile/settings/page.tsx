@@ -41,10 +41,10 @@ export default function SettingsPage() {
     if (saved) {
       setLanguage(saved);
     }
-    const savedTheme = localStorage.getItem('tricigo_theme') as 'light' | 'dark' | 'system' | null;
-    if (savedTheme) {
-      setDarkMode(savedTheme);
-    }
+    // Same storage key the header toggle uses ('tricigo-theme'); the page
+    // previously read/wrote 'tricigo_theme' — a key nothing else honored.
+    const savedTheme = localStorage.getItem('tricigo-theme') as 'light' | 'dark' | null;
+    setDarkMode(savedTheme ?? 'system');
   }, []);
 
   // Load notification preferences from DB
@@ -264,13 +264,17 @@ export default function SettingsPage() {
               key={mode}
               onClick={() => {
                 setDarkMode(mode);
-                localStorage.setItem('tricigo_theme', mode);
-                // Apply theme
+                // The web theme is driven by [data-theme] on <html> (globals.css)
+                // + the 'tricigo-theme' key the header reads. The old handler
+                // toggled a `.dark` CLASS no stylesheet used and persisted to a
+                // different key — the selector highlighted but nothing changed.
                 if (mode === 'system') {
-                  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  document.documentElement.classList.toggle('dark', prefersDark);
+                  localStorage.removeItem('tricigo-theme');
+                  // No attribute → globals.css falls back to prefers-color-scheme.
+                  document.documentElement.removeAttribute('data-theme');
                 } else {
-                  document.documentElement.classList.toggle('dark', mode === 'dark');
+                  localStorage.setItem('tricigo-theme', mode);
+                  document.documentElement.setAttribute('data-theme', mode);
                 }
               }}
               style={{

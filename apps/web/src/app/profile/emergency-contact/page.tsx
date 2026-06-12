@@ -81,11 +81,11 @@ export default function EmergencyContactPage() {
     setSaving(true);
     setError(null);
     try {
-      // 1. customer_profiles JSONB (backward compat).
-      await customerService.updateProfile(profile.id, {
-        emergency_contact: { name: name.trim(), phone: phone.trim(), relationship: relationship.trim() },
-      });
-      // 2. Upsert in trusted_contacts with is_emergency + auto_share (so SOS reaches them).
+      // 1. trusted_contacts FIRST — it's the step that can fail with a real
+      //    business rule (MAX_CONTACTS at 5). The old order wrote the
+      //    customer_profiles JSONB first, so a MAX failure left a half-saved
+      //    state: the contact "configured" in /profile/safety but invisible
+      //    to the SOS broadcast, while the UI said it failed.
       if (existingContact) {
         await trustedContactService.updateContact(existingContact.id, {
           name: name.trim(), phone: phone.trim(), relationship: relationship.trim(), is_emergency: true,
@@ -97,11 +97,21 @@ export default function EmergencyContactPage() {
             relationship: relationship.trim(), auto_share: true, is_emergency: true,
           });
         } catch (err: unknown) {
+          const msg = String((err as { message?: string; code?: string } | null)?.message ?? err ?? '');
+          const code = String((err as { code?: string } | null)?.code ?? '');
+          if (code === 'MAX_CONTACTS' || /Maximum contacts/i.test(msg)) {
+            setError('Tienes el máximo de 5 contactos de confianza. Marca uno existente como emergencia o elimina uno primero.');
+            setSaving(false);
+            return;
+          }
           // Ignore duplicate-phone — trusted_contacts already has this number.
-          const msg = String((err as { message?: string } | null)?.message ?? err ?? '');
           if (!/duplicate|unique|23505/.test(msg)) throw err;
         }
       }
+      // 2. customer_profiles JSONB (backward compat) after the gate passed.
+      await customerService.updateProfile(profile.id, {
+        emergency_contact: { name: name.trim(), phone: phone.trim(), relationship: relationship.trim() },
+      });
       setSaved(true);
       setTimeout(() => router.push('/profile/safety'), 800);
     } catch {

@@ -300,7 +300,7 @@ export default function SafetyPage() {
                     {t(`web.incident_type_${incident.type}`, { defaultValue: INCIDENT_TYPE_LABELS[incident.type] ?? incident.type })}
                   </p>
                   <p style={{ margin: '0.15rem 0 0', fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
-                    {new Date(incident.created_at).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {new Date(incident.created_at).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'America/Havana' })}
                   </p>
                 </div>
                 <span style={{ fontSize: '0.78rem', fontWeight: 600, color: incident.status === 'resolved' ? '#16a34a' : 'var(--text-secondary)' }}>
