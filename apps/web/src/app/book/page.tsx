@@ -158,12 +158,15 @@ export default function BookPage() {
   const [promoValidating, setPromoValidating] = useState(false);
   const [promoResult, setPromoResult] = useState<{ valid: boolean; promoId?: string; discount: number; error?: string } | null>(null);
 
-  // PASS #3 PROMO-STALE: clear a validated promo when the service type changes —
-  // the discount was validated against the previous service's fare, so leaving
-  // it would show a stale (possibly free-looking) price on the new fare.
+  // PASS #3 PROMO-STALE (extendido en PASS 2): clear a validated promo when
+  // ANYTHING the discount was computed against changes — service type, the
+  // route (pickup/dropoff), or the delivery vehicle. The server trigger
+  // recomputes the discount over the NEW fare, so a stale "-$600" chip over a
+  // cheaper route showed a total the server would never charge.
   useEffect(() => {
     setPromoResult(null);
-  }, [serviceType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceType, deliveryVehicle, pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude]);
 
   /* ─── Shared ride (triciclo only) + passenger count ─── */
   const [shareRide, setShareRide] = useState(false);
@@ -563,6 +566,10 @@ export default function BookPage() {
         pickup_lng: pickup.longitude,
         dropoff_lat: dropoff.latitude,
         dropoff_lng: dropoff.longitude,
+        // Stops must shape the estimate (the mobile client passes them; the
+        // web omitted them everywhere, so the shown price ignored up to 3
+        // stops while the server charged the real multi-stop route).
+        waypoints: waypoints.length > 0 ? waypoints.map((w) => ({ lat: w.latitude, lng: w.longitude })) : undefined,
       });
       setEstimate(result);
     } catch (err) {
@@ -589,6 +596,7 @@ export default function BookPage() {
             dropoff_lat: dropoff.latitude,
             dropoff_lng: dropoff.longitude,
             service_type: st,
+            waypoints: waypoints.length > 0 ? waypoints.map((w) => ({ lat: w.latitude, lng: w.longitude })) : undefined,
           })
         )
       );
@@ -605,14 +613,15 @@ export default function BookPage() {
     } finally {
       setEstimateLoading(false);
     }
-  }, [pickup, dropoff, estimateLoading]);
+  }, [pickup, dropoff, estimateLoading, waypoints]);
 
   /* ─── Auto-fetch estimates when both locations set ─── */
   useEffect(() => {
     if (pickup && dropoff && Object.keys(allEstimates).length === 0 && !estimateLoading) {
       handleEstimateAll();
     }
-  }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude, waypoints]);
 
   /* ─── Promo code validation ─── */
   async function handleApplyPromo() {
@@ -732,10 +741,15 @@ export default function BookPage() {
       if (paymentMethod === 'corporate' && selectedCorporateId) {
         try {
           const fresh = await corporateService.getAccount(selectedCorporateId);
-          const remaining = (fresh?.monthly_budget_trc ?? 0) - (fresh?.current_month_spent ?? 0);
-          if (remaining < (selectedEstimate.estimated_fare_trc ?? 0)) {
-            setError(t('book.corporate_budget_exceeded', { defaultValue: 'El presupuesto corporativo disponible no cubre este viaje.' }));
-            return;
+          // monthly_budget_trc = 0 means UNLIMITED (schema default; the
+          // server validator only enforces when budget > 0) — the old check
+          // blocked every ride for unlimited-budget accounts.
+          if ((fresh?.monthly_budget_trc ?? 0) > 0) {
+            const remaining = (fresh?.monthly_budget_trc ?? 0) - (fresh?.current_month_spent ?? 0);
+            if (remaining < (selectedEstimate.estimated_fare_trc ?? 0)) {
+              setError(t('book.corporate_budget_exceeded', { defaultValue: 'El presupuesto corporativo disponible no cubre este viaje.' }));
+              return;
+            }
           }
         } catch {
           // Allow ride to proceed — server enforces budget limits.
@@ -751,6 +765,7 @@ export default function BookPage() {
           pickup_lng: pickup.longitude,
           dropoff_lat: dropoff.latitude,
           dropoff_lng: dropoff.longitude,
+          waypoints: waypoints.length > 0 ? waypoints.map((w) => ({ lat: w.latitude, lng: w.longitude })) : undefined,
         });
         setAllEstimates(prev => ({ ...prev, [activeSlug]: reEstimated }));
         fareEstimatedAtRef.current = Date.now();
@@ -758,7 +773,11 @@ export default function BookPage() {
         const oldFare = selectedEstimate.estimated_fare_cup;
         const newFare = reEstimated.estimated_fare_cup;
         if (oldFare > 0 && Math.abs(newFare - oldFare) / oldFare > 0.05) {
-          setError(`El precio se actualizó de ${oldFare.toLocaleString()} a ${newFare.toLocaleString()} CUP. Revisa y confirma de nuevo.`);
+          setError(t('book.price_updated', {
+            defaultValue: `El precio se actualizó de ${formatCUP(oldFare)} a ${formatCUP(newFare)}. Revisa y confirma de nuevo.`,
+            old: formatCUP(oldFare),
+            new: formatCUP(newFare),
+          }));
           return;
         }
       } catch {
@@ -906,7 +925,7 @@ export default function BookPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
           <AddressAutocomplete
             label={t('web.address_origin', { defaultValue: 'Origen' })}
-            placeholder="¿Dónde te recogemos?"
+            placeholder={t('book.pickup_placeholder', { defaultValue: '¿Dónde te recogemos?' })}
             value={pickupAddress || ''}
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
@@ -921,6 +940,9 @@ export default function BookPage() {
               setPickupAddress(null);
               setSelectionStep('pickup');
               setEstimate(null);
+              // allEstimates feeds selectedEstimate — without clearing it the
+              // old fare card stayed visible and the CTA was enabled but dead.
+              setAllEstimates({});
               setRouteCoords(null);
               setRouteInfo(null);
             }}
@@ -956,7 +978,7 @@ export default function BookPage() {
 
           <AddressAutocomplete
             label={t('web.address_destination', { defaultValue: 'Destino' })}
-            placeholder="¿A dónde vas?"
+            placeholder={t('book.dropoff_placeholder', { defaultValue: '¿A dónde vas?' })}
             value={dropoffAddress || ''}
             mapboxToken={mapboxToken}
             savedLocations={savedLocations}
@@ -972,6 +994,9 @@ export default function BookPage() {
               setDropoffAddress(null);
               setSelectionStep('dropoff');
               setEstimate(null);
+              // Same as pickup's onClear: selectedEstimate derives from
+              // allEstimates, so the stale card survived the clear.
+              setAllEstimates({});
               setRouteCoords(null);
               setRouteInfo(null);
             }}
@@ -1128,7 +1153,7 @@ export default function BookPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setWaypoints((prev) => prev.filter((_, i) => i !== idx))}
+                      onClick={() => { setWaypoints((prev) => prev.filter((_, i) => i !== idx)); setAllEstimates({}); }}
                       aria-label={`Eliminar parada ${idx + 1}`}
                       style={{
                         background: 'none',
@@ -1177,6 +1202,9 @@ export default function BookPage() {
                             ...prev,
                             { label: r.place_name, address: r.address, latitude: r.latitude, longitude: r.longitude },
                           ]);
+                          // Invalidate the fares so the auto-estimate effect
+                          // recomputes them over the multi-stop route.
+                          setAllEstimates({});
                           setAddingWaypoint(false);
                         }}
                       />
@@ -1315,11 +1343,11 @@ export default function BookPage() {
             };
             const labelStyle = { fontSize: '0.75rem', fontWeight: 600 as const, color: 'var(--text-secondary)', letterSpacing: '0.02em' };
             const CATS = [
-              { value: 'documentos', icon: '📄', label: 'Documentos' },
-              { value: 'comida', icon: '🍔', label: 'Comida' },
-              { value: 'paquete_pequeno', icon: '📦', label: 'Pequeño' },
-              { value: 'paquete_grande', icon: '📫', label: 'Grande' },
-              { value: 'fragil', icon: '⚠️', label: 'Frágil' },
+              { value: 'documentos', icon: '📄', label: t('book.delivery_cat_documentos', { defaultValue: 'Documentos' }) },
+              { value: 'comida', icon: '🍔', label: t('book.delivery_cat_comida', { defaultValue: 'Comida' }) },
+              { value: 'paquete_pequeno', icon: '📦', label: t('book.delivery_cat_paquete_pequeno', { defaultValue: 'Pequeño' }) },
+              { value: 'paquete_grande', icon: '📫', label: t('book.delivery_cat_paquete_grande', { defaultValue: 'Grande' }) },
+              { value: 'fragil', icon: '⚠️', label: t('book.delivery_cat_fragil', { defaultValue: 'Frágil' }) },
             ];
             return (
             <div style={{
@@ -1329,13 +1357,13 @@ export default function BookPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <span style={{ fontSize: '1.25rem' }}>📦</span>
                 <div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>Datos del envío</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Completa los datos del destinatario</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{t('book.delivery_title', { defaultValue: 'Datos del envío' })}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{t('book.delivery_subtitle', { defaultValue: 'Completa los datos del destinatario' })}</div>
                 </div>
               </div>
               {/* Vehicle selector for delivery */}
               <div style={{ marginBottom: '0.75rem' }}>
-                <label style={labelStyle}>Vehículo para el envío *</label>
+                <label style={labelStyle}>{t('book.delivery_choose_vehicle', { defaultValue: 'Vehículo para el envío' })} *</label>
                 <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
                   {([
                     { slug: 'moto_standard' as ServiceTypeSlug, icon: '/images/vehicles/moto.png', label: 'Moto' },
@@ -1368,26 +1396,26 @@ export default function BookPage() {
                 {/* Recipient row */}
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>Destinatario *</label>
+                    <label style={labelStyle}>{t('book.delivery_recipient_name', { defaultValue: 'Destinatario' })} *</label>
                     <input type="text" value={deliveryDetails.recipient_name}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_name: e.target.value }))}
-                      placeholder="Nombre completo"
+                      placeholder={t('book.delivery_recipient_name_ph', { defaultValue: 'Nombre completo' })}
                       style={{ ...inputBase, border: nameEmpty && deliveryDetails.recipient_phone ? '2px solid #ef4444' : '1px solid var(--border)' }}
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>Teléfono *</label>
+                    <label style={labelStyle}>{t('book.delivery_recipient_phone', { defaultValue: 'Teléfono' })} *</label>
                     <input type="tel" value={deliveryDetails.recipient_phone}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_phone: e.target.value }))}
                       placeholder="+53 5XXXXXXX"
                       style={{ ...inputBase, border: phoneInvalid ? '2px solid #ef4444' : '1px solid var(--border)' }}
                     />
-                    {phoneInvalid && <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>Número inválido</span>}
+                    {phoneInvalid && <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>{t('book.delivery_phone_invalid', { defaultValue: 'Número inválido' })}</span>}
                   </div>
                 </div>
                 {/* Package category chips */}
                 <div>
-                  <label style={labelStyle}>Tipo de paquete</label>
+                  <label style={labelStyle}>{t('book.delivery_category', { defaultValue: 'Tipo de paquete' })}</label>
                   <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
                     {CATS.map(c => (
                       <button key={c.value} type="button"
@@ -1407,15 +1435,15 @@ export default function BookPage() {
                 {/* Description + Weight row */}
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <div style={{ flex: 2 }}>
-                    <label style={labelStyle}>Descripción</label>
+                    <label style={labelStyle}>{t('book.delivery_description', { defaultValue: 'Descripción' })}</label>
                     <input type="text" value={deliveryDetails.package_description}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, package_description: e.target.value }))}
-                      placeholder="¿Qué envías?"
+                      placeholder={t('book.delivery_description_ph', { defaultValue: '¿Qué envías?' })}
                       style={{ ...inputBase, border: '1px solid var(--border)' }}
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>Peso (kg)</label>
+                    <label style={labelStyle}>{t('book.delivery_weight', { defaultValue: 'Peso (kg)' })}</label>
                     <input type="number" value={deliveryDetails.estimated_weight_kg}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, estimated_weight_kg: e.target.value }))}
                       placeholder="0.5" min="0.1" step="0.1"
@@ -1425,7 +1453,7 @@ export default function BookPage() {
                 </div>
                 {/* Package dimensions (cm) — optional */}
                 <div>
-                  <label style={labelStyle}>Dimensiones (cm) — opcional</label>
+                  <label style={labelStyle}>{t('book.delivery_dimensions', { defaultValue: 'Dimensiones (cm) — opcional' })}</label>
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                     <input type="number" value={deliveryDetails.package_length_cm}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, package_length_cm: e.target.value }))}
@@ -1558,7 +1586,10 @@ export default function BookPage() {
                 <span>{((selectedEstimate?.estimated_distance_m ?? 0) / 1000).toFixed(1)} km</span>
                 <span>{Math.round((selectedEstimate?.estimated_duration_s ?? 0) / 60)} min</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
-                  ~${((selectedEstimate?.estimated_fare_cup ?? 0) / 300).toFixed(2)} USD
+                  {/* Live rate from the estimate (exchange_rates table) — the
+                      old hardcoded ÷300 contradicted the "1 USD = X CUP" line
+                      printed below (real rate ~640). */}
+                  ~${((selectedEstimate?.estimated_fare_cup ?? 0) / (selectedEstimate?.exchange_rate_usd_cup || 300)).toFixed(2)} USD
                 </span>
                 <span style={{ color: 'var(--text-tertiary)' }}>
                   {'\u2248'} {formatPrice(selectedEstimate?.estimated_fare_cup ?? 0, selectedEstimate?.estimated_fare_trc)}
@@ -1758,7 +1789,12 @@ export default function BookPage() {
                         const totalFare = selectedEstimate.estimated_fare_cup;
                         const walletPart = Math.round(totalFare * walletRatio);
                         const cashPart = totalFare - walletPart;
-                        return `$${walletPart.toLocaleString()} wallet + $${cashPart.toLocaleString()} efectivo = $${totalFare.toLocaleString()} total`;
+                        return t('book.mixed_breakdown', {
+                          defaultValue: `${formatCUP(walletPart)} billetera + ${formatCUP(cashPart)} efectivo = ${formatCUP(totalFare)} total`,
+                          wallet: formatCUP(walletPart),
+                          cash: formatCUP(cashPart),
+                          total: formatCUP(totalFare),
+                        });
                       })()}
                     </p>
                   </div>
@@ -1772,15 +1808,15 @@ export default function BookPage() {
           {/* ═══ Promo code (W1.3) ═══ */}
           <div style={{ marginTop: '0.75rem' }}>
             <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Código promocional
+              {t('book.promo_question', { defaultValue: 'Código promocional' })}
             </label>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
               <input
                 type="text"
                 value={promoCode}
                 onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoResult(null); }}
-                placeholder="Ingresa un código"
-                aria-label="Codigo promocional"
+                placeholder={t('book.promo_placeholder', { defaultValue: 'Ingresa tu código' })}
+                aria-label={t('book.promo_question', { defaultValue: 'Código promocional' })}
                 disabled={promoResult?.valid === true}
                 style={{
                   flex: 1,
