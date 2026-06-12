@@ -17,6 +17,31 @@ type Step = 'phone' | 'otp';
 // off-page, still applies the code on return.
 const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
 
+// sessionStorage key shared with /auth/callback: page guards send users here
+// with ?return=<path> (e.g. /empresas/registro) and the user must land back
+// on their original destination after authenticating — including across the
+// OAuth round-trip, hence sessionStorage and not React state.
+const RETURN_TO_KEY = 'tricigo_return_to';
+
+/** Internal-path whitelist: same-origin absolute paths only (no '//' or scheme). */
+function sanitizeReturnTo(value: string | null): string | null {
+  if (!value) return null;
+  const v = value.trim();
+  if (!v.startsWith('/') || v.startsWith('//') || v.includes(':')) return null;
+  return v;
+}
+
+/** Read + consume the stored return destination. */
+function popReturnTo(): string | null {
+  try {
+    const v = sanitizeReturnTo(sessionStorage.getItem(RETURN_TO_KEY));
+    sessionStorage.removeItem(RETURN_TO_KEY);
+    return v;
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -45,6 +70,35 @@ export default function LoginPage() {
     const id = setInterval(() => setResendTimer((p) => (p <= 1 ? 0 : p - 1)), 1000);
     return () => clearInterval(id);
   }, [resendTimer]);
+
+  // bfcache: coming back with the browser's Back button from the Google/Apple
+  // consent screen restores this page from the back-forward cache with
+  // loading=true intact (set before signInWithOAuth navigated away and never
+  // reset on the happy path) — every button stayed disabled until a manual
+  // reload. `pageshow` with persisted=true fires exactly on that restore.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setLoading(false);
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, []);
+
+  // Capture ?return=<path> (page guards like /empresas/registro send it) so
+  // the user lands back where they were going. Stored in sessionStorage to
+  // survive the OAuth round-trip. Also surface ?error=oauth, set by
+  // /auth/callback when the provider returns an error (user cancelled).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const ret = sanitizeReturnTo(searchParams.get('return'));
+    if (ret) {
+      try { sessionStorage.setItem(RETURN_TO_KEY, ret); } catch { /* ignore */ }
+    }
+    if (searchParams.get('error') === 'oauth') {
+      setError(t('auth.oauth_provider_error', { defaultValue: 'No se completó el inicio de sesión con el proveedor. Intenta de nuevo.' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Capture ?ref=CODE on mount and persist it. The query param goes
   // first; if absent, fall back to whatever was already stashed
@@ -85,10 +139,10 @@ export default function LoginPage() {
     }
   }
 
-  // Redirect to /book if already logged in
+  // Redirect if already logged in — honoring a pending ?return= destination.
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.replace('/book');
+      router.replace(popReturnTo() ?? '/book');
     }
   }, [isLoading, isAuthenticated, router]);
 
@@ -110,7 +164,7 @@ export default function LoginPage() {
       const profile = await authService.getUserById(uid);
       if (!profile?.full_name) { router.push('/complete-profile'); return; }
     } catch { /* fall through to /book on lookup failure */ }
-    router.push('/book');
+    router.push(popReturnTo() ?? '/book');
   }
 
   async function handleSendOtp() {

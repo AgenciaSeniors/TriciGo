@@ -10,6 +10,21 @@ import { registerWebLoginDevice } from '@/lib/webDevice';
 // session in hand) is the right time to redeem it.
 const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
 
+// Mirror of LoginPage's RETURN_TO_KEY: the OAuth round-trip must land the
+// user back on the page that sent them to /login?return=<path>.
+const RETURN_TO_KEY = 'tricigo_return_to';
+
+function popReturnTo(): string | null {
+  try {
+    const v = sessionStorage.getItem(RETURN_TO_KEY);
+    sessionStorage.removeItem(RETURN_TO_KEY);
+    if (!v || !v.startsWith('/') || v.startsWith('//') || v.includes(':')) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
 async function applyPendingReferralIfAny(uid: string): Promise<void> {
   let code: string | null = null;
   try { code = sessionStorage.getItem(PENDING_REFERRAL_KEY); } catch { return; }
@@ -36,6 +51,17 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const supabase = getSupabaseClient();
 
+    // Provider error (user cancelled consent, access_denied…): with the
+    // implicit flow it arrives as #error=...&error_description=... in the
+    // hash and NO session ever materializes. Without this check the user
+    // stared at "Autenticando..." for the full 5s timeout and landed on
+    // /login with no explanation.
+    if (typeof window !== 'undefined' && /(^#|[#&])error=/.test(window.location.hash)) {
+      handled.current = true;
+      router.replace('/login?error=oauth');
+      return;
+    }
+
     async function finishAndRedirect(uid: string | undefined) {
       if (handled.current) return;
       handled.current = true;
@@ -50,7 +76,7 @@ export default function AuthCallbackPage() {
           if (!profile?.phone) { router.replace('/verify-phone'); return; }
         } catch { /* fall through to /book on lookup failure */ }
       }
-      router.replace('/book');
+      router.replace(popReturnTo() ?? '/book');
     }
 
     // Listen for the SIGNED_IN event from hash parsing
