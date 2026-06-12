@@ -130,17 +130,24 @@ function useFormatTime(t: (key: string, options?: Record<string, unknown>) => st
   };
 }
 
+/** Calendar day (YYYY-MM-DD) of a timestamp in Cuba time — server rows are
+ *  UTC and grouping by the BROWSER's day shifted late-night notifications
+ *  into the wrong "Hoy/Ayer" bucket for anyone outside Havana's timezone. */
+function havanaDayKey(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Havana' });
+}
+
 function useFormatDateGroup(t: (key: string) => string) {
   return (dateStr: string) => {
     const date = new Date(dateStr);
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today.getTime() - 86400000);
-    const notifDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const now = Date.now();
+    const todayKey = havanaDayKey(new Date(now));
+    const yesterdayKey = havanaDayKey(new Date(now - 86400000));
+    const notifKey = havanaDayKey(date);
 
-    if (notifDate.getTime() === today.getTime()) return t('notifications.date_today');
-    if (notifDate.getTime() === yesterday.getTime()) return t('notifications.date_yesterday');
-    return date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    if (notifKey === todayKey) return t('notifications.date_today');
+    if (notifKey === yesterdayKey) return t('notifications.date_yesterday');
+    return date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Havana' });
   };
 }
 
@@ -165,6 +172,18 @@ export default function NotificationsPage() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const PAGE_SIZE = 20;
 
+  // Current list length for pagination. fetchNotifications is memoized on
+  // [userId, t, filter] (NOT `notifications`), so reading notifications.length
+  // from the closure always saw the INITIAL empty array → infinite scroll
+  // requested offset=0 forever, duplicating page 1 and never reaching older
+  // notifications. A ref reads the live length without re-memoizing.
+  const notifCountRef = useRef(0);
+
+  // Server-side unread count: the page badge counted only the LOADED rows
+  // (filter over the 20-per-page array) and contradicted the header badge,
+  // which already uses notificationService.getUnreadCount.
+  const [serverUnread, setServerUnread] = useState(0);
+
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
       setUserId(session?.user?.id ?? null);
@@ -180,13 +199,14 @@ export default function NotificationsPage() {
     if (reset) {
       setLoading(true);
       setNotifications([]);
+      notifCountRef.current = 0;
       setHasMore(true);
     } else {
       setLoadingMore(true);
     }
     setError(null);
     try {
-      const offset = reset ? 0 : notifications.length;
+      const offset = reset ? 0 : notifCountRef.current;
       const data = await notificationService.getInboxNotifications(userId, {
         unreadOnly: filter === 'unread',
         limit: PAGE_SIZE,
@@ -194,7 +214,14 @@ export default function NotificationsPage() {
       });
       // Page exhausted when the API returned less than we asked for.
       setHasMore(data.length >= PAGE_SIZE);
-      setNotifications((prev) => (reset ? data : [...prev, ...data]));
+      setNotifications((prev) => {
+        // Dedupe: the realtime prepend can race a page fetch.
+        const seen = new Set(reset ? [] : prev.map((n) => n.id));
+        const fresh = data.filter((n) => !seen.has(n.id));
+        const next = reset ? data : [...prev, ...fresh];
+        notifCountRef.current = next.length;
+        return next;
+      });
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
       setError(t('notifications.error_loading'));
@@ -244,7 +271,13 @@ export default function NotificationsPage() {
     const subscription = notificationService.subscribeToNotifications(
       userId,
       (newNotification: AppNotification) => {
-        setNotifications((prev) => [newNotification, ...prev]);
+        setNotifications((prev) => {
+          if (prev.some((n) => n.id === newNotification.id)) return prev;
+          const next = [newNotification, ...prev];
+          notifCountRef.current = next.length;
+          return next;
+        });
+        setServerUnread((c) => c + 1);
       },
     );
 
@@ -253,11 +286,18 @@ export default function NotificationsPage() {
     };
   }, [userId]);
 
+  // Server unread count, refreshed when the user/filter context changes.
+  useEffect(() => {
+    if (!userId) return;
+    notificationService.getUnreadCount(userId).then(setServerUnread).catch(() => {});
+  }, [userId, filter]);
+
   const handleMarkAllRead = async () => {
     if (!userId) return;
     try {
       await notificationService.markAllAsRead(userId);
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setServerUnread(0);
     } catch {
       // Silently fail
     }
@@ -269,6 +309,7 @@ export default function NotificationsPage() {
       setNotifications((prev) =>
         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
       );
+      setServerUnread((c) => Math.max(0, c - 1));
     } catch {
       // Silently fail
     }
@@ -295,7 +336,8 @@ export default function NotificationsPage() {
     grouped[key].push(notif);
   }
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // Server-side total (matches the header badge), not just the loaded pages.
+  const unreadCount = serverUnread;
 
   return (
     <main style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem', background: 'var(--bg-card)', minHeight: '100vh' }}>
