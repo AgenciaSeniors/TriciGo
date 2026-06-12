@@ -383,12 +383,41 @@ describe('rideService.getSplitsForRide', () => {
     vi.clearAllMocks();
   });
 
-  it('returns splits with user info', async () => {
+  it('selects without the broken users embed and resolves names via RPC', async () => {
+    // PASS2 P1: the old `users:user_id(raw_user_meta_data)` embed 400'd with
+    // PGRST200 (FK points at auth.users; public.users has no such column).
     const mockData = [
-      { id: 'split-1', ride_id: 'r-1', user_id: 'u-2', share_pct: 50, payment_status: 'pending', users: { raw_user_meta_data: { name: 'Alice' }, phone: '+5355555555' } },
-      { id: 'split-2', ride_id: 'r-1', user_id: 'u-3', share_pct: 25, payment_status: 'paid', users: { raw_user_meta_data: { name: 'Bob' }, phone: '+5366666666' } },
+      { id: 'split-1', ride_id: 'r-1', user_id: 'u-2', share_pct: 50, payment_status: 'pending' },
+      { id: 'split-2', ride_id: 'r-1', user_id: 'u-3', share_pct: 25, payment_status: 'paid' },
     ];
 
+    const selectMock = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        order: vi.fn().mockResolvedValue({ data: mockData, error: null }),
+      }),
+    });
+    mockFrom.mockReturnValue({ select: selectMock });
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        { user_id: 'u-2', full_name: 'Alice', avatar_url: null },
+        { user_id: 'u-3', full_name: 'Bob', avatar_url: 'https://x/a.png' },
+      ],
+      error: null,
+    });
+
+    const result = await rideService.getSplitsForRide('r-1');
+    expect(selectMock).toHaveBeenCalledWith('*');
+    expect(mockRpc).toHaveBeenCalledWith('get_public_display_names', { p_user_ids: ['u-2', 'u-3'] });
+    expect(result).toHaveLength(2);
+    expect(result[0].user_name).toBe('Alice');
+    expect(result[1].user_name).toBe('Bob');
+    expect(result[1].user_avatar_url).toBe('https://x/a.png');
+  });
+
+  it('still returns the splits when the names RPC is missing (migration tolerance)', async () => {
+    const mockData = [
+      { id: 'split-1', ride_id: 'r-1', user_id: 'u-2', share_pct: 50, payment_status: 'pending' },
+    ];
     mockFrom.mockReturnValue({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
@@ -396,12 +425,14 @@ describe('rideService.getSplitsForRide', () => {
         }),
       }),
     });
+    mockRpc.mockRejectedValueOnce(new Error('function get_public_display_names does not exist'));
 
     const result = await rideService.getSplitsForRide('r-1');
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(1);
+    expect(result[0].user_name).toBeUndefined();
   });
 
-  it('returns empty array when no splits exist', async () => {
+  it('returns empty array when no splits exist (no RPC call)', async () => {
     mockFrom.mockReturnValue({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
@@ -412,6 +443,7 @@ describe('rideService.getSplitsForRide', () => {
 
     const result = await rideService.getSplitsForRide('r-1');
     expect(result).toEqual([]);
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 });
 
