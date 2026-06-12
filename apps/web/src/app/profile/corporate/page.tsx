@@ -49,6 +49,10 @@ export default function CorporatePage() {
   });
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  // Separate from saveSuccess: the NETOPIA return handler used to reuse the
+  // policy-editor success state, so a completed recharge showed the banner
+  // "Políticas guardadas correctamente".
+  const [rechargeSuccess, setRechargeSuccess] = useState<string | null>(null);
 
   // Recharge state
   const [rechargeAccountId, setRechargeAccountId] = useState<string | null>(null);
@@ -307,7 +311,7 @@ export default function CorporatePage() {
           // Refresh balance for the recharged account
           const newBalance = await corporateService.getCorporateBalance(final.corporate_account_id);
           setCorporateBalances((prev) => ({ ...prev, [final.corporate_account_id!]: newBalance }));
-          setSaveSuccess(final.corporate_account_id);
+          setRechargeSuccess(final.corporate_account_id);
           setRechargeAmount('');
         } else if (final.status === 'failed') {
           setError(t('corporate_recharge_failed', { defaultValue: 'El pago no se procesó.' }));
@@ -543,6 +547,7 @@ export default function CorporatePage() {
             const isAdmin = acc.role === 'admin';
             const isEditing = editingId === acc.id;
             const justSaved = saveSuccess === acc.id;
+            const justRecharged = rechargeSuccess === acc.id;
 
             return (
               <div key={acc.id} style={{
@@ -670,7 +675,7 @@ export default function CorporatePage() {
                   </>
                 )}
 
-                {/* Success banner */}
+                {/* Success banners */}
                 {justSaved && (
                   <div style={{
                     background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem',
@@ -678,6 +683,16 @@ export default function CorporatePage() {
                   }}>
                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#16a34a', fontWeight: 500 }}>
                       {t('corporate_saved', { defaultValue: 'Políticas guardadas correctamente' })}
+                    </p>
+                  </div>
+                )}
+                {justRecharged && (
+                  <div style={{
+                    background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem',
+                    padding: '0.6rem 1rem', marginBottom: '0.75rem',
+                  }}>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#16a34a', fontWeight: 500 }}>
+                      {t('corporate_recharge_success', { defaultValue: 'Recarga acreditada correctamente' })}
                     </p>
                   </div>
                 )}

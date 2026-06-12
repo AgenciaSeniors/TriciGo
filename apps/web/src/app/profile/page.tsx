@@ -169,7 +169,12 @@ export default function ProfilePage() {
         {menuGroups.map((group) => (
           <div key={group.titleKey} className="profile-menu-group">
             <div className="profile-menu-group-title">
-              {t(group.titleKey, { defaultValue: group.titleKey.split('.').pop()?.replace('group_', '') })}
+              {/* The group_* keys don't exist in any locale — the derived
+                  token fallback rendered raw English ('account', 'safety'…)
+                  in an all-Spanish UI. Proper Spanish defaults instead. */}
+              {t(group.titleKey, {
+                defaultValue: { group_account: 'Cuenta', group_safety: 'Seguridad', group_business: 'Empresas', group_more: 'Más' }[group.titleKey.split('.').pop() ?? ''] ?? '',
+              })}
             </div>
             <div className="profile-menu-group-items">
               {group.items.map((item) => {

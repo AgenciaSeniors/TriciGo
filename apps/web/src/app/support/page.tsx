@@ -112,8 +112,8 @@ export default function SupportPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesión para ver tus tickets</p>
-        <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>Iniciar sesión</Link>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.support_login_prompt', { defaultValue: 'Inicia sesión para ver tus tickets' })}</p>
+        <Link href="/login?return=/support" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>{t('web.support_login_link', { defaultValue: 'Iniciar sesión' })}</Link>
       </div>
     );
   }
@@ -145,15 +145,18 @@ export default function SupportPage() {
             cursor: 'pointer',
           }}
         >
-          {showForm ? 'Cancelar' : '+ Nuevo ticket'}
+          {showForm ? t('common.cancel', { defaultValue: 'Cancelar' }) : t('web.support_new_ticket', { defaultValue: '+ Nuevo ticket' })}
         </button>
       </div>
 
       {/* Contacto directo — parity con el hub de contacto del /support móvil
           (WhatsApp + correo). El FAQ vive en /help. */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem' }}>
+        {/* Canonical support WhatsApp — the old value was the +53 5555 5555
+            placeholder (invalid). Same target the mobile hubs use
+            (apps/client/app/support.tsx). */}
         <a
-          href="https://wa.me/5355555555"
+          href="https://wa.me/5545998622511"
           target="_blank"
           rel="noopener noreferrer"
           style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, padding: '0.9rem 1rem', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '0.85rem', textDecoration: 'none', color: 'var(--text-primary)' }}
