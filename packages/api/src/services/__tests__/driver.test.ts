@@ -313,6 +313,36 @@ describe('driverService', () => {
 
       await expect(driverService.submitForVerification('d-1')).rejects.toEqual(err);
     });
+
+    it('stamps terms_accepted_at in the same update when termsAccepted is true', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await driverService.submitForVerification('d-1', { termsAccepted: true });
+
+      expect(chain.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'under_review',
+          terms_accepted_at: expect.any(String),
+        }),
+      );
+      expect(chain.eq).toHaveBeenCalledWith('id', 'd-1');
+    });
+
+    it('retries with status only when terms_accepted_at column is missing (00405 not applied)', async () => {
+      const colErr = {
+        message: 'column "terms_accepted_at" of relation "driver_profiles" does not exist',
+        code: '42703',
+      };
+      const failing = createMockQueryChain({ data: null, error: colErr });
+      const retrying = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(failing).mockReturnValueOnce(retrying);
+
+      await driverService.submitForVerification('d-1', { termsAccepted: true });
+
+      expect(retrying.update).toHaveBeenCalledWith({ status: 'under_review' });
+      expect(retrying.eq).toHaveBeenCalledWith('id', 'd-1');
+    });
   });
 
   // ==================== setOnlineStatus ====================

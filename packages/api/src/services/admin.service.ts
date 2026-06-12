@@ -11,6 +11,7 @@ function escapeLikePattern(pattern: string): string {
 import type {
   AdminAction,
   AuditLog,
+  DriverContract,
   DriverDocument,
   DriverProfile,
   DriverProfileWithUser,
@@ -230,6 +231,56 @@ export const adminService = {
       .createSignedUrl(storagePath, 3600);
     if (error) throw error;
     return data.signedUrl;
+  },
+
+  /**
+   * Driver T&C-acceptance contract (migration 00405). Returns null when
+   * the driver has none yet — or when the migration hasn't been applied
+   * (table missing), so the admin UI degrades silently.
+   */
+  async getDriverContract(driverId: string): Promise<DriverContract | null> {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('driver_contracts')
+        .select('*')
+        .eq('driver_id', driverId)
+        .maybeSingle();
+      if (error) return null;
+      return (data as DriverContract) ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Signed URL for a contract PDF in the private `driver-contracts`
+   * bucket (admin storage RLS read; mirrors getReceiptSignedUrl).
+   */
+  async getContractSignedUrl(storagePath: string, expirySec = 3600): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.storage
+      .from('driver-contracts')
+      .createSignedUrl(storagePath, expirySec);
+    if (error) throw error;
+    return data.signedUrl;
+  },
+
+  /**
+   * Generate (or force-regenerate) a driver's contract through the
+   * generate-driver-contract EF. The EF authorizes the caller as
+   * admin/super_admin from the session JWT, builds the ES/RO PDFs,
+   * stores them and sends the emails. Returns the fresh contract row.
+   */
+  async generateDriverContract(driverId: string, force = false): Promise<DriverContract | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('generate-driver-contract', {
+      body: { driver_id: driverId, force },
+    });
+    if (error) throw error;
+    const payload = data as { ok?: boolean; error?: string } | null;
+    if (payload?.error) throw new Error(payload.error);
+    return this.getDriverContract(driverId);
   },
 
   /**

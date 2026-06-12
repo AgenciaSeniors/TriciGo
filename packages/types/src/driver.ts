@@ -96,6 +96,24 @@ export interface DriverDocument {
   mime_type?: string;
 }
 
+/**
+ * T&C-acceptance contract generated when the driver completes
+ * onboarding (migration 00405 + EF generate-driver-contract).
+ * One per driver; PDFs live in the private `driver-contracts` bucket.
+ */
+export interface DriverContract {
+  id: string;
+  driver_id: string;
+  contract_no: string;
+  accepted_at: string;
+  terms_updated_at: string | null;
+  pdf_es_path: string | null;
+  pdf_ro_path: string | null;
+  emailed_driver_at: string | null;
+  emailed_admin_at: string | null;
+  created_at: string;
+}
+
 export type SelfieCheckStatus = 'pending' | 'processing' | 'passed' | 'failed' | 'expired';
 
 export interface SelfieCheck {
