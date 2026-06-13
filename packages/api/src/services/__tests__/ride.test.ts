@@ -29,6 +29,16 @@ vi.mock('../corporate.service', () => ({
   },
 }));
 
+// Mock notification service — _matchDriversForRide only sends the customer
+// cargo notice now (driver push is server-side, audit #18).
+const { mockNotifyUser } = vi.hoisted(() => ({ mockNotifyUser: vi.fn() }));
+vi.mock('../notification.service', () => ({
+  notificationService: {
+    notifyUser: mockNotifyUser,
+    sendToMultipleUsers: vi.fn(),
+  },
+}));
+
 // Import after mock is set up
 import { rideService } from '../ride.service';
 
@@ -1370,5 +1380,33 @@ describe('CreateRideParams — rider_preferences', () => {
       dropoff_address: 'Hotel Nacional',
     };
     expect(params.rider_preferences).toBeUndefined();
+  });
+});
+
+describe('rideService._matchDriversForRide (audit #18)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does NOT notify drivers for a passenger ride (server-side dispatch + notify_driver_new_offer push handle it)', async () => {
+    await rideService._matchDriversForRide(
+      { id: UUID, customer_id: UUID } as unknown as import('@tricigo/types').Ride,
+      { ride_mode: 'passenger' },
+    );
+    expect(mockNotifyUser).not.toHaveBeenCalled();
+  });
+
+  it('notifies ONLY the customer for a cargo/delivery ride', async () => {
+    await rideService._matchDriversForRide(
+      { id: UUID, customer_id: 'cust-xyz' } as unknown as import('@tricigo/types').Ride,
+      { ride_mode: 'cargo' },
+    );
+    expect(mockNotifyUser).toHaveBeenCalledTimes(1);
+    expect(mockNotifyUser).toHaveBeenCalledWith(
+      'cust-xyz',
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ type: 'delivery_searching' }),
+    );
   });
 });

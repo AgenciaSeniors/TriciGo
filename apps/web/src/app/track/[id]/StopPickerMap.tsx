@@ -10,8 +10,10 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { reverseGeocode } from '@tricigo/utils';
+import { MAPBOX_TOKEN, HAS_MAPBOX_TOKEN } from '@/config/mapbox';
+import { MapUnavailable } from '@/components/MapUnavailable';
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 interface StopPickerMapProps {
   /** Initial map center (usually the ride's pickup). */
@@ -77,7 +79,9 @@ export function StopPickerMap({ center, onConfirm, onClose }: StopPickerMapProps
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Marcar parada en el mapa</h3>
           <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>Toca el mapa para elegir el punto.</p>
         </div>
-        <div ref={containerRef} style={{ width: '100%', height: 320 }} />
+        {HAS_MAPBOX_TOKEN
+          ? <div ref={containerRef} style={{ width: '100%', height: 320 }} />
+          : <div style={{ width: '100%', height: 320 }}><MapUnavailable /></div>}
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-light)' }}>
           <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: selected ? 'var(--text-primary)' : 'var(--text-tertiary)', minHeight: '1.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {resolving ? 'Buscando dirección…' : selected ? `📍 ${selected.address}` : 'Sin punto seleccionado'}

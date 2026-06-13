@@ -1095,8 +1095,11 @@ export function useRideActions() {
 
           searchRetryCountRef.current += 1;
 
-          // First rounds: widen the radius + reassure. retryMatchDrivers is
-          // best-effort — the server re-dispatches on its own regardless.
+          // First rounds: reassure the rider. The server re-dispatches on its
+          // own with a widening radius (retry_dispatch_expired_rides cron +
+          // notify_driver_new_offer push). The old client-side retryMatchDrivers
+          // only pushed to a findBestDrivers set that often had no ride_offer —
+          // misleading and redundant, removed (ride-flow audit #18).
           if (searchRetryCountRef.current <= RIDE_CONFIG.SEARCH_RETRY_ROUNDS) {
             Toast.show({
               type: 'info',
@@ -1105,12 +1108,6 @@ export function useRideActions() {
               }),
               visibilityTime: 3000,
             });
-            const radius = RIDE_CONFIG.SEARCH_RADIUS_PROGRESSION[searchRetryCountRef.current - 1] ?? 12000;
-            try {
-              await rideService.retryMatchDrivers(ar.id, radius);
-            } catch {
-              // Best-effort — don't block the loop
-            }
           }
 
           // Keep searching — the loop never cancels the ride.

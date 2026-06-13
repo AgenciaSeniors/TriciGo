@@ -4,8 +4,10 @@ import { useEffect, useRef, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { HAVANA_CENTER, reverseGeocode } from '@tricigo/utils';
+import { MAPBOX_TOKEN, HAS_MAPBOX_TOKEN } from '@/config/mapbox';
+import { MapUnavailable } from '@/components/MapUnavailable';
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 interface SavedLocation {
   label: string;
@@ -214,6 +216,8 @@ export default function SavedLocationsMap({ locations, onMapClick, selectedIndex
       map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 800 });
     }
   }, [locations, selectedIndex]);
+
+  if (!HAS_MAPBOX_TOKEN) return <MapUnavailable />;
 
   return (
     <div

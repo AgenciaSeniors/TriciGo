@@ -47,7 +47,6 @@ import {
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 import { corporateService } from './corporate.service';
-import { matchingService } from './matching.service';
 import { notificationService } from './notification.service';
 import { validate, createRideSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
@@ -677,7 +676,7 @@ export const rideService = {
     // Find best drivers and notify them via push. If no drivers found,
     // the ride stays in 'searching' status and cancel-stale-rides will
     // handle timeout after the configured window.
-    this._matchDriversForRide(rideData, { ...validParams, ride_mode: validParams.ride_mode }).catch((err) => {
+    this._matchDriversForRide(rideData, { ride_mode: validParams.ride_mode }).catch((err) => {
       logger.error('ride_creation_failed', { error: (err as Error).message, rideId: rideData.id });
     });
 
@@ -685,130 +684,31 @@ export const rideService = {
   },
 
   /**
-   * Internal: find and notify best drivers for a new ride.
-   * Runs async after ride creation — failure here doesn't block the ride.
+   * Internal: post-creation side-effects for a new ride.
+   *
+   * Driver matching + the wake-up push to drivers is handled SERVER-SIDE:
+   * `on_ride_insert_dispatch` creates the authoritative `ride_offers`
+   * (RLS-scoped) on insert, and the `notify_driver_new_offer` trigger sends
+   * one `ride_offer` push per real offer. The driver app reads its incoming
+   * requests from `ride_offers` (getSearchingRides + realtime), NOT from any
+   * push payload — so a second client-side push (to a `findBestDrivers` set
+   * that often had no matching offer) was redundant and misleading. Removed
+   * (ride-flow audit #18). This now only sends the customer-facing
+   * "matching started" notice for cargo/delivery requests.
    */
   async _matchDriversForRide(
     ride: Ride,
-    params: { pickup_latitude: number; pickup_longitude: number; service_type: string; pickup_address: string; dropoff_address: string; ride_mode?: string },
+    params: { ride_mode?: string },
   ): Promise<void> {
+    if (params.ride_mode !== 'cargo') return;
     try {
-      const isDelivery = params.ride_mode === 'cargo';
-      const drivers = await matchingService.findBestDrivers({
-        pickup_lat: params.pickup_latitude,
-        pickup_lng: params.pickup_longitude,
-        service_type: params.service_type,
-        limit: 10,
-        radius_m: 5000,
-        is_delivery: isDelivery,
-      });
-
-      logger.info('drivers_matched', { rideId: ride.id, driversFound: drivers.length, isDelivery });
-
-      if (drivers.length === 0) {
-        console.warn('[Ride] No drivers found for ride', ride.id);
-        return;
-      }
-
-      // Notify each matched driver via push notification
-      const driverUserIds = drivers.map((d) => d.user_id).filter(Boolean);
-      if (driverUserIds.length > 0) {
-        const title = isDelivery ? 'Nuevo envio disponible' : 'Nuevo viaje disponible';
-        const body = isDelivery
-          ? `Envio de ${params.pickup_address} a ${params.dropoff_address}`
-          : `De ${params.pickup_address} a ${params.dropoff_address}`;
-        await notificationService.sendToMultipleUsers(
-          driverUserIds,
-          isDelivery ? 'new_delivery' : 'new_ride',
-          {
-            title,
-            body,
-            data: { ride_id: ride.id, type: isDelivery ? 'new_delivery' : 'new_ride' },
-          },
-        ).catch((err) => {
-          console.warn('[Ride] Failed to notify drivers:', err);
-        });
-      }
-
-      // Notify the customer that their delivery request is being matched
-      if (isDelivery) {
-        try {
-          await notificationService.notifyUser(
-            ride.customer_id,
-            'Buscando conductor para tu envío',
-            'Estamos buscando un conductor para recoger tu paquete',
-            { ride_id: ride.id, type: 'delivery_searching' },
-          );
-        } catch { /* non-blocking */ }
-      }
-    } catch (err) {
-      logger.error('ride_creation_failed', { error: (err as Error).message, rideId: ride.id });
-      console.warn('[Ride] _matchDriversForRide error:', err);
-    }
-  },
-
-  /**
-   * Retry driver matching with an expanded search radius.
-   * Called from the client when the initial search times out.
-   * Returns the number of drivers notified.
-   */
-  async retryMatchDrivers(rideId: string, radiusM: number): Promise<number> {
-    const supabase = getSupabaseClient();
-
-    // Fetch ride and validate status — select only needed columns
-    const { data: ride, error } = await supabase
-      .from('rides')
-      .select('id, status, ride_mode, service_type, pickup_lat, pickup_lng, pickup_address, dropoff_address')
-      .eq('id', rideId)
-      .single();
-    if (error) throw error;
-    if (!ride) throw new ValidationError('Ride not found');
-
-    if (ride.status !== 'searching') {
-      logger.info('retry_match_skipped', { rideId, status: ride.status });
-      return 0;
-    }
-
-    try {
-      const isDelivery = ride.ride_mode === 'cargo';
-      const drivers = await matchingService.findBestDrivers({
-        pickup_lat: ride.pickup_lat,
-        pickup_lng: ride.pickup_lng,
-        service_type: ride.service_type,
-        limit: 10,
-        radius_m: radiusM,
-        is_delivery: isDelivery,
-      });
-
-      logger.info('retry_drivers_matched', { rideId, radiusM, driversFound: drivers.length, isDelivery });
-
-      if (drivers.length === 0) return 0;
-
-      // Notify each matched driver via push notification
-      const driverUserIds = drivers.map((d) => d.user_id).filter(Boolean);
-      if (driverUserIds.length > 0) {
-        const title = isDelivery ? 'Nuevo env\u00edo disponible' : 'Nuevo viaje disponible';
-        const body = isDelivery
-          ? `Env\u00edo de ${ride.pickup_address} a ${ride.dropoff_address}`
-          : `De ${ride.pickup_address} a ${ride.dropoff_address}`;
-        await notificationService.sendToMultipleUsers(
-          driverUserIds,
-          isDelivery ? 'new_delivery' : 'new_ride',
-          {
-            title,
-            body,
-            data: { ride_id: ride.id, type: isDelivery ? 'new_delivery' : 'new_ride' },
-          },
-        ).catch((err) => {
-          logger.warn('retry_notify_failed', { error: String(err), rideId });
-        });
-      }
-
-      return driverUserIds.length;
-    } catch (err) {
-      logger.error('retry_match_failed', { error: (err as Error).message, rideId, radiusM });
-      return 0;
-    }
+      await notificationService.notifyUser(
+        ride.customer_id,
+        'Buscando conductor para tu envío',
+        'Estamos buscando un conductor para recoger tu paquete',
+        { ride_id: ride.id, type: 'delivery_searching' },
+      );
+    } catch { /* non-blocking */ }
   },
 
   /**

@@ -6,10 +6,12 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { useTranslation } from '@tricigo/i18n';
 import { HAVANA_CENTER, CUBA_CENTER, CUBA_DEFAULT_ZOOM, HAVANA_PRESETS, findNearestPreset, reverseGeocode, MAP_STYLE_LIGHT, ROUTE } from '@tricigo/utils';
 import { DEMO_MODE, getMapFallbackCoordLngLat } from '@/config/demo';
+import { MAPBOX_TOKEN, HAS_MAPBOX_TOKEN } from '@/config/mapbox';
+import { MapUnavailable } from '@/components/MapUnavailable';
 import type { LocationPreset } from '@tricigo/utils';
 import type { NearbyVehicle, ServiceTypeSlug } from '@tricigo/types';
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 type SelectionStep = 'pickup' | 'dropoff' | 'done';
 
@@ -545,6 +547,8 @@ export default function BookingMap({
     selectionStep === 'pickup' ? '#22c55e'
     : selectionStep === 'dropoff' ? '#ef4444'
     : 'var(--primary)';
+
+  if (!HAS_MAPBOX_TOKEN) return <MapUnavailable />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

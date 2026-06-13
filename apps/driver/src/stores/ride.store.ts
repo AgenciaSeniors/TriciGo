@@ -94,9 +94,12 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
       const recvTime  = new Date(trip.updated_at).getTime();
       const driftMs   = localTime - recvTime;
       // Forward status transitions always win (immune to clock skew).
+      // 'disputed' at the end: a `completed → disputed` update (once
+      // formal_disputes_enabled is on; valid_transitions added the edge in
+      // 00409) must count as forward so it isn't ignored as a stale update.
       const STATUS_ORDER = [
         'searching','accepted','driver_en_route','arrived_at_pickup',
-        'in_progress','arrived_at_destination','completed',
+        'in_progress','arrived_at_destination','completed','disputed',
       ];
       const localIdx = STATUS_ORDER.indexOf(activeTrip.status);
       const recvIdx  = STATUS_ORDER.indexOf(trip.status);
