@@ -39,6 +39,8 @@
     "invalid_phone": "Número de telefone inválido",
     "invalid_otp": "Código incorreto. Tente novamente.",
     "send_otp_failed": "Não foi possível enviar o código. Verifique o número.",
+    "phone_taken": "Esse número já está em uso por outra conta",
+    "otp_rate_limited_body": "Muitos códigos. Aguarde alguns minutos antes de pedir outro.",
     "google_login_failed": "Não foi possível entrar com o Google.",
     "apple_login_failed": "Não foi possível entrar com a Apple.",
     "or_continue_with": "ou continue com",

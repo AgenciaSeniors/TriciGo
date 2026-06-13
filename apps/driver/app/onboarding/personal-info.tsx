@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Pressable, Switch, Platform, ScrollView, KeyboardAvoidingView } from 'react-native';
+import { View, Pressable, Switch, Platform, ScrollView, KeyboardAvoidingView, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,10 +13,11 @@ import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
+import { authService, isRateLimitError } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
-import { isValidEmail, sanitizeText, isValidCubanId, isValidCubanPhone, normalizeCubanPhone, CUBA_PROVINCES, CUBA_MUNICIPALITIES } from '@tricigo/utils';
+import { isValidEmail, sanitizeText, isValidCubanId, isValidCubanPhone, normalizeCubanPhone, isValidOTP, CUBA_PROVINCES, CUBA_MUNICIPALITIES } from '@tricigo/utils';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 
 function useSteps() {
@@ -122,9 +123,11 @@ function SelectField({
 
 export default function PersonalInfoScreen() {
   const { t } = useTranslation('driver');
+  const { t: tc } = useTranslation('common');
   const STEPS = useSteps();
   const { isPhone } = useResponsive();
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const { personalInfo, setPersonalInfo } = useOnboardingStore();
 
   // Extract phone without +53 prefix for editing
@@ -159,6 +162,31 @@ export default function PersonalInfoScreen() {
 
   // Errors
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Phone OTP verification (OAuth signups type the phone by hand — it must be
+  // verified before the application accepts it; OTP logins already verified it).
+  const [otpVisible, setOtpVisible] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+  const [pendingPhone, setPendingPhone] = useState('');
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const interval = setInterval(() => {
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resendTimer > 0]);
 
   // Dynamic municipalities based on selected province
   const municipalities = useMemo(() => {
@@ -207,7 +235,22 @@ export default function PersonalInfoScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
+  const proceedToVehicle = (normalizedPhone: string) => {
+    setPersonalInfo({
+      full_name: sanitizeText(fullName),
+      phone: normalizedPhone,
+      email: email.trim(),
+      identity_number: identityNumber.trim(),
+      province,
+      municipality,
+      address: address.trim(),
+      has_criminal_record: hasCriminalRecord,
+      criminal_record_details: hasCriminalRecord ? criminalDetails.trim() : '',
+    });
+    router.push('/onboarding/vehicle-info');
+  };
+
+  const handleNext = async () => {
     if (!validate()) {
       // UX: without a global cue, drivers hit "Siguiente" and the button
       // appears to do nothing — the inline red marks are easy to miss on
@@ -221,18 +264,84 @@ export default function PersonalInfoScreen() {
       return;
     }
     const finalPhone = phone.trim().startsWith('+53') ? phone.trim() : `+53${phone.trim()}`;
-    setPersonalInfo({
-      full_name: sanitizeText(fullName),
-      phone: normalizeCubanPhone(finalPhone),
-      email: email.trim(),
-      identity_number: identityNumber.trim(),
-      province,
-      municipality,
-      address: address.trim(),
-      has_criminal_record: hasCriminalRecord,
-      criminal_record_details: hasCriminalRecord ? criminalDetails.trim() : '',
-    });
-    router.push('/onboarding/vehicle-info');
+    const normalizedPhone = normalizeCubanPhone(finalPhone);
+
+    // Phone already verified for this account (OTP login, or linked earlier in
+    // this onboarding) → no OTP round-trip needed.
+    if (user?.phone === normalizedPhone) {
+      proceedToVehicle(normalizedPhone);
+      return;
+    }
+
+    // OAuth signup: the phone was typed by hand. Verify it via OTP (same D7
+    // chain as login) before the application accepts it — otherwise drivers
+    // could submit someone else's / a wrong number (SMS, passenger contact and
+    // SOS all depend on it).
+    setSendingCode(true);
+    try {
+      await authService.linkPhone(normalizedPhone);
+      setPendingPhone(normalizedPhone);
+      setOtpCode('');
+      setOtpError('');
+      setResendTimer(60);
+      setOtpVisible(true);
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: isRateLimitError(err) ? tc('auth.otp_rate_limited_body') : tc('auth.send_otp_failed'),
+        visibilityTime: 3000,
+      });
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    setOtpError('');
+    if (!isValidOTP(otpCode)) {
+      setOtpError(tc('auth.invalid_otp'));
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      // link-phone EF validates the code and links the phone server-side
+      // (auth.users + public.users mirror) — no separate updateProfile needed.
+      await authService.verifyPhoneLink(pendingPhone, otpCode);
+      if (user) {
+        try {
+          const updated = await authService.getUserById(user.id);
+          if (updated) setUser(updated);
+        } catch { /* store refresh is best-effort — the server already linked it */ }
+      }
+      setOtpVisible(false);
+      proceedToVehicle(pendingPhone);
+    } catch (err) {
+      const code = (err as Error & { code?: string }).code;
+      setOtpError(
+        code === 'PHONE_TAKEN'
+          ? tc('auth.phone_taken')
+          : code === 'INVALID_CODE'
+            ? tc('auth.invalid_otp')
+            : tc('errors.generic'),
+      );
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    try {
+      await authService.linkPhone(pendingPhone);
+      setResendTimer(60);
+      Toast.show({
+        type: 'success',
+        text1: tc('auth.resend_success_title', { defaultValue: 'Código reenviado' }),
+        text2: tc('auth.resend_success_body', { defaultValue: 'Revisá los mensajes del teléfono.' }),
+        visibilityTime: 2500,
+      });
+    } catch (err) {
+      setOtpError(isRateLimitError(err) ? tc('auth.otp_rate_limited_body') : tc('auth.send_otp_failed'));
+    }
   };
 
   return (
@@ -507,6 +616,8 @@ export default function PersonalInfoScreen() {
                 size="lg"
                 fullWidth
                 onPress={handleNext}
+                loading={sendingCode}
+                disabled={sendingCode}
                 className="mt-2 mb-8"
               />
             </AnimatedCard>
@@ -517,6 +628,111 @@ export default function PersonalInfoScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ─── Phone OTP verification (OAuth signups) ─── */}
+      <Modal
+        visible={otpVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOtpVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            justifyContent: 'center',
+            paddingHorizontal: 24,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: midnightEmber.map.bg.surface,
+              borderRadius: 20,
+              padding: 24,
+              borderWidth: 1,
+              borderColor: midnightEmber.map.line.hairline,
+              maxWidth: 420,
+              width: '100%',
+              alignSelf: 'center',
+            }}
+          >
+            <View className="flex-row items-center mb-3">
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 9999,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: 12,
+                  backgroundColor: midnightEmber.accent[100],
+                }}
+              >
+                <Ionicons name="shield-checkmark-outline" size={20} color={midnightEmber.accent[500]} />
+              </View>
+              <Text variant="h3" color="inverse">
+                {tc('auth.otp_title')}
+              </Text>
+            </View>
+            <Text variant="bodySmall" color="secondary" className="mb-5">
+              {tc('auth.otp_subtitle', { phone: pendingPhone })}
+            </Text>
+
+            <Input
+              placeholder="000000"
+              keyboardType="number-pad"
+              maxLength={6}
+              value={otpCode}
+              onChangeText={(v) => {
+                // UX: clear stale error as the user retypes — same pattern
+                // as the rest of the auth flow.
+                if (otpError) setOtpError('');
+                setOtpCode(v);
+              }}
+              variant="dark"
+              autoFocus
+            />
+
+            {otpError ? (
+              <Text variant="bodySmall" color="error" className="mb-2">{otpError}</Text>
+            ) : null}
+
+            <Button
+              title={tc('auth.verify')}
+              onPress={handleVerifyOtp}
+              loading={otpLoading}
+              disabled={otpCode.length !== 6 || otpLoading}
+              fullWidth
+              size="lg"
+              className="mt-1"
+            />
+            <Button
+              title={
+                resendTimer > 0
+                  ? tc('auth.resend_in', { seconds: resendTimer })
+                  : tc('auth.resend_code')
+              }
+              variant="ghost"
+              onPress={handleResendOtp}
+              disabled={resendTimer > 0 || otpLoading}
+              className="mt-3"
+              fullWidth
+            />
+            <Button
+              title={tc('auth.change_number')}
+              variant="ghost"
+              onPress={() => {
+                setOtpVisible(false);
+                setOtpCode('');
+                setOtpError('');
+              }}
+              disabled={otpLoading}
+              className="mt-1"
+              fullWidth
+            />
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
