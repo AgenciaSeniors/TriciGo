@@ -671,19 +671,11 @@ export default function TrackingMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickupLat, pickupLng, dropoffLat, dropoffLng, mapReady, waypointsKey]);
 
-  if (!hasValidCoords) {
-    return (
-      <div style={{
-        width: '100%', height: styleProp?.height ?? 300, borderRadius: styleProp?.borderRadius ?? '0.75rem', background: 'var(--bg-light)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)',
-        ...styleProp,
-      }}>
-        Cargando mapa...
-      </div>
-    );
-  }
-
   // ── Nearby vehicle markers (green dots during search) ──
+  // NOTE: this hook MUST stay above the early `if (!hasValidCoords) return` below.
+  // Placing a hook after a conditional return violates the Rules of Hooks and
+  // crashes the render the moment hasValidCoords toggles ("Rendered more hooks
+  // than during the previous render"). See ride-flow audit #4.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
@@ -701,6 +693,18 @@ export default function TrackingMap({
       vehicleMarkersRef.current.push(marker);
     });
   }, [nearbyVehicles, mapReady]);
+
+  if (!hasValidCoords) {
+    return (
+      <div style={{
+        width: '100%', height: styleProp?.height ?? 300, borderRadius: styleProp?.borderRadius ?? '0.75rem', background: 'var(--bg-light)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)',
+        ...styleProp,
+      }}>
+        Cargando mapa...
+      </div>
+    );
+  }
 
   return (
     <>
