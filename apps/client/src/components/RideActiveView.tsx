@@ -372,10 +372,16 @@ export function RideActiveView() {
     }
   }, [driverPosition, activeRide?.status]);
 
-  // Stale position detection (4.3) — position older than 60s
-  const positionIsStale = driverPosState.isCached && driverPosState.cachedAt
-    ? (Date.now() - new Date(driverPosState.cachedAt).getTime()) > 60_000
-    : false;
+  // Stale position detection (4.3) — position older than 60s. Based on the real
+  // GPS-fix timestamp (recordedAt) so a driver who goes offline mid-ride (the
+  // position freezes but isCached stays false after the first poll) still trips
+  // the banner. Falls back to the cached timestamp when there's no live recordedAt.
+  const positionAgeMs = driverPosition?.recordedAt != null
+    ? Date.now() - driverPosition.recordedAt
+    : (driverPosState.isCached && driverPosState.cachedAt
+        ? Date.now() - new Date(driverPosState.cachedAt).getTime()
+        : null);
+  const positionIsStale = positionAgeMs != null ? positionAgeMs > 60_000 : false;
 
   // `waypoints` state is declared earlier (near the useRoutePolyline
   // call) so the route hook sees them. Only the add-stop UI state
