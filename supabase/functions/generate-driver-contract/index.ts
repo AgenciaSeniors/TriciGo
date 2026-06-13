@@ -567,25 +567,37 @@ class PdfWriter {
     this.y -= 24;
   }
 
-  /** Label/value row: muted label on a fixed column, wrapped value. */
+  /**
+   * Label/value row laid out as two aligned columns. BOTH the muted label
+   * and the value are word-wrapped inside their own column and share the
+   * same top baseline; the cursor advances by whichever column is taller.
+   * Wrapping the label (with a gutter before the value column) is what
+   * stops a long label like "Licencia de conducción (Nr. / Categoría)"
+   * from overflowing past the value column and overlapping the value.
+   */
   row(label: string, value: string): void {
     const size = 10;
+    const lineH = size + 4;
+    const labelX = MARGIN_L;
     const valueX = MARGIN_L + 170;
-    const maxWidth = MARGIN_R - valueX;
-    const lines = this.wrap(this.sanitize(value), this.regular, size, maxWidth);
-    const blockH = Math.max(lines.length, 1) * (size + 4);
-    this.ensure(blockH);
-    this.page.drawText(this.sanitize(label), {
-      x: MARGIN_L, y: this.y, size, font: this.regular, color: rgb(...BRAND_RGB.muted),
-    });
-    for (const line of lines) {
+    const labelMaxW = valueX - MARGIN_L - 12; // 12pt gutter before the value
+    const valueMaxW = MARGIN_R - valueX;
+    const labelLines = this.wrap(this.sanitize(label), this.regular, size, labelMaxW);
+    const valueLines = this.wrap(this.sanitize(value), this.regular, size, valueMaxW);
+    const rows = Math.max(labelLines.length, valueLines.length, 1);
+    this.ensure(rows * lineH);
+    const top = this.y;
+    labelLines.forEach((line, i) => {
       this.page.drawText(line, {
-        x: valueX, y: this.y, size, font: this.regular, color: rgb(...BRAND_RGB.ink),
+        x: labelX, y: top - i * lineH, size, font: this.regular, color: rgb(...BRAND_RGB.muted),
       });
-      this.y -= size + 4;
-    }
-    if (lines.length === 0) this.y -= size + 4;
-    this.y -= 2;
+    });
+    valueLines.forEach((line, i) => {
+      this.page.drawText(line, {
+        x: valueX, y: top - i * lineH, size, font: this.regular, color: rgb(...BRAND_RGB.ink),
+      });
+    });
+    this.y = top - rows * lineH - 2;
   }
 
   /** Article subheading (e.g. "Artículo 5.1 — …"): bold ink, no underline. */
