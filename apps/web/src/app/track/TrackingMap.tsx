@@ -13,8 +13,10 @@ import {
   MARKER,
   ROUTE,
 } from '@tricigo/utils';
+import { MAPBOX_TOKEN, HAS_MAPBOX_TOKEN } from '@/config/mapbox';
+import { MapUnavailable } from '@/components/MapUnavailable';
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 export interface TrackingMapProps {
   pickupLat: number;
@@ -693,6 +695,8 @@ export default function TrackingMap({
       vehicleMarkersRef.current.push(marker);
     });
   }, [nearbyVehicles, mapReady]);
+
+  if (!HAS_MAPBOX_TOKEN) return <MapUnavailable />;
 
   if (!hasValidCoords) {
     return (

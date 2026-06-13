@@ -309,7 +309,12 @@ export const useRideStore = create<RideState>((set, get) => ({
 
     // X2.2: Validate forward-only status transitions
     if (ride.status !== activeRide.status) {
-      const STATUS_ORDER = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination', 'completed', 'canceled'];
+      // 'disputed' lives at the end so a `completed → disputed` realtime
+      // update (once formal_disputes_enabled is on; valid_transitions added
+      // the edge in 00409) isn't dropped by the forward-only guard below.
+      // It is a terminal state reached from completed — not an "active" ride,
+      // so getActiveRide intentionally does NOT list it.
+      const STATUS_ORDER = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination', 'completed', 'canceled', 'disputed'];
 
       const isValidTransition = (current: string, next: string): boolean => {
         if (next === 'canceled') return true; // can always cancel

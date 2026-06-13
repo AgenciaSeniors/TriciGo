@@ -155,7 +155,14 @@ export function useDriverRideInit() {
 
     // Bug 36: Re-check active trip when app returns from background
     const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && mounted) checkActive();
+      if (state === 'active' && mounted) {
+        checkActive();
+        // #9b: Android throttles the JS heartbeat timer while backgrounded, so
+        // a driver returning to foreground can be stale (>3min) and miss/lose
+        // offers (find_best_drivers + accept_ride_v2 both gate on heartbeat).
+        // Send one beat immediately to heal.
+        if (profile?.id) driverService.sendHeartbeat(profile.id).catch(() => {});
+      }
     });
 
     // BUG-287 fix C — periodic reconcile while a trip is active so the
@@ -350,6 +357,11 @@ export function useDriverRideActions() {
     acceptingRef.current = true;
 
     try {
+      // #9b: refresh heartbeat right before accepting. Android throttles the
+      // JS heartbeat timer in background, so accept_ride_v2's >3min stale gate
+      // can reject an otherwise-valid accept. One fresh beat heals that race.
+      await driverService.sendHeartbeat(profile.id).catch(() => {});
+
       // 1. RPC call FIRST — database determines who wins the race
       const ride = await driverService.acceptRideWithEligibility(rideId, profile.id);
 
@@ -427,9 +439,14 @@ export function useDriverRideActions() {
           title: i18next.t('driver:common.driver_not_online', { defaultValue: 'Debes estar en línea para aceptar viajes' }),
           type: 'error',
         },
+        // #11: this is a transient timing race (the JS heartbeat lapsed while
+        // backgrounded), not the driver's internet. The pre-accept beat above
+        // usually heals it; if it still trips, one retry tap succeeds. Honest,
+        // actionable copy beats the misleading "connection lost".
         driver_stale_heartbeat: {
-          title: i18next.t('driver:common.driver_stale_heartbeat', { defaultValue: 'Conexión perdida. Verificá tu internet.' }),
-          type: 'error',
+          title: i18next.t('driver:common.driver_stale_heartbeat', { defaultValue: 'Reconectando…' }),
+          subtitle: i18next.t('driver:common.driver_stale_heartbeat_sub', { defaultValue: 'Tu conexión se reactivó. Tocá aceptar de nuevo.' }),
+          type: 'info',
         },
         driver_has_active_ride: {
           title: i18next.t('driver:common.driver_has_active_ride', { defaultValue: 'Ya tenés un viaje activo' }),
