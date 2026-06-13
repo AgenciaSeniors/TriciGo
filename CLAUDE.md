@@ -1425,6 +1425,26 @@ Luego ensamblar el archivo de migración con la fuente completa + cambios surgic
 
 **Para cambios de arity** (params nuevos), DROP FUNCTION primero con la signature vieja, después CREATE. Ver `00336_find_best_drivers_fleet_priority.sql` para el ejemplo (12 params → 13 params).
 
+#### Patch in-place para cambios de UNA línea en RPCs grandes (verificado 2026-06-13)
+
+Cuando solo necesitás cambiar 1-2 strings en un RPC de ~24k chars (ej: `'driver_cash'` → `'tricicoin'`, agregar un `AND` a un `WHERE`), **NO reescribas el cuerpo entero** — el verbatim tiene riesgo de transcripción y **puede perder features** silenciosamente (cf. regresión 00124). En su lugar, leé el cuerpo VIVO y patcheálo server-side:
+
+```sql
+DO $patch$
+DECLARE v_src text;
+BEGIN
+  SELECT pg_get_functiondef('public.fn(args)'::regprocedure) INTO v_src;
+  IF v_src IS NOT NULL AND position('<target literal>' IN v_src) > 0 THEN
+    EXECUTE replace(v_src, '<target literal>', '<replacement>');
+    RAISE NOTICE '...';
+  END IF;
+EXCEPTION WHEN undefined_function THEN
+  RAISE NOTICE 'fn absent; skipping';
+END $patch$;
+```
+
+Reglas: (1) **verificá que el target sea único ANTES** — `(length(prosrc)-length(replace(prosrc,'target','')))/length('target')` debe dar 1; (2) **idempotente** — agregá un guard `AND position('<marker-del-cambio>' IN v_src) = 0` para no re-aplicar; (3) escapá comillas simples en los literales (`''driver_cash''`); (4) el `EXCEPTION WHEN undefined_function` lo hace seguro en DBs frescas (la función la crea una migración anterior; el patch corre después por número). **Ventaja clave sobre el verbatim: no puede perder features** porque parte del cuerpo vivo. Ejemplos: `00408` (`complete_ride_and_pay` `driver_cash`→`tricicoin`; `find_best_drivers` + filtro de heartbeat).
+
 ### Fleet membership 3-way gate (corporate)
 
 **Verificado en migraciones 00336 + 00337.**
