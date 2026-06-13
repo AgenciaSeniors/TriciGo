@@ -95,3 +95,19 @@ FROM ledger_entries le
 JOIN ledger_transactions lt ON lt.id = le.transaction_id
 JOIN wallet_accounts wa ON wa.id = le.account_id AND wa.account_type='platform_revenue'
 GROUP BY lt.type ORDER BY total DESC;
+
+-- 10) DOUBLE-ENTRY — every ledger transaction must net to 0 (debits = credits),
+--    and the global sum of all entries must be 0. Any row = a transaction that
+--    minted/burned money without a counterparty (e.g. the cargo bonus before
+--    00414 credited the driver with no platform debit). Added 2026-06-13.
+SELECT 'UNBALANCED_TXN' AS check, lt.id::text AS txn, lt.idempotency_key,
+       COALESCE(SUM(le.amount), 0) AS net
+FROM ledger_transactions lt
+LEFT JOIN ledger_entries le ON le.transaction_id = lt.id
+GROUP BY lt.id, lt.idempotency_key
+HAVING COALESCE(SUM(le.amount), 0) <> 0;
+
+-- 10b) GLOBAL LEDGER IMBALANCE — the sum across ALL entries must be exactly 0.
+SELECT 'GLOBAL_LEDGER_IMBALANCE' AS check, COALESCE(SUM(amount), 0) AS global_sum
+FROM ledger_entries
+HAVING COALESCE(SUM(amount), 0) <> 0;
