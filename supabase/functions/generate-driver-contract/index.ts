@@ -455,33 +455,72 @@ class PdfWriter {
     this.y -= h;
   }
 
-  /** Word-wrap a single logical line into physical lines that fit maxWidth. */
+  /**
+   * Word-wrap a single logical line into physical lines that fit maxWidth.
+   *
+   * Measures each word's width ONCE and accumulates the line width by
+   * addition (O(words)) instead of re-measuring the growing candidate
+   * string per word (O(words²)). The quadratic version, multiplied across
+   * a multi-page contract, was heavy enough to trip the Edge worker's
+   * resource limit — this keeps the same layout for a fraction of the
+   * width-measurement cost. widthOfTextAtSize results are memoized per
+   * (token,size) for the duration of the wrap call.
+   */
   wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
     const words = text.split(/\s+/).filter((w) => w.length > 0);
     if (words.length === 0) return [];
+    const widthCache = new Map<string, number>();
+    const measure = (t: string): number => {
+      const key = `${size}:${t}`;
+      let v = widthCache.get(key);
+      if (v === undefined) {
+        v = font.widthOfTextAtSize(t, size);
+        widthCache.set(key, v);
+      }
+      return v;
+    };
+    const spaceW = measure(' ');
     const lines: string[] = [];
     let cur = '';
-    for (const w of words) {
-      const candidate = cur ? `${cur} ${w}` : w;
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
-        cur = candidate;
+    let curW = 0;
+    const startWord = (word: string) => {
+      const wW = measure(word);
+      if (wW <= maxWidth) {
+        cur = word;
+        curW = wW;
+        return;
+      }
+      // Pathologically long token (e.g. a URL) — hard-break by characters.
+      let chunk = '';
+      let chunkW = 0;
+      for (const ch of word) {
+        const cw = measure(ch);
+        if (chunkW + cw > maxWidth && chunk) {
+          lines.push(chunk);
+          chunk = ch;
+          chunkW = cw;
+        } else {
+          chunk += ch;
+          chunkW += cw;
+        }
+      }
+      cur = chunk;
+      curW = chunkW;
+    };
+    for (const word of words) {
+      if (cur === '') {
+        startWord(word);
         continue;
       }
-      if (cur) lines.push(cur);
-      if (font.widthOfTextAtSize(w, size) > maxWidth) {
-        // Pathologically long token — hard-break by characters.
-        let chunk = '';
-        for (const ch of w) {
-          if (font.widthOfTextAtSize(chunk + ch, size) > maxWidth && chunk) {
-            lines.push(chunk);
-            chunk = ch;
-          } else {
-            chunk += ch;
-          }
-        }
-        cur = chunk;
+      const wW = measure(word);
+      if (curW + spaceW + wW <= maxWidth) {
+        cur = `${cur} ${word}`;
+        curW += spaceW + wW;
       } else {
-        cur = w;
+        lines.push(cur);
+        cur = '';
+        curW = 0;
+        startWord(word);
       }
     }
     if (cur) lines.push(cur);
@@ -612,6 +651,10 @@ async function buildContractPdf(args: BuildArgs): Promise<Uint8Array> {
   let sanitize: (s: string) => string;
   if (fonts) {
     doc.registerFontkit(fontkit);
+    // subset:true keeps the PDF small (~80 KB) and was proven on the
+    // earlier version. The Edge worker memory/CPU blow-up on this longer
+    // contract came from O(words²) width measurements in wrap(), not from
+    // subsetting — wrap() now measures each word once (see PdfWriter.wrap).
     regular = await doc.embedFont(fonts.regular, { subset: true });
     bold = await doc.embedFont(fonts.bold, { subset: true });
     sanitize = (s) => s;
