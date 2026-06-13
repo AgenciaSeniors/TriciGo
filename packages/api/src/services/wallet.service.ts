@@ -379,7 +379,7 @@ export const walletService = {
   async getQuotaStatus(driverUserId: string): Promise<DriverQuotaStatus> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('get_driver_quota_status', {
-      p_driver_user_id: driverUserId,
+      p_user_id: driverUserId,
     });
     if (error) throw error;
     const result = data as Record<string, unknown>;
