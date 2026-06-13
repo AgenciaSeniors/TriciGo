@@ -221,7 +221,7 @@ export default function LiveMapPage() {
                     {ride.pickup_address ?? '?'} → {ride.dropoff_address ?? '?'}
                   </td>
                   <td className="px-4 py-2 text-ink-muted">
-                    {ride.estimated_fare_cup ? `${(ride.estimated_fare_cup / 100).toFixed(0)} CUP` : '—'}
+                    {ride.estimated_fare_cup ? `${ride.estimated_fare_cup.toLocaleString('es-CU')} CUP` : '—'}
                   </td>
                 </tr>
               ))}
