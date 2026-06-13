@@ -42,14 +42,16 @@ import {
 } from 'https://esm.sh/pdf-lib@1.17.1?target=deno';
 import fontkit from 'https://esm.sh/@pdf-lib/fontkit@1.1.1?target=deno';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
-import { BRAND_NAME, BRAND_RGB, LOGO_URL, SUPPORT_EMAIL, WEB_ORIGIN } from '../_shared/brand.ts';
+import { BRAND_NAME, BRAND_RGB, LOGO_URL } from '../_shared/brand.ts';
 import {
   CONTRACT_ES,
   CONTRACT_RO,
+  ContractBlock,
   ContractCopy,
   TERMS_RO_BODY,
   TERMS_RO_TITLE,
 } from '../_shared/driver-contract.ts';
+import { CONTRACT_STAMP_PNG_BASE64 } from '../_shared/contract-stamp.ts';
 import {
   driverContractHtml,
   driverContractSubject,
@@ -269,6 +271,7 @@ Deno.serve(async (req) => {
       contractNo,
       driver,
       user,
+      driverEmail,
       vehicle,
       acceptedAtISO: acceptedAt,
       termsUpdatedAtISO: termsUpdatedAt,
@@ -452,33 +455,72 @@ class PdfWriter {
     this.y -= h;
   }
 
-  /** Word-wrap a single logical line into physical lines that fit maxWidth. */
+  /**
+   * Word-wrap a single logical line into physical lines that fit maxWidth.
+   *
+   * Measures each word's width ONCE and accumulates the line width by
+   * addition (O(words)) instead of re-measuring the growing candidate
+   * string per word (O(words²)). The quadratic version, multiplied across
+   * a multi-page contract, was heavy enough to trip the Edge worker's
+   * resource limit — this keeps the same layout for a fraction of the
+   * width-measurement cost. widthOfTextAtSize results are memoized per
+   * (token,size) for the duration of the wrap call.
+   */
   wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
     const words = text.split(/\s+/).filter((w) => w.length > 0);
     if (words.length === 0) return [];
+    const widthCache = new Map<string, number>();
+    const measure = (t: string): number => {
+      const key = `${size}:${t}`;
+      let v = widthCache.get(key);
+      if (v === undefined) {
+        v = font.widthOfTextAtSize(t, size);
+        widthCache.set(key, v);
+      }
+      return v;
+    };
+    const spaceW = measure(' ');
     const lines: string[] = [];
     let cur = '';
-    for (const w of words) {
-      const candidate = cur ? `${cur} ${w}` : w;
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
-        cur = candidate;
+    let curW = 0;
+    const startWord = (word: string) => {
+      const wW = measure(word);
+      if (wW <= maxWidth) {
+        cur = word;
+        curW = wW;
+        return;
+      }
+      // Pathologically long token (e.g. a URL) — hard-break by characters.
+      let chunk = '';
+      let chunkW = 0;
+      for (const ch of word) {
+        const cw = measure(ch);
+        if (chunkW + cw > maxWidth && chunk) {
+          lines.push(chunk);
+          chunk = ch;
+          chunkW = cw;
+        } else {
+          chunk += ch;
+          chunkW += cw;
+        }
+      }
+      cur = chunk;
+      curW = chunkW;
+    };
+    for (const word of words) {
+      if (cur === '') {
+        startWord(word);
         continue;
       }
-      if (cur) lines.push(cur);
-      if (font.widthOfTextAtSize(w, size) > maxWidth) {
-        // Pathologically long token — hard-break by characters.
-        let chunk = '';
-        for (const ch of w) {
-          if (font.widthOfTextAtSize(chunk + ch, size) > maxWidth && chunk) {
-            lines.push(chunk);
-            chunk = ch;
-          } else {
-            chunk += ch;
-          }
-        }
-        cur = chunk;
+      const wW = measure(word);
+      if (curW + spaceW + wW <= maxWidth) {
+        cur = `${cur} ${word}`;
+        curW += spaceW + wW;
       } else {
-        cur = w;
+        lines.push(cur);
+        cur = '';
+        curW = 0;
+        startWord(word);
       }
     }
     if (cur) lines.push(cur);
@@ -525,25 +567,69 @@ class PdfWriter {
     this.y -= 24;
   }
 
-  /** Label/value row: muted label on a fixed column, wrapped value. */
+  /**
+   * Label/value row laid out as two aligned columns. BOTH the muted label
+   * and the value are word-wrapped inside their own column and share the
+   * same top baseline; the cursor advances by whichever column is taller.
+   * Wrapping the label (with a gutter before the value column) is what
+   * stops a long label like "Licencia de conducción (Nr. / Categoría)"
+   * from overflowing past the value column and overlapping the value.
+   */
   row(label: string, value: string): void {
     const size = 10;
+    const lineH = size + 4;
+    const labelX = MARGIN_L;
     const valueX = MARGIN_L + 170;
-    const maxWidth = MARGIN_R - valueX;
-    const lines = this.wrap(this.sanitize(value), this.regular, size, maxWidth);
-    const blockH = Math.max(lines.length, 1) * (size + 4);
-    this.ensure(blockH);
-    this.page.drawText(this.sanitize(label), {
-      x: MARGIN_L, y: this.y, size, font: this.regular, color: rgb(...BRAND_RGB.muted),
-    });
-    for (const line of lines) {
+    const labelMaxW = valueX - MARGIN_L - 12; // 12pt gutter before the value
+    const valueMaxW = MARGIN_R - valueX;
+    const labelLines = this.wrap(this.sanitize(label), this.regular, size, labelMaxW);
+    const valueLines = this.wrap(this.sanitize(value), this.regular, size, valueMaxW);
+    const rows = Math.max(labelLines.length, valueLines.length, 1);
+    this.ensure(rows * lineH);
+    const top = this.y;
+    labelLines.forEach((line, i) => {
       this.page.drawText(line, {
-        x: valueX, y: this.y, size, font: this.regular, color: rgb(...BRAND_RGB.ink),
+        x: labelX, y: top - i * lineH, size, font: this.regular, color: rgb(...BRAND_RGB.muted),
       });
-      this.y -= size + 4;
-    }
-    if (lines.length === 0) this.y -= size + 4;
+    });
+    valueLines.forEach((line, i) => {
+      this.page.drawText(line, {
+        x: valueX, y: top - i * lineH, size, font: this.regular, color: rgb(...BRAND_RGB.ink),
+      });
+    });
+    this.y = top - rows * lineH - 2;
+  }
+
+  /** Article subheading (e.g. "Artículo 5.1 — …"): bold ink, no underline. */
+  subheading(title: string): void {
+    this.ensure(20);
     this.y -= 2;
+    this.page.drawText(this.sanitize(title), {
+      x: MARGIN_L, y: this.y, size: 10.5, font: this.bold, color: rgb(...BRAND_RGB.ink),
+    });
+    this.y -= 16;
+  }
+
+  /** Bullet list item with a hanging indent and an orange bullet glyph. */
+  bullet(text: string, size = 10): void {
+    const bulletX = MARGIN_L + 8;
+    const textX = MARGIN_L + 22;
+    const maxWidth = MARGIN_R - textX;
+    const lineHeight = size + 4;
+    const lines = this.wrap(this.sanitize(text), this.regular, size, maxWidth);
+    lines.forEach((line, i) => {
+      this.ensure(lineHeight);
+      if (i === 0) {
+        this.page.drawText('•', {
+          x: bulletX, y: this.y, size, font: this.bold, color: rgb(...BRAND_RGB.primary),
+        });
+      }
+      this.page.drawText(line, {
+        x: textX, y: this.y, size, font: this.regular, color: rgb(...BRAND_RGB.text),
+      });
+      this.y -= lineHeight;
+    });
+    this.y -= 4;
   }
 }
 
@@ -553,7 +639,10 @@ interface BuildArgs {
   contractNo: string;
   driver: DriverProfileRow;
   user: UserRow;
-  vehicle: VehicleRow | null;
+  /** Best-effort recipient email used for the identification table. */
+  driverEmail: string | null;
+  /** Loaded for completeness; the licence contract has no vehicle section. */
+  vehicle?: VehicleRow | null;
   acceptedAtISO: string;
   termsUpdatedAtISO: string | null;
   termsTitle: string;
@@ -562,7 +651,7 @@ interface BuildArgs {
 }
 
 async function buildContractPdf(args: BuildArgs): Promise<Uint8Array> {
-  const { copy, lang, contractNo, driver, user, vehicle, acceptedAtISO, termsUpdatedAtISO, termsTitle, termsBody, fonts } = args;
+  const { copy, lang, contractNo, driver, user, driverEmail, acceptedAtISO, termsTitle, termsBody, fonts } = args;
 
   const doc = await PDFDocument.create();
   doc.setTitle(`${copy.docTitle} — ${contractNo}`);
@@ -574,6 +663,10 @@ async function buildContractPdf(args: BuildArgs): Promise<Uint8Array> {
   let sanitize: (s: string) => string;
   if (fonts) {
     doc.registerFontkit(fontkit);
+    // subset:true keeps the PDF small (~80 KB) and was proven on the
+    // earlier version. The Edge worker memory/CPU blow-up on this longer
+    // contract came from O(words²) width measurements in wrap(), not from
+    // subsetting — wrap() now measures each word once (see PdfWriter.wrap).
     regular = await doc.embedFont(fonts.regular, { subset: true });
     bold = await doc.embedFont(fonts.bold, { subset: true });
     sanitize = (s) => s;
@@ -589,94 +682,93 @@ async function buildContractPdf(args: BuildArgs): Promise<Uint8Array> {
   const muted = rgb(...BRAND_RGB.muted);
   const ink = rgb(...BRAND_RGB.ink);
 
-  // ── Header: logo (or wordmark) + contract-number chip ──
+  // ── Header: logo (or wordmark) + brand tagline (left) + contract chip (right) ──
   const logo = await tryEmbedLogo(doc);
   if (logo) {
-    const targetH = 28;
+    const targetH = 26;
     const lw = (logo.width / logo.height) * targetH;
-    w.page.drawImage(logo, { x: MARGIN_L, y: w.y - 4, width: lw, height: targetH });
+    w.page.drawImage(logo, { x: MARGIN_L, y: w.y - 2, width: lw, height: targetH });
   } else {
-    w.page.drawText(BRAND_NAME, { x: MARGIN_L, y: w.y, size: 24, font: bold, color: primary });
+    w.page.drawText(BRAND_NAME, { x: MARGIN_L, y: w.y, size: 22, font: bold, color: primary });
   }
   drawChip(w.page, bold, sanitize(contractNo), MARGIN_R, w.y - 4, primary, primaryLight);
-  w.y -= 52;
+  w.y -= 26;
+  w.page.drawText(sanitize(copy.brandTagline), {
+    x: MARGIN_L, y: w.y, size: 8.5, font: regular, color: muted,
+  });
+  w.y -= 22;
 
-  // ── Title ──
-  w.paragraph(copy.docTitle, { size: 15, bold: true, color: ink, lineGap: 5, spaceAfter: 2 });
-  w.paragraph(copy.docSubtitle, { size: 10, color: muted, spaceAfter: 10 });
+  // ── Title + divider ──
+  w.paragraph(copy.docTitle, { size: 14, bold: true, color: ink, lineGap: 4, spaceAfter: 2 });
+  w.paragraph(copy.docSubtitle, { size: 10, color: muted, spaceAfter: 8 });
   w.page.drawLine({
     start: { x: MARGIN_L, y: w.y }, end: { x: MARGIN_R, y: w.y }, thickness: 0.75, color: primary,
   });
-  w.spacer(20);
+  w.spacer(16);
 
-  // ── Parties ──
-  w.paragraph(copy.parties, { size: 10, lineGap: 5, spaceAfter: 14 });
+  // ── Metadata strip: contract number + sign date/place ──
+  const acceptedLabel = formatDateLong(acceptedAtISO, lang);
+  w.row(copy.contractNoLabel, contractNo);
+  w.row(copy.signDateLabel, `${acceptedLabel} · ${copy.signPlace}`);
+  w.spacer(10);
 
-  // ── Driver data ──
-  const nv = copy.labels.notProvided;
-  w.sectionHeader(copy.driverSectionTitle);
-  w.row(copy.labels.fullName, user.full_name || nv);
-  w.row(copy.labels.identityNumber, driver.identity_number || nv);
-  w.row(copy.labels.phone, user.phone || nv);
-  w.row(copy.labels.email, user.email || nv);
-  if (driver.address) w.row(copy.labels.address, driver.address);
-  if (driver.province || driver.municipality) {
-    w.row(
-      copy.labels.provinceMunicipality,
-      [driver.province, driver.municipality].filter(Boolean).join(' / '),
-    );
+  // ── Section I — parties (company data fixed in the prose) ──
+  w.sectionHeader(copy.partiesTitle);
+  for (const block of copy.partiesBlocks) {
+    w.paragraph(block.text, { size: 10, lineGap: 5, spaceAfter: 8 });
+  }
+  w.spacer(4);
+
+  // ── Section II — driver identification (filled with real data) ──
+  const nv = copy.notProvided;
+  const addressParts = [driver.address, driver.province, driver.municipality].filter(Boolean);
+  w.sectionHeader(copy.identTitle);
+  w.row(copy.identLabels.fullName, user.full_name || nv);
+  w.row(copy.identLabels.idNumber, driver.identity_number || nv);
+  // Driver licence number isn't stored as structured data (only the
+  // uploaded document image) — left for manual completion.
+  w.row(copy.identLabels.license, nv);
+  w.row(copy.identLabels.address, addressParts.length ? addressParts.join(', ') : nv);
+  w.row(copy.identLabels.phone, user.phone || nv);
+  w.row(copy.identLabels.email, user.email || driverEmail || nv);
+  w.spacer(12);
+
+  // ── Sections III–XVI — flowing legal body ──
+  for (const block of copy.bodyBlocks) {
+    renderBlock(w, block, ink, muted);
+  }
+  w.spacer(6);
+
+  // ── Driver declaration ──
+  w.sectionHeader(copy.declarationTitle);
+  w.paragraph(copy.declarationLead, { size: 10, lineGap: 5, spaceAfter: 6 });
+  for (const item of copy.declarationItems) {
+    w.bullet(item);
   }
   w.spacer(10);
 
-  // ── Vehicle data ──
-  if (vehicle) {
-    w.sectionHeader(copy.vehicleSectionTitle);
-    const typeLabel = vehicle.type ? (copy.vehicleTypes[vehicle.type] ?? vehicle.type) : nv;
-    w.row(copy.labels.vehicleType, typeLabel);
-    w.row(copy.labels.makeModel, [vehicle.make, vehicle.model].filter(Boolean).join(' ') || nv);
-    if (vehicle.year) w.row(copy.labels.year, String(vehicle.year));
-    if (vehicle.color) w.row(copy.labels.color, vehicle.color);
-    w.row(copy.labels.plate, vehicle.plate_number || nv);
-    if (vehicle.capacity != null) w.row(copy.labels.capacity, String(vehicle.capacity));
-    w.spacer(10);
-  }
-
-  // ── Declaration ──
-  const acceptedLabel = formatDateLong(acceptedAtISO, lang);
-  const termsDateLabel = termsUpdatedAtISO ? formatDateShort(termsUpdatedAtISO, lang) : '—';
-  w.sectionHeader(copy.declarationTitle);
-  for (const p of copy.declarationParagraphs) {
-    const filled = p
-      .replace('{termsDate}', termsDateLabel)
-      .replace('{acceptedAt}', acceptedLabel)
-      .replace('{contractNo}', contractNo);
-    w.paragraph(filled, { size: 10, lineGap: 5, spaceAfter: 8 });
-  }
-  w.spacer(4);
-  w.row(copy.labels.contractNo, contractNo);
-  w.row(copy.labels.acceptedAt, acceptedLabel);
-  w.row(copy.labels.termsVersion, termsDateLabel);
-  w.spacer(8);
-
-  if (copy.translationNote) {
-    w.paragraph(copy.translationNote, { size: 8.5, color: muted, lineGap: 4, spaceAfter: 8 });
-  }
-  w.paragraph(copy.footerLine, { size: 8.5, color: muted, lineGap: 4, spaceAfter: 2 });
-  w.paragraph(`${BRAND_NAME} · ${SUPPORT_EMAIL} · ${WEB_ORIGIN.replace(/^https?:\/\//, '')}`, {
-    size: 8.5, bold: true, color: ink, spaceAfter: 0,
+  // ── Signatures: platform (cuño + pre-signed) | conductor (digital acceptance) ──
+  w.sectionHeader(copy.signaturesTitle);
+  await drawSignatureBlock(w, doc, copy, {
+    acceptedLabel,
+    contractNo,
+    driverName: user.full_name || nv,
+    driverId: driver.identity_number || '',
   });
+  w.spacer(14);
+  w.paragraph(copy.footerLine, { size: 7.5, color: muted, lineGap: 3, spaceAfter: 0 });
 
-  // ── Annex I: full T&C ──
+  // ── Anexo A — full live Terms & Conditions ──
   w.newPage();
-  w.paragraph(copy.annexTitle, { size: 12, bold: true, color: ink, lineGap: 5, spaceAfter: 2 });
+  w.paragraph(copy.annexTitle, { size: 12, bold: true, color: ink, lineGap: 4, spaceAfter: 2 });
+  w.paragraph(copy.annexLead, { size: 9, color: muted, spaceAfter: 4 });
   w.paragraph(termsTitle, { size: 9, color: muted, spaceAfter: 12 });
 
-  // Plain text with newlines (cms_content stores it that way — the web
-  // /terms page renders \n as <br/>). Headings are the numbered ALL-CAPS
-  // section titles; bullets start with "- ".
-  const blocks = termsBody.split(/\n{2,}/);
-  for (const block of blocks) {
-    const lines = block.split('\n');
+  // CMS T&C body is plain text with newlines (the web /terms page renders
+  // \n as <br/>). Numbered ALL-CAPS lines are headings; "- " lines bullets.
+  const tcGroups = termsBody.split(/\n{2,}/);
+  for (const group of tcGroups) {
+    const lines = group.split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -684,7 +776,7 @@ async function buildContractPdf(args: BuildArgs): Promise<Uint8Array> {
         w.spacer(4);
         w.paragraph(trimmed, { size: 9.5, bold: true, color: ink, lineGap: 4, spaceAfter: 2 });
       } else if (trimmed.startsWith('- ')) {
-        w.paragraph(`• ${trimmed.slice(2)}`, { size: 9.5, indent: 12, lineGap: 4, spaceAfter: 1 });
+        w.bullet(trimmed.slice(2), 9.5);
       } else {
         w.paragraph(trimmed, { size: 9.5, lineGap: 4, spaceAfter: 2 });
       }
@@ -693,6 +785,108 @@ async function buildContractPdf(args: BuildArgs): Promise<Uint8Array> {
   }
 
   return doc.save();
+}
+
+/** Render one structured contract block (heading / subheading / paragraph / bullet). */
+function renderBlock(
+  w: PdfWriter,
+  block: ContractBlock,
+  ink: ReturnType<typeof rgb>,
+  _muted: ReturnType<typeof rgb>,
+): void {
+  switch (block.type) {
+    case 'h1':
+      w.sectionHeader(block.text);
+      break;
+    case 'h2':
+      w.subheading(block.text);
+      break;
+    case 'bullet':
+      w.bullet(block.text);
+      break;
+    case 'p':
+    default:
+      w.paragraph(block.text, { size: 10, lineGap: 5, spaceAfter: 7, color: ink });
+      break;
+  }
+}
+
+interface SignatureData {
+  acceptedLabel: string;
+  contractNo: string;
+  driverName: string;
+  driverId: string;
+}
+
+/**
+ * Two-column signature block. Left: LA PLATAFORMA, stamped with the
+ * MACH DIGITAL TECH cuño and the pre-filled legal representative. Right:
+ * EL CONDUCTOR, rendered as a digital-acceptance record (the contract is
+ * generated when the driver accepts in-app) instead of a blank line.
+ */
+async function drawSignatureBlock(
+  w: PdfWriter,
+  doc: PDFDocument,
+  copy: ContractCopy,
+  data: SignatureData,
+): Promise<void> {
+  const BLOCK_H = 132;
+  w.ensure(BLOCK_H);
+  const topY = w.y;
+  const colGap = 28;
+  const colW = (MARGIN_R - MARGIN_L - colGap) / 2;
+  const leftX = MARGIN_L;
+  const rightX = MARGIN_L + colW + colGap;
+  const ink = rgb(...BRAND_RGB.ink);
+  const muted = rgb(...BRAND_RGB.muted);
+  const text = rgb(...BRAND_RGB.text);
+  const s = w.sanitize;
+
+  // Column labels.
+  w.page.drawText(s(copy.platformLabel), { x: leftX, y: topY, size: 10, font: w.bold, color: ink });
+  w.page.drawText(s(copy.conductorLabel), { x: rightX, y: topY, size: 10, font: w.bold, color: ink });
+
+  // Left column — cuño + pre-signed representative.
+  const stamp = await embedStamp(doc);
+  let lY = topY - 16;
+  if (stamp) {
+    const dim = 74;
+    w.page.drawImage(stamp, { x: leftX, y: lY - dim, width: dim, height: dim });
+    lY -= dim + 8;
+  } else {
+    lY -= 24;
+  }
+  w.page.drawText(s(copy.platformName), { x: leftX, y: lY, size: 9.5, font: w.bold, color: ink });
+  lY -= 13;
+  for (const line of w.wrap(s(copy.platformRep), w.regular, 9, colW)) {
+    w.page.drawText(line, { x: leftX, y: lY, size: 9, font: w.regular, color: text });
+    lY -= 12;
+  }
+  w.page.drawText(s(copy.platformRepRole), { x: leftX, y: lY, size: 8.5, font: w.regular, color: muted });
+
+  // Right column — digital acceptance record.
+  let rY = topY - 20;
+  const acceptedLine = copy.acceptedElectronicallyTpl.replace('{date}', data.acceptedLabel);
+  for (const line of w.wrap(s(acceptedLine), w.bold, 9, colW)) {
+    w.page.drawText(line, { x: rightX, y: rY, size: 9, font: w.bold, color: ink });
+    rY -= 12;
+  }
+  rY -= 4;
+  w.page.drawText(s(copy.contractRefTpl.replace('{no}', data.contractNo)), {
+    x: rightX, y: rY, size: 9, font: w.regular, color: text,
+  });
+  rY -= 16;
+  for (const line of w.wrap(s(data.driverName), w.regular, 9, colW)) {
+    w.page.drawText(line, { x: rightX, y: rY, size: 9, font: w.regular, color: text });
+    rY -= 12;
+  }
+  if (data.driverId) {
+    w.page.drawText(s(`${copy.identLabels.idNumber}: ${data.driverId}`), {
+      x: rightX, y: rY, size: 8.5, font: w.regular, color: muted,
+    });
+  }
+
+  w.y = topY - BLOCK_H;
 }
 
 function drawChip(
@@ -711,6 +905,36 @@ function drawChip(
   page.drawRectangle({ x, y, width: cw, height: ch, color: primaryLight });
   page.drawRectangle({ x, y, width: cw, height: ch, borderColor: primary, borderWidth: 0.5 });
   page.drawText(label, { x: x + padX, y: y + 7, size: 10, font: fontBold, color: primary });
+}
+
+// Decode base64 → Uint8Array (mirror of encodeBase64; for the embedded cuño).
+function decodeBase64(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// MACH DIGITAL TECH cuño — decoded once per process, embedded per doc.
+// Returns null only if the embedded PNG fails to decode (never for a
+// network reason — the bytes are bundled, see _shared/contract-stamp.ts).
+let cachedStampBytes: Uint8Array | null | undefined;
+async function embedStamp(pdf: PDFDocument): Promise<PDFImage | null> {
+  if (cachedStampBytes === null) return null;
+  if (cachedStampBytes === undefined) {
+    try {
+      cachedStampBytes = decodeBase64(CONTRACT_STAMP_PNG_BASE64);
+    } catch (_err) {
+      cachedStampBytes = null;
+      return null;
+    }
+  }
+  try {
+    return await pdf.embedPng(cachedStampBytes);
+  } catch (_err) {
+    cachedStampBytes = null;
+    return null;
+  }
 }
 
 // Logo fetch+cache — same approach as generate-recharge-receipt.
@@ -754,18 +978,6 @@ function formatDateLong(iso: string, lang: 'es' | 'ro'): string {
       hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Havana',
     });
     return `${datePart}, ${timePart} (Cuba)`;
-  } catch {
-    return iso;
-  }
-}
-
-function formatDateShort(iso: string, lang: 'es' | 'ro'): string {
-  try {
-    const d = new Date(iso);
-    const locale = lang === 'ro' ? 'ro-RO' : 'es-CU';
-    return d.toLocaleDateString(locale, {
-      day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Havana',
-    });
   } catch {
     return iso;
   }
