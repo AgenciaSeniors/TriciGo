@@ -135,6 +135,7 @@ Deno.serve(async (req) => {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
           body: JSON.stringify({
             from: 'TriciGo <noreply@tricigo.com>',
+            reply_to: 'soporte@tricigo.com', // replies reach the support inbox
             to: user.email,
             subject,
             html: personalizedHtml,

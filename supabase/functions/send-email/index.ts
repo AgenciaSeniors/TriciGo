@@ -211,6 +211,8 @@ Deno.serve(async (req) => {
 
     const resendBody: Record<string, unknown> = {
       from: 'TriciGo <noreply@tricigo.com>',
+      // Replies land in the monitored support inbox, not the no-reply sender.
+      reply_to: 'soporte@tricigo.com',
       to: recipient_email,
       subject: encodeSubject(rendered.subject),
       html: rendered.html,

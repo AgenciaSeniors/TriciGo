@@ -248,7 +248,7 @@ function shell(title: string, receiptNo: string, body: string, footer: string): 
   </div>
   ${body}
   <p style="text-align:center;color:#888;font-size:11px;margin-top:28px;">${footer}</p>
-  <p style="text-align:center;color:#bbb;font-size:9px;margin-top:4px;">TriciGo · Cuba · contacto@tricigo.com</p>
+  <p style="text-align:center;color:#bbb;font-size:9px;margin-top:4px;">TriciGo · Cuba · soporte@tricigo.com</p>
 </body></html>`;
 }
 

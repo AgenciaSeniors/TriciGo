@@ -1002,6 +1002,8 @@ async function sendResend(args: ResendArgs): Promise<{ ok: boolean; id?: string;
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
         from: FROM_EMAIL,
+        // Replies reach the support inbox, not the contratos@ sender.
+        reply_to: 'soporte@tricigo.com',
         to: args.to,
         subject: args.subject,
         html: args.html,
