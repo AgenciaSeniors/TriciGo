@@ -74,9 +74,27 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: 'all_methods_failed' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    await supabase.from('exchange_rates').update({ is_current: false }).eq('is_current', true);
-    const { error: insertError } = await supabase.from('exchange_rates').insert({ source, usd_cup_rate: rate, fetched_at: new Date().toISOString(), is_current: true });
-    if (insertError) return new Response(JSON.stringify({ ok: false, error: insertError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // CRON-02: sanity-bound the fetched rate before writing it as is_current. The
+    // NETOPIA recharge path credits round(amount_usd * rate), and the 24h
+    // staleness check does NOT catch a wrong but FRESH value — so a malformed-but-
+    // positive reading from eltoque (inverted, wrong magnitude, parse glitch) would
+    // mis-credit wallets. Cuban informal USD→CUP sits in the low hundreds (~660
+    // today); reject anything implausible (matches scrapeElToque's own bounds).
+    if (rate < 100 || rate > 5000) {
+      console.error(`[sync-exchange-rate] rejected out-of-range rate ${rate} from ${source}`);
+      return new Response(JSON.stringify({ ok: false, error: 'rate_out_of_sane_range', rate, source }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // CRON-02: atomic upsert (mig 00052) instead of the two-step update-then-insert,
+    // which left a brief window with ZERO is_current rows — a concurrent recharge
+    // read could find no current rate. upsert_exchange_rate flips old→false and
+    // inserts the new current row in a single transaction.
+    const { error: upsertError } = await supabase.rpc('upsert_exchange_rate', {
+      p_source: source,
+      p_usd_cup_rate: rate,
+      p_fetched_at: new Date().toISOString(),
+    });
+    if (upsertError) return new Response(JSON.stringify({ ok: false, error: upsertError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     return new Response(JSON.stringify({ ok: true, usd_cup_rate: rate, source }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
