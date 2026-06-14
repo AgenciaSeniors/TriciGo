@@ -81,6 +81,10 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
     case 'payment':
     case 'wallet_recharge':
     case 'wallet_recharge_refund':
+    case 'wallet_credit':
+    case 'wallet_debit':
+      // wallet_credit/debit are sent by gifts/tips/payments (e.g. 00393).
+      // Without these cases a tapped wallet push was a dead no-op.
       router.push('/(tabs)/wallet');
       break;
     case 'announcement':
@@ -92,6 +96,10 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
       router.push('/(tabs)');
       break;
     default:
+      // Any other category (lost_item, dispute_update, scheduled_ride,
+      // delivery, campaign, sos, …): open home instead of a dead no-op,
+      // matching the in-app inbox fallback (notifications/index.tsx).
+      router.push('/(tabs)');
       break;
   }
 }
