@@ -268,8 +268,19 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Atomic idempotency claim. Now includes 'failed' as a recoverable
-      // state and clears any stale error_message from a prior interim IPN.
+      // Atomic idempotency claim. Includes 'failed' AND 'expired' as recoverable
+      // states and clears any stale error_message from a prior interim IPN.
+      // CRON-01 (audit 2026-06-14): the expire-stale-payment-intents cron flips
+      // created|pending → 'expired' after 1h. A legitimately PAID IPN can arrive
+      // later (3DS challenge, hosted-page abandon-then-complete, delayed
+      // settlement, NETOPIA's documented interim-then-final two-IPN pattern). If
+      // 'expired' were not recoverable, the card would be charged but the wallet
+      // never credited and NETOPIA would never retry (same money-loss class as
+      // the d3fc744f 'failed' fix). An expired intent has no prior ntpID, so it
+      // skips the failed-recovery ntpID guard above.
+      if (existingIntent.status === 'expired') {
+        console.warn(`[netopia] Recovering intent ${orderId} from 'expired' → 'paid' (ntpID=${ntpId}) — paid IPN arrived after the 1h expiry cron`);
+      }
       const { data: claimed, error: claimError } = await supabase
         .from('payment_intents')
         .update({
@@ -278,7 +289,7 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq('id', orderId)
-        .in('status', ['pending', 'created', 'failed'])
+        .in('status', ['pending', 'created', 'failed', 'expired'])
         .select();
 
       if (claimError || !claimed || claimed.length === 0) {
