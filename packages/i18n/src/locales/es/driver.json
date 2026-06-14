@@ -1,4 +1,8 @@
 {
+  "errors": {
+    "generic": "Ocurrió un error. Inténtalo de nuevo."
+  },
+
   "home": {
     "go_online": "Conectarse",
     "go_offline": "Desconectarse",
@@ -230,6 +234,8 @@
 
   "nav": {
     "arrive": "Llegaste a tu destino",
+    "voice_off": "Silenciar voz",
+    "voice_on": "Activar voz",
     "depart": "Inicia el recorrido",
     "depart_on": "Dirígete por {{street}}",
     "turn_left": "Gira a la izquierda",

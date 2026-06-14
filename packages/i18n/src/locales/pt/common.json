@@ -20,6 +20,7 @@
   "auth": {
     "login": "Entrar",
     "logout": "Sair",
+    "logging_out": "Encerrando sessão…",
     "subtitle": "Entre para solicitar viagens",
     "phone_placeholder": "Número de telefone",
     "phone_label": "Seu número de telefone",
@@ -51,6 +52,8 @@
     "apple": "Apple",
     "driver_tagline": "Seu app para dirigir em Cuba"
   },
+
+  "processing": "Processando…",
 
   "wallet": {
     "title": "Créditos de viagem",
@@ -240,6 +243,7 @@
 
   "safety": {
     "title": "Centro de Segurança",
+    "someone": "Alguém",
     "desc": "Suas ferramentas de segurança em um só lugar",
     "emergency_call": "Serviços de Emergência",
     "emergency_call_desc": "Ligue para o 106 para ajuda imediata",
@@ -371,6 +375,7 @@
 
   "errors": {
     "generic": "Algo deu errado. Tente novamente.",
+    "invalid_phone": "Número de telefone inválido",
     "network": "Erro de conexão. Verifique sua rede.",
     "server": "Erro do servidor. Tente mais tarde.",
     "unauthorized": "Sessão expirada. Faça login novamente.",

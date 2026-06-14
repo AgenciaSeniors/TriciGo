@@ -626,6 +626,8 @@
     "pending_verifications": "Verificaciones pendientes",
     "open_incidents": "Incidentes abiertos",
     "circulation": "TC en circulación",
+    "pending_redemptions": "Canjes pendientes",
+    "pending_amount": "Monto pendiente",
     "desc_active_rides": "Viajes en curso en este momento",
     "desc_rides_today": "Total de viajes creados hoy",
     "desc_online_drivers": "Conductores actualmente disponibles",

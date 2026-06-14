@@ -1,4 +1,8 @@
 {
+  "errors": {
+    "generic": "Something went wrong. Please try again."
+  },
+
   "home": {
     "go_online": "Go online",
     "go_offline": "Go offline",
@@ -230,6 +234,8 @@
 
   "nav": {
     "arrive": "You have arrived",
+    "voice_off": "Mute voice",
+    "voice_on": "Unmute voice",
     "depart": "Start driving",
     "depart_on": "Head on {{street}}",
     "turn_left": "Turn left",

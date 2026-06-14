@@ -20,6 +20,7 @@
   "auth": {
     "login": "Iniciar sesión",
     "logout": "Cerrar sesión",
+    "logging_out": "Cerrando sesión…",
     "subtitle": "Inicia sesión para solicitar viajes",
     "phone_placeholder": "Número de teléfono",
     "phone_label": "Tu número de teléfono",
@@ -55,6 +56,8 @@
     "switch_account_confirm_title": "¿Cambiar de cuenta?",
     "switch_account_confirm_body": "Vas a cerrar sesión y volver al inicio."
   },
+
+  "processing": "Procesando…",
 
   "wallet": {
     "title": "Créditos de viaje",
@@ -245,6 +248,7 @@
 
   "safety": {
     "title": "Centro de Seguridad",
+    "someone": "Alguien",
     "desc": "Tus herramientas de seguridad en un solo lugar",
     "emergency_call": "Servicios de Emergencia",
     "emergency_call_desc": "Llama al 106 para ayuda inmediata",
@@ -376,6 +380,7 @@
 
   "errors": {
     "generic": "Algo salió mal. Inténtalo de nuevo.",
+    "invalid_phone": "Número de teléfono inválido",
     "network": "Error de conexión. Verifica tu red.",
     "server": "Error del servidor. Inténtalo más tarde.",
     "unauthorized": "Sesión expirada. Inicia sesión de nuevo.",

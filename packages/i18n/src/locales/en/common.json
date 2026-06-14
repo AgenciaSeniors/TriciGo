@@ -20,6 +20,7 @@
   "auth": {
     "login": "Sign in",
     "logout": "Sign out",
+    "logging_out": "Logging out…",
     "subtitle": "Sign in to request rides",
     "phone_placeholder": "Phone number",
     "phone_label": "Your phone number",
@@ -51,6 +52,8 @@
     "apple": "Apple",
     "driver_tagline": "Your app to drive in Cuba"
   },
+
+  "processing": "Processing…",
 
   "wallet": {
     "title": "Trip credits",
@@ -241,6 +244,7 @@
 
   "safety": {
     "title": "Safety Center",
+    "someone": "Someone",
     "desc": "Your safety tools in one place",
     "emergency_call": "Emergency Services",
     "emergency_call_desc": "Call 106 for immediate help",
@@ -372,6 +376,7 @@
 
   "errors": {
     "generic": "Something went wrong. Please try again.",
+    "invalid_phone": "Invalid phone number",
     "network": "Connection error. Check your network.",
     "server": "Server error. Try again later.",
     "unauthorized": "Session expired. Please sign in again.",
