@@ -1404,6 +1404,19 @@ Migration de referencia: `00340_complete_ride_and_pay_tricicoin_mixed_fix.sql` c
 
 **Performance metric**: este pattern produjo 8 migrations aplicadas + 13 PRs mergeados en una sesión, sin rollbacks ni bugs introducidos en otras áreas.
 
+### Sweep de contrato cliente↔prod — el cliente Supabase está SIN tipar (verificado 2026-06-13, PR #517)
+
+`getSupabaseClient()` devuelve `SupabaseClient` **sin** el genérico `<Database>` (ver `packages/api/src/client.ts`). Consecuencia crítica: `.rpc('fn', {args})`, `.from(t).insert/update/upsert({...})`, `.eq('col',...)`, `.select('cols')` son **loosely-typed** → **`tsc` NO caza typos** de nombre de RPC-arg, columna ni payload. Esa clase de bug es **runtime-only** (PostgREST `PGRST202` "función no encontrada" / `42703` "columna no existe") y suele estar en code paths que no se ejercitan seguido (admin, sitemap, métodos muertos). **Si algún día el cliente se tipa con `<Database>`, esta clase entera la cubre tsc y este sweep deja de hacer falta.**
+
+**Cómo barrer (mecánico, alta precisión, contra prod viva):**
+
+1. **RPC args vs firma real.** Extraé toda `.rpc('fn', {keys})` del repo (parser que captura el 1er string literal + las top-level keys del 2º arg objeto, depth-aware). Por cada `fn`, traé `pg_get_function_arguments(oid)` + `pronargs`/`pronargdefaults` de prod. Reglas PostgREST: (a) **arg extra** del cliente que NO está en los params → la función no resuelve (PGRST202); (b) **param requerido** (los primeros `pronargs − pronargdefaults`, los defaults van trailing en PG) que ningún call site provee → falla. El union de keys cross-call-site hace el check (a) conservador (caza cualquier site).
+2. **Columnas write/filter vs schema.** Extraé `.from(t).insert/update/upsert({...})` (keys del payload) + columnas de `.eq/.neq/.gt/.gte/.lt/.lte/.like/.ilike/.is/.in/.order/.contains('col',…)`. **CRÍTICO: acotá el chain a UN solo statement** — desde el `.from(` hasta el **primer `;`** (terminador; los method-chains no tienen `;` top-level) o el siguiente `.from(`, lo que venga antes. Sin esto, columnas de statements adyacentes **sangran** (bleed) y generás decenas de falsos positivos. Después emití los pares `(tabla, columna, kind)` a un `WITH client_refs(...) AS (VALUES …) … LEFT JOIN information_schema.columns … WHERE column_name IS NULL AND tbl IN (tablas de prod)` (excluí buckets de storage: `avatars/receipts/driver-documents/delivery-photos/dispute-evidence/driver-contracts` — son `storage.from()`, no tablas).
+3. **Verificá cada candidato con grep/Read del source** antes de afirmarlo (puede quedar 1 bleed residual; y distinguí método muerto vs. live path con `grep` de callers).
+4. **Advisors de Supabase** (`get_advisors security|performance`) en la misma pasada: output gigante → parsealo con un script Node (`j.result.lints`, campos `name/level/metadata.{schema,name,type}/detail`). Ruido conocido a descartar: ERROR `spatial_ref_sys` (PostGIS, no se le puede poner RLS); `rls_enabled_no_policy` en tablas-candado intencionales (`otp_codes`, `rate_limits`, caches, counters) + las `zzz_backup_*`; `anon/authenticated_security_definer_function_executable` mayormente intencional (share links por token, config/geo públicos, fns de trigger inocuas); performance (initplan/multi-permissive/FK sin índice) = higiene-a-escala, **no** bloqueante de lanzamiento (varios counts inflados tras un wipe).
+
+Resultado del 1er sweep (PR #517): 99 RPCs + 489 refs de columna → **3 bugs reales** (param de RPC en método muerto, `sitemap` filtrando `blog_posts.status` inexistente → blog fuera del sitemap, toggle admin escribiendo `reviews.is_featured` inexistente → mig 00416). Resto del contrato **sano**.
+
 ### Pattern para CREATE OR REPLACE FUNCTION grandes (≥7k chars)
 
 **Verificado 2026-05-28 con `complete_ride_and_pay` de 24,240 chars.**
