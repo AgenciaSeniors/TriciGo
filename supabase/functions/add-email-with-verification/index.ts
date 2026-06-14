@@ -114,8 +114,9 @@ Deno.serve(async (req) => {
     // Sync email a public.users (sin verified_at todavía)
     await supaAdmin.from('users').update({ email, email_verified_at: null }).eq('id', user.id);
 
-    // Audit
-    await supaAdmin.from('audit_log').insert({
+    // Audit (security_audit_log, 00417 — the old audit_log target had no
+    // action/actor_id/details columns so this insert silently failed).
+    await supaAdmin.from('security_audit_log').insert({
       action: 'email_change_requested',
       actor_id: user.id,
       target_id: user.id,

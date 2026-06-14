@@ -12,6 +12,7 @@
 // Rate limit: 3 intentos / hora por identifier (SMS cost guard).
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { rateLimit } from '../_shared/rate-limiter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,16 +41,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Rate limit check (simple: count requests last hour by identifier)
-    const oneHourAgo = new Date(Date.now() - 3600_000).toISOString();
+    // Rate limit: 3 requests / hour per identifier (SMS cost + recovery-email
+    // bombing guard). This used to count audit_log rows by `action` /
+    // `details->>identifier`, but audit_log has no such columns — the query
+    // errored, `count` came back null, and `0 >= 3` was always false, so the
+    // limit NEVER triggered. Use the shared DB-backed limiter (check_rate_limit),
+    // the same one send-sms-otp uses.
     const identifier = email ?? phone!;
-    const { count } = await supaAdmin
-      .from('audit_log')
-      .select('id', { count: 'exact', head: true })
-      .eq('action', 'password_reset_requested')
-      .gte('created_at', oneHourAgo)
-      .filter('details->>identifier', 'eq', identifier);
-    if ((count ?? 0) >= 3) {
+    const rl = await rateLimit(`pwreset:${identifier}`, 3, 3600_000);
+    if (!rl.allowed) {
       return new Response(JSON.stringify({ error: 'rate_limited', retry_after_minutes: 60 }), {
         status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -89,8 +89,9 @@ Deno.serve(async (req) => {
           }).catch(() => {});
         }
       }
-      // Audit
-      await supaAdmin.from('audit_log').insert({
+      // Audit (security_audit_log, 00417 — the old audit_log target had no
+      // action/actor_id/details columns so these inserts silently failed).
+      await supaAdmin.from('security_audit_log').insert({
         action: 'password_reset_requested',
         actor_id: dbUser?.id ?? null,
         target_id: dbUser?.id ?? null,
@@ -118,7 +119,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ phone, mode: 'reset' }),
       }).catch(() => {});
     }
-    await supaAdmin.from('audit_log').insert({
+    await supaAdmin.from('security_audit_log').insert({
       action: 'password_reset_requested',
       actor_id: dbUser?.id ?? null,
       target_id: dbUser?.id ?? null,
