@@ -12,19 +12,23 @@
 // codes: 3=paid, 5=confirmed, 12=invalid account, 15=3DS required.
 //
 // SECURITY MODEL:
-//   NETOPIA's v2.x IPN does NOT carry a documented signature header
-//   (no HMAC, no asymmetric signature). The defenses we use:
-//     1. orderID is the merchant payment_intents.id (UUID v4) — not
-//        guessable. An attacker can't forge an IPN for an unknown
-//        intent.
-//     2. Atomic claim: status flips from pending|created → processing
-//        in a single UPDATE; a replay sees 0 rows and exits.
-//     3. Status checked: only `paid` / `confirmed` calls the credit
-//        RPC; others mark failed / refunded.
-//     4. Optional callback verify (controlled by
-//        NETOPIA_IPN_VERIFY_CALLBACK env var): re-queries the NETOPIA
-//        API for the ntpID's true status before crediting. Turn on
-//        once verify endpoint shape is confirmed in sandbox.
+//   ⚠️ WPS-01 (audit 2026-06-14): the orderID UUID is NOT a sufficient defense.
+//   The legitimate user receives that UUID from create-netopia-payment-intent,
+//   so an attacker can create their own intent and forge a paid IPN for it
+//   without paying. The atomic claim only stops DOUBLE-crediting one intent, not
+//   crediting N self-created intents. The credited amount is server-side
+//   (intent.amount_cup), so amount-tampering is blocked — but unverified
+//   authenticity = free top-ups. The ONLY real defenses are (a) verify the IPN
+//   signature, or (b) re-query NETOPIA's payment status by ntpID with the secret
+//   API key, before crediting. Neither is implemented yet.
+//   Current mitigations in this handler:
+//     1. Atomic claim: status flips pending|created|failed → processing in one
+//        UPDATE; a replay sees 0 rows and exits (no double-credit).
+//     2. Status checked: only `paid`/`confirmed` credits; others mark failed/refunded.
+//     3. LIVE FAIL-CLOSED GUARD (WPS-01): in netopia_environment='live', a paid
+//        IPN is REFUSED until IPN_AUTHENTICITY_VERIFIED becomes a real
+//        signature/re-query check confirmed in sandbox. Sandbox is unaffected.
+//   TODO before live: implement (a) or (b) and set IPN_AUTHENTICITY_VERIFIED.
 //
 // Contract: docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md §2
 // ============================================================
@@ -184,6 +188,41 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: 'Provider mismatch' }),
         { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
+    }
+
+    // ── 2b. AUTHENTICITY GUARD (WPS-01, audit 2026-06-14) ──
+    // This IPN is NOT authenticated: there is no signature/HMAC check and no
+    // server-to-server status re-query implemented. The only thing gating a
+    // credit is the orderID UUID — but the legitimate user already has that UUID
+    // (create-netopia-payment-intent returns it), so an attacker can create their
+    // OWN $500 intent and POST a forged {status:3} IPN for it WITHOUT paying →
+    // free wallet top-up, unbounded. UUID/ntpID binding does NOT stop this (the
+    // attacker owns both for their own intent). The only real defense is verifying
+    // authenticity with NETOPIA (verify the IPN signature, OR re-query the payment
+    // status by ntpID with the secret API key) — which must be confirmed against
+    // sandbox before it can be trusted.
+    //
+    // Until that verification exists, FAIL CLOSED in the LIVE environment: never
+    // credit on an unverified live IPN. Sandbox is unaffected (test freely). Today
+    // netopia_environment='sandbox', so this changes nothing now — but it makes it
+    // impossible to silently credit forged IPNs if NETOPIA is flipped to live
+    // before the verification is implemented. See PAYMENT_PROVIDER_CONTRACT.md §2.
+    const IPN_AUTHENTICITY_VERIFIED = false; // TODO(WPS-01): set by a real signature/re-query check, confirmed in sandbox, BEFORE live.
+    if (status === 'paid' && !IPN_AUTHENTICITY_VERIFIED) {
+      const { data: envCfg } = await supabase
+        .from('platform_config').select('value').eq('key', 'netopia_environment').maybeSingle();
+      const netopiaEnv = (envCfg?.value as string | undefined) ?? 'sandbox';
+      if (netopiaEnv === 'live') {
+        console.error(
+          `[netopia] CRITICAL (WPS-01): refusing to credit intent ${orderId} — LIVE IPN authenticity is NOT verified ` +
+          `(no signature check / no status re-query). Forged-IPN guard. Intent left in its current state for manual ` +
+          `reconciliation. Implement NETOPIA IPN verification before enabling live. ip=${clientIP} ntp=${ntpId}`,
+        );
+        return new Response(
+          JSON.stringify({ error: 'ipn_authenticity_unverified', detail: 'Live credit refused pending NETOPIA verification (WPS-01)' }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
     }
 
     // ── 3. Branch on status ──
