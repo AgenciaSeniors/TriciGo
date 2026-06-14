@@ -243,12 +243,15 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // BUG-036: Validate cron secret — this authentication prevents unauthorized
-  // invocation, which mitigates the need for per-request rate limiting (BUG-088).
+  // BUG-036 + BUG-199: cron auth. The pg_cron job presents the service-role key
+  // in the `apikey` header (Authorization carries only the anon JWT), so the old
+  // `authHeader.includes(SERVICE_ROLE_KEY)` check ALWAYS failed and every daily
+  // run 401'd before sending any welcome/win-back email. Authorize on the
+  // `apikey` header like auto-admin/sync-weather; keep the x-cron-secret fallback.
   const cronSecret = Deno.env.get('CRON_SECRET');
   const requestSecret = req.headers.get('x-cron-secret');
-  const authHeader = req.headers.get('authorization');
-  const isServiceRole = authHeader?.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '___none___');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const isServiceRole = serviceRoleKey !== '' && (req.headers.get('apikey') ?? '') === serviceRoleKey;
   if (!isServiceRole && (!cronSecret || requestSecret !== cronSecret)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
