@@ -833,12 +833,27 @@ export function RideActiveView() {
                       defaultValue: `${res.contacts_notified} contactos avisados`,
                     }),
                   });
+                } else {
+                  // SF-02: contacts_notified===0 used to show NOTHING — the rider
+                  // believed their contacts were alerted when they weren't. The
+                  // emergency path must say so, so they fall back to calling 106.
+                  Toast.show({
+                    type: 'error',
+                    text1: t('ride.sos_contacts_not_reached', {
+                      defaultValue: 'No pudimos avisar a tus contactos. Llamá al 106.',
+                    }),
+                  });
                 }
               }).catch((err) => {
                 logger.error('SOS broadcast failed', { error: String(err) });
-                // Sin toast de error — el usuario está en emergencia, no
-                // queremos asustar con un fail toast. El SMS fallido se
-                // ve después en logs; el tel:106 sigue funcionando.
+                // SF-02: even on a thrown error, warn the rider their contacts
+                // were NOT reached (the tel:106 fallback still runs below).
+                Toast.show({
+                  type: 'error',
+                  text1: t('ride.sos_contacts_not_reached', {
+                    defaultValue: 'No pudimos avisar a tus contactos. Llamá al 106.',
+                  }),
+                });
               });
             }
             Linking.openURL('tel:106');

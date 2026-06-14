@@ -1612,26 +1612,57 @@ export default function TrackRidePage() {
                         vehiclePlate: ride.vehicle_plate ?? null,
                         riderName: null,
                       }).then((res) => {
+                        // SF-02: a lightweight toast for BOTH outcomes. Showing
+                        // nothing on contacts_notified===0 let the rider believe
+                        // their emergency contacts were alerted when they weren't.
+                        const showSosToast = (text: string, bg: string) => {
+                          if (typeof window === 'undefined') return;
+                          const toast = document.createElement('div');
+                          toast.textContent = text;
+                          Object.assign(toast.style, {
+                            position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)',
+                            background: bg, color: 'white', padding: '0.75rem 1.5rem',
+                            borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: '600',
+                            zIndex: '9999', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                          });
+                          document.body.appendChild(toast);
+                          setTimeout(() => toast.remove(), 4000);
+                        };
                         if (res.contacts_notified > 0) {
-                          // Surface confirmation via lightweight toast.
-                          if (typeof window !== 'undefined') {
-                            const toast = document.createElement('div');
-                            toast.textContent = t('track.sos_contacts_notified', {
+                          showSosToast(
+                            t('track.sos_contacts_notified', {
                               count: res.contacts_notified,
                               defaultValue: `${res.contacts_notified} contactos avisados por SMS`,
-                            });
-                            Object.assign(toast.style, {
-                              position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)',
-                              background: '#16a34a', color: 'white', padding: '0.75rem 1.5rem',
-                              borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: '600',
-                              zIndex: '9999', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                            });
-                            document.body.appendChild(toast);
-                            setTimeout(() => toast.remove(), 4000);
-                          }
+                            }),
+                            '#16a34a',
+                          );
+                        } else {
+                          showSosToast(
+                            t('track.sos_contacts_not_reached', {
+                              defaultValue: 'No pudimos avisar a tus contactos. Llamá al 106.',
+                            }),
+                            '#dc2626',
+                          );
                         }
                       }),
-                    ]).catch(() => { /* best-effort, swallow errors */ });
+                    ]).catch(() => {
+                      // SF-02: do NOT swallow silently on the emergency path —
+                      // warn the rider their contacts were not reached.
+                      if (typeof window !== 'undefined') {
+                        const toast = document.createElement('div');
+                        toast.textContent = t('track.sos_contacts_not_reached', {
+                          defaultValue: 'No pudimos avisar a tus contactos. Llamá al 106.',
+                        });
+                        Object.assign(toast.style, {
+                          position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)',
+                          background: '#dc2626', color: 'white', padding: '0.75rem 1.5rem',
+                          borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: '600',
+                          zIndex: '9999', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        });
+                        document.body.appendChild(toast);
+                        setTimeout(() => toast.remove(), 4000);
+                      }
+                    });
                     // Open dialer last (always succeeds — even when
                     // offline the dialer launches, user just sees no
                     // signal indicator). Cuban emergency line is 106.
