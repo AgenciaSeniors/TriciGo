@@ -626,6 +626,8 @@
     "pending_verifications": "Pending verifications",
     "open_incidents": "Open incidents",
     "circulation": "TC in circulation",
+    "pending_redemptions": "Pending redemptions",
+    "pending_amount": "Pending amount",
     "desc_active_rides": "Rides currently in progress",
     "desc_rides_today": "Total rides created today",
     "desc_online_drivers": "Drivers currently available",

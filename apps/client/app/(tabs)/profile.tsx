@@ -143,7 +143,7 @@ function WebProfileScreen() {
         <View className="mt-8 mb-4">
           <MenuRow
             icon="log-out-outline"
-            label={loggingOut ? t('common.processing') : t('profile.logout', { defaultValue: 'Cerrar sesión' })}
+            label={loggingOut ? t('processing') : t('profile.logout', { defaultValue: 'Cerrar sesión' })}
             onPress={handleLogout}
             destructive
             showChevron={false}
