@@ -7,7 +7,7 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { Card } from '@tricigo/ui/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
-import { rideService } from '@tricigo/api';
+import { rideService, walletService } from '@tricigo/api';
 import { formatTRC } from '@tricigo/utils';
 import { useRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -41,20 +41,26 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
     if (!phone.trim() || !userId) return;
     setLoading(true);
     try {
-      // Search user by phone
-      const { data: users } = await (await import('@tricigo/api')).getSupabaseClient()
-        .from('users')
-        .select('id, raw_user_meta_data')
-        .eq('phone', phone.trim())
-        .limit(1);
+      // Search user by phone via the find_user_by_phone RPC. A direct
+      // .from('users').select(...).eq('phone', …) does NOT work: public.users is
+      // RLS-scoped to the caller's own row and has no raw_user_meta_data column
+      // (it FKs to auth.users), so the old query 400'd / returned nothing and the
+      // invite-by-phone always said "not found". The RPC is the canonical,
+      // rate-limited, anti-enumeration lookup (same as the gift feature).
+      let invitedUser: { id: string; full_name: string; phone: string } | null = null;
+      try {
+        invitedUser = await walletService.findUserByPhone(phone.trim());
+      } catch {
+        // Invalid phone format (cubanPhoneSchema) → treat as not found.
+        invitedUser = null;
+      }
 
-      if (!users || users.length === 0) {
+      if (!invitedUser) {
         Alert.alert('', t('ride.split_user_not_found', { defaultValue: 'Usuario no encontrado' }));
         return;
       }
 
-      const invitedUser = users[0]!;
-      if (!invitedUser?.id || !userId || invitedUser.id === userId) {
+      if (invitedUser.id === userId) {
         Alert.alert('', t('ride.split_cant_invite_self', { defaultValue: 'No puedes invitarte a ti mismo' }));
         return;
       }
@@ -66,7 +72,7 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
       const result = await rideService.createSplitInvite(rideId, invitedUser.id, userId, newPct);
       addSplit({
         ...result,
-        user_name: invitedUser.raw_user_meta_data?.name ?? phone,
+        user_name: invitedUser.full_name ?? phone,
         user_phone: phone,
       });
       setPhone('');
