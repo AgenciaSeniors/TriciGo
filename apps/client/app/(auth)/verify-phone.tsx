@@ -15,6 +15,7 @@ import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useTokens } from '@/hooks/useTokens';
+import { SwitchAccountFooter } from '@/components/auth/SwitchAccountFooter';
 
 type Step = 'phone' | 'otp';
 
@@ -287,6 +288,14 @@ export default function VerifyPhoneScreen() {
               />
             </>
           )}
+
+          {/* Escape hatch (Apple Guideline 2.1 / HIG escape-routes): a user who
+              signed in with Google/Apple lands here with no phone, and in
+              production the input only accepts +53 — so a non-Cuban reviewer
+              can't send a code, can't skip, and the RootNavigator guard bounces
+              them back if they try to leave. Without this they're trapped.
+              Reuses the same logout footer as complete-profile. */}
+          <SwitchAccountFooter />
         </View>
       </KeyboardAvoidingView>
     </Screen>

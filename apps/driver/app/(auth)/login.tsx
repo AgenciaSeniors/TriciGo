@@ -227,10 +227,13 @@ export default function LoginScreen() {
               <View className="flex-1 h-px bg-white/6" />
             </View>
 
-            {/* Social login buttons */}
-            <View className="flex-row gap-3">
+            {/* Social login buttons — stacked full-width so each shows the
+                HIG-required label with its logo, at equal size/prominence
+                (Apple Review Guideline 4.8). Dark-only screen: Apple button is
+                the white HIG variant on the dark background. */}
+            <View className="gap-3">
               <Pressable
-                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-[#1a1a2e] border border-white/12 active:bg-[#252540] min-h-[48px]"
+                className="flex-row items-center justify-center gap-2 rounded-2xl bg-[#1a1a2e] border border-white/12 active:bg-[#252540] min-h-[52px]"
                 disabled={socialLoading || loading}
                 onPress={async () => {
                   setSocialLoading(true);
@@ -257,6 +260,15 @@ export default function LoginScreen() {
                   } catch (err) {
                     console.warn('[GoogleSignIn] error', String(err));
                     setSocialLoading(false);
+                    // Surface the failure instead of silently resetting the
+                    // spinner — a dead-looking social button reads as a bug to
+                    // store reviewers and confuses users on a real network error.
+                    Toast.show({
+                      type: 'error',
+                      text1: t('auth.social_login_failed_title', { defaultValue: 'No se pudo iniciar sesión' }),
+                      text2: t('auth.social_login_failed_body', { defaultValue: 'Probá de nuevo o usá tu número de teléfono.' }),
+                      visibilityTime: 3000,
+                    });
                   }
                   setTimeout(() => setSocialLoading(false), 30000);
                 }}
@@ -264,10 +276,10 @@ export default function LoginScreen() {
                 accessibilityLabel={t('auth.sign_in_google', { defaultValue: 'Iniciar sesión con Google' })}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
-                <Text variant="body" color="inverse" className="font-medium">Google</Text>
+                <Text variant="body" color="inverse" className="font-medium">{socialLoading ? '...' : t('auth.continue_with_google', { defaultValue: 'Continuar con Google' })}</Text>
               </Pressable>
               <Pressable
-                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-white active:bg-neutral-100 min-h-[48px]"
+                className="flex-row items-center justify-center gap-2 rounded-2xl bg-white active:bg-neutral-100 min-h-[52px]"
                 disabled={socialLoading || loading}
                 onPress={async () => {
                   setSocialLoading(true);
@@ -281,6 +293,12 @@ export default function LoginScreen() {
                     }
                   } catch {
                     setSocialLoading(false);
+                    Toast.show({
+                      type: 'error',
+                      text1: t('auth.social_login_failed_title', { defaultValue: 'No se pudo iniciar sesión' }),
+                      text2: t('auth.social_login_failed_body', { defaultValue: 'Probá de nuevo o usá tu número de teléfono.' }),
+                      visibilityTime: 3000,
+                    });
                   }
                   setTimeout(() => setSocialLoading(false), 30000);
                 }}
@@ -288,7 +306,7 @@ export default function LoginScreen() {
                 accessibilityLabel={t('auth.sign_in_apple', { defaultValue: 'Iniciar sesión con Apple' })}
               >
                 <Ionicons name="logo-apple" size={20} color="#000" />
-                <Text variant="body" className="font-medium" style={{ color: '#000' }}>Apple</Text>
+                <Text variant="body" className="font-medium" style={{ color: '#000' }}>{socialLoading ? '...' : t('auth.continue_with_apple', { defaultValue: 'Continuar con Apple' })}</Text>
               </Pressable>
             </View>
 

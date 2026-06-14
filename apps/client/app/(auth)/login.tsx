@@ -251,10 +251,13 @@ export default function LoginScreen() {
               <View className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
             </View>
 
-            {/* Social login buttons */}
-            <View className="flex-row gap-3">
+            {/* Social login buttons — stacked full-width so each shows the
+                HIG-required label with its logo, and Sign in with Apple sits at
+                equal size/prominence to Google (Apple Review Guideline 4.8).
+                Apple button is black on light / white on dark per the HIG. */}
+            <View className="gap-3">
               <Pressable
-                className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 active:bg-neutral-100 dark:active:bg-neutral-700"
+                className="flex-row items-center justify-center gap-2 py-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 active:bg-neutral-100 dark:active:bg-neutral-700"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
                 disabled={socialLoading || loading}
                 onPress={async () => {
@@ -274,15 +277,25 @@ export default function LoginScreen() {
                     }
                   } catch {
                     setSocialLoading(false);
+                    // Surface the failure instead of silently resetting the
+                    // spinner — a dead-looking social button reads as a bug to
+                    // store reviewers and confuses users on a real network error.
+                    triggerHaptic('warning');
+                    Toast.show({
+                      type: 'error',
+                      text1: t('auth.social_login_failed_title', { defaultValue: 'No se pudo iniciar sesión' }),
+                      text2: t('auth.social_login_failed_body', { defaultValue: 'Probá de nuevo o usá tu número de teléfono.' }),
+                      visibilityTime: 3000,
+                    });
                   }
                   setTimeout(() => setSocialLoading(false), 30000);
                 }}
               >
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
-                <Text variant="body" className="font-medium">{socialLoading ? '...' : 'Google'}</Text>
+                <Text variant="body" className="font-medium">{socialLoading ? '...' : t('auth.continue_with_google', { defaultValue: 'Continuar con Google' })}</Text>
               </Pressable>
               <Pressable
-                className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl bg-neutral-900 active:bg-neutral-800"
+                className="flex-row items-center justify-center gap-2 py-4 rounded-2xl bg-neutral-900 dark:bg-white active:bg-neutral-800 dark:active:bg-neutral-100"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
                 disabled={socialLoading || loading}
                 onPress={async () => {
@@ -299,12 +312,19 @@ export default function LoginScreen() {
                     }
                   } catch {
                     setSocialLoading(false);
+                    triggerHaptic('warning');
+                    Toast.show({
+                      type: 'error',
+                      text1: t('auth.social_login_failed_title', { defaultValue: 'No se pudo iniciar sesión' }),
+                      text2: t('auth.social_login_failed_body', { defaultValue: 'Probá de nuevo o usá tu número de teléfono.' }),
+                      visibilityTime: 3000,
+                    });
                   }
                   setTimeout(() => setSocialLoading(false), 30000);
                 }}
               >
-                <Ionicons name="logo-apple" size={20} color="#fff" />
-                <Text variant="body" className="font-medium" style={{ color: '#fff' }}>{socialLoading ? '...' : 'Apple'}</Text>
+                <Ionicons name="logo-apple" size={20} color={isDark ? '#000' : '#fff'} />
+                <Text variant="body" className="font-medium" style={{ color: isDark ? '#000' : '#fff' }}>{socialLoading ? '...' : t('auth.continue_with_apple', { defaultValue: 'Continuar con Apple' })}</Text>
               </Pressable>
             </View>
 
