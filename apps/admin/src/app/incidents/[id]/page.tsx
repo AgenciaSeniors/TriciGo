@@ -43,6 +43,13 @@ type IncidentDetail = {
   against: UserInfo;
   resolver: UserInfo;
   ride: { id: string; status: string; pickup_address: string; dropoff_address: string } | null;
+  review: {
+    id: string;
+    rating: number;
+    comment: string | null;
+    is_visible: boolean;
+    created_at: string;
+  } | null;
 };
 
 export default function IncidentDetailPage() {
@@ -97,6 +104,26 @@ export default function IncidentDetailPage() {
     [detail, adminUserId, showToast, t],
   );
 
+  const hideReview = useCallback(async () => {
+    if (!detail?.review) return;
+    const reviewId = detail.review.id;
+    setUpdating(true);
+    try {
+      await adminService.adminHideReview(reviewId, adminUserId);
+      await adminService.updateIncidentStatus(detail.incident.id, 'resolved', adminUserId, 'Reseña ocultada');
+      setDetail((prev) =>
+        prev && prev.review
+          ? { ...prev, incident: { ...prev.incident, status: 'resolved' }, review: { ...prev.review, is_visible: false } }
+          : prev,
+      );
+      showToast('success', t('incidents.review_hidden', { defaultValue: 'Reseña ocultada' }));
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : t('incidents.update_error', { defaultValue: 'No pudimos actualizar el estado.' }));
+    } finally {
+      setUpdating(false);
+    }
+  }, [detail, adminUserId, showToast, t]);
+
   const breadcrumb = (
     <AdminBreadcrumb
       items={[
@@ -128,7 +155,7 @@ export default function IncidentDetailPage() {
     );
   }
 
-  const { incident, reporter, against, resolver, ride } = detail;
+  const { incident, reporter, against, resolver, ride, review } = detail;
   const sev = ((incident.severity as Severity) ?? 'low');
   const severityLabel: Record<Severity, string> = {
     critical: t('incidents.severity_critical', { defaultValue: 'Crítica' }),
@@ -195,6 +222,49 @@ export default function IncidentDetailPage() {
         <h2 className="mb-3 text-lg font-bold text-ink">{t('incidents.col_description', { defaultValue: 'Descripción' })}</h2>
         <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-muted">{incident.description}</p>
       </div>
+
+      {/* Reported review (review_abuse) — moderate it */}
+      {incident.type === 'review_abuse' && review && (
+        <div className="mb-6 rounded-xl border border-line bg-surface-elevated p-6 shadow-sm">
+          <h2 className="mb-3 text-lg font-bold text-ink">{t('incidents.reported_review', { defaultValue: 'Reseña reportada' })}</h2>
+          <div className="mb-4">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-amber-500">{'★'.repeat(review.rating)}{'☆'.repeat(Math.max(0, 5 - review.rating))}</span>
+              <span className="text-sm text-ink-muted">{t('incidents.review_by', { defaultValue: 'por' })} {personLine(against, incident.against_user_id)}</span>
+              {!review.is_visible && (
+                <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-ink-muted">{t('incidents.review_hidden_badge', { defaultValue: 'Oculta' })}</span>
+              )}
+            </div>
+            {review.comment ? (
+              <p className="whitespace-pre-wrap text-sm italic leading-relaxed text-ink-muted">&ldquo;{review.comment}&rdquo;</p>
+            ) : (
+              <p className="text-sm text-ink-subtle">{t('incidents.review_no_comment', { defaultValue: 'Sin comentario (solo estrellas).' })}</p>
+            )}
+          </div>
+          {incident.status !== 'resolved' && incident.status !== 'dismissed' && (
+            <div className="flex gap-2">
+              {review.is_visible && (
+                <button
+                  type="button"
+                  disabled={updating}
+                  onClick={() => void hideReview()}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {t('incidents.action_hide_review', { defaultValue: 'Ocultar reseña' })}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={updating}
+                onClick={() => void advanceStatus('dismissed', t('incidents.toast_review_kept', { defaultValue: 'Reseña mantenida' }))}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50 dark:bg-green-700 dark:hover:bg-green-600"
+              >
+                {t('incidents.action_keep_review', { defaultValue: 'Mantener' })}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         {/* People */}

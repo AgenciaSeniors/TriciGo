@@ -1049,6 +1049,7 @@ export const adminService = {
     against: { name: string; phone: string } | null;
     resolver: { name: string; phone: string } | null;
     ride: { id: string; status: string; pickup_address: string; dropoff_address: string } | null;
+    review: { id: string; rating: number; comment: string | null; is_visible: boolean; created_at: string } | null;
   } | null> {
     const supabase = getSupabaseClient();
 
@@ -1087,13 +1088,41 @@ export const adminService = {
       if (r) ride = r as { id: string; status: string; pickup_address: string; dropoff_address: string };
     }
 
+    // Reported review (when type='review_abuse') so the admin can see + moderate it.
+    let review: { id: string; rating: number; comment: string | null; is_visible: boolean; created_at: string } | null = null;
+    if (incident.type === 'review_abuse' && incident.review_id) {
+      const { data: rev } = await supabase
+        .from('reviews')
+        .select('id, rating, comment, is_visible, created_at')
+        .eq('id', incident.review_id)
+        .maybeSingle();
+      if (rev) review = rev as { id: string; rating: number; comment: string | null; is_visible: boolean; created_at: string };
+    }
+
     return {
       incident,
       reporter: userMap[incident.reported_by] ?? null,
       against: incident.against_user_id ? (userMap[incident.against_user_id] ?? null) : null,
       resolver: incident.resolved_by ? (userMap[incident.resolved_by] ?? null) : null,
       ride,
+      review,
     };
+  },
+
+  /**
+   * Hide a review (is_visible=false) to moderate a reported abusive review.
+   * Logs to admin_actions. RLS policy rev_admin allows admin UPDATE.
+   */
+  async adminHideReview(reviewId: string, adminId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.from('reviews').update({ is_visible: false }).eq('id', reviewId);
+    if (error) throw error;
+    await supabase.from('admin_actions').insert({
+      admin_id: adminId,
+      action: 'hide_review',
+      target_type: 'review',
+      target_id: reviewId,
+    });
   },
 
   // ==================== FEATURE FLAGS ====================

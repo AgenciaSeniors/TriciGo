@@ -17,6 +17,8 @@ export interface IncidentReport {
   resolved_by: string | null;
   resolved_at: string | null;
   resolution_notes: string | null;
+  /** Set when type='review_abuse' — the reported review (00436). */
+  review_id: string | null;
   created_at: string;
   updated_at: string;
 }
