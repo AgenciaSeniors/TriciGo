@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const apiKey = req.headers.get('apikey') ?? '';
     const isInternalCall = apiKey === serviceRoleKey;
+    let callerUserId: string | null = null;
 
     if (!isInternalCall) {
       const authHeader = req.headers.get('Authorization');
@@ -70,6 +71,7 @@ Deno.serve(async (req) => {
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
+      callerUserId = user.id;
     }
 
     const supabase = createClient(
@@ -84,6 +86,38 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: 'check_id and driver_id are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
+    }
+
+    // EFAUTH-01 (audit round 5): for non-internal (user JWT) calls, the caller MUST
+    // own driver_id or be an admin. Without this, any authenticated user could POST
+    // an arbitrary driver_id and have the service-role client write that driver's
+    // selfie_checks.status='passed' — re-opening the BUG-129 (mig 00186) self-pass
+    // hole at the EF layer (RLS blocks drivers from writing 'passed' directly, so
+    // this EF is the only write path to it). Mirrors the ownsDriverProfile/isAdmin
+    // gate in storage-upload and upload-delivery-photo.
+    if (!isInternalCall) {
+      const { data: dp } = await supabase
+        .from('driver_profiles')
+        .select('user_id')
+        .eq('id', driver_id)
+        .single();
+
+      let allowed = !!dp && dp.user_id === callerUserId;
+      if (!allowed && callerUserId) {
+        const { data: caller } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', callerUserId)
+          .single();
+        allowed = caller?.role === 'admin' || caller?.role === 'super_admin';
+      }
+
+      if (!allowed) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden: you may only verify your own selfie check' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
     }
 
     // BUG-093: Atomically claim this selfie check for processing to prevent
