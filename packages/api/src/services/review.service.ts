@@ -361,4 +361,19 @@ export const reviewService = {
     ]);
     return { summary, recentReviews };
   },
+
+  /**
+   * Report a review left ABOUT YOU as abusive (Apple Guideline 1.2).
+   * Files an incident_report (type='review_abuse') via the report_review RPC,
+   * which validates server-side that the caller is the reviewee. The review
+   * stays visible until an admin acts. Throws so the UI can surface the result.
+   */
+  async reportReview(reviewId: string, reason: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc('report_review', {
+      p_review_id: reviewId,
+      p_reason: reason,
+    });
+    if (error) throw error;
+  },
 };
