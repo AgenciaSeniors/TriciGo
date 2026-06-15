@@ -88,7 +88,8 @@ export type IncidentType =
   | 'payment_dispute'
   | 'vehicle_issue'
   | 'driver_behavior'
-  | 'passenger_behavior';
+  | 'passenger_behavior'
+  | 'review_abuse';
 
 export type IncidentSeverity = 'low' | 'medium' | 'high' | 'critical';
 

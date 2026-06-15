@@ -63,3 +63,4 @@ export { recurringRideService } from './services/recurring-ride.service';
 export { cityService } from './services/city.service';
 export { suggestionsService } from './services/suggestions.service';
 export { trackValidationEvent } from './services/validation.service';
+export { blockService } from './services/block.service';
