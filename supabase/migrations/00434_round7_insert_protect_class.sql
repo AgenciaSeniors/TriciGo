@@ -147,6 +147,26 @@ AS $function$
 $function$;
 GRANT EXECUTE ON FUNCTION public.corp_has_no_employees(uuid) TO authenticated;
 
+-- corp_is_creator: bypassrls helper so the bootstrap INSERT check does NOT inline a
+-- SELECT over corporate_accounts. That inline SELECT would re-enter
+-- corporate_accounts' RLS (its corporate_accounts_employee_read policy references
+-- corporate_employees) → back into corporate_employees → 42P17 cross-table
+-- recursion (verified). Routing the creator check through a SECURITY DEFINER helper
+-- (owner postgres, BYPASSRLS) avoids re-triggering any table's RLS.
+CREATE OR REPLACE FUNCTION public.corp_is_creator(p_account_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM corporate_accounts
+    WHERE id = p_account_id AND created_by = auth.uid()
+  );
+$function$;
+GRANT EXECUTE ON FUNCTION public.corp_is_creator(uuid) TO authenticated;
+
 -- Bootstrap: the corp creator adds THEMSELVES as the first active admin employee.
 DROP POLICY IF EXISTS corporate_employees_bootstrap_creator ON public.corporate_employees;
 CREATE POLICY corporate_employees_bootstrap_creator ON public.corporate_employees
@@ -155,10 +175,7 @@ CREATE POLICY corporate_employees_bootstrap_creator ON public.corporate_employee
     user_id = (SELECT auth.uid())
     AND role = 'admin'
     AND is_active = true
-    AND EXISTS (
-      SELECT 1 FROM corporate_accounts ca
-      WHERE ca.id = corporate_account_id AND ca.created_by = (SELECT auth.uid())
-    )
+    AND public.corp_is_creator(corporate_account_id)
     AND public.corp_has_no_employees(corporate_account_id)
   );
 
