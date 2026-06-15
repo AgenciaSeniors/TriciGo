@@ -1113,7 +1113,8 @@
     "cancel_rating_event_window_days_help": "Días que un evento de cancelación sigue contando en el rating (0 = permanente). Por defecto 90",
     "low_rating_rider_threshold_help": "Rating bajo el cual el pasajero recibe la 1ª ronda de despacho reducida (0 desactiva el gate). Por defecto 3.0",
     "low_rating_rider_dispatch_limit_help": "Conductores máximos en la 1ª ronda para pasajeros bajo el umbral. Por defecto 5",
-    "low_rating_rider_radius_m_help": "Radio de búsqueda (m) en la 1ª ronda para pasajeros bajo el umbral. Por defecto 3000"
+    "low_rating_rider_radius_m_help": "Radio de búsqueda (m) en la 1ª ronda para pasajeros bajo el umbral. Por defecto 3000",
+    "max_billable_wait_minutes_help": "Minutos de espera máximos que se pueden cobrar al pasajero (tope contra cargos de espera inflados). Por defecto 20"
   },
   "exchange_rate": {
     "title": "Tasa de cambio",

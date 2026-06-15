@@ -63,6 +63,9 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
   low_rating_rider_threshold: { type: 'number', helpKey: 'platform_config.low_rating_rider_threshold_help' },
   low_rating_rider_dispatch_limit: { type: 'number', helpKey: 'platform_config.low_rating_rider_dispatch_limit_help' },
   low_rating_rider_radius_m: { type: 'number', helpKey: 'platform_config.low_rating_rider_radius_m_help' },
+
+  // ── Wait charge (cargo por espera; cap server-side, mig 00432 DSP-01) ──
+  max_billable_wait_minutes: { type: 'number', helpKey: 'platform_config.max_billable_wait_minutes_help' },
 };
 
 export default function PlatformConfigPage() {
