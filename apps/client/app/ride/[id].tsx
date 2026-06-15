@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Pressable, Share } from 'react-native';
+import { View, Pressable, Share, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
@@ -9,11 +9,11 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api/services/ride';
-import { disputeService, lostItemService, deliveryService } from '@tricigo/api';
+import { disputeService, lostItemService, deliveryService, blockService } from '@tricigo/api';
 import type { DeliveryDetails } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
-import { formatTRC, formatCUP, formatUSD, cupToUsd, DEFAULT_EXCHANGE_RATE, triggerHaptic, logger, formatTimestamp, buildShareUrl, riderChargedTotal, riderChargedTotalTrc } from '@tricigo/utils';
+import { formatTRC, formatCUP, formatUSD, cupToUsd, DEFAULT_EXCHANGE_RATE, triggerHaptic, logger, formatTimestamp, buildShareUrl, riderChargedTotal, riderChargedTotalTrc, getErrorMessage } from '@tricigo/utils';
 import { Ionicons } from '@expo/vector-icons';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
@@ -27,6 +27,7 @@ import { SkeletonCard } from '@tricigo/ui/Skeleton';
 export default function RideDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation('rider');
+  const { t: tc } = useTranslation('common');
   const { isTablet } = useResponsive();
 
   const STATUS_LABEL: Record<string, string> = {
@@ -544,6 +545,40 @@ export default function RideDetailScreen() {
               )}
             </View>
           </Card>
+        )}
+
+        {/* Block driver — available on any completed ride with a driver (Apple 1.2) */}
+        {isCompleted && ride.driver_user_id && (
+          <Pressable
+            onPress={() => {
+              const driverUserId = ride.driver_user_id!;
+              Alert.alert(
+                tc('block.confirm_title', { defaultValue: '¿Bloquear conductor?' }),
+                tc('block.confirm_msg', { defaultValue: 'No volverás a emparejarte con este conductor en el futuro.' }),
+                [
+                  { text: tc('cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+                  {
+                    text: tc('block.block_action', { defaultValue: 'Bloquear' }),
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await blockService.blockUser(driverUserId);
+                        Toast.show({ type: 'success', text1: tc('block.blocked_ok', { defaultValue: 'Conductor bloqueado' }) });
+                      } catch (err) {
+                        Toast.show({ type: 'error', text1: getErrorMessage(err) });
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+            className="flex-row items-center bg-white dark:bg-neutral-800 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3.5 mb-4"
+            accessibilityRole="button"
+            accessibilityLabel={tc('block.block_driver', { defaultValue: 'Bloquear conductor' })}
+          >
+            <Ionicons name="ban-outline" size={22} color={colors.primary[500]} />
+            <Text variant="body" className="font-semibold ml-3 flex-1">{tc('block.block_driver', { defaultValue: 'Bloquear conductor' })}</Text>
+          </Pressable>
         )}
 
         {/* Share button */}
