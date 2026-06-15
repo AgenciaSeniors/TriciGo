@@ -173,6 +173,26 @@ present for travelers using the app abroad.
 
 ---
 
+### Content moderation (Guideline 1.2)
+
+User-generated content is limited to (a) **ephemeral in-app chat** (only during an
+active trip) and (b) **mutual ratings/reviews** (1–5 stars + optional short comment).
+Moderation tools:
+
+- **Report** — a user can report an abusive review they received (flag on each
+  received review) and report another user via the in-app safety / dispute flows.
+  Reports are filed as `incident_reports`.
+- **Block** — a user can block another from the ride detail / end-of-trip screen;
+  blocking is **mutual no-rematch** (the matching engine never pairs them again),
+  managed in Settings → "Usuarios bloqueados".
+- **Admin queue + action** — reports land in an admin moderation queue; an admin
+  can **hide** an abusive review (kept visible until then, to avoid censoring
+  legitimate negative reviews) and act on abusive users.
+
+No public feed, no profile browsing, no media sharing.
+
+---
+
 ## Contact
 
 - App support email: soporte@tricigo.com
