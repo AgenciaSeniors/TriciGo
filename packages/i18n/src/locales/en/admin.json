@@ -1113,7 +1113,8 @@
     "cancel_rating_event_window_days_help": "Days a cancellation event keeps counting toward the rating (0 = forever). Default 90",
     "low_rating_rider_threshold_help": "Rating below which the rider gets a reduced first dispatch round (0 disables the gate). Default 3.0",
     "low_rating_rider_dispatch_limit_help": "Max drivers in the first dispatch round for riders below the threshold. Default 5",
-    "low_rating_rider_radius_m_help": "Search radius (m) in the first dispatch round for riders below the threshold. Default 3000"
+    "low_rating_rider_radius_m_help": "Search radius (m) in the first dispatch round for riders below the threshold. Default 3000",
+    "max_billable_wait_minutes_help": "Maximum wait minutes that can be billed to the rider (caps inflated wait charges). Default 20"
   },
   "exchange_rate": {
     "title": "Exchange Rate",

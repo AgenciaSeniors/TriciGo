@@ -1113,7 +1113,8 @@
     "cancel_rating_event_window_days_help": "Dias que um evento de cancelação continua contando no rating (0 = permanente). Padrão 90",
     "low_rating_rider_threshold_help": "Rating abaixo do qual o passageiro recebe a 1ª rodada de despacho reduzida (0 desativa). Padrão 3.0",
     "low_rating_rider_dispatch_limit_help": "Máximo de motoristas na 1ª rodada para passageiros abaixo do limite. Padrão 5",
-    "low_rating_rider_radius_m_help": "Raio de busca (m) na 1ª rodada para passageiros abaixo do limite. Padrão 3000"
+    "low_rating_rider_radius_m_help": "Raio de busca (m) na 1ª rodada para passageiros abaixo do limite. Padrão 3000",
+    "max_billable_wait_minutes_help": "Minutos máximos de espera que podem ser cobrados do passageiro (limita cobranças de espera infladas). Padrão 20"
   },
   "exchange_rate": {
     "title": "Taxa de câmbio",
