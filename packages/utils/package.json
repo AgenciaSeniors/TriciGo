@@ -11,6 +11,7 @@
     "./analytics": "./src/analytics.ts",
     "./animateCoordinate": "./src/animateCoordinate.ts",
     "./chatQuickReplies": "./src/chatQuickReplies.ts",
+    "./cuba-geo": "./src/cuba-geo.ts",
     "./currency": "./src/currency.ts",
     "./date": "./src/date.ts",
     "./destinationPredictor": "./src/destinationPredictor.ts",
