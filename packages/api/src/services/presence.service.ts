@@ -37,14 +37,24 @@ export const presenceService = {
     }
 
     const logStatus = realtimeStatusLogger('ride_search_join');
-    channel = supabase.channel(channelName);
-    channel
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          channel!.track(presence);
-        }
-        logStatus(status, err);
-      });
+    // RT-02 (audit round 8): PRIVATE channel — a public presence/broadcast channel
+    // leaked every reviewing driver's name, photo, rating, vehicle (incl. plate) and
+    // location to anyone holding the rideId. Authorized by RLS on realtime.messages
+    // (can_access_ride_search: the ride's customer + drivers with an active offer).
+    channel = supabase.channel(channelName, { config: { private: true } });
+    // Attach the user JWT to the realtime socket before subscribing so the
+    // realtime.messages policy can authorize this private topic.
+    supabase.realtime
+      .setAuth()
+      .then(() =>
+        channel!.subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') {
+            channel!.track(presence);
+          }
+          logStatus(status, err);
+        }),
+      )
+      .catch(() => { /* best-effort: presence is supplementary */ });
 
     activeChannels.set(rideId, channel);
     return channel;
@@ -79,7 +89,9 @@ export const presenceService = {
     const supabase = getSupabaseClient();
     const channelName = `ride-search:${rideId}`;
 
-    const channel = supabase.channel(channelName);
+    // RT-02 (audit round 8): PRIVATE channel — only the ride's customer and drivers
+    // with an active offer may join (RLS on realtime.messages via can_access_ride_search).
+    const channel = supabase.channel(channelName, { config: { private: true } });
 
     channel
       .on('presence', { event: 'sync' }, () => {
@@ -102,8 +114,13 @@ export const presenceService = {
       })
       .on('broadcast', { event: 'driver_accepted' }, (payload) => {
         onAccepted(payload.payload as DriverAcceptedBroadcast);
-      })
-      .subscribe(realtimeStatusLogger('ride_search_drivers'));
+      });
+
+    // Attach the user JWT to the realtime socket, then subscribe.
+    supabase.realtime
+      .setAuth()
+      .then(() => channel.subscribe(realtimeStatusLogger('ride_search_drivers')))
+      .catch(() => { /* best-effort */ });
 
     activeChannels.set(rideId, channel);
     return channel;
@@ -130,30 +147,36 @@ export const presenceService = {
       return;
     }
 
-    // If channel doesn't exist yet (edge case), create a temporary one
+    // If channel doesn't exist yet (edge case), create a temporary one.
+    // RT-02: private channel (authorized via realtime.messages / can_access_ride_search).
     const supabase = getSupabaseClient();
     const channelName = `ride-search:${rideId}`;
-    const tempChannel = supabase.channel(channelName);
+    const tempChannel = supabase.channel(channelName, { config: { private: true } });
 
     // Safety: clean up temp channel regardless of subscription outcome
     const cleanupTimeout = setTimeout(() => {
       supabase.removeChannel(tempChannel);
     }, 5000);
 
-    tempChannel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        tempChannel.send({
-          type: 'broadcast',
-          event: 'driver_accepted',
-          payload: data,
-        });
-        // Clean up after a short delay (cancel the safety timeout)
-        clearTimeout(cleanupTimeout);
-        setTimeout(() => {
-          supabase.removeChannel(tempChannel);
-        }, 2000);
-      }
-    });
+    supabase.realtime
+      .setAuth()
+      .then(() =>
+        tempChannel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            tempChannel.send({
+              type: 'broadcast',
+              event: 'driver_accepted',
+              payload: data,
+            });
+            // Clean up after a short delay (cancel the safety timeout)
+            clearTimeout(cleanupTimeout);
+            setTimeout(() => {
+              supabase.removeChannel(tempChannel);
+            }, 2000);
+          }
+        }),
+      )
+      .catch(() => { /* best-effort */ });
   },
 
   // ── Cleanup ──────────────────────────────────────────────
