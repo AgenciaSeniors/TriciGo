@@ -20,7 +20,7 @@
 | Controlled substances (drugs, alcohol, tobacco)? | **No** |
 | Gambling (simulated or real-money)? | **No** |
 | Frightening/disturbing content for young users? | **No** |
-| User-generated content / can users interact or exchange messages? | **Yes** — the driver and the assigned rider exchange short text messages **during an active trip only**. No public feed or social browsing. |
+| User-generated content / can users interact or exchange messages? | **Yes** — (a) the driver and the assigned rider exchange short text messages **during an active trip only**; (b) after a trip, driver and rider **rate each other** (1–5 stars + optional short comment + preset tags). No public feed or social browsing. **Moderation:** a user can **report** an abusive review and **block** another user (mutual no-rematch); reports go to an admin moderation queue and abusive reviews can be hidden. |
 | Does the app share the user's current physical location with other users? | **Yes** — while online on an active trip, the driver's live location is shared with the assigned rider (incl. background, for trip tracking). Not shared outside an active trip. |
 | Does the app allow users to purchase digital goods? | **No.** The driver does **not** pay in-app; they **receive earnings** into an internal wallet (CUP). No digital-goods purchases. |
 | Ads? | **No** |
@@ -52,4 +52,4 @@
 
 **Expected rating: 4+.**
 
-> Driver-specific notes for review (not part of the rating): background location is used **only** while online on an active trip (see the Background Location declaration form); the driver receives earnings (no in-app payments out); in-app chat + location sharing are disclosed in App Privacy / data-safety.
+> Driver-specific notes for review (not part of the rating): background location is used **only** while online on an active trip (see the Background Location declaration form); the driver receives earnings (no in-app payments out); in-app chat, mutual ratings/reviews and location sharing are disclosed in App Privacy / data-safety. The app provides UGC moderation (report a review, block a user, admin moderation queue) per Guideline 1.2.

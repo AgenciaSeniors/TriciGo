@@ -56,6 +56,7 @@
 |---|---|---|---|---|
 | App interactions | ✅ Yes (PostHog events, autocapture off) | ❌ No | ❌ Required | Analytics, App functionality |
 | In-app search history | ❌ No | — | — | — |
+| Other user-generated content (post-trip ratings + short review comments) | ✅ Yes | ❌ No (visible to the rated party, not transferred to third parties) | ❌ Required | App functionality |
 
 ### App info and performance
 

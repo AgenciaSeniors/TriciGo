@@ -62,6 +62,7 @@
 |---|---|---|---|---|
 | App interactions | ✅ Yes (PostHog events, no auto-tracking) | ❌ No | ❌ Required | Analytics, App functionality |
 | In-app search history | ✅ Yes (recent destinations, local cache only) | ❌ No | ❌ Required | App functionality |
+| Other user-generated content (post-trip ratings + short review comments) | ✅ Yes | ❌ No (visible to the rated party / on driver profiles, not transferred to third parties) | ❌ Required | App functionality |
 | Other actions | ❌ No | — | — | — |
 
 ### App info and performance

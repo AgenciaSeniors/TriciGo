@@ -192,6 +192,26 @@ for service area assignment.
 
 ---
 
+### Content moderation (Guideline 1.2)
+
+User-generated content is limited to (a) **ephemeral in-app chat** (only during an
+active trip) and (b) **mutual ratings/reviews** (1–5 stars + optional short comment).
+Moderation tools:
+
+- **Report** — the driver can report an abusive review they received (flag on each
+  received review in Perfil → Reseñas) and report a rider via the safety / dispute
+  flows. Reports are filed as `incident_reports`.
+- **Block** — the driver can block a rider from the trip detail / end-of-trip rating
+  sheet; blocking is **mutual no-rematch** (the matching engine never pairs them
+  again), managed in Settings → "Usuarios bloqueados".
+- **Admin queue + action** — reports land in an admin moderation queue; an admin can
+  **hide** an abusive review (kept visible until then, to avoid censoring legitimate
+  negative reviews) and act on abusive users.
+
+No public feed, no profile browsing, no media sharing.
+
+---
+
 ## Contact
 
 - App support email: conductores@tricigo.com

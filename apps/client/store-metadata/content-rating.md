@@ -20,7 +20,7 @@
 | Does the app reference or depict controlled substances (drugs, alcohol, tobacco)? | **No** |
 | Does the app contain gambling (simulated or real-money)? | **No** |
 | Does the app contain content that could be frightening/disturbing to young users? | **No** |
-| Is the app's content user-generated, and can users interact or exchange content/messages? | **Yes** — riders and the assigned driver can exchange short text messages **during an active trip only** (in-app chat). No public feed, no profiles browsing, no media sharing. |
+| Is the app's content user-generated, and can users interact or exchange content/messages? | **Yes** — (a) riders and the assigned driver exchange short text messages **during an active trip only** (in-app chat); (b) after a trip, riders and drivers **rate each other** (1–5 stars + optional short comment + preset tags); a driver's ratings are visible on their profile. No public feed, no profile browsing, no media sharing. **Moderation:** a user can **report** an abusive review and **block** another user (mutual no-rematch); reports go to an admin moderation queue and abusive reviews can be hidden. |
 | Does the app share the user's current physical location with other users? | **Yes** — during an active trip the rider sees the assigned driver's live location and the driver sees the pickup point. Not shared outside the trip. |
 | Does the app allow users to purchase digital goods? | **No digital goods.** Users may top up **trip credit** used to pay for **real-world transportation** (processed by NETOPIA, a third-party payment processor). This is a real-world service, not digital content. |
 | Does the app contain ads? | **No** |
@@ -54,4 +54,4 @@ Set every content type to its lowest frequency:
 
 **Expected rating: 4+.**
 
-> Note: rider↔driver in-app messaging and live location sharing are disclosed in **App Privacy** (PrivacyInfo.xcprivacy / data-safety) and in the review notes; they do not raise the Apple age rating above 4+.
+> Note: rider↔driver in-app messaging, mutual ratings/reviews and live location sharing are disclosed in **App Privacy** (PrivacyInfo.xcprivacy / data-safety) and in the review notes; they do not raise the Apple age rating above 4+. The app provides UGC moderation (report a review, block a user, admin moderation queue) per Guideline 1.2.
