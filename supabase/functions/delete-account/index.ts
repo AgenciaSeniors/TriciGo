@@ -108,6 +108,20 @@ Deno.serve(async (req: Request) => {
   });
 
   try {
+    // ─── 1.5. Settle wallet balance + scrub authored free-text (DIC-03 / PII-02) ───
+    //     MUST run BEFORE anonymize (which re-points the author FKs to the anon
+    //     user) and before auth.admin.deleteUser (so a positive balance is not left
+    //     orphaned in a userless wallet — wallet_accounts.user_id is ON DELETE SET
+    //     NULL per 00422). This moves any non-zero balance to platform_revenue with
+    //     a double-entry ledger transaction and overwrites the user's free text.
+    const { data: settled, error: settleErr } = await admin.rpc(
+      'settle_and_scrub_for_deletion',
+      { p_user_id: userId },
+    );
+    if (settleErr) {
+      throw new Error(`settle_failed: ${settleErr.message}`);
+    }
+
     // ─── 2. Anonymize all non-CASCADE FK references ───
     const { data: anonymized, error: anonErr } = await admin.rpc(
       'anonymize_user_references',
@@ -173,7 +187,7 @@ Deno.serve(async (req: Request) => {
       throw new Error(`auth_delete_failed: ${deleteErr.message}`);
     }
 
-    return jsonResponse(req, { success: true, anonymized }, 200);
+    return jsonResponse(req, { success: true, anonymized, settled }, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unknown_error';
     console.error('[delete-account] failed for user', userId, ':', msg);
