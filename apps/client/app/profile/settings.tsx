@@ -241,6 +241,17 @@ export default function SettingsScreen() {
           />
         </ProfileSection>
 
+        {/* Privacy & safety */}
+        <ProfileSection title={t('profile.section_privacy', { defaultValue: 'Privacidad y seguridad' })}>
+          <ProfileRow
+            icon="ban-outline"
+            tint="#EF4444"
+            label={t('block.blocked_users', { defaultValue: 'Usuarios bloqueados' })}
+            onPress={() => router.push('/profile/blocked-users')}
+            isLast
+          />
+        </ProfileSection>
+
         {/* Danger zone — delete account */}
         <ProfileSection title={t('profile.danger_zone', { defaultValue: 'Zona de peligro' })} marginBottom={32}>
           <ProfileRow
