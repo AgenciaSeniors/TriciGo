@@ -43,8 +43,17 @@ export function useRiderLocationSharing(
     }
 
     const supabase = getSupabaseClient();
-    const channel = supabase.channel(`rider-location:${rideId}`);
-    channel.subscribe();
+    // RT-01 (audit round 6): PRIVATE channel — only the ride's customer +
+    // assigned driver may join (RLS on realtime.messages via is_ride_party).
+    const channel = supabase.channel(`rider-location:${rideId}`, {
+      config: { private: true },
+    });
+    // Attach the user JWT to the realtime socket, then subscribe so the
+    // realtime.messages policy can authorize this private topic.
+    supabase.realtime
+      .setAuth()
+      .then(() => channel.subscribe())
+      .catch(() => { /* best-effort */ });
     channelRef.current = channel;
 
     const watchId = navigator.geolocation.watchPosition(

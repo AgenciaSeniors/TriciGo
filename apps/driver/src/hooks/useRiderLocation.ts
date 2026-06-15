@@ -45,19 +45,28 @@ export function useRiderLocation(
     }
 
     const supabase = getSupabaseClient();
-    const channel = supabase.channel(`rider-location:${rideId}`);
+    // RT-01 (audit round 6): PRIVATE channel — only the ride's customer +
+    // assigned driver may join (RLS on realtime.messages via is_ride_party).
+    const channel = supabase.channel(`rider-location:${rideId}`, {
+      config: { private: true },
+    });
 
-    channel
-      .on('broadcast', { event: 'rider_location' }, ({ payload }) => {
-        const data = payload as RiderLocationPayload;
-        if (data.latitude && data.longitude) {
-          setRiderLocation({
-            latitude: data.latitude,
-            longitude: data.longitude,
-          });
-        }
-      })
-      .subscribe(realtimeStatusLogger('rider_location'));
+    channel.on('broadcast', { event: 'rider_location' }, ({ payload }) => {
+      const data = payload as RiderLocationPayload;
+      if (data.latitude && data.longitude) {
+        setRiderLocation({
+          latitude: data.latitude,
+          longitude: data.longitude,
+        });
+      }
+    });
+
+    // Attach the user JWT to the realtime socket, then subscribe so the
+    // realtime.messages policy can authorize this private topic.
+    supabase.realtime
+      .setAuth()
+      .then(() => channel.subscribe(realtimeStatusLogger('rider_location')))
+      .catch(() => { /* best-effort: rider pin is supplementary */ });
 
     channelRef.current = channel;
 
