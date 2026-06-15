@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, FlatList, RefreshControl, useColorScheme } from 'react-native';
+import { View, FlatList, RefreshControl, useColorScheme, Pressable, Alert } from 'react-native';
 import { router } from 'expo-router';
+import Toast from 'react-native-toast-message';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
@@ -101,17 +103,49 @@ export default function DriverReviewsScreen() {
     fetchReviews(page + 1);
   }, [hasMore, loading, page, fetchReviews]);
 
+  const handleReportReview = (review: Review) => {
+    Alert.alert(
+      t('review.report_title', { defaultValue: '¿Reportar esta reseña?' }),
+      t('review.report_body', { defaultValue: 'La reseña seguirá visible mientras nuestro equipo la revisa.' }),
+      [
+        { text: t('cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('review.report', { defaultValue: 'Reportar' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await reviewService.reportReview(review.id, 'Reseña reportada como abusiva');
+              Toast.show({ type: 'success', text1: t('review.reported_ok', { defaultValue: 'Reseña reportada' }) });
+            } catch {
+              Toast.show({ type: 'error', text1: t('errors.generic', { defaultValue: 'Algo salió mal' }) });
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderReview = ({ item }: { item: Review }) => (
     <View style={{ backgroundColor: palette.bg.elev1, borderRadius: 14, padding: 14, marginBottom: 8, ...CARD_SHADOW }}>
       <View className="flex-row items-center justify-between mb-1">
         <StarRow rating={item.rating} palette={palette} />
-        <Text style={{ fontSize: 11, color: palette.ink.subtle }}>
-          {new Date(item.created_at).toLocaleDateString('es-CU', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-          })}
-        </Text>
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <Text style={{ fontSize: 11, color: palette.ink.subtle }}>
+            {new Date(item.created_at).toLocaleDateString('es-CU', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </Text>
+          <Pressable
+            onPress={() => handleReportReview(item)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('review.report', { defaultValue: 'Reportar' })}
+          >
+            <Ionicons name="flag-outline" size={16} color={palette.ink.subtle} />
+          </Pressable>
+        </View>
       </View>
       {item.comment && (
         <Text style={{ fontSize: 13, color: palette.ink.primary, marginTop: 4, lineHeight: 18 }}>

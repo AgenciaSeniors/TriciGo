@@ -14,6 +14,7 @@ export default function ProfileLayout() {
       <Stack.Screen name="referral" />
       <Stack.Screen name="cargo-settings" />
       <Stack.Screen name="edit-vehicle" />
+      <Stack.Screen name="blocked-users" />
     </Stack>
   );
 }

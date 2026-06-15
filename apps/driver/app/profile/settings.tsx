@@ -540,6 +540,19 @@ export default function DriverSettingsScreen() {
           </Card>
         </SettingsGroup>
 
+        {/* ── Group: Privacidad y seguridad ───────────────────────────── */}
+        <SettingsGroup title={t('profile.section_privacy', { defaultValue: 'Privacidad y seguridad' })}>
+          <Card theme="light" variant="surface" padding="md">
+            <MenuRow
+              icon="ban-outline"
+              label={t('block.blocked_users', { defaultValue: 'Usuarios bloqueados' })}
+              iconBg="error"
+              onPress={() => router.push('/profile/blocked-users')}
+              showBorder={false}
+            />
+          </Card>
+        </SettingsGroup>
+
         {/* ── Group 4: Cuenta ─────────────────────────────────────────── */}
         <SettingsGroup title={t('profile.section_account', { defaultValue: 'Cuenta' })}>
           <Card theme="light" variant="surface" padding="md">
