@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, Pressable, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import Toast from 'react-native-toast-message';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import { rideService } from '@tricigo/api/services/ride';
-import { disputeService, lostItemService } from '@tricigo/api';
+import { disputeService, lostItemService, blockService } from '@tricigo/api';
 import { locationService } from '@tricigo/api/services/location';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
 
@@ -334,6 +336,42 @@ export default function TripDetailScreen() {
                 {lostItem.description.slice(0, 60)}{lostItem.description.length > 60 ? '…' : ''}
               </Text>
             </Card>
+          </Pressable>
+        )}
+
+        {/* Block rider — available on any past ride with a passenger (Apple 1.2) */}
+        {ride.customer_id && (
+          <Pressable
+            onPress={() => {
+              const customerId = ride.customer_id;
+              Alert.alert(
+                t('block.confirm_title_rider', { defaultValue: '¿Bloquear pasajero?' }),
+                t('block.confirm_msg_rider', { defaultValue: 'No volverás a emparejarte con este pasajero en el futuro.' }),
+                [
+                  { text: t('cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+                  {
+                    text: t('block.block_action', { defaultValue: 'Bloquear' }),
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await blockService.blockUser(customerId);
+                        Toast.show({ type: 'success', text1: t('block.blocked_ok_rider', { defaultValue: 'Pasajero bloqueado' }) });
+                      } catch (err) {
+                        Toast.show({ type: 'error', text1: getErrorMessage(err) });
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+            className="flex-row items-center bg-white border border-red-200 rounded-xl px-4 py-3.5 mb-4"
+            accessibilityRole="button"
+            accessibilityLabel={t('block.block_rider', { defaultValue: 'Bloquear pasajero' })}
+          >
+            <Ionicons name="ban-outline" size={22} color={colors.brand.orange} />
+            <Text variant="body" color="primary" className="font-semibold ml-3 flex-1">
+              {t('block.block_rider', { defaultValue: 'Bloquear pasajero' })}
+            </Text>
           </Pressable>
         )}
 

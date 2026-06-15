@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, Alert } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
@@ -7,7 +8,7 @@ import { Avatar } from '@tricigo/ui/Avatar';
 import { Card } from '@tricigo/ui/Card';
 import { triggerSelection, trackEvent } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import { reviewService, useFeatureFlag } from '@tricigo/api';
+import { reviewService, useFeatureFlag, blockService } from '@tricigo/api';
 
 // Fallback tags in case DB fetch fails
 const FALLBACK_POSITIVE_TAGS = [
@@ -85,6 +86,28 @@ export function RiderRatingSheet({
       console.error('Error submitting rider review:', err);
       setSubmitting(false);
     }
+  };
+
+  const handleBlockRider = () => {
+    Alert.alert(
+      t('block.confirm_title_rider', { defaultValue: '¿Bloquear pasajero?' }),
+      t('block.confirm_msg_rider', { defaultValue: 'No volverás a emparejarte con este pasajero en el futuro.' }),
+      [
+        { text: t('cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('block.block_action', { defaultValue: 'Bloquear' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockService.blockUser(riderId);
+              Toast.show({ type: 'success', text1: t('block.blocked_ok_rider', { defaultValue: 'Pasajero bloqueado' }) });
+            } catch {
+              Toast.show({ type: 'error', text1: t('errors.generic', { defaultValue: 'Algo salió mal' }) });
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (submitted) {
@@ -216,6 +239,17 @@ export function RiderRatingSheet({
           forceDark
           onPress={onSkip}
         />
+        <Pressable
+          onPress={handleBlockRider}
+          hitSlop={8}
+          className="items-center pt-1"
+          accessibilityRole="button"
+          accessibilityLabel={t('block.block_rider', { defaultValue: 'Bloquear pasajero' })}
+        >
+          <Text variant="bodySmall" style={{ color: '#F87171' }}>
+            {t('block.block_rider', { defaultValue: 'Bloquear pasajero' })}
+          </Text>
+        </Pressable>
       </View>
     </Card>
   );
