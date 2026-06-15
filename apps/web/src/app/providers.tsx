@@ -1,12 +1,19 @@
 'use client';
 
-import React, { useEffect, useState, useRef, createContext, useContext } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { initI18n } from '@tricigo/i18n';
+import { initI18n, i18n } from '@tricigo/i18n';
 import { getSupabaseClient, authService } from '@tricigo/api';
 import type { User } from '@supabase/supabase-js';
 
-let i18nInitialized = false;
+// Initialize i18n synchronously at module load. The resources are bundled JSON
+// (no async backend), so the very first render — on the SERVER and on the
+// client — has translations ready. This is what lets the whole site be
+// server-rendered into the HTML: previously I18nProvider gated every page
+// behind a client-only spinner, so crawlers received an empty shell. We default
+// to Spanish (matches <html lang="es"> and the canonical content); the user's
+// saved language is applied after mount, below.
+initI18n();
 
 // ── Auth Context ──
 interface AuthContextType {
@@ -101,44 +108,21 @@ function ProfileGuard({ children }: { children: React.ReactNode }) {
 
 // ── Combined Provider ──
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(i18nInitialized);
-
+  // i18n is already initialized synchronously at module load (see top of file),
+  // so children render immediately — including during SSR. After mount, apply
+  // the user's saved language (client-only): SSR and the first client render
+  // stay on the default 'es', so there is no hydration mismatch; switching to a
+  // saved en/pt happens here and triggers a re-render.
   useEffect(() => {
-    if (!i18nInitialized) {
-      // Restore saved language from localStorage (set in profile/settings)
-      const savedLang = typeof window !== 'undefined'
+    const savedLang =
+      typeof window !== 'undefined'
         ? localStorage.getItem('tricigo_language') ?? undefined
         : undefined;
-      initI18n(savedLang);
-      if (savedLang) {
-        document.documentElement.lang = savedLang;
-      }
-      i18nInitialized = true;
-      setReady(true);
+    if (savedLang && savedLang !== i18n.language) {
+      i18n.changeLanguage(savedLang);
+      document.documentElement.lang = savedLang;
     }
   }, []);
 
-  if (!ready) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--bg)',
-      }}>
-        <div style={{ textAlign: 'center', color: 'var(--text-tertiary, #999)' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
-            Trici<span style={{ color: 'var(--primary, #00C853)' }}>Go</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <AuthProvider>
-      {children}
-    </AuthProvider>
-  );
+  return <AuthProvider>{children}</AuthProvider>;
 }

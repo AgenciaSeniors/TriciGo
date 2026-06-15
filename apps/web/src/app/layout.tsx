@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { Montserrat } from 'next/font/google';
 import './globals.css';
 import { I18nProvider } from './providers';
@@ -112,7 +113,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <DemoBanner />
         <I18nProvider>
           <WebHeader />
-          {children}
+          {/* Suspense boundary so pages that read useSearchParams() (login,
+              wallet, gift, corporate…) don't trigger the CSR-bailout build
+              error now that the whole site is server-rendered. Pages that don't
+              suspend (home, blog, transporte, legal) still render fully in the
+              static HTML. */}
+          <Suspense fallback={null}>{children}</Suspense>
           <WebFooter />
         </I18nProvider>
       </body>

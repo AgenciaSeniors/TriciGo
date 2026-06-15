@@ -41,6 +41,10 @@ const CONTENT_SECURITY_POLICY = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   transpilePackages: ['@tricigo/api', '@tricigo/types', '@tricigo/utils'],
+  // isomorphic-dompurify pulls in jsdom on the server (used to sanitize blog
+  // post bodies during SSR). Keep it external so Next bundles it as a plain
+  // node_modules require instead of trying to trace jsdom's dynamic requires.
+  serverExternalPackages: ['isomorphic-dompurify'],
   typescript: {
     // Pre-existing type error in packages/utils/src/analytics.ts
     // dynamic import('@tricigo/api') doesn't resolve during build type-check

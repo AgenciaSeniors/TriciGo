@@ -1,4 +1,10 @@
-import DOMPurify from 'dompurify';
+// isomorphic-dompurify runs DOMPurify in both environments: native DOMPurify in
+// the browser (privacy/terms client pages) and a jsdom-backed window on the
+// server (the blog Server Components render the post body during SSR). Plain
+// `dompurify` needs a DOM and silently returns '' under Node, which would strip
+// every blog post body from the server-rendered HTML — the exact content we
+// need crawlers to see.
+import DOMPurify from 'isomorphic-dompurify';
 
 const ALLOWED_TAGS = [
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
