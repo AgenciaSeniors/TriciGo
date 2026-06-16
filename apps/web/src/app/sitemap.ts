@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { getAllProvinceSlugs } from '@/lib/coverage';
+import { AIRPORT, getAllRouteSlugs } from '@/lib/airport-routes';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -34,6 +35,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   ];
 
+  // Airport transfer routes (hub + one page per destination)
+  const airportRoutes: MetadataRoute.Sitemap = [
+    { url: `${baseUrl}${AIRPORT.hubPath}`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
+    ...getAllRouteSlugs().map((slug) => ({
+      url: `${baseUrl}${AIRPORT.hubPath}/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    })),
+  ];
+
   // Dynamic blog posts
   let blogRoutes: MetadataRoute.Sitemap = [];
   try {
@@ -57,5 +69,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Best-effort: if blog posts fetch fails, just use static routes
   }
 
-  return [...staticRoutes, ...coverageRoutes, ...blogRoutes];
+  return [...staticRoutes, ...coverageRoutes, ...airportRoutes, ...blogRoutes];
 }

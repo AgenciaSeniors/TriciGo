@@ -86,6 +86,17 @@ export default function TransporteHubPage() {
           </Link>
         ))}
       </div>
+
+      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '2.75rem 0 0.75rem', color: 'var(--text-primary)' }}>
+        Rutas populares
+      </h2>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+        ¿Llegas a La Habana? Mira cómo llegar desde el{' '}
+        <Link href="/transporte/aeropuerto-la-habana" style={{ color: 'var(--primary)', fontWeight: 600 }}>
+          aeropuerto José Martí al Vedado, Habana Vieja, Miramar o las Playas del Este
+        </Link>{' '}
+        con el precio claro antes de subir.
+      </p>
     </main>
   );
 }
