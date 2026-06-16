@@ -37,7 +37,7 @@ export default async function BlogPage() {
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
               <article style={{ border: '1px solid var(--border-light)', borderRadius: '1rem', overflow: 'hidden' }}>
-                {post.cover_image_url && (
+                {post.cover_image_url ? (
                   <div style={{ position: 'relative', width: '100%', height: 200 }}>
                     <Image
                       src={post.cover_image_url}
@@ -45,6 +45,27 @@ export default async function BlogPage() {
                       fill
                       sizes="(max-width: 800px) 100vw, 800px"
                       style={{ objectFit: 'cover' }}
+                    />
+                  </div>
+                ) : (
+                  // Branded fallback header for posts without a cover image, so
+                  // the listing stays uniform (mirrors the dynamic OG card).
+                  <div
+                    style={{
+                      width: '100%',
+                      height: 200,
+                      background: 'var(--gradient-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Image
+                      src="/logo-wordmark-white.png"
+                      alt="TriciGo"
+                      width={180}
+                      height={43}
+                      style={{ width: 180, height: 'auto', opacity: 0.95 }}
                     />
                   </div>
                 )}
