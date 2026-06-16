@@ -521,7 +521,7 @@ export default function HomeClient() {
                 </svg>
               </div>
               <div>
-                <h3>Para que no te claven</h3>
+                <h3>Para que no te estafen</h3>
                 <p>Cómo saber el precio justo y defenderte del sobrecobro.</p>
                 <span className="bento-link" style={{ paddingTop: '0.4rem' }}>Leer &rarr;</span>
               </div>
