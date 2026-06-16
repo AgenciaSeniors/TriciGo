@@ -1,14 +1,13 @@
-// Per-province local-SEO landing page. Server-rendered with unique copy +
-// the province's real municipality list, plus Service (areaServed),
-// BreadcrumbList and FAQPage JSON-LD. Targets local searches like
-// "transporte en La Habana" / "pedir triciclo Santiago de Cuba".
+// Per-city local-SEO landing page. Server-rendered with unique copy, plus
+// Service (areaServed = city), BreadcrumbList (4 levels) and FAQPage JSON-LD.
+// Targets city-level searches like "transporte en Santiago de Cuba" /
+// "pedir un triciclo en Trinidad". Nested under the province for hierarchy.
 
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/JsonLd';
-import { getAllProvinceSlugs, getProvinceBySlug } from '@/lib/coverage';
-import { getCitiesForProvince } from '@/lib/cities';
+import { getAllCityParams, getCityBySlug } from '@/lib/cities';
 
 const SITE = 'https://tricigo.com';
 
@@ -19,55 +18,70 @@ const SERVICES: { emoji: string; title: string; desc: string }[] = [
   { emoji: '📦', title: 'Mensajería', desc: 'Envío de paquetes de un punto a otro, rápido y con seguimiento.' },
 ];
 
+const ORIENTE = new Set(['las_tunas', 'holguin', 'granma', 'santiago_de_cuba', 'guantanamo', 'camaguey']);
+
+function blogLinksFor(provinceValue: string): { href: string; label: string }[] {
+  const links = [
+    { href: '/blog/tarifas-transporte-cuba-2026', label: 'tarifas de transporte en Cuba 2026' },
+    { href: '/blog/glosario-transporte-cubano', label: 'glosario del transporte cubano' },
+  ];
+  if (provinceValue === 'la_habana') {
+    links.unshift({ href: '/blog/como-moverse-en-la-habana', label: 'cómo moverse en La Habana' });
+  } else if (ORIENTE.has(provinceValue)) {
+    links.unshift({ href: '/blog/como-pedir-carro-app-oriente-cuba', label: 'cómo pedir un carro por app en oriente' });
+  }
+  return links;
+}
+
 export function generateStaticParams() {
-  return getAllProvinceSlugs().map((provincia) => ({ provincia }));
+  return getAllCityParams();
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ provincia: string }>;
+  params: Promise<{ provincia: string; ciudad: string }>;
 }): Promise<Metadata> {
-  const { provincia } = await params;
-  const p = getProvinceBySlug(provincia);
-  if (!p) return { title: 'Provincia no encontrada', robots: { index: false } };
-  const url = `${SITE}/transporte/${p.slug}`;
-  // No "| TriciGo" here — the root layout's title template ('%s | TriciGo')
-  // appends it. Including it would double the suffix in the <title>.
-  const title = `Transporte en ${p.name} — Triciclos, motos y autos`;
+  const { provincia, ciudad } = await params;
+  const city = getCityBySlug(provincia, ciudad);
+  if (!city) return { title: 'Ciudad no encontrada', robots: { index: false } };
+  const url = `${SITE}/transporte/${city.provinceSlug}/${city.citySlug}`;
+  // No "| TriciGo" here — the root layout's title template appends it.
+  const title = `Transporte en ${city.cityName} (${city.provinceName}) — Triciclos, motos y autos`;
   return {
     title,
-    description: p.content.metaDescription,
+    description: city.content.metaDescription,
     alternates: { canonical: url },
     openGraph: {
       title,
-      description: p.content.metaDescription,
+      description: city.content.metaDescription,
       url,
       siteName: 'TriciGo',
     },
   };
 }
 
-export default async function ProvincePage({
+export default async function CityPage({
   params,
 }: {
-  params: Promise<{ provincia: string }>;
+  params: Promise<{ provincia: string; ciudad: string }>;
 }) {
-  const { provincia } = await params;
-  const p = getProvinceBySlug(provincia);
-  if (!p) notFound();
+  const { provincia, ciudad } = await params;
+  const city = getCityBySlug(provincia, ciudad);
+  if (!city) notFound();
 
-  const url = `${SITE}/transporte/${p.slug}`;
-  const cities = getCitiesForProvince(p.value);
+  const url = `${SITE}/transporte/${city.provinceSlug}/${city.citySlug}`;
+  const provinceUrl = `${SITE}/transporte/${city.provinceSlug}`;
+  const blogLinks = blogLinksFor(city.provinceValue);
 
   const serviceJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Service',
     serviceType: 'Transporte bajo demanda',
-    name: `TriciGo en ${p.name}`,
-    description: p.content.intro,
+    name: `TriciGo en ${city.cityName}`,
+    description: city.content.intro,
     provider: { '@type': 'Organization', name: 'TriciGo', url: SITE },
-    areaServed: { '@type': 'AdministrativeArea', name: `${p.name}, Cuba` },
+    areaServed: { '@type': 'City', name: `${city.cityName}, ${city.provinceName}, Cuba` },
     offers: { '@type': 'Offer', availability: 'https://schema.org/InStock' },
   };
 
@@ -77,14 +91,15 @@ export default async function ProvincePage({
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Inicio', item: SITE },
       { '@type': 'ListItem', position: 2, name: 'Transporte en Cuba', item: `${SITE}/transporte` },
-      { '@type': 'ListItem', position: 3, name: p.name, item: url },
+      { '@type': 'ListItem', position: 3, name: city.provinceName, item: provinceUrl },
+      { '@type': 'ListItem', position: 4, name: city.cityName, item: url },
     ],
   };
 
   const faqJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
-    mainEntity: p.content.faqs.map((f) => ({
+    mainEntity: city.content.faqs.map((f) => ({
       '@type': 'Question',
       name: f.q,
       acceptedAnswer: { '@type': 'Answer', text: f.a },
@@ -103,15 +118,17 @@ export default async function ProvincePage({
         <span style={{ margin: '0 0.4rem' }}>/</span>
         <Link href="/transporte" style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>Transporte en Cuba</Link>
         <span style={{ margin: '0 0.4rem' }}>/</span>
-        <span style={{ color: 'var(--text-secondary)' }}>{p.name}</span>
+        <Link href={`/transporte/${city.provinceSlug}`} style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>{city.provinceName}</Link>
+        <span style={{ margin: '0 0.4rem' }}>/</span>
+        <span style={{ color: 'var(--text-secondary)' }}>{city.cityName}</span>
       </nav>
 
       {/* Hero */}
       <h1 style={{ fontSize: '2.25rem', fontWeight: 800, lineHeight: 1.2, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-        Transporte en {p.name} con TriciGo
+        Transporte en {city.cityName} con TriciGo
       </h1>
       <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.6, marginBottom: '1.75rem' }}>
-        {p.content.intro}
+        {city.content.intro}
       </p>
 
       <Link
@@ -132,7 +149,7 @@ export default async function ProvincePage({
       </Link>
 
       {/* Unique body copy */}
-      {p.content.bodyParagraphs.map((para, i) => (
+      {city.content.bodyParagraphs.map((para, i) => (
         <p key={i} style={{ color: 'var(--text-secondary)', lineHeight: 1.75, fontSize: '0.98rem', marginBottom: '1.1rem' }}>
           {para}
         </p>
@@ -140,7 +157,7 @@ export default async function ProvincePage({
 
       {/* Services */}
       <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: '2.25rem 0 1rem', color: 'var(--text-primary)' }}>
-        Servicios disponibles en {p.name}
+        Servicios disponibles en {city.cityName}
       </h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
         {SERVICES.map((s) => (
@@ -162,79 +179,39 @@ export default async function ProvincePage({
         <li><strong>Viajá seguro</strong> — seguí el viaje en el mapa, compartí tu ubicación y pagá en efectivo o con TriciCoin.</li>
       </ol>
 
-      {/* Municipalities covered */}
-      <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: '2.25rem 0 1rem', color: 'var(--text-primary)' }}>
-        Municipios de {p.name}
-      </h2>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', marginBottom: '0.85rem', lineHeight: 1.6 }}>
-        TriciGo se despliega por zonas dentro de {p.name}. Consultá la disponibilidad en la app en estos municipios:
-      </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
-        {p.municipios.map((m) => (
-          <span
-            key={m.value}
-            style={{
-              fontSize: '0.82rem',
-              padding: '0.35rem 0.7rem',
-              borderRadius: '999px',
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-light)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            {m.label}
-          </span>
-        ))}
-      </div>
-
-      {/* Cities with their own landing page */}
-      {cities.length > 0 && (
-        <>
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: '2.25rem 0 1rem', color: 'var(--text-primary)' }}>
-            Ciudades principales de {p.name}
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-            {cities.map((c) => (
-              <Link
-                key={c.cityValue}
-                href={`/transporte/${c.provinceSlug}/${c.citySlug}`}
-                style={{
-                  display: 'block',
-                  padding: '0.9rem 1.1rem',
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border-light)',
-                  borderRadius: '0.75rem',
-                  textDecoration: 'none',
-                  color: 'var(--text-primary)',
-                  fontWeight: 600,
-                  fontSize: '0.95rem',
-                }}
-              >
-                Transporte en {c.cityName}
-                <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: 'var(--primary)', marginTop: '0.2rem' }}>
-                  Ver ciudad &rarr;
-                </span>
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
-
       {/* FAQ */}
       <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: '2.5rem 0 1rem', color: 'var(--text-primary)' }}>
-        Preguntas frecuentes — {p.name}
+        Preguntas frecuentes — {city.cityName}
       </h2>
-      {p.content.faqs.map((f, i) => (
+      {city.content.faqs.map((f, i) => (
         <div key={i} style={{ marginBottom: '1.1rem' }}>
           <h3 style={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.3rem' }}>{f.q}</h3>
           <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.65, fontSize: '0.92rem' }}>{f.a}</p>
         </div>
       ))}
 
+      {/* Internal links: province + guides */}
+      <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: '2.5rem 0 1rem', color: 'var(--text-primary)' }}>
+        Seguí leyendo
+      </h2>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.7 }}>
+        Mirá todo el{' '}
+        <Link href={`/transporte/${city.provinceSlug}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
+          transporte en {city.provinceName}
+        </Link>
+        {blogLinks.map((b, i) => (
+          <span key={b.href}>
+            {i === 0 ? ', o leé sobre ' : ' y '}
+            <Link href={b.href} style={{ color: 'var(--primary)', fontWeight: 600 }}>{b.label}</Link>
+          </span>
+        ))}
+        .
+      </p>
+
       {/* CTA */}
       <div style={{ marginTop: '2.75rem', padding: '2rem', background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', textAlign: 'center' }}>
         <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
-          Pedí tu viaje en {p.name}
+          Pedí tu viaje en {city.cityName}
         </h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', fontSize: '0.95rem' }}>
           Descargá TriciGo y solicitá tu primer viaje en minutos.
