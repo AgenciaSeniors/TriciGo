@@ -52,7 +52,9 @@ export async function generateMetadata({
       ...(post.cover_image_url ? { images: [{ url: post.cover_image_url }] } : {}),
     },
     twitter: {
-      card: post.cover_image_url ? 'summary_large_image' : 'summary',
+      // Every post now has a 1200x630 image: its cover_image_url when set,
+      // otherwise the dynamic branded card from blog/[slug]/opengraph-image.tsx.
+      card: 'summary_large_image',
       title: post.title_es,
       description: post.excerpt_es,
     },
