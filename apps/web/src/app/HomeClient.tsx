@@ -207,70 +207,108 @@ export default function HomeClient() {
         </div>
       </section>
 
-      {/* ── Social Proof / Stats ── */}
+      {/* ── TriciGo para empresas (B2B teaser) ── */}
       <section className="section">
         <div className="container">
-          <h2 className="section-title text-center">{t('home.stats_title', { defaultValue: 'Miles de viajeros confían en TriciGo' })}</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginTop: '2.5rem' }}>
+          <div style={{ textAlign: 'center' }}>
+            <span style={{
+              display: 'inline-block',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--primary)',
+              background: 'var(--primary-alpha-10)',
+              padding: '0.3rem 0.8rem',
+              borderRadius: 'var(--radius-full)',
+              marginBottom: '0.9rem',
+            }}>
+              Para empresas
+            </span>
+          </div>
+          <h2 className="section-title text-center">Movilidad para tu empresa</h2>
+          <p className="section-subtitle text-center" style={{ maxWidth: 580, margin: '0.75rem auto 0' }}>
+            Mové a tu personal o a tus clientes por las 16 provincias, con todo facturado y bajo control.
+            Una cuenta corporativa sin mensualidad: pagás solo los viajes que tu empresa consume.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginTop: '2.5rem' }}>
             {[
-              { value: '500+', label: t('home.stat_drivers', { defaultValue: 'Conductores registrados' }) },
-              { value: '10,000+', label: t('home.stat_rides', { defaultValue: 'Viajes completados' }) },
-              { value: '4.8★', label: t('home.stat_rating', { defaultValue: 'Calificación promedio' }) },
-              { value: '24/7', label: t('home.stat_available', { defaultValue: 'Disponible siempre' }) },
-            ].map((s) => (
-              <div key={s.value} style={{
-                textAlign: 'center',
-                padding: '1.5rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-light)',
+              {
+                title: 'Control de presupuesto',
+                desc: 'Definí el límite mensual, el tope por viaje y los horarios permitidos para tu equipo.',
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+                    <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+                    <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+                    <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Reportes por empleado',
+                desc: 'Mirá quién viaja, cuánto y a dónde, con un reporte claro mes a mes.',
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Facturas mensuales en PDF',
+                desc: 'Descargá la factura cada mes con el desglose por empleado y por servicio.',
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><line x1="10" y1="9" x2="8" y2="9" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Flota exclusiva (opcional)',
+                desc: 'Si tu empresa tiene conductores propios, los viajes corporativos van solo a ellos.',
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 17h14M5 17a2 2 0 0 1-2-2v-3l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 5l2 5v3a2 2 0 0 1-2 2" />
+                    <circle cx="7.5" cy="17" r="1.5" /><circle cx="16.5" cy="17" r="1.5" />
+                  </svg>
+                ),
+              },
+            ].map((f) => (
+              <div key={f.title} style={{
                 background: 'var(--bg-card)',
+                border: '1px solid var(--border-light)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '1.5rem',
+                textAlign: 'center',
               }}>
-                <p style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: 'var(--primary)', marginBottom: '0.25rem', lineHeight: 1.2 }}>{s.value}</p>
-                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{s.label}</p>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--primary-alpha-10)',
+                  color: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 1rem',
+                }}>
+                  {f.icon}
+                </div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)' }}>{f.title}</h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
               </div>
             ))}
           </div>
 
-          {/* Testimonials */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginTop: '3rem' }}>
-            {[
-              { text: t('home.testimonial_1', { defaultValue: '"Uso TriciGo todos los días para ir al trabajo. Es rápido y confiable."' }), name: 'María G.', loc: 'Pasajera', initial: 'M' },
-              { text: t('home.testimonial_2', { defaultValue: '"Como conductor, TriciGo me permite ganar bien y organizar mi tiempo."' }), name: 'Carlos R.', loc: 'Conductor', initial: 'C' },
-              { text: t('home.testimonial_3', { defaultValue: '"El pago con TriciCoin es genial. No necesito efectivo."' }), name: 'Ana P.', loc: 'Pasajera', initial: 'A' },
-            ].map((review) => (
-              <div key={review.initial} style={{
-                background: 'var(--bg-card)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '1.5rem',
-                border: '1px solid var(--border-light)',
-                transition: 'transform var(--transition-fast), box-shadow var(--transition-fast)',
-                cursor: 'default',
-              }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-lg)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
-              >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="var(--primary-alpha-20)" style={{ marginBottom: '0.75rem' }}>
-                  <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10H14.017zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10H0z" />
-                </svg>
-                <p style={{ fontSize: 'var(--text-md)', lineHeight: 1.6, marginBottom: '1rem', color: 'var(--text-primary)' }}>
-                  {review.text}
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: '50%',
-                    background: 'var(--gradient-primary)', color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 'var(--text-sm)', fontWeight: 700,
-                  }}>
-                    {review.initial}
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{review.name}</p>
-                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{review.loc}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '2.5rem' }}>
+            <Link href="/empresas" className="btn-base btn-primary-solid" style={{ padding: '0.8rem 1.75rem', fontSize: 'var(--text-md)' }}>
+              Conocer TriciGo Empresas
+            </Link>
+            <Link href="/empresas/registro" className="btn-base btn-secondary-outline" style={{ padding: '0.8rem 1.75rem', fontSize: 'var(--text-md)' }}>
+              Solicitar cuenta
+            </Link>
           </div>
         </div>
       </section>
