@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { getAllProvinceSlugs } from '@/lib/coverage';
+import { getAllCityParams } from '@/lib/cities';
 import { AIRPORT, getAllRouteSlugs } from '@/lib/airport-routes';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -30,6 +31,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/transporte`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.7 },
     ...getAllProvinceSlugs().map((slug) => ({
       url: `${baseUrl}/transporte/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    })),
+    ...getAllCityParams().map(({ provincia, ciudad }) => ({
+      url: `${baseUrl}/transporte/${provincia}/${ciudad}`,
       lastModified: new Date(),
       changeFrequency: 'monthly' as const,
       priority: 0.6,
