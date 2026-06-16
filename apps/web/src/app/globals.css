@@ -752,6 +752,214 @@ body {
 }
 
 /* ══════════════════════════════════════════════════
+   Bento grid — modern home sections
+   ══════════════════════════════════════════════════ */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: minmax(150px, auto);
+  gap: 1rem;
+  margin-top: 3rem;
+}
+
+.bento-2 { grid-column: span 2; }
+.bento-3 { grid-column: span 3; }
+.bento-4 { grid-column: span 4; }
+.bento-tall { grid-row: span 2; }
+
+.bento-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  padding: 1.75rem;
+  overflow: hidden;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+/* Interactive tiles (links) lift on hover */
+a.bento-tile {
+  text-decoration: none;
+  color: inherit;
+}
+a.bento-tile:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border);
+}
+
+.bento-tile h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.4rem;
+}
+
+.bento-tile p {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Icon chip inside a tile */
+.bento-icon {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: var(--radius-md);
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+/* Horizontal tile (icon left, copy right) */
+.bento-tile--row {
+  flex-direction: row;
+  align-items: center;
+  gap: 1.25rem;
+}
+.bento-tile--row .bento-icon { margin-bottom: 0; }
+
+/* Primary (brand gradient) variant */
+.bento-tile--primary {
+  background: var(--gradient-primary);
+  border-color: transparent;
+  color: #fff;
+}
+.bento-tile--primary h3,
+.bento-tile--primary p { color: #fff; }
+.bento-tile--primary p { color: rgba(255, 255, 255, 0.92); }
+.bento-tile--primary .bento-icon {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+/* Dark (corporate) variant */
+.bento-tile--dark {
+  background: #15151f;
+  border-color: transparent;
+  color: #fff;
+}
+[data-theme="dark"] .bento-tile--dark {
+  background: #07070e;
+  border: 1px solid var(--border);
+}
+.bento-tile--dark h3 { color: #fff; }
+.bento-tile--dark p { color: rgba(255, 255, 255, 0.7); }
+.bento-tile--dark .bento-icon {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Glow accent (mirrors the hero brand glow) */
+.bento-tile--glow::before {
+  content: '';
+  position: absolute;
+  top: -45%;
+  right: -30%;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  opacity: 0.14;
+  filter: blur(55px);
+  z-index: 0;
+  pointer-events: none;
+}
+.bento-tile--glow > * { position: relative; z-index: 1; }
+
+/* Product-image showcase tile */
+.bento-tile--showcase {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: linear-gradient(135deg, var(--primary-alpha-10), transparent);
+}
+
+/* Big number / stat */
+.bento-stat {
+  font-size: clamp(1.85rem, 3.5vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+/* Eyebrow pill (section header) */
+.bento-eyebrow {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: var(--primary-alpha-10);
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--radius-full);
+  margin-bottom: 0.9rem;
+}
+
+/* "Read" link pinned to the bottom of a guide tile */
+.bento-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--primary);
+  margin-top: auto;
+  padding-top: 0.85rem;
+}
+
+/* Push trailing content (CTAs) to the bottom of a tall tile */
+.bento-spacer { flex: 1 1 auto; }
+
+/* On-tile buttons (work over gradient / dark backgrounds) */
+.bento-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.bento-btn--white {
+  background: #fff;
+  color: var(--primary);
+}
+.bento-tile--dark .bento-btn--white { color: #15151f; }
+.bento-btn--white:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.bento-btn--ghost {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.bento-btn--ghost:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* Bento responsive: 4 → 2 → 1 columns */
+@media (max-width: 768px) {
+  .bento { grid-template-columns: repeat(2, 1fr); }
+  .bento-3, .bento-4 { grid-column: span 2; }
+  .bento-tall { grid-row: span 1; }
+}
+@media (max-width: 480px) {
+  .bento { grid-template-columns: 1fr; }
+  .bento-2, .bento-3, .bento-4 { grid-column: span 1; }
+  .bento-tile--row { flex-direction: column; align-items: flex-start; text-align: left; }
+}
+
+/* ══════════════════════════════════════════════════
    App Pages — Responsive (booking, rides, wallet, profile)
    ══════════════════════════════════════════════════ */
 

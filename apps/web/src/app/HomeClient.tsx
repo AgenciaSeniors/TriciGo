@@ -207,107 +207,330 @@ export default function HomeClient() {
         </div>
       </section>
 
-      {/* ── TriciGo para empresas (B2B teaser) ── */}
+      {/* ── Seguridad (bento) ── */}
       <section className="section">
         <div className="container">
-          <div style={{ textAlign: 'center' }}>
-            <span style={{
-              display: 'inline-block',
-              fontSize: '0.72rem',
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: 'var(--primary)',
-              background: 'var(--primary-alpha-10)',
-              padding: '0.3rem 0.8rem',
-              borderRadius: 'var(--radius-full)',
-              marginBottom: '0.9rem',
-            }}>
-              Para empresas
-            </span>
+          <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
+            <span className="bento-eyebrow">Seguridad</span>
+            <h2 className="section-title">Viajá tranquilo, siempre</h2>
+            <p className="section-subtitle">
+              Tu seguridad va con vos en cada viaje: conductores verificados, seguimiento en vivo
+              y un botón de emergencia a un toque.
+            </p>
           </div>
-          <h2 className="section-title text-center">Movilidad para tu empresa</h2>
-          <p className="section-subtitle text-center" style={{ maxWidth: 580, margin: '0.75rem auto 0' }}>
-            Mové a tu personal o a tus clientes por las 16 provincias, con todo facturado y bajo control.
-            Una cuenta corporativa sin mensualidad: pagás solo los viajes que tu empresa consume.
-          </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginTop: '2.5rem' }}>
-            {[
-              {
-                title: 'Control de presupuesto',
-                desc: 'Definí el límite mensual, el tope por viaje y los horarios permitidos para tu equipo.',
-                icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
-                    <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
-                    <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
-                    <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
-                  </svg>
-                ),
-              },
-              {
-                title: 'Reportes por empleado',
-                desc: 'Mirá quién viaja, cuánto y a dónde, con un reporte claro mes a mes.',
-                icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
-                  </svg>
-                ),
-              },
-              {
-                title: 'Facturas mensuales en PDF',
-                desc: 'Descargá la factura cada mes con el desglose por empleado y por servicio.',
-                icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><line x1="10" y1="9" x2="8" y2="9" />
-                  </svg>
-                ),
-              },
-              {
-                title: 'Flota exclusiva (opcional)',
-                desc: 'Si tu empresa tiene conductores propios, los viajes corporativos van solo a ellos.',
-                icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 17h14M5 17a2 2 0 0 1-2-2v-3l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 5l2 5v3a2 2 0 0 1-2 2" />
-                    <circle cx="7.5" cy="17" r="1.5" /><circle cx="16.5" cy="17" r="1.5" />
-                  </svg>
-                ),
-              },
-            ].map((f) => (
-              <div key={f.title} style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-light)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '1.5rem',
-                textAlign: 'center',
-              }}>
-                <div style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--primary-alpha-10)',
-                  color: 'var(--primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 1rem',
-                }}>
-                  {f.icon}
-                </div>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)' }}>{f.title}</h3>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
+          <div className="bento">
+            {/* SOS — primary, wide */}
+            <div className="bento-tile bento-tile--primary bento-2">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
               </div>
-            ))}
+              <h3 style={{ fontSize: '1.35rem' }}>Botón SOS</h3>
+              <p>Un toque para pedir ayuda y avisar a tus contactos de confianza en una emergencia. Disponible durante todo el viaje.</p>
+            </div>
+
+            {/* Conductores verificados */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 12 11 14 15 10" />
+                </svg>
+              </div>
+              <h3>Conductores verificados</h3>
+              <p>Identidad y documentos revisados antes de manejar.</p>
+            </div>
+
+            {/* Seguimiento en vivo — glow */}
+            <div className="bento-tile bento-tile--glow">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
+                </svg>
+              </div>
+              <h3>Seguimiento en vivo</h3>
+              <p>Mirá tu viaje en el mapa en tiempo real, de la recogida al destino.</p>
+            </div>
+
+            {/* Compartí tu viaje — full-width row */}
+            <div className="bento-tile bento-tile--row bento-4">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </div>
+              <div>
+                <h3>Compartí tu viaje</h3>
+                <p>Compartí tu ubicación en vivo con tu familia y sumá contactos de confianza que pueden seguir tu recorrido hasta que llegás.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── TriciCoin (bento) ── */}
+      <section className="section section--gray">
+        <div className="container">
+          <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
+            <span className="bento-eyebrow">TriciCoin</span>
+            <h2 className="section-title">Pagá sin efectivo</h2>
+            <p className="section-subtitle">
+              TriciCoin es el saldo de la app. Cargás, pagás tus viajes en segundos y hasta le
+              regalás saldo a quien quieras.
+            </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '2.5rem' }}>
-            <Link href="/empresas" className="btn-base btn-primary-solid" style={{ padding: '0.8rem 1.75rem', fontSize: 'var(--text-md)' }}>
-              Conocer TriciGo Empresas
+          <div className="bento">
+            {/* 1:1 stat — primary, tall */}
+            <div className="bento-tile bento-tile--primary bento-2 bento-tall">
+              <Image
+                src="/images/coins/tricoin-small.png"
+                alt="Moneda TriciCoin"
+                width={64}
+                height={64}
+                style={{ width: 64, height: 64, objectFit: 'contain', marginBottom: '1.25rem' }}
+              />
+              <div className="bento-stat">1 TriciCoin<br />= 1 CUP</div>
+              <p style={{ marginTop: '0.75rem' }}>
+                Sin conversiones raras: un TriciCoin vale exactamente un peso cubano. Lo que cargás es lo que vale.
+              </p>
+            </div>
+
+            {/* Cargá */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
+                </svg>
+              </div>
+              <h3>Cargá tu billetera</h3>
+              <p>Sumá saldo y tenés tus créditos listos para viajar.</p>
+            </div>
+
+            {/* Pagá */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+              </div>
+              <h3>Pagá en segundos</h3>
+              <p>Sin buscar cambio: el viaje se descuenta solo del saldo.</p>
+            </div>
+
+            {/* Regalá — wide */}
+            <div className="bento-tile bento-tile--row bento-2">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" /><line x1="12" y1="22" x2="12" y2="7" /><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+                </svg>
+              </div>
+              <div>
+                <h3>Regalá saldo</h3>
+                <p>Mandale TriciCoin a un familiar o a un amigo para sus próximos viajes, al instante.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── TriciGo para empresas (bento) ── */}
+      <section className="section">
+        <div className="container">
+          <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
+            <span className="bento-eyebrow">Para empresas</span>
+            <h2 className="section-title">Movilidad para tu empresa</h2>
+            <p className="section-subtitle">
+              Mové a tu personal o a tus clientes por las 16 provincias, con todo facturado y bajo control.
+            </p>
+          </div>
+
+          <div className="bento">
+            {/* CTA — dark, tall */}
+            <div className="bento-tile bento-tile--dark bento-2 bento-tall">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 21h18" /><path d="M5 21V7l8-4v18" /><path d="M19 21V11l-6-4" /><line x1="9" y1="9" x2="9" y2="9.01" /><line x1="9" y1="12" x2="9" y2="12.01" /><line x1="9" y1="15" x2="9" y2="15.01" />
+                </svg>
+              </div>
+              <h3 style={{ fontSize: '1.4rem' }}>Cuenta corporativa, sin mensualidad</h3>
+              <p>Pagás solo los viajes que tu empresa consume. Una factura mensual, todo el equipo en una sola cuenta.</p>
+              <div className="bento-spacer" />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '1.25rem' }}>
+                <Link href="/empresas" className="bento-btn bento-btn--white">Conocer TriciGo Empresas</Link>
+                <Link href="/empresas/registro" className="bento-btn bento-btn--ghost">Solicitar cuenta</Link>
+              </div>
+            </div>
+
+            {/* Presupuesto */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+                </svg>
+              </div>
+              <h3>Control de presupuesto</h3>
+              <p>Límite mensual, tope por viaje y horarios permitidos.</p>
+            </div>
+
+            {/* Reportes */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+              </div>
+              <h3>Reportes por empleado</h3>
+              <p>Quién viaja, cuánto y a dónde, mes a mes.</p>
+            </div>
+
+            {/* Facturas */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><line x1="10" y1="9" x2="8" y2="9" />
+                </svg>
+              </div>
+              <h3>Facturas en PDF</h3>
+              <p>Descargá cada mes el desglose por empleado y servicio.</p>
+            </div>
+
+            {/* Flota */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 17h14M5 17a2 2 0 0 1-2-2v-3l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 5l2 5v3a2 2 0 0 1-2 2" /><circle cx="7.5" cy="17" r="1.5" /><circle cx="16.5" cy="17" r="1.5" />
+                </svg>
+              </div>
+              <h3>Flota exclusiva (opcional)</h3>
+              <p>Si tenés conductores propios, los viajes van solo a ellos.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Para conductores (bento) ── */}
+      <section className="section section--gray">
+        <div className="container">
+          <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
+            <span className="bento-eyebrow">Para conductores</span>
+            <h2 className="section-title">¿Tenés moto, triciclo o auto?</h2>
+            <p className="section-subtitle">
+              Convertí tu vehículo en una fuente de ingreso. Manejás cuando querés, cobrás en pesos
+              y aceptás solo los viajes que te convienen.
+            </p>
+          </div>
+
+          <div className="bento">
+            {/* CTA — primary, tall */}
+            <div className="bento-tile bento-tile--primary bento-2 bento-tall">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+              </div>
+              <h3 style={{ fontSize: '1.4rem' }}>Generá ingresos con tu vehículo</h3>
+              <p>Precio claro y sin regateo en la calle. Vos elegís cuándo manejás y cuánto.</p>
+              <div className="bento-spacer" />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '1.25rem' }}>
+                <a href="https://play.google.com/store/apps/details?id=app.tricigo.driver" target="_blank" rel="noopener noreferrer" className="bento-btn bento-btn--white">
+                  Descargá TriciGo Conductor
+                </a>
+                <Link href="/blog/motorina-cuba-conductor-mensajero" className="bento-btn bento-btn--ghost">Cómo funciona</Link>
+              </div>
+            </div>
+
+            {/* Showcase — motorina */}
+            <div className="bento-tile bento-tile--showcase bento-2">
+              <Image
+                src="/images/vehicles/moto.png"
+                alt="Motorina para conductores TriciGo"
+                width={120}
+                height={120}
+                style={{ width: 120, height: 120, objectFit: 'contain', marginBottom: '0.75rem' }}
+              />
+              <h3>Tu moto, tu negocio</h3>
+              <p>Miles de motorinas en Cuba ya generan ingresos a su ritmo.</p>
+            </div>
+
+            {/* Benefit — horarios */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <h3>A tu ritmo</h3>
+              <p>Manejás cuando querés, sin horarios fijos.</p>
+            </div>
+
+            {/* Benefit — cobrás en pesos */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+              </div>
+              <h3>Cobrás en pesos</h3>
+              <p>En efectivo o TriciCoin, según prefieras.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Guías (bento) ── */}
+      <section className="section">
+        <div className="container">
+          <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
+            <span className="bento-eyebrow">Guías</span>
+            <h2 className="section-title">Aprendé a moverte por Cuba</h2>
+            <p className="section-subtitle">
+              Consejos prácticos para moverte mejor y pagar lo justo, en lenguaje cubano de a pie.
+            </p>
+          </div>
+
+          <div className="bento">
+            {/* Featured — cómo moverse (tall) */}
+            <Link href="/blog/como-moverse-en-la-habana" className="bento-tile bento-tile--glow bento-2 bento-tall">
+              <span className="bento-eyebrow" style={{ background: 'var(--primary-alpha-10)' }}>Guía destacada</span>
+              <h3 style={{ fontSize: '1.4rem' }}>Cómo moverse en La Habana</h3>
+              <p>Todas las formas de moverte por la capital —guagua, almendrón, bicitaxi, motorina— y cuál te conviene en cada caso.</p>
+              <span className="bento-link">Leer la guía &rarr;</span>
             </Link>
-            <Link href="/empresas/registro" className="btn-base btn-secondary-outline" style={{ padding: '0.8rem 1.75rem', fontSize: 'var(--text-md)' }}>
-              Solicitar cuenta
+
+            {/* Glosario */}
+            <Link href="/blog/glosario-transporte-cubano" className="bento-tile">
+              <h3>Glosario del transporte cubano</h3>
+              <p>Bicitaxi, almendrón, botero, motorina… qué es cada uno.</p>
+              <span className="bento-link">Leer &rarr;</span>
+            </Link>
+
+            {/* Tarifas */}
+            <Link href="/blog/tarifas-transporte-cuba-2026" className="bento-tile">
+              <h3>Tarifas de transporte 2026</h3>
+              <p>Cuánto cuesta moverse hoy, modo por modo, en CUP.</p>
+              <span className="bento-link">Leer &rarr;</span>
+            </Link>
+
+            {/* No te claven — wide */}
+            <Link href="/blog/para-que-no-te-claven-precio-taxi-cuba" className="bento-tile bento-tile--row bento-2">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+              </div>
+              <div>
+                <h3>Para que no te claven</h3>
+                <p>Cómo saber el precio justo y defenderte del sobrecobro.</p>
+                <span className="bento-link" style={{ paddingTop: '0.4rem' }}>Leer &rarr;</span>
+              </div>
+            </Link>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+            <Link href="/blog" style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none' }}>
+              Ver todo el blog &rarr;
             </Link>
           </div>
         </div>
