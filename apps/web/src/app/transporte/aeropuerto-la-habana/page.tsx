@@ -103,7 +103,7 @@ export default function AirportHubPage() {
       <p style={{ marginTop: '2rem', color: 'var(--text-secondary)', fontSize: '0.92rem', lineHeight: 1.6 }}>
         ¿Quieres más contexto antes de viajar? Lee <Link href="/blog/transporte-cuba-turistas" style={{ color: 'var(--primary)' }}>transporte en Cuba para turistas</Link>,
         las <Link href="/blog/tarifas-transporte-cuba-2026" style={{ color: 'var(--primary)' }}>tarifas de transporte 2026</Link> o
-        cómo <Link href="/blog/para-que-no-te-claven-precio-taxi-cuba" style={{ color: 'var(--primary)' }}>evitar que te claven</Link>.
+        cómo <Link href="/blog/no-te-estafen-precio-taxi-cuba" style={{ color: 'var(--primary)' }}>evitar que te estafen</Link>.
       </p>
     </main>
   );

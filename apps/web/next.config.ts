@@ -56,6 +56,17 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'tricigo.com' },
     ],
   },
+  async redirects() {
+    return [
+      // Blog post reworded "claven" -> "estafen"; slug renamed. Keep the old
+      // indexed URL alive with a permanent (308) redirect to the new slug.
+      {
+        source: '/blog/para-que-no-te-claven-precio-taxi-cuba',
+        destination: '/blog/no-te-estafen-precio-taxi-cuba',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {
