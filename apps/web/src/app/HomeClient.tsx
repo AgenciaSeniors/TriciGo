@@ -514,7 +514,7 @@ export default function HomeClient() {
             </Link>
 
             {/* No te claven — wide */}
-            <Link href="/blog/para-que-no-te-claven-precio-taxi-cuba" className="bento-tile bento-tile--row bento-2">
+            <Link href="/blog/no-te-estafen-precio-taxi-cuba" className="bento-tile bento-tile--row bento-2">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
