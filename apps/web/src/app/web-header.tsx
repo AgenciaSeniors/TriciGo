@@ -322,7 +322,7 @@ export function WebHeader() {
           <DarkToggle />
         </nav>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} className="nav-mobile-toggle">
+        <div className="nav-mobile-toggle">
           <DarkToggle />
           <button
             onClick={() => setMenuOpen(!menuOpen)}
