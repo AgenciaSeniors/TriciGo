@@ -354,6 +354,8 @@ body {
 
 .nav-mobile-toggle {
   display: none;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .nav-mobile-menu {
@@ -366,7 +368,7 @@ body {
     display: none !important;
   }
   .nav-mobile-toggle {
-    display: block !important;
+    display: flex !important;
   }
   .nav-mobile-menu {
     display: flex !important;
