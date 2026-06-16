@@ -52,10 +52,10 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://tricigo.com'),
   alternates: {
     canonical: 'https://tricigo.com',
-    languages: {
-      'es': 'https://tricigo.com',
-      'en': 'https://tricigo.com',
-    },
+    // No `languages` hreflang map: there are no localized routes — every
+    // language is served from the same URL (Spanish-first, <html lang="es">),
+    // so pointing es/en at the same URL was misleading. Re-add real hreflang
+    // only when localized /en routes exist.
   },
 };
 
