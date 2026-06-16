@@ -70,6 +70,10 @@ export default async function BlogPostPage({
   const post = await getPostBySlugServer(slug);
   if (!post) notFound();
 
+  const related = (await getPublishedPostsServer(7))
+    .filter((r) => r.slug !== post.slug)
+    .slice(0, 3);
+
   const url = `${SITE}/blog/${post.slug}`;
 
   const articleJsonLd = {
@@ -104,12 +108,14 @@ export default async function BlogPostPage({
       <JsonLd data={articleJsonLd} />
       <JsonLd data={breadcrumbJsonLd} />
 
-      <Link
-        href="/blog"
-        style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600, fontSize: '0.9rem', display: 'inline-block', marginBottom: '1.5rem' }}
-      >
-        Volver al blog
-      </Link>
+      {/* Breadcrumb (matches the BreadcrumbList JSON-LD above) */}
+      <nav aria-label="Migas" style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginBottom: '1.5rem' }}>
+        <Link href="/" style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>Inicio</Link>
+        <span style={{ margin: '0 0.4rem' }}>/</span>
+        <Link href="/blog" style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>Blog</Link>
+        <span style={{ margin: '0 0.4rem' }}>/</span>
+        <span style={{ color: 'var(--text-secondary)' }}>{post.title_es}</span>
+      </nav>
 
       {post.cover_image_url && (
         <div style={{ position: 'relative', width: '100%', height: 300, marginBottom: '1.5rem' }}>
@@ -136,6 +142,29 @@ export default async function BlogPostPage({
         style={{ lineHeight: 1.8, color: 'var(--text-primary)', fontSize: '1rem' }}
         dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.body_es) }}
       />
+
+      {/* Related posts — internal linking + dwell time */}
+      {related.length > 0 && (
+        <section style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid var(--border-light)' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '1rem', color: 'var(--text-primary)' }}>
+            Seguí leyendo
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            {related.map((r) => (
+              <Link
+                key={r.id}
+                href={`/blog/${r.slug}`}
+                style={{ textDecoration: 'none', color: 'inherit', display: 'block', border: '1px solid var(--border-light)', borderRadius: '0.75rem', padding: '1.1rem' }}
+              >
+                <h3 style={{ fontSize: '0.98rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                  {r.title_es}
+                </h3>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)' }}>Leer &rarr;</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

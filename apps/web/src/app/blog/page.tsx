@@ -16,18 +16,68 @@ function formatDate(iso: string): string {
   });
 }
 
-export default async function BlogPage() {
-  const posts = await getPublishedPostsServer(50);
+export default async function BlogPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
+  const query = (q ?? '').trim();
+  const all = await getPublishedPostsServer(50);
+  const posts = query
+    ? all.filter((p) =>
+        `${p.title_es ?? ''} ${p.excerpt_es ?? ''}`.toLowerCase().includes(query.toLowerCase()),
+      )
+    : all;
 
   return (
     <main style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 1.5rem' }}>
       <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem' }}>Blog</h1>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-        Noticias y novedades de TriciGo
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+        Noticias y guías para moverte por Cuba
       </p>
 
+      {/* Server-side search (GET → ?q=). Backs the WebSite SearchAction. */}
+      <form method="get" action="/blog" role="search" style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
+        <input
+          type="search"
+          name="q"
+          defaultValue={query}
+          placeholder="Buscar en el blog…"
+          aria-label="Buscar en el blog"
+          style={{
+            flex: 1,
+            padding: '0.7rem 1rem',
+            borderRadius: '0.75rem',
+            border: '1.5px solid var(--border)',
+            background: 'var(--bg-card)',
+            color: 'var(--text-primary)',
+            fontSize: '0.95rem',
+            fontFamily: 'inherit',
+          }}
+        />
+        <button
+          type="submit"
+          style={{
+            padding: '0.7rem 1.4rem',
+            borderRadius: '0.75rem',
+            border: 'none',
+            background: 'var(--primary)',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+          }}
+        >
+          Buscar
+        </button>
+      </form>
+
       {posts.length === 0 ? (
-        <p style={{ color: 'var(--text-secondary)' }}>Sin publicaciones aún</p>
+        <p style={{ color: 'var(--text-secondary)' }}>
+          {query ? `Sin resultados para "${query}".` : 'Sin publicaciones aún'}
+        </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           {posts.map((post) => (
