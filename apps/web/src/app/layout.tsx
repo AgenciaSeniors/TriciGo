@@ -83,6 +83,27 @@ const organizationJsonLd = {
   },
 };
 
+// WebSite schema: lets Google show the brand name in results and declares a
+// sitewide search target (the blog supports ?q=). Enables the sitelinks
+// searchbox when Google chooses to render it.
+const webSiteJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'TriciGo',
+  alternateName: 'TriciGo Cuba',
+  url: 'https://tricigo.com',
+  inLanguage: 'es',
+  publisher: { '@type': 'Organization', name: 'TriciGo', url: 'https://tricigo.com' },
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: 'https://tricigo.com/blog?q={search_term_string}',
+    },
+    'query-input': 'required name=search_term_string',
+  },
+};
+
 const localBusinessJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'LocalBusiness',
@@ -105,6 +126,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className={montserrat.variable}>
       <head>
         <JsonLd data={organizationJsonLd} />
+        <JsonLd data={webSiteJsonLd} />
         <JsonLd data={localBusinessJsonLd} />
       </head>
       <body className="font-sans antialiased">
