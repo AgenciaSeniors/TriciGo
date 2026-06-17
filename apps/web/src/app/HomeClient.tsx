@@ -174,7 +174,7 @@ export default function HomeClient() {
           </p>
           <div className="services-grid">
             {services.map((svc) => (
-              <div key={svc.key} className="service-card">
+              <Link key={svc.key} href={`/${svc.key}`} className="service-card" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
                 <Image
                   src={svc.img}
                   alt={svc.title}
@@ -184,7 +184,7 @@ export default function HomeClient() {
                 />
                 <h3>{svc.title}</h3>
                 <p>{svc.desc}</p>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
