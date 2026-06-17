@@ -41,6 +41,43 @@ import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
 
+/**
+ * USD-anchored pricing (migration 00441). When an admin edits a CUP rate, we
+ * keep the USD anchor in sync (usd = cup / current_rate) so the nightly FX
+ * recompute does NOT overwrite the admin's change. Maps each *_cup field
+ * present in `updates` to its matching *_usd field.
+ */
+const CUP_TO_USD_FIELD: Record<string, string> = {
+  base_fare_cup: 'base_fare_usd',
+  per_km_rate_cup: 'per_km_rate_usd',
+  per_minute_rate_cup: 'per_minute_rate_usd',
+  min_fare_cup: 'min_fare_usd',
+  per_wait_minute_rate_cup: 'per_wait_minute_rate_usd',
+};
+
+async function withUsdAnchors(updates: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const cupFields = Object.keys(CUP_TO_USD_FIELD).filter(
+    (f) => typeof updates[f] === 'number',
+  );
+  if (cupFields.length === 0) return updates;
+  // Anchor against the live rate. If it can't be resolved, skip anchoring
+  // rather than write a wrong USD value (the recompute keeps CUP as-is).
+  let rate: number;
+  try {
+    rate = await exchangeRateService.getUsdCupRate();
+  } catch {
+    return updates;
+  }
+  if (!rate || rate <= 0) return updates;
+  const out: Record<string, unknown> = { ...updates };
+  for (const f of cupFields) {
+    const usdField = CUP_TO_USD_FIELD[f];
+    if (!usdField) continue;
+    out[usdField] = (updates[f] as number) / rate;
+  }
+  return out;
+}
+
 export const adminService = {
   /**
    * Get dashboard metrics.
@@ -658,13 +695,16 @@ export const adminService = {
     id: string,
     updates: Partial<Pick<ServiceTypeConfig,
       'name_es' | 'name_en' | 'base_fare_cup' | 'per_km_rate_cup' |
-      'per_minute_rate_cup' | 'min_fare_cup' | 'max_passengers' | 'icon_name' | 'is_active'
+      'per_minute_rate_cup' | 'min_fare_cup' | 'per_wait_minute_rate_cup' |
+      'max_passengers' | 'icon_name' | 'is_active'
     >>,
   ): Promise<void> {
     const supabase = getSupabaseClient();
+    // 00441: keep USD anchors in sync so the FX recompute doesn't revert edits.
+    const anchored = await withUsdAnchors(updates as Record<string, unknown>);
     const { error } = await supabase
       .from('service_type_configs')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...anchored, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
   },
@@ -692,9 +732,11 @@ export const adminService = {
     >>,
   ): Promise<void> {
     const supabase = getSupabaseClient();
+    // 00441: keep USD anchors in sync so the FX recompute doesn't revert edits.
+    const anchored = await withUsdAnchors(updates as Record<string, unknown>);
     const { error } = await supabase
       .from('pricing_rules')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...anchored, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw error;
   },
@@ -711,9 +753,11 @@ export const adminService = {
     },
   ): Promise<void> {
     const supabase = getSupabaseClient();
+    // 00441: anchor the new rule's CUP rates in USD on creation too.
+    const anchored = await withUsdAnchors(rule as Record<string, unknown>);
     const { error } = await supabase
       .from('pricing_rules')
-      .insert(rule);
+      .insert(anchored);
     if (error) throw error;
   },
 

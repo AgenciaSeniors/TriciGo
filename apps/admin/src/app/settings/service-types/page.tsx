@@ -107,6 +107,13 @@ export default function ServiceTypesPage() {
       )}
       <h1 className="text-3xl font-bold mb-6">{t('service_types.title')}</h1>
 
+      <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl px-4 py-3 mb-6 text-sm">
+        {t('pricing.usd_anchor_note', {
+          defaultValue:
+            'Los precios están anclados en USD. Editás el valor en CUP de hoy y queda guardado su equivalente en dólares; el CUP se recalcula solo con la tasa de ElToque para que la inflación no afecte nuestro ingreso.',
+        })}
+      </div>
+
       <div className="bg-surface-elevated rounded-xl shadow-sm border border-line overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-surface-sunken border-b border-line">

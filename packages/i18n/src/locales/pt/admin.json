@@ -800,6 +800,7 @@
     "no_service_types": "Sem tipos de serviço"
   },
   "pricing": {
+    "usd_anchor_note": "Os preços estão ancorados em USD. Você edita o valor em CUP de hoje e seu equivalente em dólares é salvo; o CUP é recalculado sozinho com a taxa do ElToque para que a inflação não afete nossa receita.",
     "title": "Regras de preço",
     "filter_all": "Todos",
     "filter_triciclo": "Triciclo Básico",
