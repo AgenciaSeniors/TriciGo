@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
+import { HOME_FAQS } from '@/lib/home-faq';
 
 /* ── SVG Icons for Features ── */
 
@@ -207,8 +208,91 @@ export default function HomeClient() {
         </div>
       </section>
 
-      {/* ── Seguridad (bento) ── */}
+      {/* ── Todo lo que podés hacer (bento) ── */}
       <section className="section">
+        <div className="container">
+          <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
+            <span className="bento-eyebrow">La app</span>
+            <h2 className="section-title">Todo lo que podés hacer</h2>
+            <p className="section-subtitle">
+              TriciGo es más que pedir un viaje: programá, compartí, sumá paradas y viajá a tu manera.
+            </p>
+          </div>
+
+          <div className="bento">
+            {/* Programá — primary, tall */}
+            <div className="bento-tile bento-tile--primary bento-2 bento-tall">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+              </div>
+              <h3 style={{ fontSize: '1.35rem' }}>Programá tus viajes</h3>
+              <p>Reservá un viaje para más tarde, o dejá programados tus viajes de siempre —al trabajo, a la escuela— para que se repitan solos.</p>
+            </div>
+
+            {/* Agregá paradas */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><line x1="12" y1="7" x2="12" y2="13" /><line x1="9" y1="10" x2="15" y2="10" />
+                </svg>
+              </div>
+              <h3>Agregá paradas</h3>
+              <p>¿Surgió una parada? Sumala en pleno viaje y el precio se ajusta solo.</p>
+            </div>
+
+            {/* Chateá con tu conductor */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <h3>Chateá con tu conductor</h3>
+              <p>Coordiná la recogida con mensajes dentro de la app.</p>
+            </div>
+
+            {/* Direcciones guardadas — glow */}
+            <div className="bento-tile bento-tile--glow">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+              </div>
+              <h3>Direcciones guardadas</h3>
+              <p>Guardá casa y trabajo y pedí en dos toques. Tu historial, siempre a mano.</p>
+            </div>
+
+            {/* Tu viaje a tu medida */}
+            <div className="bento-tile">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="21" y1="4" x2="14" y2="4" /><line x1="10" y1="4" x2="3" y2="4" /><line x1="21" y1="12" x2="12" y2="12" /><line x1="8" y1="12" x2="3" y2="12" /><line x1="21" y1="20" x2="16" y2="20" /><line x1="12" y1="20" x2="3" y2="20" /><line x1="14" y1="2" x2="14" y2="6" /><line x1="8" y1="10" x2="8" y2="14" /><line x1="16" y1="18" x2="16" y2="22" />
+                </svg>
+              </div>
+              <h3>Tu viaje a tu medida</h3>
+              <p>Modo silencio, espacio para equipaje y opciones de accesibilidad (silla de ruedas y más).</p>
+            </div>
+
+            {/* Compartí y dividí — full-width row */}
+            <div className="bento-tile bento-tile--row bento-4">
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 0 1-9 9" />
+                </svg>
+              </div>
+              <div>
+                <h3>Compartí y dividí</h3>
+                <p>En triciclo, compartí los asientos libres y pagás menos. ¿Viajan juntos? Dividí la cuenta con quien va con vos, sin cuentas a mano.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Seguridad (bento) ── */}
+      <section className="section section--gray">
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
             <span className="bento-eyebrow">Seguridad</span>
@@ -270,7 +354,7 @@ export default function HomeClient() {
       </section>
 
       {/* ── TriciCoin (bento) ── */}
-      <section className="section section--gray">
+      <section className="section">
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
             <span className="bento-eyebrow">TriciCoin</span>
@@ -329,6 +413,33 @@ export default function HomeClient() {
               <div>
                 <h3>Regalá saldo</h3>
                 <p>Mandale TriciCoin a un familiar o a un amigo para sus próximos viajes, al instante.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Invitá y ganá (referidos) ── */}
+      <section className="section section--gray">
+        <div className="container">
+          <div className="bento">
+            <div className="bento-tile bento-tile--primary bento-tile--row bento-4" style={{ alignItems: 'center' }}>
+              <div className="bento-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" />
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: '1.4rem' }}>Invitá y ganá</h3>
+                <p>
+                  Compartí tu código de invitación. Cuando tu amigo se registra y hace su primer viaje,
+                  los dos ganan saldo TriciCoin para moverse. Tu código está en la app, en la sección de referidos.
+                </p>
+                <div style={{ marginTop: '1.1rem' }}>
+                  <div className="hero__store-buttons">
+                    <StoreButtons variant="white" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -532,6 +643,28 @@ export default function HomeClient() {
             <Link href="/blog" style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none' }}>
               Ver todo el blog &rarr;
             </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Preguntas frecuentes ── */}
+      <section className="section section--gray">
+        <div className="container">
+          <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
+            <span className="bento-eyebrow">Dudas</span>
+            <h2 className="section-title">Preguntas frecuentes</h2>
+            <p className="section-subtitle">
+              Lo que más nos preguntan sobre cómo viajar con TriciGo.
+            </p>
+          </div>
+
+          <div className="faq-list">
+            {HOME_FAQS.map((f, i) => (
+              <details key={i} className="faq-item">
+                <summary>{f.q}</summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
