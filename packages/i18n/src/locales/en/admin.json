@@ -800,6 +800,7 @@
     "no_service_types": "No service types"
   },
   "pricing": {
+    "usd_anchor_note": "Prices are anchored in USD. You edit today's CUP value and its USD equivalent is stored; the CUP auto-recalculates with the ElToque rate so inflation doesn't erode our revenue.",
     "title": "Pricing rules",
     "filter_all": "All",
     "filter_triciclo": "Triciclo Basic",

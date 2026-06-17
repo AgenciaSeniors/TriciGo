@@ -22,6 +22,14 @@ vi.mock('../notification.service', () => ({
   },
 }));
 
+// Mock exchange-rate service: pricing updates anchor CUP→USD via getUsdCupRate
+// (00441). Stub it so it doesn't issue its own supabase calls during tests.
+vi.mock('../exchange-rate.service', () => ({
+  exchangeRateService: {
+    getUsdCupRate: vi.fn().mockResolvedValue(680),
+  },
+}));
+
 // Import after mock is set up
 import { adminService } from '../admin.service';
 
@@ -857,11 +865,24 @@ describe('adminService', () => {
       await adminService.updateServiceTypeConfig('stc-1', { base_fare_cup: 5000 });
 
       expect(mockFrom).toHaveBeenCalledWith('service_type_configs');
+      // 00441: CUP edit also persists the USD anchor (cup / rate).
       expect(chain.update).toHaveBeenCalledWith(expect.objectContaining({
         base_fare_cup: 5000,
+        base_fare_usd: 5000 / 680,
         updated_at: expect.any(String),
       }));
       expect(chain.eq).toHaveBeenCalledWith('id', 'stc-1');
+    });
+
+    it('does not add USD anchors when no CUP field changes', async () => {
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await adminService.updateServiceTypeConfig('stc-1', { is_active: false });
+
+      const payload = chain.update.mock.calls[0][0];
+      expect(payload).not.toHaveProperty('base_fare_usd');
+      expect(payload).toMatchObject({ is_active: false });
     });
 
     it('throws on supabase error', async () => {
@@ -925,7 +946,11 @@ describe('adminService', () => {
       await adminService.updatePricingRule('pr-1', { base_fare_cup: 5000 });
 
       expect(mockFrom).toHaveBeenCalledWith('pricing_rules');
-      expect(chain.update).toHaveBeenCalledWith(expect.objectContaining({ base_fare_cup: 5000 }));
+      // 00441: CUP edit also persists the USD anchor (cup / rate).
+      expect(chain.update).toHaveBeenCalledWith(expect.objectContaining({
+        base_fare_cup: 5000,
+        base_fare_usd: 5000 / 680,
+      }));
       expect(chain.eq).toHaveBeenCalledWith('id', 'pr-1');
     });
 

@@ -34,6 +34,15 @@ export interface PricingRule {
   per_minute_rate_cup: number;
   /** Minimum fare in CUP/TRC whole units */
   min_fare_cup: number;
+  /**
+   * USD anchors (source of truth, migration 00441). The *_cup columns above
+   * are derived = ROUND(usd * current_rate) and auto-refresh on every FX rate
+   * change. Optional because they may be absent until the migration runs.
+   */
+  base_fare_usd?: number | null;
+  per_km_rate_usd?: number | null;
+  per_minute_rate_usd?: number | null;
+  min_fare_usd?: number | null;
   /** Time window for time-based pricing (HH:MM format) */
   time_window_start: string | null;
   time_window_end: string | null;
@@ -64,6 +73,16 @@ export interface ServiceTypeConfig {
   per_wait_minute_rate_cup: number;
   /** Free wait time in minutes before charges begin */
   free_wait_minutes: number;
+  /**
+   * USD anchors (source of truth, migration 00441). The *_cup columns are
+   * derived = ROUND(usd * current_rate) and auto-refresh on every FX rate
+   * change. Optional because they may be absent until the migration runs.
+   */
+  base_fare_usd?: number | null;
+  per_km_rate_usd?: number | null;
+  per_minute_rate_usd?: number | null;
+  min_fare_usd?: number | null;
+  per_wait_minute_rate_usd?: number | null;
   created_at: string;
   updated_at: string;
 }
