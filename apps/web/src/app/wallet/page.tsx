@@ -118,7 +118,8 @@ export default function WalletPage() {
     available: number; held: number;
     availableUsdCents: number | null; heldUsdCents: number | null;
     migrationRate: number | null; migrationBonusPct: number | null;
-  }>({ available: 0, held: 0, availableUsdCents: null, heldUsdCents: null, migrationRate: null, migrationBonusPct: null });
+    anchorUsdCents: number | null;
+  }>({ available: 0, held: 0, availableUsdCents: null, heldUsdCents: null, migrationRate: null, migrationBonusPct: null, anchorUsdCents: null });
   const [balanceLoading, setBalanceLoading] = useState(true);
 
   // Wallet v2 migration banner (one-time, dismissible — parity con WalletMigrationBanner).
@@ -522,25 +523,20 @@ export default function WalletPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
                 Saldo disponible
               </p>
-              {/* Wallet v2: show USD as the unit of account with a CUP subtitle. */}
-              {balance.availableUsdCents != null ? (
-                <>
-                  <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.1rem' }}>
-                    ${(balance.availableUsdCents / 100).toFixed(2)} <span style={{ fontSize: '1rem', fontWeight: 600, opacity: 0.85 }}>USD</span>
-                  </p>
-                  <p style={{ fontSize: '0.8rem', opacity: 0.85, margin: 0 }}>
-                    &asymp; {formatTRC(balance.available)}
-                  </p>
-                </>
-              ) : (
-                <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.25rem' }}>
-                  {formatTRC(balance.available)}
+              {/* 00443: CUP is the primary figure (Cuban-first). When the wallet
+                  is USD-anchored, show its protected dollar value as subtitle. */}
+              <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.1rem' }}>
+                {formatTRC(balance.available)}
+              </p>
+              {balance.anchorUsdCents != null && (
+                <p style={{ fontSize: '0.8rem', opacity: 0.85, margin: 0 }}>
+                  &asymp; ${(balance.anchorUsdCents / 100).toFixed(2)} USD &middot; valor protegido
                 </p>
               )}
               {balance.held > 0 && (
                 <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.15)', borderRadius: '0.5rem' }}>
                   <p style={{ fontSize: '0.75rem', opacity: 0.8, margin: 0 }}>
-                    Retenido: {balance.heldUsdCents != null ? `$${(balance.heldUsdCents / 100).toFixed(2)} USD` : formatTRC(balance.held)}
+                    Retenido: {formatTRC(balance.held)}
                   </p>
                 </div>
               )}

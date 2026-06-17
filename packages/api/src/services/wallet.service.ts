@@ -144,17 +144,18 @@ export const walletService = {
     heldUsdCents: number | null;
     migrationRate: number | null;
     migrationBonusPct: number | null;
+    anchorUsdCents: number | null;
   }> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('wallet_accounts')
-      .select('balance, held_balance, balance_usd_cents, held_balance_usd_cents, migration_rate, migration_bonus_pct')
+      .select('balance, held_balance, balance_usd_cents, held_balance_usd_cents, migration_rate, migration_bonus_pct, anchor_usd_cents')
       .eq('user_id', userId)
       .eq('account_type', accountType)
       .single();
     if (error && error.code !== 'PGRST116') throw error;
     if (!data) {
-      return { available: 0, held: 0, availableUsdCents: null, heldUsdCents: null, migrationRate: null, migrationBonusPct: null };
+      return { available: 0, held: 0, availableUsdCents: null, heldUsdCents: null, migrationRate: null, migrationBonusPct: null, anchorUsdCents: null };
     }
     const row = data as {
       balance: number;
@@ -163,6 +164,7 @@ export const walletService = {
       held_balance_usd_cents: number | null;
       migration_rate: string | number | null;
       migration_bonus_pct: string | number | null;
+      anchor_usd_cents: number | null;
     };
     return {
       available: row.balance,
@@ -171,6 +173,7 @@ export const walletService = {
       heldUsdCents: row.held_balance_usd_cents,
       migrationRate: row.migration_rate != null ? Number(row.migration_rate) : null,
       migrationBonusPct: row.migration_bonus_pct != null ? Number(row.migration_bonus_pct) : null,
+      anchorUsdCents: row.anchor_usd_cents,
     };
   },
 

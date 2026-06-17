@@ -155,10 +155,12 @@ function WebWalletScreen() {
     heldUsdCents: number | null;
     migrationRate: number | null;
     migrationBonusPct: number | null;
+    anchorUsdCents: number | null;
   }>({
     available: 0, held: 0,
     availableUsdCents: null, heldUsdCents: null,
     migrationRate: null, migrationBonusPct: null,
+    anchorUsdCents: null,
   });
   const [accountId, setAccountId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<TransactionWithAmount[]>([]);
@@ -619,10 +621,12 @@ function NativeWalletScreen() {
     heldUsdCents: number | null;
     migrationRate: number | null;
     migrationBonusPct: number | null;
+    anchorUsdCents: number | null;
   }>({
     available: 0, held: 0,
     availableUsdCents: null, heldUsdCents: null,
     migrationRate: null, migrationBonusPct: null,
+    anchorUsdCents: null,
   });
   const [accountId, setAccountId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<TransactionWithAmount[]>([]);
@@ -1141,9 +1145,14 @@ function NativeWalletScreen() {
   const heroPrimary = heroUsdMode
     ? formatTriciCoinUsd(balance.availableUsdCents ?? 0)
     : formatTriciCoin(displayBalance);
+  // 00443: when the wallet is USD-anchored, show its protected dollar value
+  // (anchor) as the subtitle. CUP stays the primary figure; the dollar value
+  // is what's preserved against inflation.
   const heroSubtitle = heroUsdMode
     ? formatCupApprox(balance.availableUsdCents ?? 0, heroRate)
-    : `≈ ${formatUSD(trcToUsd(displayBalance, heroRate))}`;
+    : balance.anchorUsdCents != null
+      ? `≈ ${formatUSD(balance.anchorUsdCents / 100)}`
+      : `≈ ${formatUSD(trcToUsd(displayBalance, heroRate))}`;
   const heroHasHeld = heroUsdMode ? (balance.heldUsdCents ?? 0) > 0 : balance.held > 0;
   const heroHeldText = heroUsdMode
     ? formatTriciCoinUsd(balance.heldUsdCents ?? 0)
