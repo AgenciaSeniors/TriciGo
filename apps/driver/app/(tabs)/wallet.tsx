@@ -86,6 +86,9 @@ export default function WalletScreen() {
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
+  // 00444: USD anchor (cents) for the tricicoin wallet — the protected dollar
+  // value shown under the CUP balance. Null until the anchor is set.
+  const [anchorUsdCents, setAnchorUsdCents] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -104,12 +107,15 @@ export default function WalletScreen() {
     try {
       const p = reset ? 0 : page;
       // 00300: single-wallet driver model → tricicoin es la única fuente.
-      const [summaryData, rateData] = await Promise.all([
+      // 00444: also read the USD anchor to show the protected dollar value.
+      const [summaryData, rateData, balanceData] = await Promise.all([
         walletService.getSummary(userId, 'tricicoin'),
         exchangeRateService.getUsdCupRate().catch(() => DEFAULT_EXCHANGE_RATE),
+        walletService.getBalance(userId, 'tricicoin').catch(() => null),
       ]);
       setSummary(summaryData);
       setExchangeRate(rateData);
+      setAnchorUsdCents(balanceData?.anchorUsdCents ?? null);
 
       let txData: LedgerTransaction[] = [];
       if (summaryData.account_id) {
@@ -561,7 +567,7 @@ export default function WalletScreen() {
                         ...TABULAR,
                       }}
                     >
-                      ≈ {formatUSD(trcToUsd(balance, exchangeRate))}
+                      ≈ {formatUSD(anchorUsdCents != null ? anchorUsdCents / 100 : trcToUsd(balance, exchangeRate))}{anchorUsdCents != null ? ` · ${t('wallet.usd_protected', { defaultValue: 'valor protegido' })}` : ''}
                     </Text>
                   </View>
                   {held > 0 && (
