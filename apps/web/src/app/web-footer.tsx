@@ -27,6 +27,15 @@ export function WebFooter() {
         </div>
 
         <div>
+          <div className="footer-section-title">{t('footer.services', { defaultValue: 'Servicios' })}</div>
+          <a href="/triciclo" className="footer-link">Triciclo</a>
+          <a href="/moto" className="footer-link">Moto</a>
+          <a href="/auto" className="footer-link">Auto</a>
+          <a href="/mensajeria" className="footer-link">Mensajería</a>
+          <a href="/uber-cuba" className="footer-link">¿Hay Uber en Cuba?</a>
+        </div>
+
+        <div>
           <div className="footer-section-title">{t('footer.legal', { defaultValue: 'Legal' })}</div>
           <a href="/privacy" className="footer-link">{t('footer.privacy')}</a>
           <a href="/terms" className="footer-link">{t('footer.terms')}</a>

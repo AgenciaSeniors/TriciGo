@@ -55,6 +55,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   ];
 
+  // Service landing pages + "Uber en Cuba" (high-intent commercial keywords)
+  const keywordRoutes: MetadataRoute.Sitemap = [
+    ...getAllServiceSlugs().map((slug) => ({
+      url: `${baseUrl}/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.8,
+    })),
+    { url: `${baseUrl}/uber-cuba`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
+  ];
+
   // Dynamic blog posts
   let blogRoutes: MetadataRoute.Sitemap = [];
   try {
@@ -78,5 +89,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Best-effort: if blog posts fetch fails, just use static routes
   }
 
-  return [...staticRoutes, ...coverageRoutes, ...airportRoutes, ...blogRoutes];
+  return [...staticRoutes, ...coverageRoutes, ...keywordRoutes, ...airportRoutes, ...blogRoutes];
 }
