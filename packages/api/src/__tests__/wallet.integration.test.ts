@@ -101,6 +101,7 @@ describe('Wallet Service Integration', () => {
         heldUsdCents: null,
         migrationRate: null,
         migrationBonusPct: null,
+        anchorUsdCents: null,
       });
     });
 
