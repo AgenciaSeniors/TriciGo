@@ -961,6 +961,51 @@ a.bento-tile:hover {
   .bento-tile--row { flex-direction: column; align-items: flex-start; text-align: left; }
 }
 
+/* ── FAQ accordion (native <details>, no JS) ── */
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 720px;
+  margin: 2.5rem auto 0;
+}
+.faq-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 0 1.25rem;
+}
+.faq-item summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 0;
+  font-weight: 600;
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after {
+  content: '+';
+  flex: 0 0 auto;
+  font-size: 1.4rem;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--primary);
+  transition: transform var(--transition-base);
+}
+.faq-item[open] summary::after { content: '\2212'; }
+.faq-item > p {
+  margin: 0;
+  padding: 0 0 1.2rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  font-size: var(--text-md);
+}
+
 /* ══════════════════════════════════════════════════
    App Pages — Responsive (booking, rides, wallet, profile)
    ══════════════════════════════════════════════════ */

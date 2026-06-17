@@ -3,6 +3,7 @@ import Link from 'next/link';
 import HomeClient from './HomeClient';
 import { JsonLd } from '../components/JsonLd';
 import { getAllProvinces } from '@/lib/coverage';
+import { HOME_FAQS } from '@/lib/home-faq';
 
 export const metadata: Metadata = {
   title: 'TriciGo — Pedí tu viaje | Triciclos, Motos y Autos',
@@ -15,51 +16,16 @@ export const metadata: Metadata = {
 
 /* ── Structured data for SEO ── */
 
+// Built from the shared HOME_FAQS so the structured data and the visible FAQ
+// accordion in HomeClient always stay in sync.
 const faqJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
-  mainEntity: [
-    {
-      '@type': 'Question',
-      name: '¿Cómo funciona TriciGo?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Descarga la app, ingresa tu destino, elige entre triciclo, moto o auto, y confirma tu viaje. Un conductor cercano te recogerá en minutos.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: '¿En qué ciudades opera TriciGo?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'TriciGo se despliega ciudad por ciudad en las 16 provincias de Cuba, de Pinar del Río a Guantánamo. Revisa la app o la página de cobertura para ver las zonas de servicio disponibles en cada momento.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: '¿Cómo pago mi viaje?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Puedes pagar en efectivo o con créditos de viaje TriciCoin. Los créditos se compran con tarjeta de crédito o débito dentro de la app.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: '¿Es seguro viajar con TriciGo?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Sí. TriciGo incluye botón SOS, seguimiento en tiempo real, contactos de confianza y verificación de conductores.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: '¿Cuánto cuesta un viaje?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'El precio depende de la distancia, tipo de vehículo y demanda. Siempre ves el precio estimado antes de confirmar.',
-      },
-    },
-  ],
+  mainEntity: HOME_FAQS.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: f.a },
+  })),
 };
 
 const serviceJsonLd = {
