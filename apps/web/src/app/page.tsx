@@ -6,9 +6,10 @@ import { getAllProvinces } from '@/lib/coverage';
 import { HOME_FAQS } from '@/lib/home-faq';
 
 export const metadata: Metadata = {
-  title: 'TriciGo — Pedí tu viaje | Triciclos, Motos y Autos',
+  // `absolute` sets the exact <title> (bypasses the root "%s | TriciGo" template).
+  title: { absolute: 'TriciGo — App de transporte en Cuba: triciclo, moto y auto' },
   description:
-    'Solicita un viaje con TriciGo en toda Cuba. Triciclos, motos y autos disponibles 24/7. Rápido, seguro y económico.',
+    'Pedí un triciclo, moto o auto con TriciGo, la app de transporte en Cuba. Mirá el precio en CUP antes de viajar, en las 16 provincias. Descarga gratis.',
   alternates: {
     canonical: 'https://tricigo.com',
   },

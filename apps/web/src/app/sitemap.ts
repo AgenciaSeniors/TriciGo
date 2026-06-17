@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { getAllProvinceSlugs } from '@/lib/coverage';
 import { getAllCityParams } from '@/lib/cities';
+import { getAllServiceSlugs } from '@/lib/services';
 import { AIRPORT, getAllRouteSlugs } from '@/lib/airport-routes';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
