@@ -55,19 +55,30 @@ COMMENT ON COLUMN public.pricing_rules.base_fare_usd IS
 -- 2) Generic anchor: usd = current_cup / 680 for EVERY row (keeps current
 --    level for anything not in the report: mensajeria, triciclo_premium, …).
 --    The report vehicles are overridden right after.
+--
+--    IDEMPOTENCY GUARD (WHERE base_fare_usd IS NULL): only anchor rows that do
+--    NOT yet have a USD anchor. This matters because mcp apply records this
+--    migration by TIMESTAMP, not by filename, so a later `supabase db push`
+--    would re-run it. Without the guard, re-running would re-anchor each row
+--    from its already-derived CUP (computed at the live rate), drifting the
+--    non-report rows (e.g. mensajeria) upward on every re-apply. With the
+--    guard, re-applies are no-ops here; the report vehicles stay correct via
+--    their fixed overrides in sections 3-4 below.
 -- ─────────────────────────────────────────────────────────────────────────
 UPDATE public.service_type_configs SET
   base_fare_usd            = base_fare_cup            / 680.0,
   per_km_rate_usd          = per_km_rate_cup          / 680.0,
   per_minute_rate_usd      = per_minute_rate_cup      / 680.0,
   min_fare_usd             = min_fare_cup             / 680.0,
-  per_wait_minute_rate_usd = COALESCE(per_wait_minute_rate_cup, 0) / 680.0;
+  per_wait_minute_rate_usd = COALESCE(per_wait_minute_rate_cup, 0) / 680.0
+WHERE base_fare_usd IS NULL;
 
 UPDATE public.pricing_rules SET
   base_fare_usd       = base_fare_cup       / 680.0,
   per_km_rate_usd     = per_km_rate_cup     / 680.0,
   per_minute_rate_usd = per_minute_rate_cup / 680.0,
-  min_fare_usd        = min_fare_cup        / 680.0;
+  min_fare_usd        = min_fare_cup        / 680.0
+WHERE base_fare_usd IS NULL;
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- 3) service_type_configs — Día defaults for the 4 report vehicles
