@@ -66,6 +66,11 @@ const organizationJsonLd = {
   legalName: 'MACH DIGITAL TECH S.R.L.',
   url: 'https://tricigo.com',
   logo: 'https://tricigo.com/logo-wordmark.png',
+  // Official brand profiles — strengthens entity recognition / knowledge panel.
+  sameAs: [
+    'https://facebook.com/tricigoapp',
+    'https://www.instagram.com/tricigo_app',
+  ],
   description:
     'Plataforma de transporte urbano. Solicita triciclos, motos y autos de forma rápida y segura.',
   taxID: '54552055',
