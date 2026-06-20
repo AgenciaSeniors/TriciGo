@@ -217,6 +217,10 @@ export function RideActiveView() {
 
   // INFRA-2: Mapbox Directions route ETA (more accurate than haversine)
   const [routeETA, setRouteETA] = useState<{ durationMinutes: number; distanceKm: number } | null>(null);
+  // Latest-wins guard: getRouteETA fires on every driverPosition change, so a
+  // slow older request could resolve after a newer one and overwrite a fresher
+  // ETA. Only the most recent request may set state.
+  const etaReqIdRef = useRef(0);
 
   useEffect(() => {
     if (!driverPosition || !activeRide) return;
@@ -225,11 +229,12 @@ export function RideActiveView() {
       ? { lat: activeRide.pickup_location?.latitude ?? 0, lng: activeRide.pickup_location?.longitude ?? 0 }
       : { lat: activeRide.dropoff_location?.latitude ?? 0, lng: activeRide.dropoff_location?.longitude ?? 0 };
 
+    const reqId = ++etaReqIdRef.current;
     getRouteETA(
       { lat: driverPosition.latitude, lng: driverPosition.longitude },
       target,
     ).then((result) => {
-      if (result) setRouteETA(result);
+      if (etaReqIdRef.current === reqId && result) setRouteETA(result);
     });
   }, [driverPosition?.latitude, driverPosition?.longitude, activeRide?.status]);
 
