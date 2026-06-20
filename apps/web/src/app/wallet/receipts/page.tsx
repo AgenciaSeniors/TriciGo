@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { walletService, getSupabaseClient } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
 
@@ -61,6 +62,7 @@ function formatDate(iso: string): string {
 }
 
 export default function ReceiptsPage() {
+  const { t } = useTranslation('web');
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -101,7 +103,7 @@ export default function ReceiptsPage() {
 
   const handleDownload = useCallback(async (row: ReceiptRow) => {
     if (!row.pdf_storage_path) {
-      setDownloadError('El PDF aún no está disponible. Esperá unos segundos y volvé a intentar.');
+      setDownloadError(t('receipts.error_not_ready', { defaultValue: 'El PDF aún no está disponible. Esperá unos segundos y volvé a intentar.' }));
       return;
     }
     setDownloadingId(row.id);
@@ -113,17 +115,17 @@ export default function ReceiptsPage() {
       // download flow depending on the user's settings.
       window.open(signedUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : 'No se pudo generar la URL de descarga.');
+      setDownloadError(err instanceof Error ? err.message : t('receipts.error_download', { defaultValue: 'No se pudo generar la URL de descarga.' }));
     } finally {
       setDownloadingId(null);
     }
-  }, []);
+  }, [t]);
 
   if (authLoading || !userId) {
     return (
       <main className="page-main">
         <div className="page-container">
-          <p style={{ color: 'var(--text-tertiary)' }}>Cargando…</p>
+          <p style={{ color: 'var(--text-tertiary)' }}>{t('receipts.loading', { defaultValue: 'Cargando…' })}</p>
         </div>
       </main>
     );
@@ -134,10 +136,10 @@ export default function ReceiptsPage() {
       <div className="page-container">
         <Link
           href="/wallet"
-          aria-label="Volver a mis créditos"
+          aria-label={t('receipts.back_credits_aria', { defaultValue: 'Volver a mis créditos' })}
           style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}
         >
-          &larr; Mis créditos
+          {t('receipts.back_credits', { defaultValue: '← Mis créditos' })}
         </Link>
 
         <h1
@@ -148,7 +150,7 @@ export default function ReceiptsPage() {
             marginBottom: '0.25rem',
           }}
         >
-          Comprobantes de recarga
+          {t('receipts.title', { defaultValue: 'Comprobantes de recarga' })}
         </h1>
         <p
           style={{
@@ -157,8 +159,7 @@ export default function ReceiptsPage() {
             margin: '0 0 1.5rem',
           }}
         >
-          Cada recarga genera un PDF con el detalle del cargo y los TriciCoin acreditados.
-          Conservalos para tus registros.
+          {t('receipts.subtitle', { defaultValue: 'Cada recarga genera un PDF con el detalle del cargo y los TriciCoin acreditados. Conservalos para tus registros.' })}
         </p>
 
         {downloadError && (
@@ -183,9 +184,9 @@ export default function ReceiptsPage() {
         {!loading && receipts.length === 0 && (
           <WebEmptyState
             icon="📄"
-            title="Sin comprobantes todavía"
-            description="Cuando hagas una recarga vas a poder descargar el PDF acá."
-            action={{ label: 'Ir a recargar', href: '/wallet' }}
+            title={t('receipts.empty_title', { defaultValue: 'Sin comprobantes todavía' })}
+            description={t('receipts.empty_description', { defaultValue: 'Cuando hagas una recarga vas a poder descargar el PDF acá.' })}
+            action={{ label: t('receipts.go_recharge', { defaultValue: 'Ir a recargar' }), href: '/wallet' }}
           />
         )}
 
@@ -245,15 +246,14 @@ export default function ReceiptsPage() {
                         margin: '0.35rem 0 0',
                       }}
                     >
-                      Cargo {formatUsd(row.usd_charged)} · {formatTcInt(row.tc_credited)} TriciCoin
-                      acreditados
+                      {t('receipts.charge_summary', { usd: formatUsd(row.usd_charged), tc: formatTcInt(row.tc_credited), defaultValue: 'Cargo {{usd}} · {{tc}} TriciCoin acreditados' })}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleDownload(row)}
                     disabled={!ready || isDownloading}
-                    aria-label={`Descargar PDF del comprobante ${row.receipt_no}`}
+                    aria-label={t('receipts.download_aria', { receipt: row.receipt_no, defaultValue: 'Descargar PDF del comprobante {{receipt}}' })}
                     className="btn-base btn-secondary-outline"
                     style={{
                       cursor: !ready || isDownloading ? 'not-allowed' : 'pointer',
@@ -262,10 +262,10 @@ export default function ReceiptsPage() {
                     }}
                   >
                     {isDownloading
-                      ? 'Preparando…'
+                      ? t('receipts.downloading', { defaultValue: 'Preparando…' })
                       : ready
-                        ? 'Descargar PDF'
-                        : 'PDF en proceso'}
+                        ? t('receipts.download', { defaultValue: 'Descargar PDF' })
+                        : t('receipts.pdf_in_process', { defaultValue: 'PDF en proceso' })}
                   </button>
                 </li>
               );

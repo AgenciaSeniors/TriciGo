@@ -15,13 +15,19 @@ import {
   translateNetopiaError,
   classifyWalletTxn,
 } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import type { LedgerTransaction, WalletAccount, PaymentProviderConfig } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
 
+// Minimal `t` signature so the module-scope helpers below can take the
+// translator without depending on the full i18n types.
+type TFn = (key: string, options?: Record<string, unknown>) => string;
+
 // Filter tabs for the transaction history: Recargas, Viajes, Bonos
 // (promo_credit) and Ajustes (adjustment). Legacy P2P transfers still
-// appear under "Todos" but no new transfers can be created.
+// appear under "Todos" but no new transfers can be created. Labels are
+// resolved via `t` inside the component (i18n key wallet.filter_<key>).
 type FilterTab =
   | 'all'
   | 'recharge'
@@ -29,33 +35,47 @@ type FilterTab =
   | 'bonus'
   | 'adjustment';
 
-const FILTER_TABS: { key: FilterTab; label: string }[] = [
-  { key: 'all', label: 'Todos' },
-  { key: 'recharge', label: 'Recargas' },
-  { key: 'rides', label: 'Viajes' },
-  { key: 'bonus', label: 'Bonos' },
-  { key: 'adjustment', label: 'Ajustes' },
-];
+const FILTER_TAB_KEYS: FilterTab[] = ['all', 'recharge', 'rides', 'bonus', 'adjustment'];
 
 // Label derived from the shared classifier kind + direction (fixes received
 // gifts showing "Transferencia enviada" and tips showing "Ajuste"). Credit vs
 // debit and the amount come from the per-account net (classifyWalletTxn), not
 // from the raw type — a gift is one `transfer_out` txn for both parties.
-function webTxLabel(view: { kind: string; isCredit: boolean }): string {
+// `t` is passed in so this stays a module-scope helper (no `t` call at
+// module load).
+function webTxLabel(view: { kind: string; isCredit: boolean }, t: TFn): string {
   switch (view.kind) {
-    case 'recharge': return 'Recarga';
-    case 'ride': return view.isCredit ? 'Ingreso por viaje' : 'Pago de viaje';
-    case 'commission': return 'Comisión';
+    case 'recharge': return t('wallet.tx_recharge', { defaultValue: 'Recarga' });
+    case 'ride': return view.isCredit
+      ? t('wallet.tx_ride_in', { defaultValue: 'Ingreso por viaje' })
+      : t('wallet.tx_ride_out', { defaultValue: 'Pago de viaje' });
+    case 'commission': return t('wallet.tx_commission', { defaultValue: 'Comisión' });
     case 'gift':
-    case 'transfer': return view.isCredit ? 'Regalo recibido' : 'Regalo enviado';
-    case 'tip': return view.isCredit ? 'Propina recibida' : 'Propina enviada';
-    case 'penalty': return 'Penalización por cancelación';
-    case 'bonus': return 'Crédito promocional';
-    case 'refund': return 'Reembolso';
-    case 'insurance': return 'Seguro de viaje';
-    case 'fx': return 'Ajuste por tipo de cambio';
+    case 'transfer': return view.isCredit
+      ? t('wallet.tx_gift_in', { defaultValue: 'Regalo recibido' })
+      : t('wallet.tx_gift_out', { defaultValue: 'Regalo enviado' });
+    case 'tip': return view.isCredit
+      ? t('wallet.tx_tip_in', { defaultValue: 'Propina recibida' })
+      : t('wallet.tx_tip_out', { defaultValue: 'Propina enviada' });
+    case 'penalty': return t('wallet.tx_penalty', { defaultValue: 'Penalización por cancelación' });
+    case 'bonus': return t('wallet.tx_bonus', { defaultValue: 'Crédito promocional' });
+    case 'refund': return t('wallet.tx_refund', { defaultValue: 'Reembolso' });
+    case 'insurance': return t('wallet.tx_insurance', { defaultValue: 'Seguro de viaje' });
+    case 'fx': return t('wallet.tx_fx', { defaultValue: 'Ajuste por tipo de cambio' });
     case 'adjustment':
-    default: return 'Ajuste';
+    default: return t('wallet.tx_adjustment', { defaultValue: 'Ajuste' });
+  }
+}
+
+// Label for a filter tab (i18n). Module-scope helper takes `t`.
+function filterTabLabel(key: FilterTab, t: TFn): string {
+  switch (key) {
+    case 'recharge': return t('wallet.filter_recharge', { defaultValue: 'Recargas' });
+    case 'rides': return t('wallet.filter_rides', { defaultValue: 'Viajes' });
+    case 'bonus': return t('wallet.filter_bonus', { defaultValue: 'Bonos' });
+    case 'adjustment': return t('wallet.filter_adjustment', { defaultValue: 'Ajustes' });
+    case 'all':
+    default: return t('wallet.filter_all', { defaultValue: 'Todos' });
   }
 }
 
@@ -107,6 +127,7 @@ async function computeDeviceFingerprint(): Promise<string | undefined> {
 }
 
 export default function WalletPage() {
+  const { t } = useTranslation('web');
   const router = useRouter();
 
   // ── Auth state ──
@@ -293,7 +314,7 @@ export default function WalletPage() {
             })();
           }
         } else if (intent.status === 'failed') {
-          setRechargeError(intent.error_message ? translateNetopiaError(intent.error_message) : 'El pago no pudo ser procesado');
+          setRechargeError(intent.error_message ? translateNetopiaError(intent.error_message) : t('wallet.failed_short', { defaultValue: 'El pago no pudo ser procesado' }));
           setRechargeStep('failed');
         } else {
           // Still pending after poll exhausted — soft success (webhook will land soon)
@@ -302,7 +323,7 @@ export default function WalletPage() {
         }
       } catch (err) {
         if (cancelled) return;
-        setRechargeError(err instanceof Error ? err.message : 'No se pudo verificar el estado del pago');
+        setRechargeError(err instanceof Error ? err.message : t('wallet.verify_error', { defaultValue: 'No se pudo verificar el estado del pago' }));
         setRechargeStep('failed');
       } finally {
         // Clean the intent param from the URL so a refresh doesn't re-poll.
@@ -346,7 +367,7 @@ export default function WalletPage() {
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </div>
-          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
+          <p style={{ fontSize: '0.875rem' }}>{t('wallet.loading', { defaultValue: 'Cargando...' })}</p>
         </div>
       </div>
     );
@@ -387,11 +408,11 @@ export default function WalletPage() {
     if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
 
     if (amountUsd < MIN_RECHARGE_USD_CUSTOMER) {
-      setRechargeError(`Monto mínimo: $${MIN_RECHARGE_USD_CUSTOMER} USD`);
+      setRechargeError(t('wallet.recharge_min', { amount: MIN_RECHARGE_USD_CUSTOMER, defaultValue: 'Monto mínimo: ${{amount}} USD' }));
       return;
     }
     if (amountUsd > MAX_RECHARGE_USD_CUSTOMER) {
-      setRechargeError(`Monto máximo: $${MAX_RECHARGE_USD_CUSTOMER} USD`);
+      setRechargeError(t('wallet.recharge_max', { amount: MAX_RECHARGE_USD_CUSTOMER, defaultValue: 'Monto máximo: ${{amount}} USD' }));
       return;
     }
 
@@ -406,7 +427,7 @@ export default function WalletPage() {
         deviceFingerprint,
       });
       if (!result.redirectUrl) {
-        throw new Error('El procesador no devolvió una URL de pago');
+        throw new Error(t('wallet.recharge_error_no_url', { defaultValue: 'El procesador no devolvió una URL de pago' }));
       }
       setRechargeStep('redirecting');
       // Hand off to the NETOPIA hosted payment page. After the user
@@ -414,7 +435,7 @@ export default function WalletPage() {
       // /wallet?intent=<id> and the useEffect above takes over.
       window.location.href = result.redirectUrl;
     } catch (err) {
-      setRechargeError(err instanceof Error ? err.message : 'Error al iniciar la recarga');
+      setRechargeError(err instanceof Error ? err.message : t('wallet.recharge_error_generic', { defaultValue: 'Error al iniciar la recarga' }));
       setRechargeLoading(false);
     }
   }
@@ -478,12 +499,12 @@ export default function WalletPage() {
     <>
     <main className="page-main">
       <div className="page-container">
-        <Link href="/" aria-label="Volver al inicio" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
-          &larr; Inicio
+        <Link href="/" aria-label={t('wallet.back_home', { defaultValue: 'Volver al inicio' })} style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
+          {t('wallet.back_home_link', { defaultValue: '← Inicio' })}
         </Link>
 
         <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, marginTop: '1rem', marginBottom: '1.5rem' }}>
-          Mis créditos de viaje
+          {t('wallet.title', { defaultValue: 'Mis créditos de viaje' })}
         </h1>
 
         {/* ═══ Wallet v2 migration banner (dismissible) ═══ */}
@@ -495,18 +516,20 @@ export default function WalletPage() {
           return (
             <div role="alert" style={{ marginBottom: '1rem', borderRadius: '1rem', border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)', padding: '1rem' }}>
               <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#b45309', margin: '0 0 0.25rem' }}>
-                {showsBonus ? '🎁 ¡Nuevo TriciCoin con bono!' : 'TriciCoin actualizado'}
+                {showsBonus
+                  ? t('wallet.migration_bonus_title', { defaultValue: '🎁 ¡Nuevo TriciCoin con bono!' })
+                  : t('wallet.migration_title', { defaultValue: 'TriciCoin actualizado' })}
               </p>
               <p style={{ fontSize: '0.8rem', color: '#92400e', margin: '0 0 0.75rem', lineHeight: 1.4 }}>
                 {showsBonus
-                  ? `Tu saldo ahora se muestra en USD (1 TC ≡ 1 USD). Te regalamos ~$${bonusUsd.toFixed(2)} (${bonusPct.toFixed(0)}%) como bienvenida al nuevo modelo.`
-                  : 'Tu saldo ahora se muestra en USD (1 TC ≡ 1 USD). Mismo importe, nueva unidad para reflejar el valor real.'}
+                  ? t('wallet.migration_bonus_text', { bonus: bonusUsd.toFixed(2), percent: bonusPct.toFixed(0), defaultValue: 'Tu saldo ahora se muestra en USD (1 TC ≡ 1 USD). Te regalamos ~${{bonus}} ({{percent}}%) como bienvenida al nuevo modelo.' })
+                  : t('wallet.migration_text', { defaultValue: 'Tu saldo ahora se muestra en USD (1 TC ≡ 1 USD). Mismo importe, nueva unidad para reflejar el valor real.' })}
               </p>
               <button
                 onClick={() => { localStorage.setItem('tricigo_wallet_migration_ack', '1'); setMigrationDismissed(true); }}
                 style={{ background: '#ea580c', color: '#fff', border: 'none', borderRadius: '999px', padding: '0.4rem 1rem', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
               >
-                Entendido
+                {t('wallet.migration_ack', { defaultValue: 'Entendido' })}
               </button>
             </div>
           );
@@ -516,13 +539,13 @@ export default function WalletPage() {
         <div className="wallet-balance-card">
           {balanceLoading ? (
             <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-              <p style={{ fontSize: '0.875rem', opacity: 0.8 }}>Cargando saldo...</p>
+              <p style={{ fontSize: '0.875rem', opacity: 0.8 }}>{t('wallet.loading_balance', { defaultValue: 'Cargando saldo...' })}</p>
             </div>
           ) : (
             <>
               <p style={{ fontSize: 'var(--text-sm)', opacity: 0.8, margin: '0 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
-                Saldo disponible
+                {t('wallet.available_balance', { defaultValue: 'Saldo disponible' })}
               </p>
               {/* 00443: CUP is the primary figure (Cuban-first). When the wallet
                   is USD-anchored, show its protected dollar value as subtitle. */}
@@ -531,13 +554,13 @@ export default function WalletPage() {
               </p>
               {balance.anchorUsdCents != null && (
                 <p style={{ fontSize: '0.8rem', opacity: 0.85, margin: 0 }}>
-                  &asymp; ${(balance.anchorUsdCents / 100).toFixed(2)} USD &middot; valor protegido
+                  &asymp; ${(balance.anchorUsdCents / 100).toFixed(2)} USD &middot; {t('wallet.protected_value', { defaultValue: 'valor protegido' })}
                 </p>
               )}
               {balance.held > 0 && (
                 <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.15)', borderRadius: '0.5rem' }}>
                   <p style={{ fontSize: '0.75rem', opacity: 0.8, margin: 0 }}>
-                    Retenido: {formatTriciCoin(balance.held)}
+                    {t('wallet.held', { amount: formatTriciCoin(balance.held), defaultValue: 'Retenido: {{amount}}' })}
                   </p>
                 </div>
               )}
@@ -548,7 +571,7 @@ export default function WalletPage() {
         {/* ═══ Regalar (gift P2P) ═══ */}
         <Link
           href="/wallet/gift"
-          aria-label="Enviar un regalo de TriciCoin"
+          aria-label={t('wallet.gift_aria', { defaultValue: 'Enviar un regalo de TriciCoin' })}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
             width: '100%', padding: '0.85rem', marginBottom: '1rem', borderRadius: '0.75rem',
@@ -557,19 +580,19 @@ export default function WalletPage() {
           }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" /><line x1="12" y1="22" x2="12" y2="7" /><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" /></svg>
-          Regalar
+          {t('wallet.gift', { defaultValue: 'Regalar' })}
         </Link>
 
         {/* ═══ Recharge section ═══ */}
         <div id="wallet-recharge" className="wallet-section-card" style={{ marginBottom: '1rem' }}>
           <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.75rem' }}>
-            Comprar créditos de viaje
+            {t('wallet.recharge_title', { defaultValue: 'Comprar créditos de viaje' })}
           </p>
 
           {rechargeStep === 'amount' && (
             <>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem' }}>
-                Comprá créditos de viaje con tarjeta de crédito o débito. Te vamos a llevar al sitio seguro del procesador para que completes el pago.
+                {t('wallet.recharge_desc', { defaultValue: 'Comprá créditos de viaje con tarjeta de crédito o débito. Te vamos a llevar al sitio seguro del procesador para que completes el pago.' })}
               </p>
 
               {/* Quick amounts (USD) */}
@@ -599,8 +622,8 @@ export default function WalletPage() {
               <div style={{ marginBottom: '0.5rem' }}>
                 <input
                   type="number"
-                  placeholder="Monto en USD"
-                  aria-label="Monto de recarga en USD"
+                  placeholder={t('wallet.recharge_amount_placeholder', { defaultValue: 'Monto en USD' })}
+                  aria-label={t('wallet.recharge_amount_aria', { defaultValue: 'Monto de recarga en USD' })}
                   value={rechargeAmount}
                   onChange={(e) => { setRechargeAmount(e.target.value); setRechargeError(null); }}
                   className="input-base"
@@ -611,11 +634,15 @@ export default function WalletPage() {
                 />
               </div>
 
-              {/* Charge breakdown (additive fee) */}
+              {/* Charge breakdown (additive fee). The translated string carries
+                  the <strong> markup around the total; content is fully
+                  app-controlled (formatted numbers only), so rendering it via
+                  dangerouslySetInnerHTML is safe and keeps the bold emphasis. */}
               {amountUsdNum > 0 && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-                  Pagarás <strong>${previewChargeUsd.toFixed(2)} USD</strong> (incluye ${previewFeeUsd.toFixed(2)} de comisión de servicio)
-                </p>
+                <p
+                  style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}
+                  dangerouslySetInnerHTML={{ __html: t('wallet.recharge_breakdown', { charge: previewChargeUsd.toFixed(2), fee: previewFeeUsd.toFixed(2), defaultValue: 'Pagarás <strong>${{charge}} USD</strong> (incluye ${{fee}} de comisión de servicio)' }) }}
+                />
               )}
 
               {rechargeError && (
@@ -625,7 +652,7 @@ export default function WalletPage() {
               <button
                 onClick={handleStartRecharge}
                 disabled={rechargeLoading || !rechargeAmount || amountUsdNum <= 0 || !providerConfig?.enabled}
-                aria-label="Continuar al pago"
+                aria-label={t('wallet.recharge_continue_aria', { defaultValue: 'Continuar al pago' })}
                 className="btn-base btn-primary-solid"
                 style={{
                   width: '100%',
@@ -633,12 +660,14 @@ export default function WalletPage() {
                   opacity: rechargeLoading || !rechargeAmount || amountUsdNum <= 0 ? 0.6 : 1,
                 }}
               >
-                {rechargeLoading ? 'Preparando pago...' : 'Continuar al pago'}
+                {rechargeLoading
+                  ? t('wallet.recharge_preparing', { defaultValue: 'Preparando pago...' })
+                  : t('wallet.recharge_continue', { defaultValue: 'Continuar al pago' })}
               </button>
 
               {!providerConfig?.enabled && (
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0.5rem 0 0', textAlign: 'center' }}>
-                  Compra de créditos con tarjeta no disponible temporalmente
+                  {t('wallet.recharge_unavailable', { defaultValue: 'Compra de créditos con tarjeta no disponible temporalmente' })}
                 </p>
               )}
             </>
@@ -663,9 +692,9 @@ export default function WalletPage() {
                   <line x1="10" y1="14" x2="21" y2="3" />
                 </svg>
               </div>
-              <p style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.25rem' }}>Redirigiéndote al procesador…</p>
+              <p style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.25rem' }}>{t('wallet.redirecting_title', { defaultValue: 'Redirigiéndote al procesador…' })}</p>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
-                Vas a completar el pago de forma segura fuera de TriciGo.
+                {t('wallet.redirecting_desc', { defaultValue: 'Vas a completar el pago de forma segura fuera de TriciGo.' })}
               </p>
             </div>
           )}
@@ -673,9 +702,9 @@ export default function WalletPage() {
           {rechargeStep === 'verifying' && (
             <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
               <div className="spinner" style={{ width: 28, height: 28, margin: '0 auto 0.5rem' }} />
-              <p style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.25rem' }}>Verificando tu pago…</p>
+              <p style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.25rem' }}>{t('wallet.verifying_title', { defaultValue: 'Verificando tu pago…' })}</p>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
-                Esto puede tardar unos segundos.
+                {t('wallet.verifying_desc', { defaultValue: 'Esto puede tardar unos segundos.' })}
               </p>
             </div>
           )}
@@ -697,9 +726,9 @@ export default function WalletPage() {
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </div>
-              <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>Recarga exitosa</p>
+              <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>{t('wallet.success_title', { defaultValue: 'Recarga exitosa' })}</p>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 1rem' }}>
-                Tu saldo ha sido actualizado.
+                {t('wallet.success_desc', { defaultValue: 'Tu saldo ha sido actualizado.' })}
               </p>
               {/* RECARGA V2: surface the receipt as soon as the user lands on success.
                   The PDF generation runs async post-webhook (a few seconds), so the
@@ -716,11 +745,13 @@ export default function WalletPage() {
                 {successIntentId && (
                   <Link
                     href="/wallet/receipts"
-                    aria-label="Ver mis comprobantes de recarga"
+                    aria-label={t('wallet.view_receipt_aria', { defaultValue: 'Ver mis comprobantes de recarga' })}
                     className="btn-base btn-primary-solid"
                     style={{ cursor: 'pointer', textDecoration: 'none', opacity: receiptReady ? 1 : 0.85 }}
                   >
-                    {receiptReady ? 'Ver recibo' : 'Generando recibo…'}
+                    {receiptReady
+                      ? t('wallet.view_receipt', { defaultValue: 'Ver recibo' })
+                      : t('wallet.generating_receipt', { defaultValue: 'Generando recibo…' })}
                   </Link>
                 )}
                 <button
@@ -728,7 +759,7 @@ export default function WalletPage() {
                   className="btn-base btn-secondary-outline"
                   style={{ cursor: 'pointer' }}
                 >
-                  Realizar otra recarga
+                  {t('wallet.another_recharge', { defaultValue: 'Realizar otra recarga' })}
                 </button>
               </div>
             </div>
@@ -756,16 +787,16 @@ export default function WalletPage() {
                   <line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
               </div>
-              <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>Pago no completado</p>
+              <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>{t('wallet.failed_title', { defaultValue: 'Pago no completado' })}</p>
               <p style={{ fontSize: '0.8rem', color: '#dc2626', margin: '0 0 1rem' }}>
-                {rechargeError ?? 'El pago no pudo ser procesado.'}
+                {rechargeError ?? t('wallet.failed_desc', { defaultValue: 'El pago no pudo ser procesado.' })}
               </p>
               <button
                 onClick={handleRechargeReset}
                 className="btn-base btn-secondary-outline"
                 style={{ cursor: 'pointer' }}
               >
-                Intentar de nuevo
+                {t('wallet.retry', { defaultValue: 'Intentar de nuevo' })}
               </button>
             </div>
           )}
@@ -774,12 +805,12 @@ export default function WalletPage() {
         {/* ═══ Este mes — insights mensuales (parity con el wallet móvil) ═══ */}
         {monthlyInsights.ridesCount > 0 && (
           <div style={{ marginBottom: '1.5rem' }}>
-            <p style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 0.5rem' }}>Este mes</p>
+            <p style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 0.5rem' }}>{t('wallet.this_month', { defaultValue: 'Este mes' })}</p>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               {[
-                { label: 'Gastado', value: formatTriciCoin(monthlyInsights.totalSpent), usd: monthlyInsights.totalSpent },
-                { label: 'Viajes', value: String(monthlyInsights.ridesCount), usd: null as number | null },
-                { label: 'Promedio', value: formatTriciCoin(monthlyInsights.avgRide), usd: monthlyInsights.avgRide },
+                { label: t('wallet.insight_spent', { defaultValue: 'Gastado' }), value: formatTriciCoin(monthlyInsights.totalSpent), usd: monthlyInsights.totalSpent },
+                { label: t('wallet.insight_rides', { defaultValue: 'Viajes' }), value: String(monthlyInsights.ridesCount), usd: null as number | null },
+                { label: t('wallet.insight_average', { defaultValue: 'Promedio' }), value: formatTriciCoin(monthlyInsights.avgRide), usd: monthlyInsights.avgRide },
               ].map((m) => (
                 <div key={m.label} style={{ flex: 1, padding: '0.85rem 0.6rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>{m.value}</div>
@@ -798,27 +829,29 @@ export default function WalletPage() {
           {/* Persistent receipts link — antes /wallet/receipts sólo era
               alcanzable tras una recarga; ahora siempre desde el wallet. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 0.75rem' }}>
-            <p style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Historial de transacciones</p>
+            <p style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>{t('wallet.history_title', { defaultValue: 'Historial de transacciones' })}</p>
             <Link href="/wallet/receipts" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none', flexShrink: 0 }}>
-              {'Ver recibos →'}
+              {t('wallet.view_receipts', { defaultValue: 'Ver recibos →' })}
             </Link>
           </div>
 
-          <div className="wallet-filter-tabs" role="tablist" aria-label="Filtrar transacciones">
-            {FILTER_TABS.map((tab) => (
+          <div className="wallet-filter-tabs" role="tablist" aria-label={t('wallet.filter_label', { defaultValue: 'Filtrar transacciones' })}>
+            {FILTER_TAB_KEYS.map((tabKey) => {
+              const tabLabel = filterTabLabel(tabKey, t);
+              return (
               <button
-                key={tab.key}
+                key={tabKey}
                 role="tab"
-                aria-selected={filter === tab.key}
-                aria-label={`Filtrar por ${tab.label}`}
-                onClick={() => setFilter(tab.key)}
+                aria-selected={filter === tabKey}
+                aria-label={t('wallet.filter_aria', { label: tabLabel, defaultValue: 'Filtrar por {{label}}' })}
+                onClick={() => setFilter(tabKey)}
                 style={{
                   padding: '0.5rem 1rem',
                   borderRadius: 'var(--radius-full)',
                   border: 'none',
-                  background: filter === tab.key ? 'var(--primary)' : 'var(--bg-hover)',
-                  color: filter === tab.key ? 'white' : 'var(--text-secondary)',
-                  fontWeight: filter === tab.key ? 600 : 500,
+                  background: filter === tabKey ? 'var(--primary)' : 'var(--bg-hover)',
+                  color: filter === tabKey ? 'white' : 'var(--text-secondary)',
+                  fontWeight: filter === tabKey ? 600 : 500,
                   fontSize: 'var(--text-sm)',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
@@ -827,9 +860,10 @@ export default function WalletPage() {
                   minHeight: '36px',
                 }}
               >
-                {tab.label}
+                {tabLabel}
               </button>
-            ))}
+              );
+            })}
           </div>
 
           {txLoading && <WebSkeletonList count={4} />}
@@ -837,11 +871,13 @@ export default function WalletPage() {
           {!txLoading && filteredTx.length === 0 && (
             <WebEmptyState
               icon="💰"
-              title={filter !== 'all' ? 'Sin transacciones en esta categoría' : 'Sin transacciones'}
-              description="Tus movimientos de TriciCoin aparecerán aquí."
+              title={filter !== 'all'
+                ? t('wallet.empty_category_title', { defaultValue: 'Sin transacciones en esta categoría' })
+                : t('wallet.empty_title', { defaultValue: 'Sin transacciones' })}
+              description={t('wallet.empty_description', { defaultValue: 'Tus movimientos de TriciCoin aparecerán aquí.' })}
               action={filter !== 'all'
-                ? { label: 'Mostrar todos', onClick: () => setFilter('all') }
-                : { label: 'Recargar saldo', onClick: () => document.getElementById('wallet-recharge')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
+                ? { label: t('wallet.show_all', { defaultValue: 'Mostrar todos' }), onClick: () => setFilter('all') }
+                : { label: t('wallet.recharge_balance', { defaultValue: 'Recargar saldo' }), onClick: () => document.getElementById('wallet-recharge')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
             />
           )}
 
@@ -860,7 +896,7 @@ export default function WalletPage() {
                     }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>
-                        {webTxLabel(view)}
+                        {webTxLabel(view, t)}
                       </p>
                       {tx.description && (
                         <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', margin: '0.15rem 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -868,7 +904,7 @@ export default function WalletPage() {
                         </p>
                       )}
                       <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', margin: '0.15rem 0 0' }}>
-                        {getRelativeDay(tx.created_at, 'Hoy', 'Ayer')} &middot; {formatTime(tx.created_at)}
+                        {getRelativeDay(tx.created_at, t('wallet.date_today', { defaultValue: 'Hoy' }), t('wallet.date_yesterday', { defaultValue: 'Ayer' }))} &middot; {formatTime(tx.created_at)}
                       </p>
                     </div>
                     {amount != null && (
@@ -897,11 +933,11 @@ export default function WalletPage() {
                 <button
                   onClick={handleLoadMoreTx}
                   disabled={txLoadingMore}
-                  aria-label="Cargar mas transacciones"
+                  aria-label={t('wallet.load_more_aria', { defaultValue: 'Cargar mas transacciones' })}
                   className="btn-base btn-secondary-outline"
                   style={{ width: '100%', marginTop: '0.25rem' }}
                 >
-                  {txLoadingMore ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Cargar mas transacciones'}
+                  {txLoadingMore ? <span className="spinner" style={{ width: 14, height: 14 }} /> : t('wallet.load_more', { defaultValue: 'Cargar mas transacciones' })}
                 </button>
               )}
             </div>
