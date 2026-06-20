@@ -170,11 +170,21 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
   }, [activeIndex]);
 
   async function searchNominatimEnhanced(q: string, prox?: { latitude: number; longitude: number }, signal?: AbortSignal): Promise<AddressResult[]> {
+    // Own timeout so a stalled 3G request can't hang the search spinner forever
+    // (this is a direct external fetch, outside the Supabase client's timeout
+    // wrapper). Combine it with the caller's abort signal.
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 8000);
+    const onAbort = () => ctrl.abort();
+    if (signal) {
+      if (signal.aborted) ctrl.abort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
     try {
       // Use all-Cuba viewbox — Nominatim still filters by countrycodes=cu
       const viewbox = '-84.95,19.8,-74.13,23.3'; // All Cuba
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=cu&limit=8&viewbox=${viewbox}&bounded=0&addressdetails=1&namedetails=1&extratags=1`;
-      const res = await fetch(url, { headers: { 'Accept-Language': 'es' }, signal });
+      const res = await fetch(url, { headers: { 'Accept-Language': 'es' }, signal: ctrl.signal });
       if (!res.ok) return [];
       const data = await res.json();
       return data.map((item: any) => {
@@ -199,6 +209,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
       });
     } catch {
       return [];
+    } finally {
+      clearTimeout(timeout);
+      if (signal) signal.removeEventListener('abort', onAbort);
     }
   }
 

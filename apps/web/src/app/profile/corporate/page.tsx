@@ -317,7 +317,7 @@ export default function CorporatePage() {
       // useEffect below polls + refreshes balance.
       window.location.href = result.redirectUrl;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar la recarga');
+      setError(getErrorMessage(err));
       setRecharging(false);
     }
   };

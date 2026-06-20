@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, referralService, walletService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import type { Referral } from '@tricigo/types';
 
 const STATUS_BADGE: Record<Referral['status'], { bg: string; color: string; key: string; defaultLabel: string }> = {
@@ -84,7 +85,7 @@ export default function ReferralPage() {
       const parsedBonus = bonusRaw != null ? parseInt(bonusRaw, 10) : NaN;
       if (Number.isFinite(parsedBonus) && parsedBonus > 0) setBonusCup(parsedBonus);
     } catch (err) {
-      setDataError(err instanceof Error ? err.message : String(err));
+      setDataError(getErrorMessage(err));
     } finally {
       setDataLoading(false);
     }
@@ -156,7 +157,7 @@ export default function ReferralPage() {
       // and the input is hidden.
       await loadData(userId);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : String(err));
+      setSubmitError(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance, getErrorMessage } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService, useFeatureFlag } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory, RidePreferences } from '@tricigo/types';
@@ -907,7 +907,9 @@ export default function BookPage() {
       } else if (msg.includes('Validation error')) {
         setError('Datos del viaje incompletos. Verifica origen y destino.');
       } else {
-        setError(`Error al solicitar viaje: ${msg}`);
+        // Friendly message (network/abort/PostgREST) instead of the raw English
+        // err.message — getErrorMessage is the canonical helper used across web.
+        setError(getErrorMessage(err));
       }
     } finally {
       isSubmittingRef.current = false;
