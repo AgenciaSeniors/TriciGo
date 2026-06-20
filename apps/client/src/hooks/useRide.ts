@@ -578,16 +578,23 @@ export function useRideActions() {
         // Bugfix: method is `getAccount`, not `getAccountDetails` —
         // same return shape (CorporateAccount).
         const freshAccount = await corporateService.getAccount(d.corporateAccountId);
-        const remainingBudget = (freshAccount?.monthly_budget_trc ?? 0) - (freshAccount?.current_month_spent ?? 0);
-        if (remainingBudget < (fareEstimate.estimated_fare_trc ?? 0)) {
-          isSubmittingRef.current = false;
-          pendingRequestIdRef.current = null;
-          Toast.show({
-            type: 'error',
-            text1: i18next.t('rider:corporate.budget_exceeded_title', { defaultValue: 'Presupuesto insuficiente' }),
-            text2: i18next.t('rider:corporate.budget_exceeded_msg', { defaultValue: 'El presupuesto corporativo disponible no cubre este viaje.' }),
-          });
-          return;
+        // AUD-013 / BUG-073: monthly_budget_trc = 0 means UNLIMITED — the server trigger
+        // (tg_rides_validate_corporate) only enforces budget when > 0, and web book/page.tsx
+        // already guards with the same > 0 check. Without it, a default (0) budget computes a
+        // negative remaining and blocks every corporate ride client-side.
+        const monthlyBudget = freshAccount?.monthly_budget_trc ?? 0;
+        if (monthlyBudget > 0) {
+          const remainingBudget = monthlyBudget - (freshAccount?.current_month_spent ?? 0);
+          if (remainingBudget < (fareEstimate.estimated_fare_trc ?? 0)) {
+            isSubmittingRef.current = false;
+            pendingRequestIdRef.current = null;
+            Toast.show({
+              type: 'error',
+              text1: i18next.t('rider:corporate.budget_exceeded_title', { defaultValue: 'Presupuesto insuficiente' }),
+              text2: i18next.t('rider:corporate.budget_exceeded_msg', { defaultValue: 'El presupuesto corporativo disponible no cubre este viaje.' }),
+            });
+            return;
+          }
         }
       } catch (corpErr) {
         logger.warn('Corporate budget re-check failed', { error: String(corpErr) });
