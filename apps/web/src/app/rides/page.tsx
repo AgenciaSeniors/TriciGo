@@ -90,6 +90,9 @@ export default function RidesPage() {
 
   // Data
   const [rides, setRides] = useState<Ride[]>([]);
+  // Upcoming scheduled rides (one-off future trips not yet dispatched). They
+  // arrive in the same getRideHistoryFiltered payload — separated below.
+  const [scheduledRides, setScheduledRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -137,10 +140,19 @@ export default function RidesPage() {
         ...(opts.dateFrom && { dateFrom: new Date(`${opts.dateFrom}T00:00:00-04:00`).toISOString() }),
         ...(opts.dateTo && { dateTo: new Date(`${opts.dateTo}T23:59:59-04:00`).toISOString() }),
       });
+      // Separate upcoming scheduled rides (one-off future trips still in
+      // 'searching') from the history. Same filter the client móvil uses.
+      const now = new Date();
+      const isUpcomingScheduled = (r: Ride) =>
+        r.is_scheduled && !!r.scheduled_at && new Date(r.scheduled_at) > now && r.status === 'searching';
+      const scheduled = data.filter(isUpcomingScheduled);
+      const history = data.filter((r) => !isUpcomingScheduled(r));
       if (append) {
-        setRides((prev) => [...prev, ...data]);
+        setRides((prev) => [...prev, ...history]);
+        // Keep the pinned scheduled list as-is on pagination (page 0 owns it).
       } else {
-        setRides(data);
+        setRides(history);
+        setScheduledRides(scheduled);
       }
       setHasMore(data.length >= PAGE_SIZE);
       setPage(pg);
@@ -204,6 +216,7 @@ export default function RidesPage() {
     if (tab === activeTab) return;
     setActiveTab(tab);
     setRides([]);
+    setScheduledRides([]);
     setPage(0);
   };
 
@@ -336,8 +349,69 @@ export default function RidesPage() {
           </div>
         )}
 
-        {/* Empty */}
-        {!loading && !error && rides.length === 0 && (
+        {/* Scheduled rides — pinned above the history (parity con app móvil) */}
+        {!loading && !error && scheduledRides.length > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div className="rides-date-header">
+              {t('rides.scheduled_title', { defaultValue: 'Viajes programados' })}
+            </div>
+            <div className="rides-list">
+              {scheduledRides.map((ride) => {
+                const whenLabel = ride.scheduled_at
+                  ? new Intl.DateTimeFormat('es', { timeZone: 'America/Havana', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ride.scheduled_at))
+                  : '';
+                return (
+                  <button
+                    key={ride.id}
+                    type="button"
+                    onClick={() => router.push(`/rides/${ride.id}`)}
+                    aria-label={t('rides.scheduled_card_aria', { when: whenLabel, defaultValue: 'Ver viaje programado para {{when}}' })}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+                      border: '1px solid var(--primary)', borderRadius: '0.75rem',
+                      background: 'var(--bg-card)', padding: '0.85rem', marginBottom: '0.6rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                        <span aria-hidden="true" style={{ fontSize: '1.1rem' }}>📅</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {whenLabel}
+                        </span>
+                      </div>
+                      <span style={{
+                        flexShrink: 0, fontSize: '0.7rem', fontWeight: 700, color: 'var(--primary)',
+                        border: '1px solid var(--primary)', borderRadius: '999px', padding: '0.15rem 0.55rem',
+                      }}>
+                        {t('rides.scheduled_badge', { defaultValue: 'Programado' })}
+                      </span>
+                    </div>
+                    <div className="ride-route">
+                      <div className="ride-route-dots">
+                        <span className="ride-route-dot ride-route-dot--pickup" />
+                        <span className="ride-route-line" />
+                        <span className="ride-route-dot ride-route-dot--dropoff" />
+                      </div>
+                      <div className="ride-route-addresses">
+                        <div>
+                          <div className="ride-address-label">{t('rides.route_from', { defaultValue: 'Desde' })}</div>
+                          <div className="ride-address">{ride.pickup_address}</div>
+                        </div>
+                        <div>
+                          <div className="ride-address-label">{t('rides.route_to', { defaultValue: 'Hasta' })}</div>
+                          <div className="ride-address">{ride.dropoff_address}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Empty — only when there's no history AND no scheduled rides */}
+        {!loading && !error && rides.length === 0 && scheduledRides.length === 0 && (
           <WebEmptyState
             icon="🚗"
             title={activeTab === 'all'
