@@ -1,22 +1,53 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+
+// Shared with /book so the code survives the guest → login round-trip.
+const PENDING_PROMO_KEY = 'tricigo_pending_promo';
 
 /**
  * Web landing page for promo code deep links.
  * URL: https://tricigo.com/promo/{code}
  *
- * On mobile with app installed: Universal Links opens the app directly.
- * On web/without app: Shows this landing page with download CTA.
+ * On mobile with the app installed, Universal Links opens the app. On the web:
+ *   - Already authenticated → route to /book?promo={code}; /book pre-fills the
+ *     promo field so the rider doesn't have to retype it.
+ *   - Not authenticated → stash the code in sessionStorage and show the landing
+ *     with a "log in" CTA (after login, /book reads the pending key) plus the
+ *     download / open-app fallback.
  */
 export default function PromoLandingPage() {
   const params = useParams();
+  const router = useRouter();
   const { t } = useTranslation('web');
-  const code = params.code as string;
+  const code = ((params.code as string) ?? '').trim();
 
   const appDeepLink = `tricigo://promo/${code}`;
+  const [isGuest, setIsGuest] = useState(false);
+  // Guard against React StrictMode's dev double-invoke.
+  const ranRef = useRef(false);
+
+  useEffect(() => {
+    if (ranRef.current || !code) return;
+    ranRef.current = true;
+    (async () => {
+      try {
+        const { data: { session } } = await getSupabaseClient().auth.getSession();
+        if (session?.user?.id) {
+          // Authenticated → hand the code to the booking flow, which validates
+          // it once a fare estimate exists.
+          router.replace(`/book?promo=${encodeURIComponent(code)}`);
+          return;
+        }
+      } catch { /* fall through to guest */ }
+      try { sessionStorage.setItem(PENDING_PROMO_KEY, code); } catch { /* ignore */ }
+      setIsGuest(true);
+    })();
+  }, [code, router]);
 
   return (
     <div
@@ -98,6 +129,24 @@ export default function PromoLandingPage() {
           </p>
         </div>
 
+        {/* Logged-in riders: apply on the web. Guests: log in to use it. */}
+        {isGuest && (
+          <Link
+            href="/login"
+            className="btn-base btn-primary-solid"
+            style={{
+              display: 'flex',
+              width: '100%',
+              padding: 'var(--space-md) var(--space-lg)',
+              borderRadius: 'var(--radius-lg)',
+              fontSize: 'var(--text-lg)',
+              marginBottom: 'var(--space-sm)',
+            }}
+          >
+            {t('promo.login_cta', { defaultValue: 'Iniciar sesión y usar el código' })}
+          </Link>
+        )}
+
         {/* Open app button */}
         <a
           href={appDeepLink}
@@ -109,6 +158,7 @@ export default function PromoLandingPage() {
             borderRadius: 'var(--radius-lg)',
             fontSize: 'var(--text-lg)',
             marginBottom: 'var(--space-sm)',
+            ...(isGuest ? { background: 'transparent', color: 'var(--primary)', border: '1px solid var(--primary)' } : {}),
           }}
         >
           {t('promo.open_app', { defaultValue: 'Abrir en TriciGo' })}

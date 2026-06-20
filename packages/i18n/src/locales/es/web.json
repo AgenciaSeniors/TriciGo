@@ -26,6 +26,7 @@
     "title": "¡Tienes un descuento!",
     "subtitle": "Aplica este código promocional en tu próximo viaje con TriciGo.",
     "code_label": "Código promocional",
+    "login_cta": "Iniciar sesión y usar el código",
     "open_app": "Abrir en TriciGo",
     "no_app": "¿No tienes la app? Descárgala desde la App Store o Google Play.",
     "visit_site": "Visitar tricigo.com"
