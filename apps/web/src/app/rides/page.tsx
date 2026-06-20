@@ -140,19 +140,14 @@ export default function RidesPage() {
         ...(opts.dateFrom && { dateFrom: new Date(`${opts.dateFrom}T00:00:00-04:00`).toISOString() }),
         ...(opts.dateTo && { dateTo: new Date(`${opts.dateTo}T23:59:59-04:00`).toISOString() }),
       });
-      // Separate upcoming scheduled rides (one-off future trips still in
-      // 'searching') from the history. Same filter the client móvil uses.
-      const now = new Date();
-      const isUpcomingScheduled = (r: Ride) =>
-        r.is_scheduled && !!r.scheduled_at && new Date(r.scheduled_at) > now && r.status === 'searching';
-      const scheduled = data.filter(isUpcomingScheduled);
-      const history = data.filter((r) => !isUpcomingScheduled(r));
+      // History (completed/canceled) comes from getRideHistoryFiltered. Upcoming
+      // scheduled rides are status='searching', which that query CANNOT return,
+      // so fetch them via the dedicated getScheduledRides (page 0 owns the list).
       if (append) {
-        setRides((prev) => [...prev, ...history]);
-        // Keep the pinned scheduled list as-is on pagination (page 0 owns it).
+        setRides((prev) => [...prev, ...data]);
       } else {
-        setRides(history);
-        setScheduledRides(scheduled);
+        setRides(data);
+        rideService.getScheduledRides(uid).then(setScheduledRides).catch(() => setScheduledRides([]));
       }
       setHasMore(data.length >= PAGE_SIZE);
       setPage(pg);

@@ -2053,7 +2053,10 @@ export default function BookPage() {
                 type="datetime-local"
                 value={scheduleDate}
                 onChange={(e) => setScheduleDate(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
+                // datetime-local is read in the browser's LOCAL zone — build min
+                // in local time, not UTC, so near-future times aren't blocked for
+                // Cuba (UTC−4/−5; toISOString() min was ~4-5h ahead of local now).
+                min={(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); })()}
                 aria-label={t('book.schedule_toggle', { defaultValue: 'Programar viaje' })}
                 style={{
                   width: '100%',
