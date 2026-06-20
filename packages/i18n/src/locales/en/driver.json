@@ -373,6 +373,7 @@
     "tx_penalty": "Penalty",
     "tx_bonus": "Bonus",
     "tx_refund": "Refund",
+    "tx_fx": "Exchange-rate adjustment",
     "tx_ride_hold": "Ride hold",
     "tx_ride_hold_release": "Hold released",
     "view_more": "View more"

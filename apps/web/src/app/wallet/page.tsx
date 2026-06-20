@@ -53,6 +53,7 @@ function webTxLabel(view: { kind: string; isCredit: boolean }): string {
     case 'bonus': return 'Crédito promocional';
     case 'refund': return 'Reembolso';
     case 'insurance': return 'Seguro de viaje';
+    case 'fx': return 'Ajuste por tipo de cambio';
     case 'adjustment':
     default: return 'Ajuste';
   }

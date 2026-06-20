@@ -84,6 +84,7 @@
     "txn_tip_received": "Propina recibida",
     "txn_tip_sent": "Propina enviada",
     "txn_refund": "Reembolso",
+    "txn_fx": "Ajuste por tipo de cambio",
     "txn_bonus": "Bonificación",
     "txn_gift_received": "Regalo recibido",
     "txn_gift_sent": "Regalo enviado",

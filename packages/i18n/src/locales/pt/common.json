@@ -80,6 +80,7 @@
     "txn_tip_received": "Gorjeta recebida",
     "txn_tip_sent": "Gorjeta enviada",
     "txn_refund": "Reembolso",
+    "txn_fx": "Ajuste de câmbio",
     "txn_bonus": "Bônus",
     "txn_gift_received": "Presente recebido",
     "txn_gift_sent": "Presente enviado",

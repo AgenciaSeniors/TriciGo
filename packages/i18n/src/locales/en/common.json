@@ -80,6 +80,7 @@
     "txn_tip_received": "Tip received",
     "txn_tip_sent": "Tip sent",
     "txn_refund": "Refund",
+    "txn_fx": "Exchange-rate adjustment",
     "txn_bonus": "Bonus",
     "txn_gift_received": "Gift received",
     "txn_gift_sent": "Gift sent",

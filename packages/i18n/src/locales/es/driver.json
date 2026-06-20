@@ -373,6 +373,7 @@
     "tx_penalty": "Penalización",
     "tx_bonus": "Bono",
     "tx_refund": "Reembolso",
+    "tx_fx": "Ajuste por tipo de cambio",
     "tx_ride_hold": "Retención de viaje",
     "tx_ride_hold_release": "Liberación de retención",
     "view_more": "Ver más"
