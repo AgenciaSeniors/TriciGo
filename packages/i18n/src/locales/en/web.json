@@ -98,6 +98,7 @@
     "title": "You have a discount!",
     "subtitle": "Apply this promo code on your next ride with TriciGo.",
     "code_label": "Promo code",
+    "login_cta": "Log in to use the code",
     "open_app": "Open in TriciGo",
     "no_app": "Don't have the app? Download it from the App Store or Google Play.",
     "visit_site": "Visit tricigo.com"

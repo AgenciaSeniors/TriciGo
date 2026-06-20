@@ -189,6 +189,18 @@ export default function BookPage() {
       .then((v) => { const n = v != null ? parseFloat(v) : NaN; if (Number.isFinite(n) && n > 0) setSharePct(n); })
       .catch(() => { /* keep fallback 7% */ });
   }, []);
+  // Pre-fill the promo field from a /promo/<code> deep link (?promo=) or a
+  // pending code stashed by /promo/<code> for a guest who then logged in. The
+  // rider taps "Aplicar" once a fare estimate exists (validation needs a fare).
+  useEffect(() => {
+    let pending: string | null = null;
+    try {
+      pending = new URLSearchParams(window.location.search).get('promo')
+        || sessionStorage.getItem('tricigo_pending_promo');
+      if (pending) sessionStorage.removeItem('tricigo_pending_promo');
+    } catch { /* ignore */ }
+    if (pending) setPromoCode(pending.trim());
+  }, []);
   // Shared-ride discount (triciclo only) + the price the rider actually pays =
   // estimate − promo − shareDiscount. The server trigger (00347) applies the
   // same shared discount to discount_amount_cup, so this mirrors the real total.
