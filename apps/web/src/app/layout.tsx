@@ -7,6 +7,7 @@ import { WebHeader } from './web-header';
 import { WebFooter } from './web-footer';
 import { JsonLd } from '../components/JsonLd';
 import { DemoBanner } from '../components/DemoBanner';
+import { WebOfflineBanner } from '../components/WebOfflineBanner';
 
 const montserrat = Montserrat({
   subsets: ['latin'],
@@ -139,6 +140,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             NEXT_PUBLIC_DEMO_MODE=true. Mirrors the mobile DemoBanner. */}
         <DemoBanner />
         <I18nProvider>
+          {/* Global "no connection" indicator (parity with the mobile
+              OfflineBanner). Inside I18nProvider so it can use t(). */}
+          <WebOfflineBanner />
           <WebHeader />
           {/* Suspense boundary so pages that read useSearchParams() (login,
               wallet, gift, corporate…) don't trigger the CSR-bailout build
