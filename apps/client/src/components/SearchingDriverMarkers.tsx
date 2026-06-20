@@ -7,7 +7,8 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Image, Animated, StyleSheet } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
-import { getInitials } from '@tricigo/utils';
+import { getInitials, formatRating } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
@@ -43,6 +44,7 @@ function DriverMarker({
   hasAcceptedDriver: boolean;
 }) {
   const MapboxGL = getMapboxGL();
+  const { t } = useTranslation('rider');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -163,7 +165,7 @@ function DriverMarker({
         {/* Small rating badge below */}
         <View style={styles.ratingBadge}>
           <Text style={styles.ratingText}>
-            {driver.rating.toFixed(1)}
+            {formatRating(driver.rating, t('rating_new', { ns: 'common', defaultValue: 'Nuevo' }))}
           </Text>
         </View>
       </Animated.View>

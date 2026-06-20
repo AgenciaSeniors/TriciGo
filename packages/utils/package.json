@@ -24,6 +24,7 @@
     "./offlineLabels": "./src/offlineLabels.ts",
     "./receipt-template": "./src/receipt-template.ts",
     "./ride-config": "./src/ride-config.ts",
+    "./sentryNoise": "./src/sentryNoise.ts",
     "./sounds": "./src/sounds.ts",
     "./useDebouncePress": "./src/useDebouncePress.ts",
     "./validation": "./src/validation.ts"

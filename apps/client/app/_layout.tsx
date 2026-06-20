@@ -47,8 +47,11 @@ try { setupRuntimeLogging(); } catch { /* setup failed — non-fatal */ }
 // Initialize Sentry as early as possible (safe for web)
 try { initSentry(); } catch { /* Sentry init failed — non-fatal */ }
 
-// DEBUG: Global error handler — shows Alert with crash details
-if (Platform.OS !== 'web') {
+// DEBUG-only global error handler — shows an Alert with crash details to aid
+// local debugging. Gated to __DEV__ so production users never see a raw
+// "FATAL ERROR" alert with a stack trace; in prod Sentry's own native handler
+// (installed by initSentry) captures uncaught errors untouched.
+if (__DEV__ && Platform.OS !== 'web') {
   const originalHandler = ErrorUtils.getGlobalHandler();
   ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
     try {

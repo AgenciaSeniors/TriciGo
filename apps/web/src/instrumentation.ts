@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { SENTRY_IGNORE_PATTERNS, makeSentryBeforeSend } from '@tricigo/utils/sentryNoise';
 
 export const onRequestError = Sentry.captureRequestError;
 
@@ -11,6 +12,8 @@ export async function register() {
         dsn,
         environment: process.env.NODE_ENV,
         tracesSampleRate: 0.2,
+        ignoreErrors: SENTRY_IGNORE_PATTERNS,
+        beforeSend: makeSentryBeforeSend(),
       });
     }
   }
@@ -23,6 +26,8 @@ export async function register() {
         dsn,
         environment: process.env.NODE_ENV,
         tracesSampleRate: 0.2,
+        ignoreErrors: SENTRY_IGNORE_PATTERNS,
+        beforeSend: makeSentryBeforeSend(),
       });
     }
   }

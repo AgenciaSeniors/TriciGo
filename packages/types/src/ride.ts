@@ -376,7 +376,7 @@ export interface CancellationRatingImpact {
 export interface RideWithRider extends Ride {
   rider_name: string;
   rider_avatar_url: string | null;
-  rider_rating: number;
+  rider_rating: number | null;
 }
 
 // ── Realtime Searching Types ──────────────────────────────
@@ -387,7 +387,8 @@ export interface SearchingDriverPresence {
   name: string;
   avatarUrl: string | null;
   vehicleType: string;
-  rating: number;
+  // Nullable: a brand-new driver/rider with no reviews has rating_avg = null.
+  rating: number | null;
   location: GeoPoint; // jittered ~200m for privacy
   joinedAt: number; // Date.now() timestamp
 }
@@ -399,7 +400,8 @@ export interface DriverAcceptedBroadcast {
   name: string;
   avatarUrl: string | null;
   vehicleType: string;
-  rating: number;
+  // Nullable: a brand-new driver with no reviews has rating_avg = null.
+  rating: number | null;
   location: GeoPoint; // real location (no jitter)
   vehicleMake: string | null;
   vehicleModel: string | null;

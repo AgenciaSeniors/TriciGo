@@ -914,6 +914,18 @@ export async function fetchRoute(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
 ): Promise<RouteResult | null> {
+  // Defensive: useEffect-driven route hooks (useRoutePolyline, etc.) can call
+  // fetchRoute with a coord whose lat/lng is still undefined before the
+  // location resolves. Bail gracefully instead of crashing with "Cannot read
+  // property 'toFixed' of undefined" (Sentry TRICIGO-MOBILE-W / -10, an
+  // unhandled rejection). Callers already handle a null route.
+  if (
+    !from || !to ||
+    !Number.isFinite(from.lat) || !Number.isFinite(from.lng) ||
+    !Number.isFinite(to.lat) || !Number.isFinite(to.lng)
+  ) {
+    return null;
+  }
   const fromStr = `${from.lat.toFixed(4)},${from.lng.toFixed(4)}`;
   const toStr = `${to.lat.toFixed(4)},${to.lng.toFixed(4)}`;
   const key = routeCacheKey(from, to);

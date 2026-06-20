@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService } from '@tricigo/api';
@@ -368,7 +368,7 @@ function WebSearchingState({
                     </div>
                     <div style={{ flex: 1, textAlign: 'left' as const }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{acceptedDriver.name}</div>
-                      <div style={{ fontSize: 12, color: '#6b7280' }}>{acceptedDriver.rating.toFixed(1)}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>{formatRating(acceptedDriver.rating, 'Nuevo')}</div>
                     </div>
                   </div>
                 </div>
@@ -413,7 +413,7 @@ function WebSearchingState({
                         <span style={{ fontSize: 12, fontWeight: 500, color: c.text }}>
                           {d.name.split(' ')[0]}
                         </span>
-                        <span style={{ fontSize: 11, color: c.textFaint }}>{d.rating.toFixed(1)}</span>
+                        <span style={{ fontSize: 11, color: c.textFaint }}>{formatRating(d.rating, 'Nuevo')}</span>
                       </div>
                     ))}
                   </div>

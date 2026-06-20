@@ -18,7 +18,7 @@ import { View, Image, Animated, ScrollView, StyleSheet, useColorScheme } from 'r
 import { Text } from '@tricigo/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
-import { getInitials } from '@tricigo/utils';
+import { getInitials, formatRating } from '@tricigo/utils';
 import { colors, darkColors } from '@tricigo/theme';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
@@ -92,6 +92,7 @@ function PulsingRadarDot({ color }: { color: string }) {
  *  Stays close in spirit to the previous chip but slightly larger so it
  *  doesn't disappear into the card. */
 function DriverChip({ driver, index, isDark }: { driver: SearchingDriverPresence; index: number; isDark: boolean }) {
+  const { t } = useTranslation('rider');
   const slideAnim = useRef(new Animated.Value(20)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -125,7 +126,7 @@ function DriverChip({ driver, index, isDark }: { driver: SearchingDriverPresence
       </Text>
       <View style={styles.chipRating}>
         <Ionicons name="star" size={11} color={colors.warning.DEFAULT} />
-        <Text style={[styles.chipRatingText, { color: chipMuted }]}>{driver.rating.toFixed(1)}</Text>
+        <Text style={[styles.chipRatingText, { color: chipMuted }]}>{formatRating(driver.rating, t('rating_new', { ns: 'common', defaultValue: 'Nuevo' }))}</Text>
       </View>
     </Animated.View>
   );
@@ -135,6 +136,7 @@ function DriverChip({ driver, index, isDark }: { driver: SearchingDriverPresence
  *  reviewing the request. Replaces the tiny chip with a 56-px avatar
  *  and a one-line summary so the rider sees who's looking at the trip. */
 function DriverHeroRow({ driver, isDark, serviceTypeLabel }: { driver: SearchingDriverPresence; isDark: boolean; serviceTypeLabel?: string | null }) {
+  const { t } = useTranslation('rider');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 260, useNativeDriver: true }).start();
@@ -159,7 +161,7 @@ function DriverHeroRow({ driver, isDark, serviceTypeLabel }: { driver: Searching
           </Text>
           <View style={styles.heroRatingPill}>
             <Ionicons name="star" size={11} color={colors.warning.DEFAULT} />
-            <Text style={styles.heroRatingText}>{driver.rating.toFixed(1)}</Text>
+            <Text style={styles.heroRatingText}>{formatRating(driver.rating, t('rating_new', { ns: 'common', defaultValue: 'Nuevo' }))}</Text>
           </View>
         </View>
         {serviceTypeLabel ? (

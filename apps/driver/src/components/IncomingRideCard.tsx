@@ -111,7 +111,7 @@ function IncomingRideCardInner({
       name: user.full_name,
       avatarUrl: user.avatar_url,
       vehicleType: ride.service_type,
-      rating: driverProfile.rating_avg,
+      rating: driverProfile.rating_avg ?? null,
       location: jittered,
       joinedAt: Date.now(),
     };

@@ -383,7 +383,7 @@ export function useDriverRideActions() {
           name: user.full_name,
           avatarUrl: user.avatar_url,
           vehicleType: cachedVehicle?.type ?? '',
-          rating: profile.rating_avg,
+          rating: profile.rating_avg ?? null,
           location: { latitude: loc.latitude, longitude: loc.longitude },
           vehicleMake: cachedVehicle?.make ?? null,
           vehicleModel: cachedVehicle?.model ?? null,

@@ -37,6 +37,9 @@
  */
 
 import { LogBox } from 'react-native';
+// Single source of truth shared with the Sentry event filter (sentryNoise.ts)
+// so the dev-console silencing and Sentry's `ignoreErrors` can never drift.
+import { BENIGN_CONSOLE_PATTERNS, BENIGN_REJECTION_PATTERNS } from './sentryNoise';
 
 /**
  * Regex patterns matched against the message of a `console.warn` or
@@ -44,21 +47,14 @@ import { LogBox } from 'react-native';
  * `LogBox.ignoreLogs`. Patterns must be specific enough to avoid silencing
  * legitimate errors — strict literal-match prefixes only.
  */
-const SILENCED_PATTERNS: RegExp[] = [
-  /SafeAreaView has been deprecated/,
-  /\[expo-av\]:?\s+Expo AV has been deprecated/,
-  /\[expo-notifications\] Error thrown while updating the device push token/,
-];
+const SILENCED_PATTERNS: RegExp[] = BENIGN_CONSOLE_PATTERNS;
 
 /**
  * Regex patterns matched against unhandled Promise rejection messages.
  * Matched rejections are silently dropped; unmatched ones still print to
  * the console (preserving visibility of real bugs).
  */
-const SILENCED_PROMISE_REJECTIONS: RegExp[] = [
-  /Call to function 'ExpoKeepAwake\.activate' has been rejected/,
-  /The current activity is no longer available/,
-];
+const SILENCED_PROMISE_REJECTIONS: RegExp[] = BENIGN_REJECTION_PATTERNS;
 
 type HermesPromiseTracker = {
   enablePromiseRejectionTracker?: (opts: {
