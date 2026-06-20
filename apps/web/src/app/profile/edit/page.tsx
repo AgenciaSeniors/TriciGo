@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { AvatarCropModal } from '@/components/AvatarCropModal';
 
@@ -167,9 +168,8 @@ export default function EditProfilePage() {
       setToastIsSuccess(true);
       setToast(t('web.saved', { defaultValue: 'Guardado' }));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('web.save_error', { defaultValue: 'Error al guardar' });
       setToastIsSuccess(false);
-      setToast(msg);
+      setToast(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
