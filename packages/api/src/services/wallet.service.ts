@@ -164,7 +164,9 @@ export const walletService = {
       held_balance_usd_cents: number | null;
       migration_rate: string | number | null;
       migration_bonus_pct: string | number | null;
-      anchor_usd_cents: number | null;
+      // anchor_usd_cents is NUMERIC (00446 full-precision anchor) → supabase-js returns it as a
+      // string; coerce to a number like migration_rate.
+      anchor_usd_cents: string | number | null;
     };
     return {
       available: row.balance,
@@ -173,7 +175,7 @@ export const walletService = {
       heldUsdCents: row.held_balance_usd_cents,
       migrationRate: row.migration_rate != null ? Number(row.migration_rate) : null,
       migrationBonusPct: row.migration_bonus_pct != null ? Number(row.migration_bonus_pct) : null,
-      anchorUsdCents: row.anchor_usd_cents,
+      anchorUsdCents: row.anchor_usd_cents != null ? Number(row.anchor_usd_cents) : null,
     };
   },
 
