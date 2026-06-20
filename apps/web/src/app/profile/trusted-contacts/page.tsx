@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, trustedContactService } from '@tricigo/api';
+import { isValidCubanPhone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { TrustedContact } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -89,6 +90,13 @@ export default function TrustedContactsPage() {
 
   const handleAdd = async () => {
     if (!userId || !newName.trim() || !newPhone.trim()) return;
+    // A trusted contact must be SMS-reachable for SOS; validate the Cuban phone
+    // before insert (the emergency-contact sibling already does this — without it
+    // the web let you save an unreachable contact the SOS broadcast can't text).
+    if (!isValidCubanPhone(newPhone.trim())) {
+      setError(t('web.invalid_phone', { defaultValue: 'Ingresá un número de teléfono cubano válido.' }));
+      return;
+    }
     setAdding(true);
     setError(null); // Clear any previous error
     try {

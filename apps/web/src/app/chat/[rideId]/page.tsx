@@ -228,7 +228,7 @@ export default function ChatPage() {
                   }}>
                     {isPending
                       ? t('web.message_pending', { defaultValue: 'Pendiente · sin red' })
-                      : new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      : new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' })}
                   </p>
                 </div>
               </div>

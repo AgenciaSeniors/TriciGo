@@ -175,6 +175,10 @@ export default function BookPage() {
   // cheaper route showed a total the server would never charge.
   useEffect(() => {
     setPromoResult(null);
+    // Also clear a stale validation error (e.g. "destino a menos de 200m") once
+    // the rider changes the input it complained about — handleEstimateAll never
+    // resets it, so it lingered above a fresh, valid estimate until next submit.
+    setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceType, deliveryVehicle, pickup?.latitude, pickup?.longitude, dropoff?.latitude, dropoff?.longitude]);
 
@@ -879,7 +883,9 @@ export default function BookPage() {
           });
         } catch (deliveryErr) {
           try {
-            await rideService.cancelRide(ride.id, 'delivery_details_failed');
+            // cancelRide(rideId, _userId?, reason?) — the reason is the 3rd arg;
+            // passing it 2nd dropped it into the ignored userId slot (p_reason=null).
+            await rideService.cancelRide(ride.id, undefined, 'delivery_details_failed');
           } catch { /* best-effort cleanup */ }
           console.error('[Book] delivery details failed — ride cancelled:', deliveryErr);
           setError(t('book.delivery_details_failed', { defaultValue: 'No se pudieron guardar los detalles del envío. Intenta de nuevo.' }));
