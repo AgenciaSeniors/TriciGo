@@ -59,7 +59,7 @@ export function useRiderLocationSharing() {
 
         // Watch position with lower accuracy and less frequent updates
         // (rider location is supplementary, not primary tracking)
-        subscriptionRef.current = await Location.watchPositionAsync(
+        const sub = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.Balanced,
             distanceInterval: 50, // 50m minimum movement
@@ -81,6 +81,11 @@ export function useRiderLocationSharing() {
             });
           },
         );
+        // The effect may have been torn down while watchPositionAsync was
+        // awaiting — if so, remove the just-created subscription instead of
+        // stashing it in the ref (cleanup already ran and would miss it).
+        if (cancelled) { sub.remove(); return; }
+        subscriptionRef.current = sub;
       } catch {
         // Silent — rider location sharing is best-effort
       }

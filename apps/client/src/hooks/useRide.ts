@@ -713,10 +713,14 @@ export function useRideActions() {
           });
         } catch (err) {
           logger.error('Delivery details creation failed — cancelling ride', { error: String(err), rideId: ride.id });
-          // Cancel the orphaned ride so it doesn't exist without delivery metadata
+          // Cancel the orphaned ride so it doesn't exist without delivery metadata.
+          // reason is the 3rd arg (cancelRide(rideId, _userId?, reason?)) — passing
+          // it 2nd dropped it into the ignored userId slot (p_reason=null).
+          let cancelOk = true;
           try {
-            await rideService.cancelRide(ride.id, 'delivery_details_failed');
+            await rideService.cancelRide(ride.id, undefined, 'delivery_details_failed');
           } catch (cancelErr) {
+            cancelOk = false;
             logger.error('Failed to cancel ride after delivery details error', { error: String(cancelErr) });
           }
           isSubmittingRef.current = false;
@@ -724,7 +728,11 @@ export function useRideActions() {
           Toast.show({
             type: 'error',
             text1: i18next.t('rider:ride.delivery_details_failed_title', { defaultValue: 'Error al crear envío' }),
-            text2: i18next.t('rider:ride.delivery_details_failed_msg', { defaultValue: 'No se pudieron guardar los detalles del envío. Intenta de nuevo.' }),
+            // If BOTH the details save AND the cancel failed, a cargo ride may still
+            // be live with no package info — tell the rider to check & cancel it.
+            text2: cancelOk
+              ? i18next.t('rider:ride.delivery_details_failed_msg', { defaultValue: 'No se pudieron guardar los detalles del envío. Intenta de nuevo.' })
+              : i18next.t('rider:ride.delivery_orphan_check_rides', { defaultValue: 'No se pudo guardar el envío ni cancelar el viaje. Revisá "Mis viajes" y cancelá el viaje si sigue activo.' }),
           });
           setLoading(false);
           return;
