@@ -12,6 +12,7 @@
 // Aquí solo paso 1+2.
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,6 +45,11 @@ Deno.serve(async (req) => {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // AUD2-007: rate-limit email add/change per authenticated user (anti email-bomb). The endpoint
+    // triggers an outbound verification email per call; cap at 5 per user per hour.
+    const rl = await rateLimit(`add-email:${user.id}`, 5, 60 * 60 * 1000);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, corsHeaders);
 
     const { email } = (await req.json()) as { email: string };
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
