@@ -155,7 +155,7 @@ export default function GiftPage() {
         </h1>
 
         {feedback && (
-          <p style={{ fontSize: '0.85rem', marginBottom: '0.75rem', color: feedback.kind === 'error' ? 'var(--error, #dc2626)' : '#16a34a' }}>{feedback.text}</p>
+          <p role={feedback.kind === 'error' ? 'alert' : undefined} aria-live="polite" style={{ fontSize: '0.85rem', marginBottom: '0.75rem', color: feedback.kind === 'error' ? 'var(--error, #dc2626)' : '#16a34a' }}>{feedback.text}</p>
         )}
 
         {/* Balance */}
@@ -183,6 +183,7 @@ export default function GiftPage() {
               value={query}
               onChange={(e) => setQuery(mode === 'code' ? e.target.value.toUpperCase() : e.target.value)}
               placeholder={mode === 'code' ? t('gift.code_placeholder', { defaultValue: 'Código del amigo' }) : '+53XXXXXXXX'}
+              aria-label={mode === 'code' ? t('gift.by_code', { defaultValue: 'Código' }) : t('gift.by_phone', { defaultValue: 'Teléfono' })}
               className="input-base"
               style={{ width: '100%' }}
             />
@@ -213,6 +214,7 @@ export default function GiftPage() {
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
               placeholder="0"
+              aria-label={t('gift.amount', { defaultValue: 'Monto del regalo' })}
               className="input-base"
               style={{ width: '100%' }}
             />
@@ -222,7 +224,7 @@ export default function GiftPage() {
               </p>
             )}
             <div style={{ fontSize: '0.95rem', fontWeight: 600, margin: '1rem 0 0.5rem' }}>{t('gift.message_optional', { defaultValue: 'Mensaje (opcional)' })}</div>
-            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="¡Feliz cumple!" className="input-base" style={{ width: '100%' }} />
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="¡Feliz cumple!" aria-label={t('gift.message_optional', { defaultValue: 'Mensaje (opcional)' })} className="input-base" style={{ width: '100%' }} />
             <button type="button" onClick={handleSend} disabled={!amountValid || submitting}
               style={{ width: '100%', marginTop: '1rem', padding: '0.85rem', borderRadius: '0.7rem', border: 'none', color: '#fff', fontWeight: 700, cursor: !amountValid || submitting ? 'not-allowed' : 'pointer', background: !amountValid || submitting ? '#ccc' : 'var(--primary)' }}>
               {submitting ? t('gift.sending', { defaultValue: 'Enviando…' }) : t('gift.send', { defaultValue: 'Enviar regalo' })}
@@ -234,8 +236,9 @@ export default function GiftPage() {
         <div style={{ ...card, textAlign: 'center', background: 'rgba(255,77,0,0.06)' }}>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>{t('gift.my_code', { defaultValue: 'Tu código para recibir regalos' })}</div>
           <button type="button" onClick={handleCopyCode} disabled={!myCode}
+            aria-label={t('copy_code', { defaultValue: 'Copiar mi código' })}
             style={{ background: 'none', border: 'none', cursor: myCode ? 'pointer' : 'default', fontSize: '1.6rem', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.15em' }}>
-            {myCode || '…'} {myCode ? '⧉' : ''}
+            {myCode || '…'} {myCode ? <span aria-hidden="true">⧉</span> : ''}
           </button>
           {/* QR escaneable del código — un amigo lo escanea con la cámara del
               teléfono y abre /gift/<code> (landing → pantalla de regalo precargada).

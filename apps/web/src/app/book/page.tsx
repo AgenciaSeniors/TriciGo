@@ -1439,16 +1439,16 @@ export default function BookPage() {
                 {/* Recipient row */}
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>{t('book.delivery_recipient_name', { defaultValue: 'Destinatario' })} *</label>
-                    <input type="text" value={deliveryDetails.recipient_name}
+                    <label htmlFor="delivery-recipient-name" style={labelStyle}>{t('book.delivery_recipient_name', { defaultValue: 'Destinatario' })} *</label>
+                    <input id="delivery-recipient-name" type="text" value={deliveryDetails.recipient_name}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_name: e.target.value }))}
                       placeholder={t('book.delivery_recipient_name_ph', { defaultValue: 'Nombre completo' })}
                       style={{ ...inputBase, border: nameEmpty && deliveryDetails.recipient_phone ? '2px solid #ef4444' : '1px solid var(--border)' }}
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>{t('book.delivery_recipient_phone', { defaultValue: 'Teléfono' })} *</label>
-                    <input type="tel" value={deliveryDetails.recipient_phone}
+                    <label htmlFor="delivery-recipient-phone" style={labelStyle}>{t('book.delivery_recipient_phone', { defaultValue: 'Teléfono' })} *</label>
+                    <input id="delivery-recipient-phone" type="tel" value={deliveryDetails.recipient_phone}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_phone: e.target.value }))}
                       placeholder="+53 5XXXXXXX"
                       style={{ ...inputBase, border: phoneInvalid ? '2px solid #ef4444' : '1px solid var(--border)' }}
@@ -1478,16 +1478,16 @@ export default function BookPage() {
                 {/* Description + Weight row */}
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <div style={{ flex: 2 }}>
-                    <label style={labelStyle}>{t('book.delivery_description', { defaultValue: 'Descripción' })}</label>
-                    <input type="text" value={deliveryDetails.package_description}
+                    <label htmlFor="delivery-description" style={labelStyle}>{t('book.delivery_description', { defaultValue: 'Descripción' })}</label>
+                    <input id="delivery-description" type="text" value={deliveryDetails.package_description}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, package_description: e.target.value }))}
                       placeholder={t('book.delivery_description_ph', { defaultValue: '¿Qué envías?' })}
                       style={{ ...inputBase, border: '1px solid var(--border)' }}
                     />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>{t('book.delivery_weight', { defaultValue: 'Peso (kg)' })}</label>
-                    <input type="number" value={deliveryDetails.estimated_weight_kg}
+                    <label htmlFor="delivery-weight" style={labelStyle}>{t('book.delivery_weight', { defaultValue: 'Peso (kg)' })}</label>
+                    <input id="delivery-weight" type="number" value={deliveryDetails.estimated_weight_kg}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, estimated_weight_kg: e.target.value }))}
                       placeholder="0.5" min="0.1" step="0.1"
                       style={{ ...inputBase, border: '1px solid var(--border)' }}
@@ -1517,8 +1517,8 @@ export default function BookPage() {
                 </div>
                 {/* Instructions */}
                 <div>
-                  <label style={labelStyle}>Instrucciones especiales</label>
-                  <input type="text" value={deliveryDetails.special_instructions}
+                  <label htmlFor="delivery-instructions" style={labelStyle}>Instrucciones especiales</label>
+                  <input id="delivery-instructions" type="text" value={deliveryDetails.special_instructions}
                     onChange={(e) => setDeliveryDetails(d => ({ ...d, special_instructions: e.target.value }))}
                     placeholder="Ej: Tocar timbre, preguntar por Juan..."
                     style={{ ...inputBase, border: '1px solid var(--border)' }}
@@ -1564,6 +1564,8 @@ export default function BookPage() {
           {/* ═══ Error message ═══ */}
           {error && (
             <p
+              role="alert"
+              aria-live="assertive"
               style={{
                 color: 'var(--primary-dark)',
                 fontSize: '0.875rem',

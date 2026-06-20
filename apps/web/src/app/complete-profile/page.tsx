@@ -79,10 +79,11 @@ export default function CompleteProfilePage() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+            <label htmlFor="cp-name" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
               {t('profile.name', { defaultValue: 'Nombre completo' })}
             </label>
             <input
+              id="cp-name"
               type="text"
               value={fullName}
               onChange={(e) => { setFullName(e.target.value); setError(null); }}
@@ -99,10 +100,11 @@ export default function CompleteProfilePage() {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+            <label htmlFor="cp-email" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
               {t('profile.email_optional', { defaultValue: 'Email (opcional)' })}
             </label>
             <input
+              id="cp-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -112,7 +114,7 @@ export default function CompleteProfilePage() {
             />
           </div>
 
-          {error && <p style={{ color: 'var(--error)', fontSize: '0.875rem', textAlign: 'center' }}>{error}</p>}
+          {error && <p role="alert" aria-live="assertive" style={{ color: 'var(--error)', fontSize: '0.875rem', textAlign: 'center' }}>{error}</p>}
 
           <button
             onClick={handleContinue}

@@ -87,7 +87,7 @@ export function WebHeader() {
   const DarkToggle = () => (
     <button
       onClick={toggleDark}
-      aria-label="Toggle dark mode"
+      aria-label={t('toggle_theme', { defaultValue: 'Cambiar tema' })}
       style={{
         background: 'var(--bg-hover)',
         border: 'none',
