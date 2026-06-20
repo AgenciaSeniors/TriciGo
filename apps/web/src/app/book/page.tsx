@@ -1582,13 +1582,17 @@ export default function BookPage() {
                       </span>
                       <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#22c55e', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                         {paymentMethod === 'tricicoin' && <img src="/images/coins/tricoin-small.png" alt="TRC" style={{ width: 36, height: 36 }} />}
-                        {formatPrice(Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - promoResult.discount, 0))}
+                        {/* displayFareCup already subtracts promo AND shared-ride
+                            discount, matching the Solicitar button (was promo-only). */}
+                        {formatPrice(displayFareCup)}
                       </span>
                     </>
                   ) : (
                     <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                       {paymentMethod === 'tricicoin' && <img src="/images/coins/tricoin-small.png" alt="TRC" style={{ width: 36, height: 36 }} />}
-                      {formatPrice(selectedEstimate?.estimated_fare_cup ?? 0, selectedEstimate?.estimated_fare_trc)}
+                      {/* displayFareCup/Trc subtract the shared-ride discount so
+                          the headline reconciles with the Solicitar button. */}
+                      {formatPrice(displayFareCup, displayFareTrc)}
                     </span>
                   )}
                 </div>
