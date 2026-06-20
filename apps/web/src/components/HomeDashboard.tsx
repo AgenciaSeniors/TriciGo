@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { rideService, announcementService, getSupabaseClient } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import type { Ride } from '@tricigo/types';
 import { announcementCtaWebHref } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
@@ -41,6 +42,7 @@ export function HomeDashboard({ userId, onRebook }: {
   onRebook: (loc: LocationPreset) => void;
 }) {
   const router = useRouter();
+  const { t } = useTranslation('web');
   const [lastRide, setLastRide] = useState<RawHistoryRide | null>(null);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -100,7 +102,7 @@ export function HomeDashboard({ userId, onRebook }: {
       {/* ── Re-book last ride ── */}
       {lastRide && (
         <section>
-          <p style={sectionLabel}>Tu último viaje</p>
+          <p style={sectionLabel}>{t('home.dashboard_last_ride', { defaultValue: 'Tu último viaje' })}</p>
           <button
             type="button"
             onClick={() => onRebook({
@@ -123,7 +125,7 @@ export function HomeDashboard({ userId, onRebook }: {
                 {lastRide.dropoff_address}
               </span>
               <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
-                Pedir de nuevo
+                {t('home.dashboard_rebook', { defaultValue: 'Pedir de nuevo' })}
               </span>
             </span>
             <span style={{ color: 'var(--primary)', fontWeight: 700 }}>→</span>
@@ -134,7 +136,7 @@ export function HomeDashboard({ userId, onRebook }: {
       {/* ── Active promos ── */}
       {promos.length > 0 && (
         <section>
-          <p style={sectionLabel}>Promociones</p>
+          <p style={sectionLabel}>{t('home.dashboard_promos', { defaultValue: 'Promociones' })}</p>
           <div style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
             {promos.map((p) => {
               // discount_fixed_cup is WHOLE CUP (validate_promo_code applies it
@@ -153,7 +155,7 @@ export function HomeDashboard({ userId, onRebook }: {
                   key={p.id}
                   type="button"
                   onClick={() => router.push('/profile/referral')}
-                  aria-label={`Promo ${p.code}: ${headline}`}
+                  aria-label={t('home.dashboard_promo_aria', { code: p.code, headline, defaultValue: `Promo ${p.code}: ${headline}` })}
                   style={{
                     flex: '0 0 auto', width: 200, textAlign: 'left', cursor: 'pointer',
                     padding: '0.85rem', borderRadius: '0.85rem',
@@ -168,7 +170,7 @@ export function HomeDashboard({ userId, onRebook }: {
                   </span>
                   {expiry && (
                     <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
-                      Hasta {expiry}
+                      {t('home.dashboard_promo_until', { expiry, defaultValue: `Hasta ${expiry}` })}
                     </span>
                   )}
                 </button>
@@ -181,7 +183,7 @@ export function HomeDashboard({ userId, onRebook }: {
       {/* ── Announcements / campañas ── */}
       {announcements.length > 0 && (
         <section>
-          <p style={sectionLabel}>Novedades</p>
+          <p style={sectionLabel}>{t('home.dashboard_news', { defaultValue: 'Novedades' })}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {announcements.map((a) => {
               const tappable = !!announcementCtaWebHref(a.cta_url);

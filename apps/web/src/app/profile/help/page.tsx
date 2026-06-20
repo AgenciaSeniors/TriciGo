@@ -3,43 +3,48 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
-
-const faqItems = [
-  {
-    question: 'Como pido un viaje?',
-    answer: 'Abre la app, ingresa tu destino, elige el tipo de vehiculo y confirma. Un conductor sera asignado en minutos.',
-  },
-  {
-    question: 'Cuales son los metodos de pago?',
-    answer: 'Aceptamos efectivo (CUP) y créditos de viaje TriciCoin. Puedes comprar créditos con tarjeta y elegir tu método preferido en tu perfil.',
-  },
-  {
-    question: 'Como cancelo un viaje?',
-    answer: 'Puedes cancelar un viaje antes de que el conductor llegue al punto de recogida. Puede aplicar una tarifa de cancelacion si el conductor ya esta en camino.',
-  },
-  {
-    question: 'Que son los TriciCoins?',
-    answer: 'TriciCoin es el crédito de viaje prepago de TriciGo. Puedes ganarlo con referidos, promociones y quests, y se usa únicamente para pagar viajes dentro de la app. No es dinero ni una moneda, y no se puede convertir a efectivo.',
-  },
-  {
-    question: 'Como contacto a mi conductor?',
-    answer: 'Una vez asignado el conductor, puedes llamarlo o enviarle un mensaje directamente desde la app.',
-  },
-  {
-    question: 'Que hago si olvide algo en el vehiculo?',
-    answer: 'Ve a tu historial de viajes, selecciona el viaje y usa la opcion "Reporte de objeto perdido". Te conectaremos con el conductor.',
-  },
-  {
-    question: 'Como funciona el boton SOS?',
-    answer: 'Durante un viaje, puedes presionar el boton SOS para alertar a tus contactos de confianza y compartir tu ubicacion en tiempo real.',
-  },
-];
+import { useTranslation } from '@tricigo/i18n';
 
 export default function HelpPage() {
+  const { t } = useTranslation('web');
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  // FAQ items live inside the component so each question/answer resolves
+  // through the active locale (es/en/pt). Defaults keep the exact Spanish
+  // copy as the fallback when a key is missing.
+  const faqItems = [
+    {
+      question: t('help.q1_question', { defaultValue: '¿Cómo pido un viaje?' }),
+      answer: t('help.q1_answer', { defaultValue: 'Abre la app, ingresa tu destino, elige el tipo de vehículo y confirma. Un conductor será asignado en minutos.' }),
+    },
+    {
+      question: t('help.q2_question', { defaultValue: '¿Cuáles son los métodos de pago?' }),
+      answer: t('help.q2_answer', { defaultValue: 'Aceptamos efectivo (CUP) y créditos de viaje TriciCoin. Puedes comprar créditos con tarjeta y elegir tu método preferido en tu perfil.' }),
+    },
+    {
+      question: t('help.q3_question', { defaultValue: '¿Cómo cancelo un viaje?' }),
+      answer: t('help.q3_answer', { defaultValue: 'Puedes cancelar un viaje antes de que el conductor llegue al punto de recogida. Puede aplicar una tarifa de cancelación si el conductor ya está en camino.' }),
+    },
+    {
+      question: t('help.q4_question', { defaultValue: '¿Qué son los TriciCoins?' }),
+      answer: t('help.q4_answer', { defaultValue: 'TriciCoin es el crédito de viaje prepago de TriciGo. Puedes ganarlo con referidos, promociones y quests, y se usa únicamente para pagar viajes dentro de la app. No es dinero ni una moneda, y no se puede convertir a efectivo.' }),
+    },
+    {
+      question: t('help.q5_question', { defaultValue: '¿Cómo contacto a mi conductor?' }),
+      answer: t('help.q5_answer', { defaultValue: 'Una vez asignado el conductor, puedes llamarlo o enviarle un mensaje directamente desde la app.' }),
+    },
+    {
+      question: t('help.q6_question', { defaultValue: '¿Qué hago si olvidé algo en el vehículo?' }),
+      answer: t('help.q6_answer', { defaultValue: 'Ve a tu historial de viajes, selecciona el viaje y usa la opción "Reporte de objeto perdido". Te conectaremos con el conductor.' }),
+    },
+    {
+      question: t('help.q7_question', { defaultValue: '¿Cómo funciona el botón SOS?' }),
+      answer: t('help.q7_answer', { defaultValue: 'Durante un viaje, puedes presionar el botón SOS para alertar a tus contactos de confianza y compartir tu ubicación en tiempo real.' }),
+    },
+  ];
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -52,7 +57,7 @@ export default function HelpPage() {
   if (authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>{t('help.loading', { defaultValue: 'Cargando...' })}</p>
       </div>
     );
   }
@@ -60,9 +65,9 @@ export default function HelpPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Inicia sesion para acceder a la ayuda</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('help.login_prompt', { defaultValue: 'Inicia sesión para acceder a la ayuda' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          Iniciar sesion
+          {t('help.login_link', { defaultValue: 'Iniciar sesión' })}
         </Link>
       </div>
     );
@@ -77,13 +82,13 @@ export default function HelpPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Ayuda</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('help.title', { defaultValue: 'Ayuda' })}</h1>
       </div>
 
       {/* FAQ Accordion */}
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Preguntas frecuentes
+          {t('help.faq_title', { defaultValue: 'Preguntas frecuentes' })}
         </h2>
         <div style={{
           background: 'var(--bg-card)',
@@ -150,10 +155,10 @@ export default function HelpPage() {
           <polyline points="22,6 12,13 2,6" />
         </svg>
         <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0.75rem 0 0.5rem', color: 'var(--text-primary)' }}>
-          Necesitas mas ayuda?
+          {t('help.contact_title', { defaultValue: '¿Necesitas más ayuda?' })}
         </h3>
         <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 0.75rem' }}>
-          Nuestro equipo de soporte esta disponible para ayudarte.
+          {t('help.contact_desc', { defaultValue: 'Nuestro equipo de soporte está disponible para ayudarte.' })}
         </p>
         <a
           href="mailto:soporte@tricigo.com"

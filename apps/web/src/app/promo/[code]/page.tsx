@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslation } from '@tricigo/i18n';
 
 /**
  * Web landing page for promo code deep links.
@@ -12,6 +13,7 @@ import Link from 'next/link';
  */
 export default function PromoLandingPage() {
   const params = useParams();
+  const { t } = useTranslation('web');
   const code = params.code as string;
 
   const appDeepLink = `tricigo://promo/${code}`;
@@ -62,11 +64,11 @@ export default function PromoLandingPage() {
         </div>
 
         <h2 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 var(--space-sm)' }}>
-          ¡Tienes un descuento!
+          {t('promo.title', { defaultValue: '¡Tienes un descuento!' })}
         </h2>
 
         <p style={{ color: 'var(--text-secondary)', margin: '0 0 var(--space-sm)', lineHeight: 1.5 }}>
-          Aplica este código promocional en tu próximo viaje con TriciGo.
+          {t('promo.subtitle', { defaultValue: 'Aplica este código promocional en tu próximo viaje con TriciGo.' })}
         </p>
 
         {/* Promo code display */}
@@ -80,7 +82,7 @@ export default function PromoLandingPage() {
           }}
         >
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', margin: '0 0 var(--space-xs)' }}>
-            Código promocional
+            {t('promo.code_label', { defaultValue: 'Código promocional' })}
           </p>
           <p
             style={{
@@ -109,12 +111,12 @@ export default function PromoLandingPage() {
             marginBottom: 'var(--space-sm)',
           }}
         >
-          Abrir en TriciGo
+          {t('promo.open_app', { defaultValue: 'Abrir en TriciGo' })}
         </a>
 
         {/* Fallback text */}
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 'var(--space-md)' }}>
-          ¿No tienes la app? Descárgala desde la App Store o Google Play.
+          {t('promo.no_app', { defaultValue: '¿No tienes la app? Descárgala desde la App Store o Google Play.' })}
         </p>
 
         {/* Home link */}
@@ -128,7 +130,7 @@ export default function PromoLandingPage() {
             display: 'inline-block',
           }}
         >
-          Visitar tricigo.com
+          {t('promo.visit_site', { defaultValue: 'Visitar tricigo.com' })}
         </Link>
       </div>
     </div>

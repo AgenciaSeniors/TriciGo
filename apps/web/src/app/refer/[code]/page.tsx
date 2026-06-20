@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getSupabaseClient, referralService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 
 // Mirror of the key used by /login and /auth/callback so the code
 // survives an OAuth round-trip.
@@ -32,6 +33,7 @@ type Status = 'idle' | 'applying' | 'applied' | 'failed' | 'guest';
 export default function ReferralLandingPage() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useTranslation('web');
   const rawCode = (params.code as string) ?? '';
   const code = rawCode.trim().toUpperCase();
   const appDeepLink = `tricigo://refer/${code}`;
@@ -48,7 +50,7 @@ export default function ReferralLandingPage() {
 
     if (!code) {
       setStatus('failed');
-      setErrorMsg('Código de referido inválido.');
+      setErrorMsg(t('refer.invalid_code', { defaultValue: 'Código de referido inválido.' }));
       return;
     }
 
@@ -87,7 +89,7 @@ export default function ReferralLandingPage() {
         setStatus('failed');
       }
     })();
-  }, [code, router]);
+  }, [code, router, t]);
 
   const iconBg =
     status === 'applied'
@@ -146,20 +148,20 @@ export default function ReferralLandingPage() {
 
         <h2 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 var(--space-sm)' }}>
           {status === 'applied'
-            ? '¡Código aplicado!'
+            ? t('refer.applied_title', { defaultValue: '¡Código aplicado!' })
             : status === 'failed'
-              ? 'No se pudo aplicar'
-              : '¡Te invitaron a TriciGo!'}
+              ? t('refer.failed_title', { defaultValue: 'No se pudo aplicar' })
+              : t('refer.invited_title', { defaultValue: '¡Te invitaron a TriciGo!' })}
         </h2>
 
         <p style={{ color: 'var(--text-secondary)', margin: '0 0 var(--space-sm)', lineHeight: 1.5 }}>
           {status === 'applied'
-            ? 'Tu invitador recibirá su bono cuando completes tu primer viaje.'
+            ? t('refer.applied_desc', { defaultValue: 'Tu invitador recibirá su bono cuando completes tu primer viaje.' })
             : status === 'failed'
-              ? (errorMsg ?? 'Inténtalo de nuevo más tarde.')
+              ? (errorMsg ?? t('refer.failed_desc', { defaultValue: 'Inténtalo de nuevo más tarde.' }))
               : status === 'applying'
-                ? 'Aplicando código...'
-                : 'Cuando completes tu primer viaje, tu invitador recibirá un bono en TriciCoins.'}
+                ? t('refer.applying', { defaultValue: 'Aplicando código...' })
+                : t('refer.invited_desc', { defaultValue: 'Cuando completes tu primer viaje, tu invitador recibirá un bono en TriciCoins.' })}
         </p>
 
         {/* Code chip — always visible so the rider can copy it
@@ -174,7 +176,7 @@ export default function ReferralLandingPage() {
           }}
         >
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', margin: '0 0 var(--space-xs)' }}>
-            Código de referido
+            {t('refer.code_label', { defaultValue: 'Código de referido' })}
           </p>
           <p
             style={{
@@ -196,30 +198,30 @@ export default function ReferralLandingPage() {
             web actions. */}
         {status === 'applied' && (
           <Link href="/book" className="btn-base btn-primary-solid" style={primaryCtaStyle}>
-            Pedir mi primer viaje
+            {t('refer.cta_book', { defaultValue: 'Pedir mi primer viaje' })}
           </Link>
         )}
 
         {status === 'guest' && (
           <>
             <Link href={`/login?ref=${code}`} className="btn-base btn-primary-solid" style={primaryCtaStyle}>
-              Iniciar sesión y aplicar
+              {t('refer.cta_login', { defaultValue: 'Iniciar sesión y aplicar' })}
             </Link>
             <a href={appDeepLink} className="btn-base btn-secondary-outline" style={primaryCtaStyle}>
-              Abrir en la app TriciGo
+              {t('refer.cta_open_app', { defaultValue: 'Abrir en la app TriciGo' })}
             </a>
           </>
         )}
 
         {status === 'failed' && (
           <Link href="/profile/referral" className="btn-base btn-primary-solid" style={primaryCtaStyle}>
-            Ir a mi código
+            {t('refer.cta_my_code', { defaultValue: 'Ir a mi código' })}
           </Link>
         )}
 
         {/* Fallback note + brand link, always visible. */}
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 'var(--space-md)' }}>
-          ¿No tenés la app? Descargala desde la App Store o Google Play.
+          {t('refer.no_app', { defaultValue: '¿No tenés la app? Descargala desde la App Store o Google Play.' })}
         </p>
         <Link
           href="/"
@@ -231,7 +233,7 @@ export default function ReferralLandingPage() {
             display: 'inline-block',
           }}
         >
-          Visitar tricigo.com
+          {t('refer.visit_site', { defaultValue: 'Visitar tricigo.com' })}
         </Link>
       </div>
     </div>
