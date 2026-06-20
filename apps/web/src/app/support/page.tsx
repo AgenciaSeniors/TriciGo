@@ -2,52 +2,64 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, supportService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-
-type Ticket = {
-  id: string;
-  subject: string;
-  description: string;
-  status: 'open' | 'in_progress' | 'resolved' | 'closed';
-  category: string;
-  created_at: string;
-  updated_at: string;
-};
+import type { SupportTicket, TicketCategory } from '@tricigo/types';
 
 const STATUS_COLORS: Record<string, string> = {
   open: 'var(--info, #3B82F6)',
   in_progress: 'var(--warning, #F59E0B)',
+  waiting_user: 'var(--warning, #F59E0B)',
   resolved: 'var(--success, #10B981)',
   closed: 'var(--text-tertiary, #6B7280)',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Abierto',
-  in_progress: 'En progreso',
-  resolved: 'Resuelto',
-  closed: 'Cerrado',
-};
-
-const CATEGORIES = [
-  { value: 'ride_issue', label: 'Problema con viaje' },
-  { value: 'payment', label: 'Pago / Facturación' },
-  { value: 'account', label: 'Mi cuenta' },
-  { value: 'safety', label: 'Seguridad' },
-  { value: 'other', label: 'Otro' },
+const CATEGORY_VALUES: TicketCategory[] = [
+  'ride_issue',
+  'payment_issue',
+  'driver_complaint',
+  'account_issue',
+  'app_bug',
+  'other',
 ];
 
 export default function SupportPage() {
-  const { t } = useTranslation();
+  const { t } = useTranslation('web');
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('ride_issue');
+  const [category, setCategory] = useState<TicketCategory>('ride_issue');
   const [submitting, setSubmitting] = useState(false);
+
+  const STATUS_LABELS: Record<string, string> = {
+    open: t('support.status_open', { defaultValue: 'Abierto' }),
+    in_progress: t('support.status_in_progress', { defaultValue: 'En progreso' }),
+    waiting_user: t('support.status_waiting_user', { defaultValue: 'Esperando respuesta' }),
+    resolved: t('support.status_resolved', { defaultValue: 'Resuelto' }),
+    closed: t('support.status_closed', { defaultValue: 'Cerrado' }),
+  };
+
+  const CATEGORY_LABELS: Record<TicketCategory, string> = {
+    ride_issue: t('support.category_ride_issue', { defaultValue: 'Problema con viaje' }),
+    payment_issue: t('support.category_payment_issue', { defaultValue: 'Pago / Facturación' }),
+    driver_complaint: t('support.category_driver_complaint', { defaultValue: 'Queja sobre conductor' }),
+    passenger_complaint: t('support.category_other', { defaultValue: 'Otro' }),
+    account_issue: t('support.category_account_issue', { defaultValue: 'Mi cuenta' }),
+    app_bug: t('support.category_app_bug', { defaultValue: 'Error en la app' }),
+    feature_request: t('support.category_other', { defaultValue: 'Otro' }),
+    other: t('support.category_other', { defaultValue: 'Otro' }),
+  };
+
+  const dateFormatter = new Intl.DateTimeFormat('es', {
+    timeZone: 'America/Havana',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -62,14 +74,10 @@ export default function SupportPage() {
   }, [userId]);
 
   async function fetchTickets() {
+    if (!userId) return;
     try {
-      const supabase = getSupabaseClient();
-      const { data } = await supabase
-        .from('support_tickets')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-      setTickets((data as Ticket[]) ?? []);
+      const data = await supportService.getUserTickets(userId);
+      setTickets(data ?? []);
     } catch {
       // silent
     } finally {
@@ -82,13 +90,11 @@ export default function SupportPage() {
     if (!userId || !subject.trim() || !description.trim()) return;
     setSubmitting(true);
     try {
-      const supabase = getSupabaseClient();
-      await supabase.from('support_tickets').insert({
+      await supportService.createTicket({
         user_id: userId,
+        category,
         subject: subject.trim(),
         description: description.trim(),
-        category,
-        status: 'open',
       });
       setSubject('');
       setDescription('');
@@ -112,8 +118,8 @@ export default function SupportPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>{t('web.support_login_prompt', { defaultValue: 'Inicia sesión para ver tus tickets' })}</p>
-        <Link href="/login?return=/support" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>{t('web.support_login_link', { defaultValue: 'Iniciar sesión' })}</Link>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('support.login_prompt', { defaultValue: 'Inicia sesión para ver tus tickets' })}</p>
+        <Link href="/login?return=/support" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>{t('support.login_link', { defaultValue: 'Iniciar sesión' })}</Link>
       </div>
     );
   }
@@ -129,7 +135,7 @@ export default function SupportPage() {
             </svg>
           </Link>
           <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
-            {t('web.support', { defaultValue: 'Soporte' })}
+            {t('support.title', { defaultValue: 'Soporte' })}
           </h1>
         </div>
         <button
@@ -145,7 +151,7 @@ export default function SupportPage() {
             cursor: 'pointer',
           }}
         >
-          {showForm ? t('common.cancel', { defaultValue: 'Cancelar' }) : t('web.support_new_ticket', { defaultValue: '+ Nuevo ticket' })}
+          {showForm ? t('support.cancel', { defaultValue: 'Cancelar' }) : t('support.new_ticket', { defaultValue: '+ Nuevo ticket' })}
         </button>
       </div>
 
@@ -162,13 +168,13 @@ export default function SupportPage() {
           style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, padding: '0.9rem 1rem', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '0.85rem', textDecoration: 'none', color: 'var(--text-primary)' }}
         >
           <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>WhatsApp</span>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Chatea con nuestro equipo</span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{t('support.contact_whatsapp_desc', { defaultValue: 'Chatea con nuestro equipo' })}</span>
         </a>
         <a
           href="mailto:soporte@tricigo.com?subject=Soporte%20TriciGo"
           style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, padding: '0.9rem 1rem', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '0.85rem', textDecoration: 'none', color: 'var(--text-primary)' }}
         >
-          <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Correo</span>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>{t('support.contact_email_title', { defaultValue: 'Correo' })}</span>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>soporte@tricigo.com</span>
         </a>
       </div>
@@ -184,11 +190,11 @@ export default function SupportPage() {
         }}>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
-              Categoría
+              {t('support.category_label', { defaultValue: 'Categoría' })}
             </label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => setCategory(e.target.value as TicketCategory)}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -199,21 +205,21 @@ export default function SupportPage() {
                 fontSize: '0.95rem',
               }}
             >
-              {CATEGORIES.map((cat) => (
-                <option key={cat.value} value={cat.value}>{cat.label}</option>
+              {CATEGORY_VALUES.map((value) => (
+                <option key={value} value={value}>{CATEGORY_LABELS[value]}</option>
               ))}
             </select>
           </div>
 
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
-              Asunto
+              {t('support.subject_label', { defaultValue: 'Asunto' })}
             </label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Describe brevemente tu problema"
+              placeholder={t('support.subject_placeholder', { defaultValue: 'Describe brevemente tu problema' })}
               required
               style={{
                 width: '100%',
@@ -229,12 +235,12 @@ export default function SupportPage() {
 
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
-              Descripción
+              {t('support.description_label', { defaultValue: 'Descripción' })}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Detalla tu problema con toda la información posible"
+              placeholder={t('support.description_placeholder', { defaultValue: 'Detalla tu problema con toda la información posible' })}
               required
               rows={4}
               style={{
@@ -265,7 +271,7 @@ export default function SupportPage() {
               cursor: subject.trim() && description.trim() ? 'pointer' : 'not-allowed',
             }}
           >
-            {submitting ? 'Enviando...' : 'Enviar ticket'}
+            {submitting ? t('support.submitting', { defaultValue: 'Enviando...' }) : t('support.submit', { defaultValue: 'Enviar ticket' })}
           </button>
         </form>
       )}
@@ -285,8 +291,8 @@ export default function SupportPage() {
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.5" style={{ margin: '0 auto 1rem' }}>
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>No tienes tickets de soporte</p>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>Crea uno si necesitas ayuda</p>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{t('support.empty_title', { defaultValue: 'No tienes tickets de soporte' })}</p>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>{t('support.empty_desc', { defaultValue: 'Crea uno si necesitas ayuda' })}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -318,14 +324,14 @@ export default function SupportPage() {
                   {STATUS_LABELS[ticket.status] ?? ticket.status}
                 </span>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                  {new Date(ticket.created_at).toLocaleDateString()}
+                  {dateFormatter.format(new Date(ticket.created_at))}
                 </span>
               </div>
               <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
                 {ticket.subject}
               </p>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>
-                {ticket.category === 'ride_issue' ? 'Viaje' : ticket.category === 'payment' ? 'Pago' : ticket.category === 'safety' ? 'Seguridad' : ticket.category === 'account' ? 'Cuenta' : 'Otro'}
+                {CATEGORY_LABELS[ticket.category] ?? CATEGORY_LABELS.other}
               </p>
             </Link>
           ))}
