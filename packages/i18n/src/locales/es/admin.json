@@ -1130,6 +1130,7 @@
     "set_rate": "Establecer tasa",
     "rate_saved": "Tasa de cambio actualizada correctamente",
     "error_invalid_rate": "Ingresa una tasa válida mayor a 0",
+    "error_rate_out_of_range": "La tasa debe estar entre 100 y 5000 CUP por USD",
     "error_saving": "Error al actualizar la tasa de cambio",
     "history": "Historial de tasas",
     "no_history": "Sin historial de tasas aún",
