@@ -331,6 +331,10 @@ export default function TrackRidePage() {
 
   const rideStatusRef = useRef(ride?.status);
   rideStatusRef.current = ride?.status;
+  // Consecutive "not found" polls (RLS reject / inexistent ride). After a few
+  // we stop the 3s poll so we don't hammer the DB forever for a ride the user
+  // can never see; a transient null still tolerates a couple of retries.
+  const notFoundStreakRef = useRef(0);
 
   const fetchRide = useCallback(async () => {
     if (!userId) return;
@@ -341,9 +345,11 @@ export default function TrackRidePage() {
       // (rideStatusRef is set once a ride rendered). Success clears any error
       // so the page self-heals when connectivity returns.
       if (data) {
+        notFoundStreakRef.current = 0;
         setRide(data);
         setError(null);
       } else if (!rideStatusRef.current) {
+        notFoundStreakRef.current += 1;
         setError(t('track.not_found', { defaultValue: 'Viaje no encontrado' }));
       }
     } catch {
@@ -484,7 +490,9 @@ export default function TrackRidePage() {
     // rating screen appeared. Same network cost as mobile, identical UX.
     const TERMINAL = ['completed', 'canceled', 'failed', 'no_driver_found', 'disputed'];
     const interval = setInterval(() => {
-      if (TERMINAL.includes(rideStatusRef.current ?? '')) {
+      // Stop on a terminal ride, or after 3 straight "not found" polls (the ride
+      // is unreadable/inexistent — RLS won't change, so don't keep hammering).
+      if (TERMINAL.includes(rideStatusRef.current ?? '') || notFoundStreakRef.current >= 3) {
         clearInterval(interval);
         return;
       }
@@ -507,6 +515,18 @@ export default function TrackRidePage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId, fetchRide]);
+
+  // If the ride goes terminal (e.g. the driver cancels) while the rider has the
+  // add-stop sheet / full-screen map / confirm modal open, close it all so a
+  // stale "¿Agregar parada?" can't sit over a canceled ride (or fire an
+  // addWaypoint on a dead ride).
+  useEffect(() => {
+    if (ride && ['completed', 'canceled', 'failed', 'no_driver_found', 'disputed'].includes(ride.status)) {
+      setAddStopOpen(false);
+      setShowStopMap(false);
+      setPendingStop(null);
+    }
+  }, [ride?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll nearby vehicles during searching status
   useEffect(() => {
