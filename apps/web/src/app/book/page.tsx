@@ -201,6 +201,10 @@ export default function BookPage() {
   const displayFareCup = Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - promoDiscountCup - shareDiscountCup, 0);
   const displayFareTrc = (promoDiscountCup > 0 || shareDiscountCup > 0) ? undefined : (selectedEstimate?.estimated_fare_trc ?? undefined);
 
+  /* ─── Schedule a future ride (parity con app móvil) ─── */
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+
   /* ─── Estimate freshness (X1.3: reject stale > FARE_ESTIMATE_TTL_MS) ─── */
   const fareEstimatedAtRef = useRef<number | null>(null);
 
@@ -838,6 +842,9 @@ export default function BookPage() {
         // ride defaults to wallet_ratio=0 → wallet portion 0 → charged all as
         // cash and the split never shows. Only for 'mixed'; ignored otherwise.
         wallet_ratio: paymentMethod === 'mixed' ? walletRatio : undefined,
+        // Schedule a future ride — only when the toggle is on AND a date is
+        // picked. The spread keeps scheduled_at absent for on-demand rides.
+        ...(isScheduled && scheduleDate && { scheduled_at: new Date(scheduleDate).toISOString() }),
       });
 
       // Delivery details as a blocking step — cancel the ride if it fails so it
@@ -868,7 +875,9 @@ export default function BookPage() {
         }
       }
 
-      router.push(`/track/${ride.id}`);
+      // Scheduled rides have no live tracking yet — send the rider to the list
+      // of scheduled rides; on-demand rides go straight to live tracking.
+      router.push(isScheduled ? '/rides' : `/track/${ride.id}`);
     } catch (err) {
       console.error('[Book] createRide failed:', err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -2005,6 +2014,39 @@ export default function BookPage() {
             );
           })()}
 
+          {/* ═══ Schedule a future ride (parity con app móvil) ═══ */}
+          <div style={{ marginTop: '0.75rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={isScheduled}
+                onChange={(e) => { setIsScheduled(e.target.checked); if (!e.target.checked) setScheduleDate(''); }}
+              />
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {t('book.schedule_toggle', { defaultValue: 'Programar viaje' })}
+              </span>
+            </label>
+            {isScheduled && (
+              <input
+                type="datetime-local"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                aria-label={t('book.schedule_toggle', { defaultValue: 'Programar viaje' })}
+                style={{
+                  width: '100%',
+                  marginTop: '0.5rem',
+                  padding: '0.5rem',
+                  borderRadius: '0.5rem',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-page)',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.85rem',
+                  boxSizing: 'border-box',
+                }}
+              />
+            )}
+          </div>
 
           {/* Request button with price */}
             <button
