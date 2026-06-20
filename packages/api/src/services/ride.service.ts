@@ -1132,6 +1132,27 @@ export const rideService = {
   },
 
   /**
+   * Upcoming one-off scheduled rides for a customer (still in 'searching',
+   * is_scheduled, scheduled_at in the future). getRideHistoryFiltered CANNOT
+   * return these — it hard-restricts the query to completed/canceled — so the
+   * "Programados" lists (web + móvil) need their own fetch. Additive: does not
+   * touch getActiveRide or the dispatch/lock path.
+   */
+  async getScheduledRides(userId: string): Promise<Ride[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('rides')
+      .select('*')
+      .eq('customer_id', userId)
+      .eq('is_scheduled', true)
+      .eq('status', 'searching')
+      .gt('scheduled_at', new Date().toISOString())
+      .order('scheduled_at', { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as Ride[];
+  },
+
+  /**
    * Get pricing snapshot for a ride.
    */
   async getPricingSnapshot(rideId: string): Promise<RidePricingSnapshot | null> {
