@@ -65,6 +65,7 @@ function driverTxLabel(
     case 'penalty': return t('earnings.tx_penalty', { defaultValue: 'Penalización' });
     case 'bonus': return t('earnings.tx_bonus', { defaultValue: 'Bono' });
     case 'refund': return t('earnings.tx_refund', { defaultValue: 'Reembolso' });
+    case 'fx': return t('earnings.tx_fx', { defaultValue: 'Ajuste por tipo de cambio' });
     case 'adjustment':
     default: return t('earnings.tx_adjustment', { defaultValue: 'Ajuste' });
   }

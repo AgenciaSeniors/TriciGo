@@ -160,6 +160,32 @@ describe('classifyWalletTxn', () => {
     expect(classifyWalletTxn(buy, 'me').kind).toBe('adjustment');
     expect(classifyWalletTxn(ded, 'me').kind).toBe('adjustment');
   });
+
+  // USD-anchored wallet (migs 00442-00444): the daily revaluation posts a
+  // double-entry `fx_revaluation` txn on the user wallet. It fell through to the
+  // 'transfer' fallback and was labelled "Regalo" in the history (4 live rows in
+  // prod touched customer_cash + tricicoin). It is its own kind.
+  it('fx_revaluation up → kind fx, credit (was mislabelled as a received gift)', () => {
+    const tx = {
+      type: 'fx_revaluation',
+      ledger_entries: [
+        { account_id: 'me', amount: 130 },
+        { account_id: 'platform_fx_reserve', amount: -130 },
+      ],
+    };
+    expect(classifyWalletTxn(tx, 'me')).toMatchObject({ kind: 'fx', direction: 'in', isCredit: true });
+  });
+
+  it('fx_revaluation down → kind fx, debit', () => {
+    const tx = {
+      type: 'fx_revaluation',
+      ledger_entries: [
+        { account_id: 'me', amount: -90 },
+        { account_id: 'platform_fx_reserve', amount: 90 },
+      ],
+    };
+    expect(classifyWalletTxn(tx, 'me')).toMatchObject({ kind: 'fx', direction: 'out', isCredit: false });
+  });
 });
 
 describe('walletTxnIcon', () => {
@@ -179,5 +205,6 @@ describe('walletTxnIcon', () => {
     expect(walletTxnIcon({ kind: 'penalty', direction: 'out' })).toBe('remove-circle');
     expect(walletTxnIcon({ kind: 'refund', direction: 'in' })).toBe('refresh');
     expect(walletTxnIcon({ kind: 'adjustment', direction: 'out' })).toBe('swap-horizontal');
+    expect(walletTxnIcon({ kind: 'fx', direction: 'in' })).toBe('swap-vertical');
   });
 });

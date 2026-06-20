@@ -48,7 +48,7 @@ export function signedLedgerAmountForAccount(
 export type WalletTxnKind =
   | 'recharge' | 'ride' | 'commission' | 'gift' | 'tip'
   | 'penalty' | 'bonus' | 'refund' | 'adjustment' | 'transfer'
-  | 'insurance';
+  | 'insurance' | 'fx';
 
 /** Minimal shape of a ledger transaction needed to classify it. */
 export interface ClassifiableTxn {
@@ -124,6 +124,11 @@ export function classifyWalletTxn(
     // NETOPIA recharge refunds post with type='refund' (mig 00398) — they
     // also fell through to 'transfer'/"Regalo recibido".
     kind = 'refund';
+  } else if (type === 'fx_revaluation') {
+    // USD-anchored wallet daily revaluation (migs 00442-00444). A double-entry
+    // txn on the user wallet (+/- delta) vs platform_fx_reserve. Fell through to
+    // 'transfer' and was shown as "Regalo" — it is an exchange-rate adjustment.
+    kind = 'fx';
   } else if (type === 'quota_purchase' || type === 'quota_deduction') {
     kind = 'adjustment';
   } else if (type === 'adjustment') {
@@ -161,6 +166,8 @@ export function walletTxnIcon(view: Pick<WalletTxnView, 'kind' | 'direction'>): 
       return 'refresh';
     case 'insurance':
       return 'shield-checkmark';
+    case 'fx':
+      return 'swap-vertical';
     case 'adjustment':
     default:
       return 'swap-horizontal';
