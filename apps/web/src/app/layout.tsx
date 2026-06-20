@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { Montserrat } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { I18nProvider } from './providers';
 import { WebHeader } from './web-header';
@@ -9,10 +9,19 @@ import { JsonLd } from '../components/JsonLd';
 import { DemoBanner } from '../components/DemoBanner';
 import { WebOfflineBanner } from '../components/WebOfflineBanner';
 
-const montserrat = Montserrat({
-  subsets: ['latin'],
+// Self-hosted Montserrat (variable font, latin subset) instead of
+// next/font/google. The deployed standalone build was NOT baking the Google
+// fonts into .next/static, so the SSR server fetched fonts.gstatic.com at
+// request time on every cold start — a big chunk of the GET / latency spikes
+// (Sentry GET / regression, VPS investigation 2026-06-20). Bundling the woff2
+// removes that runtime external dependency entirely.
+const montserrat = localFont({
+  src: './fonts/Montserrat-latin.woff2',
+  weight: '100 900',
+  style: 'normal',
   display: 'swap',
   variable: '--font-montserrat',
+  fallback: ['system-ui', 'sans-serif'],
 });
 
 export const metadata: Metadata = {
