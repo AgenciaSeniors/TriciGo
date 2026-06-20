@@ -7,10 +7,12 @@
  */
 import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useTranslation } from '@tricigo/i18n';
 
 export default function GiftCodeLanding() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useTranslation('web');
   const code = params.code as string;
 
   useEffect(() => {
@@ -23,7 +25,7 @@ export default function GiftCodeLanding() {
         <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
           Trici<span style={{ color: 'var(--primary)' }}>Go</span>
         </div>
-        <p style={{ fontSize: '0.875rem' }}>Abriendo regalo…</p>
+        <p style={{ fontSize: '0.875rem' }}>{t('gift.opening', { defaultValue: 'Abriendo regalo…' })}</p>
       </div>
     </main>
   );

@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { rideService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import { formatTRC } from '@tricigo/utils';
 import type { RideSplit } from '@tricigo/types';
 
@@ -23,6 +24,7 @@ interface PendingInvite extends RideSplit {
 const POLL_MS = 20_000;
 
 export function SplitInviteBanner({ userId }: { userId: string | null | undefined }) {
+  const { t } = useTranslation('web');
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
@@ -94,7 +96,7 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
                 </svg>
               </span>
               <span style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Te invitaron a dividir una tarifa
+                {t('split.title', { defaultValue: 'Te invitaron a dividir una tarifa' })}
               </span>
             </div>
 
@@ -106,7 +108,7 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
               <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                Tu parte: {invite.share_pct}%
+                {t('split.your_share', { pct: invite.share_pct, defaultValue: `Tu parte: ${invite.share_pct}%` })}
               </span>
               {estimatedShare != null && (
                 <span style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--primary)' }}>~{formatTRC(estimatedShare)}</span>
@@ -123,7 +125,7 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
                   fontWeight: 600, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1,
                 }}
               >
-                Rechazar
+                {t('split.decline', { defaultValue: 'Rechazar' })}
               </button>
               <button
                 onClick={() => handleAccept(invite)}
@@ -134,7 +136,7 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
                   fontWeight: 600, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1,
                 }}
               >
-                Aceptar
+                {t('split.accept', { defaultValue: 'Aceptar' })}
               </button>
             </div>
           </div>
