@@ -81,8 +81,11 @@ Deno.serve(async (req) => {
     // Mark password_set_at en public.users
     await supaAdmin.from('users').update({ password_set_at: new Date().toISOString() }).eq('id', user.id);
 
-    // Audit
-    await supaAdmin.from('audit_log').insert({
+    // Audit — AUD2-006: write to security_audit_log (whose columns are action/actor_id/target_id/
+    // details). The previous target `audit_log` has a different schema (table_name/operation/...), so
+    // the insert errored on unknown columns and was swallowed by the .then(noop) → the password_set
+    // security event was never recorded.
+    await supaAdmin.from('security_audit_log').insert({
       action: 'password_set',
       actor_id: user.id,
       target_id: user.id,
