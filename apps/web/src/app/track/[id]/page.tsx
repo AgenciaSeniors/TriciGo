@@ -6,7 +6,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, rideService, deliveryService, reviewService, nearbyService, trustedContactService, incidentService, notificationService, useFeatureFlag } from '@tricigo/api';
-import { formatCUP, generateReceiptHTML, haversineDistance } from '@tricigo/utils';
+import { formatCUP, generateReceiptHTML, haversineDistance, riderChargedTotal } from '@tricigo/utils';
 import type { RideWithDriver, RideStatus, Waypoint } from '@tricigo/types';
 import { useDriverPosition } from '../../../hooks/useDriverPosition';
 import { useRiderLocationSharing } from '../../../hooks/useRiderLocationSharing';
@@ -1376,7 +1376,10 @@ export default function TrackRidePage() {
                 {isTerminal ? t('track.final_fare', { defaultValue: 'Tarifa final' }) : t('track.estimated_fare', { defaultValue: 'Tarifa estimada' })}
               </span>
               <span className="track-fare-amount">
-                {formatCUP(ride.final_fare_cup ?? ride.estimated_fare_cup)}
+                {/* riderChargedTotal sums the tip back in: add_tip only bumps
+                    tip_amount, never final_fare_cup, so the raw column understates
+                    the real debit once a tip is left (parity with rides/[id]). */}
+                {formatCUP(riderChargedTotal(ride))}
               </span>
             </div>
             {/* Descuento aplicado (promo y/o compartir viaje) — parity con

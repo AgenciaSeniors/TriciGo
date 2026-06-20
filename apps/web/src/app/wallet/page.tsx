@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { walletService, exchangeRateService, paymentService, getSupabaseClient } from '@tricigo/api';
 import {
-  formatTRC,
+  formatTriciCoin,
   DEFAULT_EXCHANGE_RATE,
   getRelativeDay,
   formatTime,
@@ -527,7 +527,7 @@ export default function WalletPage() {
               {/* 00443: CUP is the primary figure (Cuban-first). When the wallet
                   is USD-anchored, show its protected dollar value as subtitle. */}
               <p style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.1rem' }}>
-                {formatTRC(balance.available)}
+                {formatTriciCoin(balance.available)}
               </p>
               {balance.anchorUsdCents != null && (
                 <p style={{ fontSize: '0.8rem', opacity: 0.85, margin: 0 }}>
@@ -537,7 +537,7 @@ export default function WalletPage() {
               {balance.held > 0 && (
                 <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.15)', borderRadius: '0.5rem' }}>
                   <p style={{ fontSize: '0.75rem', opacity: 0.8, margin: 0 }}>
-                    Retenido: {formatTRC(balance.held)}
+                    Retenido: {formatTriciCoin(balance.held)}
                   </p>
                 </div>
               )}
@@ -777,9 +777,9 @@ export default function WalletPage() {
             <p style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 0.5rem' }}>Este mes</p>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               {[
-                { label: 'Gastado', value: formatTRC(monthlyInsights.totalSpent), usd: monthlyInsights.totalSpent },
+                { label: 'Gastado', value: formatTriciCoin(monthlyInsights.totalSpent), usd: monthlyInsights.totalSpent },
                 { label: 'Viajes', value: String(monthlyInsights.ridesCount), usd: null as number | null },
-                { label: 'Promedio', value: formatTRC(monthlyInsights.avgRide), usd: monthlyInsights.avgRide },
+                { label: 'Promedio', value: formatTriciCoin(monthlyInsights.avgRide), usd: monthlyInsights.avgRide },
               ].map((m) => (
                 <div key={m.label} style={{ flex: 1, padding: '0.85rem 0.6rem', borderRadius: '0.75rem', border: '1px solid var(--border-light)', background: 'var(--bg-card)', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>{m.value}</div>
@@ -874,7 +874,7 @@ export default function WalletPage() {
                     {amount != null && (
                       <div style={{ flexShrink: 0, marginLeft: '0.5rem', textAlign: 'right' }}>
                         <span style={{ fontSize: '0.9rem', fontWeight: 700, color: amount > 0 ? '#16a34a' : '#dc2626' }}>
-                          {amount > 0 ? '+' : amount < 0 ? '−' : ''}{formatTRC(Math.abs(amount))}
+                          {amount > 0 ? '+' : amount < 0 ? '−' : ''}{formatTriciCoin(Math.abs(amount))}
                         </span>
                         {(() => {
                           // USD caption — usa la tasa de migración si existe, si no
