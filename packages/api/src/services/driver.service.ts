@@ -281,7 +281,7 @@ export const driverService = {
     latitude: number,
     longitude: number,
     heading?: number,
-    activeRideId?: string,
+    _activeRideId?: string,
   ): Promise<void> {
     const supabase = getSupabaseClient();
     const { error } = await supabase
@@ -292,18 +292,11 @@ export const driverService = {
       })
       .eq('id', driverId);
     if (error) throw error;
-
-    // Broadcast location to web tracking clients listening on driver-location-{driverId}
-    supabase.channel(`driver-location-${driverId}`)
-      .send({ type: 'broadcast', event: 'location', payload: { latitude, longitude, heading } })
-      .catch(() => { /* best-effort: web tracking broadcast */ });
-
-    // Broadcast on ride-level channel for share tracking (no driver_id exposed)
-    if (activeRideId) {
-      supabase.channel(`ride-driver-location-${activeRideId}`)
-        .send({ type: 'broadcast', event: 'driver_location', payload: { latitude, longitude } })
-        .catch(() => { /* best-effort: share tracking broadcast */ });
-    }
+    // AUD2-003 (privacy, audit 2026-06-20 pass 2): removed the public GPS broadcasts to
+    // `driver-location-{driverId}` and `ride-driver-location-{rideId}`. Those broadcast channels were
+    // UNAUTHENTICATED (any client could subscribe to a predictable id and track a driver's live GPS)
+    // AND already dead: every consumer (web + mobile) polls the RLS-gated `get_driver_position` RPC
+    // (BUG-277 polling architecture). The driver_profiles update above is the source of truth.
   },
 
   /**
