@@ -497,6 +497,20 @@ describe('fetchRoute fallback order (PR C)', () => {
     );
   }
 
+  it('returns null without throwing when a coordinate is missing (regression: fetchRoute toFixed crash)', async () => {
+    // TRICIGO-MOBILE-W / -10: useEffect-driven route hooks can call fetchRoute
+    // with a coord whose lat/lng is still undefined → `lat.toFixed(4)` threw
+    // "Cannot read property 'toFixed' of undefined" (unhandled rejection).
+    const fetchSpy = vi.fn(async () => makeRouteResponse(1, 1));
+    vi.stubGlobal('fetch', fetchSpy);
+    const ok = { lat: 23.14, lng: -82.35 };
+    const missing = { lat: undefined as unknown as number, lng: -82.36 };
+    await expect(fetchRoute(missing, ok)).resolves.toBeNull();
+    await expect(fetchRoute(ok, missing)).resolves.toBeNull();
+    await expect(fetchRoute({ lat: NaN, lng: 0 }, ok)).resolves.toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('calls Mapbox FIRST and returns its result; OSRM never called', async () => {
     const fetchSpy = vi.fn(async (url: unknown) => {
       const u = String(url);

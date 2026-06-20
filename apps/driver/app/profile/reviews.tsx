@@ -10,6 +10,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { useAuthStore } from '@/stores/auth.store';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
+import { formatRating } from '@tricigo/utils';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Review, ReviewTagSummaryItem } from '@tricigo/types';
 import { ReviewTagsBreakdown } from '@/components/profile/ReviewTagsBreakdown';
@@ -182,7 +183,7 @@ export default function DriverReviewsScreen() {
             <View className="flex-row items-center justify-between">
               <View className="items-center">
                 <Text style={{ fontFamily: 'Inter_800ExtraBold', fontSize: 36, color: palette.ink.primary, fontVariant: ['tabular-nums'] }}>
-                  {summary.average_rating.toFixed(1)}
+                  {formatRating(summary.average_rating)}
                 </Text>
                 <StarRow rating={Math.round(summary.average_rating)} palette={palette} />
                 <Text style={{ fontSize: 11, color: palette.ink.subtle, marginTop: 4 }}>

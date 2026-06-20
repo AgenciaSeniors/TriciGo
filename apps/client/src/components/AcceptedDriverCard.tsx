@@ -9,7 +9,7 @@ import { View, Image, Animated, StyleSheet } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
-import { getInitials } from '@tricigo/utils';
+import { getInitials, formatRating } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import type { DriverAcceptedBroadcast } from '@tricigo/types';
 
@@ -116,7 +116,7 @@ export function AcceptedDriverCard({ driver, onAnimationComplete }: AcceptedDriv
           <Text style={styles.driverName}>{driver.name}</Text>
           <View style={styles.ratingRow}>
             <Ionicons name="star" size={14} color={colors.warning.DEFAULT} />
-            <Text style={styles.ratingText}>{driver.rating.toFixed(1)}</Text>
+            <Text style={styles.ratingText}>{formatRating(driver.rating, t('rating_new', { ns: 'common', defaultValue: 'Nuevo' }))}</Text>
           </View>
           {vehicleDesc ? (
             <Text style={styles.vehicleText} numberOfLines={1}>

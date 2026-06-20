@@ -24,11 +24,12 @@ import { Text } from '@tricigo/ui/Text';
 import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
+import { formatRating } from '@tricigo/utils';
 
 interface RiderInfoCardProps {
   riderName: string;
   riderAvatarUrl: string | null;
-  riderRating: number;
+  riderRating: number | null;
   rideId: string;
 }
 
@@ -73,7 +74,7 @@ export function RiderInfoCard({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
           <Ionicons name="star" size={12} color={midnightEmber.accent[500]} />
           <Text variant="caption" style={{ color: midnightEmber.map.text.secondary }}>
-            {riderRating.toFixed(1)}
+            {formatRating(riderRating, t('rating_new', { ns: 'common', defaultValue: 'Nuevo' }))}
           </Text>
         </View>
       </View>

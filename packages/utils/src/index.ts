@@ -22,6 +22,19 @@ export type { SoundEvent } from './sounds';
 // Silences known-benign runtime warnings (ExpoKeepAwake / expo-av / SafeAreaView /
 // push token network). Native-only; web stub is a no-op. Call once at app boot.
 export { setupRuntimeLogging } from './setupRuntimeLogging';
+// Shared Sentry noise filtering — used by all four apps' Sentry.init configs
+// (network/connectivity noise + upstream deprecations) and kept in sync with
+// the native console silencer above.
+export {
+  SENTRY_IGNORE_PATTERNS,
+  SENTRY_DENY_URLS,
+  BENIGN_CONSOLE_PATTERNS,
+  BENIGN_REJECTION_PATTERNS,
+  BENIGN_NETWORK_PATTERNS,
+  isBenignSentryMessage,
+  makeSentryBeforeSend,
+} from './sentryNoise';
+export type { MinimalSentryEvent, MinimalSentryHint } from './sentryNoise';
 export { useDebouncePress } from './useDebouncePress';
 // BUG-marker-position-lag: smooth coordinate interpolation for Uber-style
 // marker animation between discrete GPS samples. Used by RideMapView
@@ -86,6 +99,8 @@ export { translateNetopiaError } from './netopia-errors';
 export { deliveryVehicleToSlug, isPackageCompatible, PACKAGE_CATEGORY_LABELS, INCOMPATIBILITY_REASON_LABELS } from './delivery';
 export type { PackageSpecs, VehicleCargoCapabilities, CompatibilityResult } from './delivery';
 export { logger, setLogContext, clearLogContext } from './logger';
+// Crash-proof star-rating formatter (rating_avg can be null for new accounts).
+export { formatRating } from './rating';
 export { offlineQueue } from './offlineQueue';
 export { fuzzyMatch, stripAccents } from './fuzzyMatch';
 export { SHARE_BASE_URL, buildShareUrl } from './shareRide';
