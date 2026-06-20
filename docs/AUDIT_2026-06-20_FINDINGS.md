@@ -146,3 +146,31 @@ La web (`book/page.tsx:757`) guarda `if ((monthly_budget_trc ?? 0) > 0)` (BUG-07
 
 ## Procedencia
 Workflow `wf_5e01f4dd-b2c` (run 2026-06-20). Grounding contra prod viva (`pg_get_functiondef`/`prosrc`/`list_migrations`/`get_advisors`), no contra archivos de migración. Remediación: migraciones `00445`–`00450` aplicadas (ver tabla de resolución). **Próxima migración libre: `00451`.**
+
+---
+
+## SEGUNDA PASADA — verificación + barrido exhaustivo (mismo día)
+
+> Disparada por la pregunta del usuario: *"¿estás seguro que la auditoría es 100% segura y no hubo errores de agentes?"*. **Respuesta honesta: NO 100% — y esta pasada lo demostró cazando 7 bugs reales, uno introducido por mi propio fix de la 1ra pasada.** Migs nuevas: `00451`–`00454`. EFs deployadas: `verify-otp`, `set-password-after-otp`, `add-email-with-verification`. **Próxima mig libre: `00455`.**
+
+### Fase A — re-revisión adversarial de la remediación
+- Las 6 migraciones aplicadas (00445-00450) quedaron **exactas** en prod (16/16 markers). `cancel_ride` íntegro.
+- **#601 / 00451 — bug REAL introducido por 00448:** el carve-out del lock excluía rides con `is_scheduled=true AND NOT scheduled_notified`, pero esas columnas son **client-writable** (RLS INSERT solo chequea `customer_id`) → un cliente marca un ride normal como pending-scheduled y **escapa el lock de un-viaje-activo**. Fix: BEFORE INSERT `tg_rides_normalize_scheduling` fuerza `is_scheduled := (scheduled_at IS NOT NULL AND scheduled_at > now())`. E2E ✓.
+
+### Fase B/C — hallazgos nuevos (todos groundeados vs prod + arreglados)
+| ID | Sev | Hallazgo | Fix | Estado |
+|---|---|---|---|---|
+| AUD2-001 | P1 | **rides INSERT sub-protegido**: RLS INSERT solo chequea `customer_id`; FSM + CLI-001 son BEFORE UPDATE → un cliente self-INSERTa `status='completed'` (infla tier) + driver/fare/actuals forjados | clamp de lifecycle en `tg_rides_normalize_scheduling` | **#603 / 00452** · E2E ✓ |
+| AUD2-002 | P1 | **verify-otp `listUsers()` sin paginar** → usuarios más allá de la 1ra página no se encuentran → createUser → colisión teléfono 500 → no pueden loguear (bloqueante a escala) | RPC indexado `lookup_auth_user_by_contact` (service_role only) | **#604 / 00453** · EF deployada · validado |
+| AUD2-003 | P2 | **GPS del driver en canales broadcast públicos** (`driver-location-*`/`ride-driver-location-*`) sin auth — pero muertos (consumidores pollean `get_driver_position`, gateado) | eliminar los broadcasts | **#605** · sin mig |
+| AUD2-005 | P3 | `claim_delivery_notification` gateaba solo `auth.uid() IS NULL` → cualquiera dispara SMS + obtiene PII del destinatario de cualquier cargo | restringir al **driver asignado**/admin | **#606 / 00454** · E2E ✓ |
+| AUD2-006 | P3 | `set-password-after-otp` insertaba a `audit_log` (schema distinto) → error tragado → evento `password_set` nunca registrado | escribir a `security_audit_log` | **#607** · EF deployada |
+| AUD2-007 | P3 | `add-email-with-verification` sin rate-limit → email-bomb | rate-limit 5/h por user | **#607** · EF deployada |
+
+### Falsos positivos + diferidos
+- **AUD2-004 (verify-selfie BOLA) = FALSO POSITIVO** — ya tiene el gate de ownership EFAUTH-01 (ronda 5).
+- **Info/unreachable (documentados, no fixeados, bajo valor):** AUD2-008/009 (hardening crons auto-admin/recurring, los finders mismos los marcaron *unreachable*); AUD2-010 (sesgo OTP modulo — negligible, el brute-force está acotado por rate-limit 10/10min, no por entropía); AUD2-011 (`is_session_revoked` sin uso en políticas — dead-ish, no vuln).
+- **N5#1** `update_ride_status_v2` ya guardado (00432, verificado vivo). Falsos positivos N5: shared_ride recomputado, `arrived_at_destination_at` sí chequeado, `disputed→completed` intencional.
+
+### Lección reforzada
+La clase **"BEFORE INSERT sin protección"** es sistémica en `rides`: el cliente Supabase **sin tipar** + RLS INSERT solo-row → toda columna server-only (status, driver_id, fares, actuals, is_scheduled) es **client-writable** salvo que un BEFORE INSERT la clampee. Toda la protección de columnas histórica (FSM, CLI-001) era BEFORE **UPDATE**, dejando el INSERT abierto.
