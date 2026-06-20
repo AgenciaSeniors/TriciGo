@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { rideService, getSupabaseClient } from '@tricigo/api';
 import { formatTRC, formatCUP, getRelativeDay, formatTime, riderChargedTotal, riderChargedTotalTrc, generateHistoryCSV } from '@tricigo/utils';
+import { useTranslation } from '@tricigo/i18n';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import { WebEmptyState } from '@/components/WebEmptyState';
@@ -12,22 +13,21 @@ import { WebEmptyState } from '@/components/WebEmptyState';
 /* ── Constants ── */
 const PAGE_SIZE = 20;
 
-const SERVICE_LABELS: Record<string, string> = {
-  triciclo_basico: 'Triciclo',
-  triciclo_premium: 'Triciclo Premium',
-  triciclo_cargo: 'Triciclo Cargo',
-  moto_standard: 'Moto',
-  auto_standard: 'Auto',
-  auto_confort: 'Confort',
-  mensajeria: 'Envío',
-};
+// Service slugs in display order — labels are resolved via `t` inside the
+// component (i18n key rides.service_<slug>).
+const SERVICE_SLUGS = [
+  'triciclo_basico',
+  'triciclo_premium',
+  'triciclo_cargo',
+  'moto_standard',
+  'auto_standard',
+  'auto_confort',
+  'mensajeria',
+] as const;
 
-const PAYMENT_LABELS: Record<string, string> = {
-  cash: 'Efectivo',
-  tricicoin: 'TriciCoin',
-  mixed: 'Mixto',
-  corporate: 'Corporativo',
-};
+// Payment methods in display order — labels resolved via `t`
+// (i18n key rides.payment_<method>).
+const PAYMENT_METHODS = ['cash', 'tricicoin', 'mixed', 'corporate'] as const;
 
 function getVehicleIcon(serviceType: string): string {
   if (serviceType.startsWith('triciclo')) return '/images/vehicles/triciclo.png';
@@ -39,26 +39,50 @@ function getVehicleIcon(serviceType: string): string {
 
 type TabFilter = 'all' | 'completed' | 'canceled';
 
-const TABS: { key: TabFilter; label: string }[] = [
-  { key: 'all', label: 'Todos' },
-  { key: 'completed', label: 'Completados' },
-  { key: 'canceled', label: 'Cancelados' },
-];
-
-/* ── Date Grouping ── */
-function groupRidesByDate(rides: Ride[]): { label: string; rides: Ride[] }[] {
-  const groups: Map<string, Ride[]> = new Map();
-  for (const ride of rides) {
-    const label = getRelativeDay(ride.created_at, 'Hoy', 'Ayer');
-    if (!groups.has(label)) groups.set(label, []);
-    groups.get(label)!.push(ride);
-  }
-  return Array.from(groups.entries()).map(([label, groupRides]) => ({ label, rides: groupRides }));
-}
-
 /* ── Page Component ── */
 export default function RidesPage() {
+  const { t } = useTranslation('web');
   const router = useRouter();
+
+  // Service / payment labels (i18n). Slug → translated label, falling back
+  // to the raw slug for unknown service types.
+  const SERVICE_LABELS: Record<string, string> = {
+    triciclo_basico: t('rides.service_triciclo_basico', { defaultValue: 'Triciclo' }),
+    triciclo_premium: t('rides.service_triciclo_premium', { defaultValue: 'Triciclo Premium' }),
+    triciclo_cargo: t('rides.service_triciclo_cargo', { defaultValue: 'Triciclo Cargo' }),
+    moto_standard: t('rides.service_moto_standard', { defaultValue: 'Moto' }),
+    auto_standard: t('rides.service_auto_standard', { defaultValue: 'Auto' }),
+    auto_confort: t('rides.service_auto_confort', { defaultValue: 'Confort' }),
+    mensajeria: t('rides.service_mensajeria', { defaultValue: 'Envío' }),
+  };
+
+  const PAYMENT_LABELS: Record<string, string> = {
+    cash: t('rides.payment_cash', { defaultValue: 'Efectivo' }),
+    tricicoin: t('rides.payment_tricicoin', { defaultValue: 'TriciCoin' }),
+    mixed: t('rides.payment_mixed', { defaultValue: 'Mixto' }),
+    corporate: t('rides.payment_corporate', { defaultValue: 'Corporativo' }),
+  };
+
+  const TABS: { key: TabFilter; label: string }[] = [
+    { key: 'all', label: t('rides.tab_all', { defaultValue: 'Todos' }) },
+    { key: 'completed', label: t('rides.tab_completed', { defaultValue: 'Completados' }) },
+    { key: 'canceled', label: t('rides.tab_canceled', { defaultValue: 'Cancelados' }) },
+  ];
+
+  /* ── Date Grouping ── */
+  const groupRidesByDate = (rides: Ride[]): { label: string; rides: Ride[] }[] => {
+    const groups: Map<string, Ride[]> = new Map();
+    for (const ride of rides) {
+      const label = getRelativeDay(
+        ride.created_at,
+        t('rides.date_today', { defaultValue: 'Hoy' }),
+        t('rides.date_yesterday', { defaultValue: 'Ayer' }),
+      );
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label)!.push(ride);
+    }
+    return Array.from(groups.entries()).map(([label, groupRides]) => ({ label, rides: groupRides }));
+  };
 
   // Auth
   const [userId, setUserId] = useState<string | null>(null);
@@ -124,11 +148,12 @@ export default function RidesPage() {
       console.error('Failed to load rides:', err);
       // Surface the failure (parity con el ErrorState + retry del rides móvil)
       // en vez de mostrar un "sin viajes" engañoso.
-      if (!append) setError('No se pudieron cargar tus viajes. Revisá tu conexión e intentá de nuevo.');
+      if (!append) setError(t('rides.error_loading', { defaultValue: 'No se pudieron cargar tus viajes. Revisá tu conexión e intentá de nuevo.' }));
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const currentOpts = (): LoadOpts => ({ tab: activeTab, serviceType: serviceFilter, paymentMethod: paymentFilter, dateFrom, dateTo });
@@ -164,7 +189,7 @@ export default function RidesPage() {
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
             Trici<span style={{ color: 'var(--primary)' }}>Go</span>
           </div>
-          <p style={{ fontSize: '0.875rem' }}>Cargando...</p>
+          <p style={{ fontSize: '0.875rem' }}>{t('rides.loading', { defaultValue: 'Cargando...' })}</p>
         </div>
       </div>
     );
@@ -206,22 +231,22 @@ export default function RidesPage() {
   return (
     <main className="page-main">
       <div className="page-container">
-        <Link href="/" aria-label="Volver al inicio" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
-          &larr; Inicio
+        <Link href="/" aria-label={t('rides.back_home', { defaultValue: 'Volver al inicio' })} style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
+          {t('rides.back_home_link', { defaultValue: '← Inicio' })}
         </Link>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginTop: '1rem', marginBottom: '1.25rem' }}>
           <h1 style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 800, margin: 0 }}>
-            Historial de viajes
+            {t('rides.title', { defaultValue: 'Historial de viajes' })}
           </h1>
           {rides.length > 0 && (
             <button
               onClick={handleExportCsv}
-              aria-label="Exportar historial a CSV"
+              aria-label={t('rides.export_csv_aria', { defaultValue: 'Exportar historial a CSV' })}
               className="btn-base btn-secondary-outline"
               style={{ cursor: 'pointer', fontSize: '0.8rem', flexShrink: 0, padding: '0.4rem 0.8rem' }}
             >
-              Exportar CSV
+              {t('rides.export_csv', { defaultValue: 'Exportar CSV' })}
             </button>
           )}
         </div>
@@ -248,35 +273,37 @@ export default function RidesPage() {
             onClick={() => setShowFilters((s) => !s)}
             style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', padding: '0.25rem 0' }}
           >
-            {showFilters ? '− Menos filtros' : '+ Más filtros'}
-            {(serviceFilter !== 'all' || paymentFilter !== 'all' || dateFrom || dateTo) ? ' · activos' : ''}
+            {showFilters
+              ? t('rides.filters_less', { defaultValue: '− Menos filtros' })
+              : t('rides.filters_more', { defaultValue: '+ Más filtros' })}
+            {(serviceFilter !== 'all' || paymentFilter !== 'all' || dateFrom || dateTo) ? t('rides.filters_active', { defaultValue: ' · activos' }) : ''}
           </button>
           {showFilters && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '0.5rem', alignItems: 'flex-end' }}>
               <label style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                Servicio
+                {t('rides.filter_service', { defaultValue: 'Servicio' })}
                 <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className="input-base" style={{ fontSize: '0.82rem' }}>
-                  <option value="all">Todos</option>
-                  {Object.entries(SERVICE_LABELS).map(([slug, label]) => (
-                    <option key={slug} value={slug}>{label}</option>
+                  <option value="all">{t('rides.filter_all', { defaultValue: 'Todos' })}</option>
+                  {SERVICE_SLUGS.map((slug) => (
+                    <option key={slug} value={slug}>{SERVICE_LABELS[slug]}</option>
                   ))}
                 </select>
               </label>
               <label style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                Pago
+                {t('rides.filter_payment', { defaultValue: 'Pago' })}
                 <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="input-base" style={{ fontSize: '0.82rem' }}>
-                  <option value="all">Todos</option>
-                  {Object.entries(PAYMENT_LABELS).map(([m, label]) => (
-                    <option key={m} value={m}>{label}</option>
+                  <option value="all">{t('rides.filter_all', { defaultValue: 'Todos' })}</option>
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>{PAYMENT_LABELS[m]}</option>
                   ))}
                 </select>
               </label>
               <label style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                Desde
+                {t('rides.filter_from', { defaultValue: 'Desde' })}
                 <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input-base" style={{ fontSize: '0.82rem' }} />
               </label>
               <label style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                Hasta
+                {t('rides.filter_to', { defaultValue: 'Hasta' })}
                 <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input-base" style={{ fontSize: '0.82rem' }} />
               </label>
               {(serviceFilter !== 'all' || paymentFilter !== 'all' || dateFrom || dateTo) && (
@@ -285,7 +312,7 @@ export default function RidesPage() {
                   onClick={() => { setServiceFilter('all'); setPaymentFilter('all'); setDateFrom(''); setDateTo(''); }}
                   style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.45rem 0.7rem', fontSize: '0.78rem', color: 'var(--text-secondary)', cursor: 'pointer' }}
                 >
-                  Limpiar
+                  {t('rides.filter_clear', { defaultValue: 'Limpiar' })}
                 </button>
               )}
             </div>
@@ -304,7 +331,7 @@ export default function RidesPage() {
               className="btn-base btn-secondary-outline"
               style={{ cursor: 'pointer' }}
             >
-              Reintentar
+              {t('rides.retry', { defaultValue: 'Reintentar' })}
             </button>
           </div>
         )}
@@ -313,9 +340,15 @@ export default function RidesPage() {
         {!loading && !error && rides.length === 0 && (
           <WebEmptyState
             icon="🚗"
-            title={activeTab === 'all' ? 'Sin viajes todavía' : activeTab === 'completed' ? 'Sin viajes completados' : 'Sin viajes cancelados'}
-            description={activeTab === 'all' ? 'Cuando completes un viaje, aparecerá aquí.' : 'No hay viajes con este filtro.'}
-            action={{ label: 'Solicitar un viaje', href: '/book' }}
+            title={activeTab === 'all'
+              ? t('rides.empty_all_title', { defaultValue: 'Sin viajes todavía' })
+              : activeTab === 'completed'
+                ? t('rides.empty_completed_title', { defaultValue: 'Sin viajes completados' })
+                : t('rides.empty_canceled_title', { defaultValue: 'Sin viajes cancelados' })}
+            description={activeTab === 'all'
+              ? t('rides.empty_all_desc', { defaultValue: 'Cuando completes un viaje, aparecerá aquí.' })
+              : t('rides.empty_filtered_desc', { defaultValue: 'No hay viajes con este filtro.' })}
+            action={{ label: t('rides.request_ride', { defaultValue: 'Solicitar un viaje' }), href: '/book' }}
           />
         )}
 
@@ -329,7 +362,9 @@ export default function RidesPage() {
                   {group.rides.map((ride) => {
                     const cardIdx = globalCardIdx++;
                     const statusClass = ride.status === 'completed' ? 'ride-status-badge--completed' : 'ride-status-badge--canceled';
-                    const statusLabel = ride.status === 'completed' ? 'Completado' : 'Cancelado';
+                    const statusLabel = ride.status === 'completed'
+                      ? t('rides.status_completed', { defaultValue: 'Completado' })
+                      : t('rides.status_canceled', { defaultValue: 'Cancelado' });
                     const serviceType = (ride as any).service_type ?? '';
 
                     return (
@@ -339,7 +374,7 @@ export default function RidesPage() {
                         role="button"
                         tabIndex={0}
                         style={{ animationDelay: `${Math.min(cardIdx * 0.05, 0.4)}s` }}
-                        aria-label={`Ver viaje de ${ride.pickup_address} a ${ride.dropoff_address}`}
+                        aria-label={t('rides.card_aria', { pickup: ride.pickup_address, dropoff: ride.dropoff_address, defaultValue: 'Ver viaje de {{pickup}} a {{dropoff}}' })}
                         onClick={() => router.push(`/rides/${ride.id}`)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push(`/rides/${ride.id}`); }}
                       >
@@ -372,11 +407,11 @@ export default function RidesPage() {
                           </div>
                           <div className="ride-route-addresses">
                             <div>
-                              <div className="ride-address-label">Desde</div>
+                              <div className="ride-address-label">{t('rides.route_from', { defaultValue: 'Desde' })}</div>
                               <div className="ride-address">{ride.pickup_address}</div>
                             </div>
                             <div>
-                              <div className="ride-address-label">Hasta</div>
+                              <div className="ride-address-label">{t('rides.route_to', { defaultValue: 'Hasta' })}</div>
                               <div className="ride-address">{ride.dropoff_address}</div>
                             </div>
                           </div>
@@ -417,11 +452,11 @@ export default function RidesPage() {
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                aria-label="Cargar más viajes"
+                aria-label={t('rides.load_more_aria', { defaultValue: 'Cargar más viajes' })}
                 className="btn-base btn-secondary-outline"
                 style={{ width: '100%', marginTop: '1rem' }}
               >
-                {loadingMore ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Cargar más viajes'}
+                {loadingMore ? <span className="spinner" style={{ width: 14, height: 14 }} /> : t('rides.load_more', { defaultValue: 'Cargar más viajes' })}
               </button>
             )}
           </div>
