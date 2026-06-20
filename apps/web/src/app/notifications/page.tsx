@@ -103,6 +103,14 @@ function getNotificationIcon(type: string) {
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
       );
+    case 'lost_item':
+      // Magnifier — mirrors the mobile inbox 'search' icon for lost & found.
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0891b2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      );
     default:
       return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#718096" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -126,7 +134,8 @@ function useFormatTime(t: (key: string, options?: Record<string, unknown>) => st
     if (diffMins < 60) return t('notifications.time_mins_ago', { count: diffMins });
     if (diffHours < 24) return t('notifications.time_hours_ago', { count: diffHours });
     if (diffDays < 7) return t('notifications.time_days_ago', { count: diffDays });
-    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    // Pin to Havana TZ like the date-group header (server rows are UTC).
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'America/Havana' });
   };
 }
 
@@ -480,13 +489,19 @@ export default function NotificationsPage() {
                 onClick={() => {
                   if (!notif.read) handleMarkRead(notif.id);
                   // Deep link parity with mobile handleTap (apps/client/app/
-                  // notifications/index.tsx): ride_id wins, then wallet types
-                  // → /wallet, content categories → their web surface.
+                  // notifications/index.tsx + useNotifications.ts): chat → the
+                  // chat thread, any other ride_id → the LIVE /track screen
+                  // (mobile routes ride notifs to /ride; /track is its web twin
+                  // and handles terminal rides too), then wallet/content
+                  // categories → their surface, and a final fallback to home so
+                  // a tap is never a dead no-op (sos/dispute_update/lost_item).
                   const rid = notif.data && typeof (notif.data as Record<string, unknown>).ride_id === 'string'
                     ? (notif.data as Record<string, string>).ride_id
                     : null;
-                  if (rid) {
-                    router.push(`/rides/${rid}`);
+                  if ((notif.type as string) === 'chat' && rid) {
+                    router.push(`/chat/${rid}`);
+                  } else if (rid) {
+                    router.push(`/track/${rid}`);
                   } else if (['wallet', 'payment', 'wallet_recharge', 'wallet_recharge_refund', 'wallet_credit', 'wallet_debit'].includes(notif.type)) {
                     router.push('/wallet');
                   } else if (['blog', 'news'].includes(notif.type)) {
@@ -494,6 +509,10 @@ export default function NotificationsPage() {
                   } else if (['announcement', 'campaign', 'promo'].includes(notif.type)) {
                     // Campaigns render in the HomeDashboard inside /book.
                     router.push('/book');
+                  } else {
+                    // dispute_update / sos / lost_item / system with no ride_id:
+                    // mirror the mobile default branch instead of a dead no-op.
+                    router.push('/');
                   }
                 }}
                 aria-label={notif.read ? notif.title : t('notifications.mark_read_aria', { title: notif.title })}
