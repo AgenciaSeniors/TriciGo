@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, corporateService, paymentService, invoiceService } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
-import type { CorporateAccount, CorporateEmployeeRole, CorporateEmployeeWithUser, EmployeeReport } from '@tricigo/types';
+import { getErrorMessage, formatTRC } from '@tricigo/utils';
+import type { CorporateAccount, CorporateEmployeeRole, CorporateEmployeeWithUser, EmployeeReport, CorporateBillingSummary, CorporateRide } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
 import CorporateRequestForm from './CorporateRequestForm';
 
@@ -59,6 +59,32 @@ export default function CorporatePage() {
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [recharging, setRecharging] = useState(false);
   const [corporateBalances, setCorporateBalances] = useState<Record<string, number>>({});
+
+  // Billing summary + recent rides (parity with the client "Facturación" card)
+  const [billingAccountId, setBillingAccountId] = useState<string | null>(null);
+  const [billingSummary, setBillingSummary] = useState<CorporateBillingSummary | null>(null);
+  const [billingRides, setBillingRides] = useState<CorporateRide[]>([]);
+  const [loadingBilling, setLoadingBilling] = useState(false);
+
+  const handleToggleBilling = async (accountId: string) => {
+    if (billingAccountId === accountId) { setBillingAccountId(null); return; }
+    setBillingAccountId(accountId);
+    setLoadingBilling(true);
+    setBillingSummary(null);
+    setBillingRides([]);
+    try {
+      const [summary, rides] = await Promise.all([
+        corporateService.getBillingSummary(accountId),
+        corporateService.getCorporateRides(accountId, 0, 10),
+      ]);
+      setBillingSummary(summary);
+      setBillingRides(rides);
+    } catch {
+      // Silent — the section just stays empty; the rest of the page is unaffected.
+    } finally {
+      setLoadingBilling(false);
+    }
+  };
 
   // Employee reports state
   const [reportsAccountId, setReportsAccountId] = useState<string | null>(null);
@@ -639,6 +665,83 @@ export default function CorporatePage() {
                             ? t('corporate_generating', { defaultValue: 'Generando...' })
                             : t('corporate_generate_link', { defaultValue: 'Generar link' })}
                         </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Facturación: billing summary + recent rides (parity with the
+                    client "Facturación" card — getBillingSummary + getCorporateRides). */}
+                {isAdmin && (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <button
+                      onClick={() => handleToggleBilling(acc.id)}
+                      style={{
+                        padding: '0.35rem 0.75rem', background: 'transparent', color: 'var(--primary)',
+                        border: '1px solid var(--primary)', borderRadius: '0.4rem', fontSize: '0.78rem',
+                        fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      {billingAccountId === acc.id
+                        ? t('corporate_billing_hide', { defaultValue: 'Ocultar facturación' })
+                        : t('corporate_billing_show', { defaultValue: 'Ver facturación' })}
+                    </button>
+                    {billingAccountId === acc.id && (
+                      <div style={{ marginTop: '0.6rem' }}>
+                        {loadingBilling ? (
+                          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            {t('corporate_billing_loading', { defaultValue: 'Cargando facturación...' })}
+                          </p>
+                        ) : (
+                          <>
+                            {billingSummary && (
+                              <div style={{ background: 'var(--bg-page)', border: '1px solid var(--border-light)', borderRadius: '0.6rem', padding: '0.85rem', marginBottom: '0.6rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                  <div>
+                                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{t('corporate_billing_total_rides', { defaultValue: 'Viajes este mes' })}</p>
+                                    <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>{billingSummary.total_rides}</p>
+                                  </div>
+                                  <div style={{ textAlign: 'right' }}>
+                                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{t('corporate_billing_total_spent', { defaultValue: 'Total gastado' })}</p>
+                                    <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--primary)' }}>{formatTRC(billingSummary.total_spent_trc)}</p>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <div>
+                                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{t('corporate_billing_budget_remaining', { defaultValue: 'Presupuesto restante' })}</p>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                      {billingSummary.budget_remaining_trc < 0
+                                        ? t('corporate_billing_unlimited', { defaultValue: 'Ilimitado' })
+                                        : formatTRC(billingSummary.budget_remaining_trc)}
+                                    </p>
+                                  </div>
+                                  <div style={{ textAlign: 'right' }}>
+                                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{t('corporate_balance', { defaultValue: 'Balance corporativo' })}</p>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formatTRC(corporateBalances[acc.id] ?? 0)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {billingRides.length > 0 && (
+                              <div>
+                                <p style={{ margin: '0 0 0.35rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('corporate_billing_recent_rides', { defaultValue: 'Viajes recientes' })}</p>
+                                {billingRides.map((ride) => (
+                                  <div key={ride.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid var(--border-light)' }}>
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                      {new Intl.DateTimeFormat('es', { timeZone: 'America/Havana', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(ride.created_at))}
+                                    </span>
+                                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formatTRC(ride.fare_trc)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {!billingSummary && billingRides.length === 0 && (
+                              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center', padding: '0.5rem 0' }}>
+                                {t('corporate_billing_empty', { defaultValue: 'Sin actividad de facturación este mes.' })}
+                              </p>
+                            )}
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
