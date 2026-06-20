@@ -1130,6 +1130,7 @@
     "set_rate": "Definir taxa",
     "rate_saved": "Taxa de câmbio atualizada com sucesso",
     "error_invalid_rate": "Insira uma taxa válida maior que 0",
+    "error_rate_out_of_range": "A taxa deve estar entre 100 e 5000 CUP por USD",
     "error_saving": "Erro ao atualizar a taxa de câmbio",
     "history": "Histórico de taxas",
     "no_history": "Sem histórico de taxas ainda",

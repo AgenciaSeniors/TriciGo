@@ -44,6 +44,11 @@ export default function ExchangeRatePage() {
       setError(t('exchange_rate.error_invalid_rate'));
       return;
     }
+    // AUD-002: sanity bound mirroring the DB CHECK (00445) so a typo can't ×N every fare.
+    if (rate < 100 || rate > 5000) {
+      setError(t('exchange_rate.error_rate_out_of_range'));
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -123,7 +128,8 @@ export default function ExchangeRatePage() {
               <input
                 type="number"
                 step="1"
-                min="1"
+                min="100"
+                max="5000"
                 aria-label={t('exchange_rate.manual_rate_input', { defaultValue: 'Exchange rate in CUP per USD' })}
                 className="w-32 px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm text-right font-mono"
                 placeholder="520"

@@ -18,6 +18,13 @@ let cachedRate: number | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
+// AUD-002 (pre-launch audit): sanity bound on the USD/CUP rate, mirrored by the DB CHECK
+// (migration 00445) and the sync-exchange-rate edge function. A value outside this range
+// re-prices every fare and revalues every anchored wallet, so it is rejected everywhere.
+// Current rate ~695; historical range 512..695 — [100, 5000] leaves ample headroom.
+export const MIN_USD_CUP_RATE = 100;
+export const MAX_USD_CUP_RATE = 5000;
+
 export const exchangeRateService = {
   /**
    * Get the current exchange rate record from the database.
@@ -86,23 +93,28 @@ export const exchangeRateService = {
    * Creates a new exchange_rates row and toggles is_current.
    */
   async setManualRate(usdCupRate: number): Promise<void> {
+    // AUD-002: reject out-of-range values before they reach the database. A typo here
+    // re-prices every fare and revalues every anchored wallet at the next cron.
+    if (
+      !Number.isFinite(usdCupRate) ||
+      usdCupRate < MIN_USD_CUP_RATE ||
+      usdCupRate > MAX_USD_CUP_RATE
+    ) {
+      throw new Error(
+        `Exchange rate out of range: must be between ${MIN_USD_CUP_RATE} and ${MAX_USD_CUP_RATE} CUP per USD`,
+      );
+    }
+
     const supabase = getSupabaseClient();
 
-    // Unset the current rate
-    await supabase
-      .from('exchange_rates')
-      .update({ is_current: false })
-      .eq('is_current', true);
-
-    // Insert new manual rate
-    const { error } = await supabase
-      .from('exchange_rates')
-      .insert({
-        source: 'manual',
-        usd_cup_rate: usdCupRate,
-        fetched_at: new Date().toISOString(),
-        is_current: true,
-      });
+    // AUD-020 + RLS: upsert_exchange_rate does the UPDATE+INSERT atomically (a CHECK
+    // rejection rolls back cleanly with no zero-current window) and is admin-gated, so the
+    // admin's user JWT can set the rate even though exchange_rates RLS only allows SELECT.
+    const { error } = await supabase.rpc('upsert_exchange_rate', {
+      p_source: 'manual',
+      p_usd_cup_rate: usdCupRate,
+      p_fetched_at: new Date().toISOString(),
+    });
     if (error) throw error;
 
     // Invalidate cache

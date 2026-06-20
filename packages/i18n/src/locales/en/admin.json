@@ -1130,6 +1130,7 @@
     "set_rate": "Set rate",
     "rate_saved": "Exchange rate updated successfully",
     "error_invalid_rate": "Enter a valid rate greater than 0",
+    "error_rate_out_of_range": "The rate must be between 100 and 5000 CUP per USD",
     "error_saving": "Error updating exchange rate",
     "history": "Rate history",
     "no_history": "No rate history yet",
