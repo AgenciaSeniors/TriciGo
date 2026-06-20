@@ -93,15 +93,19 @@ Deno.serve(async (req) => {
     const devEmail = `phone_${normalizedPhone.replace(/\+/g, '')}@tricigo.app`;
 
     // Try to find existing user by email
-    let existingUser: { id: string; email?: string; phone?: string } | undefined;
+    // AUD2-002: indexed lookup via RPC instead of an UNPAGINATED listUsers() (which only saw the
+    // first ~50 users of auth.users — past one page, an existing user was not found, fell through to
+    // createUser, hit a phone-collision 500 and could never log in). The RPC is service_role-only.
+    let existingUserId: string | undefined;
     try {
-      const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();
-      if (listError) throw listError;
-      existingUser = existingUsers?.users?.find(
-        (u) => u.email === devEmail || u.phone === normalizedPhone,
-      );
+      const { data: foundId, error: lookupError } = await supabase.rpc('lookup_auth_user_by_contact', {
+        p_email: devEmail,
+        p_phone: normalizedPhone,
+      });
+      if (lookupError) throw lookupError;
+      existingUserId = (foundId as string | null) ?? undefined;
     } catch (err) {
-      console.error('Failed to list users:', err);
+      console.error('Failed to look up user:', err);
       return new Response(
         JSON.stringify({ error: 'Authentication service unavailable' }),
         { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
@@ -110,15 +114,12 @@ Deno.serve(async (req) => {
 
     let userId: string;
 
-    if (existingUser) {
-      userId = existingUser.id;
-      // Update phone if needed
-      if (!existingUser.phone || existingUser.phone !== normalizedPhone) {
-        await supabase.auth.admin.updateUserById(userId, {
-          phone: normalizedPhone,
-          phone_confirm: true,
-        });
-      }
+    if (existingUserId) {
+      userId = existingUserId;
+      // Ensure the phone is set + confirmed (idempotent; never fatal to login).
+      await supabase.auth.admin
+        .updateUserById(userId, { phone: normalizedPhone, phone_confirm: true })
+        .catch((e) => console.warn('updateUserById phone failed (non-fatal):', e));
     } else {
       // Create new user
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
