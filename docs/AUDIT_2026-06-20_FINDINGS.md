@@ -15,6 +15,38 @@ El **núcleo de dinero está estructuralmente sano**: ledger doble-entrada balan
 
 ---
 
+## Estado de resolución (cerrado 2026-06-20)
+
+**16 hallazgos fixeados + aplicados a prod** (migraciones `00445`–`00450`, 8 PRs), **5 paths de dinero validados E2E** (rolled-back contra prod), 4 diferidos con justificación, 1 falso positivo. `money-health-check.sql` post-fixes: detectores de correctitud en 0 (el `DRIFT=2` son los fixtures demo María/Carlos, no de la auditoría). `pnpm check-types` verde (4 apps) + 475 tests por PR.
+
+| ID | Sev | Estado | PR · migración | Nota |
+|---|---|---|---|---|
+| AUD-001 | P1 | ⏸️ **Diferido** (NETOPIA-live) | — | Guard fail-closed en `live` → 0 riesgo hoy. No flipear `netopia_environment='live'` hasta shippear firma/re-query. |
+| AUD-002 | P1 | ✅ Fixed | [#577](https://github.com/AgenciaSeniors/TriciGo/pull/577) · 00445 | CHECK `[100,5000]`. |
+| AUD-003 | P1 | ✅ Fixed | [#579](https://github.com/AgenciaSeniors/TriciGo/pull/579) | Borrada la página admin duplicada; hub → `/promotions`. |
+| AUD-004 | P2 | ⚪ Falso positivo | — | El label `fx_revaluation`→'fx' ya existía (lo fixeó la paridad #575-#590). |
+| AUD-005 | P2 | ✅ Fixed · **E2E** | [#581](https://github.com/AgenciaSeniors/TriciGo/pull/581) · 00446 | Split backed/unbacked (`unbacked_cup`). La sugerencia rápida del audit era incorrecta (habría destruido el saldo promo). |
+| AUD-006 | P2 | ✅ Fixed · **E2E** | [#584](https://github.com/AgenciaSeniors/TriciGo/pull/584) · 00447 | Trigger lee `snapshot 'final'.commission_amount` (rate corporativo). E2E: 8%→480, no 15%→900. |
+| AUD-007 | P2 | ✅ Fixed · **E2E** | [#584](https://github.com/AgenciaSeniors/TriciGo/pull/584) · 00447 | Gate usa fallback CUP + estimate>0; re-check cap/budget vs final (WARNING). |
+| AUD-008 | P2 | ✅ Fixed · **E2E** | [#587](https://github.com/AgenciaSeniors/TriciGo/pull/587) · 00448 | Lock excluye programados pendientes (trigger + índice). |
+| AUD-009 | P2 | ✅ Fixed | [#592](https://github.com/AgenciaSeniors/TriciGo/pull/592) · 00450 | Velocity cuenta estados in-flight. |
+| AUD-010 | P2 | ⏸️ Diferido (NETOPIA-live) | — | Refund status=4; gateado en la misma verificación que AUD-001. |
+| AUD-011 | P2 | ✅ Fixed · **E2E** | [#589](https://github.com/AgenciaSeniors/TriciGo/pull/589) · 00449 | Settle solo `balance > 0` (no drena platform_revenue con negativo). |
+| AUD-012 | P3 | ⏸️ Diferido (NETOPIA-live) | — | Cross-check de monto (fee vs net); live-gated. |
+| AUD-013 | P2 | ✅ Fixed (rebuild) | [#593](https://github.com/AgenciaSeniors/TriciGo/pull/593) | Móvil: budget 0 = ilimitado (guard `>0`). |
+| AUD-014 | P3 | ✅ Fixed · **E2E** | [#589](https://github.com/AgenciaSeniors/TriciGo/pull/589) · 00449 | GUC `app.trusted_cancel_update` para el contador. |
+| AUD-015 | P3 | ✅ Fixed · **E2E** | [#581](https://github.com/AgenciaSeniors/TriciGo/pull/581) · 00446 | Dead-band (anchor numérico → día plano = no-op exacto). |
+| AUD-016 | P3 | ✅ Resuelto por diseño | [#581](https://github.com/AgenciaSeniors/TriciGo/pull/581) · 00446 | Anchor `numeric` elimina el drift de raíz (sin recompute, que rompería el float). |
+| AUD-017 | P3 | ✅ Fixed · **E2E** | [#581](https://github.com/AgenciaSeniors/TriciGo/pull/581) · 00446 | `FOR UPDATE` en reserve + cada wallet. |
+| AUD-018 | P3 | ⏸️ Diferido (forward-looking) | — | Prima de seguro sin snapshot; 0 viajes con seguro, revisar al habilitar trip insurance. |
+| AUD-019 | P3 | ✅ Fixed | [#592](https://github.com/AgenciaSeniors/TriciGo/pull/592) · 00450 | Push de pago-fallido en CUP (matchea el email). |
+| AUD-020 | P3 | ✅ Fixed | [#577](https://github.com/AgenciaSeniors/TriciGo/pull/577) · 00445 | `setManualRate` atómico vía `upsert_exchange_rate` (admin-gated; requiere MFA del admin). |
+| AUD-021 | P3 | ✅ Fixed | [#592](https://github.com/AgenciaSeniors/TriciGo/pull/592) · 00450 | Dropeada `get_users_with_anniversary_today` (0 callers). |
+
+> Las notas inline "Migración NOT applied to prod" más abajo son del estado **inicial** del reporte; la tabla de arriba refleja el estado **final** (migraciones `00445`–`00450` aplicadas).
+
+---
+
 ## P1 — Bloqueantes
 
 ### AUD-001 · NETOPIA IPN authenticity (WPS-01) — `edge-fn` — confianza alta
@@ -113,4 +145,4 @@ La web (`book/page.tsx:757`) guarda `if ((monthly_budget_trc ?? 0) > 0)` (BUG-07
 ---
 
 ## Procedencia
-Workflow `wf_5e01f4dd-b2c` (run 2026-06-20). Grounding contra prod viva (`pg_get_functiondef`/`prosrc`/`list_migrations`/`get_advisors`), no contra archivos de migración. Próxima migración libre: **00445** (`00433`/`00440` saltados).
+Workflow `wf_5e01f4dd-b2c` (run 2026-06-20). Grounding contra prod viva (`pg_get_functiondef`/`prosrc`/`list_migrations`/`get_advisors`), no contra archivos de migración. Remediación: migraciones `00445`–`00450` aplicadas (ver tabla de resolución). **Próxima migración libre: `00451`.**
