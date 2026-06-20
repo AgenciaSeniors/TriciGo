@@ -882,7 +882,7 @@ export default function TrackRidePage() {
               </h1>
               <span className="track-panel-id">ID: {ride.id.slice(0, 8)}</span>
             </div>
-            <span className={`track-status-badge ${statusBadgeClass}`}>{statusLabel}</span>
+            <span className={`track-status-badge ${statusBadgeClass}`} aria-live="polite">{statusLabel}</span>
           </div>
 
           {/* Status Stepper or Canceled/Disputed */}

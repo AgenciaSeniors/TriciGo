@@ -646,7 +646,7 @@ export default function WalletPage() {
               )}
 
               {rechargeError && (
-                <p style={{ fontSize: '0.8rem', color: '#dc2626', margin: '0 0 0.5rem' }}>{rechargeError}</p>
+                <p role="alert" aria-live="assertive" style={{ fontSize: '0.8rem', color: '#dc2626', margin: '0 0 0.5rem' }}>{rechargeError}</p>
               )}
 
               <button

@@ -360,7 +360,7 @@ export default function LoginPage() {
         {step === 'phone' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+              <label htmlFor="login-phone" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
                 {t('auth.phone_label')}
               </label>
               {DEMO_MODE ? (
@@ -379,6 +379,7 @@ export default function LoginPage() {
                     ))}
                   </select>
                   <input
+                    id="login-phone"
                     type="tel"
                     value={phone}
                     onChange={(e) => { setPhone(e.target.value); setError(null); }}
@@ -389,6 +390,7 @@ export default function LoginPage() {
                 </div>
               ) : (
                 <input
+                  id="login-phone"
                   type="tel"
                   value={phone}
                   onChange={(e) => { setPhone(e.target.value); setError(null); }}
@@ -442,6 +444,7 @@ export default function LoginPage() {
               placeholder="000000"
               maxLength={6}
               autoFocus
+              aria-label={t('otp_code', { defaultValue: 'Código de verificación' })}
               className="input-base"
               style={{ fontSize: '1.5rem', textAlign: 'center', letterSpacing: '0.3em' }}
             />
@@ -492,7 +495,7 @@ export default function LoginPage() {
         )}
 
         {error && (
-          <p style={{ color: 'var(--error)', fontSize: '0.875rem', textAlign: 'center', marginTop: '1rem' }}>
+          <p role="alert" aria-live="assertive" style={{ color: 'var(--error)', fontSize: '0.875rem', textAlign: 'center', marginTop: '1rem' }}>
             {error}
           </p>
         )}

@@ -159,8 +159,8 @@ export default function ChatPage() {
         borderBottom: '1px solid var(--border-light)',
         background: 'var(--bg-card)',
       }}>
-        <Link href="/rides" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Link href="/rides" aria-label={t('back', { defaultValue: 'Volver' })} style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
@@ -316,6 +316,7 @@ export default function ChatPage() {
             notifyTyping();
           }}
           placeholder={t('web.type_message', { defaultValue: 'Escribe un mensaje...' })}
+          aria-label={t('type_message', { defaultValue: 'Escribe un mensaje...' })}
           style={{
             flex: 1,
             padding: '0.75rem 1rem',
@@ -330,6 +331,7 @@ export default function ChatPage() {
         <button
           type="submit"
           disabled={!text.trim() || sending}
+          aria-label={t('send', { defaultValue: 'Enviar' })}
           style={{
             width: 44,
             height: 44,
@@ -344,7 +346,7 @@ export default function ChatPage() {
             flexShrink: 0,
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="22" y1="2" x2="11" y2="13" />
             <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>

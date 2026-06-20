@@ -193,6 +193,7 @@ export default function TicketDetailPage() {
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
             placeholder={t('profile.ticket_message_placeholder', { defaultValue: 'Escribe un mensaje...' })}
+            aria-label={t('type_message', { defaultValue: 'Escribe un mensaje' })}
             style={{ flex: 1, padding: '0.75rem 1rem', borderRadius: '1.5rem', border: '1px solid var(--border)', background: 'var(--bg-page)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none' }}
           />
           <button

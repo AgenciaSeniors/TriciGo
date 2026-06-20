@@ -220,8 +220,8 @@ export default function EditProfilePage() {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem' }}>
-        <Link href="/profile" style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Link href="/profile" aria-label={t('back', { defaultValue: 'Volver' })} style={{ color: 'var(--text-primary)', textDecoration: 'none', marginRight: '1rem' }}>
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
@@ -314,10 +314,11 @@ export default function EditProfilePage() {
       {/* Form */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+          <label htmlFor="pe-name" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
             {t('web.full_name', { defaultValue: 'Nombre completo' })}
           </label>
           <input
+            id="pe-name"
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
@@ -334,10 +335,11 @@ export default function EditProfilePage() {
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+          <label htmlFor="pe-email" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
             {t('web.email', { defaultValue: 'Correo electronico' })}
           </label>
           <input
+            id="pe-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -354,10 +356,11 @@ export default function EditProfilePage() {
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+          <label htmlFor="pe-phone" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
             {t('web.phone', { defaultValue: 'Telefono' })}
           </label>
           <input
+            id="pe-phone"
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}

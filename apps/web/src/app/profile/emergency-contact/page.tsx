@@ -157,26 +157,28 @@ export default function EmergencyContactPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
+            <label htmlFor="ec-name" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
               {t('profile.emergency_name', { defaultValue: 'Nombre' })}
             </label>
-            <input type="text" value={name} onChange={(e) => { setName(e.target.value); setError(null); }} placeholder="Juan Pérez" style={inputStyle} />
+            <input id="ec-name" type="text" value={name} onChange={(e) => { setName(e.target.value); setError(null); }} placeholder="Juan Pérez" style={inputStyle} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
+            <label htmlFor="ec-phone" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
               {t('profile.emergency_phone', { defaultValue: 'Teléfono' })}
             </label>
-            <input type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setError(null); }} placeholder="+53 5XXXXXXX" style={inputStyle} />
+            <input id="ec-phone" type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setError(null); }} placeholder="+53 5XXXXXXX" style={inputStyle} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
+            <label htmlFor="ec-relationship" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
               {t('profile.emergency_relationship', { defaultValue: 'Relación' })}
             </label>
-            <input type="text" value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="Familiar, Amigo..." style={inputStyle} />
+            <input id="ec-relationship" type="text" value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="Familiar, Amigo..." style={inputStyle} />
           </div>
 
-          {error && <p style={{ color: 'var(--error, #dc2626)', fontSize: '0.85rem', margin: 0 }}>{error}</p>}
-          {saved && <p style={{ color: 'var(--success, #16a34a)', fontSize: '0.85rem', margin: 0 }}>Contacto de emergencia guardado ✓</p>}
+          <div aria-live="polite">
+            {error && <p style={{ color: 'var(--error, #dc2626)', fontSize: '0.85rem', margin: 0 }}>{error}</p>}
+            {saved && <p style={{ color: 'var(--success, #16a34a)', fontSize: '0.85rem', margin: 0 }}>Contacto de emergencia guardado ✓</p>}
+          </div>
 
           <button
             onClick={handleSave}
