@@ -1065,6 +1065,9 @@ export const adminService = {
     const updatePayload: Record<string, unknown> = {
       status,
       resolved_at: status === 'resolved' ? new Date().toISOString() : null,
+      // Record WHO resolved it — incidents/[id] shows the resolver and the audit
+      // trail needs it; was left null (resolved_at was set but resolved_by wasn't).
+      resolved_by: status === 'resolved' ? adminId : null,
     };
 
     const { error } = await supabase

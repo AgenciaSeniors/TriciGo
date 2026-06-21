@@ -6,7 +6,7 @@ import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import type {
   DriverProfile,
   DriverContract,
@@ -218,6 +218,8 @@ export default function DriverDetailPage() {
         ? t('drivers.doc_verified', { defaultValue: 'Documento verificado' })
         : t('drivers.doc_rejected', { defaultValue: 'Documento rechazado' })
       );
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
     } finally {
       setVerifyingDoc(null);
     }
@@ -299,6 +301,8 @@ export default function DriverDetailPage() {
       await adminService.approveDriver(id, adminUserId);
       await refreshDriver();
       showToast('success', t('drivers.approved_success', { defaultValue: 'Conductor aprobado' }));
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
@@ -320,6 +324,8 @@ export default function DriverDetailPage() {
         ? t('drivers.rejected_success', { defaultValue: 'Conductor rechazado' })
         : t('drivers.suspended_success', { defaultValue: 'Conductor suspendido' })
       );
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
     } finally {
       setActionLoading(false);
     }
