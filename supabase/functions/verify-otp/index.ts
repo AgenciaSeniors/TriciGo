@@ -74,14 +74,34 @@ Deno.serve(async (req) => {
 
     const result = rpcResult as { ok: boolean; error?: string; attempts_remaining?: number };
     if (!result?.ok) {
-      const errCode = result?.error;
-      const userMsg =
-        errCode === 'too_many_attempts' ? 'Too many attempts. Request a new code.'
-        : 'Invalid or expired code';
-      return new Response(
-        JSON.stringify({ error: userMsg, attempts_remaining: result?.attempts_remaining }),
-        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-      );
+      // Idempotency: if the SAME code was verified very recently (≤3 min), the
+      // user already proved possession. A transient session-mint failure on the
+      // first attempt burns the code, so a plain retry would 400 and strand them.
+      // Allow re-minting the session within that short window (the attacker would
+      // still need the real code, so this opens no enumeration/brute-force hole).
+      let recentlyVerified = false;
+      if (result?.error === 'no_active_code') {
+        const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+        const { data: recent } = await supabase
+          .from('otp_codes')
+          .select('id')
+          .eq('phone', normalizedPhone)
+          .eq('code', code)
+          .gte('verified_at', cutoff)
+          .limit(1);
+        recentlyVerified = !!(recent && recent.length > 0);
+      }
+      if (!recentlyVerified) {
+        const errCode = result?.error;
+        const userMsg =
+          errCode === 'too_many_attempts' ? 'Too many attempts. Request a new code.'
+          : 'Invalid or expired code';
+        return new Response(
+          JSON.stringify({ error: userMsg, attempts_remaining: result?.attempts_remaining }),
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+        );
+      }
+      console.log('OTP recently verified — idempotent session re-mint');
     }
 
     // Do not log the phone number (PII). The user id is logged later if needed.
@@ -141,112 +161,108 @@ Deno.serve(async (req) => {
 
       userId = newUser.user.id;
 
-      // Fix NULL token columns (prevent "Database error querying schema")
-      // Use parameterized query to prevent SQL injection (BUG-001 fix)
-      await supabase.rpc('fix_null_auth_tokens', {
-        p_user_id: userId,
-      }).catch(() => {
-        // If RPC doesn't exist, try admin API as fallback (no raw SQL)
-        supabase.auth.admin.updateUserById(userId, {
-          user_metadata: { tokens_fixed: true },
-        }).catch(() => {
-          console.warn('Could not fix NULL tokens, may cause issues');
-        });
-      });
-    }
-
-    // Generate a magic link to create a session
-    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: devEmail,
-    });
-
-    if (linkError || !linkData) {
-      console.error('Failed to generate session link, using fallback auth');
-      // BUG-039: Fallback sign-in with ephemeral password — NEVER log or return tempPassword
-      const tempPassword = `otp_${crypto.randomUUID()}`;
-      await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
-
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: devEmail,
-        password: tempPassword,
-      });
-
-      if (signInError || !signInData.session) {
-        return new Response(
-          JSON.stringify({ error: 'Failed to create session' }),
-          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        );
+      // Fix NULL token columns (prevent "Database error querying schema").
+      // ROOT CAUSE of the new-user signup 500: `supabase.rpc(...)` returns a
+      // PostgrestFilterBuilder (a thenable) that has NO `.catch` method — chaining
+      // `.catch` throws "TypeError: supabase.rpc(...).catch is not a function",
+      // which (only on the createUser path) bubbled to the catch-all → HTTP 500.
+      // A recent @supabase/supabase-js@2 bump from esm.sh (unpinned) surfaced it.
+      // Await the builder and inspect `error` instead of chaining `.catch`.
+      try {
+        const { error: fixErr } = await supabase.rpc('fix_null_auth_tokens', { p_user_id: userId });
+        if (fixErr) {
+          console.warn('fix_null_auth_tokens failed, trying admin fallback:', fixErr.message);
+          const { error: fbErr } = await supabase.auth.admin.updateUserById(userId, {
+            user_metadata: { tokens_fixed: true },
+          });
+          if (fbErr) console.warn('Could not fix NULL tokens, may cause issues:', fbErr.message);
+        }
+      } catch (e) {
+        console.warn('fix_null_auth_tokens threw (non-fatal):', e instanceof Error ? e.message : String(e));
       }
-
-      console.log('Fallback auth completed for user', userId);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          session: {
-            access_token: signInData.session.access_token,
-            refresh_token: signInData.session.refresh_token,
-            expires_in: signInData.session.expires_in,
-            user: signInData.session.user,
-          },
-        }),
-        { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-      );
     }
 
-    // Extract token from magic link and exchange it
-    const url = new URL(linkData.properties.action_link);
-    const token = url.searchParams.get('token') ?? url.hash?.split('access_token=')[1]?.split('&')[0];
+    // ── Code verified, user ensured — mint a session (robust, multi-strategy) ──
+    // The old magic-link dance was fragile under PKCE / asymmetric (ES256) signing
+    // keys: the action_link uses `token_hash` (not `token`), and `new URL(...)` /
+    // verifyOtp could THROW, bubbling to the catch-all → HTTP 500 that stranded
+    // EVERY new user (the OTP is already burned, so the retry then 400s). Try the
+    // reliable password grant first, then the magic-link hashed_token; each
+    // strategy is isolated so a single failure can't 500 the whole request.
+    // Return 500 only if BOTH strategies fail.
+    let session:
+      | { access_token: string; refresh_token: string; expires_in: number; user: unknown }
+      | null = null;
 
-    if (!token) {
-      // BUG-039: Fallback approach — ephemeral password NEVER logged or returned in response
+    // Strategy A — ephemeral password + signInWithPassword (NEVER log/return the password)
+    try {
       const tempPassword = `otp_${crypto.randomUUID()}`;
-      await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
-      const { data: fbData } = await supabase.auth.signInWithPassword({
-        email: devEmail,
-        password: tempPassword,
-      });
-
-      console.log('Fallback auth completed for user', userId);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          session: fbData?.session ? {
-            access_token: fbData.session.access_token,
-            refresh_token: fbData.session.refresh_token,
-            expires_in: fbData.session.expires_in,
-            user: fbData.session.user,
-          } : null,
-        }),
-        { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-      );
+      const { error: pwSetErr } = await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
+      if (pwSetErr) {
+        console.error('updateUserById(password) failed:', pwSetErr.message);
+      } else {
+        const { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
+          email: devEmail,
+          password: tempPassword,
+        });
+        if (pwErr) {
+          console.error('signInWithPassword failed:', pwErr.message);
+        } else if (pwData?.session) {
+          session = {
+            access_token: pwData.session.access_token,
+            refresh_token: pwData.session.refresh_token,
+            expires_in: pwData.session.expires_in,
+            user: pwData.session.user,
+          };
+        }
+      }
+    } catch (e) {
+      console.error('password-grant strategy threw:', e instanceof Error ? e.message : String(e));
     }
 
-    // Verify the magic link token to get a session
-    const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-      token_hash: token,
-      type: 'magiclink',
-    });
+    // Strategy B — magic-link hashed_token (fallback; PKCE-correct)
+    if (!session) {
+      try {
+        const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+          type: 'magiclink',
+          email: devEmail,
+        });
+        const hashedToken = linkData?.properties?.hashed_token;
+        if (linkError) {
+          console.error('generateLink failed:', linkError.message);
+        } else if (!hashedToken) {
+          console.error('generateLink returned no hashed_token');
+        } else {
+          const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: hashedToken,
+            type: 'magiclink',
+          });
+          if (verifyError) {
+            console.error('verifyOtp(magiclink) failed:', verifyError.message);
+          } else if (verifyData?.session) {
+            session = {
+              access_token: verifyData.session.access_token,
+              refresh_token: verifyData.session.refresh_token,
+              expires_in: verifyData.session.expires_in,
+              user: verifyData.session.user,
+            };
+          }
+        }
+      } catch (e) {
+        console.error('magic-link strategy threw:', e instanceof Error ? e.message : String(e));
+      }
+    }
 
-    if (verifyError || !verifyData.session) {
+    if (!session) {
       return new Response(
-        JSON.stringify({ error: 'Failed to verify session' }),
+        JSON.stringify({ error: 'Failed to create session' }),
         { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
     }
 
+    console.log('Session minted for user', userId);
     return new Response(
-      JSON.stringify({
-        success: true,
-        session: {
-          access_token: verifyData.session.access_token,
-          refresh_token: verifyData.session.refresh_token,
-          expires_in: verifyData.session.expires_in,
-          user: verifyData.session.user,
-        },
-      }),
+      JSON.stringify({ success: true, session }),
       { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     );
   } catch (err) {
