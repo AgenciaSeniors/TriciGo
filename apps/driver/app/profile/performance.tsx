@@ -17,7 +17,7 @@
  * Tolerates missing trend data (00260 not applied to prod) — sparklines
  * just hide and the headline cards keep working from the snapshot.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, ActivityIndicator, StyleSheet, Text as RNText, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -31,6 +31,7 @@ import { driverService } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverPerformanceTrend } from '@/hooks/useDriverPerformanceTrend';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 
 interface DriverStatsSnapshot {
   acceptanceRate: number;
@@ -145,24 +146,22 @@ export default function PerformanceScreen() {
     days: 30,
   });
 
-  useEffect(() => {
+  const refetchSnapshot = useCallback(() => {
     if (!driverId) return;
-    let cancelled = false;
     driverService
       .getDriverStats(driverId)
-      .then((s) => {
-        if (!cancelled) setSnapshot(s);
-      })
+      .then(setSnapshot)
       .catch((err) => {
         logger.warn('[performance] snapshot failed', { error: String(err) });
       })
-      .finally(() => {
-        if (!cancelled) setLoadingSnapshot(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .finally(() => setLoadingSnapshot(false));
   }, [driverId]);
+
+  useEffect(() => { refetchSnapshot(); }, [refetchSnapshot]);
+
+  // Stale-on-mount: refetch acceptance/cancellation/completion stats on focus /
+  // foreground (a just-completed ride recomputes these).
+  useRefreshOnFocus(refetchSnapshot);
 
   const acceptanceSeries = useMemo(() => {
     return trend.map((d) => {

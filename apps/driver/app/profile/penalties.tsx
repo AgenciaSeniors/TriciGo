@@ -9,6 +9,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -42,6 +43,10 @@ export default function PenaltiesScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Stale-on-mount: refetch penalties on focus / app foreground (an admin
+  // penalty should appear without a full restart).
+  useRefreshOnFocus(fetchData);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
