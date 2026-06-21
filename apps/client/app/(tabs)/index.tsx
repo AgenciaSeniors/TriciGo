@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput, Alert, Linking } from 'react-native';
+import { View, Pressable, ActivityIndicator, Platform, Switch, Image, Animated, ScrollView, StyleSheet, TextInput, Alert, Linking, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -1928,6 +1928,26 @@ function IdleView() {
     })();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // The home tab stays mounted, so the [user?.id] effect above only runs once.
+  // Refetch the balance whenever the home regains focus (e.g. returning from
+  // /wallet) and when the app comes back to the foreground — otherwise an
+  // external credit (admin top-up, gift, ride payment) doesn't show on the home
+  // card until a full app restart, while the wallet screen (which refetches on
+  // focus) shows it correctly.
+  const refetchBalance = useCallback(() => {
+    if (!user?.id) return;
+    walletService.getBalance(user.id).then((b) => setWalletBalance(b.available)).catch(() => {});
+  }, [user?.id]);
+
+  useFocusEffect(refetchBalance);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refetchBalance();
+    });
+    return () => sub.remove();
+  }, [refetchBalance]);
 
   // Fetch home content feed — active promotions + recent blog posts.
   // Both are best-effort; failures are silent (the home stays usable
