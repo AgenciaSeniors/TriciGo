@@ -80,6 +80,7 @@ const organizationJsonLd = {
   sameAs: [
     'https://facebook.com/tricigoapp',
     'https://www.instagram.com/tricigo_app',
+    'https://play.google.com/store/apps/details?id=app.tricigo.client',
   ],
   description:
     'Plataforma de transporte urbano. Solicita triciclos, motos y autos de forma rápida y segura.',
@@ -136,6 +137,24 @@ const localBusinessJsonLd = {
   priceRange: '$',
 };
 
+// MobileApplication schema: declares the published Android app so Google can
+// associate the brand entity with its Play listing (knowledge panel / app
+// understanding). No aggregateRating yet — omitted on purpose rather than faked.
+const appJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'MobileApplication',
+  name: 'TriciGo',
+  operatingSystem: 'ANDROID',
+  applicationCategory: 'TravelApplication',
+  url: 'https://play.google.com/store/apps/details?id=app.tricigo.client',
+  installUrl: 'https://play.google.com/store/apps/details?id=app.tricigo.client',
+  downloadUrl: 'https://play.google.com/store/apps/details?id=app.tricigo.client',
+  description:
+    'Pedí triciclos, motos y autos en Cuba con TriciGo. Mirá el precio en CUP antes de viajar, en las 16 provincias.',
+  publisher: { '@type': 'Organization', name: 'TriciGo', url: 'https://tricigo.com' },
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'CUP' },
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={montserrat.variable}>
@@ -143,6 +162,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd data={organizationJsonLd} />
         <JsonLd data={webSiteJsonLd} />
         <JsonLd data={localBusinessJsonLd} />
+        <JsonLd data={appJsonLd} />
       </head>
       <body className="font-sans antialiased">
         {/* Demo-mode banner — fixed at top, only renders when

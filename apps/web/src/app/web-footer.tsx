@@ -125,7 +125,15 @@ export function WebFooter() {
       </div>
 
       <div className="footer-copy">
-        TriciGo &copy; {new Date().getFullYear()} &middot; {t('footer.download')}
+        TriciGo &copy; {new Date().getFullYear()} &middot;{' '}
+        <a
+          href="https://play.google.com/store/apps/details?id=app.tricigo.client"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="footer-link"
+        >
+          {t('footer.download')}
+        </a>
       </div>
       <div className="footer-copy" style={{ marginTop: '0.5rem', fontSize: '0.75rem', opacity: 0.85 }}>
         TriciGo es un servicio operado por MACH DIGITAL TECH S.R.L. &middot; CUI 54552055 &middot; Nr. Reg. Com. J2026027319006 &middot; Str. Lungă nr. 149, Ap. P3, Brașov, Rumanía

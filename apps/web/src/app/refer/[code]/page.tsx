@@ -223,6 +223,21 @@ export default function ReferralLandingPage() {
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 'var(--space-md)' }}>
           {t('refer.no_app', { defaultValue: '¿No tenés la app? Descargala desde la App Store o Google Play.' })}
         </p>
+        <a
+          href="https://play.google.com/store/apps/details?id=app.tricigo.client"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 'var(--text-sm)',
+            color: 'var(--primary)',
+            fontWeight: 600,
+            textDecoration: 'none',
+            marginTop: 'var(--space-sm)',
+            display: 'inline-block',
+          }}
+        >
+          {t('refer.download_play', { defaultValue: 'Descargar en Google Play' })}
+        </a>
         <Link
           href="/"
           style={{
