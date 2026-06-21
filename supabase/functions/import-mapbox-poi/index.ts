@@ -30,7 +30,7 @@
 // so the caller never has to handle failures.
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { mapboxCategoryToTricigo } from './_shared/mapbox-categories.ts';
 
 const CORS_HEADERS = {

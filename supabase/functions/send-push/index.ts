@@ -12,7 +12,7 @@
 // rider could call it to phish drivers or admins via the inbox
 // (notifications table). Now requires service_role OR admin role.
 // ============================================================
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
 // ── CORS: restrict to allowed origins ──

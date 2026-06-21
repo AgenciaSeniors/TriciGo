@@ -9,7 +9,7 @@
 // BUG-160 + BUG-201 + BUG-199: apikey === env.SUPABASE_SERVICE_ROLE_KEY
 // (now sb_secret_*, post legacy revocation). Leaked legacy JWT
 // would not match this string-equality check.
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {

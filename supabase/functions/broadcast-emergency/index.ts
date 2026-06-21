@@ -19,7 +19,7 @@
 // Rate-limited por user_id: 1 broadcast cada 60s. Evita doble-tap o
 // scripts maliciosos vaciando el budget de SMS (D7 Networks).
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);

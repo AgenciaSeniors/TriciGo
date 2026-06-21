@@ -43,7 +43,7 @@
 // auth.admin.deleteUser will succeed.
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 

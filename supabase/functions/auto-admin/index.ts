@@ -6,7 +6,7 @@
 // to reject the leaked legacy service_role JWT in git.
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const SYSTEM_USER = '00000000-0000-0000-0000-000000000001';

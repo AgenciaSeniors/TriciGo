@@ -5,7 +5,7 @@
 // Caller: driver mobile app después de aceptar ride cargo. Auth: el
 // JWT del driver — la RPC valida `auth.uid() IS NOT NULL` (cualquier
 // usuario logueado puede invocar; la idempotency lock previene abuso).
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

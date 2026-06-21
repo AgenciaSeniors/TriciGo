@@ -2,7 +2,7 @@
 // (Twilio removed 2026-06-07). Used by broadcast-emergency (SOS), the
 // trusted-contact auto-share trigger (tracking link), and other
 // server-side notifications. apikey === SUPABASE_SERVICE_ROLE_KEY.
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { sendSmsViaD7 } from '../_shared/d7.ts';
 
 const corsHeaders = {

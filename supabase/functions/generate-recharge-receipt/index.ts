@@ -22,7 +22,7 @@
 // Auth: service_role only (called from webhook + admin retroactive).
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1?target=deno';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import {

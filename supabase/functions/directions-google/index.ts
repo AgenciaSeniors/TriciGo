@@ -25,7 +25,7 @@
 //   - routing_google_daily_cap (default 2000)
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { decodePolyline } from './_shared/polyline.ts';
 
 const DEFAULT_DAILY_CAP = 2000;

@@ -11,7 +11,7 @@
 //
 // Rate limit: 3 intentos / hora por identifier (SMS cost guard).
 // ============================================================
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit } from '../_shared/rate-limiter.ts';
 
 const corsHeaders = {

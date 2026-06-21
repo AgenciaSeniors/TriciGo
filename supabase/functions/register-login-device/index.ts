@@ -22,7 +22,7 @@
 // Self-contained on purpose (only the remote supabase-js import, no
 // ../_shared/* deps) so it deploys as a single file.
 // ============================================================
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
