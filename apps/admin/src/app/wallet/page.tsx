@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Download, Inbox } from 'lucide-react';
 import { WalletV2BonusPushButton } from '@/components/wallet/WalletV2BonusPushButton';
 import { adminService } from '@tricigo/api/services/admin';
-import { formatTriciCoin } from '@tricigo/utils';
+import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import type {
@@ -119,7 +119,7 @@ export default function WalletPage() {
         setTransactions(data);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('wallet_admin.load_error', { defaultValue: 'No pudimos cargar los datos de la billetera.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -167,7 +167,7 @@ export default function WalletPage() {
             setRecharges((prev) => prev.filter((r) => r.id !== id));
             showToast('success', t('wallet_admin.toast_recharge_approved', { defaultValue: 'Recarga aprobada' }));
           } catch (err) {
-            showToast('error', err instanceof Error ? err.message : t('wallet_admin.recharge_error', { defaultValue: 'No pudimos procesar la recarga.' }));
+            showToast('error', getErrorMessage(err));
           } finally {
             setProcessing(null);
           }
@@ -189,7 +189,7 @@ export default function WalletPage() {
             setRecharges((prev) => prev.filter((r) => r.id !== id));
             showToast('success', t('wallet_admin.toast_recharge_rejected', { defaultValue: 'Recarga rechazada' }));
           } catch (err) {
-            showToast('error', err instanceof Error ? err.message : t('wallet_admin.recharge_error', { defaultValue: 'No pudimos procesar la recarga.' }));
+            showToast('error', getErrorMessage(err));
           } finally {
             setProcessing(null);
           }

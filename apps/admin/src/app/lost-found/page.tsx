@@ -18,7 +18,7 @@ import type { LucideIcon } from 'lucide-react';
 import { lostItemService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import type { LostItem, LostItemStatus } from '@tricigo/types';
 import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
@@ -90,7 +90,7 @@ export default function LostFoundPage() {
       setItems(data);
     } catch (err) {
       setItems([]);
-      setError(err instanceof Error ? err.message : t('lost_found.load_error', { defaultValue: 'No pudimos cargar los objetos perdidos.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -112,7 +112,7 @@ export default function LostFoundPage() {
       setSelected((prev) => (prev ? { ...prev, admin_notes: adminNotes } : null));
       showToast('success', t('lost_found.toast_notes_saved', { defaultValue: 'Notas guardadas' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('lost_found.notes_error', { defaultValue: 'No pudimos guardar las notas.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -129,7 +129,7 @@ export default function LostFoundPage() {
       setSelected(updated);
       showToast('success', t('lost_found.toast_closed', { defaultValue: 'Objeto marcado como cerrado' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('lost_found.close_error', { defaultValue: 'No pudimos cerrar el reporte.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setClosing(false);
     }

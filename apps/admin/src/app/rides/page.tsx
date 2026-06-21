@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Route, Search } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride } from '@tricigo/types';
 import { createBrowserClient } from '@/lib/supabase-server';
@@ -83,7 +83,7 @@ export default function RidesPage() {
       setRides(data);
     } catch (err) {
       setRides([]);
-      setError(err instanceof Error ? err.message : t('rides.load_error', { defaultValue: 'No pudimos cargar los viajes.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

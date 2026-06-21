@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import type { FeatureFlag } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -32,7 +33,7 @@ export default function FeatureFlagsPage() {
         if (!cancelled) setFlags(data);
       } catch (err) {
         // Error handled by UI
-        setError(err instanceof Error ? err.message : 'Error al cargar feature flags');
+        setError(getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }

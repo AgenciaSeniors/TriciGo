@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Star, StarOff } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useTranslation } from '@tricigo/i18n';
+import { getErrorMessage } from '@tricigo/utils';
 import { formatAdminDate } from '@/lib/formatDate';
 import type { Review } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -184,7 +185,7 @@ export default function ReviewsPage() {
       setReviews(rows);
     } catch (err) {
       setReviews([]);
-      setError(err instanceof Error ? err.message : t('reviews.load_error', { defaultValue: 'No pudimos cargar las reseñas.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -215,7 +216,7 @@ export default function ReviewsPage() {
         ? t('reviews.toast_visible', { defaultValue: 'Reseña visible' })
         : t('reviews.toast_hidden', { defaultValue: 'Reseña ocultada' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('reviews.visibility_error', { defaultValue: 'No pudimos cambiar la visibilidad.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setActionLoading(null);
     }
@@ -238,7 +239,7 @@ export default function ReviewsPage() {
         ? t('reviews.toast_featured', { defaultValue: 'Reseña destacada' })
         : t('reviews.toast_unfeatured', { defaultValue: 'Reseña sin destacar' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('reviews.featured_error', { defaultValue: 'No pudimos cambiar el destacado.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setActionLoading(null);
     }

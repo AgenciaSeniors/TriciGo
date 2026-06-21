@@ -5,6 +5,7 @@ import { Plus, Trophy, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { questService } from '@tricigo/api/services/quest';
 import type { Quest } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
@@ -76,7 +77,7 @@ export default function QuestsPage() {
       setQuests(data);
     } catch (err) {
       setQuests([]);
-      setError(err instanceof Error ? err.message : t('quests.load_error', { defaultValue: 'No pudimos cargar las misiones.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -137,7 +138,7 @@ export default function QuestsPage() {
       await loadQuests();
       showToast('success', t('quests.toast_created', { defaultValue: 'Misión creada' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('quests.create_error', { defaultValue: 'No pudimos crear la misión.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setCreating(false);
     }
@@ -151,7 +152,7 @@ export default function QuestsPage() {
         ? t('quests.toast_deactivated', { defaultValue: 'Misión desactivada' })
         : t('quests.toast_activated', { defaultValue: 'Misión activada' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('quests.toggle_error', { defaultValue: 'No pudimos cambiar el estado.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 

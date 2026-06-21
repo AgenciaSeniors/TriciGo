@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
+import { getErrorMessage } from '@tricigo/utils';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
@@ -80,7 +81,7 @@ export default function IncidentsPage() {
       setIncidents(data as unknown as Incident[]);
     } catch (err) {
       setIncidents([]);
-      setError(err instanceof Error ? err.message : t('incidents.load_error', { defaultValue: 'No pudimos cargar los incidentes.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,7 @@ export default function IncidentsPage() {
         setIncidents((prev) => prev.map((i) => (i.id === id ? { ...i, status: next } : i)));
         showToast('success', successMsg);
       } catch (err) {
-        showToast('error', err instanceof Error ? err.message : t('incidents.update_error', { defaultValue: 'No pudimos actualizar el estado.' }));
+        showToast('error', getErrorMessage(err));
       }
     },
     [adminUserId, showToast, t],

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { PricingRule, Zone, ServiceTypeSlug } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -172,7 +172,7 @@ export default function PricingPage() {
       setRules(data);
     } catch (err) {
       // Error handled by UI
-      setError(err instanceof Error ? err.message : 'Error al cargar reglas de precios');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

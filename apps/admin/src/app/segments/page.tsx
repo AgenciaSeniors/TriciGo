@@ -14,6 +14,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { SectionCard } from '@/components/dashboard/SectionCard';
@@ -128,7 +129,7 @@ export default function SegmentsPage() {
         by_city: 0,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('segments.load_error', { defaultValue: 'No pudimos cargar los segmentos.' }));
+      setError(getErrorMessage(err));
     } finally {
       setCountsLoading(false);
     }

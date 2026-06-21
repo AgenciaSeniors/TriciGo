@@ -5,6 +5,7 @@ import { Ticket, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { promotionService, notificationService } from '@tricigo/api';
 import type { Promotion, PromotionType } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
@@ -93,7 +94,7 @@ export default function PromotionsAdminPage() {
       setItems(data);
     } catch (err) {
       setItems([]);
-      setError(err instanceof Error ? err.message : t('promotions.load_error', { defaultValue: 'No pudimos cargar las promociones.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -173,7 +174,7 @@ export default function PromotionsAdminPage() {
       resetForm();
       await loadItems();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('promotions.save_error', { defaultValue: 'No pudimos guardar la promoción.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -202,7 +203,7 @@ export default function PromotionsAdminPage() {
       showToast('success', t('promotions.toast_deleted', { defaultValue: 'Promoción eliminada' }));
       await loadItems();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('promotions.delete_error', { defaultValue: 'No pudimos eliminar la promoción.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -253,7 +254,7 @@ export default function PromotionsAdminPage() {
       if (!p.is_active) await maybeNotifyOnPublish({ ...p, is_active: true });
       await loadItems();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('promotions.toggle_error', { defaultValue: 'No pudimos cambiar el estado.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 

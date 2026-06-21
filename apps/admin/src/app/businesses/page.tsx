@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { corporateService } from '@tricigo/api';
-import { formatTriciCoin } from '@tricigo/utils';
+import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { CorporateAccount, CorporateAccountStatus } from '@tricigo/types';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
@@ -43,7 +43,7 @@ export default function BusinessesPage() {
       setAccounts(data);
     } catch (err) {
       setAccounts([]);
-      setError(err instanceof Error ? err.message : t('businesses.load_error', { defaultValue: 'No pudimos cargar las empresas.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

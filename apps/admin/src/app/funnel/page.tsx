@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, TrendingUp } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
+import { getErrorMessage } from '@tricigo/utils';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { SectionCard } from '@/components/dashboard/SectionCard';
 import { DataEmptyState } from '@/components/data/DataEmptyState';
@@ -90,7 +91,7 @@ export default function FunnelPage() {
         { key: 'completed', label: STEP_LABELS.completed!, count: completedRes.count ?? 0 },
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('funnel.load_error', { defaultValue: 'No pudimos cargar el embudo.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

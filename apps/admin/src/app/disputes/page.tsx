@@ -6,7 +6,7 @@ import { disputeService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { RideDispute, DisputeStatus, DisputeResolution } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
-import { formatTRC } from '@tricigo/utils';
+import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
@@ -117,7 +117,7 @@ export default function DisputesPage() {
       setDisputes(data);
     } catch (err) {
       setDisputes([]);
-      setError(err instanceof Error ? err.message : t('disputes.load_error', { defaultValue: 'No pudimos cargar las disputas.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -178,7 +178,7 @@ export default function DisputesPage() {
       setSelected(null);
       showToast('success', t('disputes.toast_resolved', { defaultValue: 'Disputa resuelta' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('disputes.resolve_error', { defaultValue: 'No pudimos resolver la disputa.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setResolving(false);
     }
@@ -200,7 +200,7 @@ export default function DisputesPage() {
       setDisputes((prev) => prev.map((d) => (d.id === selected.id ? updated : d)));
       showToast('success', t('disputes.toast_assigned', { defaultValue: 'Asignada a vos' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('disputes.assign_error', { defaultValue: 'No pudimos asignarla.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -211,7 +211,7 @@ export default function DisputesPage() {
       setSelected((prev) => (prev ? { ...prev, admin_notes: adminNotes } : null));
       showToast('success', t('disputes.toast_notes_saved', { defaultValue: 'Notas guardadas' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('disputes.notes_error', { defaultValue: 'No pudimos guardar las notas.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 

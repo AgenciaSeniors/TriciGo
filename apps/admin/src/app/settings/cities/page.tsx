@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
+import { getErrorMessage } from '@tricigo/utils';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
@@ -68,7 +69,7 @@ export default function CitiesPage() {
       setCities(enriched);
     } catch (err) {
       // Error handled by UI
-      setError(err instanceof Error ? err.message : 'Error al cargar ciudades');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

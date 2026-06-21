@@ -5,6 +5,7 @@ import { ArrowLeft, FileText } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { cmsService, type CmsContent } from '@tricigo/api/services/cms';
+import { getErrorMessage } from '@tricigo/utils';
 import { DataEmptyState } from '@/components/data/DataEmptyState';
 import { formatAdminDate } from '@/lib/formatDate';
 
@@ -40,7 +41,7 @@ export default function ContentPage() {
       const data = await cmsService.getAllContent();
       setContents(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('content.load_error', { defaultValue: 'No pudimos cargar el contenido.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -72,7 +73,7 @@ export default function ContentPage() {
       await loadContent();
       showToast('success', t('content.toast_saved', { defaultValue: 'Contenido guardado' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('content.save_error', { defaultValue: 'No pudimos guardar el contenido.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setSaving(false);
     }

@@ -5,7 +5,7 @@ import { Megaphone, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { announcementService, notificationService } from '@tricigo/api';
 import type { HomeAnnouncement } from '@tricigo/api';
-import { ANNOUNCEMENT_CTA_TARGETS, isValidAnnouncementCta } from '@tricigo/utils';
+import { ANNOUNCEMENT_CTA_TARGETS, getErrorMessage, isValidAnnouncementCta } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
@@ -79,7 +79,7 @@ export default function AnnouncementsAdminPage() {
       setItems(data);
     } catch (err) {
       setItems([]);
-      setError(err instanceof Error ? err.message : t('announcements.load_error', { defaultValue: 'No pudimos cargar los anuncios.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -166,7 +166,7 @@ export default function AnnouncementsAdminPage() {
       resetForm();
       await loadItems();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('announcements.save_error', { defaultValue: 'No pudimos guardar el anuncio.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -193,7 +193,7 @@ export default function AnnouncementsAdminPage() {
       showToast('success', t('announcements.toast_deleted', { defaultValue: 'Anuncio eliminado' }));
       await loadItems();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('announcements.delete_error', { defaultValue: 'No pudimos eliminar el anuncio.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -244,7 +244,7 @@ export default function AnnouncementsAdminPage() {
       if (!a.is_active) await maybeNotifyOnPublish({ ...a, is_active: true });
       await loadItems();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('announcements.toggle_error', { defaultValue: 'No pudimos cambiar el estado.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 

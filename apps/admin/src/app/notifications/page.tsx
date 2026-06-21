@@ -7,6 +7,7 @@ import { notificationService } from '@tricigo/api';
 import { adminService } from '@tricigo/api';
 import { getSupabaseClient } from '@tricigo/api';
 import type { User, AppNotification } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -64,7 +65,7 @@ export default function NotificationsPage() {
       setHistory(data);
     } catch (err) {
       setHistory([]);
-      setHistoryError(err instanceof Error ? err.message : t('notifications.history_error', { defaultValue: 'No pudimos cargar el historial.' }));
+      setHistoryError(getErrorMessage(err));
     } finally {
       setHistoryLoading(false);
     }
@@ -171,7 +172,7 @@ export default function NotificationsPage() {
         `${sentLabel} ${result.successCount}${result.errorCount > 0 ? ` · ${result.errorCount} ${failedSuffix}` : ''}`,
       );
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('notifications.sent_error', { defaultValue: 'No pudimos enviar el push.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setSending(false);
     }

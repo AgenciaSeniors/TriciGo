@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Shield, ShieldCheck, X } from 'lucide-react';
 import { fraudService } from '@tricigo/api';
 import type { FraudAlert } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { useToast } from '@/components/ui/AdminToast';
@@ -59,7 +60,7 @@ export default function FraudAlertsPage() {
       setAlerts(data);
     } catch (err) {
       setAlerts([]);
-      setError(err instanceof Error ? err.message : t('fraud.load_error', { defaultValue: 'No pudimos cargar las alertas.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -84,7 +85,7 @@ export default function FraudAlertsPage() {
       setResolutionNote('');
       showToast('success', t('fraud.toast_resolved', { defaultValue: 'Alerta marcada como resuelta' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('fraud.resolve_error', { defaultValue: 'No pudimos resolver la alerta.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setResolving(null);
     }

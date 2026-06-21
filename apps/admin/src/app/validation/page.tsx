@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Compass, Gauge, Target } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
+import { getErrorMessage } from '@tricigo/utils';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -71,7 +72,7 @@ export default function ValidationPage() {
       setNavRate(navRows && navRows.length > 0 ? navRows[0] ?? null : null);
       setOverrides(overrideRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('validation.load_error', { defaultValue: 'No pudimos cargar la validación.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

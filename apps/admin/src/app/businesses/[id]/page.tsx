@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { corporateService, walletService } from '@tricigo/api';
-import { formatTriciCoin } from '@tricigo/utils';
+import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { useAdminUser } from '@/lib/useAdminUser';
@@ -128,7 +128,7 @@ export default function BusinessDetailPage() {
       await fetchData();
       showToast('success', value === null ? 'Comisión revertida al default' : `Comisión actualizada a ${value}%`);
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error al guardar');
+      showToast('error', getErrorMessage(err));
     } finally {
       setSavingCommission(false);
     }

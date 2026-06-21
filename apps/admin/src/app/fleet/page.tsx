@@ -19,6 +19,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { adminService, getSupabaseClient } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import type { OnlineFleetDriver } from '@tricigo/types';
 import dynamic from 'next/dynamic';
 
@@ -96,7 +97,7 @@ export default function FleetPage() {
       setDrivers(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar la flota');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

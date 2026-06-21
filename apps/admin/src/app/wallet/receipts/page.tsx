@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Download, RefreshCcw, Search, FileText } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
+import { getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
@@ -65,7 +66,7 @@ export default function AdminReceiptsPage() {
       const data = await adminService.getRecentReceipts(page, PAGE_SIZE, search);
       setRows(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar comprobantes');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

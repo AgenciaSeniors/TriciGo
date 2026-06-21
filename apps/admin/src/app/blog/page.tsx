@@ -5,6 +5,7 @@ import { Newspaper, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { blogService, notificationService } from '@tricigo/api';
 import type { BlogPost } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
@@ -54,7 +55,7 @@ export default function BlogAdminPage() {
       setPosts(data);
     } catch (err) {
       setPosts([]);
-      setError(err instanceof Error ? err.message : t('blog.load_error', { defaultValue: 'No pudimos cargar los posts.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -132,7 +133,7 @@ export default function BlogAdminPage() {
       resetForm();
       await loadPosts();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('blog.save_error', { defaultValue: 'No pudimos guardar el post.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -161,7 +162,7 @@ export default function BlogAdminPage() {
       showToast('success', t('blog.toast_deleted', { defaultValue: 'Post eliminado' }));
       await loadPosts();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('blog.delete_error', { defaultValue: 'No pudimos eliminar el post.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -214,7 +215,7 @@ export default function BlogAdminPage() {
       }
       await loadPosts();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('blog.publish_error', { defaultValue: 'No pudimos cambiar el estado.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
