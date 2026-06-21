@@ -119,14 +119,16 @@ export default function BusinessDetailPage() {
     const trimmed = commissionInput.trim();
     const value = trimmed === '' ? null : Number(trimmed);
     if (value !== null && (Number.isNaN(value) || value < 0 || value > 15)) {
-      showToast('error', 'Comisión inválida (0–15%)');
+      showToast('error', t('businesses.commission_invalid', { defaultValue: 'Comisión inválida (0–15%)' }));
       return;
     }
     setSavingCommission(true);
     try {
       await corporateService.setCommissionPercent(id, value, adminUserId);
       await fetchData();
-      showToast('success', value === null ? 'Comisión revertida al default' : `Comisión actualizada a ${value}%`);
+      showToast('success', value === null
+        ? t('businesses.commission_reverted', { defaultValue: 'Comisión revertida al default' })
+        : t('businesses.commission_updated', { value, defaultValue: 'Comisión actualizada a {{value}}%' }));
     } catch (err) {
       showToast('error', getErrorMessage(err));
     } finally {
@@ -148,7 +150,7 @@ export default function BusinessDetailPage() {
 
   return (
     <div className="space-y-6">
-      <AdminBreadcrumb items={[{ label: 'Empresas', href: '/businesses' }, { label: account.name }]} />
+      <AdminBreadcrumb items={[{ label: t('sidebar.businesses'), href: '/businesses' }, { label: account.name }]} />
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -267,7 +269,7 @@ export default function BusinessDetailPage() {
       <div className="bg-surface-elevated border-line rounded-xl p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h3 className="text-sm font-medium text-ink-muted mb-1">Comisión variable</h3>
+            <h3 className="text-sm font-medium text-ink-muted mb-1">{t('businesses.variable_commission', { defaultValue: 'Comisión variable' })}</h3>
             <p className="text-xs text-ink-muted max-w-md">
               Default plataforma: <span className="font-medium text-ink">15%</span>. Reduce solo para acuerdos especiales —
               el pasajero paga menos pero el conductor cobra lo mismo. Dejá vacío para usar el default.
