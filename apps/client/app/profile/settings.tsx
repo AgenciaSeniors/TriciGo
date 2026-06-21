@@ -78,9 +78,14 @@ export default function SettingsScreen() {
   const toggleLanguage = async () => {
     triggerHaptic('light');
     const idx = LANGUAGE_CYCLE.indexOf(currentLang);
-    const next = LANGUAGE_CYCLE[(idx + 1) % LANGUAGE_CYCLE.length];
+    const next = LANGUAGE_CYCLE[(idx + 1) % LANGUAGE_CYCLE.length] ?? 'es';
     // Apply locally first so the UI reacts instantly even on slow networks.
     i18n.changeLanguage(next);
+    // Persist locally so the choice survives an app restart — app-providers reads
+    // `tricigo_language` on boot (the server `preferred_language` below is for
+    // cross-device sync but was never read back, so the choice used to reset to
+    // the device locale on every relaunch).
+    AsyncStorage.setItem('tricigo_language', next).catch(() => {});
     if (!user) return;
     try {
       const updated = await authService.updateProfile(user.id, { preferred_language: next });
