@@ -66,15 +66,15 @@ function vehicleIcon(type?: string) {
   }
 }
 
-function formatRelative(iso: string): string {
+function formatRelative(iso: string, t: (k: string, o?: Record<string, unknown>) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const d = Math.floor(diff / 86_400_000);
-  if (d < 1) return 'hoy';
-  if (d === 1) return 'ayer';
-  if (d < 7) return `hace ${d} días`;
-  if (d < 30) return `hace ${Math.floor(d / 7)} sem`;
-  if (d < 365) return `hace ${Math.floor(d / 30)} mes`;
-  return `hace ${Math.floor(d / 365)} año`;
+  if (d < 1) return t('drivers.relative_today', { defaultValue: 'hoy' });
+  if (d === 1) return t('drivers.relative_yesterday', { defaultValue: 'ayer' });
+  if (d < 7) return t('drivers.relative_days', { count: d, defaultValue: 'hace {{count}} días' });
+  if (d < 30) return t('drivers.relative_weeks', { count: Math.floor(d / 7), defaultValue: 'hace {{count}} sem' });
+  if (d < 365) return t('drivers.relative_months', { count: Math.floor(d / 30), defaultValue: 'hace {{count}} mes' });
+  return t('drivers.relative_years', { count: Math.floor(d / 365), defaultValue: 'hace {{count}} año' });
 }
 
 export default function DriversPage() {
@@ -394,7 +394,7 @@ export default function DriversPage() {
                         )}
                       </td>
                       <td className="px-4 text-sm text-ink-muted tabular-nums">
-                        {formatRelative(driver.created_at)}
+                        {formatRelative(driver.created_at, t)}
                       </td>
                       <td className="pr-4">
                         <ChevronRight size={16} className="text-ink-subtle group-hover:text-ink-muted transition-colors" />
