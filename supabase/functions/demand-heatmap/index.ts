@@ -1,5 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 const GRID_PRECISION = 3; // ~100m grid cells
 const CACHE_TTL_S = 300; // 5 minutes
