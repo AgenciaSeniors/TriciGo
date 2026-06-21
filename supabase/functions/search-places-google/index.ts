@@ -205,8 +205,12 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Lazy cleanup: 1% chance to trigger >30d row deletion ──
+  // NOTE: supabase.rpc(...) returns a PostgrestFilterBuilder (thenable) with NO
+  // `.catch` method — chaining `.catch` directly throws "catch is not a function"
+  // (same class as the verify-otp 500). Wrap in Promise.resolve() so `.catch` is
+  // valid, keeping it fire-and-forget (must not block/break the response).
   if (Math.random() < 0.01) {
-    supabase.rpc('google_cache_cleanup').catch(() => { /* best effort */ });
+    Promise.resolve(supabase.rpc('google_cache_cleanup')).catch(() => { /* best effort */ });
   }
 
   return jsonResponse({ data: results, source: 'google' }, 200);
