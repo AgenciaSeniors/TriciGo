@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { corporateService } from '@tricigo/api';
 import type { CorporateAccount } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
@@ -8,28 +8,23 @@ export function useCorporateAccounts() {
   const [accounts, setAccounts] = useState<CorporateAccount[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  // Exposed so callers can re-fetch on focus / foreground (stale-on-mount:
+  // an admin approving/denying a membership should reflect without a restart).
+  const refetch = useCallback(() => {
     if (!user) return;
-
-    let mounted = true;
     setLoading(true);
-
     corporateService
       .getMyAccounts(user.id)
-      .then((data) => {
-        if (mounted) setAccounts(data);
-      })
+      .then((data) => setAccounts(data))
       .catch(() => {
         // No corporate accounts
       })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
+      .finally(() => setLoading(false));
   }, [user]);
 
-  return { accounts, loading };
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { accounts, loading, refetch };
 }

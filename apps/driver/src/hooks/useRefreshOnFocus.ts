@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
@@ -20,16 +20,23 @@ import { useFocusEffect } from 'expo-router';
  * cost/RLS of realtime.
  */
 export function useRefreshOnFocus(refetch: () => void): void {
+  // Keep the latest `refetch` in a ref so the focus/foreground subscriptions stay
+  // stable (deps []) even when `refetch` changes identity (e.g. it closes over
+  // state that updates right after a fetch). This avoids re-subscription churn
+  // and — critically — a refetch → state-change → refetch focus loop.
+  const refetchRef = useRef(refetch);
+  useEffect(() => { refetchRef.current = refetch; }, [refetch]);
+
   useFocusEffect(
     useCallback(() => {
-      refetch();
-    }, [refetch]),
+      refetchRef.current();
+    }, []),
   );
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refetch();
+      if (state === 'active') refetchRef.current();
     });
     return () => sub.remove();
-  }, [refetch]);
+  }, []);
 }

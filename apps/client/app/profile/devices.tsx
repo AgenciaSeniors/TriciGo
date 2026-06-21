@@ -16,6 +16,7 @@ import type { KnownDevice } from '@tricigo/api';
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTokens } from '@/hooks/useTokens';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { getOrCreateDeviceId } from '@/lib/device';
 
 /** Map a platform string to a sensible device icon. */
@@ -72,6 +73,10 @@ export default function DevicesScreen() {
       .then(setCurrentDeviceId)
       .catch(() => {});
   }, [loadDevices]);
+
+  // Stale-on-mount: refetch the device list on focus / app foreground (a device
+  // revoked from another session / admin should drop off without a restart).
+  useRefreshOnFocus(loadDevices);
 
   const handleRevoke = (device: KnownDevice) => {
     const title =

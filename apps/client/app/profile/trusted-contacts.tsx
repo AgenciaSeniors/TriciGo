@@ -16,6 +16,7 @@ import { trustedContactService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { AddContactSheet } from '@/components/AddContactSheet';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { TrustedContact } from '@tricigo/types';
@@ -48,6 +49,9 @@ export default function TrustedContactsScreen() {
   useEffect(() => {
     loadContacts();
   }, [loadContacts]);
+
+  // Stale-on-mount: refetch contacts on focus / app foreground.
+  useRefreshOnFocus(loadContacts);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

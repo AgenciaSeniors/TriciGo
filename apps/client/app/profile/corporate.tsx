@@ -13,6 +13,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { useAuthStore } from '@/stores/auth.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { corporateService, paymentService, invoiceService } from '@tricigo/api';
 import CorporateRequestForm from '@/components/CorporateRequestForm';
 import * as Sharing from 'expo-sharing';
@@ -45,7 +46,7 @@ export default function CorporateProfileScreen() {
   const { t } = useTranslation('rider');
   const router = useRouter();
   const userId = useAuthStore((s) => s.user?.id);
-  const { accounts, loading } = useCorporateAccounts();
+  const { accounts, loading, refetch: refetchAccounts } = useCorporateAccounts();
 
   // Pending/rejected request status — only shown when the user has no
   // approved memberships to render the dashboard for.
@@ -63,6 +64,15 @@ export default function CorporateProfileScreen() {
       .finally(() => { if (!cancelled) setRequestLoading(false); });
     return () => { cancelled = true; };
   }, [userId, requestVersion]);
+
+  // Stale-on-mount: on focus / app foreground, re-check the request status (bump
+  // the version) and re-fetch the accounts list, so an admin approval/denial
+  // shows without a full restart.
+  const refetchCorporate = useCallback(() => {
+    setRequestVersion((v) => v + 1);
+    refetchAccounts();
+  }, [refetchAccounts]);
+  useRefreshOnFocus(refetchCorporate);
 
   // Role map: accountId -> role (loaded eagerly)
   const [roleMap, setRoleMap] = useState<Record<string, CorporateEmployeeRole | null>>({});

@@ -6,6 +6,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { ProfileRow } from '@/components/profile/ProfileRow';
 import { useTokens } from '@/hooks/useTokens';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { useTranslation } from '@tricigo/i18n';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, authService, customerService } from '@tricigo/api';
@@ -44,7 +45,7 @@ export default function SettingsScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const currentLang = (i18n.language ?? 'es') as Language;
 
-  useEffect(() => {
+  const loadSettings = useCallback(() => {
     // Load master toggle
     AsyncStorage.getItem(NOTIF_PREF_KEY).then((val) => {
       if (val !== null) setNotificationsEnabled(val === 'true');
@@ -74,6 +75,12 @@ export default function SettingsScreen() {
       }).catch((err) => logger.warn('[Settings] Failed to load customer profile:', err));
     }
   }, [userId]);
+
+  useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  // Stale-on-mount: re-read prefs / payment method / SMS on focus + foreground
+  // (so a change from another device or admin sync shows without a restart).
+  useRefreshOnFocus(loadSettings);
 
   const toggleLanguage = async () => {
     triggerHaptic('light');
