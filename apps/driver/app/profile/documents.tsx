@@ -18,6 +18,7 @@ import { colors, midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { DriverDocument, SelfieCheck, DocumentType } from '@tricigo/types';
 
@@ -64,6 +65,10 @@ export default function DocumentsScreen() {
   }, [driverId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Stale-on-mount: refetch verification status on focus / app foreground (an
+  // admin approval/rejection should reflect without a full restart).
+  useRefreshOnFocus(fetchData);
 
   const reuploadImage = useCallback(async (docType: DocumentType) => {
     if (!driverId) return;

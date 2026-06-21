@@ -9,6 +9,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { useAuthStore } from '@/stores/auth.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { formatRating, getErrorMessage } from '@tricigo/utils';
 import { ErrorState } from '@tricigo/ui/ErrorState';
@@ -90,6 +91,15 @@ export default function DriverReviewsScreen() {
     reviewService.getReviewSummary(userId).then(setSummary).catch(() => {});
     fetchReviews(0, true);
   }, [userId, fetchReviews]);
+
+  // Stale-on-mount: refetch the rating summary + first page on focus / foreground
+  // (a new rider review should reflect without a restart; rating drives matching).
+  const refetchReviews = useCallback(() => {
+    if (!userId) return;
+    reviewService.getReviewSummary(userId).then(setSummary).catch(() => {});
+    fetchReviews(0, true);
+  }, [userId, fetchReviews]);
+  useRefreshOnFocus(refetchReviews);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

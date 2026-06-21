@@ -44,6 +44,7 @@ import type { Ride } from '@tricigo/types';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useDriverStore } from '@/stores/driver.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { HistoryFilters } from '@tricigo/ui/HistoryFilters';
 import type { HistoryFilterState } from '@tricigo/ui/HistoryFilters';
 import { EmptyState } from '@tricigo/ui/EmptyState';
@@ -150,6 +151,29 @@ function NativeTripsScreen() {
     fetchTrips();
     return () => { cancelled = true; };
   }, [driverProfileId, page, filters]);
+
+  // Stale-on-mount: this is a tab (stays mounted). Reload page 0 with the current
+  // filters on focus / app foreground — a just-completed trip should appear
+  // without a full restart.
+  const refetchTrips = useCallback(() => {
+    if (!driverProfileId) return;
+    setPage(0);
+    setLoading(true);
+    driverService.getTripHistoryFiltered({
+      driverId: driverProfileId,
+      page: 0,
+      pageSize: PAGE_SIZE,
+      status: filters.status,
+      serviceType: filters.serviceType as any,
+      paymentMethod: filters.paymentMethod as any,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+    })
+      .then((data) => setTrips(data))
+      .catch((err) => setError(getErrorMessage(err)))
+      .finally(() => setLoading(false));
+  }, [driverProfileId, filters]);
+  useRefreshOnFocus(refetchTrips);
 
   const handleFilterChange = useCallback((newFilters: HistoryFilterState) => {
     setFilters(newFilters);

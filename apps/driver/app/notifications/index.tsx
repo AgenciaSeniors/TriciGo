@@ -12,6 +12,7 @@ import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import type { AppNotification } from '@tricigo/types';
 
 // Keyed by the real notification categories send-push writes to
@@ -126,6 +127,11 @@ export default function NotificationsScreen() {
   useEffect(() => {
     fetchNotifications(true);
   }, [user?.id, filter]);
+
+  // Stale-on-mount: reload the inbox on focus / app foreground (loop-safe — the
+  // hook holds the unstable fetchNotifications in a ref).
+  const refetchInbox = useCallback(() => { fetchNotifications(true); }, [fetchNotifications]);
+  useRefreshOnFocus(refetchInbox);
 
   const handleRefresh = async () => {
     setRefreshing(true);
