@@ -75,31 +75,37 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
 // App routes that require a complete profile (full_name + phone). Marketing,
 // legal, auth and onboarding routes are intentionally NOT here so the guard
-// can never trap a user or loop.
+// can never trap a user or loop. When adding a new protected route, add it here.
 const APP_ROUTES = ['/book', '/track', '/wallet', '/profile', '/chat', '/rides', '/notifications', '/gift'];
 
 /**
  * Session guard — parity con el guard de apps/client/app/_layout.tsx. If an
  * authenticated user with an incomplete profile lands on an app route (e.g.
  * they closed the tab mid-onboarding), send them to finish: no full_name →
- * /complete-profile, OAuth without phone → /verify-phone. Checks once per user.
+ * /complete-profile, OAuth without phone → /verify-phone.
+ *
+ * Caches only a COMPLETE profile: while the profile is incomplete we re-check
+ * on every navigation, so a user who is redirected and then manually returns to
+ * an app route can't slip back in (the móvil guard re-checks on every route).
+ * A complete profile can't become incomplete, so caching it is safe and avoids
+ * a getUserById on every navigation.
  */
 function ProfileGuard({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, isLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const checkedRef = useRef<string | null>(null);
+  const completeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || !user?.id || !pathname) return;
     const onAppRoute = APP_ROUTES.some((r) => pathname === r || pathname.startsWith(`${r}/`));
     if (!onAppRoute) return;
-    if (checkedRef.current === user.id) return;
-    checkedRef.current = user.id;
+    if (completeRef.current === user.id) return;
     authService.getUserById(user.id).then((p) => {
       if (!p) return;
-      if (!p.full_name) router.replace('/complete-profile');
-      else if (!p.phone) router.replace('/verify-phone');
+      if (!p.full_name) { router.replace('/complete-profile'); return; }
+      if (!p.phone) { router.replace('/verify-phone'); return; }
+      completeRef.current = user.id;
     }).catch(() => { /* best-effort — never block the app */ });
   }, [isLoading, isAuthenticated, user?.id, pathname, router]);
 

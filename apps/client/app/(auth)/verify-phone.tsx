@@ -100,7 +100,7 @@ export default function VerifyPhoneScreen() {
       const code = (err as { code?: string } | null)?.code;
       setError(
         code === 'PHONE_TAKEN'
-          ? t('auth.phone_taken')
+          ? t('auth.phone_taken_existing_account')
           : code === 'INVALID_CODE'
             ? t('auth.invalid_otp')
             : t('errors.generic'),

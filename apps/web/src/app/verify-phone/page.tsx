@@ -19,7 +19,7 @@ type Step = 'phone' | 'otp';
 export default function VerifyPhonePage() {
   const router = useRouter();
   const { t } = useTranslation('common');
-  const { user, isLoading, isAuthenticated } = useAuth();
+  const { user, isLoading, isAuthenticated, signOut } = useAuth();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState(DEMO_MODE ? '' : '+53');
@@ -78,8 +78,18 @@ export default function VerifyPhonePage() {
         if (!updated?.full_name) { router.push('/complete-profile'); return; }
       }
       router.push('/book');
-    } catch {
-      setError(t('auth.invalid_otp', { defaultValue: 'Código inválido' }));
+    } catch (err) {
+      // Surface the EF's stable error code (set by verifyPhoneLink): a phone
+      // that already belongs to another account (typical OTP-then-Google case)
+      // must NOT read as "wrong code" — point the user back to phone login.
+      const c = (err as { code?: string } | null)?.code;
+      setError(
+        c === 'PHONE_TAKEN'
+          ? t('auth.phone_taken_existing_account', { defaultValue: 'Este número ya tiene una cuenta TriciGo. Cerrá sesión e iniciá con tu teléfono.' })
+          : c === 'INVALID_CODE'
+            ? t('auth.invalid_otp', { defaultValue: 'Código inválido' })
+            : t('errors.generic', { defaultValue: 'Algo salió mal. Intenta de nuevo.' }),
+      );
     } finally {
       setLoading(false);
     }
@@ -93,6 +103,17 @@ export default function VerifyPhonePage() {
       setResendTimer(60);
     } catch {
       setError(t('errors.generic', { defaultValue: 'Algo salió mal. Intenta de nuevo.' }));
+    }
+  }
+
+  // Escape hatch — parity with the móvil SwitchAccountFooter. A user who signed
+  // in with the wrong account (or whose phone already belongs to another
+  // account) can sign out and start over from /login instead of being stuck.
+  async function handleSwitchAccount() {
+    try {
+      await signOut();
+    } finally {
+      router.push('/login');
     }
   }
 
@@ -203,6 +224,14 @@ export default function VerifyPhonePage() {
             </button>
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={handleSwitchAccount}
+          style={{ display: 'block', width: '100%', marginTop: '1.5rem', background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: '0.875rem', textAlign: 'center', fontFamily: 'inherit' }}
+        >
+          {t('auth.switch_account_prompt', { defaultValue: '¿Cuenta equivocada? Cerrar sesión' })}
+        </button>
       </div>
     </main>
   );

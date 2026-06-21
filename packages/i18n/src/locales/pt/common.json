@@ -65,6 +65,7 @@
     "invalid_otp": "Código incorreto. Tente novamente.",
     "send_otp_failed": "Não foi possível enviar o código. Verifique o número.",
     "phone_taken": "Esse número já está em uso por outra conta",
+    "phone_taken_existing_account": "Esse número já tem uma conta TriciGo. Saia e entre com seu telefone.",
     "otp_rate_limited_body": "Muitos códigos. Aguarde alguns minutos antes de pedir outro.",
     "google_login_failed": "Não foi possível entrar com o Google.",
     "apple_login_failed": "Não foi possível entrar com a Apple.",
