@@ -133,7 +133,7 @@ export default function CompleteProfileScreen() {
           {/* Welcome icon */}
           <View
             className="w-20 h-20 rounded-full items-center justify-center mb-6"
-            style={{ backgroundColor: 'rgba(255, 77, 0, 0.08)' }}
+            style={{ backgroundColor: isDark ? 'rgba(255, 77, 0, 0.15)' : 'rgba(255, 77, 0, 0.08)' }}
           >
             <Ionicons name="person-circle-outline" size={40} color={colors.brand.orange} />
           </View>
