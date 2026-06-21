@@ -7,7 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { driverService } from '@tricigo/api';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +32,7 @@ export default function PenaltiesScreen() {
       const data = await driverService.getCancellationPenalties(userId, 50);
       setPenalties(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
       setRefreshing(false);

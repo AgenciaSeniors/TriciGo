@@ -39,7 +39,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
 import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
-import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateWalletCSV, classifyWalletTxn, walletTxnIcon } from '@tricigo/utils';
+import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE, generateWalletCSV, classifyWalletTxn, walletTxnIcon, getErrorMessage } from '@tricigo/utils';
 import { colors, cubanLight, cubanDark } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import type { LedgerTransaction, WalletSummary } from '@tricigo/types';
@@ -159,7 +159,7 @@ export default function WalletScreen() {
       Toast.show({
         type: 'error',
         text1: t('wallet.fetch_error', { defaultValue: 'Error al cargar saldo' }),
-        text2: err instanceof Error ? err.message : String(err),
+        text2: getErrorMessage(err),
         visibilityTime: 4500,
       });
     } finally {

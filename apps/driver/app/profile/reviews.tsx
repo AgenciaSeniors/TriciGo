@@ -10,7 +10,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { reviewService } from '@tricigo/api/services/review';
 import { useAuthStore } from '@/stores/auth.store';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
-import { formatRating } from '@tricigo/utils';
+import { formatRating, getErrorMessage } from '@tricigo/utils';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Review, ReviewTagSummaryItem } from '@tricigo/types';
 import { ReviewTagsBreakdown } from '@/components/profile/ReviewTagsBreakdown';
@@ -77,7 +77,7 @@ export default function DriverReviewsScreen() {
       setHasMore(data.length === PAGE_SIZE);
       setPage(pageNum);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
       setRefreshing(false);

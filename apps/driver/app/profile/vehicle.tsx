@@ -11,7 +11,7 @@ import { driverService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Vehicle } from '@tricigo/types';
-import { PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
+import { PACKAGE_CATEGORY_LABELS, getErrorMessage } from '@tricigo/utils';
 
 const VEHICLE_IMAGES: Record<string, any> = {
   triciclo: require('../../assets/vehicles/selection/triciclo.png'),
@@ -47,7 +47,7 @@ export default function VehicleScreen() {
     driverService
       .getVehicle(driverProfile.id)
       .then(setVehicle)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Error desconocido'))
+      .catch((err) => setError(getErrorMessage(err)))
       .finally(() => setLoading(false));
   }, [driverProfile]);
 

@@ -167,7 +167,7 @@ export function RecentActivitySection({
                       variant="badge"
                       style={{ color: midnightEmber.screen.text.secondary }}
                     >
-                      {new Date(tx.created_at).toLocaleDateString()}
+                      {new Date(tx.created_at).toLocaleDateString('es', { timeZone: 'America/Havana' })}
                     </Text>
                   </View>
                   <Text
