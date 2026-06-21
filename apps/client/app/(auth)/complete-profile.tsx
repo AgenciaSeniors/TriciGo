@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Alert, Pressable, ActionSheetIOS, Platform, KeyboardAvoidingView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
+import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '@tricigo/ui/Screen';
@@ -16,6 +16,12 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { SwitchAccountFooter } from '@/components/auth/SwitchAccountFooter';
 
+interface PendingCrop {
+  uri: string;
+  width: number;
+  height: number;
+}
+
 export default function CompleteProfileScreen() {
   const { t } = useTranslation('common');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -27,34 +33,36 @@ export default function CompleteProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
 
-  const pickAndUploadAvatar = async (source: 'camera' | 'gallery') => {
+  const pickFromSource = async (source: 'camera' | 'gallery') => {
     if (!user) return;
     try {
+      // Pick at full quality; the shared circular AvatarCropModal handles framing
+      // so the crop UX + output spec match the edit-profile screen (Android 13+'s
+      // system picker ignores allowsEditing, so we never rely on it).
       const pickerResult = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-          })
-        : await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-          });
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 });
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
+      const asset = pickerResult.assets[0];
+      if (!asset.width || !asset.height) {
+        Alert.alert(t('error'), t('errors.generic'));
+        return;
+      }
+      setPendingCrop({ uri: asset.uri, width: asset.width, height: asset.height });
+    } catch {
+      Alert.alert(t('error'), t('errors.generic'));
+    }
+  };
 
-      setUploadingAvatar(true);
-      const manipulated = await ImageManipulator.manipulateAsync(
-        pickerResult.assets[0].uri,
-        [{ resize: { width: 300, height: 300 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-      );
-
-      const publicUrl = await authService.uploadAvatar(user.id, manipulated.uri);
+  const handleCropConfirm = async (croppedUri: string) => {
+    if (!user) return;
+    setPendingCrop(null);
+    setUploadingAvatar(true);
+    try {
+      const publicUrl = await authService.uploadAvatar(user.id, croppedUri);
       setAvatarUrl(publicUrl);
     } catch {
       Alert.alert(t('error'), t('errors.generic'));
@@ -75,8 +83,8 @@ export default function CompleteProfileScreen() {
           cancelButtonIndex: 0,
         },
         (buttonIndex) => {
-          if (buttonIndex === 1) pickAndUploadAvatar('camera');
-          else if (buttonIndex === 2) pickAndUploadAvatar('gallery');
+          if (buttonIndex === 1) pickFromSource('camera');
+          else if (buttonIndex === 2) pickFromSource('gallery');
         },
       );
     } else {
@@ -85,8 +93,8 @@ export default function CompleteProfileScreen() {
         '',
         [
           { text: t('cancel'), style: 'cancel' },
-          { text: t('profile.take_photo', { defaultValue: 'Tomar foto' }), onPress: () => pickAndUploadAvatar('camera') },
-          { text: t('profile.choose_photo', { defaultValue: 'Elegir de galería' }), onPress: () => pickAndUploadAvatar('gallery') },
+          { text: t('profile.take_photo', { defaultValue: 'Tomar foto' }), onPress: () => pickFromSource('camera') },
+          { text: t('profile.choose_photo', { defaultValue: 'Elegir de galería' }), onPress: () => pickFromSource('gallery') },
         ],
       );
     }
@@ -200,6 +208,15 @@ export default function CompleteProfileScreen() {
           <SwitchAccountFooter />
         </View>
       </KeyboardAvoidingView>
+
+      <AvatarCropModal
+        visible={pendingCrop !== null}
+        imageUri={pendingCrop?.uri ?? null}
+        imageWidth={pendingCrop?.width ?? 0}
+        imageHeight={pendingCrop?.height ?? 0}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={handleCropConfirm}
+      />
     </Screen>
   );
 }
