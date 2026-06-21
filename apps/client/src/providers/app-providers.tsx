@@ -65,9 +65,19 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   useDeepLinkHandler();
 
   useEffect(() => {
-    const locales = Localization.getLocales();
-    const deviceLang = locales[0]?.languageCode ?? 'es';
-    initI18n(deviceLang);
+    (async () => {
+      // Respect an explicit saved language choice across restarts (settings'
+      // toggleLanguage writes `tricigo_language`); fall back to the device locale
+      // on first run — a better default than 'es' for our tourist passengers.
+      const savedLang = await AsyncStorage.getItem('tricigo_language');
+      if (savedLang && ['es', 'en', 'pt'].includes(savedLang)) {
+        initI18n(savedLang);
+        return;
+      }
+      const locales = Localization.getLocales();
+      const deviceLang = locales[0]?.languageCode ?? 'es';
+      initI18n(deviceLang);
+    })();
   }, []);
 
   // Subscribe to network state changes
