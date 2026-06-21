@@ -5,6 +5,7 @@ import { Download, Users, UserX } from 'lucide-react';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { User, UserRole } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -68,7 +69,7 @@ export default function UsersPage() {
       setUsers(data);
     } catch (err) {
       setUsers([]);
-      setError(err instanceof Error ? err.message : t('users.load_error', { defaultValue: 'No pudimos cargar los pasajeros.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

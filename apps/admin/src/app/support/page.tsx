@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Headphones, Send } from 'lucide-react';
 import { supportService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import type { SupportTicket, TicketMessage, TicketStatus } from '@tricigo/types';
@@ -70,7 +71,7 @@ export default function SupportPage() {
       setTickets(data);
     } catch (err) {
       setTickets([]);
-      setError(err instanceof Error ? err.message : t('support.load_error', { defaultValue: 'No pudimos cargar los tickets.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -90,7 +91,7 @@ export default function SupportPage() {
       const msgs = await supportService.getMessages(ticket.id);
       setMessages(msgs);
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('support.messages_error', { defaultValue: 'No pudimos cargar los mensajes.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -118,7 +119,7 @@ export default function SupportPage() {
         );
       }
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('support.send_error', { defaultValue: 'No pudimos enviar la respuesta.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setSending(false);
     }
@@ -135,7 +136,7 @@ export default function SupportPage() {
       }
       showToast('success', t('support.toast_status_updated', { defaultValue: 'Estado actualizado' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('support.status_error', { defaultValue: 'No pudimos cambiar el estado.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 

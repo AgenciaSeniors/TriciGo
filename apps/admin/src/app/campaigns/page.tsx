@@ -6,6 +6,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient } from '@tricigo/api';
 import { notificationService } from '@tricigo/api';
 import { cityService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { StatusBadge } from '@/components/data/StatusBadge';
@@ -97,7 +98,7 @@ export default function CampaignsPage() {
       setCampaigns((data ?? []) as Campaign[]);
     } catch (err) {
       setCampaigns([]);
-      setError(err instanceof Error ? err.message : t('campaigns.load_error', { defaultValue: 'No pudimos cargar las campañas.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -316,7 +317,7 @@ export default function CampaignsPage() {
         ? t('campaigns.toast_sent', { defaultValue: 'Campaña enviada' })
         : t('campaigns.toast_scheduled', { defaultValue: 'Campaña programada' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('campaigns.send_error', { defaultValue: 'No pudimos enviar la campaña.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setSending(false);
     }

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
+import { getErrorMessage } from '@tricigo/utils';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { useToast } from '@/components/ui/AdminToast';
 import { StatusBadge } from '@/components/data/StatusBadge';
@@ -96,7 +97,7 @@ export default function IncidentDetailPage() {
         setDetail((prev) => (prev ? { ...prev, incident: { ...prev.incident, status: next } } : prev));
         showToast('success', successMsg);
       } catch (err) {
-        showToast('error', err instanceof Error ? err.message : t('incidents.update_error', { defaultValue: 'No pudimos actualizar el estado.' }));
+        showToast('error', getErrorMessage(err));
       } finally {
         setUpdating(false);
       }
@@ -118,7 +119,7 @@ export default function IncidentDetailPage() {
       );
       showToast('success', t('incidents.review_hidden', { defaultValue: 'Reseña ocultada' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('incidents.update_error', { defaultValue: 'No pudimos actualizar el estado.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setUpdating(false);
     }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { ServiceTypeConfig } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -27,7 +27,7 @@ export default function ServiceTypesPage() {
         if (!cancelled) setConfigs(data);
       } catch (err) {
         // Error handled by UI
-        setError(err instanceof Error ? err.message : 'Error al cargar tipos de servicio');
+        setError(getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }

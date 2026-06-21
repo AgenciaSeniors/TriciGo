@@ -149,7 +149,7 @@ export default function DriverDetailPage() {
           }).catch(() => {});
         }
       } catch (err) {
-        if (!cancelled) setApiError(err instanceof Error ? err.message : 'Error al cargar datos del conductor');
+        if (!cancelled) setApiError(getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -242,7 +242,7 @@ export default function DriverDetailPage() {
       setContract(row);
       showToast('success', t('drivers.contract_generated', { defaultValue: 'Contrato generado y enviado por email' }));
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('drivers.contract_generate_error', { defaultValue: 'No pudimos generar el contrato' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setGeneratingContract(false);
     }
@@ -259,7 +259,7 @@ export default function DriverDetailPage() {
       setWalletModalOpen(false);
       await refreshDriver();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('admin_ops.adjust_error', { defaultValue: 'No pudimos ajustar el saldo' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setWalletAdjusting(false);
     }
@@ -287,7 +287,7 @@ export default function DriverDetailPage() {
       setGraceTripsReason('');
       await refreshDriver();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('admin_ops.grace_error', { defaultValue: 'No pudimos otorgar los viajes' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setGraceTripsSubmitting(false);
     }

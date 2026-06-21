@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapPin, Plus, X, Lock, Unlock, EyeOff, Eye } from 'lucide-react';
-import { useTranslation } from '@tricigo/i18n';
 import { poiService, TRICIGO_CATEGORIES } from '@tricigo/api';
 import type { Poi, PoiInput, TriciGoCategory, PoiSource } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
@@ -29,7 +29,6 @@ const emptyForm: PoiInput & { _editingId: number | null } = {
 };
 
 export default function PoisAdminPage() {
-  const { t } = useTranslation('admin');
   const { showToast } = useToast();
 
   const [pois, setPois] = useState<Poi[]>([]);
@@ -70,7 +69,7 @@ export default function PoisAdminPage() {
     } catch (err) {
       setPois([]);
       setTotal(0);
-      setError(err instanceof Error ? err.message : 'No pudimos cargar los POIs.');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -139,7 +138,7 @@ export default function PoisAdminPage() {
       resetForm();
       await load();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos guardar el POI.');
+      showToast('error', getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -152,7 +151,7 @@ export default function PoisAdminPage() {
       setDeactivateTarget(null);
       await load();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos desactivar.');
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -162,7 +161,7 @@ export default function PoisAdminPage() {
       showToast('success', 'POI activado');
       await load();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos activar.');
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -173,7 +172,7 @@ export default function PoisAdminPage() {
       setUnlockTarget(null);
       await load();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'No pudimos desbloquear.');
+      showToast('error', getErrorMessage(err));
     }
   };
 

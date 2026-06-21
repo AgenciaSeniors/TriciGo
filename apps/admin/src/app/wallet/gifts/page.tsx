@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Gift, Plus } from 'lucide-react';
 import { adminService } from '@tricigo/api';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { WalletTransfer } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -58,7 +58,7 @@ export default function GiftsPage() {
       if (s) setStats(s);
     } catch (err) {
       setGifts([]);
-      setError(err instanceof Error ? err.message : t('gifts.load_error', { defaultValue: 'No pudimos cargar los regalos.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -93,7 +93,7 @@ export default function GiftsPage() {
           showToast('success', t('gifts.reverse_success', { defaultValue: 'Regalo revertido' }));
           await fetchData();
         } catch (err) {
-          showToast('error', err instanceof Error ? err.message : t('gifts.reverse_error', { defaultValue: 'No pudimos revertir el regalo.' }));
+          showToast('error', getErrorMessage(err));
         }
       },
     });
@@ -112,7 +112,7 @@ export default function GiftsPage() {
       setFreezeModal({ open: false, userId: '', reason: '' });
       await fetchData();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('gifts.freeze_error', { defaultValue: 'No pudimos congelar la billetera.' }));
+      showToast('error', getErrorMessage(err));
     }
   };
 
@@ -129,7 +129,7 @@ export default function GiftsPage() {
           await adminService.unfreezeWallet(uid);
           showToast('success', t('gifts.unfreeze_success', { defaultValue: 'Billetera descongelada' }));
         } catch (err) {
-          showToast('error', err instanceof Error ? err.message : t('gifts.unfreeze_error', { defaultValue: 'No pudimos descongelar la billetera.' }));
+          showToast('error', getErrorMessage(err));
         }
       },
     });
@@ -143,7 +143,7 @@ export default function GiftsPage() {
       setSendOpen(false);
       await fetchData();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('gifts.send_error', { defaultValue: 'No pudimos enviar el regalo.' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setSending(false);
     }

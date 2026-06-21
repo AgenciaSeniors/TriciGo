@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Gift } from 'lucide-react';
 import { referralService } from '@tricigo/api/services/referral';
-import { formatCUP } from '@tricigo/utils';
+import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Referral, ReferralStatus } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -63,7 +63,7 @@ export default function ReferralsPage() {
       setStats(statsData);
     } catch (err) {
       setReferrals([]);
-      setError(err instanceof Error ? err.message : t('referrals.load_error', { defaultValue: 'No pudimos cargar los referidos.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ export default function ReferralsPage() {
           showToast('success', t('referrals.reward_success', { defaultValue: 'Referido premiado' }));
           await fetchData();
         } catch (err) {
-          showToast('error', err instanceof Error ? err.message : t('referrals.reward_error', { defaultValue: 'No pudimos premiar el referido.' }));
+          showToast('error', getErrorMessage(err));
         }
       },
     });
@@ -117,7 +117,7 @@ export default function ReferralsPage() {
           showToast('success', t('referrals.invalidate_success', { defaultValue: 'Referido invalidado' }));
           await fetchData();
         } catch (err) {
-          showToast('error', err instanceof Error ? err.message : t('referrals.invalidate_error', { defaultValue: 'No pudimos invalidar el referido.' }));
+          showToast('error', getErrorMessage(err));
         }
       },
     });

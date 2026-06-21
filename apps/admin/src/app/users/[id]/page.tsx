@@ -6,6 +6,7 @@ import { adminService, reviewService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
@@ -75,7 +76,7 @@ export default function UserDetailPage() {
       const data = await adminService.getUserDetail(id);
       setDetail(data);
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : t('admin_ops.adjust_error', { defaultValue: 'No pudimos ajustar el saldo' }));
+      showToast('error', getErrorMessage(err));
     } finally {
       setWalletAdjusting(false);
     }

@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Megaphone } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 
@@ -37,7 +38,7 @@ export function WalletV2BonusPushButton() {
     } catch (err) {
       showToast(
         'error',
-        err instanceof Error ? err.message : 'Error al enviar push',
+        getErrorMessage(err),
       );
     } finally {
       setSending(false);

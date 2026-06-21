@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { adminService } from '@tricigo/api/services/admin';
-import { formatCUP, formatTriciCoin } from '@tricigo/utils';
+import { formatCUP, formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
@@ -157,7 +157,7 @@ export default function ReportsPage() {
         }
       } catch (err) {
         // Error handled by UI
-        if (!cancelled) setError(err instanceof Error ? err.message : t('reports.load_error', { defaultValue: 'Error al cargar reportes' }));
+        if (!cancelled) setError(getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }

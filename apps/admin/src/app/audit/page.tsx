@@ -5,6 +5,7 @@ import { ClipboardList, ShieldCheck } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
 import type { AdminAction } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { FilterBar } from '@/components/data/FilterBar';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -49,7 +50,7 @@ export default function AuditPage() {
       setActions(data);
     } catch (err) {
       setActions([]);
-      setError(err instanceof Error ? err.message : t('audit.load_error', { defaultValue: 'No pudimos cargar la auditoría.' }));
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

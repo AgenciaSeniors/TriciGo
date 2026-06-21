@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { DriverProfileWithUser, DriverStatus } from '@tricigo/types';
+import { getErrorMessage } from '@tricigo/utils';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
@@ -121,7 +122,7 @@ export default function DriversPage() {
       } catch (err) {
         if (!cancelled) {
           setDrivers([]);
-          setError(err instanceof Error ? err.message : 'Error al cargar conductores');
+          setError(getErrorMessage(err));
         }
       } finally {
         if (!cancelled) setLoading(false);

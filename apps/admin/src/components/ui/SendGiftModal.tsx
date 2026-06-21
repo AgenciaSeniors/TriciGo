@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService } from '@tricigo/api/services/wallet';
+import { getErrorMessage } from '@tricigo/utils';
 
 type Mode = 'code' | 'phone';
 
@@ -75,7 +76,7 @@ export function SendGiftModal({ open, loading = false, onConfirm, onCancel }: Se
       }
       setRecipient({ id: found.id, full_name: found.full_name });
     } catch (err) {
-      setLookupError(err instanceof Error ? err.message : t('gifts.lookup_error', { defaultValue: 'Error de búsqueda' }));
+      setLookupError(getErrorMessage(err));
     } finally {
       setSearching(false);
     }

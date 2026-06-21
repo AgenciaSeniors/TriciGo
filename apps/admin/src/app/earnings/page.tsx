@@ -19,7 +19,7 @@
 import { useEffect, useState } from 'react';
 import { DollarSign, TrendingUp, Users, Wallet } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
-import { formatTriciCoin } from '@tricigo/utils';
+import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
@@ -51,7 +51,7 @@ export default function EarningsPage() {
       setEarnings(earningsData);
       setTopDrivers(driversData as TopDriver[]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
