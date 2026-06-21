@@ -25,8 +25,9 @@ export const walletService = {
    *
    * `accountType` defaults to 'customer_cash' for backward compat
    * (the old signature was effectively `getAccount(userId)` = rider).
-   * Drivers MUST pass 'driver_cash' — their earnings/quota live on a
-   * separate account and the two never mix. A driver with rider
+   * Drivers MUST pass 'tricicoin' — their earnings live on a
+   * separate account and the two never mix (the legacy 'driver_cash'
+   * wallet was consolidated into 'tricicoin' in mig 00300). A driver with rider
    * activity too will have BOTH rows in wallet_accounts; calling
    * without a type returns the rider one.
    */
@@ -50,7 +51,8 @@ export const walletService = {
    *
    * `accountType` selects which wallet to summarize:
    *   - 'customer_cash' (default) → rider balance
-   *   - 'driver_cash' → driver earnings balance
+   *   - 'tricicoin' → driver earnings balance (legacy 'driver_cash' was
+   *     consolidated into 'tricicoin' in mig 00300)
    *
    * Returns the owning `account_id` so callers can paginate
    * `ledger_transactions` without a second lookup.
@@ -127,7 +129,8 @@ export const walletService = {
   /**
    * Get available + held balance. Same backward-compat rule as
    * `getAccount`: defaults to 'customer_cash' (rider). Drivers MUST
-   * pass 'driver_cash' to see their real earnings.
+   * pass 'tricicoin' to see their real earnings (legacy 'driver_cash'
+   * was consolidated into 'tricicoin' in mig 00300).
    *
    * Wallet v2 phase 2: also returns the USD-cents equivalent + the
    * exchange-rate snapshot taken at migration (00242). Callers that

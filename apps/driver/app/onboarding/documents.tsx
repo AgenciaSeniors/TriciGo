@@ -13,6 +13,7 @@ import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
@@ -102,7 +103,7 @@ export default function DocumentsScreen() {
       setDocumentUploaded(docType);
       console.log('[Documents] Upload success:', docType);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       console.error('[Documents] Upload failed:', docType, msg);
       setDocumentError(docType, `${t('onboarding.error_upload_failed')} (${msg})`);
       setDocumentUploading(docType, false);
@@ -190,7 +191,7 @@ export default function DocumentsScreen() {
       const uploadMime = compressed.wasCompressed ? 'image/jpeg' : mimeType;
       await uploadFile(docType, compressed.uri, fileName, uploadMime);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       console.error('[Documents] Document pick failed:', docType, msg);
       setDocumentError(docType, msg);
     }

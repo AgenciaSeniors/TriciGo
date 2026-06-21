@@ -36,6 +36,7 @@ import {
   generateHistoryCSV,
   getRelativeDay,
   riderChargedTotal,
+  getErrorMessage,
 } from '@tricigo/utils';
 import { walletService } from '@tricigo/api';
 import { tripNetEarnings } from '@/utils/tripNetEarnings';
@@ -140,7 +141,7 @@ function NativeTripsScreen() {
         }
       } catch (err) {
         console.error('Error fetching trips:', err);
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Error desconocido');
+        if (!cancelled) setError(getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -197,7 +198,7 @@ function NativeTripsScreen() {
       setPage(0);
     } catch (err) {
       console.error('Error refreshing trips:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(getErrorMessage(err));
     } finally {
       setRefreshing(false);
     }

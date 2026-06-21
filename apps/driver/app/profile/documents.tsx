@@ -16,6 +16,7 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
+import { getErrorMessage } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { DriverDocument, SelfieCheck, DocumentType } from '@tricigo/types';
@@ -56,7 +57,7 @@ export default function DocumentsScreen() {
       setDocuments(docs);
       setSelfieChecks(checks);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
