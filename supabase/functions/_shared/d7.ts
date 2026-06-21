@@ -11,7 +11,7 @@
 // (process-sms-dlr) which upserts sms_deliveries to
 // delivered / un_delivered.
 // ============================================================
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 export interface D7SendResult {
   ok: boolean;

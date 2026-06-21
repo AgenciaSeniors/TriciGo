@@ -11,7 +11,7 @@
 //   3. Mobile llama esta EF con el JWT en Authorization + new password.
 //   4. EF valida JWT, llama auth.admin.updateUserById, marca timestamp.
 // ============================================================
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

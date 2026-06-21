@@ -17,7 +17,7 @@
 //   - GOOGLE_DAILY_CAP       (optional, default 1000)
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { computeCacheKey, googlePlacesAutocomplete, type SearchBoxResult } from './_shared/google.ts';
 
 const DEFAULT_DAILY_CAP = 1000;

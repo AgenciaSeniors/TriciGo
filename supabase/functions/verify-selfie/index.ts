@@ -7,7 +7,7 @@
 // Automated face comparison (AWS Rekognition / Google Vision) can be integrated
 // later by enabling SELFIE_VERIFICATION_ENABLED and implementing the API calls below.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 
 // ── CORS: restrict to allowed origins ──

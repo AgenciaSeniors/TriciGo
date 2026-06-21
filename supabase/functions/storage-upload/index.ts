@@ -31,7 +31,7 @@
 // Returns: { ok: true } | { error } with 4xx/5xx.
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB — generous cap for ID/vehicle/avatar photos.
