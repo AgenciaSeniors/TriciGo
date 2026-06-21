@@ -93,8 +93,18 @@ export default function VerifyPhoneScreen() {
         setUser(updated);
       }
       // Navigation handled by auth guard in _layout.tsx
-    } catch {
-      setError(t('errors.generic'));
+    } catch (err) {
+      // Surface the EF's stable error code (set by verifyPhoneLink) instead of
+      // a generic message: PHONE_TAKEN / INVALID_CODE reuse existing translated
+      // copy so the user knows whether to pick another number or retype.
+      const code = (err as { code?: string } | null)?.code;
+      setError(
+        code === 'PHONE_TAKEN'
+          ? t('auth.phone_taken')
+          : code === 'INVALID_CODE'
+            ? t('auth.invalid_otp')
+            : t('errors.generic'),
+      );
     } finally {
       setLoading(false);
     }
@@ -135,7 +145,7 @@ export default function VerifyPhoneScreen() {
           {/* Icon */}
           <View
             className="w-20 h-20 rounded-full items-center justify-center mb-6"
-            style={{ backgroundColor: 'rgba(255, 77, 0, 0.08)' }}
+            style={{ backgroundColor: isDark ? 'rgba(255, 77, 0, 0.15)' : 'rgba(255, 77, 0, 0.08)' }}
           >
             <Ionicons
               name={step === 'phone' ? 'call-outline' : 'shield-checkmark-outline'}
