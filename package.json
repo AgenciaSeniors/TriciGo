@@ -13,6 +13,7 @@
     "lint": "turbo run lint",
     "check-types": "turbo run check-types",
     "test": "turbo run test",
+    "check:ef-imports": "node scripts/check-ef-pinned-imports.mjs",
     "clean": "turbo run clean",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },

@@ -35,6 +35,13 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Guardrail: every remote import in supabase/functions/** must be pinned to
+      # an exact version. An unpinned @supabase/supabase-js@2 (esm.sh) bump broke
+      # new-user login + address search on 2026-06-20 — this fails the PR if a
+      # floating import (@2, @latest, jsr/npm without a full semver) lands again.
+      - name: Check Edge Function imports are pinned
+        run: pnpm check:ef-imports
+
       - name: Type check
         run: pnpm check-types
 
