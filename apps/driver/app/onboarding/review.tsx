@@ -56,6 +56,12 @@ export default function ReviewScreen() {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const uploadedCount = documents.filter((d) => d.uploaded).length;
+  // P0 fix: CC-04 reduced onboarding docs from 5 to 4 (selfie removed), but this
+  // screen kept comparing against a hardcoded 5 — so `uploadedCount < 5` was
+  // always true with the 4-doc store, leaving Submit permanently disabled and
+  // making it IMPOSSIBLE for any new driver to finish registration. Track the
+  // real store length instead (documents.tsx already gates on documents.every).
+  const totalDocs = documents.length;
 
   const handleSubmit = async () => {
     if (!user || !driverProfileId) return;
@@ -241,12 +247,12 @@ export default function ReviewScreen() {
           </View>
           <View className="flex-row items-center">
             <Ionicons
-              name={uploadedCount === 5 ? 'checkmark-circle' : 'alert-circle'}
+              name={uploadedCount === totalDocs ? 'checkmark-circle' : 'alert-circle'}
               size={20}
-              color={uploadedCount === 5 ? midnightEmber.state.success : midnightEmber.state.warning}
+              color={uploadedCount === totalDocs ? midnightEmber.state.success : midnightEmber.state.warning}
             />
             <Text variant="body" color="inverse" className="ml-2">
-              {t('onboarding.documents_count', { count: uploadedCount, total: 5 })}
+              {t('onboarding.documents_count', { count: uploadedCount, total: totalDocs })}
             </Text>
           </View>
         </Card>
@@ -321,20 +327,20 @@ export default function ReviewScreen() {
           fullWidth
           onPress={handleSubmit}
           loading={submitting}
-          disabled={submitting || uploadedCount < 5 || !driverProfileId || !termsAccepted}
+          disabled={submitting || uploadedCount < totalDocs || !driverProfileId || !termsAccepted}
         />
         {/* UX: when Submit is disabled because docs are missing, say so
              explicitly. Previously the button just looked grayed out with
              no explanation — drivers thought the app was broken. */}
-        {!submitting && uploadedCount < 5 && (
+        {!submitting && uploadedCount < totalDocs && (
           <Text variant="caption" style={{ color: midnightEmber.state.warning, textAlign: 'center', marginTop: 8 }}>
             {t('onboarding.submit_disabled_docs', {
-              missing: 5 - uploadedCount,
-              defaultValue: `Falta${5 - uploadedCount === 1 ? '' : 'n'} ${5 - uploadedCount} documento${5 - uploadedCount === 1 ? '' : 's'} por subir.`,
+              missing: totalDocs - uploadedCount,
+              defaultValue: `Falta${totalDocs - uploadedCount === 1 ? '' : 'n'} ${totalDocs - uploadedCount} documento${totalDocs - uploadedCount === 1 ? '' : 's'} por subir.`,
             })}
           </Text>
         )}
-        {!submitting && uploadedCount >= 5 && !termsAccepted && (
+        {!submitting && uploadedCount >= totalDocs && !termsAccepted && (
           <Text variant="caption" style={{ color: midnightEmber.state.warning, textAlign: 'center', marginTop: 8 }}>
             {t('onboarding.submit_disabled_terms', {
               defaultValue: 'Debes aceptar los Términos y Condiciones para enviar.',
