@@ -1826,6 +1826,20 @@ git worktree remove <temp>
 - `driver_profiles.terms_accepted_at` lo estampa el checkbox del onboarding (#500, **requiere rebuild APK**); para builds viejas la EF cae al momento del submit. `submitForVerification` tolera la columna ausente (retry sin ella).
 - Verificación rápida: `SELECT contract_no, accepted_at, pdf_es_path, emailed_admin_at FROM driver_contracts ORDER BY created_at DESC LIMIT 5;` + objetos en `storage.objects WHERE bucket_id='driver-contracts'`.
 
+### Auditoría de frescura de datos (clase "stale-on-mount") — dimensión PERMANENTE
+
+**Clase de bug a chequear en TODA auditoría de UI mobile.** En las apps Expo (cliente/driver), los **tabs no se desmontan** al cambiar de tab. Una pantalla que trae **dato mutable** con `useEffect(() => Service.getX(...), [userId])` (o `[]`) y **no tiene** mecanismo de refresco queda **congelada** en el valor que tenía al abrir la app, hasta un reinicio completo — aunque el dato cambie por fuera (crédito de admin, regalo, pago de viaje, rating, estado de aprobación, penalización, contador). Caso real: el saldo del home no se actualizaba tras un crédito del admin (la billetera sí, porque refetchea al foco) → **PR #631**.
+
+**Regla:** toda pantalla que muestre dato mutable-externamente debe refrescarse al ganar foco + al volver del background. El primitivo canónico es **`useRefreshOnFocus(refetch)`** (`apps/<app>/src/hooks/useRefreshOnFocus.ts` — `useFocusEffect` + listener de `AppState 'active'`; pasar un `refetch` estable con `useCallback`). Para update instantáneo-sin-foco hace falta realtime (`supabase.channel(...postgres_changes...)`), que el codebase evita a propósito (BUG-277) salvo casos puntuales (driver `driver_profiles`, ride offers) — `useRefreshOnFocus` cubre el caso práctico sin el costo/RLS de realtime.
+
+**Cómo barrer (en cada auditoría):**
+1. `grep -rL "useFocusEffect" --include=*.tsx apps/<app>/app` cruzado con pantallas que tengan `useEffect(...Service.get...,[deps])` renderizando dato mutable → candidatas stale-prone.
+2. **Cross-check sibling:** si el mismo dato es reactivo en una pantalla (ej. billetera, `useFocusEffect`) y fetch-once en otra (ej. home, rides) → bug fuerte (asimetría).
+3. **NO confundir** con dato store-synced: lo que vive en `useAuthStore`/`useDriverStore` y se actualiza por `setUser`/realtime (ej. tier/level, nombre, rating del profile-tab del driver) ya es reactivo — no tocar.
+4. Excluir lectura de `AsyncStorage` local single-device (ej. auto-accept): no hay mutación externa, es otra sub-clase.
+
+**Fix canónico:** envolver el fetch existente en un `refetch` (`useCallback`) y llamar `useRefreshOnFocus(refetch)`. Mirar `apps/client/app/(tabs)/wallet.tsx` (useFocusEffect) y `apps/client/app/(tabs)/index.tsx` (#631) como referencia. Cambio mobile → **requiere rebuild de APK**. Estado del barrido + las pantallas migradas: `docs/AUDIT_DATA_FRESHNESS_2026-06-21.md`.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
