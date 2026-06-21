@@ -12,6 +12,7 @@ import { colors } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { logger, formatTimestamp, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { AppNotification } from '@tricigo/types';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
@@ -99,6 +100,12 @@ export default function NotificationsScreen() {
   useEffect(() => {
     fetchNotifications(true);
   }, [user?.id, filter]);
+
+  // Stale-on-mount: reload the inbox on focus / app foreground — a new
+  // notification should appear without a full restart. (fetchNotifications is an
+  // unstable callback; useRefreshOnFocus holds it in a ref so this is loop-safe.)
+  const refetchInbox = useCallback(() => { fetchNotifications(true); }, [fetchNotifications]);
+  useRefreshOnFocus(refetchInbox);
 
   const handleRefresh = async () => {
     setRefreshing(true);

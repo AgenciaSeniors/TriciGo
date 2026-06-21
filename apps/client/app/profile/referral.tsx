@@ -19,6 +19,7 @@ import { referralService, walletService } from '@tricigo/api';
 import { formatCUP, getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { Referral } from '@tricigo/types';
 
@@ -70,6 +71,9 @@ export default function ReferralScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Stale-on-mount: refetch code + history + bonus on focus / app foreground.
+  useRefreshOnFocus(fetchData);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

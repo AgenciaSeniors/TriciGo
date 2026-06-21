@@ -12,6 +12,7 @@ import { AnimatedCard, StaggeredList } from '@tricigo/ui/AnimatedCard';
 import type { Ride, ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTokens } from '@/hooks/useTokens';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { useThemeStore } from '@/stores/theme.store';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
@@ -145,6 +146,16 @@ function WebRidesScreen() {
     setPage(0);
     fetchRides(0, activeTab, false);
   }, [userId, activeTab, fetchRides]);
+
+  // Stale-on-mount fix: this is a tab (stays mounted), so reload the active tab
+  // when the screen regains focus / the app returns to foreground — a just-
+  // completed or cancelled ride should appear without a full restart.
+  const refetchOnFocus = useCallback(() => {
+    if (!userId) return;
+    setPage(0);
+    fetchRides(0, activeTab, false);
+  }, [userId, activeTab, fetchRides]);
+  useRefreshOnFocus(refetchOnFocus);
 
   const handleLoadMore = useCallback(() => {
     const nextPage = page + 1;
