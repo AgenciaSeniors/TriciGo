@@ -169,6 +169,23 @@ export default function PromoLandingPage() {
           {t('promo.no_app', { defaultValue: '¿No tienes la app? Descárgala desde la App Store o Google Play.' })}
         </p>
 
+        {/* Download on Google Play (the live store; App Store stays text-only until iOS ships) */}
+        <a
+          href="https://play.google.com/store/apps/details?id=app.tricigo.client"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 'var(--text-sm)',
+            color: 'var(--primary)',
+            fontWeight: 600,
+            textDecoration: 'none',
+            marginTop: 'var(--space-sm)',
+            display: 'inline-block',
+          }}
+        >
+          {t('promo.download_play', { defaultValue: 'Descargar en Google Play' })}
+        </a>
+
         {/* Home link */}
         <Link
           href="/"
