@@ -17,6 +17,11 @@ type Step = 'phone' | 'otp';
 // off-page, still applies the code on return.
 const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
 
+// Sign in with Apple is hidden until the Apple Developer enrollment is approved
+// and the Apple OAuth provider is enabled (the button currently does nothing).
+// Re-enable (set to true) once Apple is live.
+const APPLE_SIGN_IN_ENABLED = false;
+
 // sessionStorage key shared with /auth/callback: page guards send users here
 // with ?return=<path> (e.g. /empresas/registro) and the user must land back
 // on their original destination after authenticating — including across the
@@ -342,12 +347,14 @@ export default function LoginPage() {
             {t('auth.continue_with_google')}
           </button>
 
+          {APPLE_SIGN_IN_ENABLED && (
           <button onClick={handleAppleLogin} disabled={loading} style={socialBtnStyle}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="#000">
               <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
             </svg>
             {t('auth.continue_with_apple')}
           </button>
+          )}
         </div>
 
         {/* Divider */}

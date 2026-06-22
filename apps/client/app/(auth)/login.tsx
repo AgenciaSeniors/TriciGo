@@ -24,6 +24,13 @@ import { useTokens } from '@/hooks/useTokens';
 
 const vehicleRow = require('../../assets/login-hero.png');
 
+// Sign in with Apple is hidden until the Apple Developer enrollment is approved
+// and the Apple OAuth provider is enabled (the button currently does nothing).
+// Re-enable (set to true) before shipping to iOS — App Store Guideline 4.8
+// requires offering Sign in with Apple when another third-party sign-in
+// (Google) is shown.
+const APPLE_SIGN_IN_ENABLED = false;
+
 // BUG-201 fallback (parity with the driver app): openAuthSessionAsync can
 // return the redirect URL without the OS ever firing the Linking event, so
 // useDeepLinkHandler never runs and the session is silently lost. Parse the
@@ -294,6 +301,7 @@ export default function LoginScreen() {
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
                 <Text variant="body" className="font-medium">{socialLoading ? '...' : t('auth.continue_with_google', { defaultValue: 'Continuar con Google' })}</Text>
               </Pressable>
+              {APPLE_SIGN_IN_ENABLED && (
               <Pressable
                 className="flex-row items-center justify-center gap-2 py-4 rounded-2xl bg-neutral-900 dark:bg-white active:bg-neutral-800 dark:active:bg-neutral-100"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
@@ -326,6 +334,7 @@ export default function LoginScreen() {
                 <Ionicons name="logo-apple" size={20} color={isDark ? '#000' : '#fff'} />
                 <Text variant="body" className="font-medium" style={{ color: isDark ? '#000' : '#fff' }}>{socialLoading ? '...' : t('auth.continue_with_apple', { defaultValue: 'Continuar con Apple' })}</Text>
               </Pressable>
+              )}
             </View>
 
             {/* Legal text */}
