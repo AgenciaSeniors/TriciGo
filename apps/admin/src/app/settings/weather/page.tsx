@@ -135,7 +135,7 @@ export default function WeatherPage() {
               </p>
               {weather.lastCheck && (
                 <p className="text-xs text-ink-subtle mt-1">
-                  {t('weather.last_check', { defaultValue: 'Último chequeo' })}: {new Date(weather.lastCheck).toLocaleTimeString()}
+                  {t('weather.last_check', { defaultValue: 'Último chequeo' })}: {new Date(weather.lastCheck).toLocaleTimeString('es-CU', { timeZone: 'America/Havana' })}
                 </p>
               )}
             </div>
