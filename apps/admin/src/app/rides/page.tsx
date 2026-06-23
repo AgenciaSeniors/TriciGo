@@ -12,6 +12,8 @@ import { DataTable, type DataColumn, type SortState } from '@/components/data/Da
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { formatAdminDate } from '@/lib/formatDate';
 import { exportToCsv } from '@/lib/exportCsv';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useRequestGuard } from '@/hooks/useRequestGuard';
 
 const PAGE_SIZE = 20;
 
@@ -62,12 +64,18 @@ export default function RidesPage() {
       .select('id, name')
       .eq('is_active', true)
       .order('name')
-      .then(({ data }) => {
-        if (data) setCities(data);
-      });
+      .then(
+        ({ data }) => { if (data) setCities(data); },
+        () => { /* city filter is best-effort; ignore load failure */ },
+      );
   }, []);
 
+  // Debounce the free-text search so typing doesn't fire a fetch per keystroke.
+  const debouncedSearch = useDebouncedValue(filters.search, 300);
+  const beginRequest = useRequestGuard();
+
   const fetchRides = useCallback(async () => {
+    const isLatest = beginRequest();
     setLoading(true);
     setError(null);
     try {
@@ -77,27 +85,22 @@ export default function RidesPage() {
       if (filters.paymentMethod) query.paymentMethod = filters.paymentMethod;
       if (filters.dateFrom) query.dateFrom = filters.dateFrom;
       if (filters.dateTo) query.dateTo = filters.dateTo;
-      if (filters.search) query.search = filters.search;
+      if (debouncedSearch) query.search = debouncedSearch;
       if (selectedCity) query.cityId = selectedCity;
       const data = await adminService.getRides(query, page, PAGE_SIZE);
+      if (!isLatest()) return;
       setRides(data);
     } catch (err) {
+      if (!isLatest()) return;
       setRides([]);
       setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
-  }, [page, statusFilter, filters, selectedCity]);
+  }, [page, statusFilter, filters.serviceType, filters.paymentMethod, filters.dateFrom, filters.dateTo, debouncedSearch, selectedCity, beginRequest]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await fetchRides();
-      if (cancelled) return;
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void fetchRides();
   }, [fetchRides]);
 
   // Client-side sort of the current page only (server paginates)
