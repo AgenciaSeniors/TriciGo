@@ -43,6 +43,7 @@ import {
 import fontkit from 'https://esm.sh/@pdf-lib/fontkit@1.1.1?target=deno';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { BRAND_NAME, BRAND_RGB, LOGO_URL } from '../_shared/brand.ts';
+import { realEmail } from '../_shared/email-guard.ts';
 import {
   CONTRACT_ES,
   CONTRACT_RO,
@@ -211,10 +212,13 @@ Deno.serve(async (req) => {
     // Driver email: prefer public.users.email, fall back to auth.users
     // (phone-signup drivers often only have it there — same pattern as
     // generate-recharge-receipt).
-    let driverEmail: string | null = user.email ?? null;
+    // realEmail() filters the synthetic phone-OTP placeholder
+    // (phone_<n>@tricigo.app) so we never email the contract to a
+    // non-existent address (it bounces) nor print it in the legal PDF.
+    let driverEmail: string | null = realEmail(user.email);
     if (!driverEmail) {
       const { data: authUser } = await admin.auth.admin.getUserById(driver.user_id);
-      driverEmail = authUser?.user?.email ?? null;
+      driverEmail = realEmail(authUser?.user?.email);
     }
 
     const { data: vehicles } = await admin
@@ -730,7 +734,7 @@ async function buildContractPdf(args: BuildArgs): Promise<Uint8Array> {
   w.row(copy.identLabels.license, nv);
   w.row(copy.identLabels.address, addressParts.length ? addressParts.join(', ') : nv);
   w.row(copy.identLabels.phone, user.phone || nv);
-  w.row(copy.identLabels.email, user.email || driverEmail || nv);
+  w.row(copy.identLabels.email, realEmail(user.email) || driverEmail || nv);
   w.spacer(12);
 
   // ── Sections III–XVI — flowing legal body ──
