@@ -10,6 +10,7 @@ import { MenuRow } from '@tricigo/ui/MenuRow';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuthStore } from '@/stores/auth.store';
 import { authService } from '@tricigo/api';
+import { realEmail } from '@tricigo/utils';
 import { router } from 'expo-router';
 import type { UserLevel } from '@tricigo/types';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
@@ -118,7 +119,7 @@ function WebProfileScreen() {
           </View>
           <View className="flex-1">
             <Text variant="h4">{user?.full_name ?? t('common.no_name', { defaultValue: 'Sin nombre' })}</Text>
-            <Text variant="caption" color="secondary">{user?.email ?? ''}</Text>
+            <Text variant="caption" color="secondary">{realEmail(user?.email) ?? user?.phone ?? ''}</Text>
           </View>
         </Card>
 

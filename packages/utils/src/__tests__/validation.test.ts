@@ -10,6 +10,8 @@ import {
   isValidOTP,
   sanitizeText,
   maskPhone,
+  isPlaceholderEmail,
+  realEmail,
 } from '../validation';
 
 // ============================================================
@@ -309,5 +311,51 @@ describe('maskPhone', () => {
   it('strips spaces and dashes before masking', () => {
     expect(maskPhone('+53 5512 3456')).toBe('+53 •••• 3456');
     expect(maskPhone('5512-3456')).toBe('•••• 3456');
+  });
+});
+
+// ============================================================
+// isPlaceholderEmail / realEmail
+// ============================================================
+describe('isPlaceholderEmail', () => {
+  it('detects the synthetic phone-OTP placeholder', () => {
+    expect(isPlaceholderEmail('phone_5351234567@tricigo.app')).toBe(true);
+    expect(isPlaceholderEmail('phone_15551234567@tricigo.app')).toBe(true);
+  });
+
+  it('is case-insensitive and tolerates surrounding whitespace', () => {
+    expect(isPlaceholderEmail('  PHONE_5351234567@TriciGo.App  ')).toBe(true);
+  });
+
+  it('rejects real email addresses', () => {
+    expect(isPlaceholderEmail('user@example.com')).toBe(false);
+    expect(isPlaceholderEmail('eduardo@tricigo.com')).toBe(false);
+    // Looks similar but not the synthetic shape (has letters / wrong domain)
+    expect(isPlaceholderEmail('phone_abc@tricigo.app')).toBe(false);
+    expect(isPlaceholderEmail('phone_5351234567@tricigo.com')).toBe(false);
+  });
+
+  it('rejects null/undefined/empty', () => {
+    expect(isPlaceholderEmail(null)).toBe(false);
+    expect(isPlaceholderEmail(undefined)).toBe(false);
+    expect(isPlaceholderEmail('')).toBe(false);
+  });
+});
+
+describe('realEmail', () => {
+  it('returns null for the synthetic placeholder', () => {
+    expect(realEmail('phone_5351234567@tricigo.app')).toBeNull();
+  });
+
+  it('returns null for empty/null/undefined', () => {
+    expect(realEmail('')).toBeNull();
+    expect(realEmail('   ')).toBeNull();
+    expect(realEmail(null)).toBeNull();
+    expect(realEmail(undefined)).toBeNull();
+  });
+
+  it('returns the trimmed real email unchanged', () => {
+    expect(realEmail('user@example.com')).toBe('user@example.com');
+    expect(realEmail('  eduardo@tricigo.com  ')).toBe('eduardo@tricigo.com');
   });
 });

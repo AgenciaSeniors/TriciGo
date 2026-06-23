@@ -115,3 +115,31 @@ export function sanitizeText(text: string): string {
   // eslint-disable-next-line no-control-regex
   return text.trim().replace(/[\x00-\x1F\x7F]/g, '');
 }
+
+/**
+ * Phone-OTP signups get a synthetic placeholder email
+ * (`phone_<digits>@tricigo.app`) written to auth.users by the verify-otp Edge
+ * Function. It is load-bearing for session minting (magic-link / password
+ * grant) but is NOT a real address the user owns, so it must never be shown,
+ * pre-filled into a form, or emailed. Detect it so the UI treats it as
+ * "no email on file".
+ *
+ * NOTE: the same pattern is mirrored inline in Deno Edge Functions
+ * (e.g. behavioral-emails) because they cannot import @tricigo/utils — keep
+ * the regex in sync.
+ */
+const PLACEHOLDER_EMAIL_RE = /^phone_\d+@tricigo\.app$/i;
+
+export function isPlaceholderEmail(email?: string | null): boolean {
+  return !!email && PLACEHOLDER_EMAIL_RE.test(email.trim());
+}
+
+/**
+ * Returns the email unless it is empty or the synthetic phone-OTP placeholder,
+ * in which case it returns null (treat as "no real email on file").
+ */
+export function realEmail(email?: string | null): string | null {
+  const e = email?.trim();
+  if (!e || isPlaceholderEmail(e)) return null;
+  return e;
+}

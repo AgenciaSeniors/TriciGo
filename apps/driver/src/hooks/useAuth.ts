@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { configureStorage, createStorageAdapter, authService, driverService, getSupabaseClient, realtimeStatusLogger } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
-import { identifyUser, resetAnalytics } from '@tricigo/utils';
+import { identifyUser, resetAnalytics, realEmail } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { useChatStore } from '@/stores/chat.store';
@@ -86,7 +86,7 @@ async function loadUserAndProfile(
     if (!mounted.current) return;
     setUser(user);
     if (user) {
-      identifyUser(user.id, { email: user.email, role: 'driver' });
+      identifyUser(user.id, { email: realEmail(user.email) ?? undefined, role: 'driver' });
       try {
         const dp = await driverService.getProfile(user.id);
         if (mounted.current) setProfile(dp);
@@ -164,7 +164,7 @@ export function useAuthInit() {
               if (mounted.current && user) {
                 logger.info('[Auth] Web fast-path: session restored from localStorage');
                 setUser(user);
-                identifyUser(user.id, { email: user.email, role: 'driver' });
+                identifyUser(user.id, { email: realEmail(user.email) ?? undefined, role: 'driver' });
                 // Load driver profile in parallel (non-blocking for initial render)
                 try {
                   const dp = await driverService.getProfile(user.id);
@@ -208,7 +208,7 @@ export function useAuthInit() {
                   );
                   if (mounted.current && user) {
                     setUser(user);
-                    identifyUser(user.id, { email: user.email, role: 'driver' });
+                    identifyUser(user.id, { email: realEmail(user.email) ?? undefined, role: 'driver' });
                     try {
                       const dp = await driverService.getProfile(user.id);
                       if (mounted.current) setProfile(dp);
@@ -255,7 +255,7 @@ export function useAuthInit() {
               if (mounted.current && user) {
                 console.warn('[Auth] Safety timeout: restored session via direct REST');
                 setUser(user);
-                identifyUser(user.id, { email: user.email, role: 'driver' });
+                identifyUser(user.id, { email: realEmail(user.email) ?? undefined, role: 'driver' });
                 try {
                   const dp = await driverService.getProfile(user.id);
                   if (mounted.current) setProfile(dp);

@@ -29,6 +29,16 @@ function getSupabase() {
   );
 }
 
+// ── Synthetic phone-OTP placeholder email guard ──
+// Mirror of isPlaceholderEmail() in @tricigo/utils (Deno can't import it).
+// verify-otp creates phone accounts with `phone_<digits>@tricigo.app` in
+// auth.users; that address is not real and must never be emailed (it bounces).
+// Keep this regex in sync with packages/utils/src/validation.ts.
+const PLACEHOLDER_EMAIL_RE = /^phone_\d+@tricigo\.app$/i;
+function isPlaceholderEmail(email?: string | null): boolean {
+  return !!email && PLACEHOLDER_EMAIL_RE.test(email.trim());
+}
+
 // ── Send email via the send-email Edge Function ──
 async function sendEmail(
   supabaseUrl: string,
@@ -106,7 +116,7 @@ async function processWelcomeEmails(supabase: ReturnType<typeof getSupabase>): P
   let count = 0;
   for (const user of newUsers) {
     if (sentSet.has(user.id)) continue;
-    if (!user.email) continue;
+    if (!user.email || isPlaceholderEmail(user.email)) continue;
 
     const ok = await sendEmail(
       supabaseUrl,
@@ -213,7 +223,7 @@ async function sendWinBackBatch(
   let count = 0;
   for (const user of users) {
     if (sentSet.has(user.id)) continue;
-    if (!user.email) continue;
+    if (!user.email || isPlaceholderEmail(user.email)) continue;
 
     const days = user.days_since_last_ride ?? 7;
 

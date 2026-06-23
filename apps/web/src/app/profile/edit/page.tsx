@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, realEmail } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { AvatarCropModal } from '@/components/AvatarCropModal';
 
@@ -43,8 +43,8 @@ export default function EditProfilePage() {
         const meta = session.user.user_metadata;
         setFullName(meta?.full_name || meta?.name || '');
         setPhone(session.user.phone || meta?.phone || '');
-        setEmail(session.user.email || '');
-        setOriginalEmail(session.user.email || '');
+        setEmail(realEmail(session.user.email) ?? '');
+        setOriginalEmail(realEmail(session.user.email) ?? '');
         setAvatarUrlState((meta?.avatar_url as string | undefined) ?? null);
       }
     });
