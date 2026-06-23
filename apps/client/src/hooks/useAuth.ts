@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { configureStorage, createStorageAdapter, authService, customerService } from '@tricigo/api';
-import { identifyUser, resetAnalytics, logger } from '@tricigo/utils';
+import { identifyUser, resetAnalytics, logger, realEmail } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useChatStore } from '@/stores/chat.store';
@@ -98,7 +98,7 @@ export function useAuthInit() {
               if (mounted && user) {
                 logger.info('[Auth] Web fast-path: session restored from localStorage');
                 setUser(user);
-                identifyUser(user.id, { email: user.email });
+                identifyUser(user.id, { email: realEmail(user.email) ?? undefined });
                 customerService.ensureProfile(user.id).catch((err) =>
                   logger.warn('[Auth] Failed to ensure profile:', { error: String(err) }),
                 );
@@ -121,7 +121,7 @@ export function useAuthInit() {
             : await withTimeout(authService.getCurrentUser(), 8000, 'getCurrentUser');
           if (mounted) setUser(user);
           if (user) {
-            identifyUser(user.id, { email: user.email });
+            identifyUser(user.id, { email: realEmail(user.email) ?? undefined });
             customerService.ensureProfile(user.id).catch((err) =>
               logger.warn('[Auth] Failed to ensure profile:', { error: String(err) }),
             );
@@ -186,7 +186,7 @@ export function useAuthInit() {
                 ? await authService.getUserById(userId)
                 : await authService.getCurrentUser();
               if (mounted) setUser(user);
-              if (user) identifyUser(user.id, { email: user.email });
+              if (user) identifyUser(user.id, { email: realEmail(user.email) ?? undefined });
             } catch {
               // Don't reset on token refresh failures — session may still be valid
               if (event === 'SIGNED_IN' && mounted) reset();

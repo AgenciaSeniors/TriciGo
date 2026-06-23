@@ -11,7 +11,7 @@ import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
-import { triggerHaptic } from '@tricigo/utils';
+import { triggerHaptic, realEmail } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,7 +31,7 @@ export default function EditProfileScreen() {
   const setUser = useAuthStore((s) => s.setUser);
 
   const [fullName, setFullName] = useState(user?.full_name ?? '');
-  const [email, setEmail] = useState(user?.email ?? '');
+  const [email, setEmail] = useState(realEmail(user?.email) ?? '');
   const [saving, setSaving] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url ?? null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);

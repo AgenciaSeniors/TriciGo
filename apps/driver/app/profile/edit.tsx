@@ -14,7 +14,7 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { authService, driverService } from '@tricigo/api';
-import { isValidEmail, isValidCubanPhone, normalizeCubanPhone, PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
+import { isValidEmail, isValidCubanPhone, normalizeCubanPhone, PACKAGE_CATEGORY_LABELS, realEmail } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import type { Vehicle } from '@tricigo/types';
@@ -50,7 +50,7 @@ export default function EditProfileScreen() {
 
   // Form state
   const [fullName, setFullName] = useState(user?.full_name ?? '');
-  const [email, setEmail] = useState(user?.email ?? '');
+  const [email, setEmail] = useState(realEmail(user?.email) ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar_url ?? null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);

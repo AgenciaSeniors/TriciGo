@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
+import { realEmail } from '@tricigo/utils';
 import type { User } from '@supabase/supabase-js';
 
 export function WebHeader() {
@@ -80,7 +81,7 @@ export function WebHeader() {
   };
 
   const initial = user?.user_metadata?.full_name?.[0]
-    ?? user?.email?.[0]?.toUpperCase()
+    ?? realEmail(user?.email)?.[0]?.toUpperCase()
     ?? '?';
   const avatarUrl = user?.user_metadata?.avatar_url;
 
@@ -203,7 +204,7 @@ export function WebHeader() {
                 {avatarUrl ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
               </div>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', flex: 1, fontWeight: 500 }}>
-                {user?.user_metadata?.full_name || user?.email}
+                {user?.user_metadata?.full_name || realEmail(user?.email) || user?.phone}
               </span>
               <button
                 onClick={signOut}

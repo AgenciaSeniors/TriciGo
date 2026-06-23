@@ -17,7 +17,7 @@ import { authService, isRateLimitError } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
-import { isValidEmail, sanitizeText, isValidCubanId, isValidCubanPhone, normalizeCubanPhone, isValidOTP, CUBA_PROVINCES, CUBA_MUNICIPALITIES } from '@tricigo/utils';
+import { isValidEmail, sanitizeText, isValidCubanId, isValidCubanPhone, normalizeCubanPhone, isValidOTP, CUBA_PROVINCES, CUBA_MUNICIPALITIES, realEmail } from '@tricigo/utils';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 
 function useSteps() {
@@ -142,15 +142,17 @@ export default function PersonalInfoScreen() {
   // so a one-shot useState initializer leaves the field blank. We use a ref to
   // remember whether the user typed manually so we don't clobber their input
   // when `user.email` arrives later.
-  const [email, setEmailState] = useState(personalInfo.email || user?.email || '');
+  const [email, setEmailState] = useState(personalInfo.email || realEmail(user?.email) || '');
   const userEditedEmailRef = useRef(!!personalInfo.email);
   const setEmail = (val: string) => {
     userEditedEmailRef.current = true;
     setEmailState(val);
   };
   useEffect(() => {
-    if (!userEditedEmailRef.current && !email && user?.email) {
-      setEmailState(user.email);
+    // Skip the synthetic phone-OTP placeholder — only pre-fill a real address.
+    const real = realEmail(user?.email);
+    if (!userEditedEmailRef.current && !email && real) {
+      setEmailState(real);
     }
   }, [user?.email, email]);
   const [identityNumber, setIdentityNumber] = useState(personalInfo.identity_number || '');

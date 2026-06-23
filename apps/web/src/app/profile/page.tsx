@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import { realEmail } from '@tricigo/utils';
 
 /* ── SVG Icons ── */
 function IconEdit() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>; }
@@ -136,7 +137,7 @@ export default function ProfilePage() {
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name || 'Usuario';
-  const email = user?.email || '';
+  const email = realEmail(user?.email) ?? '';
   const initial = fullName[0]?.toUpperCase() || '?';
 
   return (

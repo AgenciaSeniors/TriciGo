@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '../client';
 import type { AppNotification, NotificationType } from '@tricigo/types';
 import { realtimeStatusLogger } from './_realtime-status';
+import { realEmail } from '@tricigo/utils';
 
 export const notificationService = {
   async registerPushToken(
@@ -285,7 +286,8 @@ export const notificationService = {
       .select('email')
       .eq('id', userId)
       .single();
-    return data?.email ?? null;
+    // Never return the synthetic phone-OTP placeholder (would bounce).
+    return realEmail(data?.email);
   },
 
   /**
