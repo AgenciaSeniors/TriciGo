@@ -645,6 +645,45 @@ export const notificationService = {
   },
 
   /**
+   * Admin-only. Send a campaign push to an EXPLICIT list of user_ids via
+   * the `send-push` edge function (service-role).
+   *
+   * Unlike the legacy `sendToMultipleUsers` path (which fetches tokens in
+   * the browser and POSTs to Expo directly — blocked by CORS and never
+   * persisted to the inbox), this delivers server-side AND persists to the
+   * in-app `notifications` inbox, exactly like `broadcastToActiveUsers`,
+   * but targeted to a precomputed segment instead of all active users.
+   *
+   * Returns the EF's real `{ sent, failed }` plus the count targeted, so
+   * the caller can surface accurate delivery numbers instead of guessing.
+   */
+  async sendCampaignPush(
+    userIds: string[],
+    opts: { title: string; body: string; deepLink?: string; contentId?: string },
+  ): Promise<{ sent: number; failed: number; targeted: number }> {
+    if (userIds.length === 0) return { sent: 0, failed: 0, targeted: 0 };
+
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('send-push', {
+      body: {
+        user_ids: userIds,
+        title: opts.title,
+        body: opts.body,
+        category: 'campaign',
+        data: {
+          deep_link: opts.deepLink ?? 'tricigo://home',
+          content_type: 'campaign',
+          ...(opts.contentId ? { content_id: opts.contentId } : {}),
+        },
+      },
+    });
+    if (error) throw error;
+
+    const res = (data ?? {}) as { sent?: number; failed?: number };
+    return { sent: res.sent ?? 0, failed: res.failed ?? 0, targeted: userIds.length };
+  },
+
+  /**
    * Subscribe to real-time inbox notifications for a user.
    * Follows the same pattern as chatService.subscribeToMessages().
    */
