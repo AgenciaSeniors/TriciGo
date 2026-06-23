@@ -238,6 +238,18 @@ export const adminService = {
       users: { full_name: string; phone: string; email: string | null };
     };
 
+    // Driver's LIVE work wallet (single-wallet model: 'tricicoin' — the
+    // account the accept-ride commission gate checks, 00300/00340). The admin
+    // adjusts THIS wallet via "Ajustar saldo TC", so surface its balance here
+    // instead of leaving the admin to top up blind. Tolerate a driver who has
+    // no wallet row yet (null).
+    const walletRes = await supabase
+      .from('wallet_accounts')
+      .select('balance, held_balance, is_active, is_frozen, frozen_reason')
+      .eq('user_id', profile.user_id)
+      .eq('account_type', 'tricicoin')
+      .maybeSingle();
+
     // Keep only the most recent document per document_type.
     // Drivers may re-upload (e.g. after rejection or earlier failures), which
     // leaves stale rows in the table. The admin UI should only see the latest.
@@ -253,6 +265,13 @@ export const adminService = {
     return {
       profile,
       vehicle: (vehiclesRes.data?.[0] as Vehicle) ?? null,
+      wallet: (walletRes.data as {
+        balance: number;
+        held_balance: number;
+        is_active: boolean;
+        is_frozen: boolean;
+        frozen_reason: string | null;
+      } | null) ?? null,
       documents: Array.from(latestByType.values()),
       scoreEvents: (scoreEventsRes.data as DriverScoreEvent[]) ?? [],
     };
@@ -670,9 +689,13 @@ export const adminService = {
       const entries = Array.isArray(tx.ledger_entries)
         ? (tx.ledger_entries as Array<{ amount: number | string }>)
         : [];
-      const amount = entries.reduce((max, e) => {
-        const a = Math.abs(Number(e.amount) || 0);
-        return a > max ? a : max;
+      // Gross magnitude moved = sum of the positive (credit) legs. For a
+      // balanced double-entry txn this equals one leg's magnitude; for a
+      // multi-leg txn (e.g. transfer + commission split) it reflects the full
+      // amount instead of just the largest single leg (max-abs hid that).
+      const amount = entries.reduce((sum, e) => {
+        const a = Number(e.amount) || 0;
+        return a > 0 ? sum + a : sum;
       }, 0);
       const { ledger_entries: _entries, ...rest } = tx;
       return { ...rest, amount } as LedgerTransaction;
@@ -1242,14 +1265,38 @@ export const adminService = {
 
     if (userRes.error) throw userRes.error;
 
+    const user = userRes.data as User;
+
+    // Drivers also hold a LIVE work wallet ('tricicoin'). The adjust modal on
+    // this page offers it for drivers, so fetch it too — otherwise a tricicoin
+    // top-up is invisible here (only customer_cash is shown). Riders skip this.
+    type WorkWallet = {
+      balance: number;
+      held_balance: number;
+      is_active: boolean;
+      is_frozen: boolean;
+      frozen_reason: string | null;
+    };
+    let driverWallet: WorkWallet | null = null;
+    if (user.role === 'driver') {
+      const dwRes = await supabase
+        .from('wallet_accounts')
+        .select('balance, held_balance, is_active, is_frozen, frozen_reason')
+        .eq('user_id', userId)
+        .eq('account_type', 'tricicoin')
+        .maybeSingle();
+      driverWallet = (dwRes.data as WorkWallet | null) ?? null;
+    }
+
     return {
-      user: userRes.data as User,
+      user,
       wallet: walletRes.data as {
         id: string;
         balance: number;
         held_balance: number;
         is_active: boolean;
       } | null,
+      driverWallet,
       transfers: (transfersRes.data ?? []) as Array<{
         id: string;
         from_user_id: string;

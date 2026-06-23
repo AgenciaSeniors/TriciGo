@@ -42,9 +42,18 @@ import {
   Calendar,
 } from 'lucide-react';
 
+type DriverWallet = {
+  balance: number;
+  held_balance: number;
+  is_active: boolean;
+  is_frozen: boolean;
+  frozen_reason: string | null;
+};
+
 type DriverDetail = {
   profile: DriverProfile & { users: { full_name: string; phone: string; email: string | null } };
   vehicle: Vehicle | null;
+  wallet: DriverWallet | null;
   documents: DriverDocument[];
   scoreEvents: DriverScoreEvent[];
 };
@@ -254,7 +263,8 @@ export default function DriverDetailPage() {
     try {
       const result = await adminService.adjustWallet(profile.user_id, args.accountType, args.amountCup, args.reason);
       showToast('success', t('admin_ops.adjust_success', {
-        defaultValue: `Saldo ajustado. Nuevo balance: ${result.new_balance.toLocaleString()} CUP`,
+        balance: formatCUP(result.new_balance),
+        defaultValue: 'Saldo ajustado. Nuevo balance: {{balance}}',
       }));
       setWalletModalOpen(false);
       await refreshDriver();
@@ -362,7 +372,7 @@ export default function DriverDetailPage() {
     );
   }
 
-  const { profile, vehicle, documents, scoreEvents } = driver;
+  const { profile, vehicle, wallet, documents, scoreEvents } = driver;
   const status = profile.status as DriverStatus;
   const statusStyle = STATUS_STYLES[status];
   const verifiedDocsCount = documents.filter((d) => d.is_verified).length;
@@ -921,6 +931,40 @@ export default function DriverDetailPage() {
                 {profile.total_rides_offered ?? 0} {t('drivers.rides_offered', { defaultValue: 'viajes ofrecidos' })}
               </p>
             </div>
+          </section>
+
+          {/* Work wallet (tricicoin) — the LIVE balance the "Ajustar saldo TC"
+              button tops up. Surfaced so the admin doesn't adjust blind. */}
+          <section className="bg-surface-elevated rounded-xl border border-line p-5">
+            <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider mb-3">
+              {t('drivers.work_wallet', { defaultValue: 'Saldo de trabajo (TC)' })}
+            </h2>
+            {wallet ? (
+              <div className="space-y-3">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted">{t('drivers.wallet_balance', { defaultValue: 'Disponible' })}</span>
+                  <span className="text-xl font-bold text-primary-500 tabular-nums">{formatCUP(wallet.balance)}</span>
+                </div>
+                {wallet.held_balance > 0 && (
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-xs text-ink-muted">{t('drivers.wallet_held', { defaultValue: 'Retenido' })}</span>
+                    <span className="text-sm font-semibold text-ink tabular-nums">{formatCUP(wallet.held_balance)}</span>
+                  </div>
+                )}
+                {wallet.is_frozen && (
+                  <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+                    <p className="text-xs font-semibold text-red-700">
+                      {t('drivers.wallet_frozen', { defaultValue: 'Billetera congelada' })}
+                    </p>
+                    {wallet.frozen_reason && (
+                      <p className="text-[11px] text-red-600 mt-0.5">{wallet.frozen_reason}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-subtle">{t('drivers.no_work_wallet', { defaultValue: 'Sin billetera de trabajo todavía' })}</p>
+            )}
           </section>
 
           {/* Churn Risk */}
