@@ -10,6 +10,8 @@ import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
 import { exportToCsv } from '@/lib/exportCsv';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useRequestGuard } from '@/hooks/useRequestGuard';
 
 const PAGE_SIZE = 20;
 
@@ -55,25 +57,32 @@ export default function UsersPage() {
     return t(`users.role_${r}`, { defaultValue: fallbacks[r] ?? r });
   }, [t]);
 
+  // Debounce the free-text search so typing doesn't fire a fetch per keystroke.
+  const debouncedSearch = useDebouncedValue(filters.search, 300);
+  const beginRequest = useRequestGuard();
+
   const fetchUsers = useCallback(async () => {
+    const isLatest = beginRequest();
     setLoading(true);
     setError(null);
     try {
       const query: Record<string, unknown> = {};
       if (roleFilter !== 'all') query.role = roleFilter;
-      if (filters.search) query.search = filters.search;
+      if (debouncedSearch) query.search = debouncedSearch;
       if (filters.dateFrom) query.dateFrom = filters.dateFrom;
       if (filters.dateTo) query.dateTo = filters.dateTo;
       if (filters.isActive) query.isActive = filters.isActive === 'true';
       const data = await adminService.getUsers(page, PAGE_SIZE, query);
+      if (!isLatest()) return;
       setUsers(data);
     } catch (err) {
+      if (!isLatest()) return;
       setUsers([]);
       setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
-  }, [page, roleFilter, filters, t]);
+  }, [page, roleFilter, debouncedSearch, filters.dateFrom, filters.dateTo, filters.isActive, beginRequest]);
 
   useEffect(() => {
     void fetchUsers();

@@ -69,7 +69,8 @@ export default function UserDetailPage() {
     try {
       const result = await adminService.adjustWallet(id, args.accountType, args.amountCup, args.reason);
       showToast('success', t('admin_ops.adjust_success', {
-        defaultValue: `Saldo ajustado. Nuevo balance: ${result.new_balance.toLocaleString()} CUP`,
+        balance: formatCurrency(result.new_balance),
+        defaultValue: 'Saldo ajustado. Nuevo balance: {{balance}}',
       }));
       setWalletModalOpen(false);
       // Refresh user detail to see new balance
@@ -167,7 +168,7 @@ export default function UserDetailPage() {
     );
   }
 
-  const { user, wallet, transfers, penalties } = detail;
+  const { user, wallet, driverWallet, transfers, penalties } = detail;
   const currentLevel = (user.level ?? 'bronce') as UserLevel;
 
   return (
@@ -347,6 +348,35 @@ export default function UserDetailPage() {
           </div>
         ) : (
           <p className="text-sm text-ink-subtle">{t('users.no_wallet')}</p>
+        )}
+
+        {/* Driver work wallet (tricicoin) — shown for drivers so a TC top-up
+            via "Ajustar saldo TC" is visible (customer_cash above is the rider
+            balance; the live work wallet is a separate account). */}
+        {user.role === 'driver' && driverWallet && (
+          <div className="mt-4 pt-4 border-t border-line">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
+              {t('users.work_wallet', { defaultValue: 'Saldo de trabajo (TC)' })}
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="bg-surface-sunken rounded-lg p-4">
+                <p className="text-xs text-ink-muted mb-1">{t('users.label_available_balance')}</p>
+                <p className="text-lg font-bold text-primary-500">{formatCurrency(driverWallet.balance)}</p>
+              </div>
+              <div className="bg-surface-sunken rounded-lg p-4">
+                <p className="text-xs text-ink-muted mb-1">{t('users.label_held_balance')}</p>
+                <p className="text-lg font-bold text-ink">{formatCurrency(driverWallet.held_balance)}</p>
+              </div>
+              <div className="bg-surface-sunken rounded-lg p-4">
+                <p className="text-xs text-ink-muted mb-1">{t('users.label_wallet_status')}</p>
+                <p className={`text-lg font-bold ${driverWallet.is_frozen ? 'text-red-600' : 'text-green-600'}`}>
+                  {driverWallet.is_frozen
+                    ? t('users.wallet_frozen', { defaultValue: 'Congelada' })
+                    : t('users.wallet_active')}
+                </p>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

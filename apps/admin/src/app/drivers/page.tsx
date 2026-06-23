@@ -12,6 +12,7 @@ import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { useSortableTable } from '@/hooks/useSortableTable';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { exportToCsv } from '@/lib/exportCsv';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import {
   Search,
   Download,
@@ -97,11 +98,17 @@ export default function DriversPage() {
 
   const hasFilters = !!(statusFilter !== 'all' || search || ratingMin || vehicleType || selectedCity);
 
+  // Debounce the free-text search so typing doesn't fire a fetch per keystroke.
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   // ─── Data loading ──────────────────────────────────────────
   useEffect(() => {
     const supabase = createBrowserClient();
     supabase.from('cities').select('id, name').eq('is_active', true).order('name')
-      .then(({ data }) => { if (data) setCities(data); });
+      .then(
+        ({ data }) => { if (data) setCities(data); },
+        () => { /* city filter is best-effort; ignore load failure */ },
+      );
   }, []);
 
   useEffect(() => {
@@ -112,7 +119,7 @@ export default function DriversPage() {
       try {
         const filters: Record<string, unknown> = {};
         if (statusFilter !== 'all') filters.status = statusFilter;
-        if (search) filters.search = search;
+        if (debouncedSearch) filters.search = debouncedSearch;
         if (ratingMin) filters.ratingMin = parseFloat(ratingMin);
         if (vehicleType) filters.vehicleType = vehicleType;
         if (selectedCity) filters.cityId = selectedCity;
@@ -130,7 +137,7 @@ export default function DriversPage() {
     })();
 
     return () => { cancelled = true; };
-  }, [page, statusFilter, search, ratingMin, vehicleType, selectedCity]);
+  }, [page, statusFilter, debouncedSearch, ratingMin, vehicleType, selectedCity]);
 
   const { sortedData, toggleSort, sortKey, sortDirection } = useSortableTable(drivers, 'created_at');
 

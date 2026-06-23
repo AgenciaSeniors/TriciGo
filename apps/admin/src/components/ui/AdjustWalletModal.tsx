@@ -79,7 +79,9 @@ export function AdjustWalletModal({
 
   if (!open) return null;
 
-  const amount = parseInt(amountStr, 10);
+  // Round rather than parseInt: parseInt('15.9') silently truncates to 15.
+  // Inputs are step=1 so decimals are rare, but this is money — be exact.
+  const amount = Math.round(parseFloat(amountStr));
   const valid =
     !isNaN(amount) &&
     amount > 0 &&

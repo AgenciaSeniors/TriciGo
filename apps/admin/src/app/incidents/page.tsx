@@ -11,6 +11,7 @@ import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { formatAdminDate } from '@/lib/formatDate';
+import { useRequestGuard } from '@/hooks/useRequestGuard';
 
 const PAGE_SIZE = 20;
 
@@ -69,7 +70,10 @@ export default function IncidentsPage() {
     }
   }, [t]);
 
+  const beginRequest = useRequestGuard();
+
   const fetchIncidents = useCallback(async () => {
+    const isLatest = beginRequest();
     setLoading(true);
     setError(null);
     try {
@@ -78,14 +82,16 @@ export default function IncidentsPage() {
         page,
         PAGE_SIZE,
       );
+      if (!isLatest()) return;
       setIncidents(data as unknown as Incident[]);
     } catch (err) {
+      if (!isLatest()) return;
       setIncidents([]);
       setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
-  }, [page, statusFilter]);
+  }, [page, statusFilter, beginRequest]);
 
   useEffect(() => {
     void fetchIncidents();

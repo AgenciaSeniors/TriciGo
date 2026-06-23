@@ -128,6 +128,7 @@ export default function GiftsPage() {
         try {
           await adminService.unfreezeWallet(uid);
           showToast('success', t('gifts.unfreeze_success', { defaultValue: 'Billetera descongelada' }));
+          await fetchData();
         } catch (err) {
           showToast('error', getErrorMessage(err));
         }
