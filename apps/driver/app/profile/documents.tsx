@@ -251,7 +251,7 @@ export default function DocumentsScreen() {
                     <View className="items-end ml-2">
                       <StatusBadge {...badgeProps} />
                       <Text variant="badge" color="secondary" className="mt-1.5">
-                        {new Date(doc.uploaded_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {new Date(doc.uploaded_at).toLocaleDateString('es-CU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Havana' })}
                       </Text>
                     </View>
                   </View>
@@ -306,7 +306,7 @@ export default function DocumentsScreen() {
                         </View>
                         <Text variant="caption" color="primary" className="flex-1">
                           {new Date(check.requested_at).toLocaleDateString('es-CU', {
-                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana',
                           })}
                         </Text>
                         {check.face_match_score != null && (

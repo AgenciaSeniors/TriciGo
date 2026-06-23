@@ -134,6 +134,19 @@ export function getRelativeTime(isoString: string, locale = 'es'): string {
 
 const MONTH_NAMES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
+// Extract calendar/clock parts in America/Havana. The Date part getters
+// (getDate/getMonth/getHours…) use the DEVICE timezone, which shows the wrong
+// hour/day for any user not on Cuba time; Intl with an explicit timeZone fixes it.
+function havanaParts(d: Date): { day: number; month: number; year: number; hours: number; minutes: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Havana',
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  return { day: get('day'), month: get('month') - 1, year: get('year'), hours: get('hour') % 24, minutes: get('minute') };
+}
+
 /**
  * Format a timestamp in one of three styles:
  *  - `relative`: "hace 5 min", "hace 2h", "hace 3d", "ayer"
@@ -161,22 +174,21 @@ export function formatTimestamp(
     if (diffHour < 24) return `hace ${diffHour}h`;
     if (diffDay === 1) return 'ayer';
     if (diffDay < 30) return `hace ${diffDay}d`;
-    return `${d.getDate()} ${MONTH_NAMES_ES[d.getMonth()]}`;
+    const p = havanaParts(d);
+    return `${p.day} ${MONTH_NAMES_ES[p.month]}`;
   }
 
   if (style === 'absolute') {
-    const day = d.getDate();
-    const month = MONTH_NAMES_ES[d.getMonth()];
-    const year = d.getFullYear();
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    return `${day} ${month} ${year}, ${hours}:${minutes}`;
+    const p = havanaParts(d);
+    const month = MONTH_NAMES_ES[p.month];
+    const hours = String(p.hours).padStart(2, '0');
+    const minutes = String(p.minutes).padStart(2, '0');
+    return `${p.day} ${month} ${p.year}, ${hours}:${minutes}`;
   }
 
   // short
-  const day = d.getDate();
-  const month = MONTH_NAMES_ES[d.getMonth()];
-  return `${day} ${month}`;
+  const p = havanaParts(d);
+  return `${p.day} ${MONTH_NAMES_ES[p.month]}`;
 }
 
 /**

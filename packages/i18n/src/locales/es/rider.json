@@ -20,7 +20,7 @@
     "surge_explanation": "Los precios suben temporalmente por el mal tiempo (lluvia, tormenta o frío)",
     "your_usual_service": "Tu servicio habitual",
     "request_service_fare_eta": "Solicitar {{service}} por ${{fare}} · ~{{eta}} min",
-    "usual_fare_range": "Este viaje suele costar ${{low}} - ${{high}}",
+    "usual_fare_range": "Este viaje suele costar {{low}} - {{high}} CUP",
     "calculating": "Calculando...",
     "drivers_active": "{{count}} conductores activos en tu zona",
     "searching_drivers": "Buscando conductores en tu zona...",

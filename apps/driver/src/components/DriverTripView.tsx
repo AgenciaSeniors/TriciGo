@@ -1050,7 +1050,7 @@ export function DriverTripView() {
             variant="bodySmall"
             style={{ marginLeft: 8, color: midnightEmber.state.info }}
           >
-            {t('home.scheduled_at', { time: new Date(activeTrip.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}
+            {t('home.scheduled_at', { time: new Date(activeTrip.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' }) })}
           </Text>
         </View>
       )}

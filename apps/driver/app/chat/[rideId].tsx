@@ -104,7 +104,7 @@ export default function ChatScreen() {
     return (
       <ChatBubble
         message={msg.body}
-        timestamp={new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        timestamp={new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' })}
         isOwn={msg.sender_id === userId}
         isRead={false}
         theme="light"

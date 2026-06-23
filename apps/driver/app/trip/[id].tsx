@@ -379,24 +379,24 @@ export default function TripDetailScreen() {
         <Card theme="light" variant="filled" padding="md" className="bg-white">
           <View className="flex-row justify-between mb-1">
             <Text variant="caption" color="primary" className="opacity-50">{t('trip.created')}</Text>
-            <Text variant="caption" color="primary">{new Date(ride.created_at).toLocaleString('es-CU')}</Text>
+            <Text variant="caption" color="primary">{new Date(ride.created_at).toLocaleString('es-CU', { timeZone: 'America/Havana' })}</Text>
           </View>
           {ride.accepted_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="primary" className="opacity-50">{t('trip.accepted')}</Text>
-              <Text variant="caption" color="primary">{new Date(ride.accepted_at).toLocaleString('es-CU')}</Text>
+              <Text variant="caption" color="primary">{new Date(ride.accepted_at).toLocaleString('es-CU', { timeZone: 'America/Havana' })}</Text>
             </View>
           )}
           {ride.completed_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="primary" className="opacity-50">{t('trip.completed_at')}</Text>
-              <Text variant="caption" color="primary">{new Date(ride.completed_at).toLocaleString('es-CU')}</Text>
+              <Text variant="caption" color="primary">{new Date(ride.completed_at).toLocaleString('es-CU', { timeZone: 'America/Havana' })}</Text>
             </View>
           )}
           {ride.canceled_at && (
             <View className="flex-row justify-between mb-1">
               <Text variant="caption" color="primary" className="opacity-50">{t('trip.canceled_at')}</Text>
-              <Text variant="caption" color="primary">{new Date(ride.canceled_at).toLocaleString('es-CU')}</Text>
+              <Text variant="caption" color="primary">{new Date(ride.canceled_at).toLocaleString('es-CU', { timeZone: 'America/Havana' })}</Text>
             </View>
           )}
         </Card>

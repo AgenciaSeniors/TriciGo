@@ -4235,9 +4235,9 @@ function ReviewingView() {
               {draft.paymentMethod === 'tricicoin'
                 ? `Este viaje suele costar ${formatTRC(Math.max(0, Math.round((fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup) * 0.85) - discount))} – ${formatTRC(Math.max(0, Math.round((fareEstimate.estimated_fare_trc ?? fareEstimate.estimated_fare_cup) * 1.15) - discount))}`
                 : t('home.usual_fare_range', {
-                    low: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 0.85) - discount).toLocaleString(),
-                    high: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 1.15) - discount).toLocaleString(),
-                    defaultValue: 'Este viaje suele costar ${{low}} - ${{high}}',
+                    low: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 0.85) - discount).toLocaleString('es-CU'),
+                    high: Math.max(0, Math.round(fareEstimate.estimated_fare_cup * 1.15) - discount).toLocaleString('es-CU'),
+                    defaultValue: 'Este viaje suele costar {{low}} - {{high}} CUP',
                   })
               }
             </Text>

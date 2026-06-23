@@ -146,6 +146,7 @@ export default function DriverReviewsScreen() {
               day: 'numeric',
               month: 'short',
               year: 'numeric',
+              timeZone: 'America/Havana',
             })}
           </Text>
           <Pressable
