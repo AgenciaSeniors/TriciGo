@@ -267,7 +267,7 @@ export default function SafetyCenterScreen() {
                 <View className="flex-1">
                   <Text variant="bodySmall" style={{ color: tokens.ink.primary }}>{getReportTypeLabel(incident.type)}</Text>
                   <Text variant="caption" style={{ color: tokens.ink.secondary }}>
-                    {new Date(incident.created_at).toLocaleDateString()}
+                    {new Date(incident.created_at).toLocaleDateString('es-CU', { timeZone: 'America/Havana' })}
                   </Text>
                 </View>
                 <Text variant="caption" color={incident.status === 'resolved' ? 'accent' : 'secondary'}>

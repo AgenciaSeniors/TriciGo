@@ -111,6 +111,7 @@ export default function DriverHelpScreen() {
                 {new Date(item.created_at).toLocaleDateString('es-CU', {
                   day: 'numeric',
                   month: 'short',
+                  timeZone: 'America/Havana',
                 })}
               </Text>
             </View>

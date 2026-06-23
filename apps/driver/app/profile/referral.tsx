@@ -106,6 +106,7 @@ export default function DriverReferralScreen() {
                 day: 'numeric',
                 month: 'short',
                 year: 'numeric',
+                timeZone: 'America/Havana',
               })}
               {' \u00b7 '}
               {t('profile.referral_bonus', { amount: formatCUP(item.bonus_amount) })}

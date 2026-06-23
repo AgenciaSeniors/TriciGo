@@ -101,6 +101,7 @@ export default function DriverTicketDetailScreen() {
           {new Date(item.created_at).toLocaleTimeString('es-CU', {
             hour: '2-digit',
             minute: '2-digit',
+            timeZone: 'America/Havana',
           })}
         </Text>
       </View>

@@ -508,7 +508,7 @@ export default function RideDetailScreen() {
             {lostItem.return_fee_cup != null && lostItem.return_fee_cup > 0 && (
               <View className="mt-1">
                 <Text variant="caption" color="secondary">
-                  {t('lost_found.return_fee')}: {lostItem.return_fee_cup} CUP
+                  {t('lost_found.return_fee')}: {formatCUP(lostItem.return_fee_cup)}
                 </Text>
               </View>
             )}

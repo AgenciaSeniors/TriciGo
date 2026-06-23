@@ -642,6 +642,7 @@ function IncomingRideCardInner({
                 time: new Date(ride.scheduled_at).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',
+                  timeZone: 'America/Havana',
                 }),
                 defaultValue: 'Programado: {{time}}',
               })}

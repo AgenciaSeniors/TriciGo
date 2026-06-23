@@ -262,7 +262,7 @@ export default function DriverSafetyCenterScreen() {
                 <View className="flex-1">
                   <Text variant="bodySmall" color="primary">{getReportTypeLabel(incident.type)}</Text>
                   <Text variant="caption" color="primary" className="opacity-50">
-                    {new Date(incident.created_at).toLocaleDateString()}
+                    {new Date(incident.created_at).toLocaleDateString('es-CU', { timeZone: 'America/Havana' })}
                   </Text>
                 </View>
                 <Text variant="caption" color={incident.status === 'resolved' ? 'accent' : 'secondary'}>

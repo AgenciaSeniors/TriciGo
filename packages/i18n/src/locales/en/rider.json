@@ -20,7 +20,7 @@
     "surge_explanation": "Prices rise temporarily due to bad weather (rain, storms or cold)",
     "your_usual_service": "Your usual service",
     "request_service_fare_eta": "Request {{service}} for ${{fare}} · ~{{eta}} min",
-    "usual_fare_range": "This trip usually costs ${{low}} - ${{high}}",
+    "usual_fare_range": "This trip usually costs {{low}} - {{high}} CUP",
     "calculating": "Calculating...",
     "drivers_active": "{{count}} active drivers in your area",
     "searching_drivers": "Searching for drivers in your area...",

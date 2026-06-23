@@ -255,7 +255,7 @@ export default function CorporateProfileScreen() {
       let y = startY + 14;
       for (const item of data.items) {
         if (y > 270) { doc.addPage(); y = 20; }
-        doc.text(new Date(item.date).toLocaleDateString('es-CU', { day: '2-digit', month: 'short' }), 16, y);
+        doc.text(new Date(item.date).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', timeZone: 'America/Havana' }), 16, y);
         doc.text(item.employee_name.substring(0, 30), 50, y);
         doc.text(item.fare_trc.toFixed(2), 160, y);
         y += 7;
@@ -985,6 +985,7 @@ export default function CorporateProfileScreen() {
                                   month: 'short',
                                   hour: '2-digit',
                                   minute: '2-digit',
+                                  timeZone: 'America/Havana',
                                 })}
                               </Text>
                               <Text variant="bodySmall" className="font-medium">{formatTRC(ride.fare_trc)}</Text>
