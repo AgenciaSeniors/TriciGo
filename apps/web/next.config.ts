@@ -76,9 +76,11 @@ const nextConfig: NextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'origin-when-cross-origin' },
           { key: 'X-DNS-Prefetch-Control', value: 'on' },
-          // Force HTTPS for two years (incl. subdomains) and limit powerful
-          // browser features to what the web app actually uses.
-          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+          // Force HTTPS (incl. subdomains), but keep the max-age short (1 day) so a
+          // transient TLS hiccup on a constrained network (e.g. Cuba/Starlink) can't
+          // hard-lock a browser for years. Domain is not on the HSTS preload list, so
+          // no `preload`. Also limit powerful browser features to what the app uses.
+          { key: 'Strict-Transport-Security', value: 'max-age=86400; includeSubDomains' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
           { key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY },
         ],
