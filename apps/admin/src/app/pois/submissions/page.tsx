@@ -209,7 +209,7 @@ export default function PoisSubmissionsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-neutral-500">
-                    {new Date(s.created_at).toLocaleString('es-CU', { dateStyle: 'short', timeStyle: 'short' })}
+                    {new Date(s.created_at).toLocaleString('es-CU', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Havana' })}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {s.status === 'pending' ? (

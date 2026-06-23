@@ -234,7 +234,7 @@ export function AdjustWalletModal({
             </p>
             <p className="mt-1 text-[13px] text-ink">
               {direction === 'credit' ? '+' : '−'}
-              <span className="font-mono">{amount.toLocaleString()}</span>
+              <span className="font-mono">{amount.toLocaleString('es-CU')}</span>
               <span className="ml-1 text-ink-muted">CUP</span>
               <span className="mx-2 text-ink-subtle">→</span>
               <span className="text-ink-muted">

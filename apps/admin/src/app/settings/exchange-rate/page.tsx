@@ -75,6 +75,7 @@ export default function ExchangeRatePage() {
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('es-CU', {
+      timeZone: 'America/Havana',
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -105,7 +106,7 @@ export default function ExchangeRatePage() {
                 </div>
                 <div className="text-ink-muted">
                   <p className="text-sm">1 USD = {Number(currentRate.usd_cup_rate).toLocaleString('es-CU')} CUP</p>
-                  <p className="text-sm">1 TRC = {Number(currentRate.usd_cup_rate).toLocaleString('es-CU')} CUP</p>
+                  <p className="text-sm">1 TRC = 1 CUP</p>
                   <p className="text-xs text-ink-subtle mt-1">
                     {t('exchange_rate.source')}: {currentRate.source === 'eltoque_api' ? 'ElToque API' : t('exchange_rate.manual')}
                   </p>

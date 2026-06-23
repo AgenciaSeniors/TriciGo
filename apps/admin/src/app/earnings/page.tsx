@@ -136,30 +136,30 @@ export default function EarningsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label={t('earnings.kpi_balance', { defaultValue: 'Saldo plataforma' })}
-          value={earnings ? formatTriciCoin(earnings.platform_balance).replace('TRC', '').trim() : '—'}
-          unit="TRC"
+          value={earnings ? formatTriciCoin(earnings.platform_balance).replace(' TC', '').trim() : '—'}
+          unit="TC"
           tone="primary"
           loading={loading}
           icon={Wallet}
         />
         <KpiCard
           label={t('earnings.kpi_today', { defaultValue: 'Hoy' })}
-          value={earnings ? formatTriciCoin(earnings.earnings_today).replace('TRC', '').trim() : '—'}
-          unit="TRC"
+          value={earnings ? formatTriciCoin(earnings.earnings_today).replace(' TC', '').trim() : '—'}
+          unit="TC"
           loading={loading}
           icon={DollarSign}
         />
         <KpiCard
           label={t('earnings.kpi_week', { defaultValue: 'Esta semana' })}
-          value={earnings ? formatTriciCoin(earnings.earnings_this_week).replace('TRC', '').trim() : '—'}
-          unit="TRC"
+          value={earnings ? formatTriciCoin(earnings.earnings_this_week).replace(' TC', '').trim() : '—'}
+          unit="TC"
           loading={loading}
           icon={TrendingUp}
         />
         <KpiCard
           label={t('earnings.kpi_month', { defaultValue: 'Este mes' })}
-          value={earnings ? formatTriciCoin(earnings.earnings_this_month).replace('TRC', '').trim() : '—'}
-          unit="TRC"
+          value={earnings ? formatTriciCoin(earnings.earnings_this_month).replace(' TC', '').trim() : '—'}
+          unit="TC"
           tone={earnings && earnings.earnings_this_month > 0 ? 'success' : 'default'}
           loading={loading}
           icon={TrendingUp}

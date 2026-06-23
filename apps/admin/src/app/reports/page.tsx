@@ -260,7 +260,7 @@ export default function ReportsPage() {
         t('rides.csv_col_destination', { defaultValue: 'Destino' }),
       ];
       const rows = data.map(r => [
-        new Date(r.created_at).toLocaleDateString(),
+        new Date(r.created_at).toLocaleDateString('es-CU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Havana' }),
         r.service_type, r.status,
         r.estimated_fare_cup, r.final_fare_trc,
         r.payment_method, r.pickup_address, r.dropoff_address,
@@ -421,8 +421,8 @@ export default function ReportsPage() {
               ))}
             </div>
             <div className="flex justify-between mt-2 text-xs text-ink-subtle">
-              <span>{ridesByDay[0]?.day ? new Date(ridesByDay[0].day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' }) : ''}</span>
-              <span>{ridesByDay[ridesByDay.length - 1]?.day ? new Date(ridesByDay[ridesByDay.length - 1]!.day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' }) : ''}</span>
+              <span>{ridesByDay[0]?.day ? new Date(ridesByDay[0].day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : ''}</span>
+              <span>{ridesByDay[ridesByDay.length - 1]?.day ? new Date(ridesByDay[ridesByDay.length - 1]!.day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : ''}</span>
             </div>
           </section>
 
@@ -461,13 +461,13 @@ export default function ReportsPage() {
               <div className="flex justify-between mt-2 text-xs text-ink-subtle">
                 <span>
                   {forecastData[0]?.day
-                    ? new Date(forecastData[0].day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' })
+                    ? new Date(forecastData[0].day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric', timeZone: 'UTC' })
                     : ''}
                 </span>
                 <span className="text-primary-400 font-medium">← {t('reports.predicted')} →</span>
                 <span>
                   {forecastData[forecastData.length - 1]?.day
-                    ? new Date(forecastData[forecastData.length - 1]!.day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric' })
+                    ? new Date(forecastData[forecastData.length - 1]!.day).toLocaleDateString('es-CU', { month: 'short', day: 'numeric', timeZone: 'UTC' })
                     : ''}
                 </span>
               </div>
