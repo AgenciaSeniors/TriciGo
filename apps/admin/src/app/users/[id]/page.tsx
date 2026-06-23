@@ -69,7 +69,8 @@ export default function UserDetailPage() {
     try {
       const result = await adminService.adjustWallet(id, args.accountType, args.amountCup, args.reason);
       showToast('success', t('admin_ops.adjust_success', {
-        defaultValue: `Saldo ajustado. Nuevo balance: ${result.new_balance.toLocaleString()} CUP`,
+        balance: formatCurrency(result.new_balance),
+        defaultValue: 'Saldo ajustado. Nuevo balance: {{balance}}',
       }));
       setWalletModalOpen(false);
       // Refresh user detail to see new balance

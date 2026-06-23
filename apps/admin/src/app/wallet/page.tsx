@@ -153,12 +153,17 @@ export default function WalletPage() {
     [transactions, sortTransactions, sortRows],
   );
 
-  async function handleRecharge(id: string, action: 'approved' | 'rejected') {
+  async function handleRecharge(r: RechargeRow, action: 'approved' | 'rejected') {
+    const id = r.id;
     if (action === 'approved') {
       setConfirmModal({
         open: true,
         title: t('wallet_admin.approve_recharge_title', { defaultValue: 'Aprobar recarga' }),
-        message: t('wallet_admin.approve_recharge_msg', { defaultValue: '¿Confirmás aprobar esta recarga? Se va a acreditar al usuario.' }),
+        message: t('wallet_admin.approve_recharge_msg', {
+          amount: formatTriciCoin(r.amount),
+          user: r.user_name || '—',
+          defaultValue: '¿Confirmás acreditar {{amount}} a {{user}}? Esta acción acredita el saldo al usuario.',
+        }),
         action: async () => {
           setConfirmModal((prev) => ({ ...prev, open: false }));
           setProcessing(id);
@@ -376,14 +381,14 @@ export default function WalletPage() {
             {
               label: t('wallet_admin.action_approve', { defaultValue: 'Aprobar' }),
               onClick: (r) => {
-                if (processing !== r.id) void handleRecharge(r.id, 'approved');
+                if (processing !== r.id) void handleRecharge(r, 'approved');
               },
             },
             {
               label: t('wallet_admin.action_reject', { defaultValue: 'Rechazar' }),
               tone: 'danger',
               onClick: (r) => {
-                if (processing !== r.id) void handleRecharge(r.id, 'rejected');
+                if (processing !== r.id) void handleRecharge(r, 'rejected');
               },
             },
           ]}
