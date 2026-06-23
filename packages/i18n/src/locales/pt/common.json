@@ -282,7 +282,8 @@
 
   "reviews": {
     "title": "Minhas avaliações",
-    "total_count": "{{count}} avaliações",
+    "total_count_one": "{{count}} avaliação",
+    "total_count_other": "{{count}} avaliações",
     "no_reviews": "Você ainda não tem avaliações",
     "tags_breakdown_title": "O que os passageiros destacam",
     "tags_positive_label": "O que vai bem",

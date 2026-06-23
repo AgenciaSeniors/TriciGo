@@ -593,7 +593,8 @@ function IncomingRideCardInner({
               icon="people-outline"
               label={t('home.shared_ride_chip', {
                 count: Math.max(0, 4 - (ride.shared_ride_seats_occupied ?? 1)),
-                defaultValue: 'Comparte · {{count}} asientos',
+                defaultValue_one: 'Comparte · {{count}} asiento',
+                defaultValue_other: 'Comparte · {{count}} asientos',
               })}
               variant="accent"
             />
