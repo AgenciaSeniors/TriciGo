@@ -283,7 +283,8 @@
 
   "reviews": {
     "title": "Mis reseñas",
-    "total_count": "{{count}} reseñas",
+    "total_count_one": "{{count}} reseña",
+    "total_count_other": "{{count}} reseñas",
     "no_reviews": "Aún no tienes reseñas",
     "tags_breakdown_title": "Lo que destacan los pasajeros",
     "tags_positive_label": "Lo bueno",

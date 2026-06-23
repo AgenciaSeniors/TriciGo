@@ -283,7 +283,8 @@
 
   "reviews": {
     "title": "My reviews",
-    "total_count": "{{count}} reviews",
+    "total_count_one": "{{count}} review",
+    "total_count_other": "{{count}} reviews",
     "no_reviews": "No reviews yet",
     "tags_breakdown_title": "What riders highlight",
     "tags_positive_label": "What's working",
