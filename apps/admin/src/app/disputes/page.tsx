@@ -156,7 +156,7 @@ export default function DisputesPage() {
       const d = selected as unknown as { ride_final_fare_trc?: number; ride_estimated_fare_trc?: number };
       const maxRefund = d.ride_final_fare_trc ?? d.ride_estimated_fare_trc ?? 100000;
       if (amount > maxRefund) {
-        showToast('warning', t('disputes.refund_limit', { defaultValue: `El reembolso no puede superar ${maxRefund} TRC` }).replace('{max}', String(maxRefund)));
+        showToast('warning', t('disputes.refund_limit', { max: formatTRC(maxRefund), defaultValue: 'El reembolso no puede superar {{max}}' }));
         setResolving(false);
         return;
       }

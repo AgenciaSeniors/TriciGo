@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Download, RefreshCcw, Search, FileText } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, formatCUP, formatUSD } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
@@ -27,16 +27,22 @@ type ReceiptRow = Awaited<ReturnType<typeof adminService.getRecentReceipts>>[num
 
 const PAGE_SIZE = 50;
 
+// Receipt amounts arrive as numeric strings; these thin wrappers parse +
+// guard NaN, then delegate to the canonical @tricigo/utils formatters so
+// USD/CUP rendering stays consistent with the rest of the admin.
 function formatUsd(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
-  return '$' + (Number.isFinite(n) ? n.toFixed(2) : '0.00');
+  return formatUSD(Number.isFinite(n) ? n : 0);
 }
 
 function formatCup(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
-  return new Intl.NumberFormat('es-CU', { maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0) + ' CUP';
+  return formatCUP(Number.isFinite(n) ? n : 0);
 }
 
+// TC on receipts is the USD-pegged TriciCoin unit shown with 2 decimals
+// (e.g. "19.41 TC"); the canonical formatTriciCoin rounds to whole units,
+// so it does NOT apply here. Kept local on purpose.
 function formatTc(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
   return (Number.isFinite(n) ? n.toFixed(2) : '0.00') + ' TC';
@@ -132,7 +138,7 @@ export default function AdminReceiptsPage() {
         </div>
         <div className="rounded-xl border border-line bg-surface p-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('receipts.kpi_total_tc', { defaultValue: 'TC acreditados' })}</p>
-          <p className="mt-1 font-editorial text-[26px] leading-none italic text-ink">{totals.sumTc.toFixed(0)} TC</p>
+          <p className="mt-1 font-editorial text-[26px] leading-none italic text-ink">{formatTc(totals.sumTc)}</p>
         </div>
         <div className="rounded-xl border border-line bg-surface p-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('receipts.kpi_with_pdf', { defaultValue: 'Con PDF' })}</p>
