@@ -166,7 +166,7 @@ export default function TicketDetailPage() {
                       <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.4 }}>{m.message}</p>
                     </div>
                     <p style={{ margin: '0.2rem 0.25rem 0', fontSize: '0.7rem', color: 'var(--text-tertiary)', textAlign: isOwn ? 'right' : 'left' }}>
-                      {new Date(m.created_at).toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {new Date(m.created_at).toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' })}
                     </p>
                   </div>
                 );

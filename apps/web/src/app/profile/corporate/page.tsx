@@ -388,7 +388,7 @@ export default function CorporatePage() {
       doc.setFontSize(12);
       doc.text(`Período: ${data.period}`, 130, 40);
       doc.setFontSize(9);
-      doc.text(`Generada: ${new Date(data.generated_at).toLocaleDateString('es-CU')}`, 130, 46);
+      doc.text(`Generada: ${new Date(data.generated_at).toLocaleDateString('es-CU', { timeZone: 'America/Havana' })}`, 130, 46);
 
       // Table header
       const startY = 62;
@@ -409,10 +409,10 @@ export default function CorporatePage() {
           doc.addPage();
           rowY = 20;
         }
-        doc.text(new Date(item.date).toLocaleDateString('es-CU', { day: '2-digit', month: 'short' }), 16, rowY);
+        doc.text(new Date(item.date).toLocaleDateString('es-CU', { day: '2-digit', month: 'short', timeZone: 'America/Havana' }), 16, rowY);
         doc.text(item.employee_name.substring(0, 30), 50, rowY);
         doc.text(item.employee_phone, 110, rowY);
-        doc.text(item.fare_trc.toFixed(2), 160, rowY);
+        doc.text(Math.round(item.fare_trc).toLocaleString('es-CU'), 160, rowY);
         rowY += 7;
       }
 
@@ -424,11 +424,11 @@ export default function CorporatePage() {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.text(`Total viajes: ${data.total_rides}`, 14, rowY);
-      doc.text(`Total: ${data.total_trc.toFixed(2)} TRC`, 130, rowY);
+      doc.text(`Total: ${Math.round(data.total_trc).toLocaleString('es-CU')} TRC`, 130, rowY);
       if (data.budget_trc > 0) {
         rowY += 7;
         doc.setFont('helvetica', 'normal');
-        doc.text(`Presupuesto mensual: ${data.budget_trc.toFixed(2)} TRC`, 14, rowY);
+        doc.text(`Presupuesto mensual: ${Math.round(data.budget_trc).toLocaleString('es-CU')} TRC`, 14, rowY);
       }
 
       doc.save(`factura-${data.account_name.replace(/\s/g, '_')}-${data.period.replace(/\s/g, '_')}.pdf`);
@@ -615,7 +615,7 @@ export default function CorporatePage() {
                       <div style={{ width: `${budgetPercent}%`, background: budgetPercent < 20 ? '#dc2626' : 'var(--primary)', borderRadius: 3 }} />
                     </div>
                     <p style={{ margin: '0.3rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      {budgetRemaining.toFixed(2)} / {acc.monthly_budget_trc.toFixed(2)} {t('corporate_remaining', { defaultValue: 'TRC restante' })}
+                      {Math.round(budgetRemaining).toLocaleString('es-CU')} / {Math.round(acc.monthly_budget_trc).toLocaleString('es-CU')} {t('corporate_remaining', { defaultValue: 'TRC restante' })}
                     </p>
                   </div>
                 )}
@@ -626,7 +626,7 @@ export default function CorporatePage() {
                     <p style={labelStyle}>{t('corporate_balance', { defaultValue: 'Balance corporativo' })}</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {(corporateBalances[acc.id] ?? 0).toFixed(2)} TRC
+                        {Math.round(corporateBalances[acc.id] ?? 0).toLocaleString('es-CU')} TRC
                       </p>
                       <button
                         onClick={() => setRechargeAccountId(rechargeAccountId === acc.id ? null : acc.id)}
@@ -753,7 +753,7 @@ export default function CorporatePage() {
                     {acc.per_ride_cap_trc > 0 && (
                       <div style={{ marginBottom: '0.75rem' }}>
                         <p style={labelStyle}>{t('corporate_per_ride', { defaultValue: 'Máximo por viaje' })}</p>
-                        <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{acc.per_ride_cap_trc.toFixed(2)} TRC</p>
+                        <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{Math.round(acc.per_ride_cap_trc).toLocaleString('es-CU')} TRC</p>
                       </div>
                     )}
                     {acc.allowed_service_types.length > 0 && (
@@ -1153,8 +1153,8 @@ export default function CorporatePage() {
                                       <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{r.phone}</span>
                                     </td>
                                     <td style={{ textAlign: 'right', padding: '0.5rem 0.4rem', color: 'var(--text-primary)' }}>{r.total_rides}</td>
-                                    <td style={{ textAlign: 'right', padding: '0.5rem 0.4rem', color: 'var(--text-primary)', fontWeight: 500 }}>{r.total_spent_trc.toFixed(2)}</td>
-                                    <td style={{ textAlign: 'right', padding: '0.5rem 0.4rem', color: 'var(--text-secondary)' }}>{r.avg_fare_trc.toFixed(2)}</td>
+                                    <td style={{ textAlign: 'right', padding: '0.5rem 0.4rem', color: 'var(--text-primary)', fontWeight: 500 }}>{Math.round(r.total_spent_trc).toLocaleString('es-CU')}</td>
+                                    <td style={{ textAlign: 'right', padding: '0.5rem 0.4rem', color: 'var(--text-secondary)' }}>{Math.round(r.avg_fare_trc).toLocaleString('es-CU')}</td>
                                   </tr>
                                 ))}
                               </tbody>
