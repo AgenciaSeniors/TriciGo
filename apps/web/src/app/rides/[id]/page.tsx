@@ -355,7 +355,7 @@ export default function RideDetailPage() {
                       {ride.driver_rating != null && (
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', margin: 0 }}>
                           ★ {ride.driver_rating.toFixed(1)}
-                          {ride.driver_total_rides != null && ` · ${ride.driver_total_rides} viajes`}
+                          {ride.driver_total_rides != null && ` · ${ride.driver_total_rides} ${ride.driver_total_rides === 1 ? 'viaje' : 'viajes'}`}
                         </p>
                       )}
                     </div>
