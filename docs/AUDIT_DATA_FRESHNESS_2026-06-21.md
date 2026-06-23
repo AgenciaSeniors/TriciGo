@@ -33,6 +33,23 @@ Documentada en **CLAUDE.md** → "Auditoría de frescura de datos (stale-on-moun
 - **#633** — Fase 1: 7 pantallas cliente + hardening del hook (ref-based).
 - **#634** — Fase 2: 6 pantallas conductor.
 
+## Seguimiento 2026-06-23 (auditoría lado consumidor)
+
+Al auditar el lado consumidor (cliente + conductor + web) de las features de
+dinero/engagement, el barrido encontró **una pantalla que la Fase 2 había omitido**:
+
+- **`apps/driver/app/(tabs)/earnings.tsx` (tab de Ingresos):** tenía solo
+  `RefreshControl` (pull manual), sin `useRefreshOnFocus`. Migrada a
+  `useRefreshOnFocus(refetch)` (el `refetch` de `useEarningsData` ya es estable,
+  `useCallback`). Ahora un viaje recién completado se refleja al volver al tab sin
+  pull manual, como el wallet tab.
+
+El resto del lado consumidor se verificó **limpio**: cliente lee `customer_cash` y el
+home ya refresca el saldo al foco (#631); conductor lee `tricicoin` (no el legacy
+`driver_cash`) en recharge/gift/earnings/profile; la web tiene paridad con el cliente
+(reseñas se califican desde el flujo de finalización activo en ambos, no desde el
+detalle histórico — simétrico, sin gap).
+
 ## Notas
 - **Requiere rebuild de APK (v6)** — todos son cambios mobile; v5 mantiene el comportamiento viejo.
 - Smoke por pantalla tras el build: cambiar el dato por fuera (admin/SQL) → volver a la pantalla o background→foreground → debe actualizarse sin reiniciar.

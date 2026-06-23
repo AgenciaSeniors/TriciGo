@@ -51,6 +51,7 @@ import { useDriverPeakHours } from '@/hooks/useDriverPeakHours';
 import { EarningsByZoneChart } from '@/components/EarningsByZoneChart';
 import { useDriverEarningsByZone } from '@/hooks/useDriverEarningsByZone';
 import { useEarningsData, getDateRange, type Period } from '@/hooks/useEarningsData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { tripNetEarnings } from '@/utils/tripNetEarnings';
 import { PeriodTabs } from '@/components/earnings/PeriodTabs';
 import { EarningsGoalCard } from '@/components/earnings/EarningsGoalCard';
@@ -135,6 +136,11 @@ function NativeEarningsScreen() {
     period,
     txExpanded,
   });
+
+  // Tabs don't unmount in Expo: refresh earnings when the tab regains focus
+  // (and when the app returns from background), so a just-completed trip shows
+  // up without a manual pull-to-refresh. `refetch` is stable (useCallback).
+  useRefreshOnFocus(refetch);
 
   // Per-period stats derived from the trips list.
   const periodStats = useMemo(() => {
