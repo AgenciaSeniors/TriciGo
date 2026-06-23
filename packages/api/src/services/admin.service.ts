@@ -1237,7 +1237,7 @@ export const adminService = {
   async getUserDetail(userId: string) {
     const supabase = getSupabaseClient();
 
-    const [userRes, walletRes, transfersRes, penaltiesRes] = await Promise.all([
+    const [userRes, walletRes, transfersRes, penaltiesRes, completedRidesRes] = await Promise.all([
       supabase
         .from('users')
         .select('*')
@@ -1261,11 +1261,23 @@ export const adminService = {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(10),
+      // Total spent = sum of completed-ride fares the user paid as a customer.
+      // users.total_spent is a dead cache (the tier system maintains only
+      // total_rides), so we derive it live instead of showing a stale figure.
+      supabase
+        .from('rides')
+        .select('final_fare_cup')
+        .eq('customer_id', userId)
+        .eq('status', 'completed')
+        .limit(10000),
     ]);
 
     if (userRes.error) throw userRes.error;
 
     const user = userRes.data as User;
+
+    const totalSpentCup = ((completedRidesRes.data ?? []) as Array<{ final_fare_cup: number | null }>)
+      .reduce((sum, r) => sum + (r.final_fare_cup ?? 0), 0);
 
     // Drivers also hold a LIVE work wallet ('tricicoin'). The adjust modal on
     // this page offers it for drivers, so fetch it too — otherwise a tricicoin
@@ -1290,6 +1302,7 @@ export const adminService = {
 
     return {
       user,
+      totalSpentCup,
       wallet: walletRes.data as {
         id: string;
         balance: number;

@@ -168,7 +168,7 @@ export default function UserDetailPage() {
     );
   }
 
-  const { user, wallet, driverWallet, transfers, penalties } = detail;
+  const { user, totalSpentCup, wallet, driverWallet, transfers, penalties } = detail;
   const currentLevel = (user.level ?? 'bronce') as UserLevel;
 
   return (
@@ -274,7 +274,7 @@ export default function UserDetailPage() {
             </div>
             <div>
               <dt className="text-sm text-ink-muted">{t('users.label_total_spent')}</dt>
-              <dd className="text-sm font-medium">{formatCurrency(user.total_spent ?? 0)}</dd>
+              <dd className="text-sm font-medium">{formatCurrency(totalSpentCup ?? 0)}</dd>
             </div>
             <div>
               <dt className="text-sm text-ink-muted">{t('users.label_cancellations')}</dt>
