@@ -86,9 +86,9 @@ export default function ServiceTypesPage() {
         type="number"
         aria-label={labelMap[field] ?? field}
         className="w-20 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
-        value={((editForm[field] as number) ?? 0) / 100}
-        onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0') * 100) }))}
-        step="0.01"
+        value={(editForm[field] as number) ?? 0}
+        onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0')) }))}
+        step="1"
       />
     );
   }
