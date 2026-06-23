@@ -739,11 +739,15 @@ export const driverService = {
     const supabase = getSupabaseClient();
     const { data } = await supabase
       .from('driver_profiles')
-      .select('total_rides, rating_avg')
+      // total_rides_completed is the MAINTAINED counter (incremented by
+      // complete_ride_and_pay). total_rides is a legacy cache that nothing
+      // keeps in sync — reading it lets a drifted driver bypass the 50-ride
+      // gate (e.g. legacy=120 while real completed=7).
+      .select('total_rides_completed, rating_avg')
       .eq('id', driverId)
       .single();
     if (!data) return false;
-    return (data.total_rides ?? 0) >= 50 && (data.rating_avg ?? 0) >= 4.5;
+    return (data.total_rides_completed ?? 0) >= 50 && (data.rating_avg ?? 0) >= 4.5;
   },
 
   // ==================== BREAK MODE ====================
