@@ -23,6 +23,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { realEmail } from '../_shared/email-guard.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -532,7 +533,10 @@ Deno.serve(async (req) => {
     const lastName = nameParts.slice(1).join(' ') || 'User';
 
     const billing = {
-      email: String(roleRow?.email ?? user.email ?? 'noreply@tricigo.com'),
+      // realEmail() drops the synthetic phone-OTP placeholder
+      // (phone_<n>@tricigo.app) so we never hand a non-existent address to
+      // the payment processor; falls back to our deliverable noreply box.
+      email: realEmail(roleRow?.email) ?? realEmail(user.email) ?? 'noreply@tricigo.com',
       phone: String(roleRow?.phone ?? '+40000000000'),
       firstName,
       lastName,

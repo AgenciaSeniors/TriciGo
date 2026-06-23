@@ -10,6 +10,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { isPlaceholderEmail } from '../_shared/email-guard.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -27,16 +28,6 @@ function getSupabase() {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
-}
-
-// ── Synthetic phone-OTP placeholder email guard ──
-// Mirror of isPlaceholderEmail() in @tricigo/utils (Deno can't import it).
-// verify-otp creates phone accounts with `phone_<digits>@tricigo.app` in
-// auth.users; that address is not real and must never be emailed (it bounces).
-// Keep this regex in sync with packages/utils/src/validation.ts.
-const PLACEHOLDER_EMAIL_RE = /^phone_\d+@tricigo\.app$/i;
-function isPlaceholderEmail(email?: string | null): boolean {
-  return !!email && PLACEHOLDER_EMAIL_RE.test(email.trim());
 }
 
 // ── Send email via the send-email Edge Function ──

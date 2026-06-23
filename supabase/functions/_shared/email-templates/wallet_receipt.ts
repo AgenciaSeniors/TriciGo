@@ -13,6 +13,7 @@
 // ============================================================
 
 import { wrapHtml, COLORS, FONT_STACK, escapeHtml, detailRow, totalRow } from './_layout.ts';
+import { realEmail } from '../email-guard.ts';
 
 export interface WalletReceiptData {
   audience: 'user' | 'admin';
@@ -104,7 +105,7 @@ function renderAdmin(data: WalletReceiptData): string {
     </p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
       ${detailRow('Comprobante', receiptNo, { strong: true })}
-      ${detailRow('Usuario', `${user.full_name ?? '—'} <${user.email ?? '—'}>`)}
+      ${detailRow('Usuario', `${user.full_name?.trim() || '—'} <${realEmail(user.email) ?? '—'}>`)}
       ${detailRow('User ID', user.id, { muted: true })}
       ${detailRow('Fecha', dateLabel)}
       ${detailRow('Recarga solicitada (neto)', fmtUsd(amounts.usdRequested), { strong: true })}

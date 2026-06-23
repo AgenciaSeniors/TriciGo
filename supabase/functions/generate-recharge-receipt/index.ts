@@ -32,6 +32,7 @@ import {
   SUPPORT_EMAIL,
   WEB_ORIGIN,
 } from '../_shared/brand.ts';
+import { realEmail } from '../_shared/email-guard.ts';
 // Import directly from the template module (not the registry index) so this
 // function's deploy bundle stays narrow — we don't need welcome / win_back /
 // ride_receipt / driver_under_review here.
@@ -176,10 +177,13 @@ Deno.serve(async (req) => {
     // canonical auth.users.email. Phone-signup users often have an email
     // only there (kept in sync going forward by migration 00358); without
     // this fallback the user's receipt was silently skipped.
-    let recipientEmail: string | null = userRow.email ?? null;
+    // realEmail() filters the synthetic phone-OTP placeholder
+    // (phone_<n>@tricigo.app) → treated as "no email" so we never email a
+    // non-existent address that bounces.
+    let recipientEmail: string | null = realEmail(userRow.email);
     if (!recipientEmail) {
       const { data: authUser } = await supabase.auth.admin.getUserById(piRow.user_id);
-      recipientEmail = authUser?.user?.email ?? null;
+      recipientEmail = realEmail(authUser?.user?.email);
     }
     if (!recipientEmail) {
       console.warn(
@@ -458,8 +462,9 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
     y = drawRow(page, helv, helvBold, 'Nombre', user.full_name, left, right, y, text, muted);
   }
   y = drawRow(page, helv, helvBold, 'ID usuario', user.id, left, right, y, muted, muted);
-  if (user.email) {
-    y = drawRow(page, helv, helvBold, 'Email', user.email, left, right, y, text, muted);
+  const receiptEmail = realEmail(user.email);
+  if (receiptEmail) {
+    y = drawRow(page, helv, helvBold, 'Email', receiptEmail, left, right, y, text, muted);
   }
   if (user.phone) {
     y = drawRow(page, helv, helvBold, 'Teléfono', user.phone, left, right, y, text, muted);
