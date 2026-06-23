@@ -1795,6 +1795,22 @@ git worktree remove <temp>
 
 ---
 
+### `admin.tricigo.com` debe estar en `ALLOWED_ORIGINS` de las Edge Functions (CORS) — verificado 2026-06-23
+
+**Síntoma:** desde el panel admin lanzás una campaña (correo/push) o tocás "Notificar ahora" en Anuncios/Promos y **no llega nada**, pero la UI dice "enviada". Misma **clase de trampa de allowlist** que el login admin (admin.tricigo.com olvidado en las Redirect URLs de Supabase Auth): el subdominio del panel se olvida en una allowlist.
+
+**Causa raíz:** las EFs de notificación (`send-push`, `send-bulk-email`, `send-bulk-sms`, y todas las que usan `getCorsHeaders`) calculan `allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ''` (sin fallback). El secret project-wide `ALLOWED_ORIGINS` tenía `https://tricigo.com,https://www.tricigo.com,http://localhost:3001,http://localhost:3000` pero **NO** `https://admin.tricigo.com`. Resultado: el preflight OPTIONS responde 200 pero con `Access-Control-Allow-Origin` **vacío** → el navegador del admin **bloquea el POST real** → no se envía nada. La firma en los logs de EF es inconfundible: **OPTIONS 200 sin un POST que lo siga**.
+
+**Diagnóstico canónico (sin leer el secret):**
+- Probar el preflight desde el sandbox (read-only): `curl -s -i -X OPTIONS '.../functions/v1/send-bulk-email' -H 'Origin: https://admin.tricigo.com' -H 'Access-Control-Request-Method: POST' | grep -i access-control-allow-origin`. Si NO devuelve el header → el origen no está allowlisted. Un origen de control (`https://tricigo.com`) sí lo devuelve.
+- `get_logs service=edge-function` en el minuto del envío: `OPTIONS 200` de `send-bulk-email`/`send-bulk-sms` **sin POST** = preflight rechazado por el navegador.
+
+**Fix (config, sin deploy de código):** agregar `https://admin.tricigo.com` (y `http://localhost:3002` para dev del admin) al secret. `supabase secrets set` **reemplaza** el valor entero y `secrets list` solo muestra el **hash SHA-256** — para no pisar lo existente, **reconstruir el valor exacto brute-forceando el digest** (`sha256` de permutaciones de los orígenes conocidos hasta matchear el hash de `secrets list`), luego setear la lista completa + los nuevos. Correr el CLI **desde un dir vacío** (`mkdir /tmp/x && cd /tmp/x && npx supabase secrets set ALLOWED_ORIGINS="..." --project-ref lqaufszburqvlslpcuac`) porque desde el repo el CLI parsea `supabase/config.toml` y falla (`email_change` schema drift). El cambio toma efecto **inmediato** (sin redeploy de las EFs). Verificar re-probando el preflight.
+
+**Defecto de código separado (push de Campañas):** la página `apps/admin/.../campaigns/page.tsx` mandaba el push por `notificationService.sendToMultipleUsers` → `sendToUser` → `fetch('https://exp.host/...')` **directo desde el navegador** (cross-origin a Expo → bloqueado; y escribía `notification_log`, no el inbox `notifications`). Arreglar el CORS NO lo desbloquea. Fix: enrutar por la EF `send-push` vía un método nuevo `notificationService.sendCampaignPush(userIds, {...})` (espejo de `broadcastToActiveUsers` con lista explícita; `category:'campaign'`) → entrega service-side **y** persiste al inbox. Anuncios/Promos ya usaban el camino bueno (`broadcastToActiveUsers` → `send-push` vía `functions.invoke`), así que esos los arregla solo el fix de CORS. Bonus UX: el handler contaba "userIds procesados" como entregas y tragaba errores de `fetch` → ahora reporta `{sent}` real y muestra toast de advertencia si 0/0 o error.
+
+---
+
 ### Checklist de paridad cross-app (auditoría 2026-06-10, PRs PARITY-1/2)
 
 **Regla:** toda feature de pasajero debe existir en paridad **web ↔ app móvil**, con contraparte **driver** (si interactúa) y **admin** (si se gestiona/configura). La auditoría 2026-06-10 (informe en `~/.claude/plans/necesito-un-analisis-para-bright-hamming.md`) encontró la paridad casi perfecta — el único gap funcional era recurrentes en web (cerrado en PARITY-1) — porque ~95% de la lógica vive en `packages/api` y ambas superficies consumen los mismos services.

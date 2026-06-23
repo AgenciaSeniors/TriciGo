@@ -238,17 +238,36 @@ export default function CampaignsPage() {
         created_by: user?.id ?? null,
       };
 
+      // Track REAL per-channel delivery so the toast reflects what actually
+      // went out — not just how many user_ids we iterated. Warnings surface
+      // when a chosen channel delivered to nobody or the EF call failed,
+      // instead of silently reporting "enviada".
+      let sentCount = 0;
+      const warnings: string[] = [];
+
       if (formSendNow) {
         const userIds = await getSegmentUserIds();
-        let sentCount = 0;
 
-        // PUSH — always-on for 'push' and 'both'
-        if (formChannel === 'push' || formChannel === 'both') {
-          const result = await notificationService.sendToMultipleUsers(userIds, 'campaign', {
-            title: formTitle,
-            body: formBody,
-          });
-          sentCount = Math.max(sentCount, result.sent);
+        if (userIds.length === 0) {
+          warnings.push(t('campaigns.warn_no_recipients', { defaultValue: 'El segmento no tiene usuarios; no se envió nada.' }));
+        }
+
+        // PUSH — route through the send-push edge function (service-role).
+        // Delivers server-side AND persists to the in-app inbox. The old
+        // browser→Expo path was blocked by CORS and never hit the inbox.
+        if ((formChannel === 'push' || formChannel === 'both') && userIds.length > 0) {
+          try {
+            const result = await notificationService.sendCampaignPush(userIds, {
+              title: formTitle,
+              body: formBody,
+            });
+            sentCount = Math.max(sentCount, result.sent);
+            if (result.sent === 0) {
+              warnings.push(t('campaigns.warn_push_zero', { defaultValue: 'Guardada, pero el push no llegó a ningún dispositivo (sin tokens activos).' }));
+            }
+          } catch (err) {
+            warnings.push(t('campaigns.warn_push_failed', { defaultValue: 'Guardada, pero falló el envío de push: {{error}}', error: getErrorMessage(err) }));
+          }
         }
 
         // EMAIL — for 'email' and 'both'. Call bulk edge function.
@@ -270,15 +289,22 @@ export default function CampaignsPage() {
                 promo_code_id: formPromoId || null,
               }),
             });
-            const json = await res.json();
-            if (json.sent) sentCount = Math.max(sentCount, json.sent);
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+            const emailSent = Number(json.sent ?? 0);
+            sentCount = Math.max(sentCount, emailSent);
+            if (emailSent === 0) {
+              warnings.push(t('campaigns.warn_email_zero', { defaultValue: 'Guardada, pero el correo no se entregó (sin direcciones válidas en el segmento).' }));
+            }
           } catch (err) {
-            console.error('[campaigns] email send failed', err);
+            warnings.push(t('campaigns.warn_email_failed', { defaultValue: 'Guardada, pero falló el envío de correo: {{error}}', error: getErrorMessage(err) }));
           }
         }
 
-        // SMS — for 'sms' and 'both'. Call bulk edge function.
-        if ((formChannel === 'sms' || formChannel === 'both') && userIds.length > 0) {
+        // SMS — only when the channel is explicitly 'sms'. "Ambos" means
+        // push + email (per the channel labels + page copy); it must NOT
+        // silently blast paid SMS via D7.
+        if (formChannel === 'sms' && userIds.length > 0) {
           try {
             const { data: { session } } = await supabase.auth.getSession();
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
@@ -295,10 +321,11 @@ export default function CampaignsPage() {
               },
               body: JSON.stringify({ user_ids: userIds, body: smsBody }),
             });
-            const json = await res.json();
-            if (json.sent) sentCount = Math.max(sentCount, json.sent);
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+            if (json.sent) sentCount = Math.max(sentCount, Number(json.sent));
           } catch (err) {
-            console.error('[campaigns] sms send failed', err);
+            warnings.push(t('campaigns.warn_sms_failed', { defaultValue: 'Guardada, pero falló el envío de SMS: {{error}}', error: getErrorMessage(err) }));
           }
         }
 
@@ -313,9 +340,13 @@ export default function CampaignsPage() {
       setShowForm(false);
       setPage(0);
       await loadCampaigns();
-      showToast('success', formSendNow
-        ? t('campaigns.toast_sent', { defaultValue: 'Campaña enviada' })
-        : t('campaigns.toast_scheduled', { defaultValue: 'Campaña programada' }));
+      if (warnings.length > 0) {
+        showToast('warning', warnings.join(' · '));
+      } else {
+        showToast('success', formSendNow
+          ? t('campaigns.toast_sent_n', { n: sentCount, defaultValue: 'Campaña enviada · {{n}} entregas' })
+          : t('campaigns.toast_scheduled', { defaultValue: 'Campaña programada' }));
+      }
     } catch (err) {
       showToast('error', getErrorMessage(err));
     } finally {
