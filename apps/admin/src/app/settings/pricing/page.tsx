@@ -284,9 +284,9 @@ export default function PricingPage() {
         type="number"
         aria-label={labelMap[field] ?? field}
         className="w-20 px-2 py-1 border border-line bg-surface text-ink rounded text-sm"
-        value={((editForm[field] as number) ?? 0) / 100}
-        onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0') * 100) }))}
-        step="0.01"
+        value={(editForm[field] as number) ?? 0}
+        onChange={(e) => setEditForm((f) => ({ ...f, [field]: Math.round(parseFloat(e.target.value || '0')) }))}
+        step="1"
       />
     );
   }
@@ -362,9 +362,9 @@ export default function PricingPage() {
               <input
                 type="number"
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.base_fare_cup ? 'border-red-500' : 'border-line'}`}
-                value={createForm.base_fare_cup / 100 || ''}
-                onChange={(e) => { setCreateForm((f) => ({ ...f, base_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { base_fare_cup, ...rest } = prev; return rest; }); }}
-                step="0.01"
+                value={createForm.base_fare_cup || ''}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, base_fare_cup: Math.round(parseFloat(e.target.value || '0')) })); setFormErrors((prev) => { const { base_fare_cup, ...rest } = prev; return rest; }); }}
+                step="1"
               />
               {formErrors.base_fare_cup && <p className="text-red-500 text-xs mt-1">{formErrors.base_fare_cup}</p>}
             </div>
@@ -373,9 +373,9 @@ export default function PricingPage() {
               <input
                 type="number"
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.per_km_rate_cup ? 'border-red-500' : 'border-line'}`}
-                value={createForm.per_km_rate_cup / 100 || ''}
-                onChange={(e) => { setCreateForm((f) => ({ ...f, per_km_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { per_km_rate_cup, ...rest } = prev; return rest; }); }}
-                step="0.01"
+                value={createForm.per_km_rate_cup || ''}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, per_km_rate_cup: Math.round(parseFloat(e.target.value || '0')) })); setFormErrors((prev) => { const { per_km_rate_cup, ...rest } = prev; return rest; }); }}
+                step="1"
               />
               {formErrors.per_km_rate_cup && <p className="text-red-500 text-xs mt-1">{formErrors.per_km_rate_cup}</p>}
             </div>
@@ -384,9 +384,9 @@ export default function PricingPage() {
               <input
                 type="number"
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.per_minute_rate_cup ? 'border-red-500' : 'border-line'}`}
-                value={createForm.per_minute_rate_cup / 100 || ''}
-                onChange={(e) => { setCreateForm((f) => ({ ...f, per_minute_rate_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { per_minute_rate_cup, ...rest } = prev; return rest; }); }}
-                step="0.01"
+                value={createForm.per_minute_rate_cup || ''}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, per_minute_rate_cup: Math.round(parseFloat(e.target.value || '0')) })); setFormErrors((prev) => { const { per_minute_rate_cup, ...rest } = prev; return rest; }); }}
+                step="1"
               />
               {formErrors.per_minute_rate_cup && <p className="text-red-500 text-xs mt-1">{formErrors.per_minute_rate_cup}</p>}
             </div>
@@ -395,9 +395,9 @@ export default function PricingPage() {
               <input
                 type="number"
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.min_fare_cup ? 'border-red-500' : 'border-line'}`}
-                value={createForm.min_fare_cup / 100 || ''}
-                onChange={(e) => { setCreateForm((f) => ({ ...f, min_fare_cup: Math.round(parseFloat(e.target.value || '0') * 100) })); setFormErrors((prev) => { const { min_fare_cup, ...rest } = prev; return rest; }); }}
-                step="0.01"
+                value={createForm.min_fare_cup || ''}
+                onChange={(e) => { setCreateForm((f) => ({ ...f, min_fare_cup: Math.round(parseFloat(e.target.value || '0')) })); setFormErrors((prev) => { const { min_fare_cup, ...rest } = prev; return rest; }); }}
+                step="1"
               />
               {formErrors.min_fare_cup && <p className="text-red-500 text-xs mt-1">{formErrors.min_fare_cup}</p>}
             </div>
