@@ -35,6 +35,10 @@ const STATUS_LABEL_KEY: Record<string, string> = {
 const PAYMENT_KEY: Record<string, string> = {
   cash: 'rides.payment_cash',
   tricicoin: 'rides.payment_tricicoin',
+  mixed: 'rides.payment_mixed',
+  corporate: 'rides.payment_corporate',
+  tropipay: 'rides.payment_tropipay',
+  stripe: 'rides.payment_tropipay',
 };
 
 type RideDetail = {
