@@ -106,7 +106,7 @@ export default function WeatherPage() {
 
       {lastUpdated && (
         <p className="text-xs text-ink-subtle mb-4">
-          {t('weather.last_updated', { defaultValue: 'Última actualización' })}: {lastUpdated.toLocaleTimeString()}
+          {t('weather.last_updated', { defaultValue: 'Última actualización' })}: {lastUpdated.toLocaleTimeString('es-CU', { timeZone: 'America/Havana' })}
         </p>
       )}
 

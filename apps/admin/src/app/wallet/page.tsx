@@ -45,6 +45,7 @@ const LEDGER_TYPE_LABELS: Record<string, string> = {
   promo_credit: 'Crédito promocional',
   redemption: 'Canje',
   adjustment: 'Ajuste',
+  fx_revaluation: 'Revaluación cambiaria',
   insurance_premium: 'Prima de seguro',
   refund: 'Reembolso',
   quota_deduction: 'Descuento de cuota',
@@ -342,7 +343,7 @@ export default function WalletPage() {
       <div className="grid grid-cols-1 gap-4">
         <KpiCard
           label={t('wallet_admin.kpi_circulation', { defaultValue: 'TriciCoin en circulación' })}
-          value={stats ? formatTriciCoin(stats.total_in_circulation).replace('TRC', '').trim() : '—'}
+          value={stats ? formatTriciCoin(stats.total_in_circulation).replace(' TC', '').trim() : '—'}
           unit="TRC"
           tone="primary"
           loading={!stats}

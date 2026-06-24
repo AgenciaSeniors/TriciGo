@@ -432,7 +432,7 @@ export default function ReportsPage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-ink">{t('reports.revenue_forecast')}</h2>
                 <div className="text-sm font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-full">
-                  {t('reports.prediction_next_7_days')}: {forecastTotal.toFixed(1)} TRC
+                  {t('reports.prediction_next_7_days')}: {formatCUP(forecastTotal)}
                 </div>
               </div>
               <div className="flex items-end gap-[2px] h-40">
@@ -440,7 +440,7 @@ export default function ReportsPage() {
                   <div
                     key={d.day}
                     className="flex-1 group relative"
-                    title={`${d.day}: ${d.revenue.toFixed(1)} TRC ${d.predicted ? `(${t('reports.predicted')})` : `(${t('reports.actual')})`}`}
+                    title={`${d.day}: ${formatCUP(d.revenue)} ${d.predicted ? `(${t('reports.predicted')})` : `(${t('reports.actual')})`}`}
                   >
                     <div
                       className={`w-full rounded-t-sm transition-all ${

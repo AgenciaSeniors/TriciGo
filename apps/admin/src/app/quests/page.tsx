@@ -156,8 +156,10 @@ export default function QuestsPage() {
     }
   };
 
-  function formatCurrency(centavos: number): string {
-    return `${(centavos / 100).toLocaleString('es-CU', { minimumFractionDigits: 2 })} CUP`;
+  // reward_cup is WHOLE CUP (the driver app reads the same column with
+  // formatCUP, which treats it as whole CUP — no centavos). Do NOT ÷100.
+  function formatCurrency(cup: number): string {
+    return `${cup.toLocaleString('es-CU')} CUP`;
   }
 
   const columns: DataColumn<Quest>[] = useMemo(
@@ -338,7 +340,7 @@ export default function QuestsPage() {
             </label>
             <label className="flex flex-col gap-1">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-                {t('quests.form_reward', { defaultValue: 'Recompensa (centavos CUP)' })}
+                {t('quests.form_reward', { defaultValue: 'Recompensa (CUP)' })}
               </span>
               <input
                 type="number"
