@@ -46,9 +46,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "edua56621636@gmail.com",
+        "appleId": "soporte@tricigo.com",
         "ascAppId": "FILL_ME",
-        "appleTeamId": "FILL_ME"
+        "appleTeamId": "3762RDMMD2"
       },
       "android": {
         "serviceAccountKeyPath": "./google-service-account.json"
