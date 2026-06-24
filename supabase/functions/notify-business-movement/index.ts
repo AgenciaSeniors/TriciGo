@@ -165,7 +165,12 @@ Deno.serve(async (req) => {
     // 5. Compose email
     const isCredit = amount >= 0;
     const symbol = isCredit ? '+' : '';
-    const subject = `[TriciGo] ${eventLabel(event_type)}: ${symbol}${formatCup(amount)} CUP — ${targetName.split(' (')[0]}`;
+    // All spendable wallets hold TriciCoin (TC, 1:1 with CUP). Label the
+    // amount by the moved account so a tricicoin/customer_cash adjustment
+    // isn't mislabeled "CUP". platform_revenue (or unknown) stays CUP.
+    const TC_ACCOUNTS = ['tricicoin', 'customer_cash', 'corporate_cash', 'driver_cash', 'driver_quota'];
+    const unit = accountType && TC_ACCOUNTS.includes(accountType) ? 'TC' : 'CUP';
+    const subject = `[TriciGo] ${eventLabel(event_type)}: ${symbol}${formatCup(amount)} ${unit} — ${targetName.split(' (')[0]}`;
     const html = `
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8"/><title>${escapeHtml(subject)}</title></head>
@@ -175,11 +180,11 @@ Deno.serve(async (req) => {
   </h2>
   <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
     <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Monto</strong></td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; color: ${isCredit ? '#059669' : '#dc2626'}; font-weight: 700;">${symbol}${formatCup(amount)} CUP</td></tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right; color: ${isCredit ? '#059669' : '#dc2626'}; font-weight: 700;">${symbol}${formatCup(amount)} ${unit}</td></tr>
     <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Cuenta</strong></td>
         <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${escapeHtml(accountType ?? '—')}</td></tr>
     <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Balance nuevo</strong></td>
-        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${formatCup(balanceAfter)} CUP</td></tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${formatCup(balanceAfter)} ${unit}</td></tr>
     <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Usuario</strong></td>
         <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${escapeHtml(targetName)}</td></tr>
     <tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Admin</strong></td>

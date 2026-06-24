@@ -517,7 +517,7 @@ async function sendPaymentNotification(
   failReason?: string | null,
 ): Promise<void> {
   try {
-    const formattedAmount = amountCup.toLocaleString();
+    const formattedAmount = amountCup.toLocaleString('es-CU');
     const title = success ? 'Recarga exitosa' : 'Recarga fallida';
 
     // For failed recharges, surface the translated reason in the push
@@ -573,7 +573,7 @@ async function sendRefundNotification(
   amountCup: number,
 ): Promise<void> {
   try {
-    const formattedAmount = amountCup.toLocaleString();
+    const formattedAmount = amountCup.toLocaleString('es-CU');
 
     // Route through send-push EF (same reasoning as sendPaymentNotification):
     // dead token cleanup + inbox persistence + category validation.
