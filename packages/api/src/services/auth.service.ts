@@ -336,6 +336,31 @@ export const authService = {
   },
 
   /**
+   * Native Sign in with Apple (iOS only).
+   *
+   * Exchanges the identity token from the native Apple sheet
+   * (expo-apple-authentication's `signInAsync`) for a Supabase session via
+   * `signInWithIdToken`. This is the flow Apple REQUIRES on iOS (the native
+   * AuthenticationServices sheet) — NOT the web OAuth redirect used by
+   * `signInWithApple` (which Apple rejects for native apps under Guideline 4.0).
+   *
+   * The native `AppleAuthentication.signInAsync()` call lives in the app layer
+   * (expo-apple-authentication is a native module, unavailable in this
+   * platform-agnostic package); this method only performs the Supabase
+   * exchange. Supabase verifies the token against Apple's public keys, so the
+   * Apple provider must be enabled with the app bundle IDs as Client IDs.
+   */
+  async signInWithAppleIdToken(identityToken: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: identityToken,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  /**
    * Link a phone number to the current OAuth account.
    * Used after social login when user needs to verify their phone.
    *

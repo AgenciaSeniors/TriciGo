@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Linking, Modal } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,12 +25,12 @@ import { useTokens } from '@/hooks/useTokens';
 
 const vehicleRow = require('../../assets/login-hero.png');
 
-// Sign in with Apple is hidden until the Apple Developer enrollment is approved
-// and the Apple OAuth provider is enabled (the button currently does nothing).
-// Re-enable (set to true) before shipping to iOS — App Store Guideline 4.8
-// requires offering Sign in with Apple when another third-party sign-in
-// (Google) is shown.
-const APPLE_SIGN_IN_ENABLED = false;
+// Sign in with Apple uses the NATIVE iOS sheet (expo-apple-authentication) +
+// Supabase signInWithIdToken — the flow Apple requires on iOS (App Store
+// Guideline 4.8: offer it when another third-party sign-in like Google is
+// shown). The button is gated on native availability (`appleAvailable`), so it
+// only renders on iOS where Sign in with Apple is supported. The legacy web
+// OAuth `authService.signInWithApple` stays for the web app only.
 
 // BUG-201 fallback (parity with the driver app): openAuthSessionAsync can
 // return the redirect URL without the OS ever firing the Linking event, so
@@ -65,6 +66,16 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [legalType, setLegalType] = useState<'terms' | 'privacy' | null>(null);
   const { t: tWeb } = useTranslation('web');
+
+  // Sign in with Apple is iOS-only. Gate the button on native availability so
+  // it never renders on Android/web (Guideline 4.8 applies to iOS only).
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    AppleAuthentication.isAvailableAsync()
+      .then(setAppleAvailable)
+      .catch(() => setAppleAvailable(false));
+  }, []);
 
   const handleSendCode = async () => {
     setError('');
@@ -301,7 +312,7 @@ export default function LoginScreen() {
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
                 <Text variant="body" className="font-medium">{socialLoading ? '...' : t('auth.continue_with_google', { defaultValue: 'Continuar con Google' })}</Text>
               </Pressable>
-              {APPLE_SIGN_IN_ENABLED && (
+              {appleAvailable && (
               <Pressable
                 className="flex-row items-center justify-center gap-2 py-4 rounded-2xl bg-neutral-900 dark:bg-white active:bg-neutral-800 dark:active:bg-neutral-100"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
@@ -309,17 +320,21 @@ export default function LoginScreen() {
                 onPress={async () => {
                   setSocialLoading(true);
                   try {
-                    const redirectTo = Platform.OS === 'web'
-                      ? window.location.origin
-                      : 'tricigo://auth/callback';
-                    const data = await authService.signInWithApple(redirectTo);
-                    // BUG-201/202 (1+2): same fix as Google — see comment above.
-                    if (Platform.OS !== 'web' && data?.url) {
-                      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-                      await setSessionFromAuthResult(result);
-                    }
-                  } catch {
+                    const credential = await AppleAuthentication.signInAsync({
+                      requestedScopes: [
+                        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                      ],
+                    });
+                    if (!credential.identityToken) throw new Error('No Apple identity token');
+                    // Native flow: exchange the identity token for a Supabase
+                    // session. The auth listener (useAuth) picks up SIGNED_IN and
+                    // routes — no manual session/redirect handling needed.
+                    await authService.signInWithAppleIdToken(credential.identityToken);
+                  } catch (err) {
                     setSocialLoading(false);
+                    // User dismissed the native Apple sheet — not an error, stay quiet.
+                    if ((err as { code?: string })?.code === 'ERR_REQUEST_CANCELED') return;
                     triggerHaptic('warning');
                     Toast.show({
                       type: 'error',

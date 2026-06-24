@@ -19,6 +19,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
+      "usesAppleSignIn": true,
       "bundleIdentifier": "app.tricigo.client",
       "associatedDomains": [
         "applinks:tricigo.com"
@@ -76,6 +77,7 @@
       "./plugins/with-user-leave-hint-safe",
       "expo-router",
       "expo-localization",
+      "expo-apple-authentication",
       [
         "expo-notifications",
         {

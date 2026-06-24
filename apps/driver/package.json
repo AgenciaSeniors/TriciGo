@@ -27,6 +27,7 @@
     "@tricigo/ui": "workspace:*",
     "@tricigo/utils": "workspace:*",
     "expo": "~55.0.14",
+    "expo-apple-authentication": "~55.0.13",
     "expo-asset": "~55.0.14",
     "expo-av": "~16.0.8",
     "expo-build-properties": "~1.0.9",
