@@ -54,8 +54,27 @@ export default function ClientAppWalletBridge() {
     }
   }, [intent, router]);
 
-  if (mobile === null || mobile === false) {
+  // Initial render (SSR / pre-effect): nothing, to avoid flashing the mobile
+  // UI before we know the platform.
+  if (mobile === null) {
     return null;
+  }
+
+  // Desktop: the effect already kicked off router.replace('/wallet'). Render a
+  // visible fallback link instead of a blank page, in case that client-side
+  // navigation is slow or blocked.
+  if (!mobile) {
+    return (
+      <main className="page-main" style={{ justifyContent: 'center' }}>
+        <a
+          href={intent ? `/wallet?intent=${encodeURIComponent(intent)}` : '/wallet'}
+          className="btn-base btn-primary-solid"
+          style={{ minHeight: 52, padding: '0 1.5rem', fontWeight: 700 }}
+        >
+          Ir a tu billetera
+        </a>
+      </main>
+    );
   }
 
   const customSchemeUrl = intent
