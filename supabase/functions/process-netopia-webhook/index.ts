@@ -11,29 +11,29 @@
 // (see https://secure.sandbox.netopia-payments.com/spec). Status
 // codes: 3=paid, 5=confirmed, 12=invalid account, 15=3DS required.
 //
-// SECURITY MODEL:
-//   ⚠️ WPS-01 (audit 2026-06-14): the orderID UUID is NOT a sufficient defense.
-//   The legitimate user receives that UUID from create-netopia-payment-intent,
-//   so an attacker can create their own intent and forge a paid IPN for it
-//   without paying. The atomic claim only stops DOUBLE-crediting one intent, not
-//   crediting N self-created intents. The credited amount is server-side
-//   (intent.amount_cup), so amount-tampering is blocked — but unverified
-//   authenticity = free top-ups. The ONLY real defenses are (a) verify the IPN
-//   signature, or (b) re-query NETOPIA's payment status by ntpID with the secret
-//   API key, before crediting. Neither is implemented yet.
-//   Current mitigations in this handler:
-//     1. Atomic claim: status flips pending|created|failed → processing in one
-//        UPDATE; a replay sees 0 rows and exits (no double-credit).
-//     2. Status checked: only `paid`/`confirmed` credits; others mark failed/refunded.
-//     3. LIVE FAIL-CLOSED GUARD (WPS-01): in netopia_environment='live', a paid
-//        IPN is REFUSED until IPN_AUTHENTICITY_VERIFIED becomes a real
-//        signature/re-query check confirmed in sandbox. Sandbox is unaffected.
-//   TODO before live: implement (a) or (b) and set IPN_AUTHENTICITY_VERIFIED.
+// SECURITY MODEL (WPS-01 / AUD-001):
+//   The orderID UUID alone is NOT a sufficient defense — the legitimate user gets
+//   that UUID from create-netopia-payment-intent, so a forged paid IPN for a
+//   self-created intent could mint free top-ups. Authenticity is therefore enforced
+//   by an authoritative server-to-server re-query (requeryNetopiaStatus): before
+//   moving money on a state-changing IPN we POST /operation/status to NETOPIA with
+//   our secret API key and require NETOPIA's own payment.status to confirm it
+//   (3/5 = paid; 8/17 = refund/reversal). A forger can't make NETOPIA report a
+//   transaction it never processed. Defense layers:
+//     1. Re-query gate: LIVE always fails closed if NETOPIA doesn't confirm; sandbox
+//        is log-only until platform_config netopia_ipn_enforce_sandbox='true'.
+//     2. JWT (Verification-token) is also checked (verifyNetopiaIpnToken) as
+//        best-effort defense-in-depth + logging; NOT the gate yet because the POS
+//        public key NETOPIA provides does not verify the IPN signature (follow-up).
+//     3. Atomic claim: pending|created|failed|expired → processing in one UPDATE; a
+//        replay sees 0 rows and exits (no double-credit). Amount is server-side
+//        (intent.amount_cup), so amount-tampering is blocked.
 //
 // Contract: docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md §2
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { decodeProtectedHeader, importX509 } from 'https://esm.sh/jose@5.9.6';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { translateNetopiaError } from '../_shared/netopia-errors.ts';
 
@@ -79,21 +79,206 @@ const ACK_OK = { code: '0', message: 'OK' };
 
 /** Map NETOPIA numeric status to our payment_intents.status. */
 function mapNetopiaStatus(s: number | undefined): 'paid' | 'failed' | 'pending' | 'refunded' | 'unknown' {
-  // Per spec: 3=paid, 5=confirmed; 12=invalid account / rejected; 15=3DS required.
-  // 4 = refunded/reversed in NETOPIA's v2 spec (admin-initiated from the
-  // POS dashboard). If the actual code differs in production we widen
-  // this check from the IPN payload — keeping it narrow for now so we
-  // don't accidentally drain a wallet on an unexpected status value.
+  // NETOPIA v2 status codes (official PHP SDK constants): 3=PAID, 5=CONFIRMED,
+  // 4=CANCELED, 8=CREDIT(refund), 12=DECLINED, 13=FRAUD, 14=PENDING_AUTH,
+  // 15=3D_AUTH, 17=REVERSED. AUD-010: 4 is CANCELED (not a refund) — refunds/
+  // reversals are 8/17. A wallet debit (refunded) is additionally gated behind the
+  // server-to-server re-query before it runs.
   if (s === 3 || s === 5) return 'paid';
-  if (s === 4) return 'refunded';
-  if (s === 12) return 'failed';
-  if (s === 15) return 'pending'; // 3DS still in flight
+  if (s === 8 || s === 17) return 'refunded'; // credit / reversal
+  if (s === 4 || s === 12 || s === 13) return 'failed'; // canceled / declined / fraud
+  if (s === 14 || s === 15) return 'pending'; // pending auth / 3DS still in flight
   return 'unknown';
 }
 
 /** UUID v4 sanity check (matches our payment_intents.id format). */
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+/**
+ * Verify the authenticity of a NETOPIA v2.x IPN (WPS-01 fix).
+ *
+ * NETOPIA signs every IPN with a JWT carried in the `Verification-token`
+ * HTTP header. The JWT is RSA-signed (RS256/384/512) with NETOPIA's private
+ * key; we verify it with the POS public certificate downloaded from the admin
+ * "Setări tehnice" panel (stored as the NETOPIA_{SANDBOX,LIVE}_PUBLIC_KEY env
+ * secret). Three claims must hold:
+ *   - iss === "NETOPIA Payments"
+ *   - aud === our POS signature (binds the IPN to this POS)
+ *   - sub === base64( SHA-512(raw request body) ) (integrity-binds the token to
+ *     the exact body received, so a captured token can't be replayed over a
+ *     tampered body).
+ *
+ * A forged IPN can't produce a valid token (no NETOPIA private key); a replayed
+ * token over a changed body fails the sub hash. Never throws — any error maps to
+ * `{ verified: false }` so the caller decides whether to fail closed.
+ *
+ * Spec/source: NETOPIA Go SDK ipn.go; docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md §2.
+ */
+/** Decode a base64url string (JWT segment) to bytes. */
+function base64UrlToBytes(s: string): Uint8Array {
+  const pad = (4 - (s.length % 4)) % 4;
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat(pad);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function verifyNetopiaIpnToken(args: {
+  token: string | null | undefined;
+  rawBody: string;
+  posSignature: string;
+  publicCertPem: string;
+}): Promise<{ verified: boolean; reason: string; alg?: string }> {
+  try {
+    if (!args.token) return { verified: false, reason: 'missing Verification-token header' };
+    if (!args.publicCertPem) return { verified: false, reason: 'public certificate not configured' };
+    if (!args.posSignature) return { verified: false, reason: 'POS signature not configured' };
+
+    // Secrets may be stored with literal "\n"; normalize to real newlines for PEM parsing.
+    const pem = args.publicCertPem.includes('\\n')
+      ? args.publicCertPem.replace(/\\n/g, '\n')
+      : args.publicCertPem;
+
+    const parts = args.token.split('.');
+    if (parts.length !== 3) return { verified: false, reason: 'malformed JWT (expected 3 parts)' };
+    const [headerB64, payloadB64, sigB64] = parts;
+
+    const header = decodeProtectedHeader(args.token);
+    const alg = String(header.alg ?? '');
+    if (!['RS256', 'RS384', 'RS512'].includes(alg)) {
+      return { verified: false, reason: `unexpected JWT alg: ${alg || '(none)'}`, alg };
+    }
+
+    // Import the POS public key from the X.509 cert (jose parses the ASN.1 → a
+    // WebCrypto RSASSA-PKCS1-v1_5 CryptoKey with the alg's hash). We then verify
+    // with crypto.subtle.verify directly rather than jose.jwtVerify because
+    // NETOPIA's POS keys are 1024-bit and jose enforces a 2048-bit minimum for
+    // RS*; WebCrypto has no such floor and a signature made with NETOPIA's own
+    // 1024-bit private key is still authentic.
+    const key = await importX509(pem, alg);
+    const signature = base64UrlToBytes(sigB64);
+    const signingInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+    const sigOk = await crypto.subtle.verify({ name: 'RSASSA-PKCS1-v1_5' }, key, signature, signingInput);
+    if (!sigOk) return { verified: false, reason: 'signature verification failed', alg };
+
+    // Decode and validate the claims ourselves (we bypassed jwtVerify above).
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payloadB64)));
+    } catch {
+      return { verified: false, reason: 'payload is not valid JSON', alg };
+    }
+    if (payload.iss !== 'NETOPIA Payments') {
+      return { verified: false, reason: `unexpected iss: ${String(payload.iss)}`, alg };
+    }
+    const aud = payload.aud;
+    const audOk = aud === args.posSignature || (Array.isArray(aud) && aud.includes(args.posSignature));
+    if (!audOk) {
+      return { verified: false, reason: 'aud does not match POS signature', alg };
+    }
+
+    // sub MUST equal base64( SHA-512(raw body) ). Accept standard and url-safe
+    // base64, with or without padding, to be tolerant of NETOPIA's encoding.
+    const digest = new Uint8Array(
+      await crypto.subtle.digest('SHA-512', new TextEncoder().encode(args.rawBody)),
+    );
+    let bin = '';
+    for (const b of digest) bin += String.fromCharCode(b);
+    const b64 = btoa(bin);
+    const b64url = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const sub = typeof payload.sub === 'string' ? payload.sub : '';
+    const subStripped = sub.replace(/=+$/, '');
+    if (sub !== b64 && sub !== b64url && subStripped !== b64.replace(/=+$/, '') && subStripped !== b64url) {
+      // sub is a SHA-512 hash, not a secret — log both sides to diagnose any
+      // encoding mismatch against a real IPN during sandbox validation.
+      console.warn(`[netopia] IPN sub mismatch — claimed="${sub.slice(0, 120)}" computed_b64="${b64}" computed_b64url="${b64url}"`);
+      return { verified: false, reason: 'body hash (sub) mismatch', alg };
+    }
+
+    return { verified: true, reason: 'ok', alg };
+  } catch (err) {
+    return { verified: false, reason: `verify error: ${String((err as Error)?.message ?? err)}` };
+  }
+}
+
+/** Base URL for the NETOPIA v2 status re-query, per environment (env-overridable). */
+function netopiaStatusBase(env: 'sandbox' | 'live'): string {
+  if (env === 'live') {
+    // Per the official Go SDK the live API base carries `/api`.
+    return Deno.env.get('NETOPIA_LIVE_STATUS_BASE') ?? 'https://secure.netopia-payments.com/api';
+  }
+  // Reuse the host that create-netopia-payment-intent already uses for
+  // /payment/card/start (proven working). Override with NETOPIA_SANDBOX_STATUS_BASE
+  // if the /operation/status host differs (the SDK uses a hyphenated sandbox host).
+  return Deno.env.get('NETOPIA_SANDBOX_STATUS_BASE') ?? 'https://secure.sandbox.netopia-payments.com';
+}
+
+/**
+ * Server-to-server re-query of a payment's authoritative status (WPS-01 gate).
+ *
+ * POST {base}/operation/status with the RAW secret API key in the Authorization
+ * header (no "Bearer") and body { posID, ntpID, orderID }. The trusted response's
+ * payment.status is what we gate on (3=paid, 5=confirmed). This is forgery-proof:
+ * an attacker cannot make NETOPIA report a paid transaction it never processed.
+ * Never throws — any failure maps to confirmedPaid=false so the caller fails closed.
+ *
+ * Source: NETOPIA Go/PHP/Python SDKs (client.GetStatus / Status::getStatus).
+ */
+async function requeryNetopiaStatus(args: {
+  env: 'sandbox' | 'live';
+  apiKey: string;
+  posSignature: string;
+  ntpId: string;
+  orderId: string;
+}): Promise<{ status: number | null; confirmedPaid: boolean; reason: string; httpStatus?: number }> {
+  try {
+    if (!args.apiKey) return { status: null, confirmedPaid: false, reason: 'api key not configured' };
+    if (!args.posSignature) return { status: null, confirmedPaid: false, reason: 'POS signature not configured' };
+    const url = `${netopiaStatusBase(args.env)}/operation/status`;
+
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': args.apiKey, // raw API key, no "Bearer" (v2.x scheme)
+        },
+        body: JSON.stringify({ posID: args.posSignature, ntpID: args.ntpId, orderID: args.orderId }),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'TimeoutError') {
+        return { status: null, confirmedPaid: false, reason: 'status re-query timed out after 15s' };
+      }
+      throw err;
+    }
+
+    const text = await resp.text();
+    let parsed: { payment?: { status?: number }; error?: { code?: string; message?: string } } = {};
+    try {
+      parsed = text ? JSON.parse(text) : {};
+    } catch {
+      return {
+        status: null,
+        confirmedPaid: false,
+        reason: `non-JSON status response (HTTP ${resp.status}): ${text.slice(0, 200)}`,
+        httpStatus: resp.status,
+      };
+    }
+    const st = typeof parsed?.payment?.status === 'number' ? parsed.payment.status : null;
+    if (st === null) {
+      const errInfo = parsed?.error?.code ?? parsed?.error?.message ?? 'none';
+      return { status: null, confirmedPaid: false, reason: `no payment.status (HTTP ${resp.status}, error=${errInfo})`, httpStatus: resp.status };
+    }
+    return { status: st, confirmedPaid: st === 3 || st === 5, reason: 'ok', httpStatus: resp.status };
+  } catch (err) {
+    return { status: null, confirmedPaid: false, reason: `status re-query error: ${String((err as Error)?.message ?? err)}` };
+  }
 }
 
 Deno.serve(async (req) => {
@@ -190,37 +375,95 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── 2b. AUTHENTICITY GUARD (WPS-01, audit 2026-06-14) ──
-    // This IPN is NOT authenticated: there is no signature/HMAC check and no
-    // server-to-server status re-query implemented. The only thing gating a
-    // credit is the orderID UUID — but the legitimate user already has that UUID
-    // (create-netopia-payment-intent returns it), so an attacker can create their
-    // OWN $500 intent and POST a forged {status:3} IPN for it WITHOUT paying →
-    // free wallet top-up, unbounded. UUID/ntpID binding does NOT stop this (the
-    // attacker owns both for their own intent). The only real defense is verifying
-    // authenticity with NETOPIA (verify the IPN signature, OR re-query the payment
-    // status by ntpID with the secret API key) — which must be confirmed against
-    // sandbox before it can be trusted.
-    //
-    // Until that verification exists, FAIL CLOSED in the LIVE environment: never
-    // credit on an unverified live IPN. Sandbox is unaffected (test freely). Today
-    // netopia_environment='sandbox', so this changes nothing now — but it makes it
-    // impossible to silently credit forged IPNs if NETOPIA is flipped to live
-    // before the verification is implemented. See PAYMENT_PROVIDER_CONTRACT.md §2.
-    const IPN_AUTHENTICITY_VERIFIED = false; // TODO(WPS-01): set by a real signature/re-query check, confirmed in sandbox, BEFORE live.
-    if (status === 'paid' && !IPN_AUTHENTICITY_VERIFIED) {
-      const { data: envCfg } = await supabase
-        .from('platform_config').select('value').eq('key', 'netopia_environment').maybeSingle();
-      const netopiaEnv = (envCfg?.value as string | undefined) ?? 'sandbox';
-      if (netopiaEnv === 'live') {
-        console.error(
-          `[netopia] CRITICAL (WPS-01): refusing to credit intent ${orderId} — LIVE IPN authenticity is NOT verified ` +
-          `(no signature check / no status re-query). Forged-IPN guard. Intent left in its current state for manual ` +
-          `reconciliation. Implement NETOPIA IPN verification before enabling live. ip=${clientIP} ntp=${ntpId}`,
-        );
-        return new Response(
-          JSON.stringify({ error: 'ipn_authenticity_unverified', detail: 'Live credit refused pending NETOPIA verification (WPS-01)' }),
-          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    // ── 2b. AUTHENTICITY VERIFICATION (WPS-01 / AUD-001 fix) ──
+    // Primary gate = server-to-server status re-query (requeryNetopiaStatus): ask
+    // NETOPIA directly, with our secret API key, whether this ntpID/orderID is
+    // genuinely paid. A forged IPN can't make NETOPIA report a paid transaction it
+    // never processed, so this is authenticity-by-authority and needs no signing key.
+    // The Verification-token JWT is ALSO checked (verifyNetopiaIpnToken) but only as
+    // best-effort defense-in-depth + logging — it is NOT the gate today because the
+    // POS public key NETOPIA provides does not verify the IPN signature (open
+    // follow-up). See docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md §2.
+    const { data: envRows } = await supabase
+      .from('platform_config')
+      .select('key, value')
+      .in('key', ['netopia_environment', 'netopia_sandbox_signature', 'netopia_live_signature', 'netopia_ipn_enforce_sandbox']);
+    const ntpCfg: Record<string, string> = {};
+    (envRows ?? []).forEach((r: { key: string; value: unknown }) => {
+      const v = r.value;
+      ntpCfg[r.key] = typeof v === 'string' && v.startsWith('"') ? JSON.parse(v) : String(v ?? '');
+    });
+    const netopiaEnv: 'sandbox' | 'live' = ntpCfg['netopia_environment'] === 'live' ? 'live' : 'sandbox';
+    const posSignature = netopiaEnv === 'live'
+      ? (ntpCfg['netopia_live_signature'] ?? '')
+      : (ntpCfg['netopia_sandbox_signature'] ?? '');
+    const publicCertPem = netopiaEnv === 'live'
+      ? (Deno.env.get('NETOPIA_LIVE_PUBLIC_KEY') ?? '')
+      : (Deno.env.get('NETOPIA_SANDBOX_PUBLIC_KEY') ?? '');
+    const apiKey = netopiaEnv === 'live'
+      ? (Deno.env.get('NETOPIA_LIVE_API_KEY') ?? '')
+      : (Deno.env.get('NETOPIA_SANDBOX_API_KEY') ?? '');
+    const enforceSandbox = ntpCfg['netopia_ipn_enforce_sandbox'] === 'true';
+    const verificationToken = req.headers.get('Verification-token') ?? req.headers.get('verification-token');
+
+    // Best-effort JWT verification (logged, not the gate).
+    const ipnAuth = await verifyNetopiaIpnToken({ token: verificationToken, rawBody, posSignature, publicCertPem });
+
+    // Authoritative gate: re-query NETOPIA for state-changing IPNs only.
+    const stateChanging = status === 'paid' || status === 'refunded';
+    let requery: { status: number | null; confirmedPaid: boolean; reason: string; httpStatus?: number } =
+      { status: null, confirmedPaid: false, reason: 'not-checked' };
+    if (stateChanging) {
+      requery = await requeryNetopiaStatus({ env: netopiaEnv, apiKey, posSignature, ntpId, orderId });
+    }
+
+    console.log('[netopia] IPN authenticity:', JSON.stringify({
+      env: netopiaEnv,
+      mapped: status,
+      headerPresent: !!verificationToken,
+      jwt: { verified: ipnAuth.verified, reason: ipnAuth.reason },
+      requery: { status: requery.status, confirmedPaid: requery.confirmedPaid, reason: requery.reason, httpStatus: requery.httpStatus },
+    }));
+
+    // Persist both verdicts alongside the IPN body for audit/forensics (queryable as
+    // payment_intents.webhook_payload._ipn_requery / _ipn_auth). NOTE: on the paid
+    // success path the credit RPC overwrites webhook_payload, so the success signal is
+    // status='completed'; the reject path below persists this verdict for diagnosis.
+    const ipnStored = {
+      ...(ipn as Record<string, unknown>),
+      _ipn_requery: requery,
+      _ipn_auth: ipnAuth,
+      _ipn_header_present: !!verificationToken,
+    } as Record<string, unknown>;
+
+    // Gate: NETOPIA's authoritative re-query must independently confirm the IPN's
+    // claimed state before we move money.
+    //   paid     -> NETOPIA status 3 (paid) / 5 (confirmed)
+    //   refunded -> NETOPIA status 8 (credit/refund) / 17 (reversed)
+    // Always fail closed in LIVE; in sandbox, log-only until netopia_ipn_enforce_sandbox=true.
+    if (stateChanging) {
+      const gateOk = status === 'paid'
+        ? requery.confirmedPaid
+        : (requery.status === 8 || requery.status === 17);
+      if (!gateOk) {
+        if (netopiaEnv === 'live' || enforceSandbox) {
+          console.error(
+            `[netopia] CRITICAL (WPS-01): refusing to process intent ${orderId} — re-query did NOT confirm ` +
+            `(mapped=${status}, requery.status=${requery.status}, reason=${requery.reason}). ` +
+            `env=${netopiaEnv} ip=${clientIP} ntp=${ntpId}. Intent left untouched for reconciliation.`,
+          );
+          // Persist the verdict for forensics (status is NOT changed here).
+          await supabase.from('payment_intents')
+            .update({ webhook_payload: ipnStored, updated_at: new Date().toISOString() })
+            .eq('id', orderId);
+          return new Response(
+            JSON.stringify({ error: 'ipn_authenticity_unverified', detail: requery.reason }),
+            { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        console.warn(
+          `[netopia] SANDBOX log-only: processing intent ${orderId} despite re-query not confirming ` +
+          `(requery.status=${requery.status}, reason=${requery.reason}). Set netopia_ipn_enforce_sandbox=true to enforce.`,
         );
       }
     }
@@ -307,7 +550,7 @@ Deno.serve(async (req) => {
             stripe_payment_intent_id: ntpId,
             card_brand: ipn.payment?.instrument?.issuer ?? null,
             card_last4: (ipn.payment?.instrument?.panMasked ?? '').slice(-4) || null,
-            webhook_payload: ipn as unknown as Record<string, unknown>,
+            webhook_payload: ipnStored,
           })
           .eq('id', orderId);
       } catch (metaErr) {
@@ -385,7 +628,7 @@ Deno.serve(async (req) => {
           status: 'failed',
           error_message: failReason,
           provider_error_code: providerCode,
-          webhook_payload: ipn as unknown as Record<string, unknown>,
+          webhook_payload: ipnStored,
           stripe_payment_intent_id: ntpId,
           updated_at: new Date().toISOString(),
         })
@@ -399,7 +642,7 @@ Deno.serve(async (req) => {
           .update({
             status: 'failed',
             error_message: failReason,
-            webhook_payload: ipn as unknown as Record<string, unknown>,
+            webhook_payload: ipnStored,
             stripe_payment_intent_id: ntpId,
             updated_at: new Date().toISOString(),
           })
@@ -470,7 +713,7 @@ Deno.serve(async (req) => {
       await supabase
         .from('payment_intents')
         .update({
-          webhook_payload: ipn as unknown as Record<string, unknown>,
+          webhook_payload: ipnStored,
           updated_at: new Date().toISOString(),
         })
         .eq('id', orderId);
