@@ -184,6 +184,8 @@ function walletCsvLabel(view: WalletTxnView, locale: 'es' | 'en'): string {
     case 'penalty': return es ? 'Penalización por cancelación' : 'Cancellation penalty';
     case 'bonus': return es ? 'Crédito promocional' : 'Promo credit';
     case 'refund': return es ? 'Reembolso' : 'Refund';
+    case 'insurance': return es ? 'Seguro de viaje' : 'Trip insurance';
+    case 'fx': return es ? 'Ajuste por tipo de cambio' : 'Exchange-rate adjustment';
     case 'adjustment':
     default: return es ? 'Ajuste' : 'Adjustment';
   }
