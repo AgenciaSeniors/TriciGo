@@ -151,6 +151,12 @@ export default function NotificationsScreen() {
 
     // Deep link based on notification data / category.
     const data = notif.data as Record<string, string> | null;
+    // Chat notifications carry ride_id but must open the conversation, not
+    // the ride screen (matches the OS push-tap handler).
+    if (((notif.type as string) === 'chat' || data?.type === 'chat') && data?.ride_id) {
+      router.push(`/chat/${data.ride_id}`);
+      return;
+    }
     if (data?.ride_id) {
       router.push(`/ride/${data.ride_id}`);
       return;
