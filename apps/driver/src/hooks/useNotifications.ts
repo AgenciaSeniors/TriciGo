@@ -81,15 +81,19 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
         router.push(`/chat/${data.ride_id}`);
       }
       break;
-    case 'wallet':
     case 'payment':
+      // Ride-earning context → Earnings tab.
+      router.push('/(tabs)/earnings');
+      break;
+    case 'wallet':
     case 'wallet_recharge':
     case 'wallet_recharge_refund':
     case 'wallet_credit':
     case 'wallet_debit':
-      // wallet_credit/debit are sent by gifts/tips/payments (e.g. 00393).
-      // Without these cases a tapped wallet push was a dead no-op.
-      router.push('/(tabs)/earnings');
+      // Balance events (gifts/recharges, e.g. 00393) open the Wallet tab
+      // where the new balance + transaction actually show. Without these
+      // cases a tapped wallet push was a dead no-op.
+      router.push('/(tabs)/wallet');
       break;
     case 'announcement':
     case 'blog':

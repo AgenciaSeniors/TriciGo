@@ -164,11 +164,22 @@ export default function NotificationsScreen() {
 
     // Deep link based on notification data / category.
     const data = notif.data as Record<string, string> | null;
+    // Chat notifications carry ride_id but must open the conversation, not
+    // the trip screen (matches the OS push-tap handler).
+    if (((notif.type as string) === 'chat' || data?.type === 'chat') && data?.ride_id) {
+      router.push(`/chat/${data.ride_id}`);
+      return;
+    }
     if (data?.ride_id) {
       router.push(`/trip/${data.ride_id}`);
       return;
     }
-    if (['wallet', 'payment', 'wallet_recharge', 'wallet_recharge_refund', 'wallet_credit', 'wallet_debit'].includes(notif.type)) {
+    // Balance events (gift/recharge/credit/debit) open the Wallet tab where
+    // the new balance + transaction show; 'payment' is a ride-earning event
+    // and stays on Earnings.
+    if (['wallet', 'wallet_recharge', 'wallet_recharge_refund', 'wallet_credit', 'wallet_debit'].includes(notif.type)) {
+      router.push('/(tabs)/wallet');
+    } else if ((notif.type as string) === 'payment') {
       router.push('/(tabs)/earnings');
     } else {
       // Content (promo/announcement/blog/news) + fallback open home.
