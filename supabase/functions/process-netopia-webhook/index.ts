@@ -5,7 +5,7 @@
 // a hosted-payment-page transaction settles, identifies our
 // payment_intent by the orderID NETOPIA echoes back (= our UUID,
 // non-guessable), claims atomically (idempotent), calls the credit
-// RPC, and ACKs with the NETOPIA-required `{ code: "0", message: "OK" }`.
+// RPC, and ACKs with the NETOPIA-required `{ "errorCode": 0 }`.
 //
 // Status: SANDBOX-READY — wired to the real NETOPIA v2.x IPN shape
 // (see https://secure.sandbox.netopia-payments.com/spec). Status
@@ -74,8 +74,15 @@ interface NetopiaIPNBody {
   };
 }
 
-/** ACK body NETOPIA expects on success. */
-const ACK_OK = { code: '0', message: 'OK' };
+/**
+ * ACK body NETOPIA expects on a successfully-received IPN. NETOPIA support
+ * (2026-06-25) confirmed the notifyURL response MUST be exactly `{"errorCode": 0}`
+ * with Content-Type application/json — otherwise it logs
+ * IDS_Model_Purchase_Sms_Online_INVALID_RESPONSE_FORMAT and treats the
+ * notification as failed (and retries). (Earlier `{code:"0",message:"OK"}` was
+ * the v2 SDK shape but this POS/account expects errorCode.)
+ */
+const ACK_OK = { errorCode: 0 };
 
 /** Map NETOPIA numeric status to our payment_intents.status. */
 function mapNetopiaStatus(s: number | undefined): 'paid' | 'failed' | 'pending' | 'refunded' | 'unknown' {
