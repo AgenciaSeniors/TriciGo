@@ -44,7 +44,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "expo-av": "^16.0.8",
+    "expo-audio": "~55.0.13",
     "expo-clipboard": "~55.0.9"
   }
 }

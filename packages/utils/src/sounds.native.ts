@@ -1,10 +1,14 @@
 /**
  * Sound feedback utilities — native implementation.
  * Metro resolves this file on iOS/Android; webpack ignores `.native.ts`.
- * Static import ensures expo-av is registered as a bundle dependency.
+ * Static import ensures expo-audio is registered as a bundle dependency.
+ *
+ * Migrated from expo-av (deprecated, no SDK 55 / new-arch build) to
+ * expo-audio, the official replacement. Same public API (registerSoundAssets
+ * / playSound / triggerFeedback) — only the native player implementation changed.
  */
 
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { triggerHaptic } from './haptics';
 
 export type SoundEvent =
@@ -35,8 +39,8 @@ export function registerSoundAssets(
   soundAssets = { ...soundAssets, ...assets };
 }
 
-// Cache loaded Audio.Sound instances
-const soundCache = new Map<SoundEvent, any>();
+// Cache loaded AudioPlayer instances
+const soundCache = new Map<SoundEvent, AudioPlayer>();
 let audioConfigured = false;
 
 /**
@@ -48,41 +52,45 @@ export async function playSound(event: SoundEvent): Promise<void> {
   if (!asset) return;
 
   try {
-    // Configure audio mode once (respect silent switch on iOS)
+    // Configure audio mode once (respect silent switch on iOS, duck others)
     if (!audioConfigured) {
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: false,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
+      await setAudioModeAsync({
+        playsInSilentMode: false,
+        shouldPlayInBackground: false,
+        interruptionMode: 'duckOthers',
       });
       audioConfigured = true;
     }
 
-    // Unload previous instance if exists
+    // Release previous instance if exists
     const cached = soundCache.get(event);
     if (cached) {
       try {
-        await cached.unloadAsync();
+        cached.remove();
       } catch {
-        // Ignore unload errors
+        // Ignore release errors
       }
       soundCache.delete(event);
     }
 
     // Create and play
-    const { sound } = await Audio.Sound.createAsync(asset, {
-      shouldPlay: true,
-      volume: 0.8,
-    });
-    soundCache.set(event, sound);
+    const player = createAudioPlayer(asset);
+    player.volume = 0.8;
+    soundCache.set(event, player);
 
-    // Auto-unload after playback finishes
-    sound.setOnPlaybackStatusUpdate((status: any) => {
+    // Auto-release after playback finishes
+    player.addListener('playbackStatusUpdate', (status) => {
       if (status.didJustFinish) {
-        sound.unloadAsync().catch(() => {});
+        try {
+          player.remove();
+        } catch {
+          // Ignore release errors
+        }
         soundCache.delete(event);
       }
     });
+
+    player.play();
   } catch {
     // Sound playback failed (e.g. no permissions, no audio device)
   }
