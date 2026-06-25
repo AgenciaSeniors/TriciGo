@@ -27,7 +27,10 @@
     },
     "neverBuiltDependencies": [
       "sharp"
-    ]
+    ],
+    "patchedDependencies": {
+      "@expo/dom-webview@55.0.3": "patches/@expo__dom-webview@55.0.3.patch"
+    }
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.0",
