@@ -31,7 +31,7 @@
     "@tricigo/utils": "workspace:*",
     "expo": "~55.0.14",
     "expo-apple-authentication": "~55.0.13",
-    "expo-av": "~16.0.8",
+    "expo-audio": "~55.0.13",
     "expo-build-properties": "~1.0.9",
     "expo-camera": "~55.0.19",
     "expo-clipboard": "~55.0.9",
