@@ -51,7 +51,7 @@
     "expo-router": "~55.0.5",
     "expo-secure-store": "^55.0.8",
     "expo-sharing": "~55.0.11",
-    "expo-speech": "~14.0.7",
+    "expo-speech": "~55.0.13",
     "expo-splash-screen": "^55.0.15",
     "expo-status-bar": "~55.0.4",
     "expo-task-manager": "~55.0.16",
