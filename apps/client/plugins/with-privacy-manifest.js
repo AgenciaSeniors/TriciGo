@@ -17,7 +17,7 @@
  * data collection or Required Reason API usage changes.
  */
 
-const { withDangerousMod, withXcodeProject } = require('@expo/config-plugins');
+const { withDangerousMod, withXcodeProject, IOSConfig } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -48,18 +48,27 @@ function withPrivacyManifestPbxResource(config) {
   return withXcodeProject(config, async (config) => {
     const xcodeProject = config.modResults;
     const projectName = config.modRequest.projectName;
+    // Path as it appears inside the Xcode project group (e.g. "TriciGo/PrivacyInfo.xcprivacy").
+    const filePath = `${projectName}/${MANIFEST_FILENAME}`;
 
     // Skip if already added (idempotent).
-    if (xcodeProject.hasFile(MANIFEST_FILENAME)) {
+    if (xcodeProject.hasFile(filePath)) {
       return config;
     }
 
-    const targetUuid = xcodeProject.getFirstTarget().uuid;
-    xcodeProject.addResourceFile(
-      MANIFEST_FILENAME,
-      { target: targetUuid },
-      projectName
-    );
+    // Use the Expo-supported helper (the same one `setGoogleServicesFile` uses to add
+    // GoogleService-Info.plist to the main group). It resolves the group with
+    // pbxGroupByPathOrAssert, which falls back to the project's mainGroup when the group
+    // can't be found by path — so it never crashes. The raw node-xcode
+    // `addResourceFile` instead does `pbxGroupByName(projectName).path`, which is null on
+    // the SDK 55 Xcode template (main group is keyed by path, not name) → TypeError.
+    IOSConfig.XcodeUtils.addResourceFileToGroup({
+      filepath: filePath,
+      groupName: projectName,
+      project: xcodeProject,
+      isBuildFile: true,
+      verbose: true,
+    });
 
     return config;
   });
