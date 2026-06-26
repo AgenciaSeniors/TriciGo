@@ -11,13 +11,13 @@
 Pegar tal cual en App Store Connect → My Apps → TriciGo → App Information → Keywords:
 
 ```
-habana,cuba,bicitaxi,taxi habana,transporte,viaje,ride,triciclo,movilidad,chofer
+habana,cuba,triciclo electrico,taxi habana,transporte,viaje,ride,triciclo,movilidad,chofer
 ```
 
 **Por qué cada keyword**:
 - `habana` — búsquedas "taxi habana", "movilidad habana"
 - `cuba` — búsquedas "transporte cuba"
-- `bicitaxi` — vocabulario local específico
+- `triciclo electrico` — vehículo específico (el que opera TriciGo)
 - `taxi habana` — long-tail muy buscado
 - `transporte` — categoría
 - `viaje` — verbo de búsqueda común
@@ -28,12 +28,12 @@ habana,cuba,bicitaxi,taxi habana,transporte,viaje,ride,triciclo,movilidad,chofer
 
 ### Subtitle (max 30 caracteres)
 ```
-Bicitaxis y viajes urbanos
+Triciclos y viajes urbanos
 ```
 
 ### Promotional Text (max 170 caracteres)
 ```
-Pide tu viaje en bicitaxi, moto o auto. Precio claro, conductor verificado, seguimiento en tiempo real.
+Pide tu viaje en triciclo, moto o auto. Precio claro, conductor verificado, seguimiento en tiempo real.
 ```
 
 ---

@@ -14,7 +14,7 @@
 
 ### 2. Mapa principal con ubicación
 - La pantalla principal con el mapa abierto mostrando La Habana
-- Texto sugerido: "Pide un bicitaxi al instante"
+- Texto sugerido: "Pide un triciclo al instante"
 
 ### 3. Selección de destino
 - El usuario ingresando un destino o seleccionando de favoritos
@@ -26,7 +26,7 @@
 
 ### 5. Seguimiento del conductor en mapa
 - Mapa mostrando el conductor acercándose al pasajero
-- Texto sugerido: "Sigue tu bicitaxi en tiempo real"
+- Texto sugerido: "Sigue tu triciclo en tiempo real"
 
 ### 6. Viaje en curso
 - Pantalla de viaje activo con ruta y tiempo estimado
@@ -50,5 +50,5 @@
 ## Tip: Feature Graphic (banner)
 - Dimensión: 1024 x 500 px
 - Imagen horizontal que aparece arriba en Play Store
-- Sugerencia: Logo de TriciGo + bicitaxi + skyline de La Habana
+- Sugerencia: Logo de TriciGo + triciclo + skyline de La Habana
 - Guardar como `feature-graphic.png`

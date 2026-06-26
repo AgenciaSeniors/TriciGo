@@ -10,7 +10,7 @@
 | Término | Dificultad | Plazo estimado |
 |---|---|---|
 | `tricigo` (marca) | Muy baja | 2-3 meses → #1 |
-| `bicitaxi`, `triciclo cuba`, `motorina cuba` | Baja-media | 3-6 meses |
+| `triciclo cuba`, `triciclo electrico cuba`, `motorina cuba` | Baja-media | 3-6 meses |
 | `alternativa a la nave`, `uber en cuba` | Media | 4-8 meses (con backlinks) |
 | `app taxi cuba`, `transporte en la habana` | Media-alta | 6-10 meses |
 | `transporte cuba` | Alta | 8-12+ meses |
@@ -61,12 +61,12 @@ agregarlos a `sameAs` del `Organization` JSON-LD en `apps/web/src/app/layout.tsx
 - El `sitemap.xml` ya está enviado.
 - **Pedir indexación** de las páginas nuevas de alto valor: `/`, `/uber-cuba`, `/triciclo`, `/moto`, `/auto`,
   `/mensajeria`, y las páginas de ciudad/provincia top.
-- **Monitorear** en "Rendimiento" las consultas `tricigo`, `bicitaxi`, `uber cuba`, `motorina`, `app transporte cuba`
+- **Monitorear** en "Rendimiento" las consultas `tricigo`, `triciclo`, `uber cuba`, `motorina`, `app transporte cuba`
   (impresiones → posición → clics) para ver qué sube y dónde reforzar contenido.
 
 ## 5. Señales que ayudan en Cuba
 
-- Contenido **en español neutro cubano** con los cubanismos reales (bicitaxi, motorina, almendrón, guagua, mandao).
+- Contenido **en español neutro cubano** con los cubanismos reales (triciclo, motorina, almendrón, guagua, mandao).
 - **Velocidad** (Cuba tiene conexiones lentas / 3G): el sitio ya es SSR + estático; mantener imágenes livianas.
 - **Mobile-first** (Cuba es móvil-dominante).
 - Páginas locales por provincia/ciudad (ya creadas) → reforzar con backlinks locales por zona.
