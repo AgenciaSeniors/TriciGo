@@ -61,6 +61,7 @@ export function useNetopiaCheckout() {
   } | null>(null);
   const resolverRef = useRef<((o: Outcome) => void) | null>(null);
   const returnBaseRef = useRef<string>('');
+  const argsRef = useRef<PresentArgs | null>(null);
   const settledRef = useRef(false);
 
   // Safety net: if the screen unmounts mid-checkout, drop the process-wide
@@ -79,6 +80,32 @@ export function useNetopiaCheckout() {
     const r = resolverRef.current;
     resolverRef.current = null;
     r?.(o);
+  }, []);
+
+  // Universal recovery: the proxied page failed to load (a proxy 407 the WebView
+  // couldn't answer, squid down, TLS error, or a flagged-IP fallthrough). Don't
+  // strand the user on a broken page with only the ✕ — clear the proxy and retry
+  // THIS checkout in the system browser, resolving present() with that outcome.
+  // The caller still polls the intent afterwards (DB is the source of truth).
+  const handleLoadFailure = useCallback(async () => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    await WebViewProxy.clearProxyOverride().catch(() => {});
+    setActive(null);
+    const resolve = resolverRef.current;
+    resolverRef.current = null;
+    const args = argsRef.current;
+    let outcome: Outcome = 'closed';
+    if (args) {
+      try {
+        const dismissUrl = `${args.returnUrlBase}?intent=${encodeURIComponent(args.intentId)}`;
+        const res = await WebBrowser.openAuthSessionAsync(args.url, dismissUrl);
+        outcome = res.type === 'success' ? 'returned' : 'closed';
+      } catch {
+        /* swallow — the caller polls the intent regardless */
+      }
+    }
+    resolve?.(outcome);
   }, []);
 
   const fallbackToBrowser = useCallback(
@@ -124,12 +151,14 @@ export function useNetopiaCheckout() {
         /* keep the static cfg creds */
       }
 
-      // Set the process-wide proxy BEFORE mounting the WebView so the very first
-      // request goes through the tunnel (no un-proxied 403 flash). On iOS the
-      // creds are applied to the ProxyConfiguration here; on Android
-      // ProxyController has no creds API, so the WebView answers the proxy's 407
-      // via the basicAuthCredential prop below (HTTP proxy → the 407 surfaces to
-      // onReceivedHttpAuthRequest).
+      // Set the process-wide proxy BEFORE mounting the WebView so the first
+      // request goes through the tunnel (no un-proxied 403 flash). iOS applies
+      // the creds on the ProxyConfiguration here. On Android ProxyController has
+      // no creds API, so the WebView is wired to answer the proxy 407 via the
+      // basicAuthCredential prop below — but whether Android surfaces a
+      // CONNECT-proxy 407 to onReceivedHttpAuthRequest is UNVERIFIED and MUST be
+      // device-tested before activation (see ops/squid/README.md). If it does
+      // not, onError on the WebView recovers to the system browser.
       try {
         await WebViewProxy.setProxyOverride(host, port, user, pass);
       } catch {
@@ -139,6 +168,7 @@ export function useNetopiaCheckout() {
       }
 
       returnBaseRef.current = returnUrlBase;
+      argsRef.current = { url, returnUrlBase, intentId };
       settledRef.current = false;
       return new Promise<Outcome>((resolve) => {
         resolverRef.current = resolve;
@@ -202,9 +232,10 @@ export function useNetopiaCheckout() {
         <WebView
           source={{ uri: active.url }}
           style={styles.web}
-          // Android can't carry proxy creds in ProxyController; this answers the
-          // proxy's 407 (HTTP proxy → onReceivedHttpAuthRequest fires). iOS uses
-          // the ProxyConfiguration creds instead, so only wire it on Android.
+          // Android can't carry proxy creds in ProxyController; this is wired to
+          // answer the proxy 407 via onReceivedHttpAuthRequest — UNVERIFIED on
+          // Android (device-test pending; onError below recovers if it fails).
+          // iOS uses the ProxyConfiguration creds, so only wire it on Android.
           basicAuthCredential={
             Platform.OS === 'android' && active.username
               ? { username: active.username, password: active.password }
@@ -212,6 +243,9 @@ export function useNetopiaCheckout() {
           }
           onShouldStartLoadWithRequest={onShouldStart}
           onNavigationStateChange={onNav}
+          // A failed main-frame load (proxy 407, squid down, TLS, flagged
+          // fallthrough) → recover to the system browser instead of a dead page.
+          onError={() => { void handleLoadFailure(); }}
           startInLoadingState
           renderLoading={() => (
             <View style={styles.loading}>

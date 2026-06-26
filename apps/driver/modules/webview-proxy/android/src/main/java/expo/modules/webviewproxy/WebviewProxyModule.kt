@@ -17,13 +17,15 @@ import java.util.concurrent.Executor
  * The proxy is a TLS-passthrough CONNECT tunnel (squid, no SSL-bump) → the
  * card data stays encrypted browser↔NETOPIA, the VPS never decrypts it.
  *
- * NOTE on auth: ProxyConfig/ProxyController have NO API to carry proxy
- * credentials, and the default RNCWebViewClient does not answer a 407
- * Proxy-Authentication challenge. So on Android the proxy must be reachable
- * WITHOUT Basic auth (secured instead by an obscure port + a NETOPIA-only
- * destination allowlist on the proxy). The username/password params are
- * accepted only for API parity with iOS (where ProxyConfiguration does carry
- * credentials) and are ignored here.
+ * NOTE on auth: ProxyController/ProxyConfig have NO API to carry proxy
+ * credentials, so the username/password params here are accepted only for API
+ * parity with iOS (where ProxyConfiguration.applyCredential DOES carry them)
+ * and are IGNORED. On Android, auth to the proxy is attempted at the JS layer
+ * via react-native-webview's basicAuthCredential prop (→ onReceivedHttpAuthRequest).
+ * Whether Android actually surfaces a CONNECT-proxy 407 to that callback (vs
+ * handling it internally with no public hook) is UNVERIFIED and MUST be
+ * device-tested before relying on an auth-required squid; if it does not, the
+ * squid must be reachable WITHOUT Basic auth. See ops/squid/README.md.
  *
  * setProxyOverride is PROCESS-WIDE for all WebViews in the app → call it right
  * before mounting the payment WebView and clearProxyOverride() right after.

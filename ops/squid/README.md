@@ -9,11 +9,20 @@ sees the card → stays **PCI SAQ-A**. **NEVER enable `ssl_bump`.**
 
 ## Authentication (so it isn't an open proxy)
 
-Android's `ProxyController` can't carry proxy credentials, but the squid is an
-**HTTP proxy** (`http_port`), so the proxy's `407` surfaces to the WebView's
-`onReceivedHttpAuthRequest` → answered by the `basicAuthCredential` prop. So we
-CAN require auth. `hmac_auth.sh` (this dir) is the squid Basic-auth helper. It
-accepts:
+Android's `ProxyController` can't carry proxy credentials. The intended auth path
+is: the squid is an **HTTP proxy** (`http_port`), so the `407` *should* surface to
+the WebView's `onReceivedHttpAuthRequest` → answered by the `basicAuthCredential`
+prop.
+
+> ⚠️ **UNVERIFIED on Android — device-test this BEFORE activation.** Android may
+> handle a CONNECT-proxy `407` internally (no public WebView hook), in which case
+> an auth-required squid would **brick** the in-app checkout on Android (the very
+> platform this feature targets). If the on-device test fails, the squid must run
+> **no-auth** and be protected another way (e.g. a dst-allowlist that still permits
+> the unpredictable 3DS bank ACS domains). iOS 17+ is fine either way
+> (`ProxyConfiguration.applyCredential`).
+
+`hmac_auth.sh` (this dir) is the squid Basic-auth helper. It accepts:
 
 - **(a) static cred** `tricigo:<pass>` — validated against the existing
   `/etc/squid/passwd` via `basic_ncsa_auth`. Transition / dev / curl smoke.
@@ -31,8 +40,14 @@ accepts:
    scp ops/squid/hmac_auth.sh root@187.77.214.236:/etc/squid/hmac_auth.sh
    ssh root@187.77.214.236 'chmod 755 /etc/squid/hmac_auth.sh
      [ -s /etc/squid/hmac_secret ] || openssl rand -hex 32 > /etc/squid/hmac_secret
-     chmod 600 /etc/squid/hmac_secret'
+     # squid spawns auth helpers as the cache_effective_user (proxy on Debian/Ubuntu),
+     # so the secret MUST be readable by that user — root:root + 600 makes the helper
+     # read it empty and ALL ephemeral tokens silently 407. chown to proxy:
+     chown proxy:proxy /etc/squid/hmac_secret && chmod 600 /etc/squid/hmac_secret'
    ```
+   ⚠️ The static-cred `curl` smoke (below) returns 200 even if the HMAC secret is
+   unreadable — so ALSO run the helper unit-test (below) to confirm the EPHEMERAL
+   path before flipping the flag.
 2. **Point squid at the helper** — set `/etc/squid/squid.conf`:
    ```
    http_port 13128

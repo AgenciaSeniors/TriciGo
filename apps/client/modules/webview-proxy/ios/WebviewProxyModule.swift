@@ -19,7 +19,10 @@ public class WebviewProxyModule: Module {
 
     AsyncFunction("setProxyOverride") { (host: String, port: Int, username: String?, password: String?, promise: Promise) in
       if #available(iOS 17.0, *) {
-        guard let portValue = NWEndpoint.Port(rawValue: UInt16(truncatingIfNeeded: port)) else {
+        // UInt16(exactly:) returns nil for out-of-range/negative ports, so a bad
+        // port is REJECTED (→ caller falls back to the browser) instead of being
+        // silently truncated to a wrong-but-valid port.
+        guard let port16 = UInt16(exactly: port), let portValue = NWEndpoint.Port(rawValue: port16) else {
           promise.reject("E_PROXY_PORT", "invalid port \(port)")
           return
         }
