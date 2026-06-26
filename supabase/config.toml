@@ -438,6 +438,12 @@ verify_jwt = false
 verify_jwt = false
 [functions.process-netopia-webhook]
 verify_jwt = false
+[functions.resolve-recharge-recipient]
+verify_jwt = false
+[functions.create-stripe-recharge-intent]
+verify_jwt = false
+[functions.process-stripe-webhook]
+verify_jwt = false
 [functions.health-check]
 verify_jwt = false
 [functions.delete-account]
