@@ -110,7 +110,7 @@ $$;
 INSERT INTO platform_config (key, value)
 VALUES (
   'business_notification_email',
-  '"soporte@tricigo.com, eduardodanielperezruiz@gmail.com"'::jsonb
+  '"soporte@tricigo.com"'::jsonb
 )
 ON CONFLICT (key) DO UPDATE
   SET value = EXCLUDED.value, updated_at = NOW();
@@ -118,4 +118,9 @@ ON CONFLICT (key) DO UPDATE
 -- Verification (run manually after apply):
 --   SELECT value #>> '{}' AS biz_emails FROM platform_config
 --    WHERE key = 'business_notification_email';
---   -- expected: soporte@tricigo.com, eduardodanielperezruiz@gmail.com
+--   -- expected: soporte@tricigo.com
+--
+-- NOTE: recipient kept as soporte@tricigo.com per owner decision. The trigger
+-- supports a comma-separated list (loops + POST per address) and the value is
+-- editable from the admin platform-config page, so more inboxes can be added
+-- later without a code change.
