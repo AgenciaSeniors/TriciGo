@@ -163,6 +163,39 @@ export const paymentService = {
     return intent;
   },
 
+  /**
+   * NETOPIA in-app checkout proxy config (from platform_config). When enabled,
+   * the mobile recharge WebView routes through the VPS CONNECT proxy so
+   * NETOPIA's edge sees the clean VPS IP instead of a reputation-flagged user
+   * IP (Cuban ETECSA otherwise gets a Google Cloud Armor 403 on the hosted
+   * card page). Defaults: flag OFF — the caller then falls back to the
+   * WebBrowser flow (exact pre-existing behavior) — and host/port = the
+   * TriciGo VPS squid. See project_netopia_cuba_ip_block_tunnel.
+   */
+  async getNetopiaProxyConfig(): Promise<{ enabled: boolean; host: string; port: number }> {
+    const DEFAULT_HOST = '187.77.214.236';
+    const DEFAULT_PORT = 13128;
+    try {
+      const supabase = getSupabaseClient();
+      const { data } = await supabase
+        .from('platform_config')
+        .select('key, value')
+        .in('key', ['netopia_proxy_enabled', 'netopia_proxy_host', 'netopia_proxy_port']);
+      const m: Record<string, string> = {};
+      (data ?? []).forEach((c: { key: string; value: string }) => {
+        const raw = c.value;
+        m[c.key] = typeof raw === 'string' && raw.startsWith('"') ? JSON.parse(raw) : String(raw);
+      });
+      return {
+        enabled: m['netopia_proxy_enabled'] === 'true',
+        host: m['netopia_proxy_host'] || DEFAULT_HOST,
+        port: parseInt(m['netopia_proxy_port'] ?? '', 10) || DEFAULT_PORT,
+      };
+    } catch {
+      return { enabled: false, host: DEFAULT_HOST, port: DEFAULT_PORT };
+    }
+  },
+
   // ==================== PROVIDER CONFIG ====================
 
   /**
