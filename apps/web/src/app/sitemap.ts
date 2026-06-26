@@ -1,6 +1,5 @@
 import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { getAllServiceSlugs } from '@/lib/services';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -22,19 +21,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/contact`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
     { url: `${baseUrl}/aml`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
     { url: `${baseUrl}/cookies`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
-  ];
-
-  // Service landing pages (high-intent commercial keywords). The /transporte
-  // coverage subtree, the airport-transfer routes and the /uber-cuba landing are
-  // intentionally excluded from the sitemap and noindexed to keep the public
-  // surface region-neutral; they remain reachable only by direct URL.
-  const keywordRoutes: MetadataRoute.Sitemap = [
-    ...getAllServiceSlugs().map((slug) => ({
-      url: `${baseUrl}/${slug}`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly' as const,
-      priority: 0.8,
-    })),
   ];
 
   // Dynamic blog posts
@@ -60,5 +46,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Best-effort: if blog posts fetch fails, just use static routes
   }
 
-  return [...staticRoutes, ...keywordRoutes, ...blogRoutes];
+  // The /transporte subtree, airport routes, per-service landings and /uber-cuba
+  // are intentionally omitted (noindexed, region-neutral public surface).
+  return [...staticRoutes, ...blogRoutes];
 }

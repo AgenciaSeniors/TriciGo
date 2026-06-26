@@ -19,6 +19,10 @@ export function buildServiceMetadata(slug: string): Metadata {
   return {
     title: svc.content.metaTitle,
     description: svc.content.metaDescription,
+    // The per-service landing copy (lib/services-content.ts) is still Cuba-forward.
+    // Keep these pages out of search/crawlers until that copy is neutralized, to
+    // hold the public surface region-neutral. Reachable by direct URL + footer.
+    robots: { index: false, follow: false },
     alternates: { canonical: url },
     openGraph: {
       title: svc.content.metaTitle,
@@ -43,8 +47,7 @@ export function ServiceLanding({ slug }: { slug: string }) {
     name: `${def.label} con TriciGo`,
     description: content.intro,
     provider: { '@type': 'Organization', name: 'TriciGo', url: SITE },
-    areaServed: { '@type': 'Country', name: 'Cuba' },
-    offers: { '@type': 'Offer', availability: 'https://schema.org/InStock', priceCurrency: 'CUP' },
+    offers: { '@type': 'Offer', availability: 'https://schema.org/InStock' },
   };
 
   const breadcrumbJsonLd = {
@@ -125,7 +128,7 @@ export function ServiceLanding({ slug }: { slug: string }) {
         ¿Cómo funciona?
       </h2>
       <ol style={{ paddingLeft: '1.25rem', margin: 0, color: 'var(--text-secondary)', lineHeight: 1.7, fontSize: '0.95rem' }}>
-        <li style={{ marginBottom: '0.5rem' }}><strong>Elegí tu destino</strong> — ingresá la recogida y el destino y verás el precio estimado en CUP al instante.</li>
+        <li style={{ marginBottom: '0.5rem' }}><strong>Elegí tu destino</strong> — ingresá la recogida y el destino y verás el precio estimado al instante.</li>
         <li style={{ marginBottom: '0.5rem' }}><strong>Confirmá el {def.label.toLowerCase()}</strong> — aceptás el precio antes de viajar, sin sorpresas al bajarte.</li>
         <li><strong>Viajá seguro</strong> — seguí el viaje en el mapa, compartí tu ubicación y pagá en efectivo o con TriciCoin.</li>
       </ol>

@@ -590,63 +590,6 @@ export default function HomeClient() {
         </div>
       </section>
 
-      {/* ── Guías (bento) ── */}
-      <section className="section">
-        <div className="container">
-          <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
-            <span className="bento-eyebrow">Guías</span>
-            <h2 className="section-title">Aprendé a moverte mejor</h2>
-            <p className="section-subtitle">
-              Consejos prácticos para moverte mejor y pagar lo justo, en lenguaje claro de a pie.
-            </p>
-          </div>
-
-          <div className="bento">
-            {/* Featured — cómo moverse (tall) */}
-            <Link href="/blog/como-moverse-en-la-habana" className="bento-tile bento-tile--glow bento-2 bento-tall">
-              <span className="bento-eyebrow" style={{ background: 'var(--primary-alpha-10)' }}>Guía destacada</span>
-              <h3 style={{ fontSize: '1.4rem' }}>Cómo moverse en la ciudad</h3>
-              <p>Todas las formas de moverte por la ciudad —bus, taxi compartido, bicitaxi, moto— y cuál te conviene en cada caso.</p>
-              <span className="bento-link">Leer la guía &rarr;</span>
-            </Link>
-
-            {/* Glosario */}
-            <Link href="/blog/glosario-transporte-cubano" className="bento-tile">
-              <h3>Glosario del transporte urbano</h3>
-              <p>Bicitaxi, taxi compartido, conductor, moto… qué es cada uno.</p>
-              <span className="bento-link">Leer &rarr;</span>
-            </Link>
-
-            {/* Tarifas */}
-            <Link href="/blog/tarifas-transporte-cuba-2026" className="bento-tile">
-              <h3>Tarifas de transporte 2026</h3>
-              <p>Cuánto cuesta moverse hoy, modo por modo.</p>
-              <span className="bento-link">Leer &rarr;</span>
-            </Link>
-
-            {/* No te claven — wide */}
-            <Link href="/blog/no-te-estafen-precio-taxi-cuba" className="bento-tile bento-tile--row bento-2">
-              <div className="bento-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-              </div>
-              <div>
-                <h3>Para que no te estafen</h3>
-                <p>Cómo saber el precio justo y defenderte del sobrecobro.</p>
-                <span className="bento-link" style={{ paddingTop: '0.4rem' }}>Leer &rarr;</span>
-              </div>
-            </Link>
-          </div>
-
-          <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-            <Link href="/blog" style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none' }}>
-              Ver todo el blog &rarr;
-            </Link>
-          </div>
-        </div>
-      </section>
-
       {/* ── Preguntas frecuentes ── */}
       <section className="section section--gray">
         <div className="container">
