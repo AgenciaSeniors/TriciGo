@@ -54,7 +54,11 @@ function iosMajorVersion(): number {
 }
 
 export function useNetopiaCheckout() {
-  const [activeUrl, setActiveUrl] = useState<string | null>(null);
+  const [active, setActive] = useState<{
+    url: string;
+    username: string;
+    password: string;
+  } | null>(null);
   const resolverRef = useRef<((o: Outcome) => void) | null>(null);
   const returnBaseRef = useRef<string>('');
   const settledRef = useRef(false);
@@ -71,7 +75,7 @@ export function useNetopiaCheckout() {
     if (settledRef.current) return;
     settledRef.current = true;
     WebViewProxy.clearProxyOverride().catch(() => {});
-    setActiveUrl(null);
+    setActive(null);
     const r = resolverRef.current;
     resolverRef.current = null;
     r?.(o);
@@ -88,7 +92,7 @@ export function useNetopiaCheckout() {
 
   const present = useCallback(
     async ({ url, returnUrlBase, intentId }: PresentArgs): Promise<Outcome> => {
-      let cfg = { enabled: false, host: '', port: 0 };
+      let cfg = { enabled: false, host: '', port: 0, username: '', password: '' };
       try {
         cfg = await paymentService.getNetopiaProxyConfig();
       } catch {
@@ -102,9 +106,15 @@ export function useNetopiaCheckout() {
       }
 
       // Set the process-wide proxy BEFORE mounting the WebView so the very
-      // first request goes through the tunnel (no un-proxied 403 flash).
+      // first request goes through the tunnel (no un-proxied 403 flash). On iOS
+      // the creds are applied to the ProxyConfiguration here; on Android
+      // ProxyController has no creds API, so the WebView answers the proxy's 407
+      // via the basicAuthCredential prop below (it's an HTTP proxy, so the 407
+      // surfaces to onReceivedHttpAuthRequest).
+      const user = cfg.username || null;
+      const pass = cfg.password || null;
       try {
-        await WebViewProxy.setProxyOverride(cfg.host, cfg.port, null, null);
+        await WebViewProxy.setProxyOverride(cfg.host, cfg.port, user, pass);
       } catch {
         // Could not set the proxy → don't load un-proxied (a flagged IP would
         // 403); fall back to the system browser instead.
@@ -115,7 +125,7 @@ export function useNetopiaCheckout() {
       settledRef.current = false;
       return new Promise<Outcome>((resolve) => {
         resolverRef.current = resolve;
-        setActiveUrl(url);
+        setActive({ url, username: cfg.username, password: cfg.password });
       });
     },
     [fallbackToBrowser],
@@ -150,7 +160,7 @@ export function useNetopiaCheckout() {
     [isReturnUrl, settle],
   );
 
-  const checkoutElement = activeUrl ? (
+  const checkoutElement = active ? (
     <Modal
       visible
       animationType="slide"
@@ -173,8 +183,16 @@ export function useNetopiaCheckout() {
           </TouchableOpacity>
         </View>
         <WebView
-          source={{ uri: activeUrl }}
+          source={{ uri: active.url }}
           style={styles.web}
+          // Android can't carry proxy creds in ProxyController; this answers the
+          // proxy's 407 (HTTP proxy → onReceivedHttpAuthRequest fires). iOS uses
+          // the ProxyConfiguration creds instead, so only wire it on Android.
+          basicAuthCredential={
+            Platform.OS === 'android' && active.username
+              ? { username: active.username, password: active.password }
+              : undefined
+          }
           onShouldStartLoadWithRequest={onShouldStart}
           onNavigationStateChange={onNav}
           startInLoadingState

@@ -17,6 +17,7 @@
  */
 import React, { useCallback, useRef, useState } from 'react';
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,6 +37,8 @@ const RETURN_PREFIXES = ['https://tricigo.com/', 'tricigo://', 'tricigo-driver:/
 export default function ProxyTestScreen() {
   const [host, setHost] = useState(DEFAULT_PROXY_HOST);
   const [port, setPort] = useState(DEFAULT_PROXY_PORT);
+  const [user, setUser] = useState('tricigo');
+  const [pass, setPass] = useState('');
   const [url, setUrl] = useState(DEFAULT_URL);
   const [webUrl, setWebUrl] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -48,13 +51,13 @@ export default function ProxyTestScreen() {
 
   const setProxy = useCallback(async () => {
     try {
-      await WebViewProxy.setProxyOverride(host.trim(), parseInt(port, 10), null, null);
+      await WebViewProxy.setProxyOverride(host.trim(), parseInt(port, 10), user.trim() || null, pass || null);
       proxyOn.current = true;
-      log(`✅ proxy SET → ${host}:${port}`);
+      log(`✅ proxy SET → ${host}:${port}${user.trim() ? ` (auth ${user.trim()})` : ' (no-auth)'}`);
     } catch (e) {
       log(`❌ setProxyOverride failed: ${String((e as Error)?.message ?? e)}`);
     }
-  }, [host, port, log]);
+  }, [host, port, user, pass, log]);
 
   const clearProxy = useCallback(async () => {
     try {
@@ -100,6 +103,10 @@ export default function ProxyTestScreen() {
         <TextInput style={[styles.input, styles.flex2]} value={host} onChangeText={setHost} placeholder="proxy host" autoCapitalize="none" />
         <TextInput style={[styles.input, styles.flex1]} value={port} onChangeText={setPort} placeholder="port" keyboardType="number-pad" />
       </View>
+      <View style={styles.row}>
+        <TextInput style={[styles.input, styles.flex1]} value={user} onChangeText={setUser} placeholder="proxy user (blank = no-auth)" autoCapitalize="none" autoCorrect={false} />
+        <TextInput style={[styles.input, styles.flex1]} value={pass} onChangeText={setPass} placeholder="proxy pass" autoCapitalize="none" autoCorrect={false} secureTextEntry />
+      </View>
       <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholder="URL to load (paste a real redirectUrl to test 3DS)" autoCapitalize="none" autoCorrect={false} />
 
       <View style={styles.row}>
@@ -124,6 +131,11 @@ export default function ProxyTestScreen() {
           <WebView
             source={{ uri: webUrl }}
             style={styles.web}
+            basicAuthCredential={
+              Platform.OS === 'android' && user.trim()
+                ? { username: user.trim(), password: pass }
+                : undefined
+            }
             onNavigationStateChange={onNav}
             onError={(e) => log(`❌ onError: ${e.nativeEvent.code} ${e.nativeEvent.description}`)}
             onHttpError={(e) => log(`❌ onHttpError: HTTP ${e.nativeEvent.statusCode} ${e.nativeEvent.url}`)}

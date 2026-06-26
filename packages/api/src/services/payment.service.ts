@@ -172,7 +172,13 @@ export const paymentService = {
    * WebBrowser flow (exact pre-existing behavior) — and host/port = the
    * TriciGo VPS squid. See project_netopia_cuba_ip_block_tunnel.
    */
-  async getNetopiaProxyConfig(): Promise<{ enabled: boolean; host: string; port: number }> {
+  async getNetopiaProxyConfig(): Promise<{
+    enabled: boolean;
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+  }> {
     const DEFAULT_HOST = '187.77.214.236';
     const DEFAULT_PORT = 13128;
     try {
@@ -180,7 +186,13 @@ export const paymentService = {
       const { data } = await supabase
         .from('platform_config')
         .select('key, value')
-        .in('key', ['netopia_proxy_enabled', 'netopia_proxy_host', 'netopia_proxy_port']);
+        .in('key', [
+          'netopia_proxy_enabled',
+          'netopia_proxy_host',
+          'netopia_proxy_port',
+          'netopia_proxy_user',
+          'netopia_proxy_pass',
+        ]);
       const m: Record<string, string> = {};
       (data ?? []).forEach((c: { key: string; value: string }) => {
         const raw = c.value;
@@ -190,9 +202,16 @@ export const paymentService = {
         enabled: m['netopia_proxy_enabled'] === 'true',
         host: m['netopia_proxy_host'] || DEFAULT_HOST,
         port: parseInt(m['netopia_proxy_port'] ?? '', 10) || DEFAULT_PORT,
+        // Proxy Basic-auth creds. Android can't carry creds in ProxyController →
+        // the WebView answers the proxy's 407 via the `basicAuthCredential` prop
+        // (HTTP proxy, so onReceivedHttpAuthRequest fires); iOS applies them on
+        // the ProxyConfiguration. Empty = no auth. The squid requires auth so it
+        // isn't an open proxy; ephemeral per-intent creds are a follow-up.
+        username: m['netopia_proxy_user'] ?? '',
+        password: m['netopia_proxy_pass'] ?? '',
       };
     } catch {
-      return { enabled: false, host: DEFAULT_HOST, port: DEFAULT_PORT };
+      return { enabled: false, host: DEFAULT_HOST, port: DEFAULT_PORT, username: '', password: '' };
     }
   },
 
