@@ -80,7 +80,7 @@ export const AIRPORT_ROUTES: AirportRoute[] = [
       },
       {
         q: '¿Conviene auto o algo más económico con maletas?',
-        a: 'Con equipaje, el auto es lo más cómodo y práctico desde el aeropuerto. El bicitaxi y la moto van mejor para trayectos cortos sin maletas dentro de la ciudad.',
+        a: 'Con equipaje, el auto es lo más cómodo y práctico desde el aeropuerto. El triciclo y la moto van mejor para trayectos cortos sin maletas dentro de la ciudad.',
       },
     ],
   },

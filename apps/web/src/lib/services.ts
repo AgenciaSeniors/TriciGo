@@ -1,5 +1,5 @@
 // Per-service local-SEO landing pages (/triciclo, /moto, /auto, /mensajeria).
-// Each targets the head term of one vehicle type (bicitaxi, motorina, almendrón,
+// Each targets the head term of one vehicle type (triciclo, motorina, almendrón,
 // mandao). Mirrors the province/city pattern: a shared <ServiceLanding> renderer
 // reads the unique copy from SERVICE_CONTENT (services-content.ts).
 
