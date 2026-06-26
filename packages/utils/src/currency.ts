@@ -49,6 +49,20 @@ export function formatTriciCoin(amount: number): string {
 }
 
 /**
+ * Format a CUP-pegged whole-TriciCoin amount with the full brand name.
+ * Use for referral / reward copy where "500 TriciCoin" reads clearer than the
+ * compact "500 TC" wallet abbreviation — same value (TriciCoin is 1:1 CUP),
+ * just spelled out.
+ *
+ *   formatTriciCoinName(500)   → "500 TriciCoin"
+ *   formatTriciCoinName(1500)  → "1,500 TriciCoin"
+ */
+export function formatTriciCoinName(amount: number): string {
+  const formatted = Math.max(0, Math.round(safeNum(amount))).toLocaleString('es-CU');
+  return `${formatted} TriciCoin`;
+}
+
+/**
  * Wallet v2 phase 2: format an USD-cents balance as the new TriciCoin
  * unit (1 TC ≡ 1 USD per spec §1).
  *

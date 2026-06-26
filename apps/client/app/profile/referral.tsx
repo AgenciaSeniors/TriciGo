@@ -16,7 +16,7 @@ import { Skeleton } from '@tricigo/ui/Skeleton';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService, walletService } from '@tricigo/api';
-import { formatCUP, getErrorMessage, triggerHaptic } from '@tricigo/utils';
+import { formatTriciCoinName, getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
@@ -143,7 +143,7 @@ export default function ReferralScreen() {
                 year: 'numeric',
               })}
               {' · '}
-              {t('profile.referral_bonus', { amount: formatCUP(item.bonus_amount) })}
+              {t('profile.referral_bonus', { amount: formatTriciCoinName(item.bonus_amount) })}
             </Text>
           </View>
           <StatusBadge
@@ -198,7 +198,7 @@ export default function ReferralScreen() {
                   disabled={!myCode}
                 />
                 <Text variant="caption" color="tertiary" className="mt-3 text-center">
-                  {t('profile.referral_share_help', { bonus: formatCUP(bonusCup) })}
+                  {t('profile.referral_share_help', { bonus: formatTriciCoinName(bonusCup) })}
                 </Text>
               </Card>
 
