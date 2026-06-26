@@ -95,6 +95,24 @@ describe('walletService gifts', () => {
       await expect(walletService.findUserByPhone('12345')).rejects.toThrow();
       expect(mockRpc).not.toHaveBeenCalled();
     });
+
+    it('normalizes a bare local number (5XXXXXXX) to canonical before the RPC', async () => {
+      mockRpc.mockResolvedValueOnce({ data: [], error: null });
+      await walletService.findUserByPhone('55512345');
+      expect(mockRpc).toHaveBeenCalledWith('find_user_by_phone', { p_phone: '+5355512345' });
+    });
+
+    it('normalizes a country-code-without-plus number (535XXXXXXX) before the RPC', async () => {
+      mockRpc.mockResolvedValueOnce({ data: [], error: null });
+      await walletService.findUserByPhone('5355512345');
+      expect(mockRpc).toHaveBeenCalledWith('find_user_by_phone', { p_phone: '+5355512345' });
+    });
+
+    it('trims surrounding whitespace before normalizing', async () => {
+      mockRpc.mockResolvedValueOnce({ data: [], error: null });
+      await walletService.findUserByPhone('  +5355512345  ');
+      expect(mockRpc).toHaveBeenCalledWith('find_user_by_phone', { p_phone: '+5355512345' });
+    });
   });
 
   // ==================== findUserByGiftCode ====================
