@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Pressable, Animated, Platform, Image, ActivityIndicator } from 'react-native';
+import { View, Pressable, Animated, Platform, Image, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -92,6 +92,9 @@ export function ConfirmLocationScreen({
   const [confirming, setConfirming] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<any>(null);
+  const cameraRef = useRef<any>(null);
+  // "Center on my location" FAB — true while resolving the GPS fix.
+  const [isLocating, setIsLocating] = useState(false);
 
   // Shimmer animation for address bar
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -169,6 +172,45 @@ export function ConfirmLocationScreen({
     // Fallback: use whatever is in centerRef (initial location)
     geocodeCenter(centerRef.current.latitude, centerRef.current.longitude);
   }, [geocodeCenter]);
+
+  // "Center on my location" FAB. Flies the camera to the user's current
+  // position; the existing onMapIdle → getCenter() → geocode path then moves
+  // the center pin and refreshes the address bar, exactly like dragging the
+  // map. We don't touch centerRef here — the camera move drives everything.
+  const handleGoToMyLocation = useCallback(async () => {
+    if (isLocating) return;
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          t('ride.location_off_title', { defaultValue: 'Ubicación desactivada' }),
+          t('ride.location_off_body', {
+            defaultValue: 'Activá el permiso de ubicación para centrar el mapa en dónde estás.',
+          }),
+        );
+        return;
+      }
+      // Instant cached fix first, fresh GPS only if there's no cached one.
+      let pos = await Location.getLastKnownPositionAsync();
+      if (!pos) {
+        pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      }
+      const lat = pos?.coords.latitude;
+      const lng = pos?.coords.longitude;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      cameraRef.current?.setCamera({
+        centerCoordinate: [lng as number, lat as number],
+        zoomLevel: 16,
+        animationDuration: 600,
+        animationMode: 'flyTo',
+      });
+    } catch {
+      /* silent — keep the current map position */
+    } finally {
+      if (mountedRef.current) setIsLocating(false);
+    }
+  }, [isLocating, t]);
 
   // The confirm button used to be gated on `disabled={isGeocoding ||
   // !address}`, forcing the user to wait out the reverse-geocode (the
@@ -299,6 +341,7 @@ export function ConfirmLocationScreen({
             on first mount, so without the key change the camera would
             stay glued to HAVANA_CENTER for the entire picker session. */}
         <MapboxGL.Camera
+          ref={cameraRef}
           key={`cam-${initialCenter[0].toFixed(4)},${initialCenter[1].toFixed(4)}`}
           defaultSettings={{
             centerCoordinate: initialCenter,
@@ -431,6 +474,40 @@ export function ConfirmLocationScreen({
           )}
         </View>
       </View>
+
+      {/* "Center on my location" FAB — sits just above the confirm button,
+         bottom-right (mirrors the recenter FAB in RideMapView). Tapping it
+         flies the camera to the user's GPS; onMapIdle then moves the pin and
+         refreshes the address, so the picked point becomes their location. */}
+      <Pressable
+        onPress={handleGoToMyLocation}
+        disabled={isLocating}
+        accessibilityRole="button"
+        accessibilityLabel={t('ride.center_on_me', { defaultValue: 'Centrar en mi ubicación' })}
+        hitSlop={8}
+        style={{
+          position: 'absolute',
+          right: 16,
+          bottom: (Platform.OS === 'ios' ? 40 : 24) + 56 + 16,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: isDark ? darkColors.card : '#fff',
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.18,
+          shadowRadius: 6,
+          elevation: 4,
+        }}
+      >
+        {isLocating ? (
+          <ActivityIndicator size="small" color={colors.brand.orange} />
+        ) : (
+          <Ionicons name="locate" size={22} color={colors.brand.orange} />
+        )}
+      </Pressable>
 
       {/* Bottom confirm button */}
       <View
