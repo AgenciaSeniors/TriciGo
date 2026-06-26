@@ -215,6 +215,53 @@ export const paymentService = {
     }
   },
 
+  /**
+   * Mint a SHORT-LIVED proxy credential for the in-app NETOPIA checkout WebView
+   * (the `mint-netopia-proxy-credential` EF). Preferred over the static
+   * `getNetopiaProxyConfig` cred: the squid validates this ephemeral HMAC token
+   * statelessly and it expires (~10 min), so a leak isn't a standing tunnel.
+   * Returns null on ANY failure (not logged in, EF absent/disabled, network) so
+   * the caller falls back to the static cred (or no auth).
+   */
+  async mintNetopiaProxyCredential(): Promise<{
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+    expiresAt: number;
+  } | null> {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return null;
+      const supabaseUrl = (supabase as unknown as { supabaseUrl: string }).supabaseUrl
+        ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+        ?? process.env.EXPO_PUBLIC_SUPABASE_URL
+        ?? '';
+      const res = await fetch(`${supabaseUrl}/functions/v1/mint-netopia-proxy-credential`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+            ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+            ?? '',
+        },
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok || !json.username || !json.password) return null;
+      return {
+        host: String(json.host),
+        port: Number(json.port),
+        username: String(json.username),
+        password: String(json.password),
+        expiresAt: Number(json.expiresAt),
+      };
+    } catch {
+      return null;
+    }
+  },
+
   // ==================== PROVIDER CONFIG ====================
 
   /**

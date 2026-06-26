@@ -105,16 +105,33 @@ export function useNetopiaCheckout() {
         return fallbackToBrowser(url, returnUrlBase, intentId);
       }
 
-      // Set the process-wide proxy BEFORE mounting the WebView so the very
-      // first request goes through the tunnel (no un-proxied 403 flash). On iOS
-      // the creds are applied to the ProxyConfiguration here; on Android
-      // ProxyController has no creds API, so the WebView answers the proxy's 407
-      // via the basicAuthCredential prop below (it's an HTTP proxy, so the 407
-      // surfaces to onReceivedHttpAuthRequest).
-      const user = cfg.username || null;
-      const pass = cfg.password || null;
+      // Prefer a SHORT-LIVED ephemeral credential (mint EF) so a leaked cred
+      // isn't a standing tunnel; fall back to the static config cred if minting
+      // fails (EF absent/disabled, not logged in, network).
+      let host = cfg.host;
+      let port = cfg.port;
+      let user: string | null = cfg.username || null;
+      let pass: string | null = cfg.password || null;
       try {
-        await WebViewProxy.setProxyOverride(cfg.host, cfg.port, user, pass);
+        const eph = await paymentService.mintNetopiaProxyCredential();
+        if (eph?.username && eph.password) {
+          host = eph.host || host;
+          port = eph.port || port;
+          user = eph.username;
+          pass = eph.password;
+        }
+      } catch {
+        /* keep the static cfg creds */
+      }
+
+      // Set the process-wide proxy BEFORE mounting the WebView so the very first
+      // request goes through the tunnel (no un-proxied 403 flash). On iOS the
+      // creds are applied to the ProxyConfiguration here; on Android
+      // ProxyController has no creds API, so the WebView answers the proxy's 407
+      // via the basicAuthCredential prop below (HTTP proxy → the 407 surfaces to
+      // onReceivedHttpAuthRequest).
+      try {
+        await WebViewProxy.setProxyOverride(host, port, user, pass);
       } catch {
         // Could not set the proxy → don't load un-proxied (a flagged IP would
         // 403); fall back to the system browser instead.
@@ -125,7 +142,7 @@ export function useNetopiaCheckout() {
       settledRef.current = false;
       return new Promise<Outcome>((resolve) => {
         resolverRef.current = resolve;
-        setActive({ url, username: cfg.username, password: cfg.password });
+        setActive({ url, username: user ?? '', password: pass ?? '' });
       });
     },
     [fallbackToBrowser],
