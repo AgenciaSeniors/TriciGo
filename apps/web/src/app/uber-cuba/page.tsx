@@ -14,6 +14,9 @@ const URL = `${SITE}/uber-cuba`;
 export const metadata: Metadata = {
   title: UBER_CUBA.metaTitle,
   description: UBER_CUBA.metaDescription,
+  // Cuba-forward SEO landing — excluded from search/crawlers to keep the public
+  // surface region-neutral. Reachable only by direct URL.
+  robots: { index: false, follow: false },
   alternates: { canonical: URL },
   openGraph: {
     title: UBER_CUBA.metaTitle,

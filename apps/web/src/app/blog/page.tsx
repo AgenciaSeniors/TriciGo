@@ -4,7 +4,7 @@ import { getPublishedPostsServer } from '@/lib/blog-server';
 
 // Server-rendered so crawlers get the full post list (titles, excerpts, links)
 // in the initial HTML. ISR: revalidated hourly, matching the /blog Cache-Control
-// in next.config.ts. Spanish is the canonical locale (<html lang="es">, Cuba).
+// in next.config.ts. Spanish is the canonical locale (<html lang="es">).
 export const revalidate = 3600;
 
 function formatDate(iso: string): string {
@@ -34,7 +34,7 @@ export default async function BlogPage({
     <main style={{ maxWidth: 800, margin: '0 auto', padding: '2rem 1.5rem' }}>
       <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem' }}>Blog</h1>
       <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-        Noticias y guías para moverte por Cuba
+        Noticias y guías para moverte por la ciudad
       </p>
 
       {/* Server-side search (GET → ?q=). Backs the WebSite SearchAction. */}

@@ -1,4 +1,4 @@
-// Coverage hub — lists the 16 Cuban provinces and links to each local landing
+// Coverage hub — lists the provinces and links to each local landing
 // page. Internal-linking hub for the /transporte/[provincia] pages; linked from
 // the footer and the home "Cobertura" section. Server-rendered + in the sitemap.
 
@@ -10,14 +10,14 @@ import { getAllProvinces } from '@/lib/coverage';
 const SITE = 'https://tricigo.com';
 
 export const metadata: Metadata = {
-  title: 'Transporte en Cuba con TriciGo — Cobertura por provincia',
+  title: 'Transporte con TriciGo — Cobertura por provincia',
   description:
-    'Pedí triciclos, motos y autos con TriciGo en las 16 provincias de Cuba. Elegí tu provincia y conocé el servicio de movilidad bajo demanda en tu zona.',
+    'Pedí triciclos, motos y autos con TriciGo en múltiples ciudades. Elegí tu zona y conocé el servicio de movilidad bajo demanda disponible.',
   alternates: { canonical: `${SITE}/transporte` },
   openGraph: {
-    title: 'Transporte en Cuba con TriciGo — Cobertura por provincia',
+    title: 'Transporte con TriciGo — Cobertura por provincia',
     description:
-      'Triciclos, motos y autos bajo demanda en las 16 provincias de Cuba. Elegí tu provincia.',
+      'Triciclos, motos y autos bajo demanda en tu zona. Elegí tu provincia o ciudad.',
     url: `${SITE}/transporte`,
   },
 };
@@ -30,7 +30,7 @@ export default function TransporteHubPage() {
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Inicio', item: SITE },
-      { '@type': 'ListItem', position: 2, name: 'Transporte en Cuba', item: `${SITE}/transporte` },
+      { '@type': 'ListItem', position: 2, name: 'Transporte', item: `${SITE}/transporte` },
     ],
   };
 
@@ -41,14 +41,14 @@ export default function TransporteHubPage() {
       <nav aria-label="Migas" style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginBottom: '1.25rem' }}>
         <Link href="/" style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>Inicio</Link>
         <span style={{ margin: '0 0.4rem' }}>/</span>
-        <span style={{ color: 'var(--text-secondary)' }}>Transporte en Cuba</span>
+        <span style={{ color: 'var(--text-secondary)' }}>Transporte</span>
       </nav>
 
       <h1 style={{ fontSize: '2.25rem', fontWeight: 800, lineHeight: 1.2, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-        Transporte en Cuba con TriciGo
+        Transporte con TriciGo
       </h1>
       <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.6, marginBottom: '2.5rem' }}>
-        TriciGo es la app de movilidad urbana de Cuba: pedí un triciclo, una moto o un auto, o un
+        TriciGo es la app de movilidad urbana: pedí un triciclo, una moto o un auto, o un
         servicio de mensajería, y seguí tu viaje en tiempo real con precio claro antes de confirmar.
         Elegí tu provincia para ver cómo funciona el servicio bajo demanda en tu zona.
       </p>
@@ -86,17 +86,6 @@ export default function TransporteHubPage() {
           </Link>
         ))}
       </div>
-
-      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '2.75rem 0 0.75rem', color: 'var(--text-primary)' }}>
-        Rutas populares
-      </h2>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-        ¿Llegas a La Habana? Mira cómo llegar desde el{' '}
-        <Link href="/transporte/aeropuerto-la-habana" style={{ color: 'var(--primary)', fontWeight: 600 }}>
-          aeropuerto José Martí al Vedado, Habana Vieja, Miramar o las Playas del Este
-        </Link>{' '}
-        con el precio claro antes de subir.
-      </p>
     </main>
   );
 }
