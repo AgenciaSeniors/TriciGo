@@ -595,9 +595,9 @@ export default function HomeClient() {
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
             <span className="bento-eyebrow">Guías</span>
-            <h2 className="section-title">Aprendé a moverte por Cuba</h2>
+            <h2 className="section-title">Aprendé a moverte mejor</h2>
             <p className="section-subtitle">
-              Consejos prácticos para moverte mejor y pagar lo justo, en lenguaje cubano de a pie.
+              Consejos prácticos para moverte mejor y pagar lo justo, en lenguaje claro de a pie.
             </p>
           </div>
 
@@ -605,22 +605,22 @@ export default function HomeClient() {
             {/* Featured — cómo moverse (tall) */}
             <Link href="/blog/como-moverse-en-la-habana" className="bento-tile bento-tile--glow bento-2 bento-tall">
               <span className="bento-eyebrow" style={{ background: 'var(--primary-alpha-10)' }}>Guía destacada</span>
-              <h3 style={{ fontSize: '1.4rem' }}>Cómo moverse en La Habana</h3>
-              <p>Todas las formas de moverte por la capital —guagua, almendrón, bicitaxi, motorina— y cuál te conviene en cada caso.</p>
+              <h3 style={{ fontSize: '1.4rem' }}>Cómo moverse en la ciudad</h3>
+              <p>Todas las formas de moverte por la ciudad —bus, taxi compartido, bicitaxi, moto— y cuál te conviene en cada caso.</p>
               <span className="bento-link">Leer la guía &rarr;</span>
             </Link>
 
             {/* Glosario */}
             <Link href="/blog/glosario-transporte-cubano" className="bento-tile">
-              <h3>Glosario del transporte cubano</h3>
-              <p>Bicitaxi, almendrón, botero, motorina… qué es cada uno.</p>
+              <h3>Glosario del transporte urbano</h3>
+              <p>Bicitaxi, taxi compartido, conductor, moto… qué es cada uno.</p>
               <span className="bento-link">Leer &rarr;</span>
             </Link>
 
             {/* Tarifas */}
             <Link href="/blog/tarifas-transporte-cuba-2026" className="bento-tile">
               <h3>Tarifas de transporte 2026</h3>
-              <p>Cuánto cuesta moverse hoy, modo por modo, en CUP.</p>
+              <p>Cuánto cuesta moverse hoy, modo por modo.</p>
               <span className="bento-link">Leer &rarr;</span>
             </Link>
 

@@ -106,7 +106,6 @@ const webSiteJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: 'TriciGo',
-  alternateName: 'TriciGo Cuba',
   url: 'https://tricigo.com',
   inLanguage: 'es',
   publisher: { '@type': 'Organization', name: 'TriciGo', url: 'https://tricigo.com' },
@@ -150,7 +149,7 @@ const appJsonLd = {
   installUrl: 'https://play.google.com/store/apps/details?id=app.tricigo.client',
   downloadUrl: 'https://play.google.com/store/apps/details?id=app.tricigo.client',
   description:
-    'Pedí triciclos, motos y autos en Cuba con TriciGo. Mirá el precio en CUP antes de viajar, en las 16 provincias.',
+    'Pedí triciclos, motos y autos con TriciGo. Mirá el precio antes de viajar, en las ciudades donde estamos.',
   publisher: { '@type': 'Organization', name: 'TriciGo', url: 'https://tricigo.com' },
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'CUP' },
 };

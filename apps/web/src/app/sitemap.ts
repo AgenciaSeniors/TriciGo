@@ -1,9 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { getAllProvinceSlugs } from '@/lib/coverage';
-import { getAllCityParams } from '@/lib/cities';
 import { getAllServiceSlugs } from '@/lib/services';
-import { AIRPORT, getAllRouteSlugs } from '@/lib/airport-routes';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -27,35 +24,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/cookies`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
   ];
 
-  // Local-SEO coverage hub + one page per province
-  const coverageRoutes: MetadataRoute.Sitemap = [
-    { url: `${baseUrl}/transporte`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.7 },
-    ...getAllProvinceSlugs().map((slug) => ({
-      url: `${baseUrl}/transporte/${slug}`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly' as const,
-      priority: 0.6,
-    })),
-    ...getAllCityParams().map(({ provincia, ciudad }) => ({
-      url: `${baseUrl}/transporte/${provincia}/${ciudad}`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly' as const,
-      priority: 0.6,
-    })),
-  ];
-
-  // Airport transfer routes (hub + one page per destination)
-  const airportRoutes: MetadataRoute.Sitemap = [
-    { url: `${baseUrl}${AIRPORT.hubPath}`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
-    ...getAllRouteSlugs().map((slug) => ({
-      url: `${baseUrl}${AIRPORT.hubPath}/${slug}`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly' as const,
-      priority: 0.6,
-    })),
-  ];
-
-  // Service landing pages + "Uber en Cuba" (high-intent commercial keywords)
+  // Service landing pages (high-intent commercial keywords). The /transporte
+  // coverage subtree, the airport-transfer routes and the /uber-cuba landing are
+  // intentionally excluded from the sitemap and noindexed to keep the public
+  // surface region-neutral; they remain reachable only by direct URL.
   const keywordRoutes: MetadataRoute.Sitemap = [
     ...getAllServiceSlugs().map((slug) => ({
       url: `${baseUrl}/${slug}`,
@@ -63,7 +35,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly' as const,
       priority: 0.8,
     })),
-    { url: `${baseUrl}/uber-cuba`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
   ];
 
   // Dynamic blog posts
@@ -89,5 +60,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Best-effort: if blog posts fetch fails, just use static routes
   }
 
-  return [...staticRoutes, ...coverageRoutes, ...keywordRoutes, ...airportRoutes, ...blogRoutes];
+  return [...staticRoutes, ...keywordRoutes, ...blogRoutes];
 }

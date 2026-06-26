@@ -8,7 +8,7 @@ import { sanitizeHtml } from '@/lib/sanitize';
 
 // Server-rendered article: crawlers receive the title, body and structured data
 // in the initial HTML (previously this was a 'use client' page that fetched in
-// useEffect → empty for bots). Spanish is the canonical locale (Cuba).
+// useEffect → empty for bots). Spanish is the canonical locale.
 export const revalidate = 3600;
 
 const SITE = 'https://tricigo.com';

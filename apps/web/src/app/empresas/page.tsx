@@ -6,21 +6,21 @@
 // CTA goes to /empresas/registro (form, requires login).
 //
 // Style mirrors /refunds and /terms — single-column max-width 800px,
-// no fancy components. Cuban Spanish copy, neutral and professional.
+// no fancy components. Spanish copy, neutral and professional.
 // ============================================================
 
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'TriciGo Empresas — Movilidad corporativa en Cuba',
+  title: 'TriciGo Empresas — Movilidad corporativa',
   description:
-    'Solucion de movilidad para empresas en Cuba: recarga via NETOPIA, control de presupuesto, flotas exclusivas, reportes por empleado y facturas mensuales. Solicita tu cuenta corporativa.',
+    'Solución de movilidad para empresas: recarga vía NETOPIA, control de presupuesto, flotas exclusivas, reportes por empleado y facturas mensuales. Solicita tu cuenta corporativa.',
   alternates: {
     canonical: 'https://tricigo.com/empresas',
   },
   openGraph: {
-    title: 'TriciGo Empresas — Movilidad corporativa en Cuba',
+    title: 'TriciGo Empresas — Movilidad corporativa',
     description:
       'Cuenta corporativa B2B con flotas, control de presupuesto y reportes mensuales.',
     url: 'https://tricigo.com/empresas',
@@ -125,8 +125,8 @@ export default function EmpresasPage() {
           marginBottom: '2rem',
         }}
       >
-        TriciGo te ofrece una solucion B2B en las 16 provincias de Cuba:
-        recarga sencilla via NETOPIA, control de presupuesto mensual, flotas
+        TriciGo te ofrece una solución B2B con cobertura ciudad por ciudad:
+        recarga sencilla vía NETOPIA, control de presupuesto mensual, flotas
         exclusivas, reportes por empleado y facturas mensuales en PDF.
       </p>
 

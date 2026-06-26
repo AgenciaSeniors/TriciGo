@@ -50,7 +50,6 @@ export function WebFooter() {
           <a href="/book" className="footer-link">{t('footer.book_ride')}</a>
           <a href="/login" className="footer-link">{t('footer.login')}</a>
           <a href="/blog" className="footer-link">{t('footer.blog')}</a>
-          <a href="/transporte" className="footer-link">{t('footer.coverage', { defaultValue: 'Cobertura' })}</a>
           <a href="/empresas" className="footer-link">{t('footer.empresas', { defaultValue: 'Empresas' })}</a>
         </div>
 
@@ -60,7 +59,6 @@ export function WebFooter() {
           <a href="/moto" className="footer-link">Moto</a>
           <a href="/auto" className="footer-link">Auto</a>
           <a href="/mensajeria" className="footer-link">Mensajería</a>
-          <a href="/uber-cuba" className="footer-link">¿Hay Uber en Cuba?</a>
         </div>
 
         <div>

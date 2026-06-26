@@ -15,11 +15,11 @@ export const HOME_FAQS: HomeFaq[] = [
   },
   {
     q: '¿En qué ciudades opera TriciGo?',
-    a: 'TriciGo se despliega ciudad por ciudad en las 16 provincias de Cuba, de Pinar del Río a Guantánamo. Abrí la app o mirá la página de cobertura para ver las zonas con servicio disponible en cada momento.',
+    a: 'TriciGo se despliega ciudad por ciudad. Abrí la app o mirá la página de cobertura para ver las zonas con servicio disponible en cada momento.',
   },
   {
     q: '¿Cuánto cuesta un viaje?',
-    a: 'Siempre ves el precio estimado en CUP antes de confirmar, así sabés cuánto vas a pagar y nadie te clava. El monto depende de la distancia, el tipo de vehículo y la demanda.',
+    a: 'Siempre ves el precio estimado antes de confirmar, así sabés cuánto vas a pagar y nadie te clava. El monto depende de la distancia, el tipo de vehículo y la demanda.',
   },
   {
     q: '¿Necesito tarjeta de crédito para viajar?',
@@ -27,7 +27,7 @@ export const HOME_FAQS: HomeFaq[] = [
   },
   {
     q: '¿Cómo pago mi viaje?',
-    a: 'En efectivo, con saldo TriciCoin o de forma mixta. Un TriciCoin equivale a un peso cubano (CUP), así que lo que cargás es lo que vale.',
+    a: 'En efectivo, con saldo TriciCoin o de forma mixta. Un TriciCoin equivale a un peso, así que lo que cargás es lo que vale.',
   },
   {
     q: '¿Es seguro viajar con TriciGo?',
