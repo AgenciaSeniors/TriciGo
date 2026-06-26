@@ -83,6 +83,18 @@ describe('normalizeCubanPhone', () => {
     expect(normalizeCubanPhone('5123 4567')).toBe('+5351234567');
     expect(normalizeCubanPhone('5123-4567')).toBe('+5351234567');
   });
+
+  it('normalizes all three Cuban input forms to canonical +535XXXXXXX', () => {
+    // The three ways a user might type the same number (55512345):
+    expect(normalizeCubanPhone('55512345')).toBe('+5355512345'); // bare local 5XXXXXXX
+    expect(normalizeCubanPhone('5355512345')).toBe('+5355512345'); // country code without + (535XXXXXXX)
+    expect(normalizeCubanPhone('+5355512345')).toBe('+5355512345'); // already E.164
+  });
+
+  it('is idempotent (normalizing twice yields the same value)', () => {
+    const once = normalizeCubanPhone('55512345');
+    expect(normalizeCubanPhone(once)).toBe(once);
+  });
 });
 
 // ============================================================
