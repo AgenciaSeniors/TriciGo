@@ -375,9 +375,9 @@ export default function HomeClient() {
                 height={64}
                 style={{ width: 64, height: 64, objectFit: 'contain', marginBottom: '1.25rem' }}
               />
-              <div className="bento-stat">1 TriciCoin<br />= 1 CUP</div>
+              <div className="bento-stat">1 TriciCoin<br />= 1 peso</div>
               <p style={{ marginTop: '0.75rem' }}>
-                Sin conversiones raras: un TriciCoin vale exactamente un peso cubano. Lo que cargás es lo que vale.
+                Sin conversiones raras: un TriciCoin vale exactamente un peso. Lo que cargás es lo que vale.
               </p>
             </div>
 
@@ -453,7 +453,7 @@ export default function HomeClient() {
             <span className="bento-eyebrow">Para empresas</span>
             <h2 className="section-title">Movilidad para tu empresa</h2>
             <p className="section-subtitle">
-              Mové a tu personal o a tus clientes por las 16 provincias, con todo facturado y bajo control.
+              Mové a tu personal o a tus clientes por toda la ciudad, con todo facturado y bajo control.
             </p>
           </div>
 
@@ -548,7 +548,6 @@ export default function HomeClient() {
                 <a href="https://play.google.com/store/apps/details?id=app.tricigo.driver" target="_blank" rel="noopener noreferrer" className="bento-btn bento-btn--white">
                   Descargá TriciGo Conductor
                 </a>
-                <Link href="/blog/motorina-cuba-conductor-mensajero" className="bento-btn bento-btn--ghost">Cómo funciona</Link>
               </div>
             </div>
 
@@ -562,7 +561,7 @@ export default function HomeClient() {
                 style={{ width: 120, height: 120, objectFit: 'contain', marginBottom: '0.75rem' }}
               />
               <h3>Tu moto, tu negocio</h3>
-              <p>Miles de motorinas en Cuba ya generan ingresos a su ritmo.</p>
+              <p>Miles de motorinas ya generan ingresos a su ritmo.</p>
             </div>
 
             {/* Benefit — horarios */}
