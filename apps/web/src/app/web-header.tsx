@@ -155,7 +155,6 @@ export function WebHeader() {
 
     if (isAuthenticated) {
       const links = [
-        { href: '/book', label: t('nav.book_ride') },
         { href: '/rides', label: t('nav.rides') },
         { href: '/wallet', label: t('nav.wallet') },
         { href: '/notifications', label: t('nav.notifications') },
@@ -280,7 +279,6 @@ export function WebHeader() {
 
     return (
       <>
-        <a href="/book" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.book_ride')}</a>
         <a href="/blog" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.blog')}</a>
       </>
     );
