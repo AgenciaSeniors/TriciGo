@@ -33,8 +33,8 @@ export const SERVICES: ServiceDef[] = [
     slug: 'triciclo',
     label: 'Triciclo',
     img: '/images/vehicles/triciclo.png',
-    blogSlug: 'cuanto-cuesta-un-bicitaxi-cuba',
-    blogLabel: 'cuánto cuesta un bicitaxi en Cuba',
+    blogSlug: 'triciclo-electrico-cuba',
+    blogLabel: 'el triciclo eléctrico en Cuba',
   },
   {
     slug: 'moto',
