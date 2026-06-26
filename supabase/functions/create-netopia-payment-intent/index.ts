@@ -120,12 +120,15 @@ interface NetopiaStartResponse {
 
 /** Maps NETOPIA API base URL by environment. */
 function netopiaApiBase(env: 'sandbox' | 'live'): string {
-  // The OpenAPI spec lists secure.mobilpay.ro/pay for production, but the
-  // generally-published v2.x base is secure.netopia-payments.com. Use the
-  // documented sandbox host and the documented live host; if the operator
-  // sees 404s in live, override via NETOPIA_LIVE_API_BASE env var.
+  // LIVE: NETOPIA's live API edge (Cloudflare/WAF) blocks Supabase Edge's
+  // datacenter egress IPs with a generic 403, while sandbox is open. We route
+  // live calls through our own VPS (static IP 187.77.214.236, NOT blocked) via
+  // an nginx reverse-proxy: tricigo.com/np-proxy/* → secure.mobilpay.ro/pay/*
+  // (the OpenAPI-declared live host). The proxy is guarded by the x-proxy-secret
+  // header (added in callNetopiaCardStart). Confirmed 2026-06-25: the VPS reaches
+  // the live API (401 JSON) while Supabase gets 403. Override via NETOPIA_LIVE_API_BASE.
   if (env === 'live') {
-    return Deno.env.get('NETOPIA_LIVE_API_BASE') ?? 'https://secure.netopia-payments.com';
+    return Deno.env.get('NETOPIA_LIVE_API_BASE') ?? 'https://tricigo.com/np-proxy';
   }
   return Deno.env.get('NETOPIA_SANDBOX_API_BASE') ?? 'https://secure.sandbox.netopia-payments.com';
 }
@@ -210,6 +213,11 @@ async function callNetopiaCardStart(args: {
         'Accept': 'application/json',
         // v2.x: raw API key, no "Bearer" prefix (per OpenAPI spec).
         'Authorization': args.apiKey,
+        // LIVE routes through the VPS nginx proxy (see netopiaApiBase); the proxy
+        // forwards to NETOPIA only when this shared secret matches. No-op in sandbox.
+        ...(args.env === 'live' && Deno.env.get('NETOPIA_PROXY_SECRET')
+          ? { 'x-proxy-secret': Deno.env.get('NETOPIA_PROXY_SECRET')! }
+          : {}),
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),

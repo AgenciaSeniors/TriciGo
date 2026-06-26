@@ -213,13 +213,15 @@ async function verifyNetopiaIpnToken(args: {
 
 /** Base URL for the NETOPIA v2 status re-query, per environment (env-overridable). */
 function netopiaStatusBase(env: 'sandbox' | 'live'): string {
+  // Match create-netopia-payment-intent's host per environment. LIVE routes
+  // through the VPS nginx proxy (tricigo.com/np-proxy/* → secure.mobilpay.ro/pay/*)
+  // because NETOPIA's live edge blocks Supabase's datacenter IPs with a 403; the
+  // VPS static IP is not blocked. Guarded by x-proxy-secret (see requeryNetopiaStatus).
+  // SANDBOX stays direct (secure.sandbox.netopia-payments.com, no proxy). Both
+  // overridable via env var.
   if (env === 'live') {
-    // Per the official Go SDK the live API base carries `/api`.
-    return Deno.env.get('NETOPIA_LIVE_STATUS_BASE') ?? 'https://secure.netopia-payments.com/api';
+    return Deno.env.get('NETOPIA_LIVE_STATUS_BASE') ?? 'https://tricigo.com/np-proxy';
   }
-  // Reuse the host that create-netopia-payment-intent already uses for
-  // /payment/card/start (proven working). Override with NETOPIA_SANDBOX_STATUS_BASE
-  // if the /operation/status host differs (the SDK uses a hyphenated sandbox host).
   return Deno.env.get('NETOPIA_SANDBOX_STATUS_BASE') ?? 'https://secure.sandbox.netopia-payments.com';
 }
 
@@ -254,6 +256,11 @@ async function requeryNetopiaStatus(args: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': args.apiKey, // raw API key, no "Bearer" (v2.x scheme)
+          // LIVE routes through the VPS nginx proxy (see netopiaStatusBase); the
+          // proxy forwards only when this shared secret matches. No-op in sandbox.
+          ...(args.env === 'live' && Deno.env.get('NETOPIA_PROXY_SECRET')
+            ? { 'x-proxy-secret': Deno.env.get('NETOPIA_PROXY_SECRET')! }
+            : {}),
         },
         body: JSON.stringify({ posID: args.posSignature, ntpID: args.ntpId, orderID: args.orderId }),
         signal: AbortSignal.timeout(15000),
