@@ -282,17 +282,6 @@ export function WebHeader() {
       <>
         <a href="/book" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.book_ride')}</a>
         <a href="/blog" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.blog')}</a>
-        <a
-          href="/login"
-          className="btn-base btn-primary-solid"
-          style={{
-            padding: mobile ? '0.75rem' : '0.5rem 1.25rem',
-            fontSize: 'var(--text-sm)',
-            ...(mobile ? { display: 'block', textAlign: 'center' as const } : {}),
-          }}
-        >
-          {t('nav.login')}
-        </a>
       </>
     );
   }
