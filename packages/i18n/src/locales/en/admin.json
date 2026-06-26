@@ -1104,6 +1104,7 @@
     "stripe_fee_type_help": "Fee type: fixed or percentage",
     "cash_enabled_help": "Enable/disable cash payments",
     "wallet_enabled_help": "Enable/disable trip credit payments",
+    "business_notification_email_help": "Email(s) that receive the \"new driver pending approval\" alert. Separate multiple addresses with commas.",
     "shared_ride_discount_per_seat_pct_help": "Discount per free seat when the rider shares the trip (tricycle only). Default 7%",
     "tier_plata_min_trips_help": "Minimum completed trips for Silver tier (rider + driver). Default 5",
     "tier_oro_min_trips_help": "Minimum completed trips for Gold tier (rider + driver). Default 20",
