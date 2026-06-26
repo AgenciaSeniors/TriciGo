@@ -122,11 +122,6 @@ export default function HomeClient() {
                 <span style={{ color: 'var(--primary)' }}>{t('home.hero_title_2')}</span>
               </h1>
               <p>{t('home.hero_subtitle')}</p>
-              <div className="hero__buttons">
-                <Link href="/book" className="btn-primary">
-                  {t('home.hero_cta')}
-                </Link>
-              </div>
               <div className="hero__store-buttons">
                 <StoreButtons />
               </div>
