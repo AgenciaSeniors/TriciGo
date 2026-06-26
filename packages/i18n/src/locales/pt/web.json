@@ -1,4 +1,24 @@
 {
+  "recharge": {
+    "nav": "Recarregar",
+    "title": "Recarregar carteira",
+    "subtitle": "Recarregue a carteira TriciGo de um familiar em Cuba.",
+    "recipient_phone": "Telefone do usuário a recarregar",
+    "recipient_found": "Recarregando para: {{name}}",
+    "recipient_not_found": "Este número não é usuário do TriciGo. Peça que instale o app.",
+    "amount": "Valor a recarregar (USD)",
+    "amount_min": "Mínimo 20",
+    "rate": "Taxa de câmbio",
+    "will_receive": "Vai receber",
+    "fee": "Taxa",
+    "total": "Total a pagar",
+    "payer_email": "Seu email (para o comprovante)",
+    "pay": "Pagar",
+    "secured_by_stripe": "Pagamento seguro processado pela Stripe.",
+    "success": "Recarga enviada! O comprovante foi enviado ao seu email.",
+    "cancelled": "Pagamento cancelado.",
+    "error": "Não foi possível processar. Tente novamente."
+  },
   "offline": "Sem conexão — verifique sua rede.",
   "support": {
     "title": "Suporte",

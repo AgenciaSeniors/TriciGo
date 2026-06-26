@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, notificationService } from '@tricigo/api';
+import { getSupabaseClient, notificationService, useFeatureFlag } from '@tricigo/api';
 import { realEmail } from '@tricigo/utils';
 import type { User } from '@supabase/supabase-js';
 
@@ -14,6 +14,7 @@ export function WebHeader() {
   const [pathname, setPathname] = useState('/');
   const [isDark, setIsDark] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const rechargeOn = useFeatureFlag('diaspora_recharge_enabled');
 
   useEffect(() => {
     setPathname(window.location.pathname);
@@ -155,6 +156,7 @@ export function WebHeader() {
 
     if (isAuthenticated) {
       const links = [
+        ...(rechargeOn ? [{ href: '/recargar', label: t('recharge.nav') }] : []),
         { href: '/rides', label: t('nav.rides') },
         { href: '/wallet', label: t('nav.wallet') },
         { href: '/notifications', label: t('nav.notifications') },
@@ -279,6 +281,7 @@ export function WebHeader() {
 
     return (
       <>
+        {rechargeOn && <a href="/recargar" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('recharge.nav')}</a>}
         <a href="/blog" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.blog')}</a>
       </>
     );

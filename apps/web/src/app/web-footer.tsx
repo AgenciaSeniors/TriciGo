@@ -1,9 +1,11 @@
 'use client';
 
 import { useTranslation } from '@tricigo/i18n';
+import { useFeatureFlag } from '@tricigo/api';
 
 export function WebFooter() {
   const { t } = useTranslation('web');
+  const rechargeOn = useFeatureFlag('diaspora_recharge_enabled');
 
   return (
     <footer className="footer-enhanced">
@@ -47,6 +49,7 @@ export function WebFooter() {
 
         <div>
           <div className="footer-section-title">{t('footer.quick_links', { defaultValue: 'Links' })}</div>
+          {rechargeOn && <a href="/recargar" className="footer-link">{t('recharge.nav')}</a>}
           <a href="/blog" className="footer-link">{t('footer.blog')}</a>
           <a href="/empresas" className="footer-link">{t('footer.empresas', { defaultValue: 'Empresas' })}</a>
         </div>

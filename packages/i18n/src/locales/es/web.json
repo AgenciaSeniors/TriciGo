@@ -1,4 +1,24 @@
 {
+  "recharge": {
+    "nav": "Recargar",
+    "title": "Recargar billetera",
+    "subtitle": "Recargá la billetera TriciGo de un familiar en Cuba.",
+    "recipient_phone": "Teléfono del usuario a recargar",
+    "recipient_found": "Recargando a: {{name}}",
+    "recipient_not_found": "Este número no es usuario de TriciGo. Pedile que instale la app.",
+    "amount": "Monto a recargar (USD)",
+    "amount_min": "Mínimo 20",
+    "rate": "Tasa de cambio",
+    "will_receive": "Recibirá en billetera",
+    "fee": "Comisión",
+    "total": "Total a pagar",
+    "payer_email": "Tu email (para el comprobante)",
+    "pay": "Realizar pago",
+    "secured_by_stripe": "Pago seguro procesado por Stripe.",
+    "success": "¡Recarga enviada! El comprobante llegó a tu email.",
+    "cancelled": "Pago cancelado.",
+    "error": "No se pudo procesar. Intentalo de nuevo."
+  },
   "offline": "Sin conexión — revisa tu red.",
   "support": {
     "title": "Soporte",
