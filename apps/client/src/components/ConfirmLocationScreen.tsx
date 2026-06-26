@@ -275,12 +275,23 @@ export function ConfirmLocationScreen({
         styleURL={MAP_STYLE_LIGHT}
         attributionEnabled={false}
         logoEnabled={false}
-        compassEnabled={false}
+        // Natural map orientation in the pin picker: let the user rotate AND
+        // tilt the map with two fingers (was hard-disabled). The address is
+        // derived from getCenter() (the screen-center pixel), which is
+        // rotation-invariant and pitch-consistent, and the static pin tip sits
+        // at that same center — so orienting the map never shifts the picked
+        // point. The compass appears only when rotated (fadeWhenNorth) and
+        // tapping it snaps the bearing back to north; placed under the top
+        // address bar so it doesn't collide with it.
+        compassEnabled={true}
+        compassFadeWhenNorth={true}
+        compassViewPosition={1}
+        compassViewMargins={{ x: 16, y: insets.top + 80 }}
         scaleBarEnabled={false}
         scrollEnabled={true}
         zoomEnabled={true}
-        pitchEnabled={false}
-        rotateEnabled={false}
+        pitchEnabled={true}
+        rotateEnabled={true}
         onMapIdle={handleMapIdle}
       >
         {/* BUG-282 — key forces Camera remount when initialCenter resolves
