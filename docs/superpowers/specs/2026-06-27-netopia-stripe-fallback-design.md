@@ -73,7 +73,7 @@ The **backend is built** on `claude/diaspora-recharge`; the WebView hook is defe
 As-built deltas vs the plan above:
 
 - **No migration needed.** `platform_config.stripe_enabled` already exists (JSONB boolean `false`, set by `00281_remove_stripe_promote_netopia`). The EF reads it **fail-closed**; flip to `true` to enable. `getEnabledPaymentProviders` correctly excludes Stripe while it's `false`.
-- **No `metadata` field.** An earlier draft wrote `metadata: { source: 'self_recharge' }`, but `payment_intents.metadata` doesn't exist in prod yet (added by the diaspora migration `00462`). It was removed — the self-recharge EF does **not** need it, so it has **no dependency on 00462**.
+- **No `metadata` field.** An earlier draft wrote `metadata: { source: 'self_recharge' }`, but `payment_intents.metadata` doesn't exist in prod yet (added by the diaspora migration `00463`). It was removed — the self-recharge EF does **not** need it, so it has **no dependency on 00462**.
 - Reuses the existing `process-stripe-webhook` (matches on `client_reference_id`, claim set includes `pending`) and `process_recharge_payment` (validates against NET `amount_usd`, credits `user_id`). End-to-end verified by adversarial review against the prod schema.
 - `success_url`/`cancel_url` are https-only (Stripe rejects custom schemes); the mobile WebView passes an `https://tricigo.com/` return URL it detects to dismiss + `pollIntentStatus`.
 

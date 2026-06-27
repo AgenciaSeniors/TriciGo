@@ -27,7 +27,7 @@
 - Env vars: EFs use `Deno.env.get('SUPABASE_URL' | 'SUPABASE_SERVICE_ROLE_KEY')`; web uses `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ## File structure
-- Create: `supabase/migrations/00462_diaspora_recharge.sql`
+- Create: `supabase/migrations/00463_diaspora_recharge.sql`
 - Create: `supabase/functions/_shared/stripe.ts`
 - Create: `supabase/functions/resolve-recharge-recipient/index.ts`
 - Create: `supabase/functions/create-stripe-recharge-intent/index.ts`
@@ -41,12 +41,12 @@
 
 ## Task 1: Migration — recipient-resolution RPC + feature flag
 
-**Files:** Create `supabase/migrations/00462_diaspora_recharge.sql`
+**Files:** Create `supabase/migrations/00463_diaspora_recharge.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- 00462: Diaspora recharge — public recipient resolution + feature flag.
+-- 00463: Diaspora recharge — public recipient resolution + feature flag.
 -- A public (no-login) page lets someone abroad recharge a Cuban user's wallet.
 -- The lookup MUST use the 00461-normalized matching (the phone bug fix); this
 -- RPC reuses _normalize_cuban_phone on BOTH sides, with NO per-user rate-limit
@@ -87,7 +87,7 @@ Expected: columns `key`, `value`, `description` exist. If `description` does not
 - [ ] **Step 3: Commit (do NOT apply — MCP guard; frontend tolerates absence)**
 
 ```bash
-git add supabase/migrations/00462_diaspora_recharge.sql
+git add supabase/migrations/00463_diaspora_recharge.sql
 git commit -m "feat(recharge): migration for diaspora recipient resolution + feature flag"
 ```
 
@@ -664,7 +664,7 @@ git commit -m "feat(recharge): flag-gated Recargar nav + footer link"
 
 ## Task 10: Secrets, Stripe webhook endpoint, and test-mode verification
 
-> No code — operator steps. Do these once the EFs are deployed (the human applies migration 00462, deploys the 3 EFs, sets secrets).
+> No code — operator steps. Do these once the EFs are deployed (the human applies migration 00463, deploys the 3 EFs, sets secrets).
 
 - [ ] **Step 1:** Set Supabase secrets (TEST keys from the Stripe dashboard, test mode):
   `STRIPE_SECRET_KEY=sk_test_…`, `STRIPE_PUBLISHABLE_KEY=pk_test_…`, `STRIPE_WEBHOOK_SECRET=whsec_…`.
