@@ -17,6 +17,7 @@
     "secured_by_stripe": "Secure payment processed by Stripe.",
     "success": "Top-up sent! The receipt was emailed to you.",
     "cancelled": "Payment cancelled.",
+    "processing": "Payment in progress. We'll email you the receipt and credit the wallet once confirmed.",
     "error": "Couldn't process. Please try again."
   },
   "offline": "No connection — check your network.",
