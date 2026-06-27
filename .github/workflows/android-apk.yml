@@ -89,6 +89,12 @@ jobs:
 
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
+        with:
+          # The RN bundle task (createBundleReleaseJsAndAssets) under-declares its
+          # JS inputs, so the persisted gradle build cache reused a STALE JS bundle
+          # across runs — a wallet.tsx change was silently ignored, shipping old JS
+          # inside a "new" APK. Disable the cache to guarantee a fresh JS bundle.
+          cache-disabled: true
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -259,7 +265,7 @@ jobs:
         run: |
           cd apps/${{ steps.target.outputs.app }}/android
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --no-build-cache --stacktrace
 
       - name: Locate + rename APK
         id: apk
