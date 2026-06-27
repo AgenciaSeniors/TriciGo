@@ -192,17 +192,17 @@ Por cada language tab (en-US, es-MX):
 - Subtitle: `Urban transport, fast and safe` (max 30 chars)
 - Description: el cuerpo del .md
 - Keywords (privado, max 100 chars): `taxi,transport,ride,pedicab,mobility,driver,trip,urban,rideshare,commute`
-- Promotional text: `Pedí tu viaje en bicitaxi, moto o auto. Precio claro, conductor verificado, seguimiento en tiempo real.`
+- Promotional text: `Pedí tu viaje en triciclo, moto o auto. Precio claro, conductor verificado, seguimiento en tiempo real.`
 - Support URL: `https://tricigo.com/support`
 - Marketing URL: `https://tricigo.com`
 
 **Client es-MX**: contenido de `apps/client/store-metadata/es/listing.md`:
-- Subtitle: `Bicitaxis y viajes urbanos`
+- Subtitle: `Triciclos y viajes urbanos`
 - Description: el cuerpo del .md
-- **Keywords (PRIVADO)**: `habana,cuba,bicitaxi,taxi habana,transporte,viaje,ride,triciclo,movilidad,chofer` ← acá Cuba/Habana SÍ es seguro porque NO se publica en HTML público
+- **Keywords (PRIVADO)**: `habana,cuba,triciclo electrico,taxi habana,transporte,viaje,ride,triciclo,movilidad,chofer` ← acá Cuba/Habana SÍ es seguro porque NO se publica en HTML público
 - Promotional text: ver `aso-keywords-private.md`
 
-**Driver**: idem con `apps/driver/store-metadata/{en,es}/listing.md`. Keywords privados driver: `conductor,bicitaxista,habana,cuba,driver,taxi,ganancias,viajes,empleo,trabajo`.
+**Driver**: idem con `apps/driver/store-metadata/{en,es}/listing.md`. Keywords privados driver: `conductor,triciclero,habana,cuba,driver,taxi,ganancias,viajes,empleo,trabajo`.
 
 ### 1.7 App Review Information
 

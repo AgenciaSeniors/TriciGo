@@ -50,5 +50,5 @@
 ## Tip: Feature Graphic (banner)
 - Dimensión: 1024 x 500 px
 - Imagen horizontal que aparece arriba en Play Store
-- Sugerencia: Logo conductor + bicitaxi + calle de La Habana
+- Sugerencia: Logo conductor + triciclo + calle de La Habana
 - Guardar como `feature-graphic.png`

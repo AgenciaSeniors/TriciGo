@@ -9,14 +9,14 @@
 Pegar en App Store Connect → My Apps → TriciGo Driver → App Information → Keywords:
 
 ```
-conductor,bicitaxista,habana,cuba,driver,taxi,ganancias,viajes,empleo,trabajo
+conductor,triciclero,habana,cuba,driver,taxi,ganancias,viajes,empleo,trabajo
 ```
 
 **Nota**: el driver app tiene un set diferente al cliente porque target audience es distinto (conductores buscando trabajar, no pasajeros buscando viajar).
 
 ### Subtitle (max 30 caracteres)
 ```
-Para bicitaxistas y choferes
+Para tricicleros y choferes
 ```
 
 ### Promotional Text (max 170 caracteres)

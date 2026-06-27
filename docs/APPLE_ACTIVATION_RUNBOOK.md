@@ -85,7 +85,7 @@ My Apps → **+** → New App (una para cada bundle ID). Al crearlas, ASC asigna
 - **Name:** `TriciGo`
 - **Subtitle (≤30):** `Pide tu viaje en la ciudad`
 - **Primary category:** Travel · **Secondary:** Navigation
-- **Keywords (≤100):** `taxi,transporte,triciclo,bicitaxi,moto,movilidad,conductor,viaje,ciudad,Cuba`
+- **Keywords (≤100):** `taxi,transporte,triciclo,electrico,moto,movilidad,conductor,viaje,ciudad,Cuba`
 - **Support URL:** `https://tricigo.com` · **Marketing URL:** `https://tricigo.com`
 - **Promotional text (≤170):** `Pide un triciclo, moto o auto desde tu teléfono. Precio claro antes de viajar, conductor verificado y seguimiento en tiempo real.`
 - **Description:** usar el cuerpo de `apps/client/store-metadata/es/listing.md` (es) / `en/listing.md` (en).
@@ -96,7 +96,7 @@ My Apps → **+** → New App (una para cada bundle ID). Al crearlas, ASC asigna
 - **Name:** `TriciGo Conductor`
 - **Subtitle (≤30):** `Maneja y genera ingresos`
 - **Primary category:** Travel · **Secondary:** Business
-- **Keywords (≤100):** `conductor,taxi,transporte,ganancias,triciclo,bicitaxi,moto,viaje,trabajo,Cuba`
+- **Keywords (≤100):** `conductor,taxi,transporte,ganancias,triciclo,electrico,moto,viaje,trabajo,Cuba`
 - **Support URL:** `https://tricigo.com` · **Marketing URL:** `https://tricigo.com`
 - **Promotional text (≤170):** `Recibí viajes cerca tuyo, navegá hasta el pasajero y administrá tus ganancias con total transparencia. Trabajá cuando quieras.`
 - **Description:** usar `apps/driver/store-metadata/es|en/listing.md`.
