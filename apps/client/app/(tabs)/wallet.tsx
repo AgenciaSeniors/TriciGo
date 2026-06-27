@@ -1279,63 +1279,66 @@ function NativeWalletScreen() {
           </View>
         </AnimatedCard>
 
-        {/* Premium CTA — glow gradient Recargar (driver parity) + outlined
-            Regalar below. Gift is closed-loop: TriciCoin can be sent to another
-            active TriciGo user but stays spend-only (rides), never cashed out. */}
-        <Pressable
-          onPress={handleRecharge}
-          accessibilityRole="button"
-          accessibilityLabel={t('wallet.recharge')}
-          style={({ pressed }) => [
-            { borderRadius: 20, overflow: 'hidden', marginBottom: 12, ...GLOW_CTA },
-            pressed && { transform: [{ scale: 0.97 }], opacity: 0.95 },
-          ]}
-        >
-          <LinearGradient
-            colors={[colors.brand.orange, tokens.accent.warm]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingVertical: 18,
-              paddingHorizontal: 24,
-              minHeight: 60,
-            }}
+        {/* Premium quick actions — Recargar (primary, glow gradient) + Regalar
+            (prominent secondary, filled orange tint) side-by-side, so gift is
+            impossible to miss above the fold. Gift is closed-loop: TriciCoin can
+            be sent to another active TriciGo user but stays spend-only (rides),
+            never cashed out. */}
+        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
+          <Pressable
+            onPress={handleRecharge}
+            accessibilityRole="button"
+            accessibilityLabel={t('wallet.recharge')}
+            style={({ pressed }) => [
+              { flex: 1, borderRadius: 20, overflow: 'hidden', ...GLOW_CTA },
+              pressed && { transform: [{ scale: 0.97 }], opacity: 0.95 },
+            ]}
           >
-            <Ionicons name="add-circle" size={24} color="#FFFFFF" />
-            <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 17, marginLeft: 10, letterSpacing: 0.3 }}>
-              {t('wallet.recharge')}
-            </Text>
-            <Ionicons name="chevron-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8, opacity: 0.85 }} />
-          </LinearGradient>
-        </Pressable>
+            <LinearGradient
+              colors={[colors.brand.orange, tokens.accent.warm]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 18,
+                paddingHorizontal: 12,
+                minHeight: 96,
+              }}
+            >
+              <Ionicons name="add-circle" size={28} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+                {t('wallet.recharge')}
+              </Text>
+            </LinearGradient>
+          </Pressable>
 
-        <Pressable
-          onPress={() => router.push('/wallet/gift')}
-          accessibilityRole="button"
-          accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
-          style={({ pressed }) => [
-            {
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingVertical: 14,
-              borderRadius: 16,
-              borderWidth: 1,
-              borderColor: tokens.line,
-              backgroundColor: tokens.bg.elev1,
-              marginBottom: 24,
-            },
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <Ionicons name="gift-outline" size={20} color={tokens.accent.orange} />
-          <Text style={{ color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 15, marginLeft: 10 }}>
-            {t('wallet.gift', { defaultValue: 'Regalar' })}
-          </Text>
-        </Pressable>
+          <Pressable
+            onPress={() => router.push('/wallet/gift')}
+            accessibilityRole="button"
+            accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
+            style={({ pressed }) => [
+              {
+                flex: 1,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 18,
+                paddingHorizontal: 12,
+                minHeight: 96,
+                borderRadius: 20,
+                borderWidth: 1.5,
+                borderColor: colors.brand.orange,
+                backgroundColor: tokens.accent.orangeGlow,
+              },
+              pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
+            ]}
+          >
+            <Ionicons name="gift" size={28} color={colors.brand.orange} />
+            <Text style={{ color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+              {t('wallet.gift', { defaultValue: 'Regalar' })}
+            </Text>
+          </Pressable>
+        </View>
 
         {/* BUG-280 — "Este mes" now hides when there are no rides this month
             (previously showed "70,000 TC gastado / 0 viajes" because admin

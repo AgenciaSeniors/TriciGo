@@ -593,82 +593,79 @@ export default function WalletScreen() {
                 </View>
               </Animated.View>
 
-              {/* ── CTA Recargar wallet ──────────────────────────────
-                  Combine stagger fade-in (opacity + translateY) with
-                  press scale into ONE Animated.View transform array. */}
+              {/* ── Quick actions: Recargar (primary, glow gradient) + Regalar
+                  (prominent secondary, filled orange tint) side-by-side, so gift
+                  is impossible to miss. Closed-loop: a driver gifts TriciCoin
+                  from their tricicoin balance to another active TriciGo user. */}
               <Animated.View
                 style={{
                   opacity: fadeAnim[1]!,
-                  marginBottom: 22,
-                  ...GLOW_CTA,
-                  transform: [
-                    { translateY: sectionTranslateY(1) },
-                    { scale: ctaScale },
-                  ],
+                  marginBottom: 24,
+                  flexDirection: 'row',
+                  gap: 12,
+                  transform: [{ translateY: sectionTranslateY(1) }],
                 }}
               >
-                <Pressable
-                  onPress={() => router.push('/wallet/recharge')}
-                  onPressIn={handleCtaPressIn}
-                  onPressOut={handleCtaPressOut}
-                  style={{ borderRadius: 20, overflow: 'hidden' }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
-                >
-                  <LinearGradient
-                    colors={[colors.brand.orange, palette.accent.warm]}
-                    start={{ x: 0, y: 0.5 }}
-                    end={{ x: 1, y: 0.5 }}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 18,
-                      paddingHorizontal: 24,
-                      minHeight: 60,
-                    }}
+                <Animated.View style={{ flex: 1, ...GLOW_CTA, transform: [{ scale: ctaScale }] }}>
+                  <Pressable
+                    onPress={() => router.push('/wallet/recharge')}
+                    onPressIn={handleCtaPressIn}
+                    onPressOut={handleCtaPressOut}
+                    style={{ borderRadius: 20, overflow: 'hidden' }}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
                   >
-                    <Ionicons name="add-circle" size={24} color="#FFFFFF" />
-                    <Text
+                    <LinearGradient
+                      colors={[colors.brand.orange, palette.accent.warm]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
                       style={{
-                        color: '#FFFFFF',
-                        fontFamily: 'Inter_700Bold',
-                        fontSize: 17,
-                        marginLeft: 10,
-                        letterSpacing: 0.3,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingVertical: 18,
+                        paddingHorizontal: 12,
+                        minHeight: 96,
                       }}
                     >
-                      {t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8, opacity: 0.85 }} />
-                  </LinearGradient>
-                </Pressable>
-              </Animated.View>
+                      <Ionicons name="add-circle" size={28} color="#FFFFFF" />
+                      <Text
+                        style={{
+                          color: '#FFFFFF',
+                          fontFamily: 'Inter_700Bold',
+                          fontSize: 15,
+                          marginTop: 8,
+                          letterSpacing: 0.3,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {t('wallet.recharge', { defaultValue: 'Recargar' })}
+                      </Text>
+                    </LinearGradient>
+                  </Pressable>
+                </Animated.View>
 
-              {/* ── Regalar (gift) — secondary action ────────────────
-                  Closed-loop: a driver can gift TriciCoin from their
-                  tricicoin balance to another active TriciGo user. */}
-              <Animated.View style={[sectionStyle(1), { marginBottom: 24, marginTop: -6 }]}>
                 <Pressable
                   onPress={() => router.push('/wallet/gift')}
                   style={({ pressed }) => [
                     {
-                      flexDirection: 'row',
+                      flex: 1,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      paddingVertical: 14,
-                      borderRadius: 16,
-                      borderWidth: 1,
-                      borderColor: palette.line,
-                      backgroundColor: palette.bg.elev1,
+                      paddingVertical: 18,
+                      paddingHorizontal: 12,
+                      minHeight: 96,
+                      borderRadius: 20,
+                      borderWidth: 1.5,
+                      borderColor: colors.brand.orange,
+                      backgroundColor: palette.accent.orangeGlow,
                     },
-                    pressed && { opacity: 0.7 },
+                    pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
                   ]}
                   accessibilityRole="button"
                   accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
                 >
-                  <Ionicons name="gift-outline" size={20} color={palette.accent.orange} />
-                  <Text style={{ color: palette.ink.primary, fontFamily: 'Inter_700Bold', fontSize: 15, marginLeft: 10 }}>
+                  <Ionicons name="gift" size={28} color={colors.brand.orange} />
+                  <Text style={{ color: palette.ink.primary, fontFamily: 'Inter_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
                     {t('wallet.gift', { defaultValue: 'Regalar' })}
                   </Text>
                 </Pressable>
