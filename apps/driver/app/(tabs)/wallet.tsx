@@ -28,7 +28,6 @@ import {
   Easing,
   StyleSheet,
   useColorScheme,
-  useWindowDimensions,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,14 +54,14 @@ const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nu
 export default function WalletScreen() {
   const { t } = useTranslation('driver');
   const userId = useAuthStore((s) => s.user?.id);
-  // CTA bar full-width: flex:1 / alignSelf:'stretch' do NOT fill the row in this
-  // layout (confirmed in a release build — the two halves collapsed to ~content
-  // width). Give each half an EXPLICIT pixel width = (content width)/2. Content
-  // width = window − the ListHeader's paddingHorizontal:16 (16/side = 32).
-  const { width: windowWidth } = useWindowDimensions();
-  const ctaInnerW = Math.max(0, windowWidth - 32);
-  const ctaHalf1 = Math.floor(ctaInnerW / 2);
-  const ctaHalf2 = ctaInnerW - ctaHalf1;
+  // CTA bar full-width: flex:1 / alignSelf:'stretch' / width:'100%' / useWindowDimensions
+  // all failed in the release build (the hook returned an unusable width → the
+  // explicit px became NaN → ignored → content-width). Measure the bar's REAL
+  // rendered width via onLayout (the outer is stretched to full content width by
+  // the parent) and give each half an explicit px width = w/2. Can't be NaN.
+  const [ctaBarW, setCtaBarW] = useState(0);
+  const ctaHalf1 = ctaBarW > 0 ? Math.floor(ctaBarW / 2) : 0;
+  const ctaHalf2 = ctaBarW > 0 ? ctaBarW - ctaHalf1 : 0;
 
   // Cuban Modern palette — warm cream light / navy profundo dark
   const colorScheme = useColorScheme();
@@ -606,6 +605,10 @@ export default function WalletScreen() {
                   Whole bar scales on press. Closed-loop gift. */}
               <Animated.View
                 testID="wallet-cta-bar"
+                onLayout={(e) => {
+                  const w = e.nativeEvent.layout.width;
+                  if (w > 0 && Math.abs(w - ctaBarW) > 0.5) setCtaBarW(w);
+                }}
                 style={{
                   opacity: fadeAnim[1]!,
                   marginBottom: 24,
@@ -625,7 +628,7 @@ export default function WalletScreen() {
                   onPressOut={handleCtaPressOut}
                   accessibilityRole="button"
                   accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
-                  style={({ pressed }) => [{ width: ctaHalf1 }, pressed && { opacity: 0.92 }]}
+                  style={({ pressed }) => [ctaBarW > 0 ? { width: ctaHalf1 } : { flex: 1 }, pressed && { opacity: 0.92 }]}
                 >
                   <LinearGradient
                     colors={[colors.brand.orange, palette.accent.warm]}
@@ -663,7 +666,7 @@ export default function WalletScreen() {
                   onPressOut={handleCtaPressOut}
                   accessibilityRole="button"
                   accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
-                  style={({ pressed }) => [{ width: ctaHalf2 }, pressed && { opacity: 0.92 }]}
+                  style={({ pressed }) => [ctaBarW > 0 ? { width: ctaHalf2 } : { flex: 1 }, pressed && { opacity: 0.92 }]}
                 >
                   <LinearGradient
                     colors={['#6B7F8F', '#52677A']}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -603,14 +603,15 @@ function NativeWalletScreen() {
   const { present: presentNetopiaCheckout, prewarm: prewarmNetopiaProxy, checkoutElement: netopiaCheckoutElement } =
     useNetopiaCheckout();
 
-  // CTA bar full-width: flex:1 / alignSelf:'stretch' do NOT fill the row in this
-  // layout (confirmed in a release build — the two halves collapsed to ~content
-  // width). Give each half an EXPLICIT pixel width = (content width)/2. Content
-  // width = window − Screen's px-4 padding (16/side = 32).
-  const { width: windowWidth } = useWindowDimensions();
-  const ctaInnerW = Math.max(0, windowWidth - 32);
-  const ctaHalf1 = Math.floor(ctaInnerW / 2);
-  const ctaHalf2 = ctaInnerW - ctaHalf1;
+  // CTA bar full-width: flex:1 / alignSelf:'stretch' / width:'100%' / useWindowDimensions
+  // all failed in the release build (the hook returned an unusable width → the
+  // explicit px became NaN → ignored → content-width). Measure the bar's REAL
+  // rendered width via onLayout (the outer is stretched to full content width by
+  // the parent) and give each half an explicit px width = w/2. A layout
+  // measurement can't be NaN, so this is robust.
+  const [ctaBarW, setCtaBarW] = useState(0);
+  const ctaHalf1 = ctaBarW > 0 ? Math.floor(ctaBarW / 2) : 0;
+  const ctaHalf2 = ctaBarW > 0 ? ctaBarW - ctaHalf1 : 0;
 
   // Cuban Modern premium shadows (mirror driver wallet). Orange-tinted on the
   // hero + CTA to reinforce brand; neutral on transaction cards.
@@ -1313,6 +1314,10 @@ function NativeWalletScreen() {
             spend-only (rides), never cashed out. */}
         <View
           testID="wallet-cta-bar"
+          onLayout={(e) => {
+            const w = e.nativeEvent.layout.width;
+            if (w > 0 && Math.abs(w - ctaBarW) > 0.5) setCtaBarW(w);
+          }}
           style={{
             marginBottom: 24,
             flexDirection: 'row',
@@ -1328,7 +1333,7 @@ function NativeWalletScreen() {
             onPress={handleRecharge}
             accessibilityRole="button"
             accessibilityLabel={t('wallet.recharge')}
-            style={({ pressed }) => [{ width: ctaHalf1 }, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [ctaBarW > 0 ? { width: ctaHalf1 } : { flex: 1 }, pressed && { opacity: 0.9 }]}
           >
             <LinearGradient
               colors={[colors.brand.orange, tokens.accent.warm]}
@@ -1355,7 +1360,7 @@ function NativeWalletScreen() {
             onPress={() => router.push('/wallet/gift')}
             accessibilityRole="button"
             accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
-            style={({ pressed }) => [{ width: ctaHalf2 }, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [ctaBarW > 0 ? { width: ctaHalf2 } : { flex: 1 }, pressed && { opacity: 0.9 }]}
           >
             <LinearGradient
               colors={['#6B7F8F', '#52677A']}
