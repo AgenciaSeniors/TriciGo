@@ -12,6 +12,7 @@
     "will_receive": "They'll receive",
     "fee": "Fee",
     "total": "Total to pay",
+    "payer_name": "Your name",
     "payer_email": "Your email (for the receipt)",
     "pay": "Pay now",
     "payment_secured": "Payment processed securely.",

@@ -367,7 +367,7 @@ Deno.serve(async (req) => {
     // refuse the recovery.
     const { data: existingIntent } = await supabase
       .from('payment_intents')
-      .select('id, status, user_id, amount_cup, intent_type, corporate_account_id, payment_provider, stripe_payment_intent_id')
+      .select('id, status, user_id, amount_cup, intent_type, corporate_account_id, payment_provider, stripe_payment_intent_id, metadata')
       .eq('id', orderId)
       .single();
 
@@ -600,7 +600,11 @@ Deno.serve(async (req) => {
 
       console.log(`[netopia] Recharge processed: ${orderId} → txn ${txnId}`);
 
-      await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, true);
+      // Diaspora recharge: surface who paid in the push ("X te recargó …").
+      // Ordinary in-app recharges have no payer_name → generic push.
+      const intentMeta = (existingIntent.metadata ?? null) as Record<string, unknown> | null;
+      const piPayerName = typeof intentMeta?.payer_name === 'string' ? (intentMeta.payer_name as string) : null;
+      await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, true, null, piPayerName);
 
       // Asynchronously trigger the receipt PDF. Mirror of the Stripe webhook
       // flow that was removed during the cutover (PR #137). The receipt EF
@@ -666,7 +670,9 @@ Deno.serve(async (req) => {
         console.error('[netopia] failed-branch update error:', updateErr);
       }
 
-      await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, false, failReason);
+      const failMeta = (existingIntent.metadata ?? null) as Record<string, unknown> | null;
+      const failPayerName = typeof failMeta?.payer_name === 'string' ? (failMeta.payer_name as string) : null;
+      await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, false, failReason, failPayerName);
 
       console.log(`[netopia] Payment failed: ${orderId} — ${failReason} (provider_code=${providerCode ?? 'none'})`);
 
@@ -772,10 +778,13 @@ async function sendPaymentNotification(
   amountCup: number,
   success: boolean,
   failReason?: string | null,
+  payerName?: string | null,
 ): Promise<void> {
   try {
     const formattedAmount = amountCup.toLocaleString('es-CU');
-    const title = success ? 'Recarga exitosa' : 'Recarga fallida';
+    const title = success
+      ? (payerName ? '¡Recibiste una recarga!' : 'Recarga exitosa')
+      : (payerName ? 'Recarga no procesada' : 'Recarga fallida');
 
     // For failed recharges, surface the translated reason in the push
     // body so the user immediately knows whether it was a CVV issue,
@@ -783,7 +792,16 @@ async function sendPaymentNotification(
     // stays under most platform truncation thresholds.
     let body: string;
     if (success) {
-      body = `Tu recarga de ${formattedAmount} CUP ha sido acreditada a tu wallet.`;
+      // Diaspora recharge: name whoever paid. Ordinary in-app recharges have no
+      // payerName → the original generic wording.
+      body = payerName
+        ? `${payerName} te recargó ${formattedAmount} CUP a tu billetera.`
+        : `Tu recarga de ${formattedAmount} CUP ha sido acreditada a tu wallet.`;
+    } else if (payerName) {
+      // Diaspora failure: the recipient is a third party to the payment. Name who
+      // tried, but do NOT surface the payer's card-decline reason (their private
+      // info — the payer sees it on the hosted page / their own flow).
+      body = `El pago de ${payerName} para recargarte no se procesó.`;
     } else if (failReason) {
       const friendly = translateNetopiaError(failReason);
       const firstSentence = friendly.split('. ')[0] + (friendly.includes('. ') ? '.' : '');

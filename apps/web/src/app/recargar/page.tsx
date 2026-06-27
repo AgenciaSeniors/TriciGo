@@ -17,11 +17,12 @@ export default function RechargePage() {
   const [recipient, setRecipient] = useState<Recipient | null>(null);
   const [resolving, setResolving] = useState(false);
   const [amount, setAmount] = useState('');
+  const [payerName, setPayerName] = useState('');
   const [email, setEmail] = useState('');
   const [rate, setRate] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [focused, setFocused] = useState<'phone' | 'amount' | 'email' | null>(null);
+  const [focused, setFocused] = useState<'phone' | 'amount' | 'name' | 'email' | null>(null);
   const [btnHover, setBtnHover] = useState(false);
   const [status, setStatus] = useState<ResultStatus>(null);
   const [provider, setProvider] = useState<Provider>('netopia');
@@ -94,7 +95,8 @@ export default function RechargePage() {
   const willReceive = rate && amt > 0 ? Math.round(amt * rate) : 0;
   const amountTooLow = amt > 0 && amt < 20;
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
-  const canPay = !!recipient?.found && amt >= 20 && emailValid;
+  const payerNameValid = payerName.trim().length >= 2;
+  const canPay = !!recipient?.found && amt >= 20 && payerNameValid && emailValid;
 
   async function handlePay() {
     setError(null);
@@ -102,7 +104,7 @@ export default function RechargePage() {
     setSubmitting(true);
     try {
       const { data, error: efErr } = await getSupabaseClient().functions.invoke(`create-${provider}-recharge-intent`, {
-        body: { phone: canonicalPhone(phone), amount_usd: amt, payer_email: email },
+        body: { phone: canonicalPhone(phone), amount_usd: amt, payer_email: email, payer_name: payerName.trim() },
       });
       const res = data as { ok?: boolean; redirectUrl?: string };
       if (efErr || !res?.ok || !res.redirectUrl) throw new Error('failed');
@@ -114,7 +116,7 @@ export default function RechargePage() {
   }
 
   // ── styles ──
-  const fieldWrap = (key: 'phone' | 'amount' | 'email', invalid = false): CSSProperties => ({
+  const fieldWrap = (key: 'phone' | 'amount' | 'name' | 'email', invalid = false): CSSProperties => ({
     display: 'flex', alignItems: 'center',
     borderRadius: 12,
     border: `1.5px solid ${invalid ? 'var(--error, #d14343)' : focused === key ? 'var(--primary)' : 'var(--border)'}`,
@@ -263,7 +265,20 @@ export default function RechargePage() {
           </div>
         </div>
 
-        {/* 4 — payer email */}
+        {/* 4 — payer name */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <label htmlFor="rec-name" style={label}>{t('recharge.payer_name')}</label>
+          <div style={fieldWrap('name', payerName.length > 0 && !payerNameValid)}>
+            <input
+              id="rec-name" value={payerName} onChange={(e) => setPayerName(e.target.value)}
+              onFocus={() => setFocused('name')} onBlur={() => setFocused(null)}
+              type="text" autoComplete="name" maxLength={60} placeholder="Nombre y apellido"
+              aria-label={t('recharge.payer_name')} style={inputBare}
+            />
+          </div>
+        </div>
+
+        {/* 5 — payer email */}
         <div style={{ marginBottom: '1.4rem' }}>
           <label htmlFor="rec-email" style={label}>{t('recharge.payer_email')}</label>
           <div style={fieldWrap('email', email.length > 3 && !emailValid)}>

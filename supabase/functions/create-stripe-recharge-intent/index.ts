@@ -7,6 +7,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getStripe } from '../_shared/stripe.ts';
+import { sanitizePayerName } from '../_shared/sanitize.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -39,13 +40,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { phone, amount_usd, payer_email } = (await req.json()) as {
-      phone?: string; amount_usd?: number; payer_email?: string;
+    const { phone, amount_usd, payer_email, payer_name } = (await req.json()) as {
+      phone?: string; amount_usd?: number; payer_email?: string; payer_name?: string;
     };
+    // payer_name is shown in the recipient's email/push and the payer's receipt —
+    // sanitize it (control chars, HTML metacharacters, length) before persisting.
+    const payerName = sanitizePayerName(payer_name);
     if (
       !phone ||
       !Number.isFinite(amount_usd as number) || (amount_usd as number) <= 0 ||
-      !payer_email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payer_email)
+      !payer_email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payer_email) ||
+      payerName.length < 2
     ) {
       return J(400, { ok: false, error: 'invalid_params' });
     }
@@ -101,7 +106,7 @@ Deno.serve(async (req) => {
         intent_type: 'recharge',
         recharge_type: rechargeType,
         client_ip: clientIP,
-        metadata: { source: 'diaspora', payer_email, recipient_phone_masked: `***${phoneDigits.slice(-4)}` },
+        metadata: { source: 'diaspora', payer_name: payerName, payer_email, recipient_phone_masked: `***${phoneDigits.slice(-4)}` },
       })
       .select()
       .single();

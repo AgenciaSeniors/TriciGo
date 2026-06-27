@@ -16,7 +16,7 @@ import { wrapHtml, COLORS, FONT_STACK, escapeHtml, detailRow, totalRow } from '.
 import { realEmail } from '../email-guard.ts';
 
 export interface WalletReceiptData {
-  audience: 'user' | 'admin';
+  audience: 'user' | 'admin' | 'payer';
   receiptNo: string;        // e.g. "TG-20260511-001"
   dateLabel: string;        // pre-formatted, locale-aware ("11 de mayo de 2026, 14:30 (Cuba)")
   user: {
@@ -24,6 +24,15 @@ export interface WalletReceiptData {
     email: string | null;
     id: string;
   };
+  /**
+   * Diaspora recharge only: the name the payer typed on /recargar.
+   *  - 'user' variant (to the RECIPIENT): renders "Recargado por: <payerName>".
+   *  - 'payer' variant (to the PAYER): used as the greeting; user.full_name is
+   *    the recipient they topped up.
+   * Absent for ordinary in-app self-recharges (then the 'user' variant reads
+   * "Recibimos tu pago." as before).
+   */
+  payerName?: string | null;
   /**
    * RECARGA V2 amounts (additive fee model).
    *   - usdRequested:  the net USD the user picked (e.g. $20).
@@ -43,13 +52,17 @@ export interface WalletReceiptData {
   stripePaymentIntentId?: string | null;
 }
 
-export const walletReceiptSubject = (receiptNo: string, audience: 'user' | 'admin') =>
+export const walletReceiptSubject = (receiptNo: string, audience: 'user' | 'admin' | 'payer') =>
   audience === 'admin'
     ? `[TriciGo] Recarga procesada · ${receiptNo}`
-    : `Tu comprobante TriciGo · ${receiptNo}`;
+    : audience === 'payer'
+      ? `Recarga enviada · ${receiptNo}`
+      : `Tu comprobante TriciGo · ${receiptNo}`;
 
 export function walletReceiptHtml(data: WalletReceiptData): string {
-  return data.audience === 'admin' ? renderAdmin(data) : renderUser(data);
+  if (data.audience === 'admin') return renderAdmin(data);
+  if (data.audience === 'payer') return renderPayer(data);
+  return renderUser(data);
 }
 
 // ── User-facing (warm, branded) ──────────────────────────────────
@@ -57,10 +70,15 @@ export function walletReceiptHtml(data: WalletReceiptData): string {
 function renderUser(data: WalletReceiptData): string {
   const { user, receiptNo, dateLabel, amounts } = data;
   const greetingName = user.full_name?.trim() || 'pasajero';
+  const payerName = data.payerName?.trim();
 
   const body = `
     <p style="margin: 0 0 20px; font-family: ${FONT_STACK}; font-size: 16px; color: ${COLORS.ink};">
-      Hola, <strong>${escapeHtml(greetingName)}</strong>. Recibimos tu pago.
+      Hola, <strong>${escapeHtml(greetingName)}</strong>. ${
+        payerName
+          ? `<strong>${escapeHtml(payerName)}</strong> te recargó la billetera.`
+          : 'Recibimos tu pago.'
+      }
     </p>
     <p style="margin: 0 0 24px;">
       Tus créditos TriciCoin ya están disponibles para tus próximos viajes.
@@ -70,6 +88,7 @@ function renderUser(data: WalletReceiptData): string {
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 8px;">
       ${detailRow('Comprobante', receiptNo, { strong: true })}
       ${detailRow('Fecha', dateLabel, { muted: true })}
+      ${payerName ? detailRow('Recargado por', payerName, { strong: true }) : ''}
       ${detailRow('Recarga solicitada', fmtUsd(amounts.usdRequested))}
       ${detailRow('Comisión de servicio (3%)', fmtUsd(amounts.feeUsd), { muted: true })}
       ${detailRow('Cargo total a tu tarjeta', fmtUsd(amounts.usdCharged), { strong: true })}
@@ -91,6 +110,44 @@ function renderUser(data: WalletReceiptData): string {
     body,
     footerNote:
       'Conservá este correo y el PDF adjunto como comprobante. Cualquier duda, escribinos a soporte@tricigo.com.',
+  });
+}
+
+// ── Payer-facing (diaspora: confirmation to whoever paid) ────────
+
+function renderPayer(data: WalletReceiptData): string {
+  const { user, receiptNo, dateLabel, amounts } = data;
+  const payerGreeting = data.payerName?.trim() || 'pagador';
+  const recipientName = user.full_name?.trim() || 'el usuario';
+
+  const body = `
+    <p style="margin: 0 0 20px; font-family: ${FONT_STACK}; font-size: 16px; color: ${COLORS.ink};">
+      Hola, <strong>${escapeHtml(payerGreeting)}</strong>. Tu recarga fue procesada con éxito.
+    </p>
+    <p style="margin: 0 0 24px;">
+      Acreditamos <strong>${fmtTrc(amounts.tcCredited)}</strong> en la billetera TriciGo de
+      <strong>${escapeHtml(recipientName)}</strong>. Adjuntamos el comprobante en PDF.
+    </p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 8px;">
+      ${detailRow('Comprobante', receiptNo, { strong: true })}
+      ${detailRow('Fecha', dateLabel, { muted: true })}
+      ${detailRow('Destinatario', recipientName)}
+      ${detailRow('Recarga solicitada', fmtUsd(amounts.usdRequested))}
+      ${detailRow('Comisión de servicio (3%)', fmtUsd(amounts.feeUsd), { muted: true })}
+      ${detailRow('Cargo total a tu tarjeta', fmtUsd(amounts.usdCharged), { strong: true })}
+      ${totalRow('Acreditado a su billetera', fmtTrc(amounts.tcCredited))}
+    </table>
+  `;
+
+  return wrapHtml({
+    preheader: `Recarga enviada · ${fmtTrc(amounts.tcCredited)} acreditados`,
+    hero: {
+      title: 'Recarga enviada',
+      subtitle: `${fmtTrc(amounts.tcCredited)} acreditados a su billetera.`,
+    },
+    body,
+    footerNote:
+      'Gracias por recargar con TriciGo. Cualquier duda, escribinos a soporte@tricigo.com.',
   });
 }
 

@@ -9,14 +9,16 @@
 //
 // The /recargar page picks this EF when platform_config.active_payment_provider
 // = 'netopia'. NETOPIA is live and the diaspora payer is abroad (non-Cuban IP),
-// so this works without the Stripe KYC. Does NOT write a `metadata` column (it
-// doesn't exist in prod until migration 00463 — and we don't need it here).
+// so this works without the Stripe KYC. Writes diaspora `metadata` (payer name +
+// email; the jsonb column exists in prod since migration 00463) so the settlement
+// path can show "X te recargó" and email the payer a confirmation.
 //
 // The NETOPIA call (callNetopiaCardStart / netopiaApiBase) is copied verbatim
 // from create-netopia-payment-intent, including the live VPS np-proxy routing.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { sanitizePayerName } from '../_shared/sanitize.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -148,13 +150,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { phone, amount_usd, payer_email } = (await req.json()) as {
-      phone?: string; amount_usd?: number; payer_email?: string;
+    const { phone, amount_usd, payer_email, payer_name } = (await req.json()) as {
+      phone?: string; amount_usd?: number; payer_email?: string; payer_name?: string;
     };
+    // payer_name is shown in the recipient's email/push and the payer's receipt —
+    // sanitize it (control chars, HTML metacharacters, length) before persisting.
+    const payerName = sanitizePayerName(payer_name);
     if (
       !phone ||
       !Number.isFinite(amount_usd as number) || (amount_usd as number) <= 0 ||
-      !payer_email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payer_email)
+      !payer_email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payer_email) ||
+      payerName.length < 2
     ) {
       return J(400, { ok: false, error: 'invalid_params' });
     }
@@ -215,7 +221,10 @@ Deno.serve(async (req) => {
       return J(503, { ok: false, error: 'not_configured', detail: `NETOPIA ${env} credentials not set` });
     }
 
-    // payment_intents: user_id = RECIPIENT. NO metadata column (doesn't exist in prod).
+    // payment_intents: user_id = RECIPIENT. Diaspora metadata (payer name +
+    // email) lets the settlement path show "X te recargó" and email the payer.
+    // The `metadata` jsonb column exists in prod since migration 00463.
+    const phoneDigits = phone.replace(/\D/g, '');
     const { data: intent, error: insErr } = await supabase
       .from('payment_intents')
       .insert({
@@ -229,6 +238,7 @@ Deno.serve(async (req) => {
         intent_type: 'recharge',
         recharge_type: rechargeType,
         client_ip: clientIP,
+        metadata: { source: 'diaspora', payer_name: payerName, payer_email, recipient_phone_masked: `***${phoneDigits.slice(-4)}` },
       })
       .select()
       .single();

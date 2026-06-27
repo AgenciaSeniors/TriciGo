@@ -12,6 +12,7 @@
     "will_receive": "Recibirá en billetera",
     "fee": "Comisión",
     "total": "Total a pagar",
+    "payer_name": "Tu nombre",
     "payer_email": "Tu email (para el comprobante)",
     "pay": "Realizar pago",
     "payment_secured": "Pago procesado de forma segura.",
