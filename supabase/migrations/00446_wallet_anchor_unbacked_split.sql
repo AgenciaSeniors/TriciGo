@@ -12,8 +12,10 @@
 -- Correct model: split each anchored wallet into a USD-backed portion (anchor_usd_cents, floats
 -- with the rate) and an unbacked portion (new unbacked_cup, held flat 1:1). Grounded against prod:
 -- promo_credit is the single ledger type that credits unbacked value (admin_reward_referral,
--- trg_referral_reward_on_*, admin_send_gift). User P2P gifts use transfer_in (real conserved value
--- → backed). ride_hold/ride_hold_release have no emitter.
+-- trg_referral_reward_on_*, admin_send_gift). (Correction, 00468: send_gift writes ONE
+-- transfer_out txn covering BOTH legs — sender debit + recipient credit; there is no
+-- transfer_in emitter. The recipient leg was treated as 100% backed here, which 00468 fixed
+-- by mirroring the sender's backed/unbacked composition.) ride_hold/ride_hold_release have no emitter.
 --
 -- Adversarial review hardening:
 --  * anchor_usd_cents becomes NUMERIC so per-entry maintenance carries NO integer-cents rounding

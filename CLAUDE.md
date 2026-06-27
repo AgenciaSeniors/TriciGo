@@ -1386,6 +1386,8 @@ Ejemplo concreto: Eduardo Admin tiene `tricicoin=80,905` (visible) Y `driver_cas
 
 Migration de referencia: `00340_complete_ride_and_pay_tricicoin_mixed_fix.sql` cerró este bug para los payment methods `tricicoin` y `mixed`.
 
+**`held_balance` está FUERA del modelo de ancla USD (deuda dormida, verificado 2026-06-27).** El ancla (revaluación + trigger) solo razona sobre `wallet_accounts.balance`; `held_balance` (fondos congelados en holds) no participa. Hoy es inofensivo porque los holds están dormidos (`held_balance=0` siempre; `complete_ride_and_pay` debita `balance` directo, no usa holds). **Si alguna vez se reactivan los holds** (mover N CUP de `balance`→`held` al iniciar un viaje), el ancla quedará reflejando solo `balance` y se desincronizará de `balance+held` → al liberar/capturar el hold la revaluación puede regalar o destruir valor. Antes de reactivar holds hay que extender el modelo de ancla para que cubra `balance + held_balance` (o snapshotear el ancla del monto congelado). Auditoría FX: `~/.claude/plans/tengo-una-pregunta-porque-composed-hare.md`.
+
 ### Auditoría secuencial pattern — Explore → SQL → Plan → PRs en cadena
 
 **Patrón verificado 2026-05-27 / 28** ejecutando 3 audits grandes (corporate, driver rendering, payment methods). Funcionó bien y produjo 13 PRs mergeados con cero rollbacks.
