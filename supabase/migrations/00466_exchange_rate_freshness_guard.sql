@@ -97,7 +97,7 @@ BEGIN
   v_max_age := COALESCE(v_max_age, 24);
 
   IF v_max_age > 0 AND v_fetched < (now() - make_interval(hours => v_max_age::int)) THEN
-    RAISE WARNING 'get_fresh_exchange_rate: is_current rate stale (fetched_at=%, max_age=%h) -> NULL',
+    RAISE WARNING 'get_fresh_exchange_rate: is_current rate stale (fetched_at=%, max_age hours=%) -> NULL',
       v_fetched, v_max_age;
     RETURN NULL;
   END IF;
@@ -180,7 +180,7 @@ BEGIN
        AND v_cur_fetched IS NOT NULL
        AND v_cur_fetched > (now() - make_interval(hours => v_max_age::int))
        AND abs(p_usd_cup_rate - v_cur) / v_cur > v_max_jump THEN
-      RAISE EXCEPTION 'exchange rate jump too large: % -> % (> %%); rejected (set manually if real)',
+      RAISE EXCEPTION 'exchange rate jump too large: % -> %; limit is % percent. Rejected (set manually if real).',
         v_cur, p_usd_cup_rate, round(v_max_jump * 100, 1);
     END IF;
   END IF;
