@@ -1,17 +1,17 @@
 # TriciGo Conductor — Metadata para Google Play Store (Español)
 
 ## Nombre de la app
-TriciGo Conductor - Para Bicitaxistas
+TriciGo Conductor - Para Tricicleros
 
 ## Descripción corta (80 caracteres máx.)
-Recibe viajes, navega y gana dinero como bicitaxista. 🚲
+Recibe viajes, navega y gana dinero con tu triciclo. 🛺
 
 ## Descripción larga (4000 caracteres máx.)
 
-TriciGo Conductor es la app para bicitaxistas y conductores. Recibe solicitudes de viaje, navega hacia tus pasajeros y genera ingresos de forma organizada y transparente.
+TriciGo Conductor es la app para conductores de triciclo y otros vehículos. Recibe solicitudes de viaje, navega hacia tus pasajeros y genera ingresos de forma organizada y transparente.
 
-🚲 ¿QUÉ ES TRICIGO CONDUCTOR?
-TriciGo Conductor es tu herramienta de trabajo como bicitaxista. La app te conecta con pasajeros que necesitan transporte, te guía con navegación integrada y te ayuda a gestionar tus ganancias. Sin intermediarios, directo al grano.
+🛺 ¿QUÉ ES TRICIGO CONDUCTOR?
+TriciGo Conductor es tu herramienta de trabajo como conductor de triciclo. La app te conecta con pasajeros que necesitan transporte, te guía con navegación integrada y te ayuda a gestionar tus ganancias. Sin intermediarios, directo al grano.
 
 📱 ¿CÓMO FUNCIONA?
 1. Regístrate y completa tu perfil de conductor
@@ -52,7 +52,7 @@ TriciGo Conductor es tu herramienta de trabajo como bicitaxista. La app te conec
 • Soporte — Equipo de atención dedicado para conductores.
 
 📋 REQUISITOS PARA SER CONDUCTOR
-• Tener un vehículo en buenas condiciones (bicitaxi, moto o auto)
+• Tener un vehículo en buenas condiciones (triciclo, moto o auto)
 • Licencia de conducción vigente
 • Teléfono con Android 7.0 o superior
 • Completar el proceso de verificación
@@ -69,7 +69,7 @@ TriciGo Conductor se despliega ciudad por ciudad. Revisa la app para ver las zon
 Maps & Navigation (principal) / Business (secundaria)
 
 ## Tags / Keywords
-conductor, bicitaxi, taxi, driver, transporte, ganancias, bicitaxista, empleo, urbano, rideshare
+conductor, triciclo, triciclo eléctrico, taxi, driver, transporte, ganancias, triciclero, empleo, urbano, rideshare
 
 ## Política de privacidad URL
 https://tricigo.com/privacy

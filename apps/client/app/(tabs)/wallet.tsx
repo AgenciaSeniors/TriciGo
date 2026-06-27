@@ -42,16 +42,19 @@ import { useThemeStore } from '@/stores/theme.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme, Linking } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
 import { RIDE_CONFIG } from '@/config/ride';
+import { useNetopiaCheckout } from '@/components/NetopiaCheckout';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 // Stripe SDK removed 2026-05-20 (NETOPIA cutover, see PROGRESS.md).
-// Recharge now opens NETOPIA's hosted payment page inside an in-app
-// browser via WebBrowser.openAuthSessionAsync (same pattern as OAuth
-// login). NETOPIA redirects back to RETURN_URL_BASE + ?intent=<id>,
-// the in-app browser closes, and we poll the intent status natively.
+// Recharge opens NETOPIA's hosted payment page inside the in-app
+// NetopiaCheckout WebView (useNetopiaCheckout), routed through the VPS
+// CONNECT proxy when `netopia_proxy_enabled` is on — so a reputation-flagged
+// IP (e.g. Cuban ETECSA) doesn't hit the Google Cloud Armor 403 — else it
+// falls back to WebBrowser.openAuthSessionAsync (the pre-existing flow).
+// NETOPIA redirects back to RETURN_URL_BASE + ?intent=<id>; we then poll the
+// intent status natively (the DB is the source of truth).
 //
 // RETURN_URL_BASE is a universal link first — Android/iOS will intercept
 // it and route to this app if associated domains / intent filters are
@@ -588,6 +591,10 @@ function NativeWalletScreen() {
   const isDark = resolvedScheme === 'dark';
   const tokens = useTokens();
   const userId = useAuthStore((s) => s.user?.id);
+  // NETOPIA card checkout: in-app WebView routed through the VPS CONNECT proxy
+  // when enabled, else falls back to the system browser. See NetopiaCheckout.
+  const { present: presentNetopiaCheckout, checkoutElement: netopiaCheckoutElement } =
+    useNetopiaCheckout();
 
   // Cuban Modern premium shadows (mirror driver wallet). Orange-tinted on the
   // hero + CTA to reinforce brand; neutral on transaction cards.
@@ -846,14 +853,15 @@ function NativeWalletScreen() {
         throw new Error(t('wallet.recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }));
       }
 
-      // 2. Open the hosted page in an in-app browser. Bloquea hasta que
-      //    NETOPIA redirija al dismissUrl (= nuestro returnUrl + ?intent=<id>),
-      //    momento en que el sistema cierra el browser y nos devuelve aquí.
-      const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
-      await WebBrowser.openAuthSessionAsync(
-        result.redirectUrl,
-        dismissUrl,
-      );
+      // 2. Open the hosted page in the in-app NETOPIA checkout WebView, routed
+      //    through the VPS CONNECT proxy when enabled (else it falls back to
+      //    WebBrowser — the exact pre-existing behavior). Resolves when NETOPIA
+      //    redirects back to RETURN_URL_BASE (or the user closes the sheet).
+      await presentNetopiaCheckout({
+        url: result.redirectUrl,
+        returnUrlBase: RETURN_URL_BASE,
+        intentId: result.intentId,
+      });
 
       // 3. ALWAYS poll the intent — browser dismissal type is NOT a
       //    reliable success/cancel signal. If the universal link fails
@@ -1162,6 +1170,7 @@ function NativeWalletScreen() {
 
   return (
     <Screen bg="cuban" padded>
+      {netopiaCheckoutElement}
       {/* Home-style layout: compact iOS-native header (h4 instead of
           large display), no big icon hero. The demo banner (~46px in
           demo builds) is non-blocking via SafeAreaView; no extra

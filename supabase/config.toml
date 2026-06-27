@@ -454,6 +454,9 @@ verify_jwt = false
 verify_jwt = false
 [functions.link-phone]
 verify_jwt = false
+# Mints a short-lived HMAC proxy credential; does its own auth.getUser inside.
+[functions.mint-netopia-proxy-credential]
+verify_jwt = false
 # Self-authenticating: accepts the service-role key (DB trigger 00405) OR an
 # admin/super_admin user JWT (admin panel "Generar contrato" button).
 [functions.generate-driver-contract]

@@ -15,6 +15,14 @@ dist/
 .expo/
 ios/
 android/
+# ...EXCEPT local Expo modules under apps/*/modules/* ship their OWN native
+# source (Kotlin/Swift). Those must be tracked — otherwise autolinking finds
+# the module config but not the native code → "Cannot find native module" at
+# runtime (and the CI dev-client build silently omits it).
+!apps/*/modules/*/android/
+!apps/*/modules/*/android/**
+!apps/*/modules/*/ios/
+!apps/*/modules/*/ios/**
 *.jks
 *.p8
 *.p12

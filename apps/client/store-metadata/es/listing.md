@@ -1,14 +1,14 @@
 # TriciGo — Metadata para Google Play Store (Español)
 
 ## Nombre de la app
-TriciGo - Bicitaxis y Más
+TriciGo - Triciclos y Más
 
 ## Descripción corta (80 caracteres máx.)
-Pide un bicitaxi en tu ciudad. Rápido, seguro y al mejor precio. 🚲
+Pide un triciclo en tu ciudad. Rápido, seguro y al mejor precio. 🛺
 
 ## Descripción larga (4000 caracteres máx.)
 
-TriciGo es una plataforma digital de transporte urbano que conecta pasajeros con conductores verificados de bicitaxis (triciclos), motos y autos en tu ciudad.
+TriciGo es una plataforma digital de transporte urbano que conecta pasajeros con conductores verificados de triciclos eléctricos, motos y autos en tu ciudad.
 
 🚲 ¿QUÉ ES TRICIGO?
 TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de subirte y pagar de forma cómoda. Sin regateos, sin sorpresas.
@@ -23,7 +23,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 
 ✨ CARACTERÍSTICAS PRINCIPALES
 
-• Solicitud inmediata — Pide un bicitaxi, moto o auto con un toque. Te conectamos con el conductor más cercano en segundos.
+• Solicitud inmediata — Pide un triciclo, moto o auto con un toque. Te conectamos con el conductor más cercano en segundos.
 
 • Precio transparente — Conoce el costo de tu viaje antes de confirmar. Tarifas claras basadas en distancia y demanda.
 
@@ -47,7 +47,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 
 🌟 ¿POR QUÉ TRICIGO?
 
-• Ecológico — El bicitaxi es transporte 100% verde, sin emisiones de carbono.
+• Ecológico — El triciclo eléctrico es transporte 100% verde, sin emisiones de carbono.
 • Económico — Precios accesibles para moverse por la ciudad.
 • Confiable — Conductores evaluados y calificados por la comunidad.
 • Local — Hecho para la movilidad urbana del día a día.
@@ -64,7 +64,7 @@ Descarga TriciGo y muévete por la ciudad como nunca antes. ¡Tu viaje te espera
 Maps & Navigation (principal) / Travel & Local (secundaria)
 
 ## Tags / Keywords
-bicitaxi, taxi, transporte, movilidad, triciclo, ride, conductor, viaje, urbano, rideshare
+triciclo, triciclo eléctrico, taxi, transporte, movilidad, ride, conductor, viaje, urbano, rideshare
 
 ## Política de privacidad URL
 https://tricigo.com/privacy
