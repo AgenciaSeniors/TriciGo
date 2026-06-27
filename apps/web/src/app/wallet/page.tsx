@@ -924,6 +924,14 @@ export default function WalletPage() {
                           {amount > 0 ? '+' : amount < 0 ? '−' : ''}{formatTriciCoin(Math.abs(amount))}
                         </span>
                         {(() => {
+                          // FX rows preserve USD value by design — never show a USD gain/loss.
+                          if (view.kind === 'fx') {
+                            return (
+                              <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
+                                {t('wallet.fx_usd_unchanged', { defaultValue: 'Valor en USD sin cambios' })}
+                              </span>
+                            );
+                          }
                           // USD caption — usa la tasa de migración si existe, si no
                           // cae a la tasa de cambio en vivo (parity con `migrationRate ?? exchangeRate`
                           // del wallet móvil), así las wallets pre-migración igual muestran ≈ $X.

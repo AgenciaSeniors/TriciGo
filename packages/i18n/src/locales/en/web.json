@@ -532,6 +532,7 @@
     "tx_refund": "Refund",
     "tx_insurance": "Trip insurance",
     "tx_fx": "Exchange rate adjustment",
+    "fx_usd_unchanged": "USD value unchanged",
     "tx_adjustment": "Adjustment",
     "date_today": "Today",
     "date_yesterday": "Yesterday"

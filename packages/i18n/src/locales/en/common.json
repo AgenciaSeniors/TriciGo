@@ -106,6 +106,7 @@
     "txn_tip_sent": "Tip sent",
     "txn_refund": "Refund",
     "txn_fx": "Exchange-rate adjustment",
+    "fx_usd_unchanged": "USD value unchanged",
     "txn_bonus": "Bonus",
     "txn_gift_received": "Gift received",
     "txn_gift_sent": "Gift sent",
