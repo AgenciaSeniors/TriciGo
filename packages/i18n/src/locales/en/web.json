@@ -14,7 +14,7 @@
     "total": "Total to pay",
     "payer_email": "Your email (for the receipt)",
     "pay": "Pay now",
-    "secured_by_stripe": "Secure payment processed by Stripe.",
+    "payment_secured": "Payment processed securely.",
     "success": "Top-up sent! The receipt was emailed to you.",
     "cancelled": "Payment cancelled.",
     "processing": "Payment in progress. We'll email you the receipt and credit the wallet once confirmed.",
