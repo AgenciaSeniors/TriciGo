@@ -17,6 +17,7 @@
     "secured_by_stripe": "Pago seguro procesado por Stripe.",
     "success": "¡Recarga enviada! El comprobante llegó a tu email.",
     "cancelled": "Pago cancelado.",
+    "processing": "Pago en proceso. Te enviamos el comprobante por email y la billetera se acredita al confirmarse.",
     "error": "No se pudo procesar. Intentalo de nuevo."
   },
   "offline": "Sin conexión — revisa tu red.",

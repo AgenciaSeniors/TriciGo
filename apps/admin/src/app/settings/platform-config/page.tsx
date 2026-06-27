@@ -10,9 +10,21 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 type ConfigEntry = { key: string; value: string };
 
 /** Well-known config keys with input type + help text key */
-const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> = {
-  // ── Payment provider registry ──
-  active_payment_provider: { type: 'text', helpKey: 'platform_config.active_payment_provider_help' },
+type KnownKey = {
+  type: 'number' | 'text' | 'select';
+  helpKey: string;
+  options?: { label: string; value: string }[];
+};
+const KNOWN_KEYS: Record<string, KnownKey> = {
+  // ── Payment provider registry ── (which provider /recargar + web /wallet use)
+  active_payment_provider: {
+    type: 'select',
+    helpKey: 'platform_config.active_payment_provider_help',
+    options: [
+      { label: 'NETOPIA', value: 'netopia' },
+      { label: 'Stripe', value: 'stripe' },
+    ],
+  },
   // ── NETOPIA Payments (post 2026-05-20 cutover) ──
   netopia_enabled: { type: 'text', helpKey: 'platform_config.netopia_enabled_help' },
   netopia_environment: { type: 'text', helpKey: 'platform_config.netopia_environment_help' },
@@ -185,19 +197,34 @@ export default function PlatformConfigPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <input
-                      type={known?.type ?? 'text'}
-                      step={known?.type === 'number' ? 'any' : undefined}
-                      aria-label={getLabel(config.key)}
-                      className="w-32 px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm text-right font-mono"
-                      value={editValues[config.key] ?? config.value}
-                      onChange={(e) =>
-                        setEditValues((prev) => ({
-                          ...prev,
-                          [config.key]: e.target.value,
-                        }))
-                      }
-                    />
+                    {known?.type === 'select' && known.options ? (
+                      <select
+                        aria-label={getLabel(config.key)}
+                        className="w-32 px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm"
+                        value={String(editValues[config.key] ?? config.value ?? '').replace(/^"|"$/g, '')}
+                        onChange={(e) =>
+                          setEditValues((prev) => ({ ...prev, [config.key]: e.target.value }))
+                        }
+                      >
+                        {known.options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={known?.type ?? 'text'}
+                        step={known?.type === 'number' ? 'any' : undefined}
+                        aria-label={getLabel(config.key)}
+                        className="w-32 px-3 py-2 border border-line bg-surface text-ink rounded-lg text-sm text-right font-mono"
+                        value={editValues[config.key] ?? config.value}
+                        onChange={(e) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            [config.key]: e.target.value,
+                          }))
+                        }
+                      />
+                    )}
                     <button
                       onClick={() => handleSave(config.key)}
                       disabled={!isEdited || savingKey === config.key || !isSuperAdmin}

@@ -442,6 +442,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.create-stripe-recharge-intent]
 verify_jwt = false
+[functions.create-netopia-recharge-intent]
+verify_jwt = false
 [functions.process-stripe-webhook]
 verify_jwt = false
 [functions.health-check]

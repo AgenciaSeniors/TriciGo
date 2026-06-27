@@ -5,7 +5,8 @@ import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, useFeatureFlag } from '@tricigo/api';
 
 type Recipient = { found: boolean; fullName?: string };
-type ResultStatus = 'ok' | 'cancel' | null;
+type ResultStatus = 'ok' | 'cancel' | 'processing' | null;
+type Provider = 'netopia' | 'stripe';
 
 export default function RechargePage() {
   const { t } = useTranslation('web');
@@ -22,6 +23,7 @@ export default function RechargePage() {
   const [focused, setFocused] = useState<'phone' | 'amount' | 'email' | null>(null);
   const [btnHover, setBtnHover] = useState(false);
   const [status, setStatus] = useState<ResultStatus>(null);
+  const [provider, setProvider] = useState<Provider>('netopia');
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -35,10 +37,25 @@ export default function RechargePage() {
     })();
   }, []);
 
-  // Read the post-Checkout return status (?status=ok|cancel) without useSearchParams.
+  // Active payment provider — admin switch (platform_config is anon-readable via
+  // its RLS pc_select USING(true)). NETOPIA is the default; the page invokes
+  // create-<provider>-recharge-intent accordingly.
+  useEffect(() => {
+    (async () => {
+      const { data } = await getSupabaseClient()
+        .from('platform_config').select('value').eq('key', 'active_payment_provider').single();
+      const v = data?.value;
+      const p = typeof v === 'string' ? v.replace(/^"|"$/g, '') : v;
+      if (p === 'stripe' || p === 'netopia') setProvider(p);
+    })();
+  }, []);
+
+  // Read the post-redirect return status (?status=ok|cancel|processing).
+  // Stripe redirects to a distinct ok/cancel URL; NETOPIA uses a single redirect
+  // with status=processing (the real result arrives async via the IPN webhook).
   useEffect(() => {
     const s = new URLSearchParams(window.location.search).get('status');
-    if (s === 'ok' || s === 'cancel') setStatus(s);
+    if (s === 'ok' || s === 'cancel' || s === 'processing') setStatus(s);
   }, []);
 
   // Normalize the typed phone to +535XXXXXXX for the lookup.
@@ -80,12 +97,12 @@ export default function RechargePage() {
     if (!canPay) { setError(t('recharge.error')); return; }
     setSubmitting(true);
     try {
-      const { data, error: efErr } = await getSupabaseClient().functions.invoke('create-stripe-recharge-intent', {
+      const { data, error: efErr } = await getSupabaseClient().functions.invoke(`create-${provider}-recharge-intent`, {
         body: { phone: canonicalPhone(phone), amount_usd: amt, payer_email: email },
       });
       const res = data as { ok?: boolean; redirectUrl?: string };
       if (efErr || !res?.ok || !res.redirectUrl) throw new Error('failed');
-      window.location.href = res.redirectUrl; // → Stripe Checkout
+      window.location.href = res.redirectUrl; // → provider hosted page (NETOPIA / Stripe)
     } catch {
       setError(t('recharge.error'));
       setSubmitting(false);
@@ -154,7 +171,11 @@ export default function RechargePage() {
           color: status === 'ok' ? 'var(--success, #1a7f55)' : 'var(--text-secondary)',
         }}>
           {status === 'ok' ? <IconCheck color="var(--success, #1a7f55)" /> : <IconInfo />}
-          {status === 'ok' ? t('recharge.success') : t('recharge.cancelled')}
+          {status === 'ok'
+            ? t('recharge.success')
+            : status === 'processing'
+              ? t('recharge.processing')
+              : t('recharge.cancelled')}
         </div>
       )}
 
