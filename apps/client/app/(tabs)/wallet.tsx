@@ -613,13 +613,6 @@ function NativeWalletScreen() {
     shadowRadius: 24,
     elevation: 12,
   };
-  const GLOW_CTA = {
-    shadowColor: '#FF4D00',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
-  };
   const CARD_SHADOW = {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1298,21 +1291,36 @@ function NativeWalletScreen() {
           </View>
         </AnimatedCard>
 
-        {/* Premium quick actions — a balanced, symmetric pair of solid cards:
-            Recargar (primary, warm orange glow gradient) + Regalar (secondary,
-            SOLID cuban dusk fill). Same size/shape; the warm/cool contrast keeps
-            Recargar leading while Regalar reads as a full, deliberate card (not a
-            faint tint). Gift is closed-loop: TriciCoin can be sent to another
-            active TriciGo user but stays spend-only (rides), never cashed out. */}
-        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
+        {/* Quick actions — ONE full-width segmented bar split 50/50: Recargar
+            (orange, left) | Regalar (dusk, right). The OUTER View is itself the
+            row (flexDirection:'row' + alignSelf:'stretch' → full width); the two
+            flex:1 Pressables are DIRECT children so flex distributes the main axis
+            (no width:'100%' which Yoga won't resolve against a stretch-sized
+            parent). Each half rounds only its OUTER corners → flat seam in the
+            middle; no overflow:'hidden' so the shadow renders on iOS too. Regalar
+            uses a hardcoded dusk gradient because the accent.dusk token resolves
+            undefined at runtime (was rendering invisible). Gift is closed-loop:
+            TriciCoin can be sent to another active TriciGo user but stays
+            spend-only (rides), never cashed out. */}
+        <View
+          testID="wallet-cta-bar"
+          style={{
+            marginBottom: 24,
+            alignSelf: 'stretch',
+            flexDirection: 'row',
+            borderRadius: 20,
+            shadowColor: '#1A1414',
+            shadowOpacity: 0.16,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 6,
+          }}
+        >
           <Pressable
             onPress={handleRecharge}
             accessibilityRole="button"
             accessibilityLabel={t('wallet.recharge')}
-            style={({ pressed }) => [
-              { flex: 1, borderRadius: 20, overflow: 'hidden', ...GLOW_CTA },
-              pressed && { transform: [{ scale: 0.97 }], opacity: 0.95 },
-            ]}
+            style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.9 }]}
           >
             <LinearGradient
               colors={[colors.brand.orange, tokens.accent.warm]}
@@ -1321,13 +1329,15 @@ function NativeWalletScreen() {
               style={{
                 alignItems: 'center',
                 justifyContent: 'center',
-                paddingVertical: 18,
+                paddingVertical: 16,
                 paddingHorizontal: 12,
-                minHeight: 96,
+                minHeight: 84,
+                borderTopLeftRadius: 20,
+                borderBottomLeftRadius: 20,
               }}
             >
-              <Ionicons name="add-circle" size={28} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+              <Ionicons name="add-circle" size={26} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 6, letterSpacing: 0.3 }}>
                 {t('wallet.recharge')}
               </Text>
             </LinearGradient>
@@ -1337,29 +1347,27 @@ function NativeWalletScreen() {
             onPress={() => router.push('/wallet/gift')}
             accessibilityRole="button"
             accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
-            style={({ pressed }) => [
-              {
-                flex: 1,
+            style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.9 }]}
+          >
+            <LinearGradient
+              colors={['#6B7F8F', '#52677A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
                 alignItems: 'center',
                 justifyContent: 'center',
-                paddingVertical: 18,
+                paddingVertical: 16,
                 paddingHorizontal: 12,
-                minHeight: 96,
-                borderRadius: 20,
-                backgroundColor: tokens.accent.dusk,
-                shadowColor: '#1A1414',
-                shadowOpacity: 0.18,
-                shadowRadius: 10,
-                shadowOffset: { width: 0, height: 5 },
-                elevation: 5,
-              },
-              pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
-            ]}
-          >
-            <Ionicons name="gift" size={28} color="#FFFFFF" />
-            <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
-              {t('wallet.gift', { defaultValue: 'Regalar' })}
-            </Text>
+                minHeight: 84,
+                borderTopRightRadius: 20,
+                borderBottomRightRadius: 20,
+              }}
+            >
+              <Ionicons name="gift" size={26} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 6, letterSpacing: 0.3 }}>
+                {t('wallet.gift', { defaultValue: 'Regalar' })}
+              </Text>
+            </LinearGradient>
           </Pressable>
         </View>
 

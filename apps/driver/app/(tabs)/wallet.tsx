@@ -75,14 +75,6 @@ export default function WalletScreen() {
     shadowRadius: 8,
     elevation: 2,
   };
-  const GLOW_CTA = {
-    shadowColor: '#FF4D00',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
-  };
-
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
@@ -593,84 +585,97 @@ export default function WalletScreen() {
                 </View>
               </Animated.View>
 
-              {/* ── Quick actions: Recargar (primary, glow gradient) + Regalar
-                  (prominent secondary, filled orange tint) side-by-side, so gift
-                  is impossible to miss. Closed-loop: a driver gifts TriciCoin
-                  from their tricicoin balance to another active TriciGo user. */}
+              {/* ── Quick actions — ONE full-width segmented bar split 50/50:
+                  Recargar (orange, left) | Regalar (dusk, right). The Animated.View
+                  IS the row (flexDirection:'row' + alignSelf:'stretch' → full
+                  width); the two flex:1 Pressables are DIRECT children so flex
+                  distributes the main axis (no width:'100%' — Yoga won't resolve a
+                  percentage against a stretch-sized parent). Each half rounds only
+                  its OUTER corners → flat seam; no overflow:'hidden' so the shadow
+                  shows on iOS. Regalar uses a hardcoded dusk gradient (the
+                  accent.dusk token resolves undefined at runtime → was invisible).
+                  Whole bar scales on press. Closed-loop gift. */}
               <Animated.View
+                testID="wallet-cta-bar"
                 style={{
                   opacity: fadeAnim[1]!,
                   marginBottom: 24,
+                  alignSelf: 'stretch',
                   flexDirection: 'row',
-                  gap: 12,
-                  transform: [{ translateY: sectionTranslateY(1) }],
+                  borderRadius: 20,
+                  shadowColor: '#000000',
+                  shadowOpacity: 0.25,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 6 },
+                  elevation: 6,
+                  transform: [{ translateY: sectionTranslateY(1) }, { scale: ctaScale }],
                 }}
               >
-                <Animated.View style={{ flex: 1, ...GLOW_CTA, transform: [{ scale: ctaScale }] }}>
-                  <Pressable
-                    onPress={() => router.push('/wallet/recharge')}
-                    onPressIn={handleCtaPressIn}
-                    onPressOut={handleCtaPressOut}
-                    style={{ borderRadius: 20, overflow: 'hidden' }}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
+                <Pressable
+                  onPress={() => router.push('/wallet/recharge')}
+                  onPressIn={handleCtaPressIn}
+                  onPressOut={handleCtaPressOut}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
+                  style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.92 }]}
+                >
+                  <LinearGradient
+                    colors={[colors.brand.orange, palette.accent.warm]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 16,
+                      paddingHorizontal: 12,
+                      minHeight: 84,
+                      borderTopLeftRadius: 20,
+                      borderBottomLeftRadius: 20,
+                    }}
                   >
-                    <LinearGradient
-                      colors={[colors.brand.orange, palette.accent.warm]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
+                    <Ionicons name="add-circle" size={26} color="#FFFFFF" />
+                    <Text
                       style={{
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        paddingVertical: 18,
-                        paddingHorizontal: 12,
-                        minHeight: 96,
+                        color: '#FFFFFF',
+                        fontFamily: 'Inter_700Bold',
+                        fontSize: 15,
+                        marginTop: 6,
+                        letterSpacing: 0.3,
+                        textAlign: 'center',
                       }}
                     >
-                      <Ionicons name="add-circle" size={28} color="#FFFFFF" />
-                      <Text
-                        style={{
-                          color: '#FFFFFF',
-                          fontFamily: 'Inter_700Bold',
-                          fontSize: 15,
-                          marginTop: 8,
-                          letterSpacing: 0.3,
-                          textAlign: 'center',
-                        }}
-                      >
-                        {t('wallet.recharge', { defaultValue: 'Recargar' })}
-                      </Text>
-                    </LinearGradient>
-                  </Pressable>
-                </Animated.View>
+                      {t('wallet.recharge', { defaultValue: 'Recargar' })}
+                    </Text>
+                  </LinearGradient>
+                </Pressable>
 
                 <Pressable
                   onPress={() => router.push('/wallet/gift')}
-                  style={({ pressed }) => [
-                    {
-                      flex: 1,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 18,
-                      paddingHorizontal: 12,
-                      minHeight: 96,
-                      borderRadius: 20,
-                      backgroundColor: palette.accent.dusk,
-                      shadowColor: '#000000',
-                      shadowOpacity: 0.22,
-                      shadowRadius: 10,
-                      shadowOffset: { width: 0, height: 5 },
-                      elevation: 5,
-                    },
-                    pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
-                  ]}
+                  onPressIn={handleCtaPressIn}
+                  onPressOut={handleCtaPressOut}
                   accessibilityRole="button"
                   accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
+                  style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.92 }]}
                 >
-                  <Ionicons name="gift" size={28} color="#FFFFFF" />
-                  <Text style={{ color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
-                    {t('wallet.gift', { defaultValue: 'Regalar' })}
-                  </Text>
+                  <LinearGradient
+                    colors={['#6B7F8F', '#52677A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 16,
+                      paddingHorizontal: 12,
+                      minHeight: 84,
+                      borderTopRightRadius: 20,
+                      borderBottomRightRadius: 20,
+                    }}
+                  >
+                    <Ionicons name="gift" size={26} color="#FFFFFF" />
+                    <Text style={{ color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 15, marginTop: 6, letterSpacing: 0.3 }}>
+                      {t('wallet.gift', { defaultValue: 'Regalar' })}
+                    </Text>
+                  </LinearGradient>
                 </Pressable>
               </Animated.View>
 
