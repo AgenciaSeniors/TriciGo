@@ -1128,6 +1128,8 @@
     "source": "Fonte",
     "manual": "Manual",
     "updated_at": "Atualizado",
+    "fresh": "Em dia",
+    "stale": "Desatualizado",
     "no_rate": "Nenhuma taxa de câmbio configurada",
     "manual_override": "Ajuste manual",
     "manual_override_desc": "Defina uma taxa USD/CUP manual. Isso sobrescreve a taxa automática do ElToque.",
