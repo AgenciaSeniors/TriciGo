@@ -593,7 +593,7 @@ function NativeWalletScreen() {
   const userId = useAuthStore((s) => s.user?.id);
   // NETOPIA card checkout: in-app WebView routed through the VPS CONNECT proxy
   // when enabled, else falls back to the system browser. See NetopiaCheckout.
-  const { present: presentNetopiaCheckout, checkoutElement: netopiaCheckoutElement } =
+  const { present: presentNetopiaCheckout, prewarm: prewarmNetopiaProxy, checkoutElement: netopiaCheckoutElement } =
     useNetopiaCheckout();
 
   // Cuban Modern premium shadows (mirror driver wallet). Orange-tinted on the
@@ -843,12 +843,17 @@ function NativeWalletScreen() {
       // RECARGA V2: pass the NET USD amount. The edge function computes
       // the additive fee (3% min $0.50) and tells NETOPIA the full
       // charge. The wallet gets credited with `amountUsd × FX` in CUP.
-      const result = await paymentService.createRechargeIntent({
-        provider: 'netopia',
-        userId,
-        amountUsd: usd,
-        returnUrl: RETURN_URL_BASE,
-      });
+      // PERF: mint the proxy creds in parallel with the intent creation
+      // (both slow EF round-trips) so the checkout opens without the extra wait.
+      const [result] = await Promise.all([
+        paymentService.createRechargeIntent({
+          provider: 'netopia',
+          userId,
+          amountUsd: usd,
+          returnUrl: RETURN_URL_BASE,
+        }),
+        prewarmNetopiaProxy(),
+      ]);
       if (!result.redirectUrl) {
         throw new Error(t('wallet.recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }));
       }

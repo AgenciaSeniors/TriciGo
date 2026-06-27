@@ -172,39 +172,71 @@ export function useNetopiaCheckout() {
     [],
   );
 
+  // Resolve the proxy config + mint the ephemeral token — the two slow,
+  // EF-bound steps. Factored out so prewarm() can run them in parallel with the
+  // recharge-intent creation, hiding their latency.
+  const resolveProxyCreds = useCallback(async (): Promise<
+    | { ok: false }
+    | { ok: true; host: string; port: number; user: string | null; pass: string | null }
+  > => {
+    let cfg = { enabled: false, host: '', port: 0 };
+    try {
+      cfg = await paymentService.getNetopiaProxyConfig();
+    } catch {
+      /* default: proxy off → fall back */
+    }
+    const platformSupportsProxy =
+      Platform.OS === 'android' || (Platform.OS === 'ios' && iosMajorVersion() >= 17);
+    if (!cfg.enabled || !cfg.host || !cfg.port || !platformSupportsProxy) {
+      return { ok: false };
+    }
+    // Auth creds come ONLY from the short-lived ephemeral mint EF (the static
+    // platform_config cred was removed — it was client-readable). If minting
+    // fails, proceed without creds; the WebView's onError recovers to the browser.
+    let host = cfg.host;
+    let port = cfg.port;
+    let user: string | null = null;
+    let pass: string | null = null;
+    try {
+      const eph = await paymentService.mintNetopiaProxyCredential();
+      if (eph?.username && eph.password) {
+        host = eph.host || host;
+        port = eph.port || port;
+        user = eph.username;
+        pass = eph.password;
+      }
+    } catch {
+      /* no creds → proceed; onError recovers if the proxy refuses */
+    }
+    return { ok: true, host, port, user, pass };
+  }, []);
+
+  // PERF: pre-resolve the proxy config + mint the token in the background so it
+  // OVERLAPS createRechargeIntent (both are slow EF round-trips that otherwise
+  // run back-to-back, ~1.5s wasted). Call sites kick this off via Promise.all
+  // with the intent creation; present() then picks up the result and opens the
+  // WebView without waiting on the mint. Never throws (a failed prewarm just
+  // makes present() resolve it inline). Does NOT set the process-wide proxy
+  // (that stays in present(), cleared by settle/unmount) so an abandoned prewarm
+  // can't leak it.
+  const prewarmRef = useRef<Awaited<ReturnType<typeof resolveProxyCreds>> | null>(null);
+  const prewarm = useCallback(async () => {
+    try {
+      prewarmRef.current = await resolveProxyCreds();
+    } catch {
+      prewarmRef.current = null;
+    }
+  }, [resolveProxyCreds]);
+
   const present = useCallback(
     async ({ url, returnUrlBase, intentId, amountUsd }: PresentArgs): Promise<Outcome> => {
-      let cfg = { enabled: false, host: '', port: 0 };
-      try {
-        cfg = await paymentService.getNetopiaProxyConfig();
-      } catch {
-        /* default: proxy off → fall back */
-      }
-      const platformSupportsProxy =
-        Platform.OS === 'android' || (Platform.OS === 'ios' && iosMajorVersion() >= 17);
+      // Use the prewarmed result if a call site kicked it off in parallel with
+      // the intent creation; otherwise resolve it inline now.
+      const setup = prewarmRef.current ?? (await resolveProxyCreds());
+      prewarmRef.current = null;
 
-      if (!cfg.enabled || !cfg.host || !cfg.port || !platformSupportsProxy) {
+      if (!setup.ok) {
         return fallbackToBrowser(url, returnUrlBase, intentId);
-      }
-
-      // Auth creds come ONLY from the short-lived ephemeral mint EF (the static
-      // platform_config cred was removed — it was client-readable). If minting
-      // fails, proceed without creds; the WebView's onError recovers to the
-      // browser if the proxy then refuses the un-authed tunnel.
-      let host = cfg.host;
-      let port = cfg.port;
-      let user: string | null = null;
-      let pass: string | null = null;
-      try {
-        const eph = await paymentService.mintNetopiaProxyCredential();
-        if (eph?.username && eph.password) {
-          host = eph.host || host;
-          port = eph.port || port;
-          user = eph.username;
-          pass = eph.password;
-        }
-      } catch {
-        /* no creds → proceed; onError recovers if the proxy refuses */
       }
 
       // Set the process-wide proxy BEFORE mounting the WebView so the first
@@ -214,7 +246,7 @@ export function useNetopiaCheckout() {
       // basicAuthCredential prop below (device-verified to work, 2026-06-27).
       // If the tunnel still fails, onError on the WebView recovers to the browser.
       try {
-        await WebViewProxy.setProxyOverride(host, port, user, pass);
+        await WebViewProxy.setProxyOverride(setup.host, setup.port, setup.user, setup.pass);
       } catch {
         // Could not set the proxy → don't load un-proxied (a flagged IP would
         // 403); fall back to the system browser instead.
@@ -229,10 +261,10 @@ export function useNetopiaCheckout() {
         setLoading(true);
         setError(false);
         setProgress(0);
-        setActive({ url, username: user ?? '', password: pass ?? '', amountUsd });
+        setActive({ url, username: setup.user ?? '', password: setup.pass ?? '', amountUsd });
       });
     },
-    [fallbackToBrowser],
+    [fallbackToBrowser, resolveProxyCreds],
   );
 
   const isReturnUrl = useCallback((u: string): boolean => {
@@ -444,7 +476,7 @@ export function useNetopiaCheckout() {
     </Modal>
   ) : null;
 
-  return { present, checkoutElement };
+  return { present, prewarm, checkoutElement };
 }
 
 const styles = StyleSheet.create({
