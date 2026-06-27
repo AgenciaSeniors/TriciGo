@@ -1284,11 +1284,12 @@ function NativeWalletScreen() {
           </View>
         </AnimatedCard>
 
-        {/* Premium quick actions — Recargar (primary, glow gradient) + Regalar
-            (prominent secondary, filled orange tint) side-by-side, so gift is
-            impossible to miss above the fold. Gift is closed-loop: TriciCoin can
-            be sent to another active TriciGo user but stays spend-only (rides),
-            never cashed out. */}
+        {/* Premium quick actions — a balanced, symmetric pair of solid cards:
+            Recargar (primary, warm orange glow gradient) + Regalar (secondary,
+            SOLID cuban dusk fill). Same size/shape; the warm/cool contrast keeps
+            Recargar leading while Regalar reads as a full, deliberate card (not a
+            faint tint). Gift is closed-loop: TriciCoin can be sent to another
+            active TriciGo user but stays spend-only (rides), never cashed out. */}
         <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
           <Pressable
             onPress={handleRecharge}
@@ -1331,15 +1332,18 @@ function NativeWalletScreen() {
                 paddingHorizontal: 12,
                 minHeight: 96,
                 borderRadius: 20,
-                borderWidth: 1.5,
-                borderColor: colors.brand.orange,
-                backgroundColor: tokens.accent.orangeGlow,
+                backgroundColor: tokens.accent.dusk,
+                shadowColor: '#1A1414',
+                shadowOpacity: 0.18,
+                shadowRadius: 10,
+                shadowOffset: { width: 0, height: 5 },
+                elevation: 5,
               },
-              pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
+              pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
             ]}
           >
-            <Ionicons name="gift" size={28} color={colors.brand.orange} />
-            <Text style={{ color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+            <Ionicons name="gift" size={28} color="#FFFFFF" />
+            <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
               {t('wallet.gift', { defaultValue: 'Regalar' })}
             </Text>
           </Pressable>

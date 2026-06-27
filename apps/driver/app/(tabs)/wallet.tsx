@@ -655,17 +655,20 @@ export default function WalletScreen() {
                       paddingHorizontal: 12,
                       minHeight: 96,
                       borderRadius: 20,
-                      borderWidth: 1.5,
-                      borderColor: colors.brand.orange,
-                      backgroundColor: palette.accent.orangeGlow,
+                      backgroundColor: palette.accent.dusk,
+                      shadowColor: '#000000',
+                      shadowOpacity: 0.22,
+                      shadowRadius: 10,
+                      shadowOffset: { width: 0, height: 5 },
+                      elevation: 5,
                     },
-                    pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
+                    pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
                   ]}
                   accessibilityRole="button"
                   accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
                 >
-                  <Ionicons name="gift" size={28} color={colors.brand.orange} />
-                  <Text style={{ color: palette.ink.primary, fontFamily: 'Inter_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+                  <Ionicons name="gift" size={28} color="#FFFFFF" />
+                  <Text style={{ color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
                     {t('wallet.gift', { defaultValue: 'Regalar' })}
                   </Text>
                 </Pressable>
