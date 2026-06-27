@@ -113,6 +113,25 @@ export default function ExchangeRatePage() {
                   <p className="text-xs text-ink-subtle">
                     {t('exchange_rate.updated_at')}: {formatDate(currentRate.fetched_at)}
                   </p>
+                  {(() => {
+                    // FX audit Tema A: surface a frozen feed. Threshold mirrors the
+                    // exchange_rate_max_age_hours config default (24h).
+                    const ageH = (Date.now() - new Date(currentRate.fetched_at).getTime()) / 3_600_000;
+                    const stale = ageH > 24;
+                    return (
+                      <span
+                        className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full ${
+                          stale ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                        }`}
+                      >
+                        {stale
+                          ? t('exchange_rate.stale', { defaultValue: 'Desactualizado' })
+                          : t('exchange_rate.fresh', { defaultValue: 'Al día' })}
+                        {' · '}
+                        {Math.max(0, Math.round(ageH))}h
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
             ) : (

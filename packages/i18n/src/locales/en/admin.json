@@ -1128,6 +1128,8 @@
     "source": "Source",
     "manual": "Manual",
     "updated_at": "Updated",
+    "fresh": "Up to date",
+    "stale": "Stale",
     "no_rate": "No exchange rate configured",
     "manual_override": "Manual override",
     "manual_override_desc": "Set a manual USD/CUP exchange rate. This overrides the automatic ElToque rate.",

@@ -96,6 +96,12 @@ Deno.serve(async (req) => {
     });
     if (upsertError) return new Response(JSON.stringify({ ok: false, error: upsertError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+    // FX audit Tema A: keep the emergency fallback (exchange_rate_fallback_cup, read
+    // only if the is_current row ever disappears) tracking the latest known rate, so a
+    // fallback can never silently undervalue ~19% the way the hardcoded 520 would have.
+    // Best-effort — a failure here must not fail the sync.
+    await supabase.from('platform_config').upsert({ key: 'exchange_rate_fallback_cup', value: rate }, { onConflict: 'key' });
+
     return new Response(JSON.stringify({ ok: true, usd_cup_rate: rate, source }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
