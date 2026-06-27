@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, useFeatureFlag } from '@tricigo/api';
+import { getSupabaseClient, useFeatureFlagState } from '@tricigo/api';
 
 type Recipient = { found: boolean; fullName?: string };
 type ResultStatus = 'ok' | 'cancel' | 'processing' | null;
@@ -10,7 +10,7 @@ type Provider = 'netopia' | 'stripe';
 
 export default function RechargePage() {
   const { t } = useTranslation('web');
-  const enabled = useFeatureFlag('diaspora_recharge_enabled');
+  const { value: enabled, loading: flagLoading } = useFeatureFlagState('diaspora_recharge_enabled');
 
   const [phone, setPhone] = useState('');
   const [recipient, setRecipient] = useState<Recipient | null>(null);
@@ -135,6 +135,22 @@ export default function RechargePage() {
     marginBottom: '0.4rem', display: 'block', letterSpacing: '0.01em',
   };
   const helper: CSSProperties = { fontSize: '0.76rem', color: 'var(--text-tertiary)', marginTop: '0.4rem' };
+
+  // While the flag is still resolving, show a spinner — NOT "no disponible".
+  // (The flag's false default would otherwise flash the unavailable message for
+  // a frame before the real value arrives.)
+  if (flagLoading) {
+    return (
+      <main style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <span
+          className="tg-flag-spin"
+          aria-label="Cargando"
+          style={{ width: 30, height: 30, border: '3px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', display: 'inline-block' }}
+        />
+        <style>{'.tg-flag-spin{animation:tg-flag-spin 0.8s linear infinite}@keyframes tg-flag-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.tg-flag-spin{animation:none}}'}</style>
+      </main>
+    );
+  }
 
   if (!enabled) {
     return (
