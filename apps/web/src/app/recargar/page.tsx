@@ -297,9 +297,9 @@ export default function RechargePage() {
           {submitting ? `${t('recharge.pay')}…` : t('recharge.pay')}
         </button>
 
-        {/* 6 — Stripe trust footer */}
+        {/* 6 — secure-payment trust footer (provider-agnostic: NETOPIA or Stripe) */}
         <p style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', color: 'var(--text-tertiary)', fontSize: '0.78rem', margin: '1rem 0 0' }}>
-          <IconLock /> {t('recharge.secured_by_stripe')}
+          <IconLock /> {t('recharge.payment_secured')}
         </p>
       </div>
     </main>

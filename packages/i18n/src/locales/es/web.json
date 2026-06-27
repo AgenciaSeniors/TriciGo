@@ -14,7 +14,7 @@
     "total": "Total a pagar",
     "payer_email": "Tu email (para el comprobante)",
     "pay": "Realizar pago",
-    "secured_by_stripe": "Pago seguro procesado por Stripe.",
+    "payment_secured": "Pago procesado de forma segura.",
     "success": "¡Recarga enviada! El comprobante llegó a tu email.",
     "cancelled": "Pago cancelado.",
     "processing": "Pago en proceso. Te enviamos el comprobante por email y la billetera se acredita al confirmarse.",
