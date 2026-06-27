@@ -61,3 +61,22 @@ One-level fallback (NETOPIA → Stripe). If Stripe also fails → "no se pudo pr
 
 - Web auto-fallback (the redirect can't auto-detect the 403). Later: a config switch (`active_payment_provider`) or an explicit user-choice button.
 - Anything in the public diaspora web recharge — that is a separate, already-built flow (`/recargar`).
+
+## As-built (2026-06-27)
+
+The **backend is built** on `claude/diaspora-recharge`; the WebView hook is deferred.
+
+- `supabase/functions/create-stripe-payment-intent/index.ts` — the authenticated self-recharge EF. Mirrors `create-netopia-payment-intent` (JWT auth via `getUser`; `user_id` must equal the caller, admins exempt; OFAC region block; per-IP rate limit `create-stripe-pi`; MIN/MAX USD; FX fail-closed >24h; additive fee `max(3%,$0.50)`, only NET credited; velocity check) and creates a Stripe Checkout Session instead of the NETOPIA hosted page.
+- `supabase/config.toml` — `[functions.create-stripe-payment-intent] verify_jwt = true`.
+- `packages/api/src/services/payment.service.ts` — `'stripe'` added to `KNOWN_PROVIDERS`.
+
+As-built deltas vs the plan above:
+
+- **No migration needed.** `platform_config.stripe_enabled` already exists (JSONB boolean `false`, set by `00281_remove_stripe_promote_netopia`). The EF reads it **fail-closed**; flip to `true` to enable. `getEnabledPaymentProviders` correctly excludes Stripe while it's `false`.
+- **No `metadata` field.** An earlier draft wrote `metadata: { source: 'self_recharge' }`, but `payment_intents.metadata` doesn't exist in prod yet (added by the diaspora migration `00462`). It was removed — the self-recharge EF does **not** need it, so it has **no dependency on 00462**.
+- Reuses the existing `process-stripe-webhook` (matches on `client_reference_id`, claim set includes `pending`) and `process_recharge_payment` (validates against NET `amount_usd`, credits `user_id`). End-to-end verified by adversarial review against the prod schema.
+- `success_url`/`cancel_url` are https-only (Stripe rejects custom schemes); the mobile WebView passes an `https://tricigo.com/` return URL it detects to dismiss + `pollIntentStatus`.
+
+Verification: `pnpm check-types` 4/4; adversarial review (1 P0 `metadata` → fixed, 1 P1 gate hardening → fixed, remaining P2/P3 pre-existing & shared with siblings).
+
+Still pending (the hook): `onHttpError`→Stripe inside `NetopiaCheckout` (lands with #664 on rebase), then deploy the EF, flip `stripe_enabled`, and rebuild the apps.

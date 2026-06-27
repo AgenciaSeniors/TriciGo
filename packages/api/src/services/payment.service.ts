@@ -5,10 +5,13 @@
 // payment provider. The recharge flow is provider-agnostic; see
 // docs/payment-processor/PAYMENT_PROVIDER_CONTRACT.md.
 //
-// NETOPIA is the sole live provider after the 2026-05-20 cutover.
-// EuPlatesc is reserved for Phase D3. The Stripe wrappers
-// (createStripePaymentIntent / getStripeConfig) were removed in
-// the same cutover; callers use createRechargeIntent directly.
+// NETOPIA is the primary live provider after the 2026-05-20 cutover.
+// EuPlatesc is reserved for Phase D3. Stripe is wired back in as the
+// in-app recharge FALLBACK (NETOPIA is geo-blocked from Cuba): the
+// recharge WebView re-creates the intent with provider='stripe' on a
+// NETOPIA load failure. See create-stripe-payment-intent (authenticated
+// self-recharge) and docs/superpowers/specs/2026-06-27-netopia-stripe-
+// fallback-design.md. Callers use createRechargeIntent directly.
 // ============================================================
 
 import type {
@@ -21,8 +24,13 @@ import type {
 import { getSupabaseClient } from '../client';
 import { logger } from '@tricigo/utils';
 
-/** Providers that have (or will have) a real recharge integration. */
-const KNOWN_PROVIDERS: PaymentProvider[] = ['netopia', 'euplatesc'];
+/**
+ * Providers that have (or will have) a real recharge integration.
+ * 'stripe' is the in-app fallback for NETOPIA; it stays OFF in
+ * getEnabledPaymentProviders until platform_config.stripe_enabled='true'
+ * (KYC + live keys), so listing it here doesn't expose it prematurely.
+ */
+const KNOWN_PROVIDERS: PaymentProvider[] = ['netopia', 'euplatesc', 'stripe'];
 
 export const paymentService = {
   /**
