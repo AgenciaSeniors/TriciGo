@@ -47,7 +47,7 @@ export default function RechargeScreen() {
   const user = useAuthStore((s) => s.user);
   // NETOPIA card checkout: in-app WebView routed through the VPS CONNECT proxy
   // when enabled, else falls back to the system browser. See NetopiaCheckout.
-  const { present: presentNetopiaCheckout, checkoutElement: netopiaCheckoutElement } =
+  const { present: presentNetopiaCheckout, prewarm: prewarmNetopiaProxy, checkoutElement: netopiaCheckoutElement } =
     useNetopiaCheckout();
 
   const [amount, setAmount] = useState('');
@@ -115,13 +115,19 @@ export default function RechargeScreen() {
       // El backend acepta 'driver_quota' como alias legacy y lo rutea al
       // mismo lugar (account_type='tricicoin'), pero los clients nuevos
       // deberían mandar 'tricicoin' directamente.
-      const result = await paymentService.createRechargeIntent({
-        provider: 'netopia',
-        userId: user.id,
-        amountUsd: selectedAmount,
-        rechargeType: 'tricicoin',
-        returnUrl: RETURN_URL_BASE,
-      });
+      // PERF: resolve the proxy config + mint the ephemeral token IN PARALLEL
+      // with the intent creation (both are slow EF round-trips) so present()
+      // opens the WebView without waiting on the mint sequentially.
+      const [result] = await Promise.all([
+        paymentService.createRechargeIntent({
+          provider: 'netopia',
+          userId: user.id,
+          amountUsd: selectedAmount,
+          rechargeType: 'tricicoin',
+          returnUrl: RETURN_URL_BASE,
+        }),
+        prewarmNetopiaProxy(),
+      ]);
       if (!result.redirectUrl) {
         throw new Error(t('wallet.recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }));
       }

@@ -48,7 +48,7 @@ export default function CorporateProfileScreen() {
   const userId = useAuthStore((s) => s.user?.id);
   // NETOPIA card checkout: in-app WebView routed through the VPS CONNECT proxy
   // when enabled, else falls back to the system browser. See NetopiaCheckout.
-  const { present: presentNetopiaCheckout, checkoutElement: netopiaCheckoutElement } =
+  const { present: presentNetopiaCheckout, prewarm: prewarmNetopiaProxy, checkoutElement: netopiaCheckoutElement } =
     useNetopiaCheckout();
   const { accounts, loading, refetch: refetchAccounts } = useCorporateAccounts();
 
@@ -333,13 +333,17 @@ export default function CorporateProfileScreen() {
     setRecharging(true);
     try {
       // 1. Create intent — corporate_account_id triggers corp routing
-      const result = await paymentService.createRechargeIntent({
-        provider: 'netopia',
-        userId,
-        amountUsd,
-        corporateAccountId: accountId,
-        returnUrl: RETURN_URL_BASE,
-      });
+      // PERF: mint the proxy creds in parallel with the intent creation.
+      const [result] = await Promise.all([
+        paymentService.createRechargeIntent({
+          provider: 'netopia',
+          userId,
+          amountUsd,
+          corporateAccountId: accountId,
+          returnUrl: RETURN_URL_BASE,
+        }),
+        prewarmNetopiaProxy(),
+      ]);
       if (!result.redirectUrl) {
         throw new Error(
           t('common:wallet.recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }),
