@@ -80,3 +80,106 @@ As-built deltas vs the plan above:
 Verification: `pnpm check-types` 4/4; adversarial review (1 P0 `metadata` → fixed, 1 P1 gate hardening → fixed, remaining P2/P3 pre-existing & shared with siblings).
 
 Still pending (the hook): `onHttpError`→Stripe inside `NetopiaCheckout` (lands with #664 on rebase), then deploy the EF, flip `stripe_enabled`, and rebuild the apps.
+
+## Hook implementation — ready to apply (deferred to rebase + go-live)
+
+Designed against the real `NetopiaCheckout` (#664). It is **additive and dormant**: with `stripe_enabled=false` (today) `createRechargeIntent({provider:'stripe'})` throws 503 → the `catch` falls through to the existing NETOPIA-in-browser retry, so `present()` behaves exactly as today. It only activates once the EF is deployed and `stripe_enabled=true`. **Apply to BOTH `apps/client/src/components/NetopiaCheckout.tsx` and `apps/driver/src/components/NetopiaCheckout.tsx` (kept-in-sync duplicates) plus the two callers.** `RETURN_URL_BASE` is already `https://tricigo.com/app/{client,driver}/wallet` in both apps, so it passes the EF's https-only whitelist and the Stripe `success_url` is detected by `isReturnUrl` exactly like the NETOPIA return.
+
+**Why it isn't shipped today:** it changes the payment WebView's failure path, which the component flags as device-test-pending on Android. The active behavior (Stripe re-load in the sheet, return detection, one-shot loop guard) must be verified on a device once the EF is deployed.
+
+### 1. `NetopiaCheckout.tsx`
+
+Carry the recharge params + the *effective* intentId (the Stripe one if it fell back, so the caller polls the right intent):
+
+```tsx
+type RechargeType = 'customer' | 'driver_quota' | 'tricicoin';
+type PresentArgs = {
+  url: string; returnUrlBase: string; intentId: string;
+  stripeFallback?: { userId: string; amountUsd: number; rechargeType?: RechargeType };
+};
+type PresentResult = { outcome: Outcome; intentId: string };
+// resolverRef: useRef<((r: PresentResult) => void) | null>(null)
+const triedStripeRef = useRef(false);
+```
+
+`settle` resolves with the effective intentId:
+
+```tsx
+const settle = useCallback((o: Outcome) => {
+  if (settledRef.current) return;
+  settledRef.current = true;
+  WebViewProxy.clearProxyOverride().catch(() => {});
+  setActive(null);
+  const r = resolverRef.current;
+  resolverRef.current = null;
+  r?.({ outcome: o, intentId: argsRef.current?.intentId ?? '' });
+}, []);
+```
+
+`handleLoadFailure` tries Stripe first (one shot), else the existing browser retry:
+
+```tsx
+const handleLoadFailure = useCallback(async () => {
+  if (settledRef.current) return;
+  const args = argsRef.current;
+
+  // NETOPIA unreachable even via proxy (geo-403). Stripe isn't geo-blocked,
+  // so load it WITHOUT the proxy, in this same sheet.
+  if (args?.stripeFallback && !triedStripeRef.current) {
+    triedStripeRef.current = true;
+    await WebViewProxy.clearProxyOverride().catch(() => {});
+    try {
+      const r = await paymentService.createRechargeIntent({
+        provider: 'stripe',
+        userId: args.stripeFallback.userId,
+        amountUsd: args.stripeFallback.amountUsd,
+        rechargeType: args.stripeFallback.rechargeType,
+        returnUrl: args.returnUrlBase, // https://tricigo.com/... → EF accepts it
+      });
+      if (r.redirectUrl) {
+        // Reload the sheet with Stripe Checkout; its https success_url hits
+        // isReturnUrl → settle('returned') with the NEW (Stripe) intentId.
+        argsRef.current = { ...args, url: r.redirectUrl, intentId: r.intentId };
+        setActive({ url: r.redirectUrl, username: '', password: '' });
+        return; // stay open
+      }
+    } catch { /* Stripe disabled/unavailable → fall through */ }
+  }
+
+  // Existing recovery: retry NETOPIA in the system browser.
+  settledRef.current = true;
+  await WebViewProxy.clearProxyOverride().catch(() => {});
+  setActive(null);
+  const resolve = resolverRef.current;
+  resolverRef.current = null;
+  let outcome: Outcome = 'closed';
+  if (args) {
+    try {
+      const dismissUrl = `${args.returnUrlBase}?intent=${encodeURIComponent(args.intentId)}`;
+      const res = await WebBrowser.openAuthSessionAsync(args.url, dismissUrl);
+      outcome = res.type === 'success' ? 'returned' : 'closed';
+    } catch { /* poll regardless */ }
+  }
+  resolve?.({ outcome, intentId: args?.intentId ?? '' });
+}, []);
+```
+
+`present()` returns `Promise<PresentResult>`, resets both guards (`settledRef.current = false; triedStripeRef.current = false;`), and `fallbackToBrowser` returns `{ outcome, intentId }`.
+
+### 2. Callers — pass `stripeFallback`, poll the *returned* intentId
+
+```tsx
+// client wallet.tsx
+const { intentId: effId } = await presentNetopiaCheckout({
+  url: result.redirectUrl, returnUrlBase: RETURN_URL_BASE, intentId: result.intentId,
+  stripeFallback: { userId, amountUsd: usd },          // rechargeType defaults to 'customer'
+});
+const final = await paymentService.pollIntentStatus(effId, 20, 2000);
+
+// driver recharge.tsx
+const { intentId: effId } = await presentNetopiaCheckout({
+  url: result.redirectUrl, returnUrlBase: RETURN_URL_BASE, intentId: result.intentId,
+  stripeFallback: { userId: user.id, amountUsd: selectedAmount, rechargeType: 'tricicoin' },
+});
+const final = await paymentService.pollIntentStatus(effId, 20, 2000);
+```
