@@ -77,6 +77,7 @@ interface PaymentIntentRow {
   created_at: string;
   card_brand: string | null;
   card_last4: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface UserRow {
@@ -141,7 +142,7 @@ Deno.serve(async (req) => {
       .select(
         'id, user_id, amount_usd, amount_cup, exchange_rate, status, ' +
         'payment_provider, stripe_payment_intent_id, fee_usd, paid_at, created_at, ' +
-        'card_brand, card_last4',
+        'card_brand, card_last4, metadata',
       )
       .eq('id', body.payment_intent_id)
       .single();
@@ -149,6 +150,16 @@ Deno.serve(async (req) => {
     if (!pi) return jsonResponse({ error: 'payment_intent_not_found' }, 404);
 
     const piRow = pi as PaymentIntentRow;
+
+    // Diaspora recharge metadata (set by create-<provider>-recharge-intent):
+    // who paid (payer_name → shown to the recipient as "Recargado por") and the
+    // payer's email (a confirmation copy goes to them). Absent for ordinary
+    // in-app self-recharges → these stay null and the flow is unchanged.
+    const meta = (piRow.metadata ?? {}) as Record<string, unknown>;
+    const payerName = typeof meta.payer_name === 'string' ? meta.payer_name : null;
+    const payerEmail = realEmail(typeof meta.payer_email === 'string' ? meta.payer_email : null);
+    const isDiaspora = meta.source === 'diaspora';
+
     // Accept any provider that produces a real wallet recharge. Today
     // that's 'netopia' (the live provider after the 2026-05-20 cutover)
     // and 'stripe' (historical rows pre-cutover that may still need
@@ -295,6 +306,7 @@ Deno.serve(async (req) => {
             dateLabel,
             user: { full_name: userRow.full_name, email: recipientEmail, id: userRow.id },
             amounts,
+            payerName,
           }),
           attachmentBase64: pdfBase64,
           attachmentFilename: `${receiptNo}.pdf`,
@@ -317,6 +329,33 @@ Deno.serve(async (req) => {
           attachmentFilename: `${receiptNo}.pdf`,
         })
       : { skipped: true };
+
+    // 8b. Diaspora only: confirmation copy to the PAYER ("recargaste la cuenta
+    // de X"). Idempotent via metadata.payer_emailed_at — wallet_receipts has no
+    // payer email slot, so the flag lives on the intent's jsonb (no migration).
+    const payerEmailResult =
+      isDiaspora && payerEmail && !meta.payer_emailed_at
+        ? await sendResend({
+            to: payerEmail,
+            subject: walletReceiptSubject(receiptNo, 'payer'),
+            html: walletReceiptHtml({
+              audience: 'payer',
+              receiptNo,
+              dateLabel,
+              user: { full_name: userRow.full_name, email: null, id: userRow.id },
+              amounts,
+              payerName,
+            }),
+            attachmentBase64: pdfBase64,
+            attachmentFilename: `${receiptNo}.pdf`,
+          })
+        : { skipped: true };
+    if (payerEmailResult && !('skipped' in payerEmailResult) && (payerEmailResult as { ok: boolean }).ok) {
+      await supabase
+        .from('payment_intents')
+        .update({ metadata: { ...meta, payer_emailed_at: new Date().toISOString() } })
+        .eq('id', piRow.id);
+    }
 
     // 9. Update timestamps
     const stampUpdate: Record<string, string> = {};

@@ -12,6 +12,7 @@
     "will_receive": "Vai receber",
     "fee": "Taxa",
     "total": "Total a pagar",
+    "payer_name": "Seu nome",
     "payer_email": "Seu email (para o comprovante)",
     "pay": "Pagar",
     "payment_secured": "Pagamento processado de forma segura.",
