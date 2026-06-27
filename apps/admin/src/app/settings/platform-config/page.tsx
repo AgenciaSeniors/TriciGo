@@ -27,6 +27,8 @@ const KNOWN_KEYS: Record<string, { type: 'number' | 'text'; helpKey: string }> =
   // ── Other ──
   cash_enabled: { type: 'text', helpKey: 'platform_config.cash_enabled_help' },
   wallet_enabled: { type: 'text', helpKey: 'platform_config.wallet_enabled_help' },
+  // ── Operations notifications ──
+  business_notification_email: { type: 'text', helpKey: 'platform_config.business_notification_email_help' },
   // ── Platform config ──
   max_driver_rate_multiplier: { type: 'number', helpKey: 'platform_config.max_driver_rate_multiplier_help' },
   default_per_km_rate_cup: { type: 'number', helpKey: 'platform_config.default_per_km_rate_cup_help' },
