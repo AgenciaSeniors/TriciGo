@@ -16,8 +16,8 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { corporateService, paymentService, invoiceService } from '@tricigo/api';
 import CorporateRequestForm from '@/components/CorporateRequestForm';
+import { useNetopiaCheckout } from '@/components/NetopiaCheckout';
 import * as Sharing from 'expo-sharing';
-import * as WebBrowser from 'expo-web-browser';
 import Toast from 'react-native-toast-message';
 // Bugfix: same as rides.tsx — cacheDirectory + EncodingType live in the
 // /legacy entrypoint post-SDK migration, otherwise the CSV export path
@@ -46,6 +46,10 @@ export default function CorporateProfileScreen() {
   const { t } = useTranslation('rider');
   const router = useRouter();
   const userId = useAuthStore((s) => s.user?.id);
+  // NETOPIA card checkout: in-app WebView routed through the VPS CONNECT proxy
+  // when enabled, else falls back to the system browser. See NetopiaCheckout.
+  const { present: presentNetopiaCheckout, checkoutElement: netopiaCheckoutElement } =
+    useNetopiaCheckout();
   const { accounts, loading, refetch: refetchAccounts } = useCorporateAccounts();
 
   // Pending/rejected request status — only shown when the user has no
@@ -342,9 +346,13 @@ export default function CorporateProfileScreen() {
         );
       }
 
-      // 2. Open hosted page in in-app browser; closes on NETOPIA redirect.
-      const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
-      await WebBrowser.openAuthSessionAsync(result.redirectUrl, dismissUrl);
+      // 2. Open the hosted page in the in-app NETOPIA checkout WebView (VPS
+      //    CONNECT proxy when enabled, else falls back to WebBrowser).
+      await presentNetopiaCheckout({
+        url: result.redirectUrl,
+        returnUrlBase: RETURN_URL_BASE,
+        intentId: result.intentId,
+      });
 
       // 3. Always poll — browser dismissal type is not a reliable signal.
       Toast.show({
@@ -488,6 +496,7 @@ export default function CorporateProfileScreen() {
 
   return (
     <Screen bg="cuban" padded scroll>
+      {netopiaCheckoutElement}
       <ScreenHeader
         title={t('corporate.title', { defaultValue: 'Cuenta Corporativa' })}
         onBack={() => router.back()}

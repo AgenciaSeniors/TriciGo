@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["WebviewProxyModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.webviewproxy.WebviewProxyModule"]
+  }
+}

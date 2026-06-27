@@ -5,7 +5,7 @@
 // a hosted-payment-page transaction settles, identifies our
 // payment_intent by the orderID NETOPIA echoes back (= our UUID,
 // non-guessable), claims atomically (idempotent), calls the credit
-// RPC, and ACKs with the NETOPIA-required `{ code: "0", message: "OK" }`.
+// RPC, and ACKs with the NETOPIA-required `{ "errorCode": 0 }`.
 //
 // Status: SANDBOX-READY — wired to the real NETOPIA v2.x IPN shape
 // (see https://secure.sandbox.netopia-payments.com/spec). Status
@@ -74,8 +74,15 @@ interface NetopiaIPNBody {
   };
 }
 
-/** ACK body NETOPIA expects on success. */
-const ACK_OK = { code: '0', message: 'OK' };
+/**
+ * ACK body NETOPIA expects on a successfully-received IPN. NETOPIA support
+ * (2026-06-25) confirmed the notifyURL response MUST be exactly `{"errorCode": 0}`
+ * with Content-Type application/json — otherwise it logs
+ * IDS_Model_Purchase_Sms_Online_INVALID_RESPONSE_FORMAT and treats the
+ * notification as failed (and retries). (Earlier `{code:"0",message:"OK"}` was
+ * the v2 SDK shape but this POS/account expects errorCode.)
+ */
+const ACK_OK = { errorCode: 0 };
 
 /** Map NETOPIA numeric status to our payment_intents.status. */
 function mapNetopiaStatus(s: number | undefined): 'paid' | 'failed' | 'pending' | 'refunded' | 'unknown' {
@@ -206,13 +213,15 @@ async function verifyNetopiaIpnToken(args: {
 
 /** Base URL for the NETOPIA v2 status re-query, per environment (env-overridable). */
 function netopiaStatusBase(env: 'sandbox' | 'live'): string {
+  // Match create-netopia-payment-intent's host per environment. LIVE routes
+  // through the VPS nginx proxy (tricigo.com/np-proxy/* → secure.mobilpay.ro/pay/*)
+  // because NETOPIA's live edge blocks Supabase's datacenter IPs with a 403; the
+  // VPS static IP is not blocked. Guarded by x-proxy-secret (see requeryNetopiaStatus).
+  // SANDBOX stays direct (secure.sandbox.netopia-payments.com, no proxy). Both
+  // overridable via env var.
   if (env === 'live') {
-    // Per the official Go SDK the live API base carries `/api`.
-    return Deno.env.get('NETOPIA_LIVE_STATUS_BASE') ?? 'https://secure.netopia-payments.com/api';
+    return Deno.env.get('NETOPIA_LIVE_STATUS_BASE') ?? 'https://tricigo.com/np-proxy';
   }
-  // Reuse the host that create-netopia-payment-intent already uses for
-  // /payment/card/start (proven working). Override with NETOPIA_SANDBOX_STATUS_BASE
-  // if the /operation/status host differs (the SDK uses a hyphenated sandbox host).
   return Deno.env.get('NETOPIA_SANDBOX_STATUS_BASE') ?? 'https://secure.sandbox.netopia-payments.com';
 }
 
@@ -247,6 +256,11 @@ async function requeryNetopiaStatus(args: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': args.apiKey, // raw API key, no "Bearer" (v2.x scheme)
+          // LIVE routes through the VPS nginx proxy (see netopiaStatusBase); the
+          // proxy forwards only when this shared secret matches. No-op in sandbox.
+          ...(args.env === 'live' && Deno.env.get('NETOPIA_PROXY_SECRET')
+            ? { 'x-proxy-secret': Deno.env.get('NETOPIA_PROXY_SECRET')! }
+            : {}),
         },
         body: JSON.stringify({ posID: args.posSignature, ntpID: args.ntpId, orderID: args.orderId }),
         signal: AbortSignal.timeout(15000),

@@ -163,6 +163,97 @@ export const paymentService = {
     return intent;
   },
 
+  /**
+   * NETOPIA in-app checkout proxy config (from platform_config). When enabled,
+   * the mobile recharge WebView routes through the VPS CONNECT proxy so
+   * NETOPIA's edge sees the clean VPS IP instead of a reputation-flagged user
+   * IP (Cuban ETECSA otherwise gets a Google Cloud Armor 403 on the hosted
+   * card page). Defaults: flag OFF — the caller then falls back to the
+   * WebBrowser flow (exact pre-existing behavior) — and host/port = the
+   * TriciGo VPS squid. See project_netopia_cuba_ip_block_tunnel.
+   */
+  async getNetopiaProxyConfig(): Promise<{
+    enabled: boolean;
+    host: string;
+    port: number;
+  }> {
+    const DEFAULT_HOST = '187.77.214.236';
+    const DEFAULT_PORT = 13128;
+    // NOTE: proxy auth creds are intentionally NOT read from platform_config.
+    // platform_config has a public SELECT RLS (any authed user can read every
+    // row), so a static proxy password stored there would be client-readable —
+    // an open-tunnel risk. Auth uses ONLY the short-lived ephemeral token from
+    // mintNetopiaProxyCredential(). The squid still keeps a static htpasswd for
+    // curl/dev smoke only; the app never sends it.
+    try {
+      const supabase = getSupabaseClient();
+      const { data } = await supabase
+        .from('platform_config')
+        .select('key, value')
+        .in('key', ['netopia_proxy_enabled', 'netopia_proxy_host', 'netopia_proxy_port']);
+      const m: Record<string, string> = {};
+      (data ?? []).forEach((c: { key: string; value: string }) => {
+        const raw = c.value;
+        m[c.key] = typeof raw === 'string' && raw.startsWith('"') ? JSON.parse(raw) : String(raw);
+      });
+      return {
+        enabled: m['netopia_proxy_enabled'] === 'true',
+        host: m['netopia_proxy_host'] || DEFAULT_HOST,
+        port: parseInt(m['netopia_proxy_port'] ?? '', 10) || DEFAULT_PORT,
+      };
+    } catch {
+      return { enabled: false, host: DEFAULT_HOST, port: DEFAULT_PORT };
+    }
+  },
+
+  /**
+   * Mint a SHORT-LIVED proxy credential for the in-app NETOPIA checkout WebView
+   * (the `mint-netopia-proxy-credential` EF). This is the ONLY source of proxy
+   * auth creds for the app (the static platform_config cred was removed — it was
+   * client-readable). The squid validates this ephemeral HMAC token statelessly
+   * and it expires (~10 min), so a leak isn't a standing tunnel. Returns null on
+   * ANY failure (not logged in, EF absent/disabled, network) → the caller then
+   * proceeds without proxy auth and the WebView's onError recovers to the browser.
+   */
+  async mintNetopiaProxyCredential(): Promise<{
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+    expiresAt: number;
+  } | null> {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return null;
+      const supabaseUrl = (supabase as unknown as { supabaseUrl: string }).supabaseUrl
+        ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+        ?? process.env.EXPO_PUBLIC_SUPABASE_URL
+        ?? '';
+      const res = await fetch(`${supabaseUrl}/functions/v1/mint-netopia-proxy-credential`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+            ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+            ?? '',
+        },
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok || !json.username || !json.password) return null;
+      return {
+        host: String(json.host),
+        port: Number(json.port),
+        username: String(json.username),
+        password: String(json.password),
+        expiresAt: Number(json.expiresAt),
+      };
+    } catch {
+      return null;
+    }
+  },
+
   // ==================== PROVIDER CONFIG ====================
 
   /**

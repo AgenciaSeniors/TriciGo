@@ -3,7 +3,6 @@ import { View, Pressable, ScrollView, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as WebBrowser from 'expo-web-browser';
 import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -23,6 +22,7 @@ import { colors } from '@tricigo/theme';
 import { paymentService } from '@tricigo/api/services/payment';
 import { walletService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
+import { useNetopiaCheckout } from '@/components/NetopiaCheckout';
 
 // RECARGA V2: presets in USD. Driver-quota uses the same customer
 // defaults (rounds 1-4). User picks NET amount; fee is additive 3%
@@ -31,11 +31,13 @@ const PRESET_AMOUNTS_USD = [20, 50, 100, 200];
 const MIN_RECHARGE_USD = RECHARGE_LIMITS.customer.min;
 const MAX_RECHARGE_USD = RECHARGE_LIMITS.customer.max;
 
-// Recharge now runs through NETOPIA's hosted payment page inside an in-app
-// browser (WebBrowser.openAuthSessionAsync — same pattern as OAuth login).
-// NETOPIA redirects back to RETURN_URL_BASE + ?intent=<id>, the in-app
-// browser closes, and we poll the intent status natively. If iOS/Android
-// stop honoring the universal link, swap to the custom scheme
+// Recharge runs through NETOPIA's hosted payment page inside the in-app
+// NetopiaCheckout WebView (useNetopiaCheckout), routed through the VPS CONNECT
+// proxy when `netopia_proxy_enabled` is on (so a reputation-flagged IP doesn't
+// hit the Google Cloud Armor 403); else it falls back to
+// WebBrowser.openAuthSessionAsync (the pre-existing flow). NETOPIA redirects
+// back to RETURN_URL_BASE + ?intent=<id>; we poll the intent status natively.
+// If iOS/Android stop honoring the universal link, swap to the custom scheme
 // 'tricigo-driver://wallet'. See PROGRESS.md (2026-05-20 cutover).
 const RETURN_URL_BASE = 'https://tricigo.com/app/driver/wallet';
 
@@ -43,6 +45,10 @@ export default function RechargeScreen() {
   const { t } = useTranslation('driver');
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
+  // NETOPIA card checkout: in-app WebView routed through the VPS CONNECT proxy
+  // when enabled, else falls back to the system browser. See NetopiaCheckout.
+  const { present: presentNetopiaCheckout, checkoutElement: netopiaCheckoutElement } =
+    useNetopiaCheckout();
 
   const [amount, setAmount] = useState('');
   const [customAmount, setCustomAmount] = useState('');
@@ -120,14 +126,15 @@ export default function RechargeScreen() {
         throw new Error(t('wallet.recharge_no_url', { defaultValue: 'El procesador no devolvió URL de pago' }));
       }
 
-      // 2. Open the hosted page in an in-app browser. Bloquea hasta que
-      //    NETOPIA redirija al dismissUrl, momento en que el sistema cierra
-      //    el browser y nos devuelve aquí.
-      const dismissUrl = `${RETURN_URL_BASE}?intent=${result.intentId}`;
-      await WebBrowser.openAuthSessionAsync(
-        result.redirectUrl,
-        dismissUrl,
-      );
+      // 2. Open the hosted page in the in-app NETOPIA checkout WebView, routed
+      //    through the VPS CONNECT proxy when enabled (else it falls back to
+      //    WebBrowser — the exact pre-existing behavior). Resolves when NETOPIA
+      //    redirects back to RETURN_URL_BASE (or the user closes the sheet).
+      await presentNetopiaCheckout({
+        url: result.redirectUrl,
+        returnUrlBase: RETURN_URL_BASE,
+        intentId: result.intentId,
+      });
 
       // 3. ALWAYS poll the intent — the browser dismissal `type` is NOT
       //    a reliable success/cancel signal:
@@ -359,6 +366,7 @@ export default function RechargeScreen() {
 
   return (
     <Screen bg="dark" statusBarStyle="light-content">
+      {netopiaCheckoutElement}
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16, paddingHorizontal: 16 }}
         keyboardShouldPersistTaps="handled"
