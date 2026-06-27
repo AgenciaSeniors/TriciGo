@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -602,6 +602,15 @@ function NativeWalletScreen() {
   // when enabled, else falls back to the system browser. See NetopiaCheckout.
   const { present: presentNetopiaCheckout, prewarm: prewarmNetopiaProxy, checkoutElement: netopiaCheckoutElement } =
     useNetopiaCheckout();
+
+  // CTA bar full-width: flex:1 / alignSelf:'stretch' do NOT fill the row in this
+  // layout (confirmed in a release build — the two halves collapsed to ~content
+  // width). Give each half an EXPLICIT pixel width = (content width)/2. Content
+  // width = window − Screen's px-4 padding (16/side = 32).
+  const { width: windowWidth } = useWindowDimensions();
+  const ctaInnerW = Math.max(0, windowWidth - 32);
+  const ctaHalf1 = Math.floor(ctaInnerW / 2);
+  const ctaHalf2 = ctaInnerW - ctaHalf1;
 
   // Cuban Modern premium shadows (mirror driver wallet). Orange-tinted on the
   // hero + CTA to reinforce brand; neutral on transaction cards.
@@ -1306,7 +1315,6 @@ function NativeWalletScreen() {
           testID="wallet-cta-bar"
           style={{
             marginBottom: 24,
-            alignSelf: 'stretch',
             flexDirection: 'row',
             borderRadius: 20,
             shadowColor: '#1A1414',
@@ -1320,7 +1328,7 @@ function NativeWalletScreen() {
             onPress={handleRecharge}
             accessibilityRole="button"
             accessibilityLabel={t('wallet.recharge')}
-            style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [{ width: ctaHalf1 }, pressed && { opacity: 0.9 }]}
           >
             <LinearGradient
               colors={[colors.brand.orange, tokens.accent.warm]}
@@ -1347,7 +1355,7 @@ function NativeWalletScreen() {
             onPress={() => router.push('/wallet/gift')}
             accessibilityRole="button"
             accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
-            style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [{ width: ctaHalf2 }, pressed && { opacity: 0.9 }]}
           >
             <LinearGradient
               colors={['#6B7F8F', '#52677A']}

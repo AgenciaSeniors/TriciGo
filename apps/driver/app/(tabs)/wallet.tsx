@@ -28,6 +28,7 @@ import {
   Easing,
   StyleSheet,
   useColorScheme,
+  useWindowDimensions,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,6 +55,14 @@ const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nu
 export default function WalletScreen() {
   const { t } = useTranslation('driver');
   const userId = useAuthStore((s) => s.user?.id);
+  // CTA bar full-width: flex:1 / alignSelf:'stretch' do NOT fill the row in this
+  // layout (confirmed in a release build — the two halves collapsed to ~content
+  // width). Give each half an EXPLICIT pixel width = (content width)/2. Content
+  // width = window − the ListHeader's paddingHorizontal:16 (16/side = 32).
+  const { width: windowWidth } = useWindowDimensions();
+  const ctaInnerW = Math.max(0, windowWidth - 32);
+  const ctaHalf1 = Math.floor(ctaInnerW / 2);
+  const ctaHalf2 = ctaInnerW - ctaHalf1;
 
   // Cuban Modern palette — warm cream light / navy profundo dark
   const colorScheme = useColorScheme();
@@ -600,7 +609,6 @@ export default function WalletScreen() {
                 style={{
                   opacity: fadeAnim[1]!,
                   marginBottom: 24,
-                  alignSelf: 'stretch',
                   flexDirection: 'row',
                   borderRadius: 20,
                   shadowColor: '#000000',
@@ -617,7 +625,7 @@ export default function WalletScreen() {
                   onPressOut={handleCtaPressOut}
                   accessibilityRole="button"
                   accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
-                  style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.92 }]}
+                  style={({ pressed }) => [{ width: ctaHalf1 }, pressed && { opacity: 0.92 }]}
                 >
                   <LinearGradient
                     colors={[colors.brand.orange, palette.accent.warm]}
@@ -655,7 +663,7 @@ export default function WalletScreen() {
                   onPressOut={handleCtaPressOut}
                   accessibilityRole="button"
                   accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
-                  style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.92 }]}
+                  style={({ pressed }) => [{ width: ctaHalf2 }, pressed && { opacity: 0.92 }]}
                 >
                   <LinearGradient
                     colors={['#6B7F8F', '#52677A']}
