@@ -106,6 +106,7 @@
     "txn_tip_sent": "Gorjeta enviada",
     "txn_refund": "Reembolso",
     "txn_fx": "Ajuste de câmbio",
+    "fx_usd_unchanged": "Valor em USD inalterado",
     "txn_bonus": "Bônus",
     "txn_gift_received": "Presente recebido",
     "txn_gift_sent": "Presente enviado",

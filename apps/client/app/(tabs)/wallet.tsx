@@ -509,9 +509,16 @@ function WebWalletScreen() {
                           {view.isZero ? '' : isCredit ? '+' : '−'}{formatTriciCoin(Math.abs(signedAmount))}
                         </Text>
                         {balance.availableUsdCents != null && (
-                          <Text variant="caption" color="tertiary" style={{ fontVariant: ['tabular-nums'] }}>
-                            ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
-                          </Text>
+                          view.kind === 'fx' ? (
+                            // FX rows preserve USD value by design — never show a USD gain/loss.
+                            <Text variant="caption" color="tertiary">
+                              {t('wallet.fx_usd_unchanged', { defaultValue: 'Valor en USD sin cambios' })}
+                            </Text>
+                          ) : (
+                            <Text variant="caption" color="tertiary" style={{ fontVariant: ['tabular-nums'] }}>
+                              ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
+                            </Text>
+                          )
                         )}
                       </View>
                     </View>
@@ -1087,9 +1094,16 @@ function NativeWalletScreen() {
                 {view.isZero ? '' : isCredit ? '+' : '−'}{formatTriciCoin(Math.abs(signedAmount))}
               </Text>
               {balance.availableUsdCents != null && (
-                <Text style={{ color: tokens.ink.subtle, fontSize: 11, marginTop: 2, ...TABULAR }}>
-                  ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
-                </Text>
+                view.kind === 'fx' ? (
+                  // FX rows preserve USD value by design — never show a USD gain/loss.
+                  <Text style={{ color: tokens.ink.subtle, fontSize: 11, marginTop: 2 }}>
+                    {t('wallet.fx_usd_unchanged', { defaultValue: 'Valor en USD sin cambios' })}
+                  </Text>
+                ) : (
+                  <Text style={{ color: tokens.ink.subtle, fontSize: 11, marginTop: 2, ...TABULAR }}>
+                    ≈ {isCredit ? '+' : '-'}{formatUSD(usdEq)}
+                  </Text>
+                )
               )}
             </View>
           </View>

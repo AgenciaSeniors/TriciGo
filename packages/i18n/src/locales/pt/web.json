@@ -532,6 +532,7 @@
     "tx_refund": "Reembolso",
     "tx_insurance": "Seguro de viagem",
     "tx_fx": "Ajuste por taxa de câmbio",
+    "fx_usd_unchanged": "Valor em USD inalterado",
     "tx_adjustment": "Ajuste",
     "date_today": "Hoje",
     "date_yesterday": "Ontem"
