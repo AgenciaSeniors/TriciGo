@@ -17,10 +17,10 @@ type Step = 'phone' | 'otp';
 // off-page, still applies the code on return.
 const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
 
-// Sign in with Apple is hidden until the Apple Developer enrollment is approved
-// and the Apple OAuth provider is enabled (the button currently does nothing).
-// Re-enable (set to true) once Apple is live.
-const APPLE_SIGN_IN_ENABLED = false;
+// Sign in with Apple is live: the Apple Developer org account (Team 3762RDMMD2)
+// was approved and the Apple OAuth provider is enabled in Supabase (Services ID
+// com.tricigo.signin, verified 302 -> appleid.apple.com on 2026-06-27).
+const APPLE_SIGN_IN_ENABLED = true;
 
 // sessionStorage key shared with /auth/callback: page guards send users here
 // with ?return=<path> (e.g. /empresas/registro) and the user must land back
