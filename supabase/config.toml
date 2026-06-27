@@ -438,6 +438,12 @@ verify_jwt = false
 verify_jwt = false
 [functions.process-netopia-webhook]
 verify_jwt = false
+[functions.resolve-recharge-recipient]
+verify_jwt = false
+[functions.create-stripe-recharge-intent]
+verify_jwt = false
+[functions.process-stripe-webhook]
+verify_jwt = false
 [functions.health-check]
 verify_jwt = false
 [functions.delete-account]
@@ -472,6 +478,10 @@ verify_jwt = false
 
 # Require a valid Supabase JWT at the gateway:
 [functions.create-netopia-payment-intent]
+verify_jwt = true
+# Authenticated self-recharge via Stripe (in-app NETOPIA fallback). The
+# handler also re-checks the JWT (getUser) + that user_id is the caller.
+[functions.create-stripe-payment-intent]
 verify_jwt = true
 [functions.create-ride-payment-link]
 verify_jwt = true

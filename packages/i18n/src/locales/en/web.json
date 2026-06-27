@@ -1,4 +1,24 @@
 {
+  "recharge": {
+    "nav": "Top up",
+    "title": "Top up a wallet",
+    "subtitle": "Top up a relative's TriciGo wallet in Cuba.",
+    "recipient_phone": "Phone of the user to top up",
+    "recipient_found": "Topping up: {{name}}",
+    "recipient_not_found": "This number isn't a TriciGo user. Ask them to install the app.",
+    "amount": "Amount to top up (USD)",
+    "amount_min": "Minimum 20",
+    "rate": "Exchange rate",
+    "will_receive": "They'll receive",
+    "fee": "Fee",
+    "total": "Total to pay",
+    "payer_email": "Your email (for the receipt)",
+    "pay": "Pay now",
+    "secured_by_stripe": "Secure payment processed by Stripe.",
+    "success": "Top-up sent! The receipt was emailed to you.",
+    "cancelled": "Payment cancelled.",
+    "error": "Couldn't process. Please try again."
+  },
   "offline": "No connection — check your network.",
   "support": {
     "title": "Support",
