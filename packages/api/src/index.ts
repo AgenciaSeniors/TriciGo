@@ -46,7 +46,7 @@ export {
 } from './lib/offlineQueue';
 export type { QueuedMutation, ProcessingStatus } from './lib/offlineQueue';
 export { registerAllOfflineMutations } from './lib/offlineMutations';
-export { useFeatureFlag } from './hooks/useFeatureFlag';
+export { useFeatureFlag, useFeatureFlagState } from './hooks/useFeatureFlag';
 export { cmsService, type CmsContent } from './services/cms.service';
 export { questService } from './services/quest.service';
 export { blogService, type BlogPost } from './services/blog.service';
