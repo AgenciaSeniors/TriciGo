@@ -176,23 +176,21 @@ export const paymentService = {
     enabled: boolean;
     host: string;
     port: number;
-    username: string;
-    password: string;
   }> {
     const DEFAULT_HOST = '187.77.214.236';
     const DEFAULT_PORT = 13128;
+    // NOTE: proxy auth creds are intentionally NOT read from platform_config.
+    // platform_config has a public SELECT RLS (any authed user can read every
+    // row), so a static proxy password stored there would be client-readable —
+    // an open-tunnel risk. Auth uses ONLY the short-lived ephemeral token from
+    // mintNetopiaProxyCredential(). The squid still keeps a static htpasswd for
+    // curl/dev smoke only; the app never sends it.
     try {
       const supabase = getSupabaseClient();
       const { data } = await supabase
         .from('platform_config')
         .select('key, value')
-        .in('key', [
-          'netopia_proxy_enabled',
-          'netopia_proxy_host',
-          'netopia_proxy_port',
-          'netopia_proxy_user',
-          'netopia_proxy_pass',
-        ]);
+        .in('key', ['netopia_proxy_enabled', 'netopia_proxy_host', 'netopia_proxy_port']);
       const m: Record<string, string> = {};
       (data ?? []).forEach((c: { key: string; value: string }) => {
         const raw = c.value;
@@ -202,26 +200,20 @@ export const paymentService = {
         enabled: m['netopia_proxy_enabled'] === 'true',
         host: m['netopia_proxy_host'] || DEFAULT_HOST,
         port: parseInt(m['netopia_proxy_port'] ?? '', 10) || DEFAULT_PORT,
-        // Proxy Basic-auth creds. Android can't carry creds in ProxyController →
-        // the WebView answers the proxy's 407 via the `basicAuthCredential` prop
-        // (HTTP proxy, so onReceivedHttpAuthRequest fires); iOS applies them on
-        // the ProxyConfiguration. Empty = no auth. The squid requires auth so it
-        // isn't an open proxy; ephemeral per-intent creds are a follow-up.
-        username: m['netopia_proxy_user'] ?? '',
-        password: m['netopia_proxy_pass'] ?? '',
       };
     } catch {
-      return { enabled: false, host: DEFAULT_HOST, port: DEFAULT_PORT, username: '', password: '' };
+      return { enabled: false, host: DEFAULT_HOST, port: DEFAULT_PORT };
     }
   },
 
   /**
    * Mint a SHORT-LIVED proxy credential for the in-app NETOPIA checkout WebView
-   * (the `mint-netopia-proxy-credential` EF). Preferred over the static
-   * `getNetopiaProxyConfig` cred: the squid validates this ephemeral HMAC token
-   * statelessly and it expires (~10 min), so a leak isn't a standing tunnel.
-   * Returns null on ANY failure (not logged in, EF absent/disabled, network) so
-   * the caller falls back to the static cred (or no auth).
+   * (the `mint-netopia-proxy-credential` EF). This is the ONLY source of proxy
+   * auth creds for the app (the static platform_config cred was removed — it was
+   * client-readable). The squid validates this ephemeral HMAC token statelessly
+   * and it expires (~10 min), so a leak isn't a standing tunnel. Returns null on
+   * ANY failure (not logged in, EF absent/disabled, network) → the caller then
+   * proceeds without proxy auth and the WebView's onError recovers to the browser.
    */
   async mintNetopiaProxyCredential(): Promise<{
     host: string;

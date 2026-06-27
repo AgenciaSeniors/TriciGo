@@ -119,7 +119,7 @@ export function useNetopiaCheckout() {
 
   const present = useCallback(
     async ({ url, returnUrlBase, intentId }: PresentArgs): Promise<Outcome> => {
-      let cfg = { enabled: false, host: '', port: 0, username: '', password: '' };
+      let cfg = { enabled: false, host: '', port: 0 };
       try {
         cfg = await paymentService.getNetopiaProxyConfig();
       } catch {
@@ -132,13 +132,14 @@ export function useNetopiaCheckout() {
         return fallbackToBrowser(url, returnUrlBase, intentId);
       }
 
-      // Prefer a SHORT-LIVED ephemeral credential (mint EF) so a leaked cred
-      // isn't a standing tunnel; fall back to the static config cred if minting
-      // fails (EF absent/disabled, not logged in, network).
+      // Auth creds come ONLY from the short-lived ephemeral mint EF (the static
+      // platform_config cred was removed — it was client-readable). If minting
+      // fails, proceed without creds; the WebView's onError recovers to the
+      // browser if the proxy then refuses the un-authed tunnel.
       let host = cfg.host;
       let port = cfg.port;
-      let user: string | null = cfg.username || null;
-      let pass: string | null = cfg.password || null;
+      let user: string | null = null;
+      let pass: string | null = null;
       try {
         const eph = await paymentService.mintNetopiaProxyCredential();
         if (eph?.username && eph.password) {
@@ -148,7 +149,7 @@ export function useNetopiaCheckout() {
           pass = eph.password;
         }
       } catch {
-        /* keep the static cfg creds */
+        /* no creds → proceed; onError recovers if the proxy refuses */
       }
 
       // Set the process-wide proxy BEFORE mounting the WebView so the first

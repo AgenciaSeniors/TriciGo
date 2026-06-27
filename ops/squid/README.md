@@ -25,7 +25,9 @@ prop.
 `hmac_auth.sh` (this dir) is the squid Basic-auth helper. It accepts:
 
 - **(a) static cred** `tricigo:<pass>` — validated against the existing
-  `/etc/squid/passwd` via `basic_ncsa_auth`. Transition / dev / curl smoke.
+  `/etc/squid/passwd` via `basic_ncsa_auth`. **squid-side curl/dev smoke ONLY** —
+  the APP no longer sends a static cred (it was removed from getNetopiaProxyConfig
+  because `platform_config` is client-readable; do NOT set `netopia_proxy_user/_pass`).
 - **(b) ephemeral token** minted by the `mint-netopia-proxy-credential` EF:
   - `username = <expiry-unix-epoch>` · `password = hex(HMAC-SHA256(username, SECRET))`
   - Stateless: the helper re-derives the HMAC + checks expiry. A leaked token
@@ -66,7 +68,7 @@ prop.
    Then `squid -k parse && squid -k reconfigure`. (Back up the old conf first.)
 3. **Give the EF the same secret:** `supabase secrets set NETOPIA_PROXY_HMAC_SECRET=<the value of /etc/squid/hmac_secret>` (run from an empty dir). Optionally `NETOPIA_PROXY_HOST` / `NETOPIA_PROXY_PORT`.
 4. **Deploy the EF:** `npx supabase functions deploy mint-netopia-proxy-credential --project-ref lqaufszburqvlslpcuac` (config.toml pins `verify_jwt = false`; it does its own `auth.getUser`).
-5. **Flip the client flag:** `platform_config.netopia_proxy_enabled = 'true'`. (The app prefers the ephemeral mint EF; `netopia_proxy_user`/`_pass` static keys are only the fallback.)
+5. **Flip the client flag:** `platform_config.netopia_proxy_enabled = 'true'`. (The app uses ONLY the ephemeral mint EF for proxy auth — the static `netopia_proxy_user`/`_pass` keys were removed from the app, so do NOT set them.)
 6. **Rebuild the apps** (the `webview-proxy` native module must be in the APK — driver + store builds don't have it yet) and run the on-device validation (below).
 
 ## Validation (no app needed)

@@ -24,6 +24,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { rateLimit } from '../_shared/rate-limiter.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 const TTL_SECONDS = 600; // 10 min — covers one hosted-page checkout + 3DS.
@@ -87,6 +88,12 @@ Deno.serve(async (req) => {
     error: authErr,
   } = await supabase.auth.getUser(token);
   if (authErr || !user) return jsonResponse(req, { ok: false, error: 'unauthorized' }, 401);
+
+  // Rate-limit per user: a token is a 10-min CONNECT-tunnel grant, so cap minting
+  // so a compromised/automated account can't flood the proxy. 10/min is generous
+  // for legit checkout retries.
+  const rl = await rateLimit(`mint-netopia-proxy:${user.id}`, 10, 60_000);
+  if (!rl.allowed) return jsonResponse(req, { ok: false, error: 'rate_limited' }, 429);
 
   const expiry = Math.floor(Date.now() / 1000) + TTL_SECONDS;
   const username = String(expiry);
