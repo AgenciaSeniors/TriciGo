@@ -352,6 +352,7 @@ export default function CorporateProfileScreen() {
         url: result.redirectUrl,
         returnUrlBase: RETURN_URL_BASE,
         intentId: result.intentId,
+        amountUsd,
       });
 
       // 3. Always poll — browser dismissal type is not a reliable signal.
