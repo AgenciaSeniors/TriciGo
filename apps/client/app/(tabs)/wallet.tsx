@@ -861,6 +861,7 @@ function NativeWalletScreen() {
         url: result.redirectUrl,
         returnUrlBase: RETURN_URL_BASE,
         intentId: result.intentId,
+        amountUsd: usd,
       });
 
       // 3. ALWAYS poll the intent — browser dismissal type is NOT a

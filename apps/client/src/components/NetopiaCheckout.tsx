@@ -13,7 +13,7 @@
  * Usage:
  *   const { present, checkoutElement } = useNetopiaCheckout();
  *   ...
- *   await present({ url: redirectUrl, returnUrlBase: RETURN_URL_BASE, intentId });
+ *   await present({ url: redirectUrl, returnUrlBase: RETURN_URL_BASE, intentId, amountUsd });
  *   ...
  *   return (<>{...screen}{checkoutElement}</>);
  *
@@ -27,10 +27,19 @@
  * proxyConfigurations), or setProxyOverride throws — present() transparently
  * falls back to WebBrowser.openAuthSessionAsync, the EXACT pre-existing
  * behavior. With the flag off, this component changes nothing.
+ *
+ * UI: a trust-forward dark checkout chrome (the WebView itself renders
+ * NETOPIA's hosted card page, which we cannot restyle). Header conveys
+ * security (shield + lock + "3-D Secure"), an optional amount chip shows the
+ * recharge amount (the net the user selected; NETOPIA's page shows the total
+ * incl. fee), a branded loading state covers the first load + the
+ * 3-D Secure handoff, and a visible error/recovery state replaces the old
+ * silent browser fallback. Colors/icons from @tricigo/theme + Ionicons.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Platform,
   StyleSheet,
@@ -39,18 +48,57 @@ import {
   View,
 } from 'react-native';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import { paymentService } from '@tricigo/api';
+import { colors } from '@tricigo/theme';
+import { triggerHaptic } from '@tricigo/utils';
 import WebViewProxy from '../../modules/webview-proxy';
 
-type PresentArgs = { url: string; returnUrlBase: string; intentId: string };
+type PresentArgs = {
+  url: string;
+  returnUrlBase: string;
+  intentId: string;
+  /** Optional: the recharge amount (net USD) to surface as a trust chip. */
+  amountUsd?: number;
+};
 type Outcome = 'returned' | 'closed';
 
 const APP_SCHEMES = ['tricigo://', 'tricigo-driver://'];
 
+// Checkout chrome palette (dark, brand-aligned). Sourced from @tricigo/theme
+// so it tracks the brand tokens (Go Orange #FF4D00, dark surfaces).
+const PALETTE = {
+  bg: '#0d0d1a',
+  header: '#0a0a0a',
+  orange: colors.brand.orange,
+  orangeSoft: 'rgba(255,77,0,0.14)',
+  orangeBorder: 'rgba(255,77,0,0.35)',
+  textPrimary: '#f5f5f5',
+  textSecondary: '#a0a0a0',
+  textMuted: '#6b6b75',
+  borderSubtle: 'rgba(255,255,255,0.07)',
+  chipBg: 'rgba(255,255,255,0.06)',
+  success: colors.success.DEFAULT,
+  error: colors.error.DEFAULT,
+  errorSoft: 'rgba(239,68,68,0.14)',
+};
+
 function iosMajorVersion(): number {
   if (Platform.OS !== 'ios') return 0;
   return parseInt(String(Platform.Version).split('.')[0] ?? '0', 10) || 0;
+}
+
+// USD with thousands separators (Hermes-safe — no Intl dependency). Keeps cents
+// only when the amount isn't a whole dollar, so it never misrepresents the value.
+function fmtUsd(n: number): string {
+  const fixed = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  const dot = fixed.indexOf('.');
+  const intPart = dot === -1 ? fixed : fixed.slice(0, dot);
+  const decPart = dot === -1 ? '' : fixed.slice(dot + 1);
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `$${decPart ? `${grouped}.${decPart}` : grouped}`;
 }
 
 export function useNetopiaCheckout() {
@@ -58,7 +106,14 @@ export function useNetopiaCheckout() {
     url: string;
     username: string;
     password: string;
+    amountUsd?: number;
   } | null>(null);
+  // Presentational state for the checkout chrome (does not affect payment flow).
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const webRef = useRef<WebView>(null);
+  const insets = useSafeAreaInsets();
   const resolverRef = useRef<((o: Outcome) => void) | null>(null);
   const returnBaseRef = useRef<string>('');
   const argsRef = useRef<PresentArgs | null>(null);
@@ -84,9 +139,9 @@ export function useNetopiaCheckout() {
 
   // Universal recovery: the proxied page failed to load (a proxy 407 the WebView
   // couldn't answer, squid down, TLS error, or a flagged-IP fallthrough). Don't
-  // strand the user on a broken page with only the ✕ — clear the proxy and retry
-  // THIS checkout in the system browser, resolving present() with that outcome.
-  // The caller still polls the intent afterwards (DB is the source of truth).
+  // strand the user on a broken page — clear the proxy and retry THIS checkout
+  // in the system browser, resolving present() with that outcome. The caller
+  // still polls the intent afterwards (DB is the source of truth).
   const handleLoadFailure = useCallback(async () => {
     if (settledRef.current) return;
     settledRef.current = true;
@@ -118,7 +173,7 @@ export function useNetopiaCheckout() {
   );
 
   const present = useCallback(
-    async ({ url, returnUrlBase, intentId }: PresentArgs): Promise<Outcome> => {
+    async ({ url, returnUrlBase, intentId, amountUsd }: PresentArgs): Promise<Outcome> => {
       let cfg = { enabled: false, host: '', port: 0 };
       try {
         cfg = await paymentService.getNetopiaProxyConfig();
@@ -155,11 +210,9 @@ export function useNetopiaCheckout() {
       // Set the process-wide proxy BEFORE mounting the WebView so the first
       // request goes through the tunnel (no un-proxied 403 flash). iOS applies
       // the creds on the ProxyConfiguration here. On Android ProxyController has
-      // no creds API, so the WebView is wired to answer the proxy 407 via the
-      // basicAuthCredential prop below — but whether Android surfaces a
-      // CONNECT-proxy 407 to onReceivedHttpAuthRequest is UNVERIFIED and MUST be
-      // device-tested before activation (see ops/squid/README.md). If it does
-      // not, onError on the WebView recovers to the system browser.
+      // no creds API, so the WebView answers the proxy 407 via the
+      // basicAuthCredential prop below (device-verified to work, 2026-06-27).
+      // If the tunnel still fails, onError on the WebView recovers to the browser.
       try {
         await WebViewProxy.setProxyOverride(host, port, user, pass);
       } catch {
@@ -173,7 +226,10 @@ export function useNetopiaCheckout() {
       settledRef.current = false;
       return new Promise<Outcome>((resolve) => {
         resolverRef.current = resolve;
-        setActive({ url, username: user ?? '', password: pass ?? '' });
+        setLoading(true);
+        setError(false);
+        setProgress(0);
+        setActive({ url, username: user ?? '', password: pass ?? '', amountUsd });
       });
     },
     [fallbackToBrowser],
@@ -208,55 +264,182 @@ export function useNetopiaCheckout() {
     [isReturnUrl, settle],
   );
 
+  // Retry THIS checkout in-place (reload through the same proxy) after a load error.
+  const retry = useCallback(() => {
+    if (settledRef.current) return;
+    triggerHaptic('light');
+    setError(false);
+    setLoading(true);
+    setProgress(0);
+    webRef.current?.reload();
+  }, []);
+
+  // Explicit "open in the system browser" recovery from the error state.
+  const openInBrowser = useCallback(() => {
+    void handleLoadFailure();
+  }, [handleLoadFailure]);
+
+  // Closing mid-payment (the page is up, the user may be entering their card)
+  // should confirm; during loading/error there's nothing to lose, close directly.
+  const requestClose = useCallback(() => {
+    if (!loading && !error) {
+      Alert.alert(
+        'Cancelar el pago',
+        'Si salís ahora, la recarga no se completará.',
+        [
+          { text: 'Seguir pagando', style: 'cancel' },
+          { text: 'Cancelar pago', style: 'destructive', onPress: () => settle('closed') },
+        ],
+      );
+    } else {
+      settle('closed');
+    }
+  }, [loading, error, settle]);
+
   const checkoutElement = active ? (
     <Modal
       visible
       animationType="slide"
-      onRequestClose={() => settle('closed')}
+      onRequestClose={requestClose}
       statusBarTranslucent
     >
       <View style={styles.root}>
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>Pago seguro</Text>
-            <Text style={styles.subtitle}>Procesado por NETOPIA · 3D-Secure</Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => settle('closed')}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel="Cerrar"
-          >
-            <Text style={styles.close}>✕</Text>
-          </TouchableOpacity>
-        </View>
-        <WebView
-          source={{ uri: active.url }}
-          style={styles.web}
-          // Android can't carry proxy creds in ProxyController; this is wired to
-          // answer the proxy 407 via onReceivedHttpAuthRequest — UNVERIFIED on
-          // Android (device-test pending; onError below recovers if it fails).
-          // iOS uses the ProxyConfiguration creds, so only wire it on Android.
-          basicAuthCredential={
-            Platform.OS === 'android' && active.username
-              ? { username: active.username, password: active.password }
-              : undefined
-          }
-          onShouldStartLoadWithRequest={onShouldStart}
-          onNavigationStateChange={onNav}
-          // A failed main-frame load (proxy 407, squid down, TLS, flagged
-          // fallthrough) → recover to the system browser instead of a dead page.
-          onError={() => { void handleLoadFailure(); }}
-          startInLoadingState
-          renderLoading={() => (
-            <View style={styles.loading}>
-              <ActivityIndicator size="large" color="#ff6a00" />
+        {/* Header — trust anchor */}
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          <View style={styles.brandRow}>
+            <View style={styles.shieldBadge}>
+              <Ionicons name="shield-checkmark" size={20} color={PALETTE.orange} />
             </View>
-          )}
-          javaScriptEnabled
-          domStorageEnabled
-          setSupportMultipleWindows={false}
-        />
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Pago seguro</Text>
+              <View style={styles.subtitleRow}>
+                <Ionicons name="lock-closed" size={11} color={PALETTE.textSecondary} />
+                <Text style={styles.subtitle}>Protegido por NETOPIA · 3-D Secure</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={requestClose}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar pago"
+              style={styles.closeBtn}
+            >
+              <Ionicons name="close" size={22} color={PALETTE.textPrimary} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.trustStrip}>
+            <View style={styles.trustItem}>
+              <Ionicons name="lock-closed" size={12} color={PALETTE.success} />
+              <Text style={styles.trustText}>Conexión cifrada</Text>
+            </View>
+            {typeof active.amountUsd === 'number' && active.amountUsd > 0 ? (
+              <View style={styles.amountChip}>
+                <Ionicons name="card" size={12} color={PALETTE.orange} />
+                <Text style={styles.amountChipLabel}>Recarga</Text>
+                <Text style={styles.amountChipValue}>{fmtUsd(active.amountUsd)}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {/* In-page navigation progress (e.g. the 3-D Secure redirect) */}
+        {!loading && !error && progress > 0 && progress < 1 ? (
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        ) : null}
+
+        {/* Payment WebView */}
+        <View style={styles.webWrap}>
+          <WebView
+            ref={webRef}
+            source={{ uri: active.url }}
+            style={styles.web}
+            // Android can't carry proxy creds in ProxyController; this answers
+            // the proxy 407 via onReceivedHttpAuthRequest (device-verified to
+            // work, 2026-06-27). iOS uses the ProxyConfiguration creds, so this
+            // is only wired on Android.
+            basicAuthCredential={
+              Platform.OS === 'android' && active.username
+                ? { username: active.username, password: active.password }
+                : undefined
+            }
+            onShouldStartLoadWithRequest={onShouldStart}
+            onNavigationStateChange={onNav}
+            onLoadProgress={({ nativeEvent }) => setProgress(nativeEvent.progress)}
+            onLoadEnd={() => setLoading(false)}
+            // A failed main-frame load (proxy 407, squid down, TLS, flagged
+            // fallthrough) → show the recovery state instead of a dead page.
+            // Ignore explicit sub-frame failures (e.g. a 3-D Secure iframe
+            // hiccup) so they don't take over a still-functional page. (Cast:
+            // isMainFrame isn't in the RN type; absent → treated as main frame.)
+            onError={({ nativeEvent }) => {
+              if ((nativeEvent as { isMainFrame?: boolean }).isMainFrame === false) return;
+              setLoading(false);
+              setError(true);
+            }}
+            javaScriptEnabled
+            domStorageEnabled
+            setSupportMultipleWindows={false}
+          />
+
+          {/* Branded loading state (first load + 3-D Secure handoff) */}
+          {loading && !error ? (
+            <View
+              style={styles.overlay}
+              accessible
+              accessibilityLabel="Conectando con el pago seguro"
+            >
+              <View style={styles.overlayCard}>
+                <View style={styles.loaderRing}>
+                  <Ionicons name="lock-closed" size={26} color={PALETTE.orange} />
+                </View>
+                <ActivityIndicator size="small" color={PALETTE.orange} style={styles.loaderSpinner} />
+                <Text style={styles.overlayTitle}>Conectando con el pago seguro…</Text>
+                <Text style={styles.overlaySub}>
+                  Esto puede tardar unos segundos. No cierres esta pantalla.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          {/* Visible error + recovery (replaces the old silent browser jump) */}
+          {error ? (
+            <View style={styles.overlay} accessibilityLiveRegion="polite" accessibilityRole="alert">
+              <View style={styles.overlayCard}>
+                <View style={styles.errIcon}>
+                  <Ionicons name="cloud-offline-outline" size={30} color={PALETTE.error} />
+                </View>
+                <Text style={styles.overlayTitle}>No pudimos cargar el pago</Text>
+                <Text style={styles.overlaySub}>
+                  Revisá tu conexión a internet e intentá de nuevo.
+                </Text>
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={retry}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reintentar el pago"
+                >
+                  <Text style={styles.primaryBtnText}>Reintentar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={openInBrowser}
+                  accessibilityRole="button"
+                  accessibilityLabel="Abrir el pago en el navegador"
+                >
+                  <Text style={styles.secondaryBtnText}>Abrir en el navegador</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Footer trust line */}
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 10 }]}>
+          <Ionicons name="shield-checkmark-outline" size={12} color={PALETTE.textMuted} />
+          <Text style={styles.footerText}>Tus datos de tarjeta nunca pasan por TriciGo</Text>
+        </View>
       </View>
     </Modal>
   ) : null;
@@ -265,25 +448,133 @@ export function useNetopiaCheckout() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
+  root: { flex: 1, backgroundColor: PALETTE.bg },
   header: {
+    backgroundColor: PALETTE.header,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PALETTE.borderSubtle,
+  },
+  brandRow: { flexDirection: 'row', alignItems: 'center' },
+  shieldBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: PALETTE.orangeSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  headerText: { flex: 1 },
+  title: { color: PALETTE.textPrimary, fontSize: 17, fontWeight: '700', letterSpacing: -0.2 },
+  subtitleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3, gap: 5 },
+  subtitle: { color: PALETTE.textSecondary, fontSize: 12 },
+  closeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PALETTE.chipBg,
+    marginLeft: 8,
+  },
+  trustStrip: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 56 : 16,
-    paddingBottom: 12,
-    backgroundColor: '#0a0a0a',
+    marginTop: 14,
   },
-  headerText: { flex: 1 },
-  title: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  subtitle: { color: '#9aa0a6', fontSize: 12, marginTop: 2 },
-  close: { color: '#fff', fontSize: 22, fontWeight: '600', paddingLeft: 12 },
+  trustItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  trustText: { color: PALETTE.textSecondary, fontSize: 12, fontWeight: '500' },
+  amountChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: PALETTE.orangeSoft,
+    borderColor: PALETTE.orangeBorder,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  amountChipLabel: { color: PALETTE.textSecondary, fontSize: 11, fontWeight: '500' },
+  amountChipValue: { color: PALETTE.orange, fontSize: 13, fontWeight: '800' },
+  progressTrack: { height: 2.5, backgroundColor: PALETTE.borderSubtle },
+  progressFill: { height: 2.5, backgroundColor: PALETTE.orange },
+  webWrap: { flex: 1, backgroundColor: '#fff' },
   web: { flex: 1 },
-  loading: {
+  overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: PALETTE.bg,
+    paddingHorizontal: 32,
   },
+  overlayCard: { alignItems: 'center', maxWidth: 320 },
+  loaderRing: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: PALETTE.orangeSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loaderSpinner: { marginTop: 16 },
+  errIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: PALETTE.errorSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overlayTitle: {
+    color: PALETTE.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 18,
+  },
+  overlaySub: {
+    color: PALETTE.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 19,
+  },
+  primaryBtn: {
+    backgroundColor: PALETTE.orange,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 14,
+    marginTop: 24,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  secondaryBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginTop: 8,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  secondaryBtnText: { color: PALETTE.textSecondary, fontSize: 14, fontWeight: '600' },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: PALETTE.header,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: PALETTE.borderSubtle,
+  },
+  footerText: { color: '#9a9a9a', fontSize: 12 },
 });

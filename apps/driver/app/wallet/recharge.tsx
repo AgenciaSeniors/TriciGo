@@ -134,6 +134,7 @@ export default function RechargeScreen() {
         url: result.redirectUrl,
         returnUrlBase: RETURN_URL_BASE,
         intentId: result.intentId,
+        amountUsd: selectedAmount,
       });
 
       // 3. ALWAYS poll the intent — the browser dismissal `type` is NOT
