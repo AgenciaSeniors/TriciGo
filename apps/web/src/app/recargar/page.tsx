@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { getSupabaseClient, useFeatureFlagState } from '@tricigo/api';
+import { computeRechargeFeeUsd, computeRechargeChargeUsd } from '@tricigo/utils';
 
 type Recipient = { found: boolean; fullName?: string };
 type ResultStatus = 'ok' | 'cancel' | 'processing' | null;
@@ -85,8 +86,11 @@ export default function RechargePage() {
   }
 
   const amt = Number(amount) || 0;
-  const fee = amt > 0 ? Math.max(Number((amt * 0.03).toFixed(2)), 0.5) : 0;
-  const total = amt > 0 ? amt + fee : 0;
+  // Single source of truth for the recharge fee — the SAME helper the mobile app
+  // uses (@tricigo/utils: 3% with a $0.50 floor, additive), so the displayed
+  // commission is guaranteed identical to the in-app recharge.
+  const fee = computeRechargeFeeUsd(amt);
+  const total = computeRechargeChargeUsd(amt);
   const willReceive = rate && amt > 0 ? Math.round(amt * rate) : 0;
   const amountTooLow = amt > 0 && amt < 20;
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
