@@ -294,6 +294,7 @@ export const cubanLight = {
     orangeGlow: 'rgba(255, 77, 0, 0.18)',
     warm: '#FFB547',        // Secondary — precios, badges, highlights cálidos
     dusk: '#6B7F8F',        // Azul ceniza — dividers, accent frío
+    duskDeep: '#34495E',    // Pizarra profunda — fill sólido frío (par con accent.orange)
   },
   line: 'rgba(26, 20, 20, 0.08)',
   shadow: {
@@ -318,6 +319,7 @@ export const cubanDark = {
     orangeGlow: 'rgba(255, 77, 0, 0.25)',
     warm: '#FFB547',
     dusk: '#4A6278',        // Dusk más oscuro para dark bg
+    duskDeep: '#3A4F5E',    // Pizarra profunda — fill sólido frío (par con accent.orange)
   },
   line: 'rgba(244, 240, 234, 0.08)',
   shadow: {
