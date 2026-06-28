@@ -52,9 +52,16 @@ export function useRiderLocationSharing() {
         const { status } = await Location.getForegroundPermissionsAsync();
         if (status !== 'granted') return;
 
-        // Create a broadcast channel for this ride
+        // RT-01 (audit round 6): PRIVATE broadcast channel, authorized by RLS on
+        // realtime.messages so only the ride's customer + assigned driver can join
+        // (a public channel let anyone with the ride UUID track the rider's live
+        // GPS). setAuth() attaches the user JWT to the realtime socket so the
+        // realtime.messages policy (is_ride_party) can authorize the topic.
         const supabase = getSupabaseClient();
-        channelRef.current = supabase.channel(`rider-location:${rideId}`);
+        await supabase.realtime.setAuth();
+        channelRef.current = supabase.channel(`rider-location:${rideId}`, {
+          config: { private: true },
+        });
         channelRef.current.subscribe(realtimeStatusLogger('rider_location_share'));
 
         // Watch position with lower accuracy and less frequent updates
