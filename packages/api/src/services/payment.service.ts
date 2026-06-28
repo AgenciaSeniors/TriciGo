@@ -32,6 +32,36 @@ import { logger } from '@tricigo/utils';
  */
 const KNOWN_PROVIDERS: PaymentProvider[] = ['netopia', 'euplatesc', 'stripe'];
 
+// ── Recharge create-intent timeout (PASS #3 resilience) ──
+// createRechargeIntent runs behind the non-dismissable "Redirigiendo a pago
+// seguro…" overlay (PR #699). On a stalled/half-open Cuban connection a bare
+// fetch (no default timeout on React Native) can hang for the OS socket
+// timeout — tens of seconds to minutes — trapping the user on that overlay
+// with no escape (Android back is a no-op). The Supabase client's own fetch is
+// already timeout-wrapped (see client.ts makeTimeoutFetch), but this path uses
+// a BARE globalThis.fetch for the edge function call, so we bound it here.
+// 30s matches client.ts READ_TIMEOUT_MS; tighter than the 120s upload backstop
+// because creating an intent is a quick metadata op and the user is trapped.
+const RECHARGE_INTENT_TIMEOUT_MS = 30_000;
+const RECHARGE_TIMEOUT_MESSAGE =
+  'La conexión tardó demasiado. Verifica tu red e intenta de nuevo.';
+
+/**
+ * Reject `promise` with a friendly timeout error if it doesn't settle within
+ * `ms`. Used to bound `supabase.auth.getSession()` — its network refresh is
+ * already timeout-wrapped at the client fetch layer, but this also guards the
+ * GoTrue lock/initialize step, which can stall before any network call.
+ */
+function withRechargeTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(RECHARGE_TIMEOUT_MESSAGE)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
 export const paymentService = {
   /**
    * Get a single payment intent by ID (to check status after payment).
@@ -94,36 +124,62 @@ export const paymentService = {
    */
   async createRechargeIntent(req: RechargeIntentRequest): Promise<RechargeIntentResult> {
     const supabase = getSupabaseClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await withRechargeTimeout(
+      supabase.auth.getSession(),
+      RECHARGE_INTENT_TIMEOUT_MS,
+    );
 
     const supabaseUrl = (supabase as unknown as { supabaseUrl: string }).supabaseUrl
       ?? process.env.NEXT_PUBLIC_SUPABASE_URL
       ?? process.env.EXPO_PUBLIC_SUPABASE_URL
       ?? '';
 
-    const res = await fetch(`${supabaseUrl}/functions/v1/create-${req.provider}-payment-intent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session?.access_token ?? ''}`,
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-          ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
-          ?? '',
-      },
-      body: JSON.stringify({
-        user_id: req.userId,
-        // RECARGA V2: send the NET USD the user picked; the edge function
-        // computes the additive fee and tells NETOPIA the total charge.
-        amount_usd: req.amountUsd,
-        recharge_type: req.rechargeType ?? 'customer',
-        corporate_account_id: req.corporateAccountId,
-        device_fingerprint: req.deviceFingerprint,
-        return_url_base: req.returnUrl,
-        language: req.language,
-      }),
-    });
+    // Bound the bare fetch with an AbortController so a stalled connection
+    // surfaces as an error (caught upstream → overlay cleared) instead of
+    // hanging behind the non-dismissable "Redirigiendo a pago seguro…" overlay.
+    // The single timer covers both the request AND res.json() so the worst-case
+    // trap time is the timeout, not 2× it.
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, RECHARGE_INTENT_TIMEOUT_MS);
 
-    const json = await res.json();
+    let json: { ok?: boolean; detail?: string; error?: string; intentId?: string } & Record<string, unknown>;
+    let res: Response;
+    try {
+      res = await fetch(`${supabaseUrl}/functions/v1/create-${req.provider}-payment-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+            ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+            ?? '',
+        },
+        body: JSON.stringify({
+          user_id: req.userId,
+          // RECARGA V2: send the NET USD the user picked; the edge function
+          // computes the additive fee and tells NETOPIA the total charge.
+          amount_usd: req.amountUsd,
+          recharge_type: req.rechargeType ?? 'customer',
+          corporate_account_id: req.corporateAccountId,
+          device_fingerprint: req.deviceFingerprint,
+          return_url_base: req.returnUrl,
+          language: req.language,
+        }),
+        signal: controller.signal,
+      });
+      json = await res.json();
+    } catch (err) {
+      // An aborted fetch throws a terse AbortError ("Aborted"); translate our
+      // own timeout into the friendly Spanish message instead of leaking it.
+      if (timedOut) throw new Error(RECHARGE_TIMEOUT_MESSAGE);
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok || !json.ok) {
       const errorMsg = json.detail ?? json.error ?? 'Failed to create recharge intent';
       logger.error('recharge_intent_failed', {
