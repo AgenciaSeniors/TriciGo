@@ -1343,24 +1343,27 @@ function NativeWalletScreen() {
               style={{ width: quickActionHalf }}
               android_ripple={{ color: 'rgba(255,255,255,0.18)' }}
             >
-              <LinearGradient
-                colors={[colors.brand.orange, tokens.accent.warm]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                  width: '100%',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingVertical: 18,
-                  paddingHorizontal: 12,
-                  minHeight: 96,
-                }}
-              >
-                <Ionicons name="add-circle" size={28} color="#FFFFFF" />
-                <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
-                  {t('wallet.recharge')}
-                </Text>
-              </LinearGradient>
+              {({ pressed }) => (
+                <LinearGradient
+                  colors={[colors.brand.orange, tokens.accent.warm]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    width: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingVertical: 18,
+                    paddingHorizontal: 12,
+                    minHeight: 96,
+                    opacity: pressed ? 0.9 : 1,
+                  }}
+                >
+                  <Ionicons name="add-circle" size={28} color="#FFFFFF" />
+                  <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+                    {t('wallet.recharge')}
+                  </Text>
+                </LinearGradient>
+              )}
             </Pressable>
 
             <Pressable
@@ -1370,24 +1373,27 @@ function NativeWalletScreen() {
               style={{ width: quickActionHalf }}
               android_ripple={{ color: 'rgba(255,255,255,0.18)' }}
             >
-              <LinearGradient
-                colors={[tokens.accent.duskDeep, tokens.accent.dusk]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                  width: '100%',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingVertical: 18,
-                  paddingHorizontal: 12,
-                  minHeight: 96,
-                }}
-              >
-                <Ionicons name="gift" size={28} color="#FFFFFF" />
-                <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
-                  {t('wallet.gift', { defaultValue: 'Regalar' })}
-                </Text>
-              </LinearGradient>
+              {({ pressed }) => (
+                <LinearGradient
+                  colors={[tokens.accent.duskDeep, tokens.accent.dusk]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    width: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingVertical: 18,
+                    paddingHorizontal: 12,
+                    minHeight: 96,
+                    opacity: pressed ? 0.9 : 1,
+                  }}
+                >
+                  <Ionicons name="gift" size={28} color="#FFFFFF" />
+                  <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+                    {t('wallet.gift', { defaultValue: 'Regalar' })}
+                  </Text>
+                </LinearGradient>
+              )}
             </Pressable>
           </View>
         </View>
