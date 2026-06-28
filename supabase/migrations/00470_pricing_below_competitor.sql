@@ -1,5 +1,5 @@
 -- ============================================================================
--- 00462_pricing_below_competitor.sql
+-- 00470_pricing_below_competitor.sql
 --
 -- Recalibra los precios al pasajero para quedar ~10% POR DEBAJO del competidor
 -- de referencia (lanave-style) en La Habana, las 24 h, y elimina el recargo
