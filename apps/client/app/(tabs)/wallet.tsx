@@ -328,6 +328,13 @@ function WebWalletScreen() {
       if (activeFilter === 'bonus') {
         return tx.type === 'promo_credit';
       }
+      if (activeFilter === 'adjustment') {
+        // "Ajustes" also covers USD-anchor revaluations (type 'fx_revaluation',
+        // rendered as "Ajuste por tipo de cambio"). Without this the chip is
+        // empty for nearly every user — almost nobody has a raw 'adjustment'
+        // row, while fx revaluation rows accrue to everyone automatically.
+        return tx.type === 'adjustment' || tx.type === 'fx_revaluation';
+      }
       return tx.type === activeFilter;
     });
   }, [transactions, activeFilter]);
@@ -1043,6 +1050,12 @@ function NativeWalletScreen() {
       // 'bonus' chip captures promo + referral credits.
       if (activeFilter === 'bonus') {
         return tx.type === 'promo_credit';
+      }
+      // "Ajustes" also covers USD-anchor revaluations ('fx_revaluation',
+      // shown as "Ajuste por tipo de cambio") alongside admin adjustments —
+      // otherwise the chip is empty for nearly every user.
+      if (activeFilter === 'adjustment') {
+        return tx.type === 'adjustment' || tx.type === 'fx_revaluation';
       }
       return tx.type === activeFilter;
     });

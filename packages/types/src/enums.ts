@@ -74,7 +74,11 @@ export type LedgerEntryType =
   | 'transfer_out'
   | 'promo_credit'
   | 'redemption'
-  | 'adjustment';
+  | 'adjustment'
+  // USD-anchor daily revaluation (migs 00442-00444). Posts a double-entry txn
+  // on the user wallet vs platform_fx_reserve; displayed as "Ajuste por tipo
+  // de cambio" and included under the "Ajustes" wallet filter.
+  | 'fx_revaluation';
 
 export type LedgerTransactionStatus =
   | 'pending'
