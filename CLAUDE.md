@@ -1120,6 +1120,24 @@ contents = contents.replace(classHeader, `$1\n${OVERRIDE_SNIPPET}`);
 
 **Lección general:** los config plugins que parchean `MainActivity.kt`/`AppDelegate.swift` por regex **no deben anclar a cuerpos de método** (cambian entre SDKs: block-body ↔ expression-body). Anclar a estructuras estables: el header de la clase + su `{`. Verificar el plugin con un test Node que corra el `.replace` sobre el template del SDK nuevo y assertee que el snippet quedó **dentro** del bloque de la clase (contar llaves, o regex `class ... { ... <snippet> ... }`). Aplicado a cliente + driver (plugins duplicados per-app).
 
+### `Pressable` función-estilo descarta props de layout (`width`/`flex`) — usar estilo-objeto
+
+**Bug verificado 2026-06-28 (PR #701).** En la wallet del cliente, una fila de botones `Pressable` con `flex: 1` (y después `width: '50%'`, y hasta `width: <px>`) **colapsaba al ancho de contenido** — los botones no llenaban el ancho aunque su contenedor SÍ era full-width (confirmado pintando contenedor + hijos con `backgroundColor` temporal). `pnpm check-types` pasaba y el bundle era fresco (verificado con Metro `--clear` + un `console.log` de `useWindowDimensions`: `windowWidth=411`, `quickActionHalf=189.7` correctos pero sin aplicarse al render).
+
+**Causa raíz:** los props **de layout** (`width`, `flex`) puestos dentro del **array que devuelve una función-estilo de `Pressable`** —`style={({ pressed }) => [{ width }, pressed && {…}]}`— se **descartan silenciosamente** en esta versión de RN. Los props de **paint** (`opacity`, `transform`) del mismo array SÍ se aplican (por eso el feedback de pulsado andaba pero el ancho no). El `ServiceIconButton` del home no sufre esto porque pone `flex:1` en un **estilo-objeto** (`StyleSheet.create`), no en función.
+
+**Fix canónico:**
+- Poner layout (`width`/`flex`) en un **estilo-objeto plano**: `style={{ width }}` o `style={styles.x}`, NUNCA dentro de la función.
+- Para el estado `pressed` sin tocar el layout, usar el **children-as-function** de `Pressable` y aplicar el prop de paint a un hijo con estilo-objeto:
+  ```tsx
+  <Pressable style={{ width }} android_ripple={{ color: 'rgba(255,255,255,0.18)' }}>
+    {({ pressed }) => (
+      <Inner style={{ width: '100%', opacity: pressed ? 0.9 : 1 }}>…</Inner>
+    )}
+  </Pressable>
+  ```
+- **Diagnóstico decisivo** cuando un flex-row "no llena el ancho": pintá el contenedor y los hijos con `backgroundColor` temporales + reload **limpio** (no fast-refresh: los cambios de layout en caliente no recalculan bien). Si el contenedor llena pero los hijos no → sospechar de la función-estilo. Un `console.log` de las dimensiones leído en el log de Metro confirma si los valores llegan correctos pero no se aplican.
+
 ---
 
 ### Search de direcciones — estado canónico (Tier 1.5–1.7 cerrados 2026-05-27 · fuzzy + sugerencias + emoji 2026-06-01)
