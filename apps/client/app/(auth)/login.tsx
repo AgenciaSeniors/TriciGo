@@ -67,8 +67,10 @@ export default function LoginScreen() {
   const [legalType, setLegalType] = useState<'terms' | 'privacy' | null>(null);
   const { t: tWeb } = useTranslation('web');
 
-  // Sign in with Apple is iOS-only. Gate the button on native availability so
-  // it never renders on Android/web (Guideline 4.8 applies to iOS only).
+  // Sign in with Apple: iOS uses the NATIVE sheet (expo-apple-authentication),
+  // detected via `appleAvailable`. Android has no native module, so it falls
+  // back to the web OAuth flow in an in-app browser (same as Google). The button
+  // renders on iOS (native) and Android (web OAuth); it stays hidden on Expo web.
   const [appleAvailable, setAppleAvailable] = useState(false);
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
@@ -312,7 +314,7 @@ export default function LoginScreen() {
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
                 <Text variant="body" className="font-medium">{socialLoading ? '...' : t('auth.continue_with_google', { defaultValue: 'Continuar con Google' })}</Text>
               </Pressable>
-              {appleAvailable && (
+              {(appleAvailable || Platform.OS === 'android') && (
               <Pressable
                 className="flex-row items-center justify-center gap-2 py-4 rounded-2xl bg-neutral-900 dark:bg-white active:bg-neutral-800 dark:active:bg-neutral-100"
                 style={{ elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, opacity: socialLoading ? 0.5 : 1 }}
@@ -320,17 +322,29 @@ export default function LoginScreen() {
                 onPress={async () => {
                   setSocialLoading(true);
                   try {
-                    const credential = await AppleAuthentication.signInAsync({
-                      requestedScopes: [
-                        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-                        AppleAuthentication.AppleAuthenticationScope.EMAIL,
-                      ],
-                    });
-                    if (!credential.identityToken) throw new Error('No Apple identity token');
-                    // Native flow: exchange the identity token for a Supabase
-                    // session. The auth listener (useAuth) picks up SIGNED_IN and
-                    // routes — no manual session/redirect handling needed.
-                    await authService.signInWithAppleIdToken(credential.identityToken);
+                    if (appleAvailable) {
+                      // iOS: native Sign in with Apple sheet → exchange the
+                      // identity token. The auth listener (useAuth) picks up
+                      // SIGNED_IN and routes — no manual redirect handling.
+                      const credential = await AppleAuthentication.signInAsync({
+                        requestedScopes: [
+                          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                        ],
+                      });
+                      if (!credential.identityToken) throw new Error('No Apple identity token');
+                      await authService.signInWithAppleIdToken(credential.identityToken);
+                    } else {
+                      // Android: no native Apple module — use the web OAuth flow
+                      // in an in-app browser, mirroring Google. Returns via the
+                      // tricigo:// deep link; BUG-201 fallback sets the session.
+                      const redirectTo = 'tricigo://auth/callback';
+                      const data = await authService.signInWithApple(redirectTo);
+                      if (data?.url) {
+                        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+                        await setSessionFromAuthResult(result);
+                      }
+                    }
                   } catch (err) {
                     setSocialLoading(false);
                     // User dismissed the native Apple sheet — not an error, stay quiet.
