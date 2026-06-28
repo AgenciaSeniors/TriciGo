@@ -84,7 +84,10 @@ function getFilterTypes(filter: FilterTab): string[] | null {
     case 'recharge': return ['recharge'];
     case 'rides': return ['ride_payment', 'ride_hold', 'ride_hold_release', 'redemption'];
     case 'bonus': return ['promo_credit'];
-    case 'adjustment': return ['adjustment'];
+    // "Ajustes" also covers USD-anchor revaluations ('fx_revaluation', shown as
+    // "Ajuste por tipo de cambio"). Without it the chip is empty for nearly
+    // every user — almost nobody has a raw 'adjustment' row.
+    case 'adjustment': return ['adjustment', 'fx_revaluation'];
     default: return null;
   }
 }
