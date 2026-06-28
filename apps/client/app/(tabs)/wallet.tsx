@@ -43,7 +43,7 @@ import { Input } from '@tricigo/ui/Input';
 import { colors, darkColors } from '@tricigo/theme';
 import { Platform, useColorScheme, Linking } from 'react-native';
 import { RIDE_CONFIG } from '@/config/ride';
-import { useNetopiaCheckout } from '@/components/NetopiaCheckout';
+import { useNetopiaCheckout, PaymentLoadingOverlay } from '@/components/NetopiaCheckout';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -703,6 +703,11 @@ function NativeWalletScreen() {
   const [rechargeSheetVisible, setRechargeSheetVisible] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState('20');
   const [rechargeSubmitting, setRechargeSubmitting] = useState(false);
+  // Full-screen "redirecting to secure payment" overlay shown during the gap
+  // between tapping Pay and the payment surface appearing (createRechargeIntent
+  // + proxy prewarm) — so the screen never goes blank. Hidden via present()'s
+  // onOpen the instant the checkout/browser opens.
+  const [preparingPayment, setPreparingPayment] = useState(false);
 
   // Processing guard to prevent double-submit across all wallet actions
   const [isProcessing, setIsProcessing] = useState(false);
@@ -844,6 +849,7 @@ function NativeWalletScreen() {
     }
 
     setRechargeSheetVisible(false);
+    setPreparingPayment(true);
     setIsProcessing(true);
     setRechargeSubmitting(true);
     try {
@@ -874,6 +880,9 @@ function NativeWalletScreen() {
         returnUrlBase: RETURN_URL_BASE,
         intentId: result.intentId,
         amountUsd: usd,
+        // Drop the "redirecting to secure payment" overlay the instant the
+        // checkout surface (WebView modal or browser fallback) appears.
+        onOpen: () => setPreparingPayment(false),
       });
 
       // 3. ALWAYS poll the intent — browser dismissal type is NOT a
@@ -960,6 +969,7 @@ function NativeWalletScreen() {
       logger.error('netopia_recharge_failed', { error: String(err) });
       Toast.show({ type: 'error', text1: getErrorMessage(err) });
     } finally {
+      setPreparingPayment(false);
       setRechargeSubmitting(false);
       setIsProcessing(false);
     }
@@ -1191,6 +1201,13 @@ function NativeWalletScreen() {
   return (
     <Screen bg="cuban" padded>
       {netopiaCheckoutElement}
+      <PaymentLoadingOverlay
+        visible={preparingPayment}
+        title={t('wallet.redirecting_secure', { defaultValue: 'Redirigiendo a pago seguro…' })}
+        subtitle={t('wallet.redirecting_secure_hint', {
+          defaultValue: 'Esto puede tardar unos segundos. No cierres la app.',
+        })}
+      />
       {/* Home-style layout: compact iOS-native header (h4 instead of
           large display), no big icon hero. The demo banner (~46px in
           demo builds) is non-blocking via SafeAreaView; no extra

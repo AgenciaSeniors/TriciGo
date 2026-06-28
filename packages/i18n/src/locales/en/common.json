@@ -95,6 +95,8 @@
     "recharge_amount": "Amount to top up",
     "pending_recharges": "Pending top-ups",
     "recharge_card": "Recharge with card",
+    "redirecting_secure": "Redirecting to secure payment…",
+    "redirecting_secure_hint": "This may take a few seconds. Don't close the app.",
     "recharge_coming_soon": "Coming soon",
     "txn_recharge": "Balance recharge",
     "txn_ride_payment": "Ride payment",

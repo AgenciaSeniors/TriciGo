@@ -62,6 +62,11 @@ type PresentArgs = {
   intentId: string;
   /** Optional: the recharge amount (net USD) to surface as a trust chip. */
   amountUsd?: number;
+  /** Fired the instant the payment surface (the in-app WebView modal OR the
+   *  browser fallback) is about to appear. Lets the caller drop its own
+   *  "preparing payment" overlay exactly at the handoff — no blank gap before,
+   *  no flash after. */
+  onOpen?: () => void;
 };
 type Outcome = 'returned' | 'closed';
 
@@ -229,13 +234,14 @@ export function useNetopiaCheckout() {
   }, [resolveProxyCreds]);
 
   const present = useCallback(
-    async ({ url, returnUrlBase, intentId, amountUsd }: PresentArgs): Promise<Outcome> => {
+    async ({ url, returnUrlBase, intentId, amountUsd, onOpen }: PresentArgs): Promise<Outcome> => {
       // Use the prewarmed result if a call site kicked it off in parallel with
       // the intent creation; otherwise resolve it inline now.
       const setup = prewarmRef.current ?? (await resolveProxyCreds());
       prewarmRef.current = null;
 
       if (!setup.ok) {
+        onOpen?.();
         return fallbackToBrowser(url, returnUrlBase, intentId);
       }
 
@@ -250,6 +256,7 @@ export function useNetopiaCheckout() {
       } catch {
         // Could not set the proxy → don't load un-proxied (a flagged IP would
         // 403); fall back to the system browser instead.
+        onOpen?.();
         return fallbackToBrowser(url, returnUrlBase, intentId);
       }
 
@@ -261,6 +268,10 @@ export function useNetopiaCheckout() {
         setLoading(true);
         setError(false);
         setProgress(0);
+        // The checkout modal (with its own loading overlay) is about to mount —
+        // signal the caller to drop its "preparing payment" overlay so the two
+        // hand off seamlessly (both show the same loader).
+        onOpen?.();
         setActive({ url, username: setup.user ?? '', password: setup.pass ?? '', amountUsd });
       });
     },
@@ -422,16 +433,10 @@ export function useNetopiaCheckout() {
               accessible
               accessibilityLabel="Conectando con el pago seguro"
             >
-              <View style={styles.overlayCard}>
-                <View style={styles.loaderRing}>
-                  <Ionicons name="lock-closed" size={26} color={PALETTE.orange} />
-                </View>
-                <ActivityIndicator size="small" color={PALETTE.orange} style={styles.loaderSpinner} />
-                <Text style={styles.overlayTitle}>Conectando con el pago seguro…</Text>
-                <Text style={styles.overlaySub}>
-                  Esto puede tardar unos segundos. No cierres esta pantalla.
-                </Text>
-              </View>
+              <PaymentLoadingCard
+                title="Conectando con el pago seguro…"
+                subtitle="Esto puede tardar unos segundos. No cierres esta pantalla."
+              />
             </View>
           ) : null}
 
@@ -477,6 +482,50 @@ export function useNetopiaCheckout() {
   ) : null;
 
   return { present, prewarm, checkoutElement };
+}
+
+/**
+ * The inner loading card (lock ring + spinner + copy). Shared by the in-app
+ * checkout's first-load overlay and the standalone PaymentLoadingOverlay so the
+ * "preparing payment" gap and the WebView load show the EXACT same loader.
+ */
+function PaymentLoadingCard({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <View style={styles.overlayCard}>
+      <View style={styles.loaderRing}>
+        <Ionicons name="lock-closed" size={26} color={PALETTE.orange} />
+      </View>
+      <ActivityIndicator size="small" color={PALETTE.orange} style={styles.loaderSpinner} />
+      <Text style={styles.overlayTitle}>{title}</Text>
+      <Text style={styles.overlaySub}>{subtitle}</Text>
+    </View>
+  );
+}
+
+/**
+ * Standalone full-screen "redirecting to secure payment" overlay. Render it from
+ * the recharge handler while createRechargeIntent + the proxy prewarm are in
+ * flight (the ~1.5–3s gap before the payment surface appears) so the screen
+ * never goes blank. Hide it via the present() onOpen callback at the exact
+ * moment the checkout modal mounts / the browser opens — same dark chrome as the
+ * in-app checkout, so the handoff is seamless.
+ */
+export function PaymentLoadingOverlay({
+  visible,
+  title = 'Conectando con el pago seguro…',
+  subtitle = 'Esto puede tardar unos segundos. No cierres esta pantalla.',
+}: {
+  visible: boolean;
+  title?: string;
+  subtitle?: string;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => {}}>
+      <View style={styles.overlay} accessible accessibilityLabel={title}>
+        <PaymentLoadingCard title={title} subtitle={subtitle} />
+      </View>
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({

@@ -22,7 +22,7 @@ import { colors } from '@tricigo/theme';
 import { paymentService } from '@tricigo/api/services/payment';
 import { walletService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
-import { useNetopiaCheckout } from '@/components/NetopiaCheckout';
+import { useNetopiaCheckout, PaymentLoadingOverlay } from '@/components/NetopiaCheckout';
 
 // RECARGA V2: presets in USD. Driver-quota uses the same customer
 // defaults (rounds 1-4). User picks NET amount; fee is additive 3%
@@ -53,6 +53,10 @@ export default function RechargeScreen() {
   const [amount, setAmount] = useState('');
   const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Full-screen "redirecting to secure payment" overlay for the gap between
+  // tapping Pay and the payment surface appearing (createRechargeIntent + proxy
+  // prewarm) — so the form never just freezes. Hidden via present()'s onOpen.
+  const [preparingPayment, setPreparingPayment] = useState(false);
 
   // RECARGA V2 PARITY: success state. After NETOPIA returns and we've
   // polled the intent to `completed`, we stay on this screen and show
@@ -107,6 +111,7 @@ export default function RechargeScreen() {
     }
 
     setSubmitting(true);
+    setPreparingPayment(true);
     try {
       // 1. Create the intent — edge function returns NETOPIA hosted page URL.
       // RECARGA V2: send the NET USD; server adds the 3% min $0.50 fee
@@ -141,6 +146,9 @@ export default function RechargeScreen() {
         returnUrlBase: RETURN_URL_BASE,
         intentId: result.intentId,
         amountUsd: selectedAmount,
+        // Drop the "redirecting to secure payment" overlay the instant the
+        // checkout surface (WebView modal or browser fallback) appears.
+        onOpen: () => setPreparingPayment(false),
       });
 
       // 3. ALWAYS poll the intent — the browser dismissal `type` is NOT
@@ -222,6 +230,7 @@ export default function RechargeScreen() {
       logger.error('netopia_driver_recharge_failed', { error: String(err) });
       Toast.show({ type: 'error', text1: getErrorMessage(err) });
     } finally {
+      setPreparingPayment(false);
       setSubmitting(false);
     }
   }, [user?.id, selectedAmount, t]);
@@ -374,6 +383,13 @@ export default function RechargeScreen() {
   return (
     <Screen bg="dark" statusBarStyle="light-content">
       {netopiaCheckoutElement}
+      <PaymentLoadingOverlay
+        visible={preparingPayment}
+        title={t('wallet.redirecting_secure', { defaultValue: 'Redirigiendo a pago seguro…' })}
+        subtitle={t('wallet.redirecting_secure_hint', {
+          defaultValue: 'Esto puede tardar unos segundos. No cierres la app.',
+        })}
+      />
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16, paddingHorizontal: 16 }}
         keyboardShouldPersistTaps="handled"

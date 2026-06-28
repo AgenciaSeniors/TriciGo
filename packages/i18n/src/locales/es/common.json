@@ -95,6 +95,8 @@
     "recharge_amount": "Monto a recargar",
     "pending_recharges": "Recargas pendientes",
     "recharge_card": "Recargar con tarjeta",
+    "redirecting_secure": "Redirigiendo a pago seguro…",
+    "redirecting_secure_hint": "Esto puede tardar unos segundos. No cierres la app.",
     "recharge_coming_soon": "Próximamente",
     "txn_recharge": "Recarga de saldo",
     "txn_ride_payment": "Pago de viaje",
