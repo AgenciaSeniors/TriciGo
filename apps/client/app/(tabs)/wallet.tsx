@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, FlatList, ActivityIndicator, RefreshControl, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -597,6 +597,14 @@ function NativeWalletScreen() {
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const isDark = resolvedScheme === 'dark';
   const tokens = useTokens();
+  // Quick-actions bar: each half gets an explicit px width (window − Screen's
+  // px-4 of 16 each side, split in two). The Pressables use a PLAIN object
+  // style, NOT the function form `({ pressed }) => [...]` — in this RN the
+  // width/flex inside a function-returned style array was silently dropped, so
+  // flex:1 / width:'50%' collapsed the buttons to content width. Px + object
+  // style fills the bar reliably and keeps it aligned with the balance card.
+  const { width: windowWidth } = useWindowDimensions();
+  const quickActionHalf = (windowWidth - 32) / 2;
   const userId = useAuthStore((s) => s.user?.id);
   // NETOPIA card checkout: in-app WebView routed through the VPS CONNECT proxy
   // when enabled, else falls back to the system browser. See NetopiaCheckout.
@@ -613,12 +621,15 @@ function NativeWalletScreen() {
     shadowRadius: 24,
     elevation: 12,
   };
-  const GLOW_CTA = {
-    shadowColor: '#FF4D00',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+  // Unified neutral shadow for the Recargar+Regalar segmented bar. NOT orange:
+  // the bar is half warm (orange) + half cool (dusk), so a neutral elevation
+  // reads cleaner than a colored halo.
+  const QUICK_ACTIONS_SHADOW = {
+    shadowColor: '#1A1414',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: isDark ? 0.4 : 0.16,
+    shadowRadius: 14,
+    elevation: 6,
   };
   const CARD_SHADOW = {
     shadowColor: '#000',
@@ -1298,69 +1309,70 @@ function NativeWalletScreen() {
           </View>
         </AnimatedCard>
 
-        {/* Premium quick actions — a balanced, symmetric pair of solid cards:
-            Recargar (primary, warm orange glow gradient) + Regalar (secondary,
-            SOLID cuban dusk fill). Same size/shape; the warm/cool contrast keeps
-            Recargar leading while Regalar reads as a full, deliberate card (not a
-            faint tint). Gift is closed-loop: TriciCoin can be sent to another
-            active TriciGo user but stays spend-only (rides), never cashed out. */}
-        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
-          <Pressable
-            onPress={handleRecharge}
-            accessibilityRole="button"
-            accessibilityLabel={t('wallet.recharge')}
-            style={({ pressed }) => [
-              { flex: 1, borderRadius: 20, overflow: 'hidden', ...GLOW_CTA },
-              pressed && { transform: [{ scale: 0.97 }], opacity: 0.95 },
-            ]}
-          >
-            <LinearGradient
-              colors={[colors.brand.orange, tokens.accent.warm]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingVertical: 18,
-                paddingHorizontal: 12,
-                minHeight: 96,
-              }}
+        {/* Quick actions — Recargar + Regalar as ONE continuous 50/50 segmented
+            bar (warm orange half + cool dusk half meeting flush, no gap), inset
+            like the balance card. Two-View technique (mirrors the hero card):
+            outer View carries the shadow (no overflow); inner View clips the two
+            gradients into one rounded bar (overflow:'hidden'). RN can't have both
+            overflow:'hidden' and a shadow on the same View. Gift is closed-loop:
+            TriciCoin can be sent to another active TriciGo user but stays
+            spend-only (rides), never cashed out. */}
+        <View style={{ alignSelf: 'stretch', borderRadius: 20, marginBottom: 24, ...QUICK_ACTIONS_SHADOW }}>
+          <View style={{ flexDirection: 'row', borderRadius: 20, overflow: 'hidden' }}>
+            <Pressable
+              onPress={handleRecharge}
+              accessibilityRole="button"
+              accessibilityLabel={t('wallet.recharge')}
+              style={{ width: quickActionHalf }}
+              android_ripple={{ color: 'rgba(255,255,255,0.18)' }}
             >
-              <Ionicons name="add-circle" size={28} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
-                {t('wallet.recharge')}
-              </Text>
-            </LinearGradient>
-          </Pressable>
+              <LinearGradient
+                colors={[colors.brand.orange, tokens.accent.warm]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  width: '100%',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 18,
+                  paddingHorizontal: 12,
+                  minHeight: 96,
+                }}
+              >
+                <Ionicons name="add-circle" size={28} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+                  {t('wallet.recharge')}
+                </Text>
+              </LinearGradient>
+            </Pressable>
 
-          <Pressable
-            onPress={() => router.push('/wallet/gift')}
-            accessibilityRole="button"
-            accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
-            style={({ pressed }) => [
-              {
-                flex: 1,
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingVertical: 18,
-                paddingHorizontal: 12,
-                minHeight: 96,
-                borderRadius: 20,
-                backgroundColor: tokens.accent.dusk,
-                shadowColor: '#1A1414',
-                shadowOpacity: 0.18,
-                shadowRadius: 10,
-                shadowOffset: { width: 0, height: 5 },
-                elevation: 5,
-              },
-              pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
-            ]}
-          >
-            <Ionicons name="gift" size={28} color="#FFFFFF" />
-            <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
-              {t('wallet.gift', { defaultValue: 'Regalar' })}
-            </Text>
-          </Pressable>
+            <Pressable
+              onPress={() => router.push('/wallet/gift')}
+              accessibilityRole="button"
+              accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
+              style={{ width: quickActionHalf }}
+              android_ripple={{ color: 'rgba(255,255,255,0.18)' }}
+            >
+              <LinearGradient
+                colors={[tokens.accent.duskDeep, tokens.accent.dusk]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  width: '100%',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 18,
+                  paddingHorizontal: 12,
+                  minHeight: 96,
+                }}
+              >
+                <Ionicons name="gift" size={28} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+                  {t('wallet.gift', { defaultValue: 'Regalar' })}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
         </View>
 
         {/* BUG-280 — "Este mes" now hides when there are no rides this month
