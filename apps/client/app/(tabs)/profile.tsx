@@ -345,24 +345,29 @@ function NativeProfileScreen() {
                     </LinearGradient>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <View className="flex-row items-center gap-2">
-                      <Text
-                        style={{ flexShrink: 1, color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 20, letterSpacing: -0.4 }}
-                        numberOfLines={1}
-                      >
-                        {user?.full_name ?? 'Usuario'}
-                      </Text>
-                      {user?.level && (
+                    {/* Name owns its own line(s): it no longer shares a row with
+                        the tier badge, so a long name + a long tier label like
+                        "Diamante" can't squeeze it. Wraps to 2 lines before any
+                        ellipsis (prefer wrap over truncation). */}
+                    <Text
+                      style={{ color: tokens.ink.primary, fontFamily: 'Montserrat_700Bold', fontSize: 20, letterSpacing: -0.4 }}
+                      numberOfLines={2}
+                    >
+                      {user?.full_name ?? 'Usuario'}
+                    </Text>
+                    <Text style={{ color: tokens.ink.secondary, fontSize: 13, marginTop: 3 }}>
+                      {user?.phone ?? '+53 5XXXXXXX'}
+                    </Text>
+                    {/* Tier badge sits below (own row, hugs content) — driver parity. */}
+                    {user?.level && (
+                      <View style={{ alignSelf: 'flex-start', marginTop: 8 }}>
                         <StatusBadge
                           label={t(`profile.level_${user.level}`)}
                           variant={(TIER_BADGE[user.level] ?? TIER_BADGE.bronce).variant}
                           icon={(TIER_BADGE[user.level] ?? TIER_BADGE.bronce).icon}
                         />
-                      )}
-                    </View>
-                    <Text style={{ color: tokens.ink.secondary, fontSize: 13, marginTop: 3 }}>
-                      {user?.phone ?? '+53 5XXXXXXX'}
-                    </Text>
+                      </View>
+                    )}
                   </View>
                   <Pressable
                     onPress={() => router.push('/profile/edit')}
