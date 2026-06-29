@@ -342,7 +342,7 @@ function NativeDriverProfileScreen() {
                     fontSize: 20,
                     letterSpacing: -0.4,
                   }}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
                   {user?.full_name ?? td('common.driver_label')}
                 </Text>
