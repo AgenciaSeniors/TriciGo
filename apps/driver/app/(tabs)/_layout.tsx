@@ -58,6 +58,9 @@ export default function TabLayout() {
           name="earnings"
           options={{
             title: t('earnings.title'),
+            // Short tab label so it never truncates on narrow phones; the long
+            // descriptive title stays for the in-screen header (EarningsHeader).
+            tabBarLabel: t('common.earnings_tab', { defaultValue: 'Ganancias' }),
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="cash" size={size} color={color} />
             ),
@@ -67,6 +70,9 @@ export default function TabLayout() {
           name="wallet"
           options={{
             title: t('wallet.title', { defaultValue: 'Billetera' }),
+            // Short tab label so it never truncates; the long "Crédito de
+            // comisión" title stays for the in-screen header.
+            tabBarLabel: t('common.wallet_tab', { defaultValue: 'Crédito' }),
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="wallet" size={size} color={color} />
             ),
