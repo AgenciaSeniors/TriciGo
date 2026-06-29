@@ -707,6 +707,8 @@
     "driver_label": "Conductor",
     "home_tab": "Inicio",
     "profile_tab": "Perfil",
+    "earnings_tab": "Ganancias",
+    "wallet_tab": "Crédito",
     "status_label": "Estado",
     "map_unavailable": "Mapa no disponible",
     "my_location": "Mi ubicación",
