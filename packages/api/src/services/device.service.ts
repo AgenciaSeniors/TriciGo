@@ -41,32 +41,51 @@ export const deviceService = {
   },
 
   /**
-   * List the current user's known devices, newest activity first. RLS
-   * policy `ukd_select_own` scopes the result to the caller's own rows.
+   * List the current user's known devices, newest activity first.
+   *
+   * The query is scoped EXPLICITLY to the authenticated user's id. We must NOT
+   * rely on RLS alone here: the `ukd_admin_all` policy (FOR ALL USING
+   * is_admin()) is permissive, so for an admin/super_admin caller RLS widens to
+   * `user_id = auth.uid() OR is_admin()` and an unscoped SELECT would return
+   * EVERY user's devices on this personal "Tus dispositivos" screen. The
+   * explicit `.eq('user_id', …)` keeps the screen to the caller's own devices
+   * regardless of their role; RLS still backstops it on the server.
    */
   async listMyDevices(): Promise<KnownDevice[]> {
     const supabase = getSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
     const { data, error } = await supabase
       .from('user_known_devices')
       .select(
         'id, device_id, platform, model, os_version, app_version, first_seen_at, last_seen_at',
       )
+      .eq('user_id', user.id)
       .order('last_seen_at', { ascending: false });
     if (error) throw error;
     return (data ?? []) as KnownDevice[];
   },
 
   /**
-   * Remove one of the current user's known devices by row id. RLS policy
-   * `ukd_delete_own` ensures a user can only delete their own rows; the next
-   * login from that device is treated as new again.
+   * Remove one of the current user's known devices by row id. Scoped to the
+   * caller's own `user_id` as well as the row id — like listMyDevices, this
+   * must not rely on RLS alone, since `ukd_admin_all` would otherwise let an
+   * admin delete another user's device row by id. The next login from that
+   * device is treated as new again.
    */
   async revokeDevice(id: string): Promise<void> {
     const supabase = getSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
     const { error } = await supabase
       .from('user_known_devices')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', user.id);
     if (error) throw error;
   },
 };
