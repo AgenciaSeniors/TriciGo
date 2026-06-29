@@ -1661,6 +1661,16 @@ export const adminService = {
     isVerified: boolean,
     notes?: string,
   ): Promise<void> {
+    // Server-side guard: rejection requires a reason. The UI already gates the
+    // Reject button on `notes.trim()`, but a caller using the service directly
+    // could leave `rejection_reason=NULL` — that state is indistinguishable
+    // from "pending" in the `!is_verified && !!rejection_reason` rule the
+    // driver app uses to render the red "Rechazado" badge.
+    const trimmedNotes = notes?.trim();
+    if (!isVerified && !trimmedNotes) {
+      throw new Error('Rejection reason is required');
+    }
+
     const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('driver_documents')
@@ -1668,8 +1678,8 @@ export const adminService = {
         is_verified: isVerified,
         verified_by: adminId,
         verified_at: new Date().toISOString(),
-        verification_notes: notes ?? null,
-        rejection_reason: isVerified ? null : (notes ?? null),
+        verification_notes: trimmedNotes ?? null,
+        rejection_reason: isVerified ? null : (trimmedNotes ?? null),
       })
       .eq('id', documentId);
     if (error) throw error;
