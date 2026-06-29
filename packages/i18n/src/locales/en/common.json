@@ -18,6 +18,13 @@
   "rating_new": "New",
   "ok": "OK",
 
+  "permissions": {
+    "title": "Permission needed",
+    "camera_body": "Enable camera access in Settings to take your photo.",
+    "gallery_body": "Enable photo access in Settings to choose an image.",
+    "open_settings": "Open Settings"
+  },
+
   "auth": {
     "login": "Sign in",
     "tagline": "Your mobility platform in Havana",

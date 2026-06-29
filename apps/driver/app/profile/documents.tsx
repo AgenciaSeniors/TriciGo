@@ -19,6 +19,7 @@ import { driverService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { DriverDocument, SelfieCheck, DocumentType } from '@tricigo/types';
 
@@ -35,6 +36,7 @@ const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'v
 
 export default function DocumentsScreen() {
   const { t } = useTranslation('driver');
+  const { t: tc } = useTranslation('common');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
@@ -72,11 +74,14 @@ export default function DocumentsScreen() {
 
   const reuploadImage = useCallback(async (docType: DocumentType) => {
     if (!driverId) return;
+    const isSelfie = docType === 'selfie';
+    const useCamera = isSelfie && Platform.OS !== 'web';
+    // Ask for camera/photos permission first (Apple 2.1(a) — avoid the iOS
+    // "Missing camera or camera roll permission" throw).
+    if (!(await ensurePickerPermission(useCamera ? 'camera' : 'gallery', tc))) return;
     setReuploading(docType);
 
     try {
-      const isSelfie = docType === 'selfie';
-      const useCamera = isSelfie && Platform.OS !== 'web';
       const result = useCamera
         ? await ImagePicker.launchCameraAsync({
             mediaTypes: 'images',
@@ -116,7 +121,7 @@ export default function DocumentsScreen() {
     } finally {
       setReuploading(null);
     }
-  }, [driverId, fetchData, t]);
+  }, [driverId, fetchData, t, tc]);
 
   const reuploadDocument = useCallback(async (docType: DocumentType) => {
     if (!driverId) return;

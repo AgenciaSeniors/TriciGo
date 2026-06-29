@@ -17,6 +17,7 @@ import { authService, driverService } from '@tricigo/api';
 import { isValidEmail, isValidCubanPhone, normalizeCubanPhone, PACKAGE_CATEGORY_LABELS, realEmail } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
+import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 import type { Vehicle } from '@tricigo/types';
 
 const VEHICLE_TYPE_LABELS: Record<string, string> = {
@@ -99,8 +100,11 @@ export default function EditProfileScreen() {
   // garantizado: 384×384 JPEG q=0.7).
   const pickAndUploadAvatar = async (source: 'camera' | 'gallery') => {
     if (!user) return;
+    const useGallery = Platform.OS === 'web' || source === 'gallery';
+    // Ask for camera/photos permission first; without it expo-image-picker
+    // throws "Missing camera or camera roll permission" on iOS (Apple 2.1(a)).
+    if (!(await ensurePickerPermission(useGallery ? 'gallery' : 'camera', t))) return;
     try {
-      const useGallery = Platform.OS === 'web' || source === 'gallery';
       const pickerResult = useGallery
         ? await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
