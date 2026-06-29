@@ -28,6 +28,7 @@ import {
   Easing,
   StyleSheet,
   useColorScheme,
+  useWindowDimensions,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,6 +61,13 @@ export default function WalletScreen() {
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
 
+  // Quick-actions bar: each half gets an explicit px width (window - the 16px
+  // horizontal inset on each side, split in two). The Pressables use a PLAIN
+  // object style for width — a function-style array (`({pressed}) => [...]`)
+  // silently drops layout props (width/flex) in this RN. See CLAUDE.md.
+  const { width: windowWidth } = useWindowDimensions();
+  const quickActionHalf = (windowWidth - 32) / 2;
+
   // RN-style shadows (cuban*.shadow.hero is CSS string syntax — not portable)
   const HERO_SHADOW = {
     shadowColor: '#FF4D00',
@@ -75,12 +83,14 @@ export default function WalletScreen() {
     shadowRadius: 8,
     elevation: 2,
   };
-  const GLOW_CTA = {
-    shadowColor: '#FF4D00',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+  // Unified neutral shadow for the Recargar+Regalar segmented bar (half warm /
+  // half cool, so the elevation is neutral, not an orange halo).
+  const QUICK_ACTIONS_SHADOW = {
+    shadowColor: '#1A1414',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: isDark ? 0.4 : 0.16,
+    shadowRadius: 14,
+    elevation: 6,
   };
 
   const [summary, setSummary] = useState<WalletSummary | null>(null);
@@ -420,13 +430,6 @@ export default function WalletScreen() {
     transform: [{ translateY: sectionTranslateY(idx) }],
   });
 
-  // ── CTA press feedback (spring scale) ──────────────────────────────
-  const ctaScale = useRef(new Animated.Value(1)).current;
-  const handleCtaPressIn = () =>
-    Animated.spring(ctaScale, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
-  const handleCtaPressOut = () =>
-    Animated.spring(ctaScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 6 }).start();
-
   if (loading) {
     return (
       <Screen
@@ -593,85 +596,93 @@ export default function WalletScreen() {
                 </View>
               </Animated.View>
 
-              {/* ── Quick actions: Recargar (primary, glow gradient) + Regalar
-                  (prominent secondary, filled orange tint) side-by-side, so gift
-                  is impossible to miss. Closed-loop: a driver gifts TriciCoin
-                  from their tricicoin balance to another active TriciGo user. */}
+              {/* ── Quick actions: Recargar + Regalar as ONE continuous 50/50
+                  segmented bar (warm orange half + cool dusk half, flush, no
+                  gap, rounded outer corners). Entrance fade/translate stays on
+                  the outer Animated.View; the inner View clips the two gradients
+                  (overflow:'hidden' can't share a View with a shadow). Half
+                  widths are px via a PLAIN object style — function-style arrays
+                  drop width/flex in this RN (see CLAUDE.md). Gift is closed-loop:
+                  a driver gifts TriciCoin to another active TriciGo user. */}
               <Animated.View
                 style={{
                   opacity: fadeAnim[1]!,
                   marginBottom: 24,
-                  flexDirection: 'row',
-                  gap: 12,
                   transform: [{ translateY: sectionTranslateY(1) }],
                 }}
               >
-                <Animated.View style={{ flex: 1, ...GLOW_CTA, transform: [{ scale: ctaScale }] }}>
-                  <Pressable
-                    onPress={() => router.push('/wallet/recharge')}
-                    onPressIn={handleCtaPressIn}
-                    onPressOut={handleCtaPressOut}
-                    style={{ borderRadius: 20, overflow: 'hidden' }}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
-                  >
-                    <LinearGradient
-                      colors={[colors.brand.orange, palette.accent.warm]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={{
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        paddingVertical: 18,
-                        paddingHorizontal: 12,
-                        minHeight: 96,
-                      }}
+                <View style={{ borderRadius: 20, ...QUICK_ACTIONS_SHADOW }}>
+                  <View style={{ flexDirection: 'row', borderRadius: 20, overflow: 'hidden' }}>
+                    <Pressable
+                      onPress={() => router.push('/wallet/recharge')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('wallet.recharge', { defaultValue: 'Recargar wallet' })}
+                      style={{ width: quickActionHalf }}
+                      android_ripple={{ color: 'rgba(255,255,255,0.18)' }}
                     >
-                      <Ionicons name="add-circle" size={28} color="#FFFFFF" />
-                      <Text
-                        style={{
-                          color: '#FFFFFF',
-                          fontFamily: 'Inter_700Bold',
-                          fontSize: 15,
-                          marginTop: 8,
-                          letterSpacing: 0.3,
-                          textAlign: 'center',
-                        }}
-                      >
-                        {t('wallet.recharge', { defaultValue: 'Recargar' })}
-                      </Text>
-                    </LinearGradient>
-                  </Pressable>
-                </Animated.View>
+                      {({ pressed }) => (
+                        <LinearGradient
+                          colors={[colors.brand.orange, palette.accent.warm]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={{
+                            width: '100%',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingVertical: 18,
+                            paddingHorizontal: 12,
+                            minHeight: 96,
+                            opacity: pressed ? 0.9 : 1,
+                          }}
+                        >
+                          <Ionicons name="add-circle" size={28} color="#FFFFFF" />
+                          <Text
+                            style={{
+                              color: '#FFFFFF',
+                              fontFamily: 'Inter_700Bold',
+                              fontSize: 15,
+                              marginTop: 8,
+                              letterSpacing: 0.3,
+                              textAlign: 'center',
+                            }}
+                          >
+                            {t('wallet.recharge', { defaultValue: 'Recargar' })}
+                          </Text>
+                        </LinearGradient>
+                      )}
+                    </Pressable>
 
-                <Pressable
-                  onPress={() => router.push('/wallet/gift')}
-                  style={({ pressed }) => [
-                    {
-                      flex: 1,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 18,
-                      paddingHorizontal: 12,
-                      minHeight: 96,
-                      borderRadius: 20,
-                      backgroundColor: palette.accent.dusk,
-                      shadowColor: '#000000',
-                      shadowOpacity: 0.22,
-                      shadowRadius: 10,
-                      shadowOffset: { width: 0, height: 5 },
-                      elevation: 5,
-                    },
-                    pressed && { opacity: 0.9, transform: [{ scale: 0.97 }] },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
-                >
-                  <Ionicons name="gift" size={28} color="#FFFFFF" />
-                  <Text style={{ color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
-                    {t('wallet.gift', { defaultValue: 'Regalar' })}
-                  </Text>
-                </Pressable>
+                    <Pressable
+                      onPress={() => router.push('/wallet/gift')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('wallet.gift', { defaultValue: 'Regalar' })}
+                      style={{ width: quickActionHalf }}
+                      android_ripple={{ color: 'rgba(255,255,255,0.18)' }}
+                    >
+                      {({ pressed }) => (
+                        <LinearGradient
+                          colors={[palette.accent.duskDeep, palette.accent.dusk]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={{
+                            width: '100%',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingVertical: 18,
+                            paddingHorizontal: 12,
+                            minHeight: 96,
+                            opacity: pressed ? 0.9 : 1,
+                          }}
+                        >
+                          <Ionicons name="gift" size={28} color="#FFFFFF" />
+                          <Text style={{ color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 15, marginTop: 8, letterSpacing: 0.3 }}>
+                            {t('wallet.gift', { defaultValue: 'Regalar' })}
+                          </Text>
+                        </LinearGradient>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
               </Animated.View>
 
               {/* ── Stats row ──────────────────────────────────────── */}
