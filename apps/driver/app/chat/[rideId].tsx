@@ -6,13 +6,16 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActionSheetIOS,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
-import { rideService } from '@tricigo/api';
+import { rideService, blockService, incidentService } from '@tricigo/api';
+import Toast from 'react-native-toast-message';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useChatInit, useChatActions } from '@/hooks/useChat';
@@ -114,7 +117,7 @@ export default function ChatScreen() {
 
   // BUG-241: fetch rider name + avatar so the header shows the actual
   // passenger instead of the generic "Pasajero" placeholder.
-  const [riderInfo, setRiderInfo] = useState<{ name: string; avatarUrl: string | null } | null>(null);
+  const [riderInfo, setRiderInfo] = useState<{ name: string; avatarUrl: string | null; userId: string | null } | null>(null);
   useEffect(() => {
     if (!rideId) return;
     let cancelled = false;
@@ -124,6 +127,7 @@ export default function ChatScreen() {
         setRiderInfo({
           name: data.rider_name ?? 'Pasajero',
           avatarUrl: data.rider_avatar_url ?? null,
+          userId: data.customer_id ?? null,
         });
       })
       .catch(() => { /* fallback to placeholder */ });
@@ -132,6 +136,84 @@ export default function ChatScreen() {
   const riderName = riderInfo?.name;
   const riderAvatarUrl = riderInfo?.avatarUrl;
   const riderInitial = (riderName ?? '?').trim().charAt(0).toUpperCase();
+  const riderUserId = riderInfo?.userId ?? null;
+
+  // ── Safety: block / report the rider from the chat (Apple Guideline 1.2) ──
+  // Block + report must be reachable in the chat context, not only post-ride.
+  // Reuses already-deployed blockService + incidentService (incident_reports).
+  const confirmBlock = (targetId: string) => {
+    Alert.alert(
+      t('chat.block_confirm_title', { defaultValue: '¿Bloquear pasajero?' }),
+      t('chat.block_confirm_msg', { defaultValue: 'No volverás a emparejarte con este pasajero y no podrán chatear.' }),
+      [
+        { text: t('chat.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('chat.block_action', { defaultValue: 'Bloquear' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockService.blockUser(targetId);
+              Toast.show({ type: 'success', text1: t('chat.blocked_ok', { defaultValue: 'Pasajero bloqueado' }) });
+              router.back();
+            } catch {
+              Toast.show({ type: 'error', text1: t('chat.action_failed', { defaultValue: 'No se pudo completar. Probá de nuevo.' }) });
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmReport = (targetId: string) => {
+    Alert.alert(
+      t('chat.report_confirm_title', { defaultValue: '¿Reportar pasajero?' }),
+      t('chat.report_confirm_msg', { defaultValue: 'Enviaremos este viaje a nuestro equipo de seguridad para que lo revise.' }),
+      [
+        { text: t('chat.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('chat.report_action', { defaultValue: 'Reportar' }),
+          onPress: async () => {
+            try {
+              if (user?.id && rideId) {
+                await incidentService.createSafetyReport({
+                  ride_id: rideId,
+                  reported_by: user.id,
+                  against_user_id: targetId,
+                  type: 'passenger_behavior',
+                  description: 'Reportado por el conductor desde el chat del viaje.',
+                });
+              }
+              Toast.show({ type: 'success', text1: t('chat.report_ok', { defaultValue: 'Reporte enviado' }) });
+            } catch {
+              Toast.show({ type: 'error', text1: t('chat.action_failed', { defaultValue: 'No se pudo completar. Probá de nuevo.' }) });
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openSafetyMenu = () => {
+    if (!riderUserId) return;
+    const blockLabel = t('chat.block_user', { defaultValue: 'Bloquear pasajero' });
+    const reportLabel = t('chat.report_user', { defaultValue: 'Reportar pasajero' });
+    const cancelLabel = t('chat.cancel', { defaultValue: 'Cancelar' });
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: [cancelLabel, blockLabel, reportLabel], cancelButtonIndex: 0, destructiveButtonIndex: 1 },
+        (i) => {
+          if (i === 1) confirmBlock(riderUserId);
+          else if (i === 2) confirmReport(riderUserId);
+        },
+      );
+    } else {
+      Alert.alert(t('chat.safety_menu_title', { defaultValue: 'Seguridad' }), undefined, [
+        { text: blockLabel, style: 'destructive', onPress: () => confirmBlock(riderUserId) },
+        { text: reportLabel, onPress: () => confirmReport(riderUserId) },
+        { text: cancelLabel, style: 'cancel' },
+      ]);
+    }
+  };
 
   return (
     <Screen bg="lightPrimary">
@@ -163,11 +245,19 @@ export default function ChatScreen() {
               {t('chat.online', { defaultValue: 'En línea' })}
             </Text>
           </View>
-          {/* UX: the previous call-outline Pressable had no onPress handler —
-               it silently did nothing when tapped, breaking trust. Until we
-               can wire a real call path (requires fetching rider phone with
-               RLS-safe RPC), remove the button entirely. Drivers can still
-               reach the rider via the chat itself or SOS from the trip view. */}
+          {/* Safety menu (Apple Guideline 1.2): block / report the rider from
+               the chat. Replaces the old dead call button. */}
+          {riderUserId ? (
+            <Pressable
+              onPress={openSafetyMenu}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.safety_menu_title', { defaultValue: 'Seguridad' })}
+              style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="ellipsis-vertical" size={22} color="#0F172A" />
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Messages */}
