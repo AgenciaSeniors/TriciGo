@@ -7,6 +7,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
+  ActionSheetIOS,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -27,6 +29,8 @@ import { colors } from '@tricigo/theme';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { chatLastReadKey } from '@/hooks/useUnreadChatCount';
+import Toast from 'react-native-toast-message';
+import { blockService, incidentService } from '@tricigo/api';
 
 export default function ChatScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
@@ -136,6 +140,87 @@ export default function ChatScreen() {
     );
   };
 
+  // ── Safety: block / report the driver from the chat (Apple Guideline 1.2) ──
+  // The chat is user-generated content, so block + report must be reachable in
+  // context (not only post-ride). Reuses existing, already-deployed services.
+  const driverUserId = rideWithDriver?.driver_user_id ?? null;
+
+  const confirmBlock = (targetId: string) => {
+    Alert.alert(
+      t('chat.block_confirm_title', { defaultValue: '¿Bloquear conductor?' }),
+      t('chat.block_confirm_msg', { defaultValue: 'No volverás a emparejarte con este conductor y no podrán chatear.' }),
+      [
+        { text: t('chat.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('chat.block_action', { defaultValue: 'Bloquear' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockService.blockUser(targetId);
+              triggerHaptic('success');
+              Toast.show({ type: 'success', text1: t('chat.blocked_ok', { defaultValue: 'Conductor bloqueado' }) });
+              router.back();
+            } catch {
+              Toast.show({ type: 'error', text1: t('chat.action_failed', { defaultValue: 'No se pudo completar. Probá de nuevo.' }) });
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmReport = (targetId: string) => {
+    Alert.alert(
+      t('chat.report_confirm_title', { defaultValue: '¿Reportar conductor?' }),
+      t('chat.report_confirm_msg', { defaultValue: 'Enviaremos este viaje a nuestro equipo de seguridad para que lo revise.' }),
+      [
+        { text: t('chat.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        {
+          text: t('chat.report_action', { defaultValue: 'Reportar' }),
+          onPress: async () => {
+            try {
+              if (user?.id && rideId) {
+                await incidentService.createSafetyReport({
+                  ride_id: rideId,
+                  reported_by: user.id,
+                  against_user_id: targetId,
+                  type: 'driver_behavior',
+                  description: 'Reportado por el pasajero desde el chat del viaje.',
+                });
+              }
+              triggerHaptic('success');
+              Toast.show({ type: 'success', text1: t('chat.report_ok', { defaultValue: 'Reporte enviado' }) });
+            } catch {
+              Toast.show({ type: 'error', text1: t('chat.action_failed', { defaultValue: 'No se pudo completar. Probá de nuevo.' }) });
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openSafetyMenu = () => {
+    if (!driverUserId) return;
+    const blockLabel = t('chat.block_user', { defaultValue: 'Bloquear conductor' });
+    const reportLabel = t('chat.report_user', { defaultValue: 'Reportar conductor' });
+    const cancelLabel = t('chat.cancel', { defaultValue: 'Cancelar' });
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: [cancelLabel, blockLabel, reportLabel], cancelButtonIndex: 0, destructiveButtonIndex: 1 },
+        (i) => {
+          if (i === 1) confirmBlock(driverUserId);
+          else if (i === 2) confirmReport(driverUserId);
+        },
+      );
+    } else {
+      Alert.alert(t('chat.safety_menu_title', { defaultValue: 'Seguridad' }), undefined, [
+        { text: blockLabel, style: 'destructive', onPress: () => confirmBlock(driverUserId) },
+        { text: reportLabel, onPress: () => confirmReport(driverUserId) },
+        { text: cancelLabel, style: 'cancel' },
+      ]);
+    }
+  };
+
   return (
     <Screen bg="cuban">
       <KeyboardAvoidingView
@@ -166,6 +251,19 @@ export default function ChatScreen() {
             }
             onBack={() => router.back()}
             className="mb-0"
+            rightAction={
+              driverUserId ? (
+                <Pressable
+                  onPress={openSafetyMenu}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('chat.safety_menu_title', { defaultValue: 'Seguridad' })}
+                  className="w-10 h-10 rounded-full items-center justify-center bg-neutral-100 dark:bg-neutral-800 active:bg-neutral-200 dark:active:bg-neutral-700"
+                >
+                  <Ionicons name="ellipsis-vertical" size={20} color={colors.neutral[500]} />
+                </Pressable>
+              ) : undefined
+            }
           />
         </View>
 
