@@ -17,6 +17,7 @@ import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@tricigo/theme';
 import { useTokens } from '@/hooks/useTokens';
+import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 
 interface PendingCrop {
   uri: string;
@@ -39,6 +40,9 @@ export default function EditProfileScreen() {
 
   const pickFromSource = async (source: 'camera' | 'gallery') => {
     if (!user) return;
+    // Ask for camera/photos permission first; without it expo-image-picker
+    // throws "Missing camera or camera roll permission" on iOS (Apple 2.1(a)).
+    if (!(await ensurePickerPermission(source, t))) return;
     try {
       // We do NOT request `allowsEditing` from the picker — Android 13+ uses
       // the system Photo Picker which ignores it. We always show our own

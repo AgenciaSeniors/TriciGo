@@ -16,6 +16,7 @@ import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { driverService } from '@tricigo/api';
 import { isValidPlateNumber } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
+import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 import type { VehicleType, DocumentType } from '@tricigo/types';
 
 // ── Vehicle type configs ──────────────────────────────────────────────────────
@@ -133,6 +134,9 @@ export default function EditVehicleScreen() {
 
   // ── Photo picking ─────────────────────────────────────────────────────────
   const pickPhoto = useCallback(async (index: number) => {
+    // Ask for photos permission first (Apple 2.1(a) — avoid the iOS
+    // "Missing camera or camera roll permission" throw).
+    if (!(await ensurePickerPermission('gallery', tc))) return;
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],

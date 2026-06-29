@@ -15,6 +15,7 @@ import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { SwitchAccountFooter } from '@/components/auth/SwitchAccountFooter';
+import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 
 interface PendingCrop {
   uri: string;
@@ -37,6 +38,9 @@ export default function CompleteProfileScreen() {
 
   const pickFromSource = async (source: 'camera' | 'gallery') => {
     if (!user) return;
+    // Ask for camera/photos permission first; without it expo-image-picker
+    // throws "Missing camera or camera roll permission" on iOS (Apple 2.1(a)).
+    if (!(await ensurePickerPermission(source, t))) return;
     try {
       // Pick at full quality; the shared circular AvatarCropModal handles framing
       // so the crop UX + output spec match the edit-profile screen (Android 13+'s

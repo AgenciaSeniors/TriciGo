@@ -18,6 +18,13 @@
   "rating_new": "Nuevo",
   "ok": "Aceptar",
 
+  "permissions": {
+    "title": "Permiso necesario",
+    "camera_body": "Activá el acceso a la cámara en Ajustes para tomar tu foto.",
+    "gallery_body": "Activá el acceso a tus fotos en Ajustes para elegir una imagen.",
+    "open_settings": "Abrir Ajustes"
+  },
+
   "auth": {
     "login": "Iniciar sesión",
     "tagline": "Tu plataforma de movilidad en La Habana",
