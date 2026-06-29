@@ -1148,6 +1148,17 @@ export const driverService = {
 
   /**
    * Get verification status for all documents of a driver.
+   *
+   * Drivers may re-upload a document after rejection (or after an
+   * earlier failed upload), which leaves stale rows in
+   * `driver_documents`. `uploadDocument` always INSERTs a new row
+   * (path is `upsert:true` in Storage but the DB row is new). Without
+   * dedup, "Mis documentos" in the driver app would render the old
+   * rejected tile *and* the new pending tile side by side — confusing.
+   *
+   * We keep only the most recent row per `document_type`, mirroring
+   * the dedup the admin already does in
+   * `adminService.getDriverById` (admin.service.ts:253-263).
    */
   async getDocumentVerificationStatus(
     driverId: string,
@@ -1157,9 +1168,18 @@ export const driverService = {
       .from('driver_documents')
       .select('*')
       .eq('driver_id', driverId)
-      .order('uploaded_at', { ascending: true });
+      .order('uploaded_at', { ascending: false });
     if (error) throw error;
-    return data as DriverDocument[];
+
+    // Rows come back ordered by uploaded_at DESC, so the first
+    // occurrence per type is the latest.
+    const latestByType = new Map<string, DriverDocument>();
+    for (const doc of ((data ?? []) as DriverDocument[])) {
+      if (!latestByType.has(doc.document_type)) {
+        latestByType.set(doc.document_type, doc);
+      }
+    }
+    return Array.from(latestByType.values());
   },
 
   /**
