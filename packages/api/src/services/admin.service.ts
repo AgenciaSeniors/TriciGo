@@ -1997,11 +1997,16 @@ export const adminService = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('wallet_transfers')
-      .select('*')
+      .select(
+        'id, from_user_id, to_user_id, amount, transaction_id, note, kind, ' +
+        'reversed_at, reversed_by, reversal_of, created_at, ' +
+        'from_user:users!wallet_transfers_from_user_id_fkey(id, full_name, phone), ' +
+        'to_user:users!wallet_transfers_to_user_id_fkey(id, full_name, phone)',
+      )
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
     if (error) throw error;
-    return (data ?? []) as WalletTransfer[];
+    return (data ?? []) as unknown as WalletTransfer[];
   },
 
   /**
