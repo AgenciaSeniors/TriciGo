@@ -113,6 +113,7 @@
     "book_ride": "Solicitar viaje",
     "login": "Iniciar sesión",
     "blog": "Blog",
+    "drivers": "Conductores",
     "rides": "Viajes",
     "wallet": "Créditos",
     "profile": "Perfil",
@@ -128,7 +129,8 @@
     "download": "Descarga la app para la experiencia completa",
     "privacy": "Privacidad",
     "terms": "Términos",
-    "blog": "Blog"
+    "blog": "Blog",
+    "drivers": "Conductores"
   },
   "home": {
     "dashboard_last_ride": "Tu último viaje",

@@ -1987,6 +1987,9 @@ a.bento-tile:hover {
 /* ── Smooth scroll ── */
 html {
   scroll-behavior: smooth;
+  /* Offset anchor jumps (e.g. /#conductores) so the sticky header
+     doesn't cover the target section's heading. */
+  scroll-padding-top: 80px;
 }
 
 /* ── Selection color ── */

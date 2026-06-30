@@ -55,6 +55,7 @@
     "book_ride": "Book a ride",
     "login": "Sign in",
     "blog": "Blog",
+    "drivers": "Drivers",
     "rides": "Rides",
     "wallet": "Credits",
     "profile": "Profile",
@@ -70,7 +71,8 @@
     "download": "Download the app for the full experience",
     "privacy": "Privacy",
     "terms": "Terms",
-    "blog": "Blog"
+    "blog": "Blog",
+    "drivers": "Drivers"
   },
   "home": {
     "tagline": "Book your ride. Fast, safe, and affordable.",
