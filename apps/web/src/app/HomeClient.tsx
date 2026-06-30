@@ -517,7 +517,7 @@ export default function HomeClient() {
       </section>
 
       {/* ── Para conductores (bento) ── */}
-      <section className="section section--gray">
+      <section id="conductores" className="section section--gray">
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
             <span className="bento-eyebrow">Para conductores</span>

@@ -55,6 +55,7 @@
     "book_ride": "Pedir viagem",
     "login": "Entrar",
     "blog": "Blog",
+    "drivers": "Motoristas",
     "rides": "Viagens",
     "wallet": "Créditos",
     "profile": "Perfil",
@@ -70,7 +71,8 @@
     "download": "Baixe o app para a experiência completa",
     "privacy": "Privacidade",
     "terms": "Termos",
-    "blog": "Blog"
+    "blog": "Blog",
+    "drivers": "Motoristas"
   },
   "home": {
     "tagline": "Peça sua viagem. Rápido, seguro e ao melhor preço.",

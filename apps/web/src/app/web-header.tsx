@@ -282,6 +282,7 @@ export function WebHeader() {
     return (
       <>
         {rechargeOn && <a href="/recargar" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('recharge.nav')}</a>}
+        <a href="/#conductores" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.drivers', { defaultValue: 'Conductores' })}</a>
         <a href="/blog" className="nav-link-animated" style={{ fontSize: 'var(--text-base)' }}>{t('nav.blog')}</a>
       </>
     );
