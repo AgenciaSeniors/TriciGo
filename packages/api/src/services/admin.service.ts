@@ -78,6 +78,25 @@ async function withUsdAnchors(updates: Record<string, unknown>): Promise<Record<
   return out;
 }
 
+/**
+ * Spanish labels for driver document types, used in the push body
+ * sent to the driver after admin verifies or rejects a document.
+ * Kept here (not in i18n) because the message is composed
+ * server-side from the admin app where we don't know the driver's
+ * UI locale — but the driver's TriciGo app is es-CU first anyway.
+ *
+ * Covers the 4 onboarding doc types in use today. `selfie` stays
+ * in the map for backward compat in case CC-04 is reverted and a
+ * biometric provider is wired in.
+ */
+const DRIVER_DOC_LABELS_ES: Record<string, string> = {
+  national_id: 'Cédula',
+  drivers_license: 'Licencia de conducción',
+  vehicle_registration: 'Registro del vehículo',
+  vehicle_photo: 'Foto del vehículo',
+  selfie: 'Selfie',
+};
+
 export const adminService = {
   /**
    * Get dashboard metrics.
@@ -1654,6 +1673,18 @@ export const adminService = {
 
   /**
    * Verify or reject an individual driver document.
+   *
+   * After persisting the verdict, sends a push to the driver
+   * (category: 'driver_approval') so they don't have to manually
+   * refresh "Mis documentos" to learn the doc was approved or
+   * needs to be re-uploaded. The push is best-effort — a failure
+   * to notify never reverts the verification.
+   *
+   * Email notification on rejection is intentionally deferred:
+   * the send-email Edge Function requires the SERVICE_ROLE key
+   * (BUG-191 / 2026-05-12 hardening) which the admin client does
+   * not hold, so an email path needs a dedicated EF gated on
+   * admin/super_admin role. Tracked separately.
    */
   async verifyDocument(
     documentId: string,
@@ -1690,8 +1721,45 @@ export const adminService = {
       action: isVerified ? 'verify_document' : 'reject_document',
       target_type: 'driver_document',
       target_id: documentId,
-      reason: notes ?? null,
+      reason: trimmedNotes ?? null,
     });
+
+    // Notify the driver. Resolve user_id + document_type from the
+    // updated row. Best-effort: if any step fails we swallow it so
+    // the admin still sees the verdict landed.
+    try {
+      const { data: doc } = await supabase
+        .from('driver_documents')
+        .select('document_type, driver_profiles!inner(user_id)')
+        .eq('id', documentId)
+        .single();
+      const userId = (doc?.driver_profiles as { user_id?: string } | null)?.user_id;
+      if (!userId) return;
+
+      const label = DRIVER_DOC_LABELS_ES[doc!.document_type] ?? 'Documento';
+      const title = isVerified
+        ? `✅ ${label} verificado`
+        : `⚠️ ${label} rechazado`;
+      const body = isVerified
+        ? `Tu ${label.toLowerCase()} fue aprobado.`
+        : `Tu ${label.toLowerCase()} fue rechazado: ${trimmedNotes}`;
+
+      await notificationService.sendToUser(
+        userId,
+        title,
+        body,
+        adminId,
+        {
+          type: 'driver_document',
+          document_id: documentId,
+          action: isVerified ? 'verified' : 'rejected',
+          cta: '/profile/documents',
+        },
+        'driver_approval',
+      );
+    } catch (err) {
+      console.warn('[verifyDocument] notify driver failed:', err);
+    }
   },
 
   /**
