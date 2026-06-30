@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Gift, Plus } from 'lucide-react';
 import { adminService } from '@tricigo/api';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
@@ -161,17 +162,42 @@ export default function GiftsPage() {
       {
         id: 'from_user_id',
         header: t('gifts.col_from', { defaultValue: 'De' }),
-        cell: (g) => (g.from_user_id ? `${g.from_user_id.substring(0, 8)}…` : t('gifts.from_platform', { defaultValue: 'Plataforma' })),
+        cell: (g) =>
+          g.from_user_id ? (
+            <div className="flex flex-col">
+              <Link
+                href={`/users/${g.from_user_id}`}
+                className="font-medium text-ink hover:text-primary-600 hover:underline"
+              >
+                {g.from_user?.full_name?.trim() || `${g.from_user_id.substring(0, 8)}…`}
+              </Link>
+              {g.from_user?.phone && (
+                <span className="font-mono text-[11px] text-ink-muted">{g.from_user.phone}</span>
+              )}
+            </div>
+          ) : (
+            <span className="text-ink-muted">{t('gifts.from_platform', { defaultValue: 'Plataforma' })}</span>
+          ),
         primary: true,
-        mono: true,
-        width: '150px',
+        width: '210px',
       },
       {
         id: 'to_user_id',
         header: t('gifts.col_to', { defaultValue: 'Para' }),
-        cell: (g) => `${g.to_user_id.substring(0, 8)}…`,
-        mono: true,
-        width: '150px',
+        cell: (g) => (
+          <div className="flex flex-col">
+            <Link
+              href={`/users/${g.to_user_id}`}
+              className="text-ink hover:text-primary-600 hover:underline"
+            >
+              {g.to_user?.full_name?.trim() || `${g.to_user_id.substring(0, 8)}…`}
+            </Link>
+            {g.to_user?.phone && (
+              <span className="font-mono text-[11px] text-ink-muted">{g.to_user.phone}</span>
+            )}
+          </div>
+        ),
+        width: '210px',
       },
       {
         id: 'amount',

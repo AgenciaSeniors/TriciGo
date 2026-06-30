@@ -82,6 +82,10 @@ export interface WalletTransfer {
   /** When this row IS a reversal, points to the original transfer. */
   reversal_of: string | null;
   created_at: string;
+  /** Embedded sender, only populated by the admin listGifts FK embed. Null for platform-originated gifts. */
+  from_user?: { id: string; full_name: string | null; phone: string | null } | null;
+  /** Embedded recipient, only populated by the admin listGifts FK embed. */
+  to_user?: { id: string; full_name: string | null; phone: string | null } | null;
 }
 
 export interface WalletRechargeRequest {
