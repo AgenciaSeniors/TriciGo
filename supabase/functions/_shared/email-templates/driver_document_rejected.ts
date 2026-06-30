@@ -17,7 +17,7 @@
 //   - note: optional free-text the admin added below the chips
 // ============================================================
 
-import { wrapHtml, COLORS, FONT_STACK, escapeHtml, ctaButton, WEB_ORIGIN } from './_layout.ts';
+import { wrapHtml, COLORS, FONT_STACK, escapeHtml, WEB_ORIGIN } from './_layout.ts';
 
 export interface DriverDocumentRejectedData {
   full_name: string;
@@ -54,8 +54,6 @@ export function driverDocumentRejectedHtml(data: DriverDocumentRejectedData): st
     `
     : '';
 
-  const cta = ctaButton('Volver a subir el documento', `${WEB_ORIGIN}/app/driver/profile/documents`);
-
   const body = `
     <p style="margin: 0 0 16px; font-family: ${FONT_STACK}; font-size: 16px; color: ${COLORS.ink};">
       Hola, <strong>${escapeHtml(name)}</strong>.
@@ -68,7 +66,6 @@ export function driverDocumentRejectedHtml(data: DriverDocumentRejectedData): st
     <p style="margin: 16px 0 24px; font-family: ${FONT_STACK}; font-size: 14px; color: ${COLORS.text}; line-height: 1.6;">
       Volvé a subir el documento desde la app y nuestro equipo lo revisará nuevamente. Si creés que esto fue un error, contactanos a soporte@tricigo.com.
     </p>
-    ${cta}
   `;
 
   return wrapHtml({
@@ -78,6 +75,12 @@ export function driverDocumentRejectedHtml(data: DriverDocumentRejectedData): st
       subtitle: 'Tu documento no pasó la verificación inicial.',
     },
     body,
+    // CTA rendered in wrapHtml's dedicated centered ctaBlock row (not
+    // inline in the body) — same pattern as driver_under_review.ts.
+    cta: {
+      label: 'Volver a subir el documento',
+      href: `${WEB_ORIGIN}/app/driver/profile/documents`,
+    },
     footerNote:
       '¿Preguntas sobre tu documento? Escribinos a soporte@tricigo.com.',
   });
