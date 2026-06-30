@@ -47,13 +47,20 @@ function getNumber(config: Record<string, string>, key: string, fallback: number
 // SELFIE_VERIFICATION_ENABLED was not set — fake security). Manual
 // admin review of the remaining KYC documents is the active control.
 //
+// 2026-06-30: `drivers_license` removed too — it's now OPTIONAL (not every
+// Cuban driver has/needs one, e.g. triciclo). Mirrors the driver onboarding
+// `optional` flag (apps/driver/.../onboarding.store.ts) and the admin
+// approval gate REQUIRED_DOC_TYPES (apps/admin/.../drivers/[id]/page.tsx).
+// Keep the three in sync. A license, if uploaded, can still be verified by
+// the admin — it just never gates approval.
+//
 // SECURITY POSTURE NOTE: with selfie biometric verification removed,
 // the recommended setting is `auto_approve_drivers_enabled = false` in
 // platform_config so every driver requires explicit admin approval.
 // This function is a NO-OP whenever that flag is false (line below).
 // If/when AWS Rekognition (or equivalent) is integrated, add selfie
 // back to REQUIRED_DOCS + restore the face_match_score gate.
-const REQUIRED_DOCS = ['national_id', 'drivers_license', 'vehicle_registration', 'vehicle_photo'];
+const REQUIRED_DOCS = ['national_id', 'vehicle_registration', 'vehicle_photo'];
 
 async function autoApproveDrivers(supabase: ReturnType<typeof getSupabase>, config: Record<string, string>) {
   if (!isEnabled(config, 'auto_approve_drivers_enabled')) return { count: 0, errors: [] };
