@@ -248,6 +248,7 @@
     "doc_vehicle_photo": "Foto do veículo",
     "view_document": "Ver documento",
     "not_uploaded": "Não enviado",
+    "no_documents": "O motorista ainda não enviou documentos",
     "contract_section": "Contrato de termos e condições",
     "contract_accepted_at": "Aceito",
     "contract_download_es": "Baixar (ES)",

@@ -500,17 +500,27 @@ export default function DriverDetailPage() {
               <h2 className="text-xs font-medium text-ink-muted uppercase tracking-wider">
                 {t('drivers.documents_section', { defaultValue: 'Documentos' })}
               </h2>
-              <div className="text-xs text-ink-muted tabular-nums">
-                {verifiedDocsCount}/{totalDocsCount || 5} {t('drivers.verified', { defaultValue: 'verificados' })}
-              </div>
+              {totalDocsCount > 0 && (
+                <div className="text-xs text-ink-muted tabular-nums">
+                  {verifiedDocsCount}/{totalDocsCount} {t('drivers.verified', { defaultValue: 'verificados' })}
+                </div>
+              )}
             </div>
 
+            {documents.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-line p-6 flex flex-col items-center justify-center bg-surface-sunken">
+                <FileText size={20} className="text-ink-subtle mb-2" />
+                <span className="text-xs text-ink-subtle">
+                  {t('drivers.no_documents', { defaultValue: 'El conductor aún no subió documentos' })}
+                </span>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(['national_id', 'drivers_license', 'vehicle_registration', 'selfie', 'vehicle_photo'] as const).map((docType) => {
-                const doc = documents.find((d) => d.document_type === docType);
-                const url = doc ? docUrls[doc.id] : null;
-                const docVerified = doc?.is_verified;
-                const docRejected = !doc?.is_verified && !!doc?.rejection_reason;
+              {documents.map((doc) => {
+                const docType = doc.document_type;
+                const url = docUrls[doc.id];
+                const docVerified = doc.is_verified;
+                const docRejected = !doc.is_verified && !!doc.rejection_reason;
 
                 return (
                   <div
@@ -646,6 +656,7 @@ export default function DriverDetailPage() {
                 );
               })}
             </div>
+            )}
           </section>
 
           {/* Contract (T&C acceptance — 00405) */}
