@@ -11,6 +11,12 @@ export { rideService } from './services/ride.service';
 export { driverService } from './services/driver.service';
 export { reviewService } from './services/review.service';
 export { adminService } from './services/admin.service';
+export {
+  DOC_REJECTION_PRESETS,
+  buildRejectionMessage,
+  labelForCode as docRejectionLabelForCode,
+} from './services/_driverDocRejectionPresets';
+export type { DocRejectionPreset } from './services/_driverDocRejectionPresets';
 export { queryKeys } from './queries/keys';
 export { createStorageAdapter } from './storage';
 export type { StorageAdapter } from './storage';

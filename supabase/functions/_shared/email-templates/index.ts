@@ -86,6 +86,11 @@ import {
   driverSuspendedSubject,
   type DriverSuspendedData,
 } from './driver_suspended.ts';
+import {
+  driverDocumentRejectedHtml,
+  driverDocumentRejectedSubject,
+  type DriverDocumentRejectedData,
+} from './driver_document_rejected.ts';
 
 export type TemplateKey =
   | 'welcome'
@@ -103,7 +108,8 @@ export type TemplateKey =
   | 'payment_failed'
   | 'driver_approved'
   | 'driver_rejected'
-  | 'driver_suspended';
+  | 'driver_suspended'
+  | 'driver_document_rejected';
 
 export interface RenderedTemplate {
   subject: string;
@@ -234,6 +240,13 @@ export function renderTemplate(
         html: driverSuspendedHtml(d),
       };
     }
+    case 'driver_document_rejected': {
+      const d = data as DriverDocumentRejectedData;
+      return {
+        subject: subjectOverride ?? driverDocumentRejectedSubject,
+        html: driverDocumentRejectedHtml(d),
+      };
+    }
     default: {
       // Exhaustiveness check — TS will flag this if a TemplateKey
       // case is missing above.
@@ -267,7 +280,8 @@ export function isTemplateKey(key: string): key is TemplateKey {
     key === 'payment_failed' ||
     key === 'driver_approved' ||
     key === 'driver_rejected' ||
-    key === 'driver_suspended'
+    key === 'driver_suspended' ||
+    key === 'driver_document_rejected'
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { adminService, reviewService } from '@tricigo/api';
+import { adminService, reviewService, DOC_REJECTION_PRESETS } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
@@ -121,6 +121,12 @@ export default function DriverDetailPage() {
   const [verifyingDoc, setVerifyingDoc] = useState<string | null>(null);
   const [churnRisk, setChurnRisk] = useState<{ churn_risk_score: number; risk_level: string; days_since_last_ride: number; earnings_this_week: number } | null>(null);
   const [docNotes, setDocNotes] = useState<Record<string, string>>({});
+  // PR-4 chip multi-select state — drives the inline rejection panel.
+  // `rejectingDocId` is the document currently being rejected (null when
+  // no reject panel is open). `selectedCodes` maps docId → Set of preset
+  // codes the admin toggled on.
+  const [rejectingDocId, setRejectingDocId] = useState<string | null>(null);
+  const [selectedCodes, setSelectedCodes] = useState<Record<string, Set<string>>>({});
   const [topTags, setTopTags] = useState<ReviewTagSummaryItem[]>([]);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
@@ -217,11 +223,30 @@ export default function DriverDetailPage() {
     setSelfieChecks(checks);
   };
 
-  const handleVerifyDoc = async (documentId: string, isVerified: boolean) => {
+  const handleVerifyDoc = async (
+    documentId: string,
+    isVerified: boolean,
+    reasonCodes?: string[],
+  ) => {
     setVerifyingDoc(documentId);
     try {
-      await adminService.verifyDocument(documentId, adminUserId, isVerified, docNotes[documentId] || undefined);
+      await adminService.verifyDocument(
+        documentId,
+        adminUserId,
+        isVerified,
+        docNotes[documentId]?.trim() || undefined,
+        reasonCodes,
+      );
       setDocNotes((prev) => ({ ...prev, [documentId]: '' }));
+      // Close the reject panel + clear its chip selection on success.
+      if (!isVerified) {
+        setRejectingDocId(null);
+        setSelectedCodes((prev) => {
+          const next = { ...prev };
+          delete next[documentId];
+          return next;
+        });
+      }
       await refreshDriver();
       showToast('success', isVerified
         ? t('drivers.doc_verified', { defaultValue: 'Documento verificado' })
@@ -232,6 +257,25 @@ export default function DriverDetailPage() {
     } finally {
       setVerifyingDoc(null);
     }
+  };
+
+  const toggleRejectCode = (docId: string, code: string) => {
+    setSelectedCodes((prev) => {
+      const set = new Set(prev[docId] ?? []);
+      if (set.has(code)) set.delete(code);
+      else set.add(code);
+      return { ...prev, [docId]: set };
+    });
+  };
+
+  const cancelReject = (docId: string) => {
+    setRejectingDocId(null);
+    setSelectedCodes((prev) => {
+      const next = { ...prev };
+      delete next[docId];
+      return next;
+    });
+    setDocNotes((prev) => ({ ...prev, [docId]: '' }));
   };
 
   const handleDownloadContract = async (storagePath: string) => {
@@ -539,22 +583,19 @@ export default function DriverDetailPage() {
                           {DOC_TYPE_KEY[docType] ? t(DOC_TYPE_KEY[docType]) : docType}
                         </p>
                       </div>
-                      {doc && (
-                        <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          docVerified ? 'bg-green-100 text-green-700' :
-                          docRejected ? 'bg-red-100 text-red-700' :
-                          'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {docVerified ? <CheckCircle2 size={10} /> : docRejected ? <XCircle size={10} /> : <Clock size={10} />}
-                          {docVerified ? t('verification.doc_status_verified', { defaultValue: 'Verificado' }) :
-                           docRejected ? t('verification.doc_status_rejected', { defaultValue: 'Rechazado' }) :
-                           t('verification.doc_status_pending', { defaultValue: 'Pendiente' })}
-                        </div>
-                      )}
+                      <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        docVerified ? 'bg-green-100 text-green-700' :
+                        docRejected ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {docVerified ? <CheckCircle2 size={10} /> : docRejected ? <XCircle size={10} /> : <Clock size={10} />}
+                        {docVerified ? t('verification.doc_status_verified', { defaultValue: 'Verificado' }) :
+                         docRejected ? t('verification.doc_status_rejected', { defaultValue: 'Rechazado' }) :
+                         t('verification.doc_status_pending', { defaultValue: 'Pendiente' })}
+                      </div>
                     </div>
 
-                    {doc ? (
-                      <div>
+                    <div>
                         {/* Preview */}
                         {url && url !== '__error__' && (() => {
                           const isPdf = doc.mime_type === 'application/pdf' || doc.file_name?.endsWith('.pdf');
@@ -616,42 +657,83 @@ export default function DriverDetailPage() {
                         )}
 
                         {/* Verify/Reject controls */}
-                        {!docVerified && (
-                          <div className="mt-2 space-y-1.5">
-                            <input
-                              type="text"
+                        {!docVerified && rejectingDocId !== doc.id && (
+                          <div className="mt-2 flex gap-1.5">
+                            <button
+                              onClick={() => handleVerifyDoc(doc.id, true)}
+                              disabled={verifyingDoc === doc.id}
+                              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                            >
+                              <CheckCircle2 size={12} />
+                              {t('verification.verify_doc', { defaultValue: 'Verificar' })}
+                            </button>
+                            <button
+                              onClick={() => setRejectingDocId(doc.id)}
+                              disabled={verifyingDoc === doc.id}
+                              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                            >
+                              <XCircle size={12} />
+                              {t('verification.reject_doc', { defaultValue: 'Rechazar' })}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Reject panel — multi-select chips + optional note */}
+                        {!docVerified && rejectingDocId === doc.id && (
+                          <div className="mt-2 space-y-2 rounded-md border border-red-200 bg-red-50/50 p-2">
+                            <p className="text-[10px] font-semibold text-red-700 uppercase tracking-wider">
+                              {t('verification.reject_pick_reasons', { defaultValue: 'Elegí los motivos' })}
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {(DOC_REJECTION_PRESETS[docType] ?? []).map((preset) => {
+                                const active = selectedCodes[doc.id]?.has(preset.code) ?? false;
+                                return (
+                                  <button
+                                    key={preset.code}
+                                    type="button"
+                                    onClick={() => toggleRejectCode(doc.id, preset.code)}
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border transition-colors ${
+                                      active
+                                        ? 'bg-red-600 text-white border-red-600'
+                                        : 'bg-white text-red-700 border-red-200 hover:bg-red-100'
+                                    }`}
+                                  >
+                                    {active && <CheckCircle2 size={10} />}
+                                    {preset.label_es}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <textarea
+                              rows={2}
                               value={docNotes[doc.id] || ''}
                               onChange={(e) => setDocNotes((prev) => ({ ...prev, [doc.id]: e.target.value }))}
-                              placeholder={t('verification.verification_notes', { defaultValue: 'Notas (opcional para aprobar, requerida para rechazar)' })}
-                              className="w-full border border-line bg-surface text-ink rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                              placeholder={t('verification.reject_note_placeholder', { defaultValue: 'Notas adicionales (opcional)' })}
+                              className="w-full border border-line bg-surface text-ink rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
                             />
                             <div className="flex gap-1.5">
                               <button
-                                onClick={() => handleVerifyDoc(doc.id, true)}
+                                onClick={() => cancelReject(doc.id)}
                                 disabled={verifyingDoc === doc.id}
-                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                                className="flex-1 inline-flex items-center justify-center px-2 py-1 rounded text-[11px] font-medium bg-white text-ink-muted border border-line hover:bg-surface-sunken disabled:opacity-50 transition-colors"
                               >
-                                <CheckCircle2 size={12} />
-                                {t('verification.verify_doc', { defaultValue: 'Verificar' })}
+                                {t('common.cancel', { defaultValue: 'Cancelar' })}
                               </button>
                               <button
-                                onClick={() => handleVerifyDoc(doc.id, false)}
-                                disabled={verifyingDoc === doc.id || !docNotes[doc.id]?.trim()}
+                                onClick={() => handleVerifyDoc(doc.id, false, Array.from(selectedCodes[doc.id] ?? []))}
+                                disabled={
+                                  verifyingDoc === doc.id ||
+                                  (selectedCodes[doc.id]?.size ?? 0) === 0
+                                }
                                 className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
                               >
                                 <XCircle size={12} />
-                                {t('verification.reject_doc', { defaultValue: 'Rechazar' })}
+                                {t('verification.confirm_reject', { defaultValue: 'Confirmar rechazo' })}
                               </button>
                             </div>
                           </div>
                         )}
-                      </div>
-                    ) : (
-                      <div className="w-full h-28 bg-surface-sunken border border-dashed border-line rounded-md flex flex-col items-center justify-center">
-                        <FileText size={20} className="text-ink-subtle mb-1" />
-                        <span className="text-[10px] text-ink-subtle">{t('drivers.not_uploaded', { defaultValue: 'Sin subir' })}</span>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 );
               })}

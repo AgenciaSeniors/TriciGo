@@ -1468,6 +1468,9 @@
   "verification": {
     "verify_doc": "Verificar",
     "reject_doc": "Rechazar",
+    "reject_pick_reasons": "Elegí los motivos",
+    "reject_note_placeholder": "Notas adicionales (opcional)",
+    "confirm_reject": "Confirmar rechazo",
     "verification_notes": "Notas de verificación",
     "face_match_score": "Score facial",
     "liveness": "Liveness",
