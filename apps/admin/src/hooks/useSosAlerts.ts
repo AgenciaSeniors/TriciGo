@@ -39,7 +39,12 @@ function isOpenSos(row: IncidentRow): boolean {
   return row.type === 'sos' && row.severity === 'critical' && row.status === 'open';
 }
 
-export function useSosAlerts() {
+/**
+ * @param channelName unique Realtime channel topic. Pass a distinct value
+ *   per consumer so two mounted hooks (e.g. the dashboard banner and the
+ *   header bell) don't share one topic and starve each other's events.
+ */
+export function useSosAlerts(channelName = 'sos-alerts') {
   const [alerts, setAlerts] = useState<SosAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
@@ -75,7 +80,7 @@ export function useSosAlerts() {
     loadInitial();
 
     const channel = supabase
-      .channel('sos-alerts')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'incident_reports' },
@@ -130,7 +135,7 @@ export function useSosAlerts() {
       mountedRef.current = false;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [channelName]);
 
   return { alerts, loading, count: alerts.length };
 }

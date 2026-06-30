@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, LogOut, Menu, Moon, Search, Sun, User as UserIcon } from 'lucide-react';
+import { LogOut, Menu, Moon, Search, Sun, User as UserIcon } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useSidebar } from './SidebarContext';
 import { useTheme } from './ThemeProvider';
 import { ProvinceSwitch } from './ProvinceSwitch';
+import { NotificationBell } from './NotificationBell';
 
 /**
  * Voice: Cuban, movement-first. Prefer verbs that evoke motion and
@@ -162,16 +163,7 @@ export function Header() {
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        <button
-          aria-label={t('sidebar.notifications', { defaultValue: 'Novedades' })}
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
-        >
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-2 top-2 flex h-2 w-2" aria-hidden="true">
-            <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-primary-500 opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary-500" />
-          </span>
-        </button>
+        <NotificationBell />
 
         {/* User menu */}
         <div ref={menuRef} className="relative">
