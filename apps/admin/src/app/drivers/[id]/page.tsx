@@ -421,7 +421,21 @@ export default function DriverDetailPage() {
   const statusStyle = STATUS_STYLES[status];
   const verifiedDocsCount = documents.filter((d) => d.is_verified).length;
   const totalDocsCount = documents.length;
-  const allDocsVerified = totalDocsCount >= 5 && verifiedDocsCount === totalDocsCount;
+  // Approval gates on REQUIRED doc types only. drivers_license is optional
+  // (product decision 2026-06-30) and never blocks approval — mirror of the
+  // driver onboarding `optional` flag (onboarding.store.ts) and the auto-admin
+  // EF REQUIRED_DOCS. Keep the three in sync.
+  //
+  // This also fixes a latent bug: the gate used to require `totalDocsCount >= 5`,
+  // a leftover from when selfie was a 5th doc. After CC-04 removed selfie
+  // (drivers upload ≤4), the threshold became impossible → the Approve button
+  // was permanently disabled. #620 fixed the same hardcoded-5 in the driver's
+  // review screen but missed this admin gate.
+  const REQUIRED_DOC_TYPES = ['national_id', 'vehicle_registration', 'vehicle_photo'] as const;
+  const requiredVerifiedCount = REQUIRED_DOC_TYPES.filter((type) =>
+    documents.some((d) => d.document_type === type && d.is_verified),
+  ).length;
+  const allDocsVerified = requiredVerifiedCount === REQUIRED_DOC_TYPES.length;
   const VIcon = vehicleIcon(vehicle?.type);
 
   return (
@@ -482,11 +496,11 @@ export default function DriverDetailPage() {
                     onClick={handleApprove}
                     disabled={actionLoading || !allDocsVerified}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
-                    title={!allDocsVerified ? `Debe verificar los documentos (${verifiedDocsCount}/${totalDocsCount})` : ''}
+                    title={!allDocsVerified ? `Debe verificar los documentos requeridos (${requiredVerifiedCount}/${REQUIRED_DOC_TYPES.length})` : ''}
                   >
                     <CheckCircle2 size={14} />
                     {t('drivers.action_approve', { defaultValue: 'Aprobar conductor' })}
-                    {!allDocsVerified && <span className="ml-auto text-xs text-ink-subtle">{verifiedDocsCount}/{totalDocsCount}</span>}
+                    {!allDocsVerified && <span className="ml-auto text-xs text-ink-subtle">{requiredVerifiedCount}/{REQUIRED_DOC_TYPES.length}</span>}
                   </button>
                 )}
                 {(status === 'under_review' || status === 'pending_verification') && (

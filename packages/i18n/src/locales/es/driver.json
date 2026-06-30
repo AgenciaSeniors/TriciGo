@@ -421,6 +421,7 @@
     "documents_count": "{{count}} de {{total}} subidos",
     "pick_from_gallery": "Seleccionar de galería",
     "take_photo": "Tomar foto",
+    "optional": "Opcional",
     "retry_upload": "Reintentar",
     "error_name_required": "El nombre es obligatorio",
     "error_invalid_email": "Correo electrónico inválido",

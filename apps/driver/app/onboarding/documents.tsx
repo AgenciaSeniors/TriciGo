@@ -218,8 +218,12 @@ export default function DocumentsScreen() {
     }
   };
 
-  const allUploaded = documents.every((d) => d.uploaded);
-  const uploadedCount = documents.filter((d) => d.uploaded).length;
+  // Optional docs (e.g. drivers_license) don't gate progression: Next enables
+  // once every REQUIRED doc is uploaded. The subtitle counts required only so
+  // "3/3" reads as complete even when the optional license is skipped.
+  const requiredDocs = documents.filter((d) => !d.optional);
+  const allUploaded = requiredDocs.every((d) => d.uploaded);
+  const requiredUploadedCount = requiredDocs.filter((d) => d.uploaded).length;
 
   return (
     <Screen scroll bg="dark" statusBarStyle="light-content" padded>
@@ -230,7 +234,7 @@ export default function DocumentsScreen() {
           {t('onboarding.step_documents')}
         </Text>
         <Text variant="bodySmall" color="secondary" className="mb-6">
-          {t('onboarding.step_n_of_total', { step: 3, total: 4 })} — {uploadedCount}/{documents.length}
+          {t('onboarding.step_n_of_total', { step: 3, total: 4 })} — {requiredUploadedCount}/{requiredDocs.length}
         </Text>
 
         {documents.map((doc) => (
@@ -253,7 +257,19 @@ export default function DocumentsScreen() {
                 />
               )}
               <View className="flex-1 ml-3">
-                <Text variant="body" color="inverse">{t(DOC_LABELS[doc.document_type])}</Text>
+                <View className="flex-row items-center">
+                  <Text variant="body" color="inverse">{t(DOC_LABELS[doc.document_type])}</Text>
+                  {doc.optional && (
+                    <View
+                      className="ml-2 px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: midnightEmber.map.bg.elevated }}
+                    >
+                      <Text variant="badge" color="secondary">
+                        {t('onboarding.optional', { defaultValue: 'Opcional' })}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 {doc.error ? (
                   <Text variant="caption" color="error">{doc.error}</Text>
                 ) : doc.uploaded && doc.mimeType === 'application/pdf' ? (

@@ -421,6 +421,7 @@
     "documents_count": "{{count}} of {{total}} uploaded",
     "pick_from_gallery": "Pick from gallery",
     "take_photo": "Take photo",
+    "optional": "Optional",
     "retry_upload": "Retry",
     "error_name_required": "Name is required",
     "error_invalid_email": "Invalid email address",

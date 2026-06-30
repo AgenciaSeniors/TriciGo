@@ -420,6 +420,7 @@
     "documents_count": "{{count}} de {{total}} enviados",
     "pick_from_gallery": "Selecionar da galeria",
     "take_photo": "Tirar foto",
+    "optional": "Opcional",
     "retry_upload": "Tentar novamente",
     "error_name_required": "O nome é obrigatório",
     "error_invalid_email": "E-mail inválido",

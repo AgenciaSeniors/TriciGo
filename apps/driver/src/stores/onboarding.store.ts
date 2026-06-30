@@ -38,6 +38,14 @@ export interface DocumentDraft {
   uploaded: boolean;
   uploading: boolean;
   error: string | null;
+  /**
+   * Optional documents are shown in the UI (labeled "Opcional") but do NOT
+   * gate progression: the Next/Submit buttons enable once every NON-optional
+   * doc is uploaded. Mirrored by the admin approval gate
+   * (apps/admin/.../drivers/[id]/page.tsx REQUIRED_DOC_TYPES) and the
+   * auto-admin EF REQUIRED_DOCS — keep the three in sync.
+   */
+  optional?: boolean;
 }
 
 interface OnboardingState {
@@ -65,9 +73,14 @@ interface OnboardingState {
 // the active KYC control. The `selfie_checks` table and `verify-selfie`
 // edge function remain in the codebase so a future PR can plug in
 // AWS Rekognition (or equivalent) without re-adding the step here.
+// drivers_license is OPTIONAL (product decision 2026-06-30): not every Cuban
+// driver has/needs one (e.g. triciclo). It's still shown so they can upload
+// it, labeled "Opcional", and the admin can verify it if present — but its
+// absence never blocks onboarding or approval. Required = national_id +
+// vehicle_registration + vehicle_photo.
 const INITIAL_DOCUMENTS: DocumentDraft[] = [
   { document_type: 'national_id', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
-  { document_type: 'drivers_license', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
+  { document_type: 'drivers_license', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null, optional: true },
   { document_type: 'vehicle_registration', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
   { document_type: 'vehicle_photo', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
 ];
