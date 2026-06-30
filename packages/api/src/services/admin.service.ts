@@ -40,6 +40,7 @@ import type { UserLevel } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
+import { buildRejectionMessage } from './_driverDocRejectionPresets';
 
 /**
  * USD-anchored pricing (migration 00441). When an admin edits a CUP rate, we
@@ -88,6 +89,10 @@ async function withUsdAnchors(updates: Record<string, unknown>): Promise<Record<
  * Covers the 4 onboarding doc types in use today. `selfie` stays
  * in the map for backward compat in case CC-04 is reverted and a
  * biometric provider is wired in.
+ *
+ * Mirrored in supabase/functions/_shared/driverDocRejectionPresets.ts
+ * (DOC_TYPE_LABELS_ES) for the email rendered by the
+ * notify-document-rejection EF. Keep both in sync.
  */
 const DRIVER_DOC_LABELS_ES: Record<string, string> = {
   national_id: 'Cédula',
@@ -1674,33 +1679,49 @@ export const adminService = {
   /**
    * Verify or reject an individual driver document.
    *
-   * After persisting the verdict, sends a push to the driver
-   * (category: 'driver_approval') so they don't have to manually
-   * refresh "Mis documentos" to learn the doc was approved or
-   * needs to be re-uploaded. The push is best-effort — a failure
-   * to notify never reverts the verification.
+   * Rejection composition: the admin UI picks one or more chip
+   * codes from `DOC_REJECTION_PRESETS` (multi-select) plus an
+   * optional free-text note. We compose them into a single
+   * human-readable sentence (see buildRejectionMessage) so the
+   * existing driver screen at apps/driver/app/profile/documents.tsx
+   * renders it tal cual without any client-side changes.
    *
-   * Email notification on rejection is intentionally deferred:
-   * the send-email Edge Function requires the SERVICE_ROLE key
-   * (BUG-191 / 2026-05-12 hardening) which the admin client does
-   * not hold, so an email path needs a dedicated EF gated on
-   * admin/super_admin role. Tracked separately.
+   * After the UPDATE we:
+   *   1) Push to the driver (category `driver_approval`) so they
+   *      don't have to manually refresh "Mis documentos" — same
+   *      best-effort pattern as approveDriver/rejectDriver.
+   *   2) On rejection only, invoke `notify-document-rejection` EF
+   *      to send an email through send-email. The EF gates on
+   *      admin/super_admin role and holds the SERVICE_ROLE secret
+   *      that send-email requires (BUG-191 / 2026-05-12 hardening
+   *      means we can't call send-email directly from the client).
+   *      Best-effort: a mail failure never reverts the verdict.
    */
   async verifyDocument(
     documentId: string,
     adminId: string,
     isVerified: boolean,
     notes?: string,
+    reasonCodes?: string[],
   ): Promise<void> {
-    // Server-side guard: rejection requires a reason. The UI already gates the
-    // Reject button on `notes.trim()`, but a caller using the service directly
-    // could leave `rejection_reason=NULL` — that state is indistinguishable
-    // from "pending" in the `!is_verified && !!rejection_reason` rule the
-    // driver app uses to render the red "Rechazado" badge.
+    // Server-side guard: rejection requires SOMETHING — a chip code,
+    // a free-text note, or both. The UI forces ≥1 chip but a direct
+    // service caller could leave both empty and that would write
+    // `rejection_reason=NULL`, which is indistinguishable from
+    // "pending" in the driver's badge logic (`!is_verified &&
+    // !!rejection_reason`).
     const trimmedNotes = notes?.trim();
-    if (!isVerified && !trimmedNotes) {
+    const codes = reasonCodes?.filter((c) => c && c.length > 0) ?? [];
+    if (!isVerified && codes.length === 0 && !trimmedNotes) {
       throw new Error('Rejection reason is required');
     }
+
+    // Compose the user-facing message that lands in
+    // `rejection_reason` (also used in the push body and the email).
+    const composedNote = isVerified
+      ? trimmedNotes ?? null
+      : buildRejectionMessage(codes, trimmedNotes);
+
 
     const supabase = getSupabaseClient();
     const { error } = await supabase
@@ -1709,8 +1730,8 @@ export const adminService = {
         is_verified: isVerified,
         verified_by: adminId,
         verified_at: new Date().toISOString(),
-        verification_notes: trimmedNotes ?? null,
-        rejection_reason: isVerified ? null : (trimmedNotes ?? null),
+        verification_notes: composedNote,
+        rejection_reason: isVerified ? null : composedNote,
       })
       .eq('id', documentId);
     if (error) throw error;
@@ -1721,12 +1742,11 @@ export const adminService = {
       action: isVerified ? 'verify_document' : 'reject_document',
       target_type: 'driver_document',
       target_id: documentId,
-      reason: trimmedNotes ?? null,
+      reason: composedNote,
     });
 
-    // Notify the driver. Resolve user_id + document_type from the
-    // updated row. Best-effort: if any step fails we swallow it so
-    // the admin still sees the verdict landed.
+    // ── Notify the driver. Resolve user_id + document_type from the
+    // updated row. Best-effort: if anything fails we swallow it.
     try {
       const { data: doc } = await supabase
         .from('driver_documents')
@@ -1742,7 +1762,7 @@ export const adminService = {
         : `⚠️ ${label} rechazado`;
       const body = isVerified
         ? `Tu ${label.toLowerCase()} fue aprobado.`
-        : `Tu ${label.toLowerCase()} fue rechazado: ${trimmedNotes}`;
+        : `Tu ${label.toLowerCase()} fue rechazado: ${composedNote}`;
 
       await notificationService.sendToUser(
         userId,
@@ -1758,7 +1778,28 @@ export const adminService = {
         'driver_approval',
       );
     } catch (err) {
-      console.warn('[verifyDocument] notify driver failed:', err);
+      console.warn('[verifyDocument] notify driver (push) failed:', err);
+    }
+
+    // ── Email on rejection only (no email for verification — less noise).
+    if (!isVerified) {
+      try {
+        const { error: emailErr } = await supabase.functions.invoke(
+          'notify-document-rejection',
+          {
+            body: {
+              documentId,
+              reasonCodes: codes,
+              note: trimmedNotes ?? '',
+            },
+          },
+        );
+        if (emailErr) {
+          console.warn('[verifyDocument] email EF reported error:', emailErr);
+        }
+      } catch (err) {
+        console.warn('[verifyDocument] email EF invoke threw:', err);
+      }
     }
   },
 

@@ -509,6 +509,8 @@ verify_jwt = true
 verify_jwt = true
 [functions.send-bulk-email]
 verify_jwt = true
+[functions.notify-document-rejection]
+verify_jwt = true
 [functions.notify-business-movement]
 verify_jwt = true
 [functions.import-mapbox-poi]
