@@ -40,6 +40,18 @@
     "light_mode": "Light mode",
     "dark_mode": "Dark mode"
   },
+  "notifications_bell": {
+    "aria": "Updates",
+    "title": "Updates",
+    "sos": "Active SOS",
+    "sos_body": "Critical incident open.",
+    "incidents": "Open incidents",
+    "incidents_body": "Need review",
+    "pending_drivers": "Drivers to verify",
+    "pending_drivers_body": "Awaiting approval",
+    "empty_title": "Nothing new",
+    "empty_body": "All calm. When something needs your attention, it will show up here."
+  },
   "filters": {
     "advanced_filters": "Advanced filters",
     "clear_all": "Clear filters",

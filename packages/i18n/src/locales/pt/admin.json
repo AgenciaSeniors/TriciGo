@@ -40,6 +40,18 @@
     "light_mode": "Modo claro",
     "dark_mode": "Modo escuro"
   },
+  "notifications_bell": {
+    "aria": "Novidades",
+    "title": "Novidades",
+    "sos": "SOS ativo",
+    "sos_body": "Incidente crítico aberto.",
+    "incidents": "Incidentes abertos",
+    "incidents_body": "Precisam de revisão",
+    "pending_drivers": "Motoristas a verificar",
+    "pending_drivers_body": "Aguardando aprovação",
+    "empty_title": "Sem novidades",
+    "empty_body": "Tudo tranquilo. Quando algo precisar da sua atenção, aparecerá aqui."
+  },
   "filters": {
     "advanced_filters": "Filtros avançados",
     "clear_all": "Limpar filtros",
