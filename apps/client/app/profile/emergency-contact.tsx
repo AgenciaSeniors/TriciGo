@@ -9,7 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { customerService, trustedContactService } from '@tricigo/api';
-import { isValidCubanPhone, getErrorMessage, triggerHaptic } from '@tricigo/utils';
+import { isValidCubanPhone, normalizeCubanPhone, getErrorMessage, triggerHaptic } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
@@ -74,12 +74,14 @@ export default function EmergencyContactScreen() {
       return;
     }
     setSaving(true);
+    // E.164 (+53...) — D7 can't deliver raw local 8-digit numbers.
+    const normalizedPhone = normalizeCubanPhone(phone.trim());
     try {
       // 1. Update customer_profiles JSONB (backward compat)
       await customerService.updateProfile(profile.id, {
         emergency_contact: {
           name: name.trim(),
-          phone: phone.trim(),
+          phone: normalizedPhone,
           relationship: relationship.trim(),
         },
       });
@@ -88,7 +90,7 @@ export default function EmergencyContactScreen() {
       if (existingContact) {
         await trustedContactService.updateContact(existingContact.id, {
           name: name.trim(),
-          phone: phone.trim(),
+          phone: normalizedPhone,
           relationship: relationship.trim(),
           is_emergency: true,
         });
@@ -96,7 +98,7 @@ export default function EmergencyContactScreen() {
         await trustedContactService.addContact({
           user_id: user.id,
           name: name.trim(),
-          phone: phone.trim(),
+          phone: normalizedPhone,
           relationship: relationship.trim(),
           auto_share: true,
           is_emergency: true,

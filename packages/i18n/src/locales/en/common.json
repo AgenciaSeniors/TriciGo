@@ -363,6 +363,7 @@
     "relationship": "Relationship",
     "auto_share": "Auto-share rides",
     "auto_share_desc": "Receive SMS with tracking link when a ride starts",
+    "auto_share_desc_driver": "Receives an SMS with a tracking link when you ride as a passenger. Always notified on SOS",
     "is_emergency": "Emergency contact",
     "emergency_desc": "Marked as primary emergency contact",
     "emergency_badge": "Emergency",

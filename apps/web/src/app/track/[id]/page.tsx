@@ -674,31 +674,9 @@ export default function TrackRidePage() {
     return () => { getSupabaseClient().removeChannel(channel); };
   }, [ride?.id, ride?.status, rideId, refetchWaypoints]);
 
-  // "Llegó seguro": al detectar la transición a completed, avisar UNA sola vez
-  // a los contactos de confianza con auto_share (parity con useRide.ts:962-975).
-  // Guard por localStorage para no re-disparar en cada refetch del polling.
-  useEffect(() => {
-    if (!ride || ride.status !== 'completed' || !userId || typeof window === 'undefined') return;
-    const key = `tricigo_arrived_notified_${rideId}`;
-    if (localStorage.getItem(key)) return;
-    localStorage.setItem(key, '1');
-    (async () => {
-      try {
-        const contacts = await trustedContactService.getAutoShareContacts(userId);
-        if (contacts.length === 0) return;
-        let name = 'Tu contacto';
-        try {
-          const { data: profile } = await getSupabaseClient().from('users').select('full_name').eq('id', userId).maybeSingle();
-          if (profile?.full_name) name = profile.full_name as string;
-        } catch { /* keep fallback */ }
-        await notificationService.notifyTrustedContacts({
-          contacts: contacts.map((c) => ({ name: c.name, phone: c.phone })),
-          message: `✅ ${name} llegó a su destino de forma segura.`,
-          eventType: 'trip_completed_safe',
-        });
-      } catch { /* best-effort, swallow errors */ }
-    })();
-  }, [ride?.status, rideId, userId]);
+  // "Llegó seguro": el SMS a contactos auto_share lo envía el servidor
+  // (trigger trg_notify_trusted_contacts_complete, mig 00473). El path
+  // client-side anterior siempre daba 401 (send-sms es service-role-only).
 
   // Recordatorio de calificación (versión liviana — el form ya está visible):
   // si sigue sin calificar 5 min después de completar, mostramos un banner que

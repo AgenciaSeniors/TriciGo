@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@tricigo/i18n';
-import { rideService, deliveryService } from '@tricigo/api';
+import { rideService, deliveryService, getSupabaseClient } from '@tricigo/api';
 import type { PublicDeliveryView } from '@tricigo/api';
 import type { SharedRideView, RideStatus } from '@tricigo/types';
 import '../../[id]/track.css';
@@ -125,6 +125,21 @@ export default function SharedTrackingPage() {
   useEffect(() => {
     fetchRide();
   }, [fetchRide]);
+
+  // Safety forensics: record that this share link was opened (mig 00473).
+  // Fire-and-forget; the RPC ignores tokens that don't resolve to a ride
+  // and its absence (migration not applied) must never break the page.
+  useEffect(() => {
+    if (!token) return;
+    try {
+      getSupabaseClient()
+        .rpc('log_share_access', {
+          p_token: token,
+          p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+        })
+        .then(() => {}, () => {});
+    } catch { /* best-effort */ }
+  }, [token]);
 
   // ── Live tracking via polling ──────────────────────────────────────
   // The shared page used to subscribe to a `ride-driver-location-*`

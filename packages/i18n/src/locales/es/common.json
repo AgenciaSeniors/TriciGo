@@ -363,6 +363,7 @@
     "relationship": "Relación",
     "auto_share": "Auto-compartir viajes",
     "auto_share_desc": "Recibe SMS con link de seguimiento al iniciar un viaje",
+    "auto_share_desc_driver": "Recibe SMS con link de seguimiento cuando viajes como pasajero. En un SOS siempre se le avisa",
     "is_emergency": "Contacto de emergencia",
     "emergency_desc": "Marcado como contacto de emergencia principal",
     "emergency_badge": "Emergencia",
