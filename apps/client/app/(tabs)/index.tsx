@@ -15,7 +15,7 @@ import Toast from 'react-native-toast-message';
 import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -55,7 +55,7 @@ import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
 import { vehicleSelectionImages } from '@/utils/vehicleImages';
 import { SplitInviteCard } from '@/components/SplitInviteCard';
 import { FareSplitSheet } from '@/components/FareSplitSheet';
-import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory, Promotion } from '@tricigo/types';
+import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory } from '@tricigo/types';
 import { PACKAGE_CATEGORIES } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
@@ -1807,7 +1807,7 @@ function IdleView() {
   // Home content feed — promotions + blog posts + campañas shown on idle view
   // (after recents, before services). See docs/superpowers/specs/
   // 2026-04-29-home-content-cards-design.md.
-  const [activePromos, setActivePromos] = useState<Promotion[]>([]);
+  const [activePromos, setActivePromos] = useState<ActivePromotion[]>([]);
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [announcements, setAnnouncements] = useState<HomeAnnouncement[]>([]);
   // Last completed ride — re-engagement card (¿Volver a [destino]?)
@@ -1957,19 +1957,12 @@ function IdleView() {
     let cancelled = false;
     (async () => {
       try {
-        const supabase = getSupabaseClient();
-        const nowIso = new Date().toISOString();
-        // Active promos: is_active=true AND (no end date OR not yet expired).
-        const { data: promos } = await supabase
-          .from('promotions')
-          .select('*')
-          .eq('is_active', true)
-          .or(`valid_until.is.null,valid_until.gt.${nowIso}`)
-          .order('created_at', { ascending: false })
-          .limit(6);
-        if (!cancelled && Array.isArray(promos)) {
-          setActivePromos(promos as Promotion[]);
-        }
+        // The promotions table is admin-only under RLS (00321) — a direct
+        // .from('promotions') read returns 0 rows for customers, which kept
+        // this section permanently hidden. The SECURITY DEFINER RPC exposes
+        // only marketing-safe fields (mig 00476); [] when not yet deployed.
+        const promos = await promotionService.getActivePromotions(6);
+        if (!cancelled) setActivePromos(promos);
       } catch (err) {
         logger.warn('Failed to load promotions feed', { error: String(err) });
       }
@@ -2399,15 +2392,16 @@ function IdleView() {
               contentContainerStyle={{ gap: 10, paddingRight: 16 }}
             >
               {activePromos.map((promo) => {
-                // Build a human-readable headline from the schema fields.
-                // Promotions have no title column — synthesize one from
-                // discount_percent / discount_fixed_cup (whole CUP, applied
-                // directly by validate_promo_code — NOT centavos).
-                const headline = promo.discount_percent
-                  ? `${promo.discount_percent}% OFF`
-                  : promo.discount_fixed_cup
-                    ? `${promo.discount_fixed_cup} CUP`
-                    : '🎁';
+                // Marketing copy (title_es) wins when the admin filled it;
+                // otherwise synthesize a headline from discount_percent /
+                // discount_fixed_cup (whole CUP, applied directly by
+                // validate_promo_code — NOT centavos).
+                const headline = promo.title_es
+                  || (promo.discount_percent
+                    ? `${promo.discount_percent}% OFF`
+                    : promo.discount_fixed_cup
+                      ? `${promo.discount_fixed_cup} CUP`
+                      : '🎁');
                 const expiry = promo.valid_until
                   ? new Date(promo.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short' })
                   : null;

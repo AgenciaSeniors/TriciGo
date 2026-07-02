@@ -2110,6 +2110,11 @@ export default function BookPage() {
               handleSetDropoff(loc);
               if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+            onApplyPromo={(code) => {
+              setPromoCode(code.toUpperCase());
+              setPromoResult(null);
+              if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         )}
 
