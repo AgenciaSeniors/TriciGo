@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, Pressable, ScrollView, Linking } from 'react-native';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { View, Pressable, ScrollView, Linking, AppState } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import { paymentService } from '@tricigo/api/services/payment';
 import { walletService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNetopiaCheckout, PaymentLoadingOverlay } from '@/components/NetopiaCheckout';
+import { savePendingRecharge, loadPendingRecharge, clearPendingRecharge } from '@/lib/pendingRecharge';
 
 // RECARGA V2: presets in USD. Driver-quota uses the same customer
 // defaults (rounds 1-4). User picks NET amount; fee is additive 3%
@@ -167,8 +168,10 @@ export default function RechargeScreen() {
         type: 'info',
         text1: t('wallet.processing_recharge', { defaultValue: 'Verificando tu pago…' }),
       });
-      const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
+      // 30×2s ≈ 60s — covers a 3-D Secure OTP-by-SMS on a slow Cuban link.
+      const final = await paymentService.pollIntentStatus(result.intentId, 30, 2000);
       if (final.status === 'completed') {
+        void clearPendingRecharge();
         // RECARGA V2 PARITY: surface a success view with USD + TC and a
         // "Ver recibo" chip. The PDF is generated async post-webhook, so
         // we poll wallet_receipts for ~12s (6 attempts × 2s). If it
@@ -206,6 +209,7 @@ export default function RechargeScreen() {
           }
         })();
       } else if (final.status === 'failed') {
+        void clearPendingRecharge();
         // Translate NETOPIA's English raw message (e.g. "Invalid CVV")
         // into Spanish copy that always tells the user their card was
         // NOT charged. See packages/utils/src/netopia-errors.ts.
@@ -216,8 +220,10 @@ export default function RechargeScreen() {
         });
       } else {
         // status='pending' / 'created' / 'processing' — webhook still in
-        // flight (or user closed the browser before paying). Push will
-        // cover the eventual outcome; show a soft "verifying" message.
+        // flight (or user closed the browser before paying). Persist the
+        // intentId so focus/app-resume can recover it (Track 2a); push also
+        // covers the eventual outcome. Show a soft "verifying" message.
+        void savePendingRecharge(result.intentId);
         Toast.show({
           type: 'info',
           text1: t('wallet.recharge_pending', { defaultValue: 'Verificando tu pago…' }),
@@ -234,6 +240,49 @@ export default function RechargeScreen() {
       setSubmitting(false);
     }
   }, [user?.id, selectedAmount, t]);
+
+  // Track 2a: recover a recharge whose "Verificando…" poll was cut short by the
+  // driver leaving the app. On mount + app-resume, re-check the persisted
+  // pending intent ONCE and surface the settled result via toast.
+  const recoveringRef = useRef(false);
+  const recoverPendingRecharge = useCallback(async () => {
+    if (recoveringRef.current) return;
+    const intentId = await loadPendingRecharge();
+    if (!intentId) return;
+    recoveringRef.current = true;
+    try {
+      const intent = await paymentService.getPaymentIntent(intentId);
+      if (intent?.status === 'completed') {
+        await clearPendingRecharge();
+        Toast.show({
+          type: 'success',
+          text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
+          text2: `+${(intent.amount_cup ?? 0).toLocaleString('es-CU')} TC`,
+        });
+      } else if (intent?.status === 'failed') {
+        await clearPendingRecharge();
+        Toast.show({
+          type: 'error',
+          text1: t('wallet.recharge_failed', { defaultValue: 'El pago no se completó' }),
+          text2: translateNetopiaError(intent.error_message),
+        });
+      } else if (intent?.status === 'refunded') {
+        await clearPendingRecharge();
+      }
+    } catch {
+      /* keep the pending marker for the next attempt */
+    } finally {
+      recoveringRef.current = false;
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void recoverPendingRecharge();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void recoverPendingRecharge();
+    });
+    return () => sub.remove();
+  }, [recoverPendingRecharge]);
 
   // RECARGA V2 PARITY: render the success view once the intent settles.
   // The form is hidden until the driver explicitly resets to recargar

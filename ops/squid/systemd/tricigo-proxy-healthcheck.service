@@ -1,0 +1,13 @@
+# TriciGo — NETOPIA proxy watchdog (oneshot, driven by the .timer).
+# Install to /etc/systemd/system/tricigo-proxy-healthcheck.service
+# See ops/squid/README.md.
+[Unit]
+Description=TriciGo NETOPIA payment-proxy health watchdog
+After=network-online.target squid.service nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/etc/squid/healthcheck.sh
+# The script restarts squid/nginx on repeated failure — needs root (default).
+Nice=5

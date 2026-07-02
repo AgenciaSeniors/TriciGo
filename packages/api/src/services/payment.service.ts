@@ -240,6 +240,11 @@ export const paymentService = {
     enabled: boolean;
     host: string;
     port: number;
+    /** Track 4b: optional 2nd CONNECT proxy the app retries once before the
+     * browser fallback. Empty/0 = none (dormant until a 2nd proxy is provisioned
+     * with the SAME hmac_secret, so the ephemeral token authenticates to both). */
+    hostFallback: string;
+    portFallback: number;
   }> {
     const DEFAULT_HOST = '187.77.214.236';
     const DEFAULT_PORT = 13128;
@@ -254,7 +259,13 @@ export const paymentService = {
       const { data } = await supabase
         .from('platform_config')
         .select('key, value')
-        .in('key', ['netopia_proxy_enabled', 'netopia_proxy_host', 'netopia_proxy_port']);
+        .in('key', [
+          'netopia_proxy_enabled',
+          'netopia_proxy_host',
+          'netopia_proxy_port',
+          'netopia_proxy_host_fallback',
+          'netopia_proxy_port_fallback',
+        ]);
       const m: Record<string, string> = {};
       (data ?? []).forEach((c: { key: string; value: string }) => {
         const raw = c.value;
@@ -264,9 +275,11 @@ export const paymentService = {
         enabled: m['netopia_proxy_enabled'] === 'true',
         host: m['netopia_proxy_host'] || DEFAULT_HOST,
         port: parseInt(m['netopia_proxy_port'] ?? '', 10) || DEFAULT_PORT,
+        hostFallback: m['netopia_proxy_host_fallback'] || '',
+        portFallback: parseInt(m['netopia_proxy_port_fallback'] ?? '', 10) || 0,
       };
     } catch {
-      return { enabled: false, host: DEFAULT_HOST, port: DEFAULT_PORT };
+      return { enabled: false, host: DEFAULT_HOST, port: DEFAULT_PORT, hostFallback: '', portFallback: 0 };
     }
   },
 

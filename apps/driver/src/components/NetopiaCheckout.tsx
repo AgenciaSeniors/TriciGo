@@ -6,7 +6,8 @@
  * on the hosted card page. TLS passthrough → the VPS never sees the card →
  * stays PCI SAQ-A. NEVER enable SSL-bump on the proxy.
  *
- * DUPLICATE of apps/driver/src/components/NetopiaCheckout.tsx — keep in sync.
+ * DUPLICATE across apps/client + apps/driver — the two copies MUST stay
+ * byte-identical (enforced by scripts/check-netopia-checkout-sync.mjs).
  * (Per-app because the webview-proxy native module is app-local and
  * packages/ui doesn't depend on react-native-webview.)
  *
@@ -116,6 +117,9 @@ export function useNetopiaCheckout() {
   // Presentational state for the checkout chrome (does not affect payment flow).
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  // Track 2b: distinguish "no internet" from "couldn't reach the payment
+  // service" so the error card gives the user the right next step.
+  const [errorKind, setErrorKind] = useState<'offline' | 'connect'>('connect');
   const [progress, setProgress] = useState(0);
   const webRef = useRef<WebView>(null);
   const insets = useSafeAreaInsets();
@@ -123,6 +127,11 @@ export function useNetopiaCheckout() {
   const returnBaseRef = useRef<string>('');
   const argsRef = useRef<PresentArgs | null>(null);
   const settledRef = useRef(false);
+  // Track 4b: a 2nd CONNECT proxy to retry ONCE before the browser fallback.
+  // Null unless a fallback host is configured (dormant by default). The
+  // ephemeral token authenticates to both proxies (same hmac_secret).
+  const fallbackRef = useRef<{ host: string; port: number; user: string | null; pass: string | null } | null>(null);
+  const triedFallbackRef = useRef(false);
 
   // Safety net: if the screen unmounts mid-checkout, drop the process-wide
   // Android proxy override so it can't leak into other WebViews.
@@ -182,9 +191,23 @@ export function useNetopiaCheckout() {
   // recharge-intent creation, hiding their latency.
   const resolveProxyCreds = useCallback(async (): Promise<
     | { ok: false }
-    | { ok: true; host: string; port: number; user: string | null; pass: string | null }
+    | {
+        ok: true;
+        host: string;
+        port: number;
+        user: string | null;
+        pass: string | null;
+        hostFallback: string;
+        portFallback: number;
+      }
   > => {
-    let cfg = { enabled: false, host: '', port: 0 };
+    let cfg: {
+      enabled: boolean;
+      host: string;
+      port: number;
+      hostFallback?: string;
+      portFallback?: number;
+    } = { enabled: false, host: '', port: 0 };
     try {
       cfg = await paymentService.getNetopiaProxyConfig();
     } catch {
@@ -213,7 +236,15 @@ export function useNetopiaCheckout() {
     } catch {
       /* no creds → proceed; onError recovers if the proxy refuses */
     }
-    return { ok: true, host, port, user, pass };
+    return {
+      ok: true,
+      host,
+      port,
+      user,
+      pass,
+      hostFallback: cfg.hostFallback ?? '',
+      portFallback: cfg.portFallback ?? 0,
+    };
   }, []);
 
   // PERF: pre-resolve the proxy config + mint the token in the background so it
@@ -263,6 +294,13 @@ export function useNetopiaCheckout() {
       returnBaseRef.current = returnUrlBase;
       argsRef.current = { url, returnUrlBase, intentId };
       settledRef.current = false;
+      // Track 4b: arm the fallback proxy (dormant unless configured). Reused
+      // creds — the ephemeral token authenticates to both proxy hosts.
+      fallbackRef.current =
+        setup.hostFallback && setup.portFallback
+          ? { host: setup.hostFallback, port: setup.portFallback, user: setup.user, pass: setup.pass }
+          : null;
+      triedFallbackRef.current = false;
       return new Promise<Outcome>((resolve) => {
         resolverRef.current = resolve;
         setLoading(true);
@@ -418,6 +456,27 @@ export function useNetopiaCheckout() {
             // isMainFrame isn't in the RN type; absent → treated as main frame.)
             onError={({ nativeEvent }) => {
               if ((nativeEvent as { isMainFrame?: boolean }).isMainFrame === false) return;
+              // Track 4b: retry ONCE through the fallback proxy before surfacing
+              // the error (dormant unless a fallback host is configured). The
+              // browser fallback (openInBrowser / handleLoadFailure) is unchanged.
+              const fb = fallbackRef.current;
+              if (fb && !triedFallbackRef.current) {
+                triedFallbackRef.current = true;
+                setError(false);
+                setLoading(true);
+                setProgress(0);
+                WebViewProxy.setProxyOverride(fb.host, fb.port, fb.user, fb.pass)
+                  .then(() => webRef.current?.reload())
+                  .catch(() => { setLoading(false); setError(true); });
+                return;
+              }
+              // Track 2b: classify so the error card gives the right next step.
+              const desc = String((nativeEvent as { description?: string }).description ?? '').toLowerCase();
+              const code = Number((nativeEvent as { code?: number }).code ?? 0);
+              const offline =
+                code === -1009 ||
+                /internet_disconnected|not connected to the internet|err_internet|err_address_unreachable|err_name_not_resolved/.test(desc);
+              setErrorKind(offline ? 'offline' : 'connect');
               setLoading(false);
               setError(true);
             }}
@@ -447,9 +506,13 @@ export function useNetopiaCheckout() {
                 <View style={styles.errIcon}>
                   <Ionicons name="cloud-offline-outline" size={30} color={PALETTE.error} />
                 </View>
-                <Text style={styles.overlayTitle}>No pudimos cargar el pago</Text>
+                <Text style={styles.overlayTitle}>
+                  {errorKind === 'offline' ? 'Sin conexión a internet' : 'No pudimos conectar con el pago'}
+                </Text>
                 <Text style={styles.overlaySub}>
-                  Revisá tu conexión a internet e intentá de nuevo.
+                  {errorKind === 'offline'
+                    ? 'Revisá tu conexión a internet e intentá de nuevo.'
+                    : 'El servicio de pago no respondió. Reintentá o abrí en el navegador.'}
                 </Text>
                 <TouchableOpacity
                   style={styles.primaryBtn}
