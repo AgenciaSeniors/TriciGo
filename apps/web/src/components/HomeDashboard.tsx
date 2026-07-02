@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { rideService, announcementService, getSupabaseClient } from '@tricigo/api';
+import { rideService, announcementService, promotionService, type ActivePromotion } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { Ride } from '@tricigo/types';
 import { announcementCtaWebHref } from '@tricigo/utils';
@@ -21,14 +21,6 @@ import type { LocationPreset } from '@tricigo/utils';
  *  numeric columns (same source getRideWithDriver normalizes from). */
 type RawHistoryRide = Ride & { dropoff_lat?: number | null; dropoff_lng?: number | null };
 
-interface Promo {
-  id: string;
-  code: string;
-  discount_percent: number | null;
-  discount_fixed_cup: number | null;
-  valid_until: string | null;
-}
-
 type Announcement = Awaited<ReturnType<typeof announcementService.getActive>>[number];
 
 const sectionLabel: React.CSSProperties = {
@@ -36,15 +28,17 @@ const sectionLabel: React.CSSProperties = {
   textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 0.6rem',
 };
 
-export function HomeDashboard({ userId, onRebook }: {
+export function HomeDashboard({ userId, onRebook, onApplyPromo }: {
   userId: string;
   /** Prefill the booking dropoff with the chosen location (re-book flow). */
   onRebook: (loc: LocationPreset) => void;
+  /** Prefill the booking promo-code field with the tapped promo. */
+  onApplyPromo: (code: string) => void;
 }) {
   const router = useRouter();
   const { t } = useTranslation('web');
   const [lastRide, setLastRide] = useState<RawHistoryRide | null>(null);
-  const [promos, setPromos] = useState<Promo[]>([]);
+  const [promos, setPromos] = useState<ActivePromotion[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   useEffect(() => {
@@ -63,17 +57,12 @@ export function HomeDashboard({ userId, onRebook }: {
       })
       .catch(() => { /* non-critical */ });
 
-    // Active promos — direct query, same shape as the mobile home
-    // (no promotionService exists). is_active + not-expired, newest 6.
-    const nowIso = new Date().toISOString();
-    getSupabaseClient()
-      .from('promotions')
-      .select('id, code, discount_percent, discount_fixed_cup, valid_until')
-      .eq('is_active', true)
-      .or(`valid_until.is.null,valid_until.gt.${nowIso}`)
-      .order('created_at', { ascending: false })
-      .limit(6)
-      .then(({ data }) => { if (!cancelled && data) setPromos(data as Promo[]); });
+    // Active promos — via the SECURITY DEFINER RPC (mig 00476). The
+    // promotions table is admin-only under RLS (00321), so the previous
+    // direct .from('promotions') read silently returned 0 rows for every
+    // customer and this section never rendered. Tolerant: [] on error.
+    promotionService.getActivePromotions(6)
+      .then((data) => { if (!cancelled) setPromos(data); });
 
     // Admin announcements (home_announcements, RLS filters inactive/expired).
     announcementService.getActive(null, 6)
@@ -139,14 +128,16 @@ export function HomeDashboard({ userId, onRebook }: {
           <p style={sectionLabel}>{t('home.dashboard_promos', { defaultValue: 'Promociones' })}</p>
           <div style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
             {promos.map((p) => {
+              // Marketing copy (title_es) wins when the admin filled it.
               // discount_fixed_cup is WHOLE CUP (validate_promo_code applies it
               // raw against CUP fares) — dividing by 100 showed "10 CUP" for the
               // live $1000 promo. Mirror of the PASS#3 mobile fix.
-              const headline = p.discount_percent
-                ? `${p.discount_percent}% OFF`
-                : p.discount_fixed_cup
-                  ? `${p.discount_fixed_cup} CUP`
-                  : '🎁';
+              const headline = p.title_es
+                || (p.discount_percent
+                  ? `${p.discount_percent}% OFF`
+                  : p.discount_fixed_cup
+                    ? `${p.discount_fixed_cup} CUP`
+                    : '🎁');
               const expiry = p.valid_until
                 ? new Date(p.valid_until).toLocaleDateString('es', { day: 'numeric', month: 'short', timeZone: 'America/Havana' })
                 : null;
@@ -154,7 +145,10 @@ export function HomeDashboard({ userId, onRebook }: {
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => router.push('/profile/referral')}
+                  // Prefill the booking promo field (this dashboard renders on
+                  // /book, right below the form). Was wrongly routing to
+                  // /profile/referral — same class of bug the mobile home fixed.
+                  onClick={() => onApplyPromo(p.code)}
                   aria-label={t('home.dashboard_promo_aria', { code: p.code, headline, defaultValue: `Promo ${p.code}: ${headline}` })}
                   style={{
                     flex: '0 0 auto', width: 200, textAlign: 'left', cursor: 'pointer',
