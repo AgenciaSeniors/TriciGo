@@ -234,8 +234,8 @@ export function formatArrivalTime(etaMinutes: number): string {
  * apps/driver/app/(tabs)/index.tsx for the today-earnings query.
  */
 export function havanaMidnightUtc(now: Date = new Date()): Date {
-  // 1. Pull the Havana-local calendar date (handles the case where UTC and
-  //    Havana are on different days, e.g. UTC 02:00 = Havana 21:00 yesterday).
+  // Pull the Havana-local calendar date (handles the case where UTC and
+  // Havana are on different days, e.g. UTC 02:00 = Havana 21:00 yesterday).
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: HAVANA_TIMEZONE,
     year: 'numeric',
@@ -243,14 +243,19 @@ export function havanaMidnightUtc(now: Date = new Date()): Date {
     day: '2-digit',
   }).formatToParts(now);
   const get = (type: string) => parts.find((p) => p.type === type)!.value;
-  const year = parseInt(get('year'), 10);
-  const month = parseInt(get('month'), 10);
-  const day = parseInt(get('day'), 10);
+  return havanaMidnightOf(
+    parseInt(get('year'), 10),
+    parseInt(get('month'), 10),
+    parseInt(get('day'), 10),
+  );
+}
 
-  // 2. Determine Havana's UTC offset for that calendar date by asking what
-  //    Havana clock-hour corresponds to 12:00 UTC. CST → 7 (offset 5h),
-  //    CDT → 8 (offset 4h). Robust to DST transitions because we query the
-  //    OS/Intl tz database for the actual instant.
+/** Havana 00:00 of a specific calendar date (1-based month), as a UTC Date. */
+function havanaMidnightOf(year: number, month: number, day: number): Date {
+  // Determine Havana's UTC offset for that calendar date by asking what
+  // Havana clock-hour corresponds to 12:00 UTC. CST → 7 (offset 5h),
+  // CDT → 8 (offset 4h). Robust to DST transitions because we query the
+  // OS/Intl tz database for the actual instant.
   const utcNoon = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
   const havanaHourAtUtcNoon = parseInt(
     new Intl.DateTimeFormat('en-US', {
@@ -262,6 +267,27 @@ export function havanaMidnightUtc(now: Date = new Date()): Date {
   );
   const offsetHours = 12 - havanaHourAtUtcNoon;
 
-  // 3. Havana 00:00 wall-clock = UTC `offsetHours`:00 of the same date.
+  // Havana 00:00 wall-clock = UTC `offsetHours`:00 of the same date.
   return new Date(Date.UTC(year, month - 1, day, offsetHours, 0, 0));
+}
+
+/**
+ * UTC instants covering one Havana calendar day, for `created_at >= start
+ * AND created_at < end` timestamptz filters driven by an
+ * `<input type="date">` value. Without this, a raw 'YYYY-MM-DD' string is
+ * interpreted as UTC midnight by Postgres — 4–5h off Cuba's real day.
+ *
+ * @param ymd 'YYYY-MM-DD' (as emitted by date inputs)
+ */
+export function havanaDayRangeUtc(ymd: string): { start: Date; end: Date } {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) throw new Error(`havanaDayRangeUtc: expected YYYY-MM-DD, got "${ymd}"`);
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const start = havanaMidnightOf(year, month, day);
+  // Next calendar day via UTC arithmetic (handles month/year rollover).
+  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  const end = havanaMidnightOf(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate());
+  return { start, end };
 }

@@ -32,6 +32,8 @@ type DashboardMetrics = {
   total_revenue_today: number;
   pending_verifications: number;
   open_incidents: number;
+  // Optional: added by mig 00479; tolerate the RPC pre-migration.
+  searching_rides?: number;
 };
 
 const STATUS_META: Record<
@@ -261,7 +263,7 @@ export default function DashboardPage() {
           <PulseMap
             onlineDrivers={kpis.online.value}
             activeRides={kpis.active.value}
-            pendingRides={Math.max(0, (metrics?.active_rides ?? 0) - kpis.active.value)}
+            pendingRides={metrics?.searching_rides ?? 0}
           />
         </SectionCard>
 

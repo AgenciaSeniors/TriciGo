@@ -6,6 +6,7 @@ import {
   formatDistance,
   getRelativeTime,
   havanaMidnightUtc,
+  havanaDayRangeUtc,
 } from '../date';
 
 // ============================================================
@@ -213,5 +214,44 @@ describe('havanaMidnightUtc', () => {
     expect([4, 5]).toContain(result.getUTCHours());
     expect(result.getUTCMinutes()).toBe(0);
     expect(result.getUTCSeconds()).toBe(0);
+  });
+});
+
+// ============================================================
+// havanaDayRangeUtc — [start, end) UTC instants of a Havana calendar day
+// ============================================================
+describe('havanaDayRangeUtc', () => {
+  it('returns 05:00Z boundaries during CST (Jan, UTC-5)', () => {
+    const { start, end } = havanaDayRangeUtc('2026-01-15');
+    expect(start.toISOString()).toBe('2026-01-15T05:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-01-16T05:00:00.000Z');
+  });
+
+  it('returns 04:00Z boundaries during CDT (Jul, UTC-4)', () => {
+    const { start, end } = havanaDayRangeUtc('2026-07-15');
+    expect(start.toISOString()).toBe('2026-07-15T04:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-07-16T04:00:00.000Z');
+  });
+
+  it('rolls over month and year boundaries', () => {
+    const { start, end } = havanaDayRangeUtc('2026-12-31');
+    expect(start.toISOString()).toBe('2026-12-31T05:00:00.000Z');
+    expect(end.toISOString()).toBe('2027-01-01T05:00:00.000Z');
+  });
+
+  it('handles the fall-back day with the documented 1h transition caveat', () => {
+    // 2026-11-01 is the 1st Sunday of November (Cuba falls back CDT->CST).
+    // The offset probe at 12:00 UTC lands AFTER the 01:00 transition, so the
+    // day start resolves to the CST interpretation (05:00Z) - 1h after the
+    // true local midnight. Same caveat havanaMidnightUtc documents; harmless
+    // for since-midnight filters.
+    const { start, end } = havanaDayRangeUtc('2026-11-01');
+    expect(start.toISOString()).toBe('2026-11-01T05:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-11-02T05:00:00.000Z');
+  });
+
+  it('throws on malformed input', () => {
+    expect(() => havanaDayRangeUtc('15/01/2026')).toThrow();
+    expect(() => havanaDayRangeUtc('')).toThrow();
   });
 });

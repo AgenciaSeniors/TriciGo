@@ -90,6 +90,18 @@ export default function DriversPage() {
 
   // Unified filter state
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
+  // Seed the status from the ?status= query param so dashboard CTAs like
+  // /drivers?status=pending_verification actually filter. Done in a mount
+  // effect (not a lazy initializer) to avoid a hydration mismatch, and via
+  // window.location to avoid the useSearchParams Suspense requirement.
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('status');
+    const valid: StatusFilter[] = ['pending_verification', 'under_review', 'approved', 'rejected', 'suspended'];
+    if (param && (valid as string[]).includes(param)) {
+      setStatusFilter(param as StatusFilter);
+    }
+  }, []);
   const [search, setSearch] = useState('');
   const [ratingMin, setRatingMin] = useState('');
   const [vehicleType, setVehicleType] = useState('');

@@ -417,8 +417,9 @@ describe('adminService', () => {
 
       const result = await adminService.getUsers(0, 20, { dateFrom: '2026-01-01', dateTo: '2026-01-31' });
 
-      expect(chain.gte).toHaveBeenCalledWith('created_at', '2026-01-01');
-      expect(chain.lt).toHaveBeenCalledWith('created_at', '2026-01-31T23:59:59');
+      // Havana calendar days -> UTC instants (Jan = CST, UTC-5).
+      expect(chain.gte).toHaveBeenCalledWith('created_at', '2026-01-01T05:00:00.000Z');
+      expect(chain.lt).toHaveBeenCalledWith('created_at', '2026-02-01T05:00:00.000Z');
       expect(result).toEqual(users);
     });
 
@@ -572,8 +573,9 @@ describe('adminService', () => {
 
       const result = await adminService.getRides({ dateFrom: '2026-01-01', dateTo: '2026-01-31' });
 
-      expect(chain.gte).toHaveBeenCalledWith('created_at', '2026-01-01');
-      expect(chain.lt).toHaveBeenCalledWith('created_at', '2026-01-31T23:59:59');
+      // Havana calendar days -> UTC instants (Jan = CST, UTC-5).
+      expect(chain.gte).toHaveBeenCalledWith('created_at', '2026-01-01T05:00:00.000Z');
+      expect(chain.lt).toHaveBeenCalledWith('created_at', '2026-02-01T05:00:00.000Z');
       expect(result).toEqual(rides);
     });
 

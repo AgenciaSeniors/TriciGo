@@ -37,6 +37,7 @@ import type {
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import type { UserLevel } from '@tricigo/types';
+import { havanaDayRangeUtc } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
@@ -521,11 +522,13 @@ export const adminService = {
       const escaped = escapeLikePattern(filters.search);
       query = query.or(`full_name.ilike.%${escaped}%,phone.ilike.%${escaped}%`);
     }
+    // Date inputs are Havana calendar days ('YYYY-MM-DD'); raw strings would
+    // be read as UTC midnight (4-5h off Cuba's day).
     if (filters.dateFrom) {
-      query = query.gte('created_at', filters.dateFrom);
+      query = query.gte('created_at', havanaDayRangeUtc(filters.dateFrom).start.toISOString());
     }
     if (filters.dateTo) {
-      query = query.lt('created_at', filters.dateTo + 'T23:59:59');
+      query = query.lt('created_at', havanaDayRangeUtc(filters.dateTo).end.toISOString());
     }
     if (filters.isActive !== undefined) {
       query = query.eq('is_active', filters.isActive);
@@ -571,11 +574,13 @@ export const adminService = {
     if (filters.paymentMethod) {
       query = query.eq('payment_method', filters.paymentMethod);
     }
+    // Date inputs are Havana calendar days ('YYYY-MM-DD'); raw strings would
+    // be read as UTC midnight (4-5h off Cuba's day).
     if (filters.dateFrom) {
-      query = query.gte('created_at', filters.dateFrom);
+      query = query.gte('created_at', havanaDayRangeUtc(filters.dateFrom).start.toISOString());
     }
     if (filters.dateTo) {
-      query = query.lt('created_at', filters.dateTo + 'T23:59:59');
+      query = query.lt('created_at', havanaDayRangeUtc(filters.dateTo).end.toISOString());
     }
     if (filters.search) {
       const escaped = escapeLikePattern(filters.search);
