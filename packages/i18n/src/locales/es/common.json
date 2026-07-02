@@ -229,6 +229,7 @@
     "referral_share": "Compartir código",
     "referral_share_message": "Usa mi código de referido {{code}} en TriciGo y gana un bono. Descarga la app: https://tricigo.com/refer/{{code}}",
     "referral_share_help": "Comparte tu código con amigos. Recibirás un bono de {{bonus}} cuando completen su primer viaje.",
+    "referral_share_help_driver": "Comparte tu código: ganas {{bonusDriver}} por cada conductor que se sume y sea aprobado, y {{bonus}} por cada pasajero que complete su primer viaje.",
     "referral_have_code": "¿Tienes un código de referido?",
     "referral_welcome_bonus_note_rider": "Bono de bienvenida: recibirás {{bonus}} al completar tu primer viaje.",
     "referral_welcome_bonus_note_driver": "Bono de bienvenida: recibirás {{bonus}} cuando tu cuenta sea aprobada.",
