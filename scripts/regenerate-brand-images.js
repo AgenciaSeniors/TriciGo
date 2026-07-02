@@ -309,14 +309,18 @@ async function regenerateWordmarks() {
     ['apps/client/assets/logo-wordmark.png', 600, 143],
     ['apps/driver/assets/logo-wordmark.png', 600, 143],
     ['apps/web/public/logo-wordmark.png', 600, 143],
-    ['apps/web/public/logo-email-light.png', 336, 80],
+    // Email logos ship at 3x (504x120) of the fixed 168x40 <img> in
+    // email-templates/_layout.ts — the ONLY consumer (re-grep before
+    // changing) — so high-DPI mail apps (Gmail/iOS) render them crisp.
+    // Canvas aspect unchanged (504/120 = 336/80 = 4.2) → identical look.
+    ['apps/web/public/logo-email-light.png', 504, 120],
     ['apps/admin/public/logo-wordmark.png', 400, 96], // was 200x48 + baked white box; 2x + real alpha (pages use h-10 w-auto)
   ];
   const WHITE_TARGETS = [
     ['apps/client/assets/logo-wordmark-white.png', 600, 143],
     ['apps/driver/assets/logo-wordmark-white.png', 600, 143],
     ['apps/web/public/logo-wordmark-white.png', 600, 143],
-    ['apps/web/public/logo-email-dark.png', 336, 80],
+    ['apps/web/public/logo-email-dark.png', 504, 120],
     ['apps/admin/public/logo-wordmark-white.png', 400, 96],
   ];
   for (const [file, w, h] of DARK_TARGETS) await writePng(dark, w, h, P(file));
@@ -359,6 +363,54 @@ async function cleanStrays() {
   ]) {
     await writeRawAsIs(pin, P(rel));
   }
+}
+
+// ---------- 4b) client icon master: flatten the ghost seam ----------
+
+// #723 made the client icon full-bleed by extending the old rounded-square;
+// a faint ghost of the old corner arc (salmon ~rgb(252,150,115), up to
+// delta 117 vs the flat orange rgb(254,66,2)) plus low-level noise survived
+// in the background. The design is a FLAT orange field + white pin (no
+// gradient, no shadow — verified: every "darker" deviation is delta<=7
+// noise), so everything outside the pin's expanded bbox is flattened to the
+// dominant orange. Safety fuse: abort if any background pixel deviates more
+// than the mapped seam (delta>130) — that would mean unexpected art.
+async function fixIconSeam() {
+  console.log('4b) apps/client/assets/icon.png: flatten corner ghost seam');
+  const file = P('apps/client/assets/icon.png');
+  const img = await loadRaw(file);
+  const { data, width, height } = img;
+  const px = (x, y) => (y * width + x) * 4;
+  // dominant flat orange from the 4 deep corners
+  const corners = [[10, 10], [width - 11, 10], [10, height - 11], [width - 11, height - 11]];
+  const dom = [0, 1, 2].map((c) => Math.round(corners.reduce((a, [x, y]) => a + data[px(x, y) + c], 0) / 4));
+  // pin bbox = near-white pixels, expanded 8px so its anti-aliasing is safe
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = px(x, y);
+    if (data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  const M = 8;
+  minX -= M; minY -= M; maxX += M; maxY += M;
+  let flattened = 0, maxDev = 0;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (x >= minX && x <= maxX && y >= minY && y <= maxY) continue;
+    const i = px(x, y);
+    const d = Math.max(Math.abs(data[i] - dom[0]), Math.abs(data[i + 1] - dom[1]), Math.abs(data[i + 2] - dom[2]));
+    if (d > maxDev) maxDev = d;
+    if (d > 130) throw new Error(`fixIconSeam: unexpected art outside pin bbox at ${x},${y} (delta ${d}) — aborting`);
+    if (d > 0) { data[i] = dom[0]; data[i + 1] = dom[1]; data[i + 2] = dom[2]; flattened++; }
+  }
+  console.log(`  pin bbox (${minX + M},${minY + M})-(${maxX - M},${maxY - M}), dominant rgb(${dom.join(',')}), flattened ${flattened}px (maxDev ${maxDev})`);
+  // preserve the original RGB (no alpha) format of the master
+  const before = fs.statSync(file).size;
+  await sharp(data, { raw: { width, height, channels: 4 } }).removeAlpha().png({ compressionLevel: 9 }).toFile(file);
+  console.log(`  wrote apps/client/assets/icon.png  ${width}x${height}  ${(before / 1024).toFixed(1)}KB -> ${(fs.statSync(file).size / 1024).toFixed(1)}KB`);
+  // NOTE: the driver icon.png has only delta<=19 deviations on near-black —
+  // imperceptible and possibly intentional vignette; deliberately untouched.
 }
 
 // ---------- 5) web PWA icons from the 1024 master ----------
@@ -414,6 +466,7 @@ async function defringeWebIcons() {
   await regenerateWordmarks();
   await fixNotificationIcon();
   await cleanStrays();
+  await fixIconSeam(); // must run BEFORE regenerateIcon512 (512/192 derive from the master)
   await regenerateIcon512();
   await regenerateTricoinSmall();
   await defringeWebIcons();
