@@ -1127,6 +1127,8 @@
     "routing_google_enabled_help": "Experimento: usar Google Directions en vez de Mapbox para las rutas. Poné 'true' para activar (requiere la clave GOOGLE_DIRECTIONS_API_KEY). Por defecto false.",
     "routing_google_daily_cap_help": "Tope diario de llamadas a Google Directions; superado, vuelve a Mapbox. Por defecto 2000.",
     "referral_bonus_cup_help": "Monto del bono de referido en CUP (se acredita en TriciCoin, 1:1). Aplica a referidos NUEVOS; los pendientes mantienen el monto con que se crearon. Por defecto 500.",
+    "referral_bonus_driver_cup_help": "Bono al REFERENTE cuando el referido es un CONDUCTOR que queda aprobado, en CUP. 0 = usa el bono estándar (referral_bonus_cup). Campaña fundadores: 2000.",
+    "referral_welcome_bonus_driver_cup_help": "Bono de bienvenida para el CONDUCTOR referido (al aprobarse), en CUP. 0 = usa referral_welcome_bonus_cup.",
     "referral_welcome_bonus_cup_help": "Bono de BIENVENIDA para el referido (quien usó el código), en CUP. 0 = apagado. Se paga en el mismo evento que el bono del referente: primer viaje completado (pasajero) o aprobación (conductor).",
     "cancel_rating_value_second_help": "Estrellas que aporta la 2ª cancelación tardía en 24h (la 1ª es gracia). Por defecto 3.0",
     "cancel_rating_value_third_help": "Estrellas que aporta la 3ª+ cancelación tardía en 24h. Por defecto 2.0",

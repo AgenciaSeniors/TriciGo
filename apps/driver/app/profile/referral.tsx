@@ -41,16 +41,19 @@ export default function DriverReferralScreen() {
   const [bonusCup, setBonusCup] = useState(500);
   // 00477: optional welcome bonus for the REFEREE (0 = off, hides the note).
   const [welcomeBonusCup, setWelcomeBonusCup] = useState(0);
+  // 00483: role-specific bonus — referring a DRIVER pays more (0 = same as base).
+  const [driverBonusCup, setDriverBonusCup] = useState(0);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
     try {
-      const [code, history, referred, bonusRaw, welcomeRaw] = await Promise.all([
+      const [code, history, referred, bonusRaw, welcomeRaw, driverBonusRaw] = await Promise.all([
         referralService.getOrCreateReferralCode(userId),
         referralService.getReferralHistory(userId),
         referralService.hasBeenReferred(userId),
         walletService.getConfigValue('referral_bonus_cup').catch(() => null),
         walletService.getConfigValue('referral_welcome_bonus_cup').catch(() => null),
+        walletService.getConfigValue('referral_bonus_driver_cup').catch(() => null),
       ]);
       setMyCode(code);
       setReferrals(history);
@@ -59,6 +62,8 @@ export default function DriverReferralScreen() {
       if (Number.isFinite(parsedBonus) && parsedBonus > 0) setBonusCup(parsedBonus);
       const parsedWelcome = welcomeRaw != null ? parseInt(welcomeRaw, 10) : NaN;
       if (Number.isFinite(parsedWelcome) && parsedWelcome > 0) setWelcomeBonusCup(parsedWelcome);
+      const parsedDriverBonus = driverBonusRaw != null ? parseInt(driverBonusRaw, 10) : NaN;
+      if (Number.isFinite(parsedDriverBonus) && parsedDriverBonus > 0) setDriverBonusCup(parsedDriverBonus);
     } catch (err) {
       console.warn('[Referral] Failed to load:', err);
     } finally {
@@ -156,7 +161,12 @@ export default function DriverReferralScreen() {
                   disabled={!myCode}
                 />
                 <Text variant="caption" color="primary" className="mt-3 text-center opacity-50">
-                  {t('profile.referral_share_help', { bonus: formatTriciCoinName(bonusCup) })}
+                  {driverBonusCup > 0
+                    ? t('profile.referral_share_help_driver', {
+                        bonusDriver: formatTriciCoinName(driverBonusCup),
+                        bonus: formatTriciCoinName(bonusCup),
+                      })
+                    : t('profile.referral_share_help', { bonus: formatTriciCoinName(bonusCup) })}
                 </Text>
               </Card>
 
