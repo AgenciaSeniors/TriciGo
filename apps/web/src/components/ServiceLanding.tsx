@@ -198,7 +198,7 @@ export function ServiceLanding({ slug }: { slug: string }) {
             style={{ padding: '0.75rem 1.4rem', background: 'var(--primary)', color: '#fff', borderRadius: '0.75rem', fontSize: '0.9rem', fontWeight: 700, textDecoration: 'none' }}>
             Google Play
           </a>
-          <a href="https://apps.apple.com/app/tricigo" target="_blank" rel="noopener noreferrer"
+          <a href="https://apps.apple.com/app/id6785157005" target="_blank" rel="noopener noreferrer"
             style={{ padding: '0.75rem 1.4rem', background: 'transparent', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: '0.75rem', fontSize: '0.9rem', fontWeight: 700, textDecoration: 'none' }}>
             App Store
           </a>
