@@ -13,7 +13,7 @@ import { RIDE_CONFIG } from '@/config/ride';
 import { useTranslation } from '@tricigo/i18n';
 import Toast from 'react-native-toast-message';
 import * as Clipboard from 'expo-clipboard';
-import { incidentService, rideService, customerService, trustedContactService, getSupabaseClient, deliveryService } from '@tricigo/api';
+import { incidentService, rideService, trustedContactService, getSupabaseClient, deliveryService } from '@tricigo/api';
 import type { DeliveryDetails } from '@tricigo/api';
 import type { RideSplit } from '@tricigo/types';
 import { useRideStore } from '@/stores/ride.store';
@@ -700,17 +700,6 @@ export function RideActiveView() {
 
   // Safety sheet state
   const [safetySheetVisible, setSafetySheetVisible] = useState(false);
-  const [emergencyContact, setEmergencyContact] = useState<{ name: string; phone: string } | null>(null);
-
-  // Load emergency contact
-  useEffect(() => {
-    if (!userId) return;
-    customerService.ensureProfile(userId).then((cp) => {
-      if (cp.emergency_contact) {
-        setEmergencyContact({ name: cp.emergency_contact.name, phone: cp.emergency_contact.phone });
-      }
-    }).catch(() => {});
-  }, [userId]);
 
   // U2.3: Slide-up entrance animation for driver card
   const slideUpAnim = useRef(new Animated.Value(100)).current;
@@ -1733,8 +1722,12 @@ export function RideActiveView() {
         rideId={activeRide.id}
         driverId={rideWithDriver?.driver_user_id ?? null}
         userId={userId!}
-        emergencyContact={emergencyContact}
         driverPhone={rideWithDriver?.driver_phone ?? null}
+        riderName={userFullName}
+        driverName={rideWithDriver?.driver_name ?? null}
+        vehiclePlate={rideWithDriver?.vehicle_plate ?? null}
+        latitude={(rideWithDriver as { driver_lat?: number } | null)?.driver_lat ?? activeRide.pickup_location?.latitude ?? 0}
+        longitude={(rideWithDriver as { driver_lng?: number } | null)?.driver_lng ?? activeRide.pickup_location?.longitude ?? 0}
       />
     </View>
   );

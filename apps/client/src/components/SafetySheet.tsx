@@ -6,9 +6,8 @@ import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import Toast from 'react-native-toast-message';
-import { incidentService, rideService, trustedContactService, notificationService } from '@tricigo/api';
+import { incidentService, rideService, trustedContactService } from '@tricigo/api';
 import { logger, triggerHaptic, buildShareUrl } from '@tricigo/utils';
-import type { TrustedContact } from '@tricigo/types';
 
 interface SafetySheetProps {
   visible: boolean;
@@ -16,8 +15,12 @@ interface SafetySheetProps {
   rideId: string;
   driverId: string | null;
   userId: string;
-  emergencyContact: { name: string; phone: string } | null;
   driverPhone?: string | null;
+  riderName?: string | null;
+  driverName?: string | null;
+  vehiclePlate?: string | null;
+  latitude?: number;
+  longitude?: number;
 }
 
 export function SafetySheet({
@@ -26,37 +29,16 @@ export function SafetySheet({
   rideId,
   driverId,
   userId,
-  emergencyContact,
   driverPhone,
+  riderName,
+  driverName,
+  vehiclePlate,
+  latitude,
+  longitude,
 }: SafetySheetProps) {
   const { t } = useTranslation('common');
   const { t: tr } = useTranslation('rider');
   const [sharing, setSharing] = useState(false);
-  const [autoShareContacts, setAutoShareContacts] = useState<TrustedContact[]>([]);
-
-  useEffect(() => {
-    if (!visible || !userId) return;
-    trustedContactService.getAutoShareContacts(userId).then(setAutoShareContacts).catch(() => {});
-  }, [visible, userId]);
-
-  const notifyTrustedContacts = useCallback(async () => {
-    if (autoShareContacts.length === 0) return;
-    try {
-      let token = await rideService.getShareTokenForRide(rideId);
-      if (!token) {
-        token = await rideService.generateShareToken(rideId);
-      }
-      const url = buildShareUrl(token);
-      const userName = emergencyContact?.name ?? t('safety.someone');
-      await notificationService.notifyTrustedContacts({
-        contacts: autoShareContacts.map((c) => ({ name: c.name, phone: c.phone })),
-        message: `\u{1F6A8} SOS: ${userName} activó emergencia durante un viaje. Ubicación: ${url}`,
-        eventType: 'sos_emergency',
-      });
-    } catch (err) {
-      logger.error('Failed to notify trusted contacts during SOS', { error: String(err) });
-    }
-  }, [autoShareContacts, rideId, emergencyContact, t]);
 
   const handleSOS = useCallback(async () => {
     onClose();
@@ -67,8 +49,20 @@ export function SafetySheet({
     // Call emergency number immediately
     Linking.openURL('tel:106');
 
-    // Simultaneously notify contacts and create report
-    notifyTrustedContacts();
+    // Broadcast SMS to trusted contacts via the broadcast-emergency EF
+    // (service-role sender with exact GPS + driver info). The DB
+    // safety-net trigger on incident_reports also notifies them with
+    // the tracking link — deliberate redundancy for emergencies.
+    trustedContactService.broadcastEmergency({
+      rideId,
+      latitude: latitude ?? 0,
+      longitude: longitude ?? 0,
+      driverName: driverName ?? null,
+      vehiclePlate: vehiclePlate ?? null,
+      riderName: riderName ?? null,
+    }).catch((err) => {
+      logger.error('Failed to broadcast SOS to trusted contacts', { error: String(err) });
+    });
 
     incidentService.createSOSReport({
       ride_id: rideId,
@@ -84,7 +78,7 @@ export function SafetySheet({
       type: 'success',
       text1: tr('ride.sos_activated'),
     });
-  }, [onClose, notifyTrustedContacts, rideId, userId, driverId, tr]);
+  }, [onClose, rideId, userId, driverId, latitude, longitude, driverName, vehiclePlate, riderName, tr]);
 
   // ── SOS long-press state (2s hold to activate) ──
   const [sosHolding, setSosHolding] = useState(false);

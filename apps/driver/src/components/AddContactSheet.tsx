@@ -19,7 +19,7 @@ import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { trustedContactService } from '@tricigo/api';
-import { isValidCubanPhone, triggerHaptic } from '@tricigo/utils';
+import { isValidCubanPhone, normalizeCubanPhone, triggerHaptic } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 
 interface AddContactSheetProps {
@@ -57,7 +57,8 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
       await trustedContactService.addContact({
         user_id: userId,
         name: name.trim(),
-        phone: phone.trim(),
+        // E.164 (+53...) — D7 can't deliver raw local 8-digit numbers.
+        phone: normalizeCubanPhone(phone.trim()),
         relationship: relationship.trim(),
         auto_share: autoShare,
         is_emergency: isEmergency,
@@ -117,7 +118,7 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
         <View className="flex-1 mr-3">
           <Text variant="body">{t('trusted_contacts.auto_share')}</Text>
           <Text variant="caption" color="secondary">
-            {t('trusted_contacts.auto_share_desc')}
+            {t('trusted_contacts.auto_share_desc_driver')}
           </Text>
         </View>
         <Switch

@@ -5,7 +5,7 @@ import i18next from 'i18next';
 import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { rideService, deliveryService, trustedContactService, notificationService, walletService, corporateService } from '@tricigo/api';
+import { rideService, deliveryService, walletService, corporateService } from '@tricigo/api';
 import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
@@ -1017,20 +1017,9 @@ export function useRideActions() {
             useRideStore.getState().setRatingReminderId(reminderId);
           }).catch(() => {});
 
-          // Notify auto-share trusted contacts that the trip ended safely (fire-and-forget)
-          const currentUserId = useAuthStore.getState().user?.id;
-          const currentUserName = useAuthStore.getState().user?.full_name ?? 'Tu contacto';
-          if (currentUserId) {
-            trustedContactService.getAutoShareContacts(currentUserId).then((contacts) => {
-              if (contacts.length > 0) {
-                notificationService.notifyTrustedContacts({
-                  contacts: contacts.map((c) => ({ name: c.name, phone: c.phone })),
-                  message: `\u2705 ${currentUserName} lleg\u00f3 a su destino de forma segura.`,
-                  eventType: 'trip_completed_safe',
-                }).catch(() => {});
-              }
-            }).catch(() => {});
-          }
+          // "Arrived safely" SMS to auto-share trusted contacts is sent
+          // server-side by trg_notify_trusted_contacts_complete (mig 00473).
+          // The old client-side path always 401'd (send-sms is service-role-only).
         }
 
         // Payment confirmed via Realtime

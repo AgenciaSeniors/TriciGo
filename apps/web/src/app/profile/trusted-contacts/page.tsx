@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, trustedContactService } from '@tricigo/api';
-import { isValidCubanPhone } from '@tricigo/utils';
+import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { TrustedContact } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -103,7 +103,8 @@ export default function TrustedContactsPage() {
       await trustedContactService.addContact({
         user_id: userId,
         name: newName.trim(),
-        phone: newPhone.trim(),
+        // E.164 (+53...) — D7 can't deliver raw local 8-digit numbers.
+        phone: normalizeCubanPhone(newPhone.trim()),
         relationship: newRelationship.trim(),
         auto_share: true,
         is_emergency: newIsEmergency,
