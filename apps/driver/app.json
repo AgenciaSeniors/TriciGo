@@ -32,6 +32,10 @@
           "location",
           "remote-notification"
         ],
+        "LSApplicationQueriesSchemes": [
+          "waze",
+          "comgooglemaps"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -69,7 +73,13 @@
           "android": {
             "compileSdkVersion": 36,
             "targetSdkVersion": 35,
-            "minSdkVersion": 24
+            "minSdkVersion": 24,
+            "manifestQueries": {
+              "package": [
+                "com.waze",
+                "com.google.android.apps.maps"
+              ]
+            }
           },
           "ios": {
             "deploymentTarget": "15.1"

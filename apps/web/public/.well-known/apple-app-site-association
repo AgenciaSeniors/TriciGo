@@ -4,17 +4,16 @@
     "details": [
       {
         "appIDs": ["XXXXXXXXXX.app.tricigo.client"],
-        "comment": "Replace XXXXXXXXXX with your actual Apple Developer Team ID from https://developer.apple.com/account → Membership Details",
+        "comment": "INTENTIONALLY INACTIVE: the placeholder Team ID keeps iOS universal links off (links open in Safari, which is the desired behavior for shared-trip links sent to contacts without an account). To activate, replace XXXXXXXXXX with the Apple Developer Team ID — but ONLY list paths that have an in-app Expo Router bridge route, and re-test the NETOPIA payment return flow on iOS first (it currently works via the browser bridge page).",
         "components": [
-          { "/": "/track/*", "comment": "Ride tracking" },
-          { "/": "/book", "comment": "Booking" }
+          { "/": "/app/client/*", "comment": "Universal-link bridge routes (apps/client/app/app/client/*): wallet payment return, corporate profile" }
         ]
       },
       {
         "appIDs": ["XXXXXXXXXX.app.tricigo.driver"],
-        "comment": "Replace XXXXXXXXXX with your actual Apple Developer Team ID",
+        "comment": "Same as above — placeholder Team ID keeps this inactive. Paths must match apps/driver/app/app/driver/* bridge routes.",
         "components": [
-          { "/": "/driver/*", "comment": "Driver links" }
+          { "/": "/app/driver/*", "comment": "Universal-link bridge routes (apps/driver/app/app/driver/*): wallet payment return, document re-upload" }
         ]
       }
     ]
