@@ -175,11 +175,11 @@ ${preheaderBlock}
           <td style="padding: 28px 32px 20px; text-align: center;">
             <a href="${WEB_ORIGIN}" target="_blank" rel="noopener"
                style="display: inline-block; text-decoration: none;">
-              <!-- Transparent, antialiased wordmark (2x: 336x80, shown at 168x40).
-                   Light/dark swap: dark wordmark by default (and the fallback when a
-                   client strips the <style> rule), white wordmark on dark backgrounds
-                   via prefers-color-scheme. Source PNGs had 1-bit (jagged) alpha; these
-                   are LANCZOS-antialiased and keep transparency (no white box). -->
+              <!-- Transparent, antialiased wordmark (3x: 504x120, shown at 168x40 —
+                   crisp on high-DPI mail apps; regenerated from the HD master by
+                   scripts/regenerate-brand-images.js). Light/dark swap: dark wordmark
+                   by default (and the fallback when a client strips the <style> rule),
+                   white wordmark on dark backgrounds via prefers-color-scheme. -->
               <img class="logo-light" src="${WEB_ORIGIN}/logo-email-light.png" alt="TriciGo" width="168" height="40"
                    style="display: block; width: 168px; height: 40px; border: 0; outline: none; -ms-interpolation-mode: bicubic;">
               <!-- alt="" so the swap's second image doesn't duplicate "TriciGo"
