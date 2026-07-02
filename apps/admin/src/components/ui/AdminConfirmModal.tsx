@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface AdminConfirmModalProps {
   open: boolean;
@@ -20,10 +20,15 @@ export function AdminConfirmModal({
   variant = 'default', onConfirm, onCancel, inputValue, onInputChange, inputPlaceholder
 }: AdminConfirmModalProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  // Double-click guard: several money flows (reverse gift, freeze wallet,
+  // reward referral) confirm through this modal and aren't idempotent. The
+  // confirm button locks after the first click until the modal is reopened.
+  const [confirming, setConfirming] = useState(false);
 
-  // Escape key handler + auto-focus
+  // Escape key handler + auto-focus + reset the double-click guard
   useEffect(() => {
     if (!open) return;
+    setConfirming(false);
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
     };
@@ -45,7 +50,23 @@ export function AdminConfirmModal({
         )}
         <div className="flex justify-end gap-3">
           <button ref={cancelRef} onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-surface-sunken">{cancelLabel}</button>
-          <button onClick={onConfirm} className={`px-4 py-2 text-sm rounded-lg text-white font-medium ${btnColor}`}>{confirmLabel}</button>
+          <button
+            onClick={async () => {
+              if (confirming) return;
+              setConfirming(true);
+              try {
+                // Handlers are usually async; lock while they run and unlock
+                // after they settle so a failed action can still be retried.
+                await Promise.resolve(onConfirm());
+              } finally {
+                setConfirming(false);
+              }
+            }}
+            disabled={confirming}
+            className={`px-4 py-2 text-sm rounded-lg text-white font-medium disabled:opacity-60 disabled:cursor-not-allowed ${btnColor}`}
+          >
+            {confirmLabel}
+          </button>
         </div>
       </div>
     </div>
