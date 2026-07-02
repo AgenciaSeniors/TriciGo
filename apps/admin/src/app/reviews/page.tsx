@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Star, StarOff } from 'lucide-react';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useTranslation } from '@tricigo/i18n';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, havanaDayRangeUtc, havanaMidnightUtc } from '@tricigo/utils';
 import { formatAdminDate } from '@/lib/formatDate';
 import type { Review } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
@@ -75,8 +75,8 @@ export default function ReviewsPage() {
       .from('reviews')
       .select('*', { count: 'exact', head: true });
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // "Hoy" anchored to Cuba's day, not the admin's browser timezone.
+    const todayStart = havanaMidnightUtc();
     const { count: todayCount } = await supabase
       .from('reviews')
       .select('*', { count: 'exact', head: true })
@@ -122,12 +122,9 @@ export default function ReviewsPage() {
       if (ratingFilter !== 'all') {
         query = query.eq('rating', parseInt(ratingFilter, 10));
       }
-      if (dateFrom) query = query.gte('created_at', new Date(dateFrom).toISOString());
-      if (dateTo) {
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        query = query.lte('created_at', end.toISOString());
-      }
+      // Date inputs are Havana calendar days; convert to UTC instants.
+      if (dateFrom) query = query.gte('created_at', havanaDayRangeUtc(dateFrom).start.toISOString());
+      if (dateTo) query = query.lt('created_at', havanaDayRangeUtc(dateTo).end.toISOString());
 
       const { data, error: dbError } = await query;
       if (dbError) throw dbError;

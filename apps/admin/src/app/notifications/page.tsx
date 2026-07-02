@@ -7,7 +7,7 @@ import { notificationService } from '@tricigo/api';
 import { adminService } from '@tricigo/api';
 import { getSupabaseClient } from '@tricigo/api';
 import type { User, AppNotification } from '@tricigo/types';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, havanaMidnightUtc } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -76,8 +76,8 @@ export default function NotificationsPage() {
     setStatsLoading(true);
     try {
       const supabase = getSupabaseClient();
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      // "Hoy" anchored to Cuba's day, not the admin's browser timezone.
+      const todayStart = havanaMidnightUtc();
 
       const [todayRes, unreadRes, typeRes, recentRes] = await Promise.all([
         supabase
