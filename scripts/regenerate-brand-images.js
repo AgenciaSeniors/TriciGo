@@ -258,18 +258,25 @@ async function regenerateWordmarks() {
   const white = cloneImg(content);
   recolorComponents(white, WHITE, ORANGE);
 
-  // Same canvas sizes + filenames as today → zero code changes.
+  // Same filenames as today → zero code changes. The 6 core wordmarks
+  // ship at the master's NATIVE content resolution (886x202) — the
+  // honest maximum without inventing detail. 600px was too small for
+  // 3x phones (AnimatedSplash renders 220dp → 660px needed) and for the
+  // client login (200dp tinted → 600px, zero headroom), which read as
+  // soft edges. Every consumer sizes the image explicitly (or by ratio),
+  // so the dimension bump is layout-safe; glyphs fill the canvas
+  // full-bleed now (the old 600x143 letterboxed ~3px top/bottom).
   const DARK_TARGETS = [
-    ['apps/client/assets/logo-wordmark.png', 600, 143],
-    ['apps/driver/assets/logo-wordmark.png', 600, 143],
-    ['apps/web/public/logo-wordmark.png', 600, 143],
+    ['apps/client/assets/logo-wordmark.png', 886, 202],
+    ['apps/driver/assets/logo-wordmark.png', 886, 202],
+    ['apps/web/public/logo-wordmark.png', 886, 202],
     ['apps/web/public/logo-email-light.png', 336, 80],
     ['apps/admin/public/logo-wordmark.png', 400, 96], // was 200x48 + baked white box; 2x + real alpha (pages use h-10 w-auto)
   ];
   const WHITE_TARGETS = [
-    ['apps/client/assets/logo-wordmark-white.png', 600, 143],
-    ['apps/driver/assets/logo-wordmark-white.png', 600, 143],
-    ['apps/web/public/logo-wordmark-white.png', 600, 143],
+    ['apps/client/assets/logo-wordmark-white.png', 886, 202],
+    ['apps/driver/assets/logo-wordmark-white.png', 886, 202],
+    ['apps/web/public/logo-wordmark-white.png', 886, 202],
     ['apps/web/public/logo-email-dark.png', 336, 80],
     ['apps/admin/public/logo-wordmark-white.png', 400, 96],
   ];
