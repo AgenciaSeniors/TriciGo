@@ -50,7 +50,7 @@ export function WebFooter() {
         <div>
           <div className="footer-section-title">{t('footer.quick_links', { defaultValue: 'Links' })}</div>
           {rechargeOn && <a href="/recargar" className="footer-link">{t('recharge.nav')}</a>}
-          <a href="/#conductores" className="footer-link">{t('footer.drivers', { defaultValue: 'Conductores' })}</a>
+          <a href="/conductores" className="footer-link">{t('footer.drivers', { defaultValue: 'Conductores' })}</a>
           <a href="/blog" className="footer-link">{t('footer.blog')}</a>
           <a href="/empresas" className="footer-link">{t('footer.empresas', { defaultValue: 'Empresas' })}</a>
         </div>

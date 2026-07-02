@@ -543,6 +543,9 @@ export default function HomeClient() {
                 <a href="https://play.google.com/store/apps/details?id=app.tricigo.driver" target="_blank" rel="noopener noreferrer" className="bento-btn bento-btn--white">
                   Descargá TriciGo Conductor
                 </a>
+                <a href="/conductores" className="bento-btn">
+                  Conocé más
+                </a>
               </div>
             </div>
 
