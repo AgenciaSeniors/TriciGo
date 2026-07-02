@@ -27,6 +27,8 @@ type Campaign = {
   sent_count: number;
   created_by: string | null;
   created_at: string;
+  // mig 00478 — null on rows created before the column existed (= customer).
+  audience_role?: string | null;
 };
 
 type Promotion = {
@@ -39,6 +41,7 @@ type City = { id: string; name: string; slug: string };
 
 const SEGMENT_KEYS = ['new_users', 'power_users', 'inactive', 'all', 'by_city'] as const;
 const CHANNEL_KEYS = ['push', 'email', 'both'] as const;
+const AUDIENCE_KEYS = ['customer', 'driver'] as const;
 
 const PAGE_SIZE = 20;
 
@@ -48,7 +51,7 @@ export default function CampaignsPage() {
   const segmentLabel = (v: string): string => {
     const fallbacks: Record<string, string> = {
       new_users: 'Recién llegados', power_users: 'Power users', inactive: 'Inactivos',
-      all: 'Todos los pasajeros', by_city: 'Por ciudad',
+      all: 'Todos', by_city: 'Por ciudad',
     };
     return t(`campaigns.segment_${v}`, { defaultValue: fallbacks[v] ?? v });
   };
@@ -56,8 +59,13 @@ export default function CampaignsPage() {
     const fallbacks: Record<string, string> = { push: 'Push', email: 'Email', both: 'Ambos' };
     return t(`campaigns.channel_${v}`, { defaultValue: fallbacks[v] ?? v });
   };
+  const audienceLabel = (v: string): string => {
+    const fallbacks: Record<string, string> = { customer: 'Pasajeros', driver: 'Conductores' };
+    return t(`campaigns.audience_${v}`, { defaultValue: fallbacks[v] ?? v });
+  };
   const SEGMENT_OPTIONS = SEGMENT_KEYS.map((v) => ({ value: v, label: segmentLabel(v) }));
   const CHANNEL_OPTIONS = CHANNEL_KEYS.map((v) => ({ value: v, label: channelLabel(v) }));
+  const AUDIENCE_OPTIONS = AUDIENCE_KEYS.map((v) => ({ value: v, label: audienceLabel(v) }));
   const { showToast } = useToast();
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -69,6 +77,7 @@ export default function CampaignsPage() {
   const [sort, setSort] = useState<SortState | null>({ columnId: 'created_at', direction: 'desc' });
 
   const [formName, setFormName] = useState('');
+  const [formAudience, setFormAudience] = useState<'customer' | 'driver'>('customer');
   const [formSegment, setFormSegment] = useState('new_users');
   const [formCityId, setFormCityId] = useState('');
   const [formChannel, setFormChannel] = useState('push');
@@ -143,48 +152,90 @@ export default function CampaignsPage() {
     });
   }, [campaigns, sort]);
 
+  // Which user_ids have ridden/driven recently? For customers the rides row
+  // carries users.id directly; for drivers rides.driver_id references
+  // driver_profiles.id, so it needs the profile → user_id mapping.
+  const getActiveUserIdsSince = async (sinceIso: string): Promise<Set<string>> => {
+    const supabase = getSupabaseClient();
+    if (formAudience === 'customer') {
+      const { data } = await supabase
+        .from('rides')
+        .select('customer_id')
+        .gte('created_at', sinceIso)
+        .not('customer_id', 'is', null);
+      return new Set((data ?? []).map((r) => r.customer_id as string));
+    }
+    const { data: rides } = await supabase
+      .from('rides')
+      .select('driver_id')
+      .gte('created_at', sinceIso)
+      .not('driver_id', 'is', null);
+    const profileIds = [...new Set((rides ?? []).map((r) => r.driver_id as string))];
+    if (profileIds.length === 0) return new Set();
+    const { data: profiles } = await supabase
+      .from('driver_profiles')
+      .select('user_id')
+      .in('id', profileIds);
+    return new Set((profiles ?? []).map((p) => p.user_id as string));
+  };
+
   const getSegmentUserIds = async (): Promise<string[]> => {
     const supabase = getSupabaseClient();
     const now = new Date();
 
     if (formSegment === 'all') {
-      const { data } = await supabase.from('users').select('id').eq('role', 'customer');
+      const { data } = await supabase.from('users').select('id').eq('role', formAudience);
       return (data ?? []).map((u) => u.id);
     }
     if (formSegment === 'new_users') {
       const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data } = await supabase.from('users').select('id').gte('created_at', since);
+      const { data } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', formAudience)
+        .gte('created_at', since);
       return (data ?? []).map((u) => u.id);
     }
     if (formSegment === 'power_users') {
-      const { data: allRides } = await supabase
-        .from('rides')
-        .select('customer_id')
-        .not('customer_id', 'is', null);
-      const rideCounts: Record<string, number> = {};
-      for (const r of allRides ?? []) {
-        rideCounts[r.customer_id] = (rideCounts[r.customer_id] || 0) + 1;
+      if (formAudience === 'customer') {
+        const { data: allRides } = await supabase
+          .from('rides')
+          .select('customer_id')
+          .not('customer_id', 'is', null);
+        const rideCounts: Record<string, number> = {};
+        for (const r of allRides ?? []) {
+          rideCounts[r.customer_id] = (rideCounts[r.customer_id] || 0) + 1;
+        }
+        return Object.entries(rideCounts)
+          .filter(([, c]) => c > 10)
+          .map(([id]) => id);
       }
-      return Object.entries(rideCounts)
-        .filter(([, c]) => c > 10)
-        .map(([id]) => id);
+      // Drivers: >10 completed trips, via the maintained counter (see the
+      // "stale precomputed field" pattern — total_rides_completed is the
+      // trigger-maintained one, total_rides is the legacy snapshot).
+      const { data: profiles } = await supabase
+        .from('driver_profiles')
+        .select('user_id, total_rides_completed, total_rides')
+        .not('user_id', 'is', null);
+      return (profiles ?? [])
+        .filter((p) => ((p.total_rides_completed ?? p.total_rides ?? 0) as number) > 10)
+        .map((p) => p.user_id as string);
     }
     if (formSegment === 'inactive') {
       const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: activeRiders } = await supabase
-        .from('rides')
-        .select('customer_id')
-        .gte('created_at', since)
-        .not('customer_id', 'is', null);
-      const activeSet = new Set((activeRiders ?? []).map((r) => r.customer_id));
-      const { data: allCustomers } = await supabase
+      const activeSet = await getActiveUserIdsSince(since);
+      const { data: allUsers } = await supabase
         .from('users')
         .select('id')
-        .eq('role', 'customer');
-      return (allCustomers ?? []).filter((u) => !activeSet.has(u.id)).map((u) => u.id);
+        .eq('role', formAudience);
+      return (allUsers ?? []).filter((u) => !activeSet.has(u.id)).map((u) => u.id);
     }
     if (formSegment === 'by_city' && formCityId) {
-      const { data } = await supabase.from('users').select('id').eq('city_id', formCityId);
+      const { data } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', formAudience)
+        .eq('city_id', formCityId);
       return (data ?? []).map((u) => u.id);
     }
     return [];
@@ -207,6 +258,7 @@ export default function CampaignsPage() {
 
   const resetForm = () => {
     setFormName('');
+    setFormAudience('customer');
     setFormSegment('new_users');
     setFormCityId('');
     setFormChannel('push');
@@ -227,6 +279,7 @@ export default function CampaignsPage() {
 
       const campaignData: Record<string, unknown> = {
         name: formName,
+        audience_role: formAudience,
         segment_type: formSegment,
         segment_city_id: formSegment === 'by_city' ? formCityId : null,
         message_title: formTitle,
@@ -333,7 +386,13 @@ export default function CampaignsPage() {
         campaignData.sent_count = sentCount;
       }
 
-      const { error: dbError } = await supabase.from('campaigns').insert(campaignData);
+      let { error: dbError } = await supabase.from('campaigns').insert(campaignData);
+      // Tolerate mig 00478 not applied yet (canonical column-missing retry):
+      // the history row just loses the audience tag until the column exists.
+      if (dbError && /audience_role|schema cache|column/i.test(dbError.message ?? '')) {
+        const { audience_role: _a, ...withoutAudience } = campaignData;
+        ({ error: dbError } = await supabase.from('campaigns').insert(withoutAudience));
+      }
       if (dbError) throw dbError;
 
       resetForm();
@@ -372,12 +431,17 @@ export default function CampaignsPage() {
         id: 'segment_type',
         header: t('campaigns.col_segment', { defaultValue: 'Segmento' }),
         cell: (c) => (
-          <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-ink-muted">
-            {segmentLabel(c.segment_type)}
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-ink-muted">
+              {audienceLabel(c.audience_role ?? 'customer')}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-ink-muted">
+              {segmentLabel(c.segment_type)}
+            </span>
           </span>
         ),
         hideBelow: 'md',
-        width: '150px',
+        width: '210px',
       },
       {
         id: 'channel',
@@ -456,6 +520,18 @@ export default function CampaignsPage() {
                 className={inputCls(!!formErrors.name)}
               />
             </FormField>
+            <FormField label={t('campaigns.field_audience', { defaultValue: 'Audiencia' })}>
+              <select
+                value={formAudience}
+                onChange={(e) => setFormAudience(e.target.value as 'customer' | 'driver')}
+                className={inputCls(false)}
+              >
+                {AUDIENCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </FormField>
+
             <FormField label={t('campaigns.field_segment', { defaultValue: 'Segmento' })}>
               <select
                 value={formSegment}
