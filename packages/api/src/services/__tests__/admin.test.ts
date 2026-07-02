@@ -141,17 +141,18 @@ describe('adminService', () => {
       expect(result).toEqual(drivers);
     });
 
-    it('filters by vehicle type client-side', async () => {
-      const drivers = [
-        { id: 'd-1', vehicles: [{ type: 'moto', plate_number: 'M1' }] },
-        { id: 'd-2', vehicles: [{ type: 'auto', plate_number: 'A1' }] },
-      ];
+    it('filters by vehicle type server-side (inner join + eq before range)', async () => {
+      // Server-side filtering: the old client-side .filter() ran AFTER
+      // .range(), so each page shrank and pagination broke.
+      const drivers = [{ id: 'd-1', vehicles: [{ type: 'moto', plate_number: 'M1' }] }];
       const chain = createMockQueryChain({ data: drivers, error: null });
       mockFrom.mockReturnValueOnce(chain);
 
       const result = await adminService.getAllDrivers(0, 20, { vehicleType: 'moto' });
 
-      expect(result).toEqual([drivers[0]]);
+      expect(chain.select).toHaveBeenCalledWith(expect.stringContaining('vehicles!inner'));
+      expect(chain.eq).toHaveBeenCalledWith('vehicles.type', 'moto');
+      expect(result).toEqual(drivers);
     });
 
     it('throws on supabase error', async () => {

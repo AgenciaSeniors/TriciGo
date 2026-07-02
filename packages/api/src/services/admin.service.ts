@@ -191,9 +191,16 @@ export const adminService = {
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
+    // vehicles!inner only while filtering by type — otherwise drivers without
+    // a vehicle row would drop out of the unfiltered list. The filter must be
+    // server-side: the previous client-side filter ran AFTER .range(), so
+    // each page of 20 shrank to however many matched and pagination broke.
+    const vehicleSelect = filters.vehicleType
+      ? 'vehicles!inner(type, plate_number)'
+      : 'vehicles(type, plate_number)';
     let query = supabase
       .from('driver_profiles')
-      .select('*, users!inner(full_name, phone, email), vehicles(type, plate_number)')
+      .select(`*, users!inner(full_name, phone, email), ${vehicleSelect}`)
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -209,16 +216,12 @@ export const adminService = {
     if (filters.cityId) {
       query = query.eq('city_id', filters.cityId);
     }
+    if (filters.vehicleType) {
+      query = query.eq('vehicles.type', filters.vehicleType);
+    }
 
     const { data, error } = await query;
     if (error) throw error;
-
-    // Client-side vehicle type filter (vehicles is a nested array)
-    if (filters.vehicleType) {
-      return (data as DriverProfileWithUser[]).filter((d) =>
-        d.vehicles?.some((v: { type: string; plate_number: string }) => v.type === filters.vehicleType),
-      );
-    }
 
     return data as DriverProfileWithUser[];
   },

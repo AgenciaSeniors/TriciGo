@@ -9,6 +9,7 @@ import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
 import { getErrorMessage } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
+import { useAdminUser } from '@/lib/useAdminUser';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
 
@@ -50,6 +51,7 @@ export default function UserDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
+  const { userId: adminUserId } = useAdminUser();
   const router = useRouter();
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,7 +101,7 @@ export default function UserDetailPage() {
           if (reviewSummary?.top_tags) setTopTags(reviewSummary.top_tags);
         }
       } catch (err) {
-        // Error handled by UI
+        if (!cancelled) showToast('error', getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -107,6 +109,7 @@ export default function UserDetailPage() {
 
     load();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const handleLevelChange = async () => {
@@ -122,8 +125,10 @@ export default function UserDetailPage() {
             : null,
         );
         showToast('success', t('users.level_updated', { defaultValue: 'Nivel actualizado' }));
-      } catch {
-        // Error handled silently
+      } catch (err) {
+        // Revert the select so the UI doesn't claim a level that didn't save.
+        setSelectedLevel(detail.user.level ?? 'bronce');
+        showToast('error', getErrorMessage(err));
       } finally {
         setLevelUpdating(false);
       }
@@ -136,7 +141,9 @@ export default function UserDetailPage() {
     if (!newActive && !blockReason.trim()) return; // Require reason to block
     setBlockUpdating(true);
     try {
-      await adminService.toggleUserActive(id, newActive, id, blockReason || undefined);
+      // 3rd arg is the ACTING admin for the admin_actions audit row — it was
+      // passing the target user's id, attributing the block to the blocked user.
+      await adminService.toggleUserActive(id, newActive, adminUserId, blockReason || undefined);
       setDetail((prev) =>
         prev
           ? { ...prev, user: { ...prev.user, is_active: newActive } }
@@ -146,7 +153,7 @@ export default function UserDetailPage() {
       setBlockReason('');
       showToast('success', newActive ? t('users.unblocked', { defaultValue: 'Usuario desbloqueado' }) : t('users.blocked', { defaultValue: 'Usuario bloqueado' }));
     } catch (err) {
-      // Error handled by UI
+      showToast('error', getErrorMessage(err));
     } finally {
       setBlockUpdating(false);
     }

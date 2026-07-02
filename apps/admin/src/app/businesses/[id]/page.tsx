@@ -79,6 +79,8 @@ export default function BusinessDetailPage() {
       await corporateService.approveAccount(id, adminUserId);
       await fetchData();
       showToast('success', t('businesses.approved_success', { defaultValue: 'Empresa aprobada' }));
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
     } finally { setActionLoading(false); }
   }
 
@@ -90,6 +92,8 @@ export default function BusinessDetailPage() {
       setShowRejectModal(false);
       await fetchData();
       showToast('success', t('businesses.rejected_success', { defaultValue: 'Empresa rechazada' }));
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
     } finally { setActionLoading(false); }
   }
 
@@ -101,6 +105,8 @@ export default function BusinessDetailPage() {
       setShowSuspendModal(false);
       await fetchData();
       showToast('success', t('businesses.suspended_success', { defaultValue: 'Empresa suspendida' }));
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
     } finally { setActionLoading(false); }
   }
 
@@ -108,9 +114,13 @@ export default function BusinessDetailPage() {
     if (!id || !adminUserId) return;
     setActionLoading(true);
     try {
-      await corporateService.approveAccount(id, adminUserId);
+      // reactivateAccount (not approveAccount): also clears suspended_at /
+      // suspended_reason and logs the 'reactivate_corporate' admin action.
+      await corporateService.reactivateAccount(id, adminUserId);
       await fetchData();
       showToast('success', t('businesses.reactivated_success', { defaultValue: 'Empresa reactivada' }));
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
     } finally { setActionLoading(false); }
   }
 
