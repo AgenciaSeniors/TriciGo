@@ -76,14 +76,16 @@ export default function PromotionsAdminPage() {
         ? t('promotions.type_percentage', { defaultValue: 'Descuento %' })
         : type === 'fixed_discount'
           ? t('promotions.type_fixed', { defaultValue: 'Descuento fijo' })
-          : t('promotions.type_bonus', { defaultValue: 'Bono crédito' }),
+          : t('promotions.type_bonus', { defaultValue: 'Bono % (descuento en viaje)' }),
     [t],
   );
 
   const discountLabel = useCallback((p: Promotion) => {
-    if (p.type === 'percentage_discount') return `${p.discount_percent ?? 0}%`;
     if (p.type === 'fixed_discount') return `−${p.discount_fixed_cup ?? 0} CUP`;
-    return `+${p.discount_fixed_cup ?? 0} CUP`;
+    // bonus_credit is computed server-side EXACTLY like percentage_discount
+    // (validate_promo_code + rides trigger read discount_percent) — it never
+    // credits the wallet. The old "+X CUP" rendering was misleading.
+    return `${p.discount_percent ?? 0}%`;
   }, []);
 
   const loadItems = useCallback(async () => {
@@ -141,7 +143,11 @@ export default function PromotionsAdminPage() {
       return;
     }
     try {
-      const isPct = form.type === 'percentage_discount';
+      // bonus_credit is percentage-based server-side (validate_promo_code and
+      // the rides trigger read discount_percent for it) — only fixed_discount
+      // uses the CUP amount. Saving bonus_credit into discount_fixed_cup
+      // produced promos that validated with a 0 discount.
+      const isPct = form.type !== 'fixed_discount';
       const base = {
         code: form.code.trim().toUpperCase(),
         type: form.type,
@@ -408,10 +414,18 @@ export default function PromotionsAdminPage() {
               >
                 <option value="percentage_discount">{t('promotions.type_percentage', { defaultValue: 'Descuento %' })}</option>
                 <option value="fixed_discount">{t('promotions.type_fixed', { defaultValue: 'Descuento fijo' })}</option>
-                <option value="bonus_credit">{t('promotions.type_bonus', { defaultValue: 'Bono crédito' })}</option>
+                <option value="bonus_credit">{t('promotions.type_bonus', { defaultValue: 'Bono % (descuento en viaje)' })}</option>
               </select>
+              {form.type === 'bonus_credit' && (
+                <p className="mt-1 text-[11px] text-ink-muted">
+                  {t('promotions.type_bonus_hint', { defaultValue: 'Se aplica como % de descuento sobre el viaje — NO acredita saldo a la billetera.' })}
+                </p>
+              )}
             </Field>
-            {form.type === 'percentage_discount' ? (
+            {/* bonus_credit reads discount_percent server-side (identical to
+                percentage_discount) — binding it to the CUP field produced
+                promos that validated with a 0 discount. */}
+            {form.type !== 'fixed_discount' ? (
               <Field label={t('promotions.field_discount_pct', { defaultValue: 'Descuento (%)' })}>
                 <input
                   type="number"
