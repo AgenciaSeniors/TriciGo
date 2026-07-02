@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
+import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
 type ConfigEntry = { key: string; value: string };
 
@@ -43,6 +45,9 @@ const RULES: AutomationRule[] = [
 export default function AutomationPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  // ADM-002: platform_config writes are super_admin-only (mig 00292).
+  // Mirror the RLS in the UI so regular admins don't get silent no-ops.
+  const { isSuperAdmin, loading: superAdminLoading } = useIsSuperAdmin();
   const [configs, setConfigs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -65,26 +70,29 @@ export default function AutomationPage() {
           setConfigs(vals);
         }
       } catch (err) {
-        // Error handled by UI
+        if (!cancelled) showToast('error', getErrorMessage(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
     fetch();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function saveConfig(key: string, value: string) {
     setSavingKey(key);
     setSavedKey(null);
     try {
-      await adminService.updatePlatformConfig(key, JSON.stringify(value));
+      // Raw value (no JSON.stringify): matches how these keys are stored in
+      // prod and how platform-config/page.tsx writes them.
+      await adminService.updatePlatformConfig(key, value);
       setConfigs((prev) => ({ ...prev, [key]: value }));
       setSavedKey(key);
       showToast('success', t('automation.saved'));
       setTimeout(() => setSavedKey(null), 3000);
     } catch (err) {
-      // Error handled by UI
+      showToast('error', getErrorMessage(err));
     } finally {
       setSavingKey(null);
     }
@@ -93,6 +101,15 @@ export default function AutomationPage() {
   function toggleEnabled(key: string) {
     const current = configs[key] === 'true';
     saveConfig(key, current ? 'false' : 'true');
+  }
+
+  function saveThreshold(key: string, value: string) {
+    const num = Number(value.trim());
+    if (value.trim() === '' || !Number.isFinite(num) || num <= 0) {
+      showToast('error', t('automation.threshold_invalid', { defaultValue: 'El valor debe ser un número mayor que 0' }));
+      return;
+    }
+    saveConfig(key, String(num));
   }
 
   function handleThresholdChange(key: string, value: string) {
@@ -117,6 +134,15 @@ export default function AutomationPage() {
       </Link>
       <h1 className="text-3xl font-bold mb-2">{t('automation.title')}</h1>
       <p className="text-ink-muted mb-6">{t('automation.subtitle')}</p>
+
+      {!superAdminLoading && !isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+          {t('platform_config.requires_super_admin', {
+            defaultValue:
+              'Solo super_admin puede modificar esta configuración. Tu cuenta puede consultar los valores actuales pero no guardarlos.',
+          })}
+        </div>
+      )}
 
       <div className="space-y-4">
         {RULES.map((rule) => {
@@ -145,13 +171,14 @@ export default function AutomationPage() {
                 {/* Toggle */}
                 <button
                   onClick={() => toggleEnabled(rule.enabledKey)}
-                  disabled={savingKey === rule.enabledKey}
+                  disabled={savingKey === rule.enabledKey || !isSuperAdmin}
+                  title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
                   role="switch"
                   aria-checked={enabled}
                   aria-label={t(rule.titleKey)}
-                  className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+                  className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none disabled:cursor-not-allowed ${
                     enabled ? 'bg-green-500' : 'bg-line-strong'
-                  } ${savingKey === rule.enabledKey ? 'opacity-50' : ''}`}
+                  } ${savingKey === rule.enabledKey || !isSuperAdmin ? 'opacity-50' : ''}`}
                 >
                   <span
                     className={`pointer-events-none inline-block h-6 w-6 rounded-full bg-white dark:bg-neutral-100 shadow transform transition-transform ${
@@ -174,9 +201,10 @@ export default function AutomationPage() {
                   onChange={(e) => handleThresholdChange(rule.thresholdKey, e.target.value)}
                 />
                 <button
-                  onClick={() => saveConfig(rule.thresholdKey, thresholdVal)}
-                  disabled={savingKey === rule.thresholdKey}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
+                  onClick={() => saveThreshold(rule.thresholdKey, thresholdVal)}
+                  disabled={savingKey === rule.thresholdKey || !isSuperAdmin}
+                  title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {savingKey === rule.thresholdKey ? t('automation.saving') : t('common.save')}
                 </button>

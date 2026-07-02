@@ -125,15 +125,10 @@ export default function NotificationsPage() {
       return;
     }
     try {
-      const users = await adminService.getUsers(0, 10);
-      setUserResults(
-        users.filter(
-          (u) =>
-            u.full_name?.toLowerCase().includes(query.toLowerCase()) ||
-            u.phone?.includes(query) ||
-            u.email?.toLowerCase().includes(query.toLowerCase()),
-        ),
-      );
+      // Server-side search (full_name + phone via ilike) so the whole user
+      // base is reachable — not just the 10 most recent rows.
+      const users = await adminService.getUsers(0, 10, { search: query });
+      setUserResults(users);
     } catch {
       setUserResults([]);
     }
@@ -153,12 +148,14 @@ export default function NotificationsPage() {
     if (!validateForm()) return;
     setSending(true);
     try {
-      let result: { successCount: number; errorCount: number };
-      if (targetType === 'user') {
-        result = await notificationService.sendToUser(targetUserId, title, body, 'admin');
-      } else {
-        result = await notificationService.broadcastPush(title, body, targetType, 'admin');
-      }
+      // Route through the send-push edge function (service-side delivery +
+      // inbox persistence). The old browser→exp.host path was CORS-blocked
+      // and never reached the in-app inbox (same class as campaigns, #641).
+      const result = await notificationService.sendAdminPush(
+        targetType === 'user' ? { userId: targetUserId } : targetType,
+        { title, body },
+        'admin',
+      );
       setTitle('');
       setBody('');
       setTargetUserId('');
