@@ -416,11 +416,20 @@ export function useRideActions() {
         userId: user.id,
         fareAmount: fe?.estimated_fare_cup ?? 0,
       });
+      // The service returns the RAW error key ('already_used', 'first_ride_only',
+      // …) — untranslated it rendered literally in ReviewingView. Map to copy.
+      const errorMsgs: Record<string, string> = {
+        invalid: i18next.t('rider:ride.promo_invalid'),
+        expired: i18next.t('rider:ride.promo_error_expired', { defaultValue: 'Código expirado' }),
+        max_uses: i18next.t('rider:ride.promo_error_max_uses', { defaultValue: 'Código agotado' }),
+        already_used: i18next.t('rider:ride.promo_error_already_used', { defaultValue: 'Ya usaste este código' }),
+        first_ride_only: i18next.t('rider:ride.promo_error_first_ride', { defaultValue: 'Solo válido para tu primer viaje' }),
+      };
       setPromoResult({
         valid: result.valid,
         discountAmount: result.discountAmount,
         promotionId: result.promotion?.id,
-        error: result.error,
+        error: result.error ? (errorMsgs[result.error] ?? i18next.t('rider:ride.promo_invalid')) : undefined,
       });
       if (result.valid) {
         trackEvent('promo_applied', { code: promoCode.trim(), discount: result.discountAmount });

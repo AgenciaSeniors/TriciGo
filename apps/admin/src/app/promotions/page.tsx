@@ -24,6 +24,7 @@ type FormState = {
   body_es: string;
   image_url: string;
   notify_on_publish: boolean;
+  first_ride_only: boolean;
 };
 
 const emptyForm: FormState = {
@@ -39,6 +40,7 @@ const emptyForm: FormState = {
   body_es: '',
   image_url: '',
   notify_on_publish: true,
+  first_ride_only: false,
 };
 
 const PAGE_SIZE = 20;
@@ -161,9 +163,23 @@ export default function PromotionsAdminPage() {
         body_es: form.body_es.trim() || null,
         image_url: form.image_url.trim() || null,
         notify_on_publish: form.notify_on_publish,
+        first_ride_only: form.first_ride_only,
+      };
+      // Tolerate mig 00482 not applied yet (canonical column-missing retry):
+      // the promo just loses the first-ride flag until the column exists.
+      const saveWithTolerance = async (fn: (payload: typeof base) => Promise<unknown>) => {
+        try {
+          return await fn(base);
+        } catch (err) {
+          if (/first_ride_only|schema cache|column/i.test(getErrorMessage(err))) {
+            const { first_ride_only: _f, ...withoutFlag } = base;
+            return await fn(withoutFlag as typeof base);
+          }
+          throw err;
+        }
       };
       if (editingId) {
-        await promotionService.update(editingId, base);
+        await saveWithTolerance((payload) => promotionService.update(editingId, payload));
         showToast('success', t('promotions.toast_updated', { defaultValue: 'Promoción actualizada' }));
         const prev = items.find((i) => i.id === editingId);
         await maybeNotifyOnPublish({
@@ -173,7 +189,9 @@ export default function PromotionsAdminPage() {
           notified_at: prev?.notified_at ?? null,
         });
       } else {
-        const created = await promotionService.create({ ...base, notified_at: null });
+        const created = (await saveWithTolerance((payload) =>
+          promotionService.create({ ...payload, notified_at: null }),
+        )) as Promotion;
         showToast('success', t('promotions.toast_created', { defaultValue: 'Promoción creada' }));
         await maybeNotifyOnPublish(created);
       }
@@ -198,6 +216,7 @@ export default function PromotionsAdminPage() {
       body_es: p.body_es ?? '',
       image_url: p.image_url ?? '',
       notify_on_publish: p.notify_on_publish,
+      first_ride_only: p.first_ride_only ?? false,
     });
     setEditingId(p.id);
     setShowForm(true);
@@ -503,6 +522,17 @@ export default function PromotionsAdminPage() {
                   className="h-4 w-4 rounded border-line"
                 />
                 {t('promotions.active_help', { defaultValue: 'El código se puede canjear' })}
+              </label>
+            </Field>
+            <Field label={t('promotions.field_first_ride_only', { defaultValue: 'Solo primer viaje' })}>
+              <label className="inline-flex items-center gap-2 text-[13px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={form.first_ride_only}
+                  onChange={(e) => setForm({ ...form, first_ride_only: e.target.checked })}
+                  className="h-4 w-4 rounded border-line"
+                />
+                {t('promotions.first_ride_only_help', { defaultValue: 'Solo válido para usuarios sin viajes completados (requiere mig 00482)' })}
               </label>
             </Field>
             <Field label={t('promotions.field_notify_on_publish', { defaultValue: 'Notificar al publicar' })}>
