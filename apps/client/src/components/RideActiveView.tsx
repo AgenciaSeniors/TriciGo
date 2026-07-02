@@ -808,9 +808,11 @@ export function RideActiveView() {
               // si falla NO bloquea la llamada al 106 — el botón rojo
               // siempre llama a emergencias incluso si el SMS broadcast
               // falla por red.
-              const driverPos = (rideWithDriver as { driver_lat?: number; driver_lng?: number } | null);
-              const lat = driverPos?.driver_lat ?? activeRide.pickup_location?.latitude ?? 0;
-              const lng = driverPos?.driver_lng ?? activeRide.pickup_location?.longitude ?? 0;
+              // driverPosition = GPS vivo del vehículo (polled); el pickup es
+              // solo fallback — un SOS a mitad de viaje debe apuntar a donde
+              // está el vehículo, no a donde empezó.
+              const lat = driverPosition?.latitude ?? activeRide.pickup_location?.latitude ?? 0;
+              const lng = driverPosition?.longitude ?? activeRide.pickup_location?.longitude ?? 0;
               trustedContactService.broadcastEmergency({
                 rideId: activeRide.id,
                 latitude: lat,
@@ -1726,8 +1728,8 @@ export function RideActiveView() {
         riderName={userFullName}
         driverName={rideWithDriver?.driver_name ?? null}
         vehiclePlate={rideWithDriver?.vehicle_plate ?? null}
-        latitude={(rideWithDriver as { driver_lat?: number } | null)?.driver_lat ?? activeRide.pickup_location?.latitude ?? 0}
-        longitude={(rideWithDriver as { driver_lng?: number } | null)?.driver_lng ?? activeRide.pickup_location?.longitude ?? 0}
+        latitude={driverPosition?.latitude ?? activeRide.pickup_location?.latitude ?? 0}
+        longitude={driverPosition?.longitude ?? activeRide.pickup_location?.longitude ?? 0}
       />
     </View>
   );
