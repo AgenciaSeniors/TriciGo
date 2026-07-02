@@ -56,6 +56,16 @@ export default function ServiceTypesPage() {
 
   async function handleSave() {
     if (!editingId) return;
+    // Mirror the pricing create-form validation: never persist negative fares.
+    const fareFields = ['base_fare_cup', 'per_km_rate_cup', 'per_minute_rate_cup', 'min_fare_cup'] as const;
+    const invalid = fareFields.some((f) => {
+      const v = editForm[f];
+      return typeof v === 'number' && (!Number.isFinite(v) || v < 0);
+    });
+    if (invalid) {
+      showToast('error', t('common.must_be_positive', { defaultValue: 'Debe ser positivo' }));
+      return;
+    }
     setSaving(true);
     try {
       await adminService.updateServiceTypeConfig(editingId, editForm);
