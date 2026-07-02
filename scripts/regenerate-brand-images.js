@@ -409,8 +409,62 @@ async function fixIconSeam() {
   const before = fs.statSync(file).size;
   await sharp(data, { raw: { width, height, channels: 4 } }).removeAlpha().png({ compressionLevel: 9 }).toFile(file);
   console.log(`  wrote apps/client/assets/icon.png  ${width}x${height}  ${(before / 1024).toFixed(1)}KB -> ${(fs.statSync(file).size / 1024).toFixed(1)}KB`);
-  // NOTE: the driver icon.png has only delta<=19 deviations on near-black —
-  // imperceptible and possibly intentional vignette; deliberately untouched.
+}
+
+// ---------- 4c) driver icon master: full-bleed + optical pin scale ----------
+
+// The driver icon kept the OLD inset rounded-badge composition (#723 only
+// fixed the client) and its pin is a hollow white outline — geometrically
+// identical to the client's (595x705 vs 595x704, verified 2026-07-02) but
+// perceived ~15% smaller next to the client's solid white pin in the App
+// Store. Fix (user decision): recompose full-bleed — flat near-black canvas
+// (badge interior and outer corners are all ~rgb(19,19,19); the old inset
+// edge is just a delta<=19 AA line) + the pin scaled up 10% at its original
+// center. Idempotency guard: skip when the pin already exceeds 72% of the
+// canvas height (original is 69%, scaled is ~76%).
+async function fixDriverIcon() {
+  console.log('4c) apps/driver/assets/icon.png: full-bleed + pin +10%');
+  const file = P('apps/driver/assets/icon.png');
+  const img = await loadRaw(file);
+  const { data, width, height } = img;
+  const px = (x, y) => (y * width + x) * 4;
+  const corners = [[10, 10], [width - 11, 10], [10, height - 11], [width - 11, height - 11]];
+  const bg = [0, 1, 2].map((c) => Math.round(corners.reduce((a, [x, y]) => a + data[px(x, y) + c], 0) / 4));
+  // pin bbox = pixels deviating strongly from the near-black background
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = px(x, y);
+    const d = Math.max(Math.abs(data[i] - bg[0]), Math.abs(data[i + 1] - bg[1]), Math.abs(data[i + 2] - bg[2]));
+    if (d > 60) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  const pinH = maxY - minY + 1;
+  if (pinH / height > 0.72) {
+    console.log(`  pin already at ${(100 * pinH / height).toFixed(0)}% height — skip (idempotent)`);
+    return;
+  }
+  const M = 6, SCALE = 1.10;
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const crop = { left: minX - M, top: minY - M, width: maxX - minX + 1 + 2 * M, height: maxY - minY + 1 + 2 * M };
+  const newW = Math.round(crop.width * SCALE), newH = Math.round(crop.height * SCALE);
+  const left = Math.round(cx - newW / 2), top = Math.round(cy - newH / 2);
+  // safety fuse: the scaled pin must keep >=60px margin (iOS corner mask)
+  if (left < 60 || top < 60 || left + newW > width - 60 || top + newH > height - 60) {
+    throw new Error('fixDriverIcon: scaled pin would leave <60px margin — aborting');
+  }
+  const scaledPin = await sharp(data, { raw: { width, height, channels: 4 } })
+    .extract(crop)
+    .resize(newW, newH, { kernel: sharp.kernel.lanczos3 })
+    .removeAlpha()
+    .png().toBuffer();
+  const before = fs.statSync(file).size;
+  await sharp({ create: { width, height, channels: 3, background: { r: bg[0], g: bg[1], b: bg[2] } } })
+    .composite([{ input: scaledPin, left, top }])
+    .png({ compressionLevel: 9 }).toFile(file);
+  console.log(`  pin (${minX},${minY})-(${maxX},${maxY}) scaled x${SCALE} -> ${newW}x${newH} at (${left},${top}) on flat rgb(${bg.join(',')})`);
+  console.log(`  wrote apps/driver/assets/icon.png  ${width}x${height}  ${(before / 1024).toFixed(1)}KB -> ${(fs.statSync(file).size / 1024).toFixed(1)}KB`);
 }
 
 // ---------- 5) web PWA icons from the 1024 master ----------
@@ -467,6 +521,7 @@ async function defringeWebIcons() {
   await fixNotificationIcon();
   await cleanStrays();
   await fixIconSeam(); // must run BEFORE regenerateIcon512 (512/192 derive from the master)
+  await fixDriverIcon();
   await regenerateIcon512();
   await regenerateTricoinSmall();
   await defringeWebIcons();
