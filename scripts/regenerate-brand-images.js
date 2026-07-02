@@ -312,12 +312,18 @@ async function cleanStrays() {
   }
 }
 
-// ---------- 5) icon-512 from the 1024 master ----------
+// ---------- 5) web PWA icons from the 1024 master ----------
 
 async function regenerateIcon512() {
-  console.log('5) apps/web/public/icon-512.png from client icon.png (1024)');
+  console.log('5) apps/web/public/icon-512.png + icon-192.png from client icon.png (1024)');
   const img = await loadRaw(P('apps/client/assets/icon.png'));
   await writePng(img, 512, 512, P('apps/web/public/icon-512.png'));
+  // icon-192 shipped in the OLD rounded-square-on-white style (baked white
+  // corners) while icon-512 went full-bleed — regenerate it from the same
+  // master so both PWA icons are consistent and safe to declare
+  // `purpose: "any maskable"` in manifest.json (the launcher applies its own
+  // rounded mask; baked white corners would show inside the mask otherwise).
+  await writePng(img, 192, 192, P('apps/web/public/icon-192.png'));
 }
 
 // ---------- 6) tricoin-small from tricoin-logo@3x ----------
