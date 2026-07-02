@@ -39,21 +39,26 @@ export default function DriverReferralScreen() {
   // PASS #3 REFERRAL-HARDCODE: bonus is admin-configurable (mig 00395,
   // platform_config.referral_bonus_cup). Default 500 until fetched.
   const [bonusCup, setBonusCup] = useState(500);
+  // 00477: optional welcome bonus for the REFEREE (0 = off, hides the note).
+  const [welcomeBonusCup, setWelcomeBonusCup] = useState(0);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
     try {
-      const [code, history, referred, bonusRaw] = await Promise.all([
+      const [code, history, referred, bonusRaw, welcomeRaw] = await Promise.all([
         referralService.getOrCreateReferralCode(userId),
         referralService.getReferralHistory(userId),
         referralService.hasBeenReferred(userId),
         walletService.getConfigValue('referral_bonus_cup').catch(() => null),
+        walletService.getConfigValue('referral_welcome_bonus_cup').catch(() => null),
       ]);
       setMyCode(code);
       setReferrals(history);
       setHasBeenReferred(referred);
       const parsedBonus = bonusRaw != null ? parseInt(bonusRaw, 10) : NaN;
       if (Number.isFinite(parsedBonus) && parsedBonus > 0) setBonusCup(parsedBonus);
+      const parsedWelcome = welcomeRaw != null ? parseInt(welcomeRaw, 10) : NaN;
+      if (Number.isFinite(parsedWelcome) && parsedWelcome > 0) setWelcomeBonusCup(parsedWelcome);
     } catch (err) {
       console.warn('[Referral] Failed to load:', err);
     } finally {
@@ -161,6 +166,11 @@ export default function DriverReferralScreen() {
                   <Text variant="body" color="primary" className="font-semibold mb-3">
                     {t('profile.referral_have_code')}
                   </Text>
+                  {welcomeBonusCup > 0 ? (
+                    <Text variant="caption" color="secondary" className="mb-3">
+                      {t('profile.referral_welcome_bonus_note_driver', { bonus: formatTriciCoinName(welcomeBonusCup) })}
+                    </Text>
+                  ) : null}
                   <Input
                     label=""
                     placeholder={t('profile.referral_enter_code')}

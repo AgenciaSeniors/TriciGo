@@ -69,6 +69,7 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
 
   // ── Referral program (Referidos) ──
   referral_bonus_cup: { type: 'number', helpKey: 'platform_config.referral_bonus_cup_help' },
+  referral_welcome_bonus_cup: { type: 'number', helpKey: 'platform_config.referral_welcome_bonus_cup_help' },
 
   // ── Cancellation reputation (Castigo por cancelar, migs 00372-00374) ──
   cancel_rating_value_second: { type: 'number', helpKey: 'platform_config.cancel_rating_value_second_help' },

@@ -1126,6 +1126,7 @@
     "routing_google_enabled_help": "Experiment: use Google Directions instead of Mapbox for routes. Set 'true' to enable (requires the GOOGLE_DIRECTIONS_API_KEY secret). Default false.",
     "routing_google_daily_cap_help": "Daily cap on Google Directions calls; once exceeded, falls back to Mapbox. Default 2000.",
     "referral_bonus_cup_help": "Referral bonus amount in CUP (credited as TriciCoin, 1:1). Applies to NEW referrals; pending ones keep the amount they were created with. Default 500.",
+    "referral_welcome_bonus_cup_help": "WELCOME bonus for the referred user (who applied the code), in CUP. 0 = off. Paid on the same event as the referrer bonus: first completed ride (passenger) or approval (driver).",
     "cancel_rating_value_second_help": "Star value contributed by the 2nd late cancellation within 24h (the 1st is grace). Default 3.0",
     "cancel_rating_value_third_help": "Star value contributed by the 3rd+ late cancellation within 24h. Default 2.0",
     "cancel_rating_event_window_days_help": "Days a cancellation event keeps counting toward the rating (0 = forever). Default 90",

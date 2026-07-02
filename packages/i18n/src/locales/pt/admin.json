@@ -1126,6 +1126,7 @@
     "routing_google_enabled_help": "Experimento: usar Google Directions em vez de Mapbox para as rotas. Defina 'true' para ativar (requer a chave GOOGLE_DIRECTIONS_API_KEY). Padrão false.",
     "routing_google_daily_cap_help": "Limite diário de chamadas ao Google Directions; ao exceder, volta para o Mapbox. Padrão 2000.",
     "referral_bonus_cup_help": "Valor do bônus de indicação em CUP (creditado como TriciCoin, 1:1). Aplica-se a novas indicações; as pendentes mantêm o valor com que foram criadas. Padrão 500.",
+    "referral_welcome_bonus_cup_help": "Bônus de BOAS-VINDAS para o indicado (quem usou o código), em CUP. 0 = desligado. Pago no mesmo evento que o bônus do indicador: primeira corrida concluída (passageiro) ou aprovação (motorista).",
     "cancel_rating_value_second_help": "Estrelas que a 2ª cancelação tardia em 24h contribui (a 1ª é tolerância). Padrão 3.0",
     "cancel_rating_value_third_help": "Estrelas que a 3ª+ cancelação tardia em 24h contribui. Padrão 2.0",
     "cancel_rating_event_window_days_help": "Dias que um evento de cancelação continua contando no rating (0 = permanente). Padrão 90",
