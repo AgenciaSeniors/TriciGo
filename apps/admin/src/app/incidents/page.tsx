@@ -101,13 +101,15 @@ export default function IncidentsPage() {
     async (id: string, next: string, successMsg: string) => {
       try {
         await adminService.updateIncidentStatus(id, next, adminUserId);
-        setIncidents((prev) => prev.map((i) => (i.id === id ? { ...i, status: next } : i)));
+        // Refetch instead of patching in place so the incident drops out of
+        // the active tab (e.g. "Abiertos") when its status no longer matches.
+        await fetchIncidents();
         showToast('success', successMsg);
       } catch (err) {
         showToast('error', getErrorMessage(err));
       }
     },
-    [adminUserId, showToast, t],
+    [adminUserId, showToast, fetchIncidents],
   );
 
   const columns: DataColumn<Incident>[] = useMemo(

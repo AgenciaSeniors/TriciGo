@@ -123,7 +123,12 @@ export function DataTable<T>({
 
   const renderHeader = (col: DataColumn<T>) => {
     const sortable = Boolean(col.sortKey) && Boolean(onSortChange);
-    const active = sort?.columnId === col.id;
+    // Sort by the declared sortKey (a real row property), not the display id.
+    // With col.id, a column like rides' Tarifa (id 'fare', sortKey
+    // 'estimated_fare_cup') emitted a columnId that isn't a row key and the
+    // consumer's `row[sort.columnId]` sort was a silent no-op.
+    const sortId = col.sortKey ?? col.id;
+    const active = sort?.columnId === sortId;
     const Icon = active ? (sort!.direction === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
 
     const content = (
@@ -142,8 +147,8 @@ export function DataTable<T>({
         onClick={() => {
           const next: SortState =
             active && sort?.direction === 'asc'
-              ? { columnId: col.id, direction: 'desc' }
-              : { columnId: col.id, direction: 'asc' };
+              ? { columnId: sortId, direction: 'desc' }
+              : { columnId: sortId, direction: 'asc' };
           onSortChange!(next);
         }}
         className="inline-flex w-full"

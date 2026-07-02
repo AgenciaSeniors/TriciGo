@@ -167,15 +167,11 @@ export default function DisputesPage() {
         amount,
         resolutionNotes,
       );
-      const nextStatus: DisputeStatus = resolution === 'no_action' ? 'resolved_driver' : 'resolved_rider';
-      setDisputes((prev) =>
-        prev.map((d) =>
-          d.id === selected.id
-            ? { ...d, status: nextStatus, resolution, refund_amount_trc: amount }
-            : d,
-        ),
-      );
       setSelected(null);
+      // Refetch instead of patching in place: the server maps resolution →
+      // status (warning_issued → resolved_driver, mig 00167), and a resolved
+      // dispute must drop out of the active "Abiertas" tab.
+      await fetchDisputes();
       showToast('success', t('disputes.toast_resolved', { defaultValue: 'Disputa resuelta' }));
     } catch (err) {
       showToast('error', getErrorMessage(err));
@@ -197,7 +193,9 @@ export default function DisputesPage() {
         assigned_to: adminUserId,
       };
       setSelected(updated);
-      setDisputes((prev) => prev.map((d) => (d.id === selected.id ? updated : d)));
+      // Refetch so the dispute drops out of the "Abiertas" tab now that it
+      // moved to under_review.
+      await fetchDisputes();
       showToast('success', t('disputes.toast_assigned', { defaultValue: 'Asignada a vos' }));
     } catch (err) {
       showToast('error', getErrorMessage(err));

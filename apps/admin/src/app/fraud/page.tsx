@@ -76,13 +76,10 @@ export default function FraudAlertsPage() {
     setResolving(alertId);
     try {
       await fraudService.resolveAlert(alertId, adminUserId, resolutionNote || undefined);
-      setAlerts((prev) =>
-        prev.map((a) =>
-          a.id === alertId ? { ...a, resolved: true, resolved_at: new Date().toISOString() } : a,
-        ),
-      );
       setResolveModalId(null);
       setResolutionNote('');
+      // Refetch so the resolved alert drops out of the "Sin resolver" tab.
+      await fetchAlerts();
       showToast('success', t('fraud.toast_resolved', { defaultValue: 'Alerta marcada como resuelta' }));
     } catch (err) {
       showToast('error', getErrorMessage(err));

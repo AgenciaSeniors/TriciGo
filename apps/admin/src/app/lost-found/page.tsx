@@ -125,8 +125,9 @@ export default function LostFoundPage() {
         adminUserId,
         adminNotes || undefined,
       );
-      setItems((prev) => prev.map((i) => (i.id === selected.id ? updated : i)));
       setSelected(updated);
+      // Refetch so the closed item drops out of the active status tab.
+      await fetchItems();
       showToast('success', t('lost_found.toast_closed', { defaultValue: 'Objeto marcado como cerrado' }));
     } catch (err) {
       showToast('error', getErrorMessage(err));
