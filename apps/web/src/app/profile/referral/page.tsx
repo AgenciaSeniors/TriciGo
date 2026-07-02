@@ -51,6 +51,8 @@ export default function ReferralPage() {
   // PASS #3 REFERRAL-HARDCODE: bonus is admin-configurable
   // (platform_config.referral_bonus_cup, mig 00395). Default 500 until fetched.
   const [bonusCup, setBonusCup] = useState(500);
+  // 00477: optional welcome bonus for the REFEREE (0 = off, hides the note).
+  const [welcomeBonusCup, setWelcomeBonusCup] = useState(0);
 
   // Apply-a-code form state.
   const [inputCode, setInputCode] = useState('');
@@ -73,17 +75,20 @@ export default function ReferralPage() {
     setDataLoading(true);
     setDataError(null);
     try {
-      const [code, history, referred, bonusRaw] = await Promise.all([
+      const [code, history, referred, bonusRaw, welcomeRaw] = await Promise.all([
         referralService.getOrCreateReferralCode(uid),
         referralService.getReferralHistory(uid),
         referralService.hasBeenReferred(uid),
         walletService.getConfigValue('referral_bonus_cup').catch(() => null),
+        walletService.getConfigValue('referral_welcome_bonus_cup').catch(() => null),
       ]);
       setMyCode(code);
       setReferrals(history);
       setHasBeenReferred(referred);
       const parsedBonus = bonusRaw != null ? parseInt(bonusRaw, 10) : NaN;
       if (Number.isFinite(parsedBonus) && parsedBonus > 0) setBonusCup(parsedBonus);
+      const parsedWelcome = welcomeRaw != null ? parseInt(welcomeRaw, 10) : NaN;
+      if (Number.isFinite(parsedWelcome) && parsedWelcome > 0) setWelcomeBonusCup(parsedWelcome);
     } catch (err) {
       setDataError(getErrorMessage(err));
     } finally {
@@ -224,6 +229,14 @@ export default function ReferralPage() {
             bonus: bonusCup,
           })}
         </p>
+        {welcomeBonusCup > 0 && (
+          <p style={{ fontSize: '0.85rem', opacity: 0.9, margin: '0.5rem 0 0', lineHeight: 1.5 }}>
+            {t('web.referral_welcome_bonus_note', {
+              defaultValue: 'Tu amigo también recibe {{bonus}} CUP de bienvenida.',
+              bonus: welcomeBonusCup,
+            })}
+          </p>
+        )}
       </div>
 
       {/* Stats card — only when user has at least one referral */}
