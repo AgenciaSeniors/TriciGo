@@ -1878,6 +1878,23 @@ git worktree remove <temp>
 
 **Fix canónico:** envolver el fetch existente en un `refetch` (`useCallback`) y llamar `useRefreshOnFocus(refetch)`. Mirar `apps/client/app/(tabs)/wallet.tsx` (useFocusEffect) y `apps/client/app/(tabs)/index.tsx` (#631) como referencia. Cambio mobile → **requiere rebuild de APK**. Estado del barrido + las pantallas migradas: `docs/AUDIT_DATA_FRESHNESS_2026-06-21.md`.
 
+### Contactos de confianza + viaje en vivo — estado canónico (auditado + E2E real 2026-07-02)
+
+**Qué es.** Contactos (máx 5, `trusted_contacts`, RLS own-only) que reciben **SMS automáticos** del viaje del pasajero: al **aceptarse** el viaje (link `https://tricigo.com/track/share/<token>`), al **completarse** ("✅ llegó a su destino"), y en **SOS**. La página pública `apps/web/src/app/track/share/[token]/page.tsx` (sin login) resuelve por RPCs anon token-gated (`get_shared_ride_by_token` + `get_shared_trip_state` polling 3s + waypoints); token de 24 hex generado on-accept (trigger BEFORE), expira 48h post-terminal. Verificado E2E con SMS reales a un número en Brasil (DLR `delivered` + confirmación en mano): PRs #734/#735/#736 + migs 00473/00474/00475, todas aplicadas a prod.
+
+**Arquitectura de envío — REGLA DURA: el SMS a contactos es 100% server-side.** La EF `send-sms` exige `apikey === SERVICE_ROLE_KEY` → **cualquier `functions.invoke('send-sms')` client-side muere con 401 silencioso** (clase de bug que mató 3 features hasta 00473). Canales vivos:
+- accept → `trg_notify_trusted_contacts` → `notify_trusted_contacts_on_accept` (contactos `auto_share=true` del **pasajero**; el driver NO genera estos SMS al conducir)
+- completed → `trg_notify_trusted_contacts_complete` (00473)
+- SOS → trigger safety-net `incident_reports_notify_sos` (throttle 1/60s) **+** EF `broadcast-emergency` (JWT, GPS exacto; la llaman client/driver/web) — redundancia deliberada
+- `notificationService` ya NO tiene sender SMS client-side (removido en #735); si aparece uno nuevo, es bug.
+
+**Lecciones verificadas (reusables):**
+1. **Teléfonos de contacto se normalizan a E.164 en DB** (`trg_trusted_contacts_normalize_phone` → `_normalize_cuban_phone`, espejo del de `users`) + en las 4 UIs con `normalizeCubanPhone`. D7 no entrega números locales de 8 dígitos crudos. Números internacionales con `+` pasan intactos.
+2. **NO abrir un SMS con el emoji 🚨** — los carriers lo filtran silenciosamente AUNQUE el DLR diga `delivered` (A/B verificado: mismo texto sin el emoji SÍ llega; el ✅ no se filtra). Ver 00475. Para diagnósticos de "el SMS no llega pero D7 dice delivered": sospechar filtro de contenido, hacer A/B por `net.http_post` directo a `send-sms`.
+3. **`sms_log.user_id` es nullable desde 00474** — era NOT NULL y el trigger SOS no lo pasaba → la EF tragaba el error del insert y TODO SMS de SOS quedaba sin auditar. El error solo era visible en los logs de Postgres (`null value in column "user_id"`). Los 3 triggers ahora pasan `user_id`.
+4. **Verificación de entrega**: `sms_log` (envío aceptado) + `sms_deliveries` join por `request_id=twilio_sid` (DLR real) + `net._http_response` (respuesta de la EF). `share_access_log` registra aperturas del link vía RPC `log_share_access` (anon, solo tokens que resuelven).
+5. **E2E de viaje por SQL**: INSERT ride `searching` (respetar fare floor `tg_rides_validate_estimated_fare` — pedía ≥3739 CUP triciclo) + UPDATE walk del FSM (`searching→accepted→driver_en_route→arrived_at_pickup→in_progress→completed`). Los triggers disparan igual que en la app; `enforce_ride_update_columns` se salta con `auth.uid()` NULL. Limpieza: borrar incidents→location_events→snapshots→ride→contacto y `SELECT recompute_user_level(<rider>),(<driver user_id>)` para restaurar contadores de tier.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.

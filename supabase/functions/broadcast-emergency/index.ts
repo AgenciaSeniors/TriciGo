@@ -55,13 +55,15 @@ function buildSmsBody(params: BroadcastBody, locale: 'es' | 'en' | 'pt'): string
     : '';
   const rideRef = params.ride_id ? ` Ride: ${params.ride_id.slice(0, 8)}.` : '';
 
+  // No leading emoji: carriers silently filter 🚨-led alert SMS even with a
+  // 'delivered' DLR (A/B verified 2026-07-02; see migration 00475).
   if (locale === 'en') {
-    return `🚨 EMERGENCY: ${riderName} sent an SOS via TriciGo. Location: ${mapsUrl}${driverInfo}${rideRef}`;
+    return `EMERGENCY: ${riderName} sent an SOS via TriciGo. Location: ${mapsUrl}${driverInfo}${rideRef}`;
   }
   if (locale === 'pt') {
-    return `🚨 EMERGÊNCIA: ${riderName} enviou um SOS pelo TriciGo. Local: ${mapsUrl}${driverInfo}${rideRef}`;
+    return `EMERGÊNCIA: ${riderName} enviou um SOS pelo TriciGo. Local: ${mapsUrl}${driverInfo}${rideRef}`;
   }
-  return `🚨 EMERGENCIA: ${riderName} envió un SOS desde TriciGo. Ubicación: ${mapsUrl}${driverInfo}${rideRef}`;
+  return `EMERGENCIA: ${riderName} envió un SOS desde TriciGo. Ubicación: ${mapsUrl}${driverInfo}${rideRef}`;
 }
 
 Deno.serve(async (req) => {
