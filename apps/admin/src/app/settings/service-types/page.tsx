@@ -8,10 +8,15 @@ import { useTranslation } from '@tricigo/i18n';
 import type { ServiceTypeConfig } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
 export default function ServiceTypesPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  // Writes to service_type_configs are super_admin-only (mig 00292).
+  // Mirror the RLS in the UI: a regular admin's UPDATE filters to 0 rows
+  // without error and the edit silently reverts.
+  const { isSuperAdmin, loading: superAdminLoading } = useIsSuperAdmin();
   const [configs, setConfigs] = useState<ServiceTypeConfig[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,6 +112,15 @@ export default function ServiceTypesPage() {
       )}
       <h1 className="text-3xl font-bold mb-6">{t('service_types.title')}</h1>
 
+      {!superAdminLoading && !isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+          {t('platform_config.requires_super_admin', {
+            defaultValue:
+              'Solo super_admin puede modificar esta configuración. Tu cuenta puede consultar los valores actuales pero no guardarlos.',
+          })}
+        </div>
+      )}
+
       <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl px-4 py-3 mb-6 text-sm">
         {t('pricing.usd_anchor_note', {
           defaultValue:
@@ -178,8 +192,9 @@ export default function ServiceTypesPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(c)}
+                      disabled={!isSuperAdmin}
                       aria-label={c.is_active ? `${t('common.deactivate', { defaultValue: 'Deactivate' })} ${c.slug}` : `${t('common.activate', { defaultValue: 'Activate' })} ${c.slug}`}
-                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium disabled:cursor-not-allowed ${
                         c.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
@@ -191,8 +206,8 @@ export default function ServiceTypesPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={handleSave}
-                          disabled={saving}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
+                          disabled={saving || !isSuperAdmin}
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {t('common.save')}
                         </button>
@@ -206,7 +221,9 @@ export default function ServiceTypesPage() {
                     ) : (
                       <button
                         onClick={() => startEdit(c)}
-                        className="text-sm text-primary-500 hover:underline"
+                        disabled={!isSuperAdmin}
+                        title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
+                        className="text-sm text-primary-500 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                       >
                         {t('common.edit')}
                       </button>

@@ -9,6 +9,7 @@ import type { PricingRule, Zone, ServiceTypeSlug } from '@tricigo/types';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
 const PAGE_SIZE = 20;
 
@@ -124,6 +125,10 @@ function PricingMatrix({ rules, t }: { rules: PricingRule[]; t: (key: string) =>
 export default function PricingPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  // Writes to pricing_rules are super_admin-only (mig 00292). Mirror the
+  // RLS in the UI: without this, a regular admin's UPDATE/DELETE filters
+  // to 0 rows without error and the edit silently reverts.
+  const { isSuperAdmin, loading: superAdminLoading } = useIsSuperAdmin();
   const [rules, setRules] = useState<PricingRule[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [zones, setZones] = useState<ZoneRow[]>([]);
@@ -310,11 +315,22 @@ export default function PricingPage() {
         <h1 className="text-3xl font-bold">{t('pricing.title')}</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+          disabled={!isSuperAdmin}
+          title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + {t('pricing.create_rule')}
         </button>
       </div>
+
+      {!superAdminLoading && !isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+          {t('platform_config.requires_super_admin', {
+            defaultValue:
+              'Solo super_admin puede modificar esta configuración. Tu cuenta puede consultar los valores actuales pero no guardarlos.',
+          })}
+        </div>
+      )}
 
       {/* USD-anchored pricing note */}
       <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl px-4 py-3 mb-6 text-sm">
@@ -583,8 +599,9 @@ export default function PricingPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(r)}
+                      disabled={!isSuperAdmin}
                       aria-label={r.is_active ? t('pricing.deactivate_rule', { defaultValue: 'Deactivate rule' }) : t('pricing.activate_rule', { defaultValue: 'Activate rule' })}
-                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium disabled:cursor-not-allowed ${
                         r.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
                       }`}
                     >
@@ -596,8 +613,8 @@ export default function PricingPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={handleSave}
-                          disabled={saving}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
+                          disabled={saving || !isSuperAdmin}
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {t('common.save')}
                         </button>
@@ -612,13 +629,17 @@ export default function PricingPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => startEdit(r)}
-                          className="text-sm text-primary-500 hover:underline"
+                          disabled={!isSuperAdmin}
+                          title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
+                          className="text-sm text-primary-500 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                         >
                           {t('common.edit')}
                         </button>
                         <button
                           onClick={() => handleDelete(r)}
-                          className="text-sm text-red-500 hover:underline"
+                          disabled={!isSuperAdmin}
+                          title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
+                          className="text-sm text-red-500 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                         >
                           {t('pricing.delete_rule')}
                         </button>

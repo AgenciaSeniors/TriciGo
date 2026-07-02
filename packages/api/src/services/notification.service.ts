@@ -652,6 +652,80 @@ export const notificationService = {
   },
 
   /**
+   * Admin-only. Send a manual push from the admin /notifications page via
+   * the `send-push` edge function (service-side delivery + inbox persistence)
+   * and log it to notification_log (the page's history table).
+   *
+   * Replaces the legacy `broadcastPush`/`sendToUser` path for the admin
+   * panel: those fetch exp.host directly, which works from React Native but
+   * is CORS-blocked in a browser (same bug class as campaigns, fix #641) and
+   * never persists to the `notifications` inbox.
+   */
+  async sendAdminPush(
+    target: 'all' | 'customers' | 'drivers' | { userId: string },
+    opts: { title: string; body: string },
+    sentBy: string,
+  ): Promise<{ successCount: number; errorCount: number }> {
+    const supabase = getSupabaseClient();
+
+    let userIds: string[];
+    let targetType: string;
+    let targetUserId: string | null = null;
+
+    if (typeof target === 'object') {
+      userIds = [target.userId];
+      targetType = 'user';
+      targetUserId = target.userId;
+    } else {
+      targetType = target;
+      let query = supabase
+        .from('user_devices')
+        .select('user_id, users!inner(role)')
+        .not('push_token', 'is', null);
+      if (target === 'customers') {
+        query = query.eq('users.role', 'customer');
+      } else if (target === 'drivers') {
+        query = query.eq('users.role', 'driver');
+      }
+      const { data: devices, error } = await query;
+      if (error) throw error;
+      userIds = [...new Set((devices ?? []).map((d: Record<string, unknown>) => d.user_id as string))];
+    }
+
+    let sent = 0;
+    let failed = 0;
+    if (userIds.length > 0) {
+      const { data, error } = await supabase.functions.invoke('send-push', {
+        body: {
+          user_ids: userIds,
+          title: opts.title,
+          body: opts.body,
+          category: 'announcement',
+        },
+      });
+      if (error) throw error;
+      const res = (data ?? {}) as { sent?: number; failed?: number };
+      sent = res.sent ?? 0;
+      failed = res.failed ?? 0;
+    }
+
+    const { error: logError } = await supabase.from('notification_log').insert({
+      title: opts.title,
+      body: opts.body,
+      target_type: targetType,
+      target_user_id: targetUserId,
+      sent_by: sentBy,
+      sent_count: sent,
+    });
+    if (logError) {
+      // Delivery already happened; a history-log failure shouldn't fail the send.
+      console.warn('[notification] sendAdminPush: failed to write notification_log:', logError.message);
+    }
+
+    return { successCount: sent, errorCount: failed };
+  },
+
+  /**
    * Subscribe to real-time inbox notifications for a user.
    * Follows the same pattern as chatService.subscribeToMessages().
    */
