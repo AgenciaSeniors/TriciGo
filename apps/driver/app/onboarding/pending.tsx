@@ -2,12 +2,14 @@ import React, { useEffect, useCallback, useState } from 'react';
 import { View, Pressable, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
+import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
-import { driverService } from '@tricigo/api';
+import { driverService, referralService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
@@ -34,6 +36,45 @@ export default function PendingScreen() {
   // BUG-299: shared logout hook — same logic now used by SwitchAccountFooter
   // in personal-info / vehicle-info / documents / review.
   const doLogout = useLogout();
+
+  // Referral reminder (marketing audit 2026-07-02): the reward trigger only
+  // fires on the transition to 'approved' — a code applied after approval
+  // stays pending forever. This is the driver's LAST chance to apply it, so
+  // surface an inline entry while they wait. Hidden once a code is applied.
+  const [hasReferral, setHasReferral] = useState(true); // assume yes until checked (avoids flicker)
+  const [referralInput, setReferralInput] = useState('');
+  const [referralApplying, setReferralApplying] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    referralService.hasBeenReferred(user.id)
+      .then((referred) => { if (!cancelled) setHasReferral(referred); })
+      .catch(() => { /* keep hidden on error */ });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const handleApplyReferral = useCallback(async () => {
+    if (!user?.id || !referralInput.trim() || referralApplying) return;
+    setReferralApplying(true);
+    try {
+      await referralService.applyReferralCode(user.id, referralInput.trim());
+      setHasReferral(true);
+      Toast.show({
+        type: 'success',
+        text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
+        text2: t('onboarding.referral_applied_body', { defaultValue: 'El bono se acreditará cuando tu cuenta sea aprobada.' }),
+      });
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: t('onboarding.referral_error', { defaultValue: 'No se pudo aplicar el código' }),
+        text2: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setReferralApplying(false);
+    }
+  }, [user?.id, referralInput, referralApplying, t]);
 
   const checkStatus = useCallback(async () => {
     if (!user?.id) return;
@@ -208,6 +249,44 @@ export default function PendingScreen() {
         <Text variant="caption" color="inverse" className="mt-4 opacity-30">
           {t('onboarding.checking_status', { defaultValue: 'Verificando estado automaticamente...' })}
         </Text>
+
+        {/* Last-chance referral entry — the bonus only pays if the code is
+             applied BEFORE approval (trigger fires on the status transition). */}
+        {!hasReferral && (
+          <View
+            className="w-full mt-6 rounded-xl px-4 py-3"
+            style={{ backgroundColor: midnightEmber.map.bg.surface }}
+          >
+            <Text variant="bodySmall" color="inverse">
+              {t('onboarding.referral_title', { defaultValue: '¿Te invitó alguien? (opcional)' })}
+            </Text>
+            <Text variant="caption" color="secondary" className="mt-1 opacity-60">
+              {t('onboarding.referral_pending_hint', { defaultValue: 'Aplica el código de referido ahora — después de la aprobación ya no suma el bono.' })}
+            </Text>
+            <View className="mt-2">
+              <Input
+                label=""
+                placeholder={t('onboarding.referral_placeholder', { defaultValue: 'Código de referido' })}
+                value={referralInput}
+                onChangeText={setReferralInput}
+                autoCapitalize="characters"
+                variant="dark"
+              />
+              {referralInput.trim().length > 0 && (
+                <Button
+                  title={t('onboarding.referral_apply', { defaultValue: 'Aplicar código' })}
+                  variant="outline"
+                  size="sm"
+                  forceDark
+                  onPress={handleApplyReferral}
+                  loading={referralApplying}
+                  disabled={referralApplying}
+                  className="mt-2"
+                />
+              )}
+            </View>
+          </View>
+        )}
 
         {/* UX: give the driver something to do while they wait. Without
              these two actions, the screen was a dead end — they couldn't

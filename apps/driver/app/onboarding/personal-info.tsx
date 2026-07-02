@@ -13,7 +13,8 @@ import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
-import { authService, isRateLimitError } from '@tricigo/api';
+import { authService, isRateLimitError, referralService } from '@tricigo/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
@@ -161,6 +162,72 @@ export default function PersonalInfoScreen() {
   const [address, setAddress] = useState(personalInfo.address || '');
   const [hasCriminalRecord, setHasCriminalRecord] = useState(personalInfo.has_criminal_record || false);
   const [criminalDetails, setCriminalDetails] = useState(personalInfo.criminal_record_details || '');
+
+  // Referral capture (marketing audit 2026-07-02): a referred driver must
+  // apply the code BEFORE approval — the reward trigger only fires on the
+  // transition to 'approved', so a code applied later stays pending forever.
+  // This optional field closes that window during onboarding.
+  const [referralCode, setReferralCode] = useState('');
+  const [referralApplied, setReferralApplied] = useState(false);
+  const [referralApplying, setReferralApplying] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const referred = await referralService.hasBeenReferred(user.id);
+        if (referred) {
+          if (!cancelled) setReferralApplied(true);
+          return;
+        }
+        // Deferred deep link: tricigo-driver://refer/<code> stashed by
+        // app/refer/[code].tsx before the driver logged in.
+        const pending = await AsyncStorage.getItem('pending_referral_code');
+        if (!pending || cancelled) return;
+        await AsyncStorage.removeItem('pending_referral_code');
+        try {
+          await referralService.applyReferralCode(user.id, pending);
+          if (!cancelled) {
+            setReferralApplied(true);
+            Toast.show({
+              type: 'success',
+              text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
+            });
+          }
+        } catch {
+          // Invalid/duplicate stash — surface it in the field so they can fix it.
+          if (!cancelled) setReferralCode(pending.toUpperCase());
+        }
+      } catch {
+        /* best-effort — the field still works manually */
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const handleApplyReferral = async () => {
+    if (!user?.id || !referralCode.trim() || referralApplying) return;
+    setReferralApplying(true);
+    try {
+      await referralService.applyReferralCode(user.id, referralCode.trim());
+      setReferralApplied(true);
+      Toast.show({
+        type: 'success',
+        text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
+        text2: t('onboarding.referral_applied_body', { defaultValue: 'El bono se acreditará cuando tu cuenta sea aprobada.' }),
+      });
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: tc('error', { defaultValue: 'Ocurrió un error' }),
+        text2: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setReferralApplying(false);
+    }
+  };
 
   // Errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -607,6 +674,57 @@ export default function PersonalInfoScreen() {
                       numberOfLines={3}
                     />
                   </View>
+                )}
+              </Card>
+            </AnimatedCard>
+
+            {/* ─── Referral code (optional) ─── */}
+            <AnimatedCard delay={550} duration={400}>
+              <Card
+                forceDark
+                variant="filled"
+                padding="lg"
+                className="mb-5"
+                style={{ backgroundColor: midnightEmber.map.bg.surface }}
+              >
+                {referralApplied ? (
+                  <View className="flex-row items-center">
+                    <Ionicons name="checkmark-circle" size={20} color={midnightEmber.state.success} />
+                    <Text variant="bodySmall" color="inverse" className="ml-2 flex-1">
+                      {t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' })}
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <Text variant="body" color="inverse">
+                      {t('onboarding.referral_title', { defaultValue: '¿Te invitó alguien? (opcional)' })}
+                    </Text>
+                    <Text variant="caption" color="secondary" className="mt-1 opacity-60">
+                      {t('onboarding.referral_hint', { defaultValue: 'Ingresa el código de referido de quien te invitó. Aplícalo antes de que aprobemos tu cuenta.' })}
+                    </Text>
+                    <View className="mt-3">
+                      <Input
+                        label=""
+                        placeholder={tc('profile.referral_enter_code', { defaultValue: 'Ingresa el código' })}
+                        value={referralCode}
+                        onChangeText={setReferralCode}
+                        autoCapitalize="characters"
+                        variant="dark"
+                      />
+                      {referralCode.trim().length > 0 && (
+                        <Button
+                          title={tc('profile.referral_apply', { defaultValue: 'Aplicar código' })}
+                          variant="outline"
+                          size="sm"
+                          forceDark
+                          onPress={handleApplyReferral}
+                          loading={referralApplying}
+                          disabled={referralApplying}
+                          className="mt-2"
+                        />
+                      )}
+                    </View>
+                  </>
                 )}
               </Card>
             </AnimatedCard>
