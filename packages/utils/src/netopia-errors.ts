@@ -31,6 +31,23 @@ const NETOPIA_ERROR_MAP: Record<string, string> = {
     'Tu tarjeta está vencida. Tu tarjeta NO fue cobrada.',
   '3DS authentication failed':
     'La verificación 3D-Secure (OTP) falló. Tu tarjeta NO fue cobrada — reintentá con el código correcto.',
+  // Seen in prod (provider_error_code 17).
+  'Invalid card number':
+    'El número de tarjeta no es válido. Tu tarjeta NO fue cobrada — verificá los datos y reintentá.',
+  'Do not honor':
+    'Tu banco no autorizó la transacción. Tu tarjeta NO fue cobrada — contactá a tu banco o probá otra tarjeta.',
+  'Transaction declined':
+    'Tu banco rechazó la transacción. Tu tarjeta NO fue cobrada — probá otra tarjeta o contactá a tu banco.',
+  'Restricted card':
+    'Tu tarjeta tiene restricciones para este pago. Tu tarjeta NO fue cobrada — probá otra tarjeta.',
+  'Exceeds withdrawal limit':
+    'Superaste el límite de tu tarjeta. Tu tarjeta NO fue cobrada — probá un monto menor u otra tarjeta.',
+  'Limit exceeded':
+    'Superaste el límite de tu tarjeta. Tu tarjeta NO fue cobrada — probá un monto menor u otra tarjeta.',
+  'Authentication timeout':
+    'La verificación 3D-Secure expiró. Tu tarjeta NO fue cobrada — reintentá y confirmá el código a tiempo.',
+  'Incorrect cardholder name':
+    'El nombre del titular no coincide con la tarjeta. Tu tarjeta NO fue cobrada — verificá los datos.',
 };
 
 /**

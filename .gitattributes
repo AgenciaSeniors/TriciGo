@@ -1,3 +1,12 @@
 # pnpm patch files must stay LF or `pnpm install` fails to apply them on
 # the EAS (macOS/Linux) build workers. Force LF regardless of core.autocrlf.
 patches/**.patch text eol=lf
+
+# VPS shell scripts + squid/systemd configs must be LF — a CRLF shebang is
+# "cannot execute: required file not found" on Linux (hit during the 2026-07-02
+# proxy-observability rollout). Keep these LF regardless of core.autocrlf.
+ops/squid/**.sh text eol=lf
+ops/squid/squid.conf text eol=lf
+ops/squid/logrotate-squid text eol=lf
+ops/squid/systemd/** text eol=lf
+ops/squid/fail2ban/** text eol=lf

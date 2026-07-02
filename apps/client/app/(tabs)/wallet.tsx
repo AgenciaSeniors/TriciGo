@@ -41,9 +41,10 @@ import { useTokens } from '@/hooks/useTokens';
 import { useThemeStore } from '@/stores/theme.store';
 import { Input } from '@tricigo/ui/Input';
 import { colors, darkColors } from '@tricigo/theme';
-import { Platform, useColorScheme, Linking } from 'react-native';
+import { Platform, useColorScheme, Linking, AppState } from 'react-native';
 import { RIDE_CONFIG } from '@/config/ride';
 import { useNetopiaCheckout, PaymentLoadingOverlay } from '@/components/NetopiaCheckout';
+import { savePendingRecharge, loadPendingRecharge, clearPendingRecharge } from '@/lib/pendingRecharge';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -282,13 +283,60 @@ function WebWalletScreen() {
   // this hook, the new recharge txn never appears in the Movimientos
   // list until the user pull-to-refreshes manually. Mirror of the
   // driver fix shipped in the same PR.
+  // Track 2a: recover a recharge whose "Verificando…" poll was cut short by the
+  // user leaving the app. We persist the pending intentId; on focus / app-resume
+  // we re-check it ONCE (instant, non-blocking) and surface the settled result.
+  const recoveringRef = useRef(false);
+  const recoverPendingRecharge = useCallback(async () => {
+    if (recoveringRef.current) return;
+    const intentId = await loadPendingRecharge();
+    if (!intentId) return;
+    recoveringRef.current = true;
+    try {
+      const intent = await paymentService.getPaymentIntent(intentId);
+      if (intent?.status === 'completed') {
+        await clearPendingRecharge();
+        await fetchData();
+        Toast.show({
+          type: 'success',
+          text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
+          text2: `+${(intent.amount_cup ?? 0).toLocaleString()} TC`,
+        });
+      } else if (intent?.status === 'failed') {
+        await clearPendingRecharge();
+        Toast.show({
+          type: 'error',
+          text1: t('wallet.recharge_failed', { defaultValue: 'El pago no se completó' }),
+          text2: translateNetopiaError(intent.error_message),
+        });
+      } else if (intent?.status === 'refunded') {
+        await clearPendingRecharge();
+      }
+      // pending / processing / created / absent → keep for the next focus/resume.
+    } catch {
+      /* keep the pending marker for the next attempt */
+    } finally {
+      recoveringRef.current = false;
+    }
+  }, [t, fetchData]);
+
   useFocusEffect(
     useCallback(() => {
       if (userId) {
         fetchData();
+        void recoverPendingRecharge();
       }
-    }, [userId, fetchData])
+    }, [userId, fetchData, recoverPendingRecharge])
   );
+
+  // Also recover when the app returns to the foreground while already on this
+  // tab (useFocusEffect doesn't re-fire without a focus change).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void recoverPendingRecharge();
+    });
+    return () => sub.remove();
+  }, [recoverPendingRecharge]);
 
   // Cleanup poll on unmount
   useEffect(() => {
@@ -913,8 +961,10 @@ function NativeWalletScreen() {
         type: 'info',
         text1: t('wallet.processing_recharge', { defaultValue: 'Verificando tu pago…' }),
       });
-      const final = await paymentService.pollIntentStatus(result.intentId, 20, 2000);
+      // 30×2s ≈ 60s — covers a 3-D Secure OTP-by-SMS on a slow Cuban link.
+      const final = await paymentService.pollIntentStatus(result.intentId, 30, 2000);
       if (final.status === 'completed') {
+        void clearPendingRecharge();
         Toast.show({
           type: 'success',
           text1: t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' }),
@@ -963,6 +1013,7 @@ function NativeWalletScreen() {
           }
         })();
       } else if (final.status === 'failed') {
+        void clearPendingRecharge();
         // Translate NETOPIA's English raw message (e.g. "Invalid CVV")
         // into Spanish copy that always tells the user their card was
         // NOT charged. See packages/utils/src/netopia-errors.ts.
@@ -973,8 +1024,10 @@ function NativeWalletScreen() {
         });
       } else {
         // status='pending' / 'created' / 'processing' — webhook still in
-        // flight (or user closed the browser before paying). Push notif
-        // covers the final outcome; show a soft "verifying" with hint.
+        // flight (or user closed the browser before paying). Persist the
+        // intentId so focus/app-resume can recover it (Track 2a); the push
+        // notif also covers the final outcome. Show a soft "verifying" hint.
+        void savePendingRecharge(result.intentId);
         Toast.show({
           type: 'info',
           text1: t('wallet.recharge_pending', { defaultValue: 'Verificando tu pago…' }),

@@ -1,0 +1,26 @@
+# TriciGo — squid log retention for the NETOPIA payment proxy.
+# Versioned source for /etc/logrotate.d/squid on the VPS.
+#
+# The DEFAULT Debian/Ubuntu fragment keeps only `rotate 2` (2 days). For a
+# money path that is far too little forensic history (which destinations were
+# tunneled, auth failures, tunnel success/failure). Keep 30 days.
+#
+# Apply: see ops/squid/README.md (§ log retention). Verify with `logrotate -d
+# /etc/logrotate.d/squid` (dry-run) before relying on it.
+
+/var/log/squid/*.log {
+	daily
+	rotate 30
+	compress
+	delaycompress
+	dateext
+	missingok
+	nocreate
+	sharedscripts
+	prerotate
+		test ! -x /usr/sbin/sarg-reports || /usr/sbin/sarg-reports daily
+	endscript
+	postrotate
+		test ! -e /run/squid.pid || test ! -x /usr/sbin/squid || /usr/sbin/squid -k rotate
+	endscript
+}
