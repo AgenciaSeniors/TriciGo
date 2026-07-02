@@ -20,6 +20,8 @@ export interface Promotion {
   image_url: string | null;
   notify_on_publish: boolean;
   notified_at: string | null;
+  /** 00482: redeemable only by customers with zero completed rides. */
+  first_ride_only: boolean;
   created_by: string | null;
   created_at: string;
 }

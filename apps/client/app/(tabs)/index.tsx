@@ -845,6 +845,7 @@ function WebHomeScreen() {
           expired: t('ride.promo_error_expired', { defaultValue: 'Código expirado' }),
           max_uses: t('ride.promo_error_max_uses', { defaultValue: 'Código agotado' }),
           already_used: t('ride.promo_error_already_used', { defaultValue: 'Ya usaste este código' }),
+          first_ride_only: t('ride.promo_error_first_ride', { defaultValue: 'Solo válido para tu primer viaje' }),
         };
         setPromoResult({ valid: false, discount: 0, error: msgs[result.error || 'invalid'] || t('ride.promo_error_invalid', { defaultValue: 'Código no válido' }) });
       }

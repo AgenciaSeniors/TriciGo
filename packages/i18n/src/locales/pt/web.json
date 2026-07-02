@@ -240,6 +240,7 @@
     "promo_error_expired": "Código expirado",
     "promo_error_max_uses": "Código esgotado",
     "promo_error_already_used": "Você já usou este código",
+    "promo_error_first_ride": "Válido apenas para sua primeira viagem",
     "route_loading": "Calculando rota...",
     "route_info": "{{distance}} km · {{duration}} min por estrada",
     "route_error": "Não foi possível calcular a rota",

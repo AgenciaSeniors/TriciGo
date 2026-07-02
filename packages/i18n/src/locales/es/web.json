@@ -230,6 +230,7 @@
     "promo_error_expired": "Código expirado",
     "promo_error_max_uses": "Código agotado",
     "promo_error_already_used": "Ya usaste este código",
+    "promo_error_first_ride": "Solo válido para tu primer viaje",
     "map_use_my_location": "Usar mi ubicación",
     "map_locating": "Localizando...",
     "map_location_denied": "Acceso a ubicación denegado. Selecciona un punto en el mapa.",
