@@ -209,6 +209,52 @@ function recolorComponents(img, darkTo, orangeTo) {
   return { dark, orange };
 }
 
+// Surgical defringe (white-matte decontamination). Semi-transparent edge
+// pixels that are much BRIGHTER than every opaque pixel around them carry
+// leftover white matte from the original background key-out — legitimate
+// anti-aliasing can never exceed the luma of the artwork it belongs to.
+// Recolor ONLY those pixels to the average color of the nearest opaque ring;
+// alpha and every opaque pixel stay byte-identical, so shapes cannot change.
+// Soft shadows (no opaque neighbor within radius 3) are left untouched.
+// NOTE: do NOT run this on assets with intentional bright semi-transparency
+// next to dark art (e.g. the selection cars' window reflections).
+function defringe(img, lumaDelta = 40) {
+  const { data, width, height } = img;
+  const orig = Buffer.from(data);
+  const lum = (b, i) => 0.299 * b[i] + 0.587 * b[i + 1] + 0.114 * b[i + 2];
+  let fixed = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = (y * width + x) * 4;
+      const A = orig[p + 3];
+      if (A === 0 || A >= 240) continue;
+      let sr = 0, sg = 0, sb = 0, n = 0, maxOl = -1;
+      for (let rad = 1; rad <= 3 && n === 0; rad++) {
+        for (let dy = -rad; dy <= rad; dy++) {
+          for (let dx = -rad; dx <= rad; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== rad) continue; // ring only
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+            const q = (ny * width + nx) * 4;
+            if (orig[q + 3] >= 240) {
+              sr += orig[q]; sg += orig[q + 1]; sb += orig[q + 2]; n++;
+              const ol = lum(orig, q);
+              if (ol > maxOl) maxOl = ol;
+            }
+          }
+        }
+      }
+      if (n === 0) continue;                       // soft shadow — leave
+      if (lum(orig, p) <= maxOl + lumaDelta) continue; // plausible art color — leave
+      data[p] = Math.round(sr / n);
+      data[p + 1] = Math.round(sg / n);
+      data[p + 2] = Math.round(sb / n);
+      fixed++;
+    }
+  }
+  return { fixed };
+}
+
 function cloneImg(img) {
   return { data: Buffer.from(img.data), width: img.width, height: img.height };
 }
@@ -291,11 +337,14 @@ async function fixNotificationIcon() {
 // ---------- 3+4) stray-speck cleanup ----------
 
 async function cleanStrays() {
-  console.log('3) login-hero.png: remove stray islands');
+  console.log('3) login-hero.png: remove stray islands + defringe dark edges');
   for (const rel of ['apps/client/assets/login-hero.png', 'apps/driver/assets/login-hero.png']) {
     const img = await loadRaw(P(rel));
     const r = dropSmallComponents(img, 50);
-    console.log(`  ${rel}: removed ${r.islands} islands (${r.pixels}px)`);
+    // The vehicles were cut out from a white background — dark silhouette
+    // edges (canopy, seats, boxes) still carry a 1px bright matte fringe.
+    const d = defringe(img);
+    console.log(`  ${rel}: removed ${r.islands} islands (${r.pixels}px), defringed ${d.fixed} edge px`);
     await writeRawAsIs(img, P(rel));
   }
 
@@ -346,12 +395,28 @@ async function regenerateTricoinSmall() {
   }
 }
 
+// ---------- 7) defringe web line-icon assets ----------
+
+async function defringeWebIcons() {
+  console.log('7) defringe web vehicle line icons (bright matte residue on strokes)');
+  for (const rel of [
+    'apps/web/public/images/vehicles/auto.png',
+    'apps/web/public/images/vehicles/markers/auto@2x.png',
+  ]) {
+    const img = await loadRaw(P(rel));
+    const d = defringe(img);
+    console.log(`  ${rel}: defringed ${d.fixed} edge px`);
+    await writeRawAsIs(img, P(rel));
+  }
+}
+
 (async () => {
   await regenerateWordmarks();
   await fixNotificationIcon();
   await cleanStrays();
   await regenerateIcon512();
   await regenerateTricoinSmall();
+  await defringeWebIcons();
   console.log('Done.');
 })().catch((e) => {
   console.error(e);
