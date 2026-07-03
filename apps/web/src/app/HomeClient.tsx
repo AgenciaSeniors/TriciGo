@@ -539,8 +539,23 @@ export default function HomeClient() {
               <p>Precio claro y sin regateo en la calle. Vos elegís cuándo manejás y cuánto.</p>
               <div className="bento-spacer" />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '1.25rem' }}>
-                <a href="https://play.google.com/store/apps/details?id=app.tricigo.driver" target="_blank" rel="noopener noreferrer" className="bento-btn bento-btn--white">
-                  Descargá TriciGo Conductor
+                <a
+                  href="https://play.google.com/store/apps/details?id=app.tricigo.driver"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bento-btn bento-btn--white"
+                  aria-label="Descargá TriciGo Conductor en Google Play"
+                >
+                  <GooglePlayIcon /> Google Play
+                </a>
+                <a
+                  href="https://apps.apple.com/app/id6785157051"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bento-btn bento-btn--white"
+                  aria-label="Descargá TriciGo Conductor en App Store"
+                >
+                  <AppStoreIcon /> App Store
                 </a>
                 <a href="/conductores" className="bento-btn">
                   Conocé más
