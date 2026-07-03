@@ -557,8 +557,8 @@ export default function HomeClient() {
                 >
                   <AppStoreIcon /> App Store
                 </a>
-                <a href="/conductores" className="bento-btn">
-                  Conocé más
+                <a href="/conductores" className="bento-btn bento-btn--ghost">
+                  Mirá cómo empezar
                 </a>
               </div>
             </div>
