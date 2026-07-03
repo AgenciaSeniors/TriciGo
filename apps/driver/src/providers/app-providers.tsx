@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PostHogProvider, usePostHog } from 'posthog-react-native';
 import { initI18n } from '@tricigo/i18n';
@@ -81,7 +81,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   }, []);
 
   const inner = (
-    <SafeAreaProvider>
+    // initialMetrics avoids a first-frame zero top inset (header flashing
+    // under the status bar) before the native safe-area measurement lands.
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <QueryClientProvider client={queryClient}>
         <OfflineBanner />
         {children}
