@@ -104,7 +104,8 @@ export type DocumentType =
   | 'drivers_license'
   | 'vehicle_registration'
   | 'selfie'
-  | 'vehicle_photo';
+  | 'vehicle_photo'
+  | 'operating_license';
 
 export type PromotionType =
   | 'percentage_discount'

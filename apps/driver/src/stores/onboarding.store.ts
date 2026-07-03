@@ -64,23 +64,31 @@ interface OnboardingState {
   reset: () => void;
 }
 
-// CC-04 (security audit 2026-05-23, PR-04 — opción C): selfie removed
-// from driver onboarding until real biometric provider integrated.
-// Before this change the selfie step ran a placeholder that returned
-// random pass scores when SELFIE_VERIFICATION_ENABLED was not set —
-// the UI promised verification it never performed. Manual admin
-// review of national_id + drivers_license + vehicle_registration is
-// the active KYC control. The `selfie_checks` table and `verify-selfie`
-// edge function remain in the codebase so a future PR can plug in
-// AWS Rekognition (or equivalent) without re-adding the step here.
-// drivers_license is OPTIONAL (product decision 2026-06-30): not every Cuban
-// driver has/needs one (e.g. triciclo). It's still shown so they can upload
-// it, labeled "Opcional", and the admin can verify it if present — but its
-// absence never blocks onboarding or approval. Required = national_id +
-// vehicle_registration + vehicle_photo.
+// Document requirements (product decision 2026-07-03):
+//   national_id            — REQUIRED
+//   selfie                 — REQUIRED  (re-added; see note below)
+//   drivers_license        — REQUIRED  (was optional until 2026-06-30; now required)
+//   operating_license      — OPTIONAL  (licencia operativa; new)
+//   vehicle_registration   — REQUIRED
+//   vehicle_photo          — REQUIRED
+//
+// SELFIE — manual review only (NOT biometric). CC-04 (2026-05-23) had removed
+// selfie because the old onboarding step called `verify-selfie`, which returned
+// random pass scores when SELFIE_VERIFICATION_ENABLED was unset (fake security).
+// It is re-added here as a plain photo the admin compares against the ID by hand,
+// exactly like every other document — the onboarding flow does NOT call
+// `verify-selfie`, so no fake verification is reintroduced. The `selfie_checks`
+// table + `verify-selfie` edge function stay dormant for a future AWS Rekognition
+// (or equivalent) integration; SELFIE_VERIFICATION_ENABLED remains OFF.
+//
+// The `optional` flag gates progression: Submit enables once every NON-optional
+// doc is uploaded. Kept in sync with the admin approval gate REQUIRED_DOC_TYPES
+// (apps/admin/.../drivers/[id]/page.tsx) and the auto-admin EF REQUIRED_DOCS.
 const INITIAL_DOCUMENTS: DocumentDraft[] = [
   { document_type: 'national_id', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
-  { document_type: 'drivers_license', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null, optional: true },
+  { document_type: 'selfie', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
+  { document_type: 'drivers_license', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
+  { document_type: 'operating_license', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null, optional: true },
   { document_type: 'vehicle_registration', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
   { document_type: 'vehicle_photo', uri: '', fileName: '', mimeType: null, uploaded: false, uploading: false, error: null },
 ];

@@ -29,10 +29,11 @@ const DOC_TYPE_KEY: Record<string, string> = {
   vehicle_registration: 'onboarding.vehicle_registration',
   selfie: 'onboarding.selfie',
   vehicle_photo: 'onboarding.vehicle_photo',
+  operating_license: 'onboarding.operating_license',
 };
 
 /** Document types that accept PDF uploads in addition to images */
-const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'vehicle_registration'];
+const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'vehicle_registration', 'operating_license'];
 
 export default function DocumentsScreen() {
   const { t } = useTranslation('driver');
