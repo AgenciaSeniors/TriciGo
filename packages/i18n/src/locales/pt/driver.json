@@ -399,6 +399,7 @@
     "drivers_license": "Carteira de motorista",
     "vehicle_registration": "Registro do veículo",
     "selfie": "Selfie de verificação",
+    "operating_license": "Licença operativa",
     "upload": "Enviar documento",
     "pending_review": "Estamos analisando sua solicitação",
     "pending_review_description": "Verificamos os documentos em menos de 24 horas. Avisaremos assim que você for aprovado.",

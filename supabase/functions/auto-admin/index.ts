@@ -41,26 +41,24 @@ function getNumber(config: Record<string, string>, key: string, fallback: number
   return isNaN(val) ? fallback : val;
 }
 
-// CC-04 (security audit 2026-05-23, PR-04 — opción C): `selfie` removed
-// from REQUIRED_DOCS because the driver onboarding UI no longer uploads
-// it (the verify-selfie EF was returning placeholder pass scores when
-// SELFIE_VERIFICATION_ENABLED was not set — fake security). Manual
-// admin review of the remaining KYC documents is the active control.
+// Required KYC documents for approval (2026-07-03): national_id,
+// drivers_license, vehicle_registration, vehicle_photo, selfie.
+// `operating_license` (licencia operativa) is OPTIONAL and never gates approval.
+// Kept in sync with the driver onboarding `optional` flag
+// (apps/driver/.../onboarding.store.ts) and the admin approval gate
+// REQUIRED_DOC_TYPES (apps/admin/.../drivers/[id]/page.tsx).
 //
-// 2026-06-30: `drivers_license` removed too — it's now OPTIONAL (not every
-// Cuban driver has/needs one, e.g. triciclo). Mirrors the driver onboarding
-// `optional` flag (apps/driver/.../onboarding.store.ts) and the admin
-// approval gate REQUIRED_DOC_TYPES (apps/admin/.../drivers/[id]/page.tsx).
-// Keep the three in sync. A license, if uploaded, can still be verified by
-// the admin — it just never gates approval.
+// SELFIE IS MANUAL REVIEW ONLY. It is required as a photo the admin compares
+// against the ID by hand — this does NOT re-enable biometric verification. The
+// face_match_score gate stays removed and SELFIE_VERIFICATION_ENABLED stays OFF;
+// the onboarding flow never calls verify-selfie. So this list only asserts the
+// selfie was UPLOADED + admin-verified (is_verified), not biometrically matched.
 //
-// SECURITY POSTURE NOTE: with selfie biometric verification removed,
-// the recommended setting is `auto_approve_drivers_enabled = false` in
-// platform_config so every driver requires explicit admin approval.
-// This function is a NO-OP whenever that flag is false (line below).
-// If/when AWS Rekognition (or equivalent) is integrated, add selfie
-// back to REQUIRED_DOCS + restore the face_match_score gate.
-const REQUIRED_DOCS = ['national_id', 'vehicle_registration', 'vehicle_photo'];
+// SECURITY POSTURE NOTE: the recommended setting is
+// `auto_approve_drivers_enabled = false` in platform_config so every driver
+// requires explicit admin approval. This function is a NO-OP whenever that flag
+// is false (line below).
+const REQUIRED_DOCS = ['national_id', 'drivers_license', 'vehicle_registration', 'vehicle_photo', 'selfie'];
 
 async function autoApproveDrivers(supabase: ReturnType<typeof getSupabase>, config: Record<string, string>) {
   if (!isEnabled(config, 'auto_approve_drivers_enabled')) return { count: 0, errors: [] };

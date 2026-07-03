@@ -59,10 +59,14 @@ export const DOC_REJECTION_PRESETS: Record<DocumentType, DocRejectionPreset[]> =
     { code: 'vp_unclear', label_es: 'No se ve claramente el vehículo' },
     { code: 'vp_mismatch', label_es: 'El vehículo en la foto no coincide con el registrado' },
   ],
-  // CC-04 (security audit 2026-05-23) — selfie is dormant until a
-  // biometric provider is wired in. Listed here for completeness so
-  // a re-activation doesn't have to touch this file.
+  // selfie is a manual-review photo (admin compares it to the ID by hand); no
+  // biometric provider is wired in, so no selfie-specific rejection codes.
   selfie: [...GENERAL],
+  operating_license: [
+    ...GENERAL,
+    { code: 'ol_expired', label_es: 'Licencia operativa vencida' },
+    { code: 'ol_mismatch', label_es: 'Los datos no coinciden con el perfil' },
+  ],
 };
 
 /**

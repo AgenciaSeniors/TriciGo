@@ -30,18 +30,17 @@ function useSteps() {
   ];
 }
 
-// CC-04 (security audit 2026-05-23, PR-04 — opción C): `selfie` kept
-// in the label map because DocumentType enum still includes it
-// (preserves backward compatibility for any in-flight onboarding
-// session that started before the deploy, and for the future provider
-// integration). The onboarding store no longer creates a selfie row,
-// so the UI never renders a selfie tile.
+// Label keys for every document tile. Which docs actually render (and whether
+// they're required) is driven by the onboarding store's INITIAL_DOCUMENTS.
+// selfie is captured with the front camera (see pickImage); it's a manual-review
+// photo, NOT biometric — the onboarding flow never calls `verify-selfie`.
 const DOC_LABELS: Record<DocumentType, string> = {
   national_id: 'onboarding.national_id',
   drivers_license: 'onboarding.drivers_license',
   vehicle_registration: 'onboarding.vehicle_registration',
   selfie: 'onboarding.selfie',
   vehicle_photo: 'onboarding.vehicle_photo',
+  operating_license: 'onboarding.operating_license',
 };
 
 export default function DocumentsScreen() {
@@ -87,7 +86,7 @@ export default function DocumentsScreen() {
   }, [driverProfileId, user, setDriverProfileId]);
 
   /** Document types that accept PDF uploads in addition to images */
-  const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'vehicle_registration'];
+  const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'vehicle_registration', 'operating_license'];
 
   const uploadFile = async (docType: DocumentType, uri: string, fileName: string, mimeType?: string) => {
     if (!driverProfileId) return;
@@ -132,7 +131,7 @@ export default function DocumentsScreen() {
 
     const useCamera = isCamera && !isWeb;
     const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true })
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true, cameraType: ImagePicker.CameraType.front })
       : await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 0.7,

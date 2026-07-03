@@ -1,0 +1,12 @@
+-- 00484: add `operating_license` (licencia operativa) to the document_type enum.
+--
+-- New OPTIONAL driver onboarding document. `selfie` is already a member of the
+-- enum (never removed from the type — only from the onboarding UI in CC-04), so
+-- re-adding the required selfie needs NO DB change; this migration only adds the
+-- brand-new `operating_license` value.
+--
+-- Must live in its OWN migration: Postgres forbids USING a freshly-added enum
+-- value in the same transaction that adds it (same constraint as 00370 for
+-- user_level). This migration only ADDs the value — nothing references it here —
+-- so it is safe. `IF NOT EXISTS` makes it idempotent.
+ALTER TYPE public.document_type ADD VALUE IF NOT EXISTS 'operating_license';

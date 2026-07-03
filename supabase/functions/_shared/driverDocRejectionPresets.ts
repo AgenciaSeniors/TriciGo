@@ -33,7 +33,8 @@ type DocumentType =
   | 'drivers_license'
   | 'vehicle_registration'
   | 'selfie'
-  | 'vehicle_photo';
+  | 'vehicle_photo'
+  | 'operating_license';
 
 export const DOC_REJECTION_PRESETS: Record<DocumentType, DocRejectionPreset[]> = {
   national_id: [
@@ -61,6 +62,11 @@ export const DOC_REJECTION_PRESETS: Record<DocumentType, DocRejectionPreset[]> =
     { code: 'vp_mismatch', label_es: 'El vehículo en la foto no coincide con el registrado' },
   ],
   selfie: [...GENERAL],
+  operating_license: [
+    ...GENERAL,
+    { code: 'ol_expired', label_es: 'Licencia operativa vencida' },
+    { code: 'ol_mismatch', label_es: 'Los datos no coinciden con el perfil' },
+  ],
 };
 
 export const DOC_TYPE_LABELS_ES: Record<DocumentType, string> = {
@@ -69,6 +75,7 @@ export const DOC_TYPE_LABELS_ES: Record<DocumentType, string> = {
   vehicle_registration: 'Registro del vehículo',
   selfie: 'Selfie',
   vehicle_photo: 'Foto del vehículo',
+  operating_license: 'Licencia operativa',
 };
 
 export function labelForCode(code: string): string {

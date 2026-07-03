@@ -87,6 +87,7 @@ const DOC_TYPE_KEY: Record<string, string> = {
   vehicle_registration: 'drivers.doc_registration',
   selfie: 'drivers.doc_selfie',
   vehicle_photo: 'drivers.doc_vehicle_photo',
+  operating_license: 'drivers.doc_operating_license',
 };
 
 function getInitials(name?: string | null): string {
@@ -421,17 +422,14 @@ export default function DriverDetailPage() {
   const statusStyle = STATUS_STYLES[status];
   const verifiedDocsCount = documents.filter((d) => d.is_verified).length;
   const totalDocsCount = documents.length;
-  // Approval gates on REQUIRED doc types only. drivers_license is optional
-  // (product decision 2026-06-30) and never blocks approval — mirror of the
-  // driver onboarding `optional` flag (onboarding.store.ts) and the auto-admin
-  // EF REQUIRED_DOCS. Keep the three in sync.
-  //
-  // This also fixes a latent bug: the gate used to require `totalDocsCount >= 5`,
-  // a leftover from when selfie was a 5th doc. After CC-04 removed selfie
-  // (drivers upload ≤4), the threshold became impossible → the Approve button
-  // was permanently disabled. #620 fixed the same hardcoded-5 in the driver's
-  // review screen but missed this admin gate.
-  const REQUIRED_DOC_TYPES = ['national_id', 'vehicle_registration', 'vehicle_photo'] as const;
+  // Approval gates on REQUIRED doc types only. Kept in sync with the driver
+  // onboarding `optional` flag (onboarding.store.ts) and the auto-admin EF
+  // REQUIRED_DOCS. Required set (2026-07-03): national_id, drivers_license,
+  // vehicle_registration, vehicle_photo, selfie. `operating_license` (licencia
+  // operativa) is OPTIONAL — it renders and can be verified, but never blocks
+  // approval. selfie is a manual-review photo (admin compares it to the ID);
+  // no biometric gate — the removed face_match_score check is NOT restored.
+  const REQUIRED_DOC_TYPES = ['national_id', 'drivers_license', 'vehicle_registration', 'vehicle_photo', 'selfie'] as const;
   const requiredVerifiedCount = REQUIRED_DOC_TYPES.filter((type) =>
     documents.some((d) => d.document_type === type && d.is_verified),
   ).length;

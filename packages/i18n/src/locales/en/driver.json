@@ -400,6 +400,7 @@
     "drivers_license": "Driver's license",
     "vehicle_registration": "Vehicle registration",
     "selfie": "Verification selfie",
+    "operating_license": "Operating license",
     "upload": "Upload document",
     "pending_review": "We're reviewing your application",
     "pending_review_description": "We verify your documents in under 24 hours. We'll notify you as soon as you're approved.",
