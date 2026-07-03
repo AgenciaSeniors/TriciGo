@@ -5,11 +5,31 @@ on:
     tags:
       - 'client-v*'
       - 'driver-v*'
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app to build'
+        type: choice
+        options:
+          - both
+          - client
+          - driver
+        default: both
+      platform:
+        description: 'Which platform(s) to build'
+        type: choice
+        options:
+          - all
+          - ios
+          - android
+        default: all
 
 jobs:
   build-client:
     name: Build Client App
-    if: startsWith(github.ref, 'refs/tags/client-v')
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/client-v')) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.app == 'client' || inputs.app == 'both'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -36,16 +56,24 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Android (preview APK)
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
         run: eas build --platform android --profile preview --non-interactive
         working-directory: apps/client
 
       - name: Build iOS (production)
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
         run: eas build --platform ios --profile production --non-interactive
         working-directory: apps/client
 
   build-driver:
     name: Build Driver App
-    if: startsWith(github.ref, 'refs/tags/driver-v')
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/driver-v')) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.app == 'driver' || inputs.app == 'both'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -72,9 +100,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Android (preview APK)
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
         run: eas build --platform android --profile preview --non-interactive
         working-directory: apps/driver
 
       - name: Build iOS (production)
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
         run: eas build --platform ios --profile production --non-interactive
         working-directory: apps/driver
