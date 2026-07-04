@@ -158,29 +158,29 @@ export default function ReviewScreen() {
         <Text variant="h3" color="inverse" className="mb-1">
           {t('onboarding.step_review')}
         </Text>
-        <Text variant="bodySmall" color="secondary" className="mb-6">
+        <Text variant="bodySmall" color="secondary" className="mb-6" style={{ color: midnightEmber.map.text.secondary }}>
           {t('onboarding.step_n_of_total', { step: 4, total: 4 })}
         </Text>
 
         {/* Personal Info */}
         <Card forceDark variant="surface" padding="md" className="mb-4">
           <View className="flex-row items-center justify-between mb-2">
-            <Text variant="label" color="secondary">
+            <Text variant="label" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
               {t('onboarding.personal_info_summary')}
             </Text>
             <EditLink step="personal-info" />
           </View>
           <Text variant="body" color="inverse">{personalInfo.full_name}</Text>
-          <Text variant="bodySmall" color="secondary">{personalInfo.phone || user?.phone}</Text>
+          <Text variant="bodySmall" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>{personalInfo.phone || user?.phone}</Text>
           {personalInfo.email ? (
-            <Text variant="bodySmall" color="secondary">{personalInfo.email}</Text>
+            <Text variant="bodySmall" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>{personalInfo.email}</Text>
           ) : null}
         </Card>
 
         {/* Vehicle — Visual card with image */}
         <Card forceDark variant="surface" padding="md" className="mb-4">
           <View className="flex-row items-center justify-between mb-3">
-            <Text variant="label" color="secondary">
+            <Text variant="label" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
               {t('onboarding.vehicle_summary')}
             </Text>
             <EditLink step="vehicle-info" />
@@ -197,7 +197,7 @@ export default function ReviewScreen() {
               <Text variant="body" color="inverse" className="font-bold">
                 {vehicle.service_type_slug === 'auto_confort' ? 'Confort' : VEHICLE_TYPE_LABELS[vehicle.type ?? ''] ?? ''}
               </Text>
-              <Text variant="bodySmall" color="secondary">
+              <Text variant="bodySmall" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
                 {vehicle.make} {vehicle.model} ({vehicle.year})
               </Text>
             </View>
@@ -239,7 +239,7 @@ export default function ReviewScreen() {
         {/* Documents */}
         <Card forceDark variant="surface" padding="md" className="mb-6">
           <View className="flex-row items-center justify-between mb-2">
-            <Text variant="label" color="secondary">
+            <Text variant="label" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
               {t('onboarding.documents_summary')}
             </Text>
             <EditLink step="documents" />
@@ -270,7 +270,7 @@ export default function ReviewScreen() {
               style={{ marginTop: 2 }}
             />
             <View className="flex-1">
-              <Text variant="caption" color="secondary">
+              <Text variant="caption" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
                 {t('onboarding.legal_disclaimer', {
                   defaultValue:
                     'Al registrarte aceptas que TriciGo es una plataforma que conecta pasajeros y conductores independientes. Tu billetera es saldo interno canjeable por servicios de transporte físico — no es una transferencia internacional de dinero ni una cuenta bancaria.',

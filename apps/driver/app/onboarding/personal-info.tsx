@@ -466,7 +466,7 @@ export default function PersonalInfoScreen() {
                   <Text variant="h3" color="inverse">
                     {t('onboarding.section_personal')}
                   </Text>
-                  <Text variant="caption" color="secondary">
+                  <Text variant="caption" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
                     {t('onboarding.step_n_of_total', { step: 1, total: 4 })}
                   </Text>
                 </View>
@@ -518,7 +518,7 @@ export default function PersonalInfoScreen() {
                     </View>
                   </View>
                   {isPhoneFromOtp && (
-                    <Text variant="caption" color="secondary" className="mt-1 opacity-50">
+                    <Text variant="caption" color="secondary" className="mt-1" style={{ color: midnightEmber.map.text.secondary }}>
                       {t('onboarding.phone_verified', { defaultValue: 'Verificado por OTP' })}
                     </Text>
                   )}
@@ -648,7 +648,7 @@ export default function PersonalInfoScreen() {
                          why-we-ask line, some drivers bail out assuming it
                          disqualifies them. It doesn't — declaring honestly
                          just changes the review timeline. */}
-                    <Text variant="caption" color="secondary" className="mt-1 opacity-60">
+                    <Text variant="caption" color="secondary" className="mt-1" style={{ color: midnightEmber.map.text.secondary }}>
                       {t('onboarding.criminal_record_hint', {
                         defaultValue: 'Requisito de verificación. Declarar antecedentes no te descalifica automáticamente.',
                       })}
@@ -699,7 +699,7 @@ export default function PersonalInfoScreen() {
                     <Text variant="body" color="inverse">
                       {t('onboarding.referral_title', { defaultValue: '¿Te invitó alguien? (opcional)' })}
                     </Text>
-                    <Text variant="caption" color="secondary" className="mt-1 opacity-60">
+                    <Text variant="caption" color="secondary" className="mt-1" style={{ color: midnightEmber.map.text.secondary }}>
                       {t('onboarding.referral_hint', { defaultValue: 'Ingresa el código de referido de quien te invitó. Aplícalo antes de que aprobemos tu cuenta.' })}
                     </Text>
                     <View className="mt-3">
@@ -794,7 +794,7 @@ export default function PersonalInfoScreen() {
                 {tc('auth.otp_title')}
               </Text>
             </View>
-            <Text variant="bodySmall" color="secondary" className="mb-5">
+            <Text variant="bodySmall" color="secondary" className="mb-5" style={{ color: midnightEmber.map.text.secondary }}>
               {tc('auth.otp_subtitle', { phone: pendingPhone })}
             </Text>
 
@@ -835,6 +835,7 @@ export default function PersonalInfoScreen() {
               variant="ghost"
               onPress={handleResendOtp}
               disabled={resendTimer > 0 || otpLoading}
+              forceDark
               className="mt-3"
               fullWidth
             />
@@ -847,6 +848,7 @@ export default function PersonalInfoScreen() {
                 setOtpError('');
               }}
               disabled={otpLoading}
+              forceDark
               className="mt-1"
               fullWidth
             />

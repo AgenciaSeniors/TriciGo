@@ -232,7 +232,7 @@ export default function DocumentsScreen() {
         <Text variant="h3" color="inverse" className="mb-1">
           {t('onboarding.step_documents')}
         </Text>
-        <Text variant="bodySmall" color="secondary" className="mb-6">
+        <Text variant="bodySmall" color="secondary" className="mb-6" style={{ color: midnightEmber.map.text.secondary }}>
           {t('onboarding.step_n_of_total', { step: 3, total: 4 })} — {requiredUploadedCount}/{requiredDocs.length}
         </Text>
 
@@ -263,7 +263,7 @@ export default function DocumentsScreen() {
                       className="ml-2 px-2 py-0.5 rounded-full"
                       style={{ backgroundColor: midnightEmber.map.bg.elevated }}
                     >
-                      <Text variant="badge" color="secondary">
+                      <Text variant="badge" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
                         {t('onboarding.optional', { defaultValue: 'Opcional' })}
                       </Text>
                     </View>
@@ -274,7 +274,7 @@ export default function DocumentsScreen() {
                 ) : doc.uploaded && doc.mimeType === 'application/pdf' ? (
                   <Text variant="caption" color="accent" numberOfLines={1}>{doc.fileName}</Text>
                 ) : (
-                  <Text variant="caption" color={doc.uploaded ? 'accent' : 'secondary'}>
+                  <Text variant="caption" color={doc.uploaded ? 'accent' : 'secondary'} style={doc.uploaded ? undefined : { color: midnightEmber.map.text.secondary }}>
                     {doc.uploaded ? t('onboarding.uploaded', { defaultValue: 'Subido' }) : doc.document_type === 'selfie' ? t('onboarding.take_photo') : t('onboarding.pick_from_gallery')}
                   </Text>
                 )}

@@ -15,7 +15,7 @@ import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useTranslation } from '@tricigo/i18n';
 import { authService, getSupabaseClient } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
-import { colors } from '@tricigo/theme';
+import { colors, midnightEmber } from '@tricigo/theme';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 const vehicleRow = require('../../assets/login-hero.png');
@@ -162,7 +162,7 @@ export default function LoginScreen() {
               </View>
 
               <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-                <Text variant="bodySmall" color="secondary" className="mt-3">
+                <Text variant="bodySmall" color="secondary" className="mt-3" style={{ color: midnightEmber.map.text.secondary }}>
                   {t('auth.driver_tagline')}
                 </Text>
               </Animated.View>
@@ -198,7 +198,7 @@ export default function LoginScreen() {
             <Text variant="h3" color="inverse" className="mb-1">
               {t('auth.welcome', { defaultValue: 'Bienvenido' })}
             </Text>
-            <Text variant="bodySmall" color="secondary" className="mb-6">
+            <Text variant="bodySmall" color="secondary" className="mb-6" style={{ color: midnightEmber.map.text.secondary }}>
               {t('auth.enter_phone_description', { defaultValue: 'Ingresa tu número para comenzar' })}
             </Text>
 
@@ -245,7 +245,7 @@ export default function LoginScreen() {
             {/* Divider */}
             <View className="flex-row items-center my-6">
               <View className="flex-1 h-px bg-white/6" />
-              <Text variant="caption" color="secondary" className="mx-4">
+              <Text variant="caption" color="secondary" className="mx-4" style={{ color: midnightEmber.map.text.secondary }}>
                 {t('auth.or_continue_with')}
               </Text>
               <View className="flex-1 h-px bg-white/6" />
@@ -355,7 +355,7 @@ export default function LoginScreen() {
             </View>
 
             {/* Legal text */}
-            <Text variant="caption" color="secondary" className="text-center mt-8 pb-8 leading-5">
+            <Text variant="caption" color="secondary" className="text-center mt-8 pb-8 leading-5" style={{ color: midnightEmber.map.text.secondary }}>
               {t('auth.terms_notice', { defaultValue: 'Al continuar, aceptas nuestros' })}{' '}
               <Text
                 variant="caption"
@@ -396,103 +396,103 @@ export default function LoginScreen() {
             {legalType === 'terms' ? (
               <>
                 <Text variant="h2" color="inverse" className="mb-1">{tWeb('terms.title')}</Text>
-                <Text variant="caption" color="secondary" className="mb-6">{tWeb('terms.last_updated')}</Text>
+                <Text variant="caption" color="secondary" className="mb-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.last_updated')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.acceptance_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.acceptance_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.acceptance_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.service_desc_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.service_desc_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.service_desc_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.eligibility_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.eligibility_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.eligibility_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.accounts_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.accounts_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.accounts_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.rides_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.rides_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.rides_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.payments_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.payments_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.payments_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.cancellations_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.cancellations_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.cancellations_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.conduct_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-2 leading-6">{tWeb('terms.conduct_intro')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('terms.conduct_respectful')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('terms.conduct_laws')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('terms.conduct_no_fraud')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{'  \u2022 '}{tWeb('terms.conduct_no_damage')}</Text>
+                <Text variant="body" color="secondary" className="mb-2 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.conduct_intro')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('terms.conduct_respectful')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('terms.conduct_laws')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('terms.conduct_no_fraud')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('terms.conduct_no_damage')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.liability_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.liability_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.liability_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.ip_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.ip_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.ip_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.termination_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.termination_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.termination_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.modifications_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.modifications_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.modifications_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.governing_law_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('terms.governing_law_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.governing_law_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('terms.contact_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-2 leading-6">{tWeb('terms.contact_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-2 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('terms.contact_text')}</Text>
                 <Text variant="body" color="accent" className="leading-6">{tWeb('terms.contact_email')}</Text>
               </>
             ) : legalType === 'privacy' ? (
               <>
                 <Text variant="h2" color="inverse" className="mb-1">{tWeb('privacy.title')}</Text>
-                <Text variant="caption" color="secondary" className="mb-6">{tWeb('privacy.last_updated')}</Text>
+                <Text variant="caption" color="secondary" className="mb-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.last_updated')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.intro_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('privacy.intro_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.intro_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.data_collected_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-2 leading-6">{tWeb('privacy.data_collected_intro')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.data_name_phone')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.data_location')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.data_ride_history')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.data_payment')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{'  \u2022 '}{tWeb('privacy.data_device')}</Text>
+                <Text variant="body" color="secondary" className="mb-2 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.data_collected_intro')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.data_name_phone')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.data_location')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.data_ride_history')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.data_payment')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.data_device')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.data_use_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-2 leading-6">{tWeb('privacy.data_use_intro')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.use_provide_service')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.use_improve')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.use_safety')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.use_communications')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{'  \u2022 '}{tWeb('privacy.use_legal')}</Text>
+                <Text variant="body" color="secondary" className="mb-2 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.data_use_intro')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.use_provide_service')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.use_improve')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.use_safety')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.use_communications')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.use_legal')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.sharing_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('privacy.sharing_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.sharing_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.retention_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('privacy.retention_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.retention_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.rights_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-2 leading-6">{tWeb('privacy.rights_intro')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.right_access')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.right_correction')}</Text>
-                <Text variant="body" color="secondary" className="mb-1 leading-6">{'  \u2022 '}{tWeb('privacy.right_deletion')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{'  \u2022 '}{tWeb('privacy.right_portability')}</Text>
+                <Text variant="body" color="secondary" className="mb-2 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.rights_intro')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.right_access')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.right_correction')}</Text>
+                <Text variant="body" color="secondary" className="mb-1 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.right_deletion')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{'  \u2022 '}{tWeb('privacy.right_portability')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.security_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('privacy.security_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.security_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.children_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('privacy.children_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.children_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.changes_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-4 leading-6">{tWeb('privacy.changes_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-4 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.changes_text')}</Text>
 
                 <Text variant="h3" color="inverse" className="mb-2 mt-4">{tWeb('privacy.contact_title')}</Text>
-                <Text variant="body" color="secondary" className="mb-2 leading-6">{tWeb('privacy.contact_text')}</Text>
+                <Text variant="body" color="secondary" className="mb-2 leading-6" style={{ color: midnightEmber.map.text.secondary }}>{tWeb('privacy.contact_text')}</Text>
                 <Text variant="body" color="accent" className="leading-6">{tWeb('privacy.contact_email')}</Text>
               </>
             ) : null}

@@ -267,7 +267,7 @@ function NativeDriverProfileScreen() {
       <Text numberOfLines={1} style={{ flex: 1, color: palette.ink.primary, fontSize: 15, fontWeight: '500' }}>
         {item.label}
       </Text>
-      <Ionicons name="chevron-forward" size={18} color={palette.ink.subtle} />
+      <Ionicons name="chevron-forward" size={18} color={palette.ink.secondary} />
     </Pressable>
   );
 

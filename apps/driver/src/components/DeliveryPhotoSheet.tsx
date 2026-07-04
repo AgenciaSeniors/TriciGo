@@ -9,6 +9,7 @@ import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
 import { deliveryService } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
+import { midnightEmber } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { compressDocument } from '@/lib/compressDocument';
 
@@ -173,7 +174,7 @@ export function DeliveryPhotoSheet({
                 {recipientName}
               </Text>
               {recipientPhone && (
-                <Text variant="caption" color="secondary" className="ml-auto">
+                <Text variant="caption" color="secondary" className="ml-auto" style={{ color: midnightEmber.map.text.secondary }}>
                   {recipientPhone}
                 </Text>
               )}
@@ -195,7 +196,7 @@ export function DeliveryPhotoSheet({
           ? t('trip.pickup_photo_title', { defaultValue: 'Foto de recogida' })
           : t('trip.delivery_photo_title', { defaultValue: 'Foto de entrega' })}
       </Text>
-      <Text variant="bodySmall" color="secondary" className="text-center mb-4">
+      <Text variant="bodySmall" color="secondary" className="text-center mb-4" style={{ color: midnightEmber.map.text.secondary }}>
         {phase === 'pickup'
           ? t('trip.pickup_photo_desc', { defaultValue: 'Tome una foto del paquete al recogerlo' })
           : t('trip.delivery_photo_desc', { defaultValue: 'Tome una foto del paquete entregado como comprobante' })}
@@ -210,7 +211,7 @@ export function DeliveryPhotoSheet({
               {t('trip.otp_request_title', { defaultValue: 'Pida el código al destinatario' })}
             </Text>
           </View>
-          <Text variant="caption" color="secondary" className="mb-3 opacity-80">
+          <Text variant="caption" color="secondary" className="mb-3 opacity-80" style={{ color: midnightEmber.map.text.secondary }}>
             {t('trip.otp_request_desc', { defaultValue: 'El cliente le compartió un código de 4 dígitos al destinatario. Pídaselo para confirmar la entrega.' })}
           </Text>
           <Input
