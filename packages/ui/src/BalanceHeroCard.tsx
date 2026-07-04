@@ -66,12 +66,19 @@ export function BalanceHeroCard({
 
       <View style={styles.row}>
         <View style={styles.amountRow}>
-          <RNText style={[styles.amount, { color: tokens.ink.primary }]}>
+          {/* Long balances (e.g. "1,234,567") must shrink instead of wrapping
+              into the USD column on narrow (320-360dp) screens. */}
+          <RNText
+            style={[styles.amount, { color: tokens.ink.primary }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
             {formatTc(balanceTc)}
           </RNText>
           <RNText style={[styles.unit, { color: tokens.ink.secondary }]}>TC</RNText>
         </View>
-        <RNText style={[styles.usd, { color: tokens.accent.warm }]}>
+        <RNText style={[styles.usd, { color: tokens.accent.warm }]} numberOfLines={1}>
           ↗ {formatUsd(balanceUsd)} USD
         </RNText>
       </View>
@@ -127,6 +134,7 @@ const styles = StyleSheet.create({
   amountRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    flexShrink: 1,
   },
   amount: {
     fontFamily: 'BricolageGrotesque_700Bold',

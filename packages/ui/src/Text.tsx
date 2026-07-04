@@ -102,6 +102,10 @@ export function Text({
         ${className ?? ''}
       `}
       style={resolvedStyle}
+      // Cap accessibility font scaling: fixed-height rows (tab bar, 48px
+      // action buttons, single-line inputs) clip their text past ~1.4×.
+      // Placed before the spread so a caller-provided value still wins.
+      maxFontSizeMultiplier={1.4}
       {...props}
     >
       {children}

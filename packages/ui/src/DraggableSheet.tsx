@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomSheetLib, {
   BottomSheetScrollView,
   BottomSheetBackdrop,
@@ -47,6 +48,10 @@ export function DraggableSheet({
 }: DraggableSheetProps) {
   const internalRef = useRef<BottomSheetLib>(null);
   const ref = sheetRef ?? internalRef;
+  // The sheet background reaches the physical bottom edge, so content needs
+  // the home-indicator / gesture-nav inset on top of its own padding or the
+  // last row (e.g. accept/reject buttons) sits under the indicator on iPhone.
+  const insets = useSafeAreaInsets();
 
   const isDark = theme === 'dark';
 
@@ -134,11 +139,13 @@ export function DraggableSheet({
       animateOnMount
     >
       {scrollable ? (
-        <BottomSheetScrollView contentContainerStyle={styles.scrollContent}>
+        <BottomSheetScrollView
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + insets.bottom }]}
+        >
           {children}
         </BottomSheetScrollView>
       ) : (
-        <View style={styles.content}>{children}</View>
+        <View style={[styles.content, { paddingBottom: insets.bottom }]}>{children}</View>
       )}
     </BottomSheetLib>
   );

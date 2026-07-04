@@ -33,7 +33,11 @@ export function DisplayHeading({
       <RNText
         style={[
           styles.heading,
-          { color: tokens.ink.primary, fontSize: size },
+          // lineHeight must scale with the size prop: a fixed value smaller
+          // than fontSize gets the glyph tops clipped on iOS (Android
+          // overflows instead), and Instrument Serif italic has tall
+          // ascenders. 1.2 keeps the current 30 → 36 ratio.
+          { color: tokens.ink.primary, fontSize: size, lineHeight: Math.ceil(size * 1.2) },
         ]}
       >
         {children}
@@ -61,7 +65,6 @@ export function DisplayHeading({
 const styles = StyleSheet.create({
   heading: {
     fontFamily: 'InstrumentSerif_400Regular_Italic',
-    lineHeight: 36,
     letterSpacing: -0.5,
   },
   underlineWrap: {
