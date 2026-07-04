@@ -687,6 +687,10 @@ export function DriverTripView() {
       initialIndex={1}
       theme="dark"
       scrollable
+      // BUG-235 hides the tab bar during an active trip, so this sheet
+      // reaches the physical bottom edge — pad the toolbar clear of the
+      // home indicator / gesture bar.
+      bottomSafeArea
       onChange={(_index: number) => {
         // Could track sheet position for analytics
       }}

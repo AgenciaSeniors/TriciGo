@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Modal, Pressable, Linking } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,9 @@ const RESHOW_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
  */
 export function NotificationPermissionSheet() {
   const { t } = useTranslation('common');
+  // Rendered inside a transparent RN Modal, which does NOT inherit the app's
+  // SafeAreaView — pad the CTAs clear of the home indicator / gesture bar.
+  const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(false);
   const [denied, setDenied] = useState(false);
 
@@ -103,7 +107,10 @@ export function NotificationPermissionSheet() {
       />
 
       {/* Bottom sheet */}
-      <View className="bg-white dark:bg-neutral-900 rounded-t-3xl px-6 pt-6 pb-10">
+      <View
+        className="bg-white dark:bg-neutral-900 rounded-t-3xl px-6 pt-6"
+        style={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }}
+      >
         {/* Handle */}
         <View className="w-10 h-1 bg-neutral-200 rounded-full self-center mb-6" />
 

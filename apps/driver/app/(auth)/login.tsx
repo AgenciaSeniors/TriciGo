@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Image, Pressable, KeyboardAvoidingView, Platform, ScrollView, Animated, Linking, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
@@ -46,6 +47,9 @@ async function setSessionFromAuthResult(result: WebBrowser.WebBrowserAuthSession
 
 export default function LoginScreen() {
   const { t } = useTranslation('common');
+  // The legal-viewer Modal below is full-screen and does not inherit any
+  // SafeAreaView — its header needs the real top inset (Dynamic Island).
+  const insets = useSafeAreaInsets();
   const { t: td } = useTranslation('driver');
   const { isPhone } = useResponsive();
   const [phone, setPhone] = useState('');
@@ -380,7 +384,7 @@ export default function LoginScreen() {
       {/* Legal Content Modal */}
       <Modal visible={!!legalType} animationType="slide" onRequestClose={() => setLegalType(null)}>
         <View style={{ flex: 1, backgroundColor: '#111' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#333' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: insets.top + 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#333' }}>
             <Text variant="body" color="inverse" className="font-semibold">
               {legalType === 'terms' ? t('auth.terms_link', { defaultValue: 'Términos de Servicio' }) : t('auth.privacy_link', { defaultValue: 'Política de Privacidad' })}
             </Text>

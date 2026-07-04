@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomSheetLib, {
   BottomSheetScrollView,
   BottomSheetBackdrop,
@@ -27,6 +28,14 @@ export interface DraggableSheetProps {
   sheetRef?: React.RefObject<BottomSheetLib | null>;
   /** Called when snap point changes */
   onChange?: (index: number) => void;
+  /**
+   * Pad the content by the bottom safe-area inset. Enable ONLY when the
+   * sheet reaches the physical bottom edge of the screen (tab bar hidden,
+   * e.g. the driver's active-trip view) — otherwise the last row sits under
+   * the iPhone home indicator / Android gesture bar. Leave off for sheets
+   * that rest on a visible tab bar (it already absorbs the inset).
+   */
+  bottomSafeArea?: boolean;
 }
 
 /**
@@ -44,9 +53,12 @@ export function DraggableSheet({
   style,
   sheetRef,
   onChange,
+  bottomSafeArea = false,
 }: DraggableSheetProps) {
   const internalRef = useRef<BottomSheetLib>(null);
   const ref = sheetRef ?? internalRef;
+  const insets = useSafeAreaInsets();
+  const bottomPad = bottomSafeArea ? insets.bottom : 0;
 
   const isDark = theme === 'dark';
 
@@ -134,11 +146,13 @@ export function DraggableSheet({
       animateOnMount
     >
       {scrollable ? (
-        <BottomSheetScrollView contentContainerStyle={styles.scrollContent}>
+        <BottomSheetScrollView
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + bottomPad }]}
+        >
           {children}
         </BottomSheetScrollView>
       ) : (
-        <View style={styles.content}>{children}</View>
+        <View style={[styles.content, { paddingBottom: bottomPad }]}>{children}</View>
       )}
     </BottomSheetLib>
   );
@@ -151,7 +165,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 24,
+    // paddingBottom is always provided inline (24 + optional safe-area pad).
   },
   webSheet: {
     position: 'absolute' as const,

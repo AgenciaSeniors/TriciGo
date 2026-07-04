@@ -102,6 +102,12 @@ export function Text({
         ${className ?? ''}
       `}
       style={resolvedStyle}
+      // Bound extreme accessibility font scaling: Android allows multipliers
+      // past 2× where fixed-height rows clip and layouts break wholesale.
+      // 2.0 preserves full WCAG 1.4.4 (200%) text resize for body copy while
+      // capping the runaway cases. Placed before the spread so a
+      // caller-provided value still wins.
+      maxFontSizeMultiplier={2.0}
       {...props}
     >
       {children}
