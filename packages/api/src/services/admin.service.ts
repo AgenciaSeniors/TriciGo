@@ -1464,6 +1464,28 @@ export const adminService = {
     };
   },
 
+  /**
+   * Cancel any active ride from the admin panel (incl. in_progress).
+   *
+   * Uses the admin_cancel_ride RPC (00485): is_admin()-gated, supersedes
+   * pending offers, audits into admin_actions, and deliberately does NOT
+   * penalize either party's reputation nor move money. The passenger and
+   * driver are notified automatically by the existing status-change triggers
+   * (push + SMS). Throws with the RPC error code on failure:
+   * 'forbidden' | 'ride_not_found' | 'ride_already_closed'.
+   */
+  async cancelRide(rideId: string, reason?: string): Promise<{ previousStatus: string }> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('admin_cancel_ride', {
+      p_ride_id: rideId,
+      p_reason: reason ?? null,
+    });
+    if (error) throw error;
+    const r = data as { success?: boolean; error?: string; previous_status?: string } | null;
+    if (!r || r.error) throw new Error(r?.error ?? 'admin_cancel_failed');
+    return { previousStatus: r.previous_status ?? '' };
+  },
+
   // ==================== WALLET RECHARGES ====================
 
   async getPendingRecharges(
