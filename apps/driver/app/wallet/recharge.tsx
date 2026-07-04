@@ -51,8 +51,10 @@ export default function RechargeScreen() {
   const { present: presentNetopiaCheckout, prewarm: prewarmNetopiaProxy, checkoutElement: netopiaCheckoutElement } =
     useNetopiaCheckout();
 
+  // Single source of truth: preset chips AND the input write the same state,
+  // so tapping a preset fills the amount field (was two states — the preset
+  // set `amount` but the input showed `customAmount`, leaving it blank).
   const [amount, setAmount] = useState('');
-  const [customAmount, setCustomAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   // Full-screen "redirecting to secure payment" overlay for the gap between
   // tapping Pay and the payment surface appearing (createRechargeIntent + proxy
@@ -73,7 +75,7 @@ export default function RechargeScreen() {
   }>(null);
   const [openingReceipt, setOpeningReceipt] = useState(false);
 
-  const selectedAmount = amount ? Number(amount) : Number(customAmount);
+  const selectedAmount = Number(amount);
 
   // RECARGA V2 PARITY: open the just-generated PDF via signed URL.
   const openSuccessReceipt = useCallback(async () => {
@@ -97,7 +99,6 @@ export default function RechargeScreen() {
     setSuccessView(null);
     setSuccessReceipt(null);
     setAmount('');
-    setCustomAmount('');
   }, []);
 
   const handleRecharge = useCallback(async () => {
@@ -470,7 +471,7 @@ export default function RechargeScreen() {
             return (
               <Pressable
                 key={preset}
-                onPress={() => { setAmount(String(preset)); setCustomAmount(''); }}
+                onPress={() => setAmount(String(preset))}
                 style={({ pressed }) => [
                   {
                     flex: 1,
@@ -507,8 +508,8 @@ export default function RechargeScreen() {
         <Input
           label={t('wallet.custom_amount_usd', { defaultValue: 'Monto personalizado (USD)' })}
           placeholder="0"
-          value={customAmount}
-          onChangeText={(v) => { setCustomAmount(v); setAmount(''); }}
+          value={amount}
+          onChangeText={setAmount}
           keyboardType="numeric"
           variant="dark"
         />
