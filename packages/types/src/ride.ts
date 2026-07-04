@@ -97,6 +97,8 @@ export interface Ride {
   canceled_at: string | null;
   canceled_by: string | null;
   cancellation_reason: string | null;
+  /** Structured cancellation reason code (migration 00486); null for legacy rides. */
+  cancellation_reason_code: CancellationReasonCode | null;
   /** Fee charged for cancellation based on ride state (CUP/TRC whole units) */
   cancellation_fee_cup: number;
   /** Fee charged for cancellation in TRC whole units (= CUP) */
@@ -371,6 +373,44 @@ export interface CancellationRatingImpact {
   stars_before: number | null;
   /** Visible (or estimated, for previews) stars after the cancellation. */
   stars_after: number | null;
+}
+
+/**
+ * Structured cancellation reason codes (migration 00486). Replace the old
+ * free-text reason so the reputation penalty can be exempted per-reason and
+ * the Phase-2 collusion detection has a queryable signal.
+ */
+export type CancellationReasonCode =
+  // No exentos — entran a la progresión reputacional fuera de la ventana de gracia.
+  | 'changed_plans'
+  | 'driver_delay'
+  | 'wrong_price'
+  | 'other'
+  // Exentos — no penalizan la reputación.
+  | 'no_show'
+  | 'passenger_gone'
+  | 'breakdown'
+  | 'safety'
+  | 'emergency';
+
+/** Reason codes exempt from the reputation penalty (must match migration 00486). */
+export const EXEMPT_CANCELLATION_REASONS: readonly CancellationReasonCode[] = [
+  'no_show', 'passenger_gone', 'breakdown', 'safety', 'emergency',
+];
+
+/** Reasons a PASSENGER can pick when cancelling. */
+export const PASSENGER_CANCELLATION_REASONS: readonly CancellationReasonCode[] = [
+  'changed_plans', 'driver_delay', 'wrong_price', 'safety', 'other',
+];
+
+/** Reasons a DRIVER can pick when cancelling. `no_show` is sent by the "passenger no-show" button. */
+export const DRIVER_CANCELLATION_REASONS: readonly CancellationReasonCode[] = [
+  'no_show', 'breakdown', 'safety', 'emergency', 'changed_plans', 'other',
+];
+
+/** True when a reason code is exempt from the reputation penalty. */
+export function isExemptCancellationReason(code?: string | null): boolean {
+  return !!code && (EXEMPT_CANCELLATION_REASONS as readonly string[]).includes(code);
 }
 
 export interface RideWithRider extends Ride {

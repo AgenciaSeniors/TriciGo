@@ -1006,7 +1006,19 @@ describe('rideService.previewCancellationImpact', () => {
     expect(result).toEqual(
       expect.objectContaining({ rating_penalized: true, stars_before: 5.0, stars_after: 4.0 }),
     );
-    expect(mockRpc).toHaveBeenCalledWith('preview_cancellation_rating_impact', { p_ride_id: 'ride-1' });
+    // migration 00486: the RPC now takes p_reason (null when no reason is passed).
+    expect(mockRpc).toHaveBeenCalledWith('preview_cancellation_rating_impact', { p_ride_id: 'ride-1', p_reason: null });
+  });
+
+  it('forwards the structured reason code so the preview reflects the exemption', async () => {
+    mockRpc.mockResolvedValue({
+      data: { eligible: false, is_grace: true, rating_penalized: false, cancel_count_24h: 0, rating_value: null, stars_before: 5.0, stars_after: 5.0 },
+      error: null,
+    });
+
+    const result = await rideService.previewCancellationImpact('ride-1', 'safety');
+    expect(result.rating_penalized).toBe(false);
+    expect(mockRpc).toHaveBeenCalledWith('preview_cancellation_rating_impact', { p_ride_id: 'ride-1', p_reason: 'safety' });
   });
 
   it('returns a grace default when the RPC is absent (migration not applied)', async () => {

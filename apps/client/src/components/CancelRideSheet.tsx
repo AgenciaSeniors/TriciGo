@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
@@ -7,12 +7,17 @@ import { BottomSheet } from '@tricigo/ui/BottomSheet';
 import { triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
-import type { CancellationRatingImpact } from '@tricigo/types';
+import {
+  type CancellationRatingImpact,
+  type CancellationReasonCode,
+  PASSENGER_CANCELLATION_REASONS,
+  isExemptCancellationReason,
+} from '@tricigo/types';
 
 interface CancelRideSheetProps {
   visible: boolean;
   onClose: () => void;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: CancellationReasonCode) => void;
   /** Whether cancel is in progress */
   isLoading: boolean;
   /** Projected rating impact of cancelling now (stars, not money) */
@@ -20,6 +25,19 @@ interface CancelRideSheetProps {
   /** Current ride status for emotional driver context */
   rideStatus?: string | null;
 }
+
+const REASON_LABELS: Record<CancellationReasonCode, string> = {
+  changed_plans: 'Cambié de planes',
+  driver_delay: 'El conductor se demora',
+  wrong_price: 'El precio no es el que esperaba',
+  safety: 'Me siento inseguro/a',
+  other: 'Otro motivo',
+  // Not offered to passengers, but typed for completeness.
+  no_show: 'No apareció',
+  passenger_gone: 'El pasajero no está',
+  breakdown: 'Avería',
+  emergency: 'Emergencia',
+};
 
 function formatStars(value: number | null | undefined): string {
   return typeof value === 'number' ? value.toFixed(1) : '—';
@@ -34,19 +52,28 @@ function CancelRideSheetInner({
   rideStatus,
 }: CancelRideSheetProps) {
   const { t } = useTranslation('rider');
+  const [reason, setReason] = useState<CancellationReasonCode | null>(null);
 
-  // Haptic warning on open
+  // Haptic warning on open + reset the reason each time the sheet opens.
   useEffect(() => {
-    if (visible) triggerHaptic('warning');
+    if (visible) {
+      triggerHaptic('warning');
+      setReason(null);
+    }
   }, [visible]);
 
-  const willPenalize = !!ratingImpact?.rating_penalized;
+  // An exempt reason (safety) overrides the projected penalty client-side, so
+  // the passenger sees "no penalty" the moment they pick it — matching what the
+  // server will do (migration 00486).
+  const exempt = isExemptCancellationReason(reason);
+  const willPenalize = !!ratingImpact?.rating_penalized && !exempt;
   const hasStarFigures =
     typeof ratingImpact?.stars_before === 'number' &&
     typeof ratingImpact?.stars_after === 'number';
 
   const handleConfirm = () => {
-    onConfirm('user_canceled');
+    if (!reason) return;
+    onConfirm(reason);
   };
 
   return (
@@ -81,8 +108,40 @@ function CancelRideSheetInner({
         </View>
       )}
 
-      {/* Rating impact (replaces the old money fee block) */}
-      {willPenalize ? (
+      {/* Reason picker (structured — migration 00486) */}
+      <Text variant="caption" color="secondary" className="mb-2">
+        {t('ride.cancel_reason_label', { defaultValue: '¿Por qué cancelás?' })}
+      </Text>
+      <View className="mb-4">
+        {PASSENGER_CANCELLATION_REASONS.map((code) => {
+          const selected = reason === code;
+          return (
+            <Pressable
+              key={code}
+              onPress={() => { triggerHaptic('light'); setReason(code); }}
+              disabled={isLoading}
+              className={`flex-row items-center rounded-xl px-4 py-3 mb-2 border ${
+                selected
+                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                  : 'border-neutral-200 dark:border-neutral-700'
+              }`}
+            >
+              <Ionicons
+                name={selected ? 'radio-button-on' : 'radio-button-off'}
+                size={18}
+                color={selected ? colors.primary[500] : colors.neutral[400]}
+              />
+              <Text variant="body" className="ml-2">
+                {t(`ride.cancel_reason_${code}`, { defaultValue: REASON_LABELS[code] })}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Rating impact (replaces the old money fee block). Only meaningful once
+          a reason is chosen; an exempt reason flips it to "no penalty". */}
+      {reason && (willPenalize ? (
         <View className="rounded-xl px-4 py-3 mb-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700">
           <View className="flex-row items-center">
             <Ionicons name="star-half" size={18} color={colors.warning.DEFAULT} />
@@ -118,7 +177,7 @@ function CancelRideSheetInner({
             </Text>
           </View>
         </View>
-      )}
+      ))}
 
       {/* Action buttons */}
       <Button
@@ -128,7 +187,7 @@ function CancelRideSheetInner({
         fullWidth
         onPress={handleConfirm}
         loading={isLoading}
-        disabled={isLoading}
+        disabled={isLoading || !reason}
         className="mb-2"
       />
       <Button
