@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
@@ -8,7 +8,15 @@ import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import type { Ride, RidePricingSnapshot, RideTransition } from '@tricigo/types';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
+
+// States from which an admin may cancel a ride (matches valid_transitions
+// rows granting admin/super_admin → canceled, incl. in_progress from mig 00485).
+const CANCELABLE_STATUSES = [
+  'searching', 'accepted', 'driver_en_route',
+  'arrived_at_pickup', 'in_progress', 'arrived_at_destination',
+];
 
 const STATUS_BADGE: Record<string, string> = {
   searching: 'bg-yellow-100 text-yellow-700',
@@ -56,6 +64,14 @@ export default function RideDetailPage() {
   const router = useRouter();
   const [detail, setDetail] = useState<RideDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+
+  const refetch = useCallback(async () => {
+    if (!id) return;
+    const data = await adminService.getRideDetail(id);
+    setDetail(data);
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -75,6 +91,26 @@ export default function RideDetailPage() {
     load();
     return () => { cancelled = true; };
   }, [id]);
+
+  const handleCancelConfirm = async () => {
+    if (!detail) return;
+    try {
+      await adminService.cancelRide(detail.ride.id, cancelReason.trim() || undefined);
+      showToast('success', t('rides.cancel_success', { defaultValue: 'Viaje cancelado' }));
+      setCancelOpen(false);
+      setCancelReason('');
+      await refetch();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'error';
+      const msg =
+        code === 'ride_already_closed'
+          ? t('rides.cancel_already_closed', { defaultValue: 'El viaje ya estaba cerrado' })
+          : code === 'forbidden'
+            ? t('rides.cancel_forbidden', { defaultValue: 'No tienes permiso para cancelar viajes' })
+            : t('rides.cancel_error', { defaultValue: 'No se pudo cancelar el viaje' });
+      showToast('error', msg);
+    }
+  };
 
   if (loading) {
     return (
@@ -110,6 +146,14 @@ export default function RideDetailPage() {
           <p className="text-3xl font-bold text-primary-500">{formatCUP(fare)}</p>
           {ride.final_fare_cup != null && ride.final_fare_cup !== ride.estimated_fare_cup && (
             <p className="text-sm text-ink-subtle line-through">{formatCUP(ride.estimated_fare_cup)} {t('rides.estimated')}</p>
+          )}
+          {CANCELABLE_STATUSES.includes(ride.status) && (
+            <button
+              onClick={() => { setCancelReason(''); setCancelOpen(true); }}
+              className="mt-3 px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium"
+            >
+              {t('rides.cancel_ride', { defaultValue: 'Cancelar viaje' })}
+            </button>
           )}
         </div>
       </div>
@@ -272,6 +316,24 @@ export default function RideDetailPage() {
           )}
         </div>
       </div>
+
+      <AdminConfirmModal
+        open={cancelOpen}
+        variant="danger"
+        title={t('rides.cancel_confirm_title', { defaultValue: 'Cancelar viaje' })}
+        message={
+          ride.status === 'in_progress'
+            ? t('rides.cancel_in_progress_warning', { defaultValue: 'Este viaje está en curso. Se cancelará sin cobro y sin afectar la calificación del pasajero ni del conductor.' })
+            : t('rides.cancel_confirm_body', { defaultValue: 'Se cancelará el viaje sin cobro y sin afectar la calificación del pasajero ni del conductor.' })
+        }
+        confirmLabel={t('rides.cancel_submit', { defaultValue: 'Sí, cancelar viaje' })}
+        cancelLabel={t('rides.cancel_dismiss', { defaultValue: 'No, volver' })}
+        inputValue={cancelReason}
+        onInputChange={setCancelReason}
+        inputPlaceholder={t('rides.cancel_reason_placeholder', { defaultValue: 'Motivo (opcional)' })}
+        onConfirm={handleCancelConfirm}
+        onCancel={() => setCancelOpen(false)}
+      />
     </div>
   );
 }
