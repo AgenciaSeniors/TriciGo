@@ -34,7 +34,7 @@ export function ChatBubble({ message, timestamp, isOwn, isRead, senderName, them
             <Ionicons
               name={isRead ? 'checkmark-done' : 'checkmark'}
               size={14}
-              color={isRead ? '#60A5FA' : 'rgba(255,255,255,0.4)'}
+              color={isRead ? '#BFDBFE' : 'rgba(255,255,255,0.8)'}
               style={{ marginLeft: 4 }}
             />
           )}
@@ -105,10 +105,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
   },
   ownTimestamp: {
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.85)',
   },
   otherTimestampDark: {
-    color: 'rgba(255,255,255,0.35)',
+    color: 'rgba(255,255,255,0.6)',
   },
   otherTimestampLight: {
     color: '#9CA3AF',

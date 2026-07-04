@@ -260,7 +260,7 @@ export default function PendingScreen() {
             <Text variant="bodySmall" color="inverse">
               {t('onboarding.referral_title', { defaultValue: '¿Te invitó alguien? (opcional)' })}
             </Text>
-            <Text variant="caption" color="secondary" className="mt-1 opacity-60">
+            <Text variant="caption" className="mt-1 opacity-60" style={{ color: midnightEmber.map.text.secondary }}>
               {t('onboarding.referral_pending_hint', { defaultValue: 'Aplica el código de referido ahora — después de la aprobación ya no suma el bono.' })}
             </Text>
             <View className="mt-2">

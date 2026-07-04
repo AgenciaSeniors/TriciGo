@@ -45,7 +45,7 @@ export function LanguageSwitcher({ variant = 'compact' }: LanguageSwitcherProps)
         >
           {currentLang.toUpperCase()}
         </Text>
-        <Ionicons name="chevron-down" size={10} color="rgba(255,255,255,0.4)" />
+        <Ionicons name="chevron-down" size={12} color="rgba(255,255,255,0.7)" />
       </Pressable>
 
       {showPicker && (

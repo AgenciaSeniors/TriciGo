@@ -75,7 +75,7 @@ export default function ReferralDeepLinkScreen() {
           <Text variant="h3" color="inverse" className="mb-2">
             {t('profile.referral_success_title', { defaultValue: '¡Código aplicado!' })}
           </Text>
-          <Text variant="body" color="secondary" className="text-center">
+          <Text variant="body" color="secondary" className="text-center" style={{ color: midnightEmber.map.text.secondary }}>
             {t('profile.referral_success_message', { defaultValue: 'Tu bono de referido ha sido aplicado.' })}
           </Text>
         </View>
@@ -90,7 +90,7 @@ export default function ReferralDeepLinkScreen() {
           <Text variant="h3" color="inverse" className="mb-2">
             {t('error', { defaultValue: 'Error' })}
           </Text>
-          <Text variant="body" color="secondary" className="mb-6 text-center">
+          <Text variant="body" color="secondary" className="mb-6 text-center" style={{ color: midnightEmber.map.text.secondary }}>
             {error}
           </Text>
           <Button
@@ -107,7 +107,7 @@ export default function ReferralDeepLinkScreen() {
     <Screen bg="dark" statusBarStyle="light-content" padded>
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color={midnightEmber.accent[500]} />
-        <Text variant="body" color="secondary" className="mt-4">
+        <Text variant="body" color="secondary" className="mt-4" style={{ color: midnightEmber.map.text.secondary }}>
           {t('deeplink.applying_referral', { defaultValue: 'Aplicando código de referido...' })}
         </Text>
       </View>

@@ -240,7 +240,7 @@ export default function VehicleInfoScreen() {
                   <Text variant="h3" color="inverse">
                     {t('onboarding.vehicle_type')}
                   </Text>
-                  <Text variant="caption" color="secondary">
+                  <Text variant="caption" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
                     {t('onboarding.step_n_of_total', { step: 2, total: 4 })}
                   </Text>
                 </View>
@@ -401,7 +401,7 @@ export default function VehicleInfoScreen() {
                           variant="dark"
                         />
 
-                        <Text variant="bodySmall" color="secondary" className="mb-2 mt-1">
+                        <Text variant="bodySmall" color="secondary" className="mb-2 mt-1" style={{ color: midnightEmber.map.text.secondary }}>
                           {t('onboarding.cargo_dimensions')}
                         </Text>
                         <View className="flex-row gap-2 mb-3">
@@ -416,7 +416,7 @@ export default function VehicleInfoScreen() {
                           </View>
                         </View>
 
-                        <Text variant="bodySmall" color="secondary" className="mb-2">
+                        <Text variant="bodySmall" color="secondary" className="mb-2" style={{ color: midnightEmber.map.text.secondary }}>
                           {t('onboarding.cargo_categories')}
                         </Text>
                         <View className="flex-row flex-wrap gap-2 mb-1">

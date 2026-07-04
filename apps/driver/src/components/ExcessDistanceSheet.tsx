@@ -82,10 +82,10 @@ export function ExcessDistanceSheet({
   return (
     <View className="flex-1 px-5 py-6">
       <Card theme="dark" variant="filled" padding="lg" className="mb-4">
-        <Text variant="h3" color="primary" className="mb-2">
+        <Text variant="h3" color="inverse" className="mb-2">
           {t('excess.title', { defaultValue: 'Tu ruta fue más larga de lo estimado' })}
         </Text>
-        <Text variant="body" color="secondary" className="mb-3">
+        <Text variant="body" color="secondary" style={{ color: midnightEmber.map.text.secondary }} className="mb-3">
           {t('excess.summary', {
             defaultValue: 'Recorriste {{actual}} km, pero al cliente solo se le cobraron {{chargeable}} km (la diferencia de {{excess}} km no se cobra).',
             actual: actualKm,

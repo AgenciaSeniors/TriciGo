@@ -18,7 +18,7 @@ import {
   RECHARGE_LIMITS,
   translateNetopiaError,
 } from '@tricigo/utils';
-import { colors } from '@tricigo/theme';
+import { colors, midnightEmber } from '@tricigo/theme';
 import { paymentService } from '@tricigo/api/services/payment';
 import { walletService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -340,7 +340,7 @@ export default function RechargeScreen() {
             <Text variant="h3" color="inverse" style={{ marginBottom: 8 }}>
               {t('wallet.recharge_success', { defaultValue: '¡Recarga exitosa!' })}
             </Text>
-            <Text variant="body" color="secondary" style={{ textAlign: 'center', marginBottom: 4 }}>
+            <Text variant="body" color="secondary" style={{ color: midnightEmber.map.text.secondary, textAlign: 'center', marginBottom: 4 }}>
               ${successView.chargeUsd.toFixed(2)} USD
             </Text>
             <Text
@@ -414,6 +414,7 @@ export default function RechargeScreen() {
             title={t('wallet.recharge_another', { defaultValue: 'Hacer otra recarga' })}
             onPress={resetForm}
             variant="ghost"
+            forceDark
             size="lg"
             fullWidth
             className="mt-4"
@@ -460,7 +461,7 @@ export default function RechargeScreen() {
           </Text>
         </View>
 
-        <Text variant="body" color="secondary" className="mb-6">
+        <Text variant="body" color="secondary" className="mb-6" style={{ color: midnightEmber.map.text.secondary }}>
           {t('wallet.recharge_desc', { defaultValue: 'Selecciona o ingresa el monto que deseas recargar.' })}
         </Text>
 
@@ -502,7 +503,7 @@ export default function RechargeScreen() {
         </View>
 
         {/* Custom amount (USD) */}
-        <Text variant="bodySmall" color="secondary" className="mb-2">
+        <Text variant="bodySmall" color="secondary" className="mb-2" style={{ color: midnightEmber.map.text.secondary }}>
           {t('wallet.or_custom', { defaultValue: 'O ingresa un monto personalizado:' })}
         </Text>
         <Input
@@ -520,7 +521,7 @@ export default function RechargeScreen() {
           const charge = computeRechargeChargeUsd(selectedAmount).toFixed(2);
           return (
             <View style={{ backgroundColor: '#1a1a2e', borderRadius: 12, padding: 12, marginTop: 12 }}>
-              <Text variant="caption" color="secondary">
+              <Text variant="caption" color="secondary" style={{ color: midnightEmber.map.text.secondary }}>
                 Pagarás ${charge} USD (incluye ${fee.toFixed(2)} de comisión de servicio)
               </Text>
             </View>
@@ -542,7 +543,7 @@ export default function RechargeScreen() {
           }}
         >
           <Ionicons name="information-circle-outline" size={18} color={colors.brand.orange} />
-          <Text variant="caption" color="secondary" style={{ flex: 1 }}>
+          <Text variant="caption" color="secondary" style={{ color: midnightEmber.map.text.secondary, flex: 1 }}>
             {t('wallet.recharge_non_refundable', {
               defaultValue: 'Estos créditos son no reembolsables y solo sirven para pagar comisiones de plataforma.',
             })}
