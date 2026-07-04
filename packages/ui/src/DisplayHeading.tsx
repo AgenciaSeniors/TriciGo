@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { View, Text as RNText, StyleSheet } from 'react-native';
-import { cubanLight, cubanDark } from '@tricigo/theme';
+import { cubanLight, cubanDark, lineHeight as themeLineHeight } from '@tricigo/theme';
 
 export interface DisplayHeadingProps {
   children: React.ReactNode;
@@ -36,8 +36,12 @@ export function DisplayHeading({
           // lineHeight must scale with the size prop: a fixed value smaller
           // than fontSize gets the glyph tops clipped on iOS (Android
           // overflows instead), and Instrument Serif italic has tall
-          // ascenders. 1.2 keeps the current 30 → 36 ratio.
-          { color: tokens.ink.primary, fontSize: size, lineHeight: Math.ceil(size * 1.2) },
+          // ascenders. tight (1.2) keeps the previous 30 → 36 ratio.
+          {
+            color: tokens.ink.primary,
+            fontSize: size,
+            lineHeight: Math.ceil(size * themeLineHeight.tight),
+          },
         ]}
       >
         {children}

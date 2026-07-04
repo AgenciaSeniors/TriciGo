@@ -102,10 +102,12 @@ export function Text({
         ${className ?? ''}
       `}
       style={resolvedStyle}
-      // Cap accessibility font scaling: fixed-height rows (tab bar, 48px
-      // action buttons, single-line inputs) clip their text past ~1.4×.
-      // Placed before the spread so a caller-provided value still wins.
-      maxFontSizeMultiplier={1.4}
+      // Bound extreme accessibility font scaling: Android allows multipliers
+      // past 2× where fixed-height rows clip and layouts break wholesale.
+      // 2.0 preserves full WCAG 1.4.4 (200%) text resize for body copy while
+      // capping the runaway cases. Placed before the spread so a
+      // caller-provided value still wins.
+      maxFontSizeMultiplier={2.0}
       {...props}
     >
       {children}

@@ -5,10 +5,10 @@ import {
   FlatList,
   Image,
   Animated,
+  Dimensions,
   StyleSheet,
   Platform,
   Text as RNText,
-  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
@@ -55,6 +55,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import type { Ride } from '@tricigo/types';
 import { SubmitPoiSheet } from '@tricigo/ui';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // BUG-218: dedicated wrapper for the active-trip map render.
 // `useActiveTripMapData()` is a hook (calls `useDriverRideStore`,
@@ -123,9 +125,6 @@ function ActiveTripMap({
 function NativeDriverHomeScreen() {
   const { t } = useTranslation('driver');
   const insets = useSafeAreaInsets();
-  // Live window height (not the module-load snapshot): keeps the map sized
-  // correctly under Android split-screen / foldable window resizes.
-  const { height: screenHeight } = useWindowDimensions();
   const { profile, isOnline, setOnline } = useDriverStore();
   const user = useAuthStore((s) => s.user);
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
@@ -937,7 +936,7 @@ function NativeDriverHomeScreen() {
             mapRef={mapRef}
             driverLocation={driverLocation}
             onRecenter={handleRecenter}
-            screenHeight={screenHeight}
+            screenHeight={SCREEN_HEIGHT}
             followMode={followMode}
             onUserInteraction={handleUserMapInteraction}
           />
@@ -975,13 +974,13 @@ function NativeDriverHomeScreen() {
           nearbyDrivers={vehiclePreview ? previewVehicles : (simpleMapMode ? [] : nearbyDrivers)}
           demandHotspots={simpleMapMode ? [] : demandHotspots}
           popularLocations={popularLocations}
-          height={screenHeight}
+          height={SCREEN_HEIGHT}
           darkStyle
           onRecenter={handleRecenter}
           // Float the recenter button bottom-right, above the sheet, so it
           // never overlaps the "En Línea" header pill. 0.45 = HomeBottomSheet
           // default snap ('45%'); +16 lifts it just above the sheet's edge.
-          recenterBottom={screenHeight * 0.45 + 16}
+          recenterBottom={SCREEN_HEIGHT * 0.45 + 16}
           vehicleType={ownVehicleType}
         />
         {/* Subtle dim when offline */}

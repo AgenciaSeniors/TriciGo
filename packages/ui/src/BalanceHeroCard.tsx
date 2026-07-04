@@ -140,6 +140,10 @@ const styles = StyleSheet.create({
     fontFamily: 'BricolageGrotesque_700Bold',
     fontSize: 32,
     letterSpacing: -1.2,
+    // RN Text defaults to flexShrink 0 — without this the amount keeps its
+    // intrinsic width and adjustsFontSizeToFit never engages, pushing the
+    // "TC" unit out of the row instead of shrinking the number.
+    flexShrink: 1,
   },
   unit: {
     fontFamily: 'BricolageGrotesque_500Medium',
