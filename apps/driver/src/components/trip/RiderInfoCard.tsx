@@ -10,11 +10,10 @@
  * DeliveryDetailsCard so it reads as part of the same sheet.
  *
  * Data comes from `rideService.getRideWithRider` (RLS-safe, membership-gated
- * RPC `get_ride_party_profiles`). That RPC does NOT expose the rider's phone,
- * so contact is via chat. A direct-call button is a deliberate future
- * follow-up: it needs a backend RPC to surface the rider's phone to the
- * assigned driver (privacy + security review). The card is built so a call
- * action can slot in next to the chat affordance without restructuring.
+ * RPCs `get_ride_party_profiles` for the profile + `get_ride_contact_info`
+ * for the phone). When the phone resolves (active-trip window only), a
+ * "Llamar" pill sits next to the "Chat" affordance so the driver can call the
+ * passenger to confirm the pickup; otherwise only Chat shows.
  */
 import React from 'react';
 import { View, Pressable } from 'react-native';
@@ -31,6 +30,10 @@ interface RiderInfoCardProps {
   riderAvatarUrl: string | null;
   riderRating: number | null;
   rideId: string;
+  /** Rider phone (E.164). When present, the "Llamar" pill is shown. */
+  riderPhone?: string | null;
+  /** Fired when the driver taps "Llamar" — opens the dialer. */
+  onCall?: () => void;
 }
 
 export function RiderInfoCard({
@@ -38,6 +41,8 @@ export function RiderInfoCard({
   riderAvatarUrl,
   riderRating,
   rideId,
+  riderPhone,
+  onCall,
 }: RiderInfoCardProps) {
   const { t } = useTranslation('driver');
 
@@ -79,24 +84,50 @@ export function RiderInfoCard({
         </View>
       </View>
 
-      {/* Chat affordance — the whole card opens the chat; this keeps the
-          action discoverable. A future "Llamar" button slots in here. */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 4,
-          backgroundColor: midnightEmber.map.bg.surface,
-          borderRadius: midnightEmber.radius.input,
-          paddingVertical: 8,
-          paddingHorizontal: 12,
-          minHeight: 40,
-        }}
-      >
-        <Ionicons name="chatbubble" size={14} color={midnightEmber.accent[500]} />
-        <Text variant="caption" style={{ color: midnightEmber.accent[500] }}>
-          {t('trip.toolbar_chat', { defaultValue: 'Chat' })}
-        </Text>
+      {/* Contact actions — icon-only pills so the passenger name (the key
+          "who am I picking up" info) keeps its width on narrow phones and at
+          large system font sizes. The text labels live in the TripActionToolbar
+          directly below. Tapping the card opens chat; the "Llamar" pill is a
+          nested Pressable that claims the touch, so it dials instead. Call
+          shows only when the rider phone resolved. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {riderPhone && onCall ? (
+          <Pressable
+            onPress={onCall}
+            hitSlop={8}
+            style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: midnightEmber.map.bg.surface,
+              borderRadius: midnightEmber.radius.input,
+              paddingHorizontal: 12,
+              minWidth: 44,
+              minHeight: 44,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t('trip.call_passenger', { defaultValue: 'Llamar al pasajero' })}
+          >
+            <Ionicons name="call" size={18} color={midnightEmber.state.info} />
+          </Pressable>
+        ) : null}
+
+        {/* Chat affordance — the whole card opens the chat; this keeps the
+            action discoverable. */}
+        <View
+          style={{
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: midnightEmber.map.bg.surface,
+            borderRadius: midnightEmber.radius.input,
+            paddingHorizontal: 12,
+            minWidth: 44,
+            minHeight: 44,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('trip.chat_passenger', { defaultValue: 'Chat con pasajero' })}
+        >
+          <Ionicons name="chatbubble" size={18} color={midnightEmber.accent[500]} />
+        </View>
       </View>
     </Pressable>
   );

@@ -801,6 +801,26 @@ export const rideService = {
           }
         }
 
+        // Repair the "Llamar al conductor" button: when the rider is the caller,
+        // RLS on public.users blocks the direct read above so driver_phone stays
+        // null and the call button is disabled. get_ride_contact_info is a
+        // membership + active-trip-window gated SECURITY DEFINER RPC that
+        // surfaces the driver's phone to the assigned rider. Best-effort +
+        // tolerant (absent RPC / terminal ride → phone stays null).
+        if (!result.driver_phone) {
+          try {
+            const { data: contact } = await supabase
+              .rpc('get_ride_contact_info', { p_ride_id: rideId })
+              .maybeSingle<{ rider_phone: string | null; driver_phone: string | null }>();
+            if (contact?.driver_phone) {
+              result.driver_phone = contact.driver_phone;
+              result.driver_masked_phone = maskPhone(contact.driver_phone);
+            }
+          } catch {
+            /* RPC unavailable or not authorized — keep phone null (button disabled) */
+          }
+        }
+
         // Fetch vehicle
         const { data: vehicle } = await supabase
           .from('vehicles')
@@ -864,11 +884,28 @@ export const rideService = {
         rider_rating: number;
       }>();
 
+    // Phone for the in-ride "Llamar al pasajero" button. Best-effort + tolerant:
+    // get_ride_contact_info is a membership + active-trip-window gated
+    // SECURITY DEFINER RPC and may be absent until its migration lands, so any
+    // failure (RPC missing, not authorized, terminal ride) simply leaves the
+    // phone null → the call button renders disabled.
+    let riderPhone: string | null = null;
+    try {
+      const { data: contact } = await supabase
+        .rpc('get_ride_contact_info', { p_ride_id: rideId })
+        .maybeSingle<{ rider_phone: string | null; driver_phone: string | null }>();
+      riderPhone = contact?.rider_phone ?? null;
+    } catch {
+      /* RPC unavailable or not authorized — leave phone null (button disabled) */
+    }
+
     return {
       ...rideData,
       rider_name: parties?.rider_name ?? 'Pasajero',
       rider_avatar_url: parties?.rider_avatar_url ?? null,
       rider_rating: parties?.rider_rating ?? 5.0,
+      rider_phone: riderPhone,
+      rider_masked_phone: riderPhone ? maskPhone(riderPhone) : null,
     };
   },
 

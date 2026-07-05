@@ -417,6 +417,10 @@ export interface RideWithRider extends Ride {
   rider_name: string;
   rider_avatar_url: string | null;
   rider_rating: number | null;
+  /** Full E.164 phone for the in-ride "Llamar al pasajero" button. Null unless
+   *  the ride is active and the membership-gated RPC surfaced it. */
+  rider_phone: string | null;
+  rider_masked_phone: string | null;
 }
 
 // ── Realtime Searching Types ──────────────────────────────
