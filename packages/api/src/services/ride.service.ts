@@ -1022,7 +1022,10 @@ export const rideService = {
    * confirming. Tolerates the RPC being absent (migration 00371 not yet
    * applied) by returning a grace / no-impact default — never throws.
    */
-  async previewCancellationImpact(rideId: string): Promise<CancellationRatingImpact> {
+  async previewCancellationImpact(
+    rideId: string,
+    reason?: string,
+  ): Promise<CancellationRatingImpact> {
     const fallback: CancellationRatingImpact = {
       rating_penalized: false,
       is_grace: true,
@@ -1033,8 +1036,12 @@ export const rideService = {
     };
     try {
       const supabase = getSupabaseClient();
+      // p_reason lets the preview reflect the exemption for legit reasons
+      // (safety/breakdown/no-show/emergency) — migration 00486. Older DBs
+      // without the 2-arg overload ignore the extra key gracefully.
       const { data, error } = await supabase.rpc('preview_cancellation_rating_impact', {
         p_ride_id: rideId,
+        p_reason: reason ?? null,
       });
       if (error) throw error;
 

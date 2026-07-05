@@ -760,7 +760,8 @@ export function RideActiveView() {
   const canCancel =
     activeRide.status === 'accepted' ||
     activeRide.status === 'driver_en_route' ||
-    activeRide.status === 'arrived_at_pickup';
+    activeRide.status === 'arrived_at_pickup' ||
+    activeRide.status === 'in_progress';
 
   const handleCall = () => {
     if (rideWithDriver?.driver_phone) {
@@ -1594,15 +1595,6 @@ export function RideActiveView() {
         </>
       )}
 
-      {/* Cancel unavailable explanation (4.4) */}
-      {activeRide.status === 'in_progress' && !canCancel && (
-        <View className="px-4 mt-2">
-          <Text variant="caption" color="secondary" className="text-center">
-            {t('ride.cannot_cancel_in_progress', { defaultValue: 'No puedes cancelar un viaje en progreso' })}.{' '}
-            {t('ride.contact_support', { defaultValue: 'Contacta al soporte si necesitas ayuda' })}.
-          </Text>
-        </View>
-      )}
       </ScrollView>
       {/* End of BUG-230 ScrollView. BottomSheets below render as overlays
            outside the scroll container. */}

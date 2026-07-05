@@ -23,7 +23,7 @@
  * Microcopy unification + redundancy trim land in PR-C.
  */
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { View, Pressable, Linking, Alert, Animated, Platform } from 'react-native';
+import { View, Pressable, Linking, Alert, Animated, Platform, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
@@ -45,6 +45,7 @@ import {
   getSupabaseClient,
 } from '@tricigo/api';
 import type { DeliveryDetails } from '@tricigo/api';
+import { DRIVER_CANCELLATION_REASONS, type CancellationReasonCode } from '@tricigo/types';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useDriverRideActions } from '@/hooks/useDriverRide';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
@@ -83,6 +84,21 @@ import type { RideStatus } from '@tricigo/types';
 
 // ─── Local helpers (kept here because they're tightly coupled to the
 // orchestrator's internal model of trip status) ─────────────────────
+
+// Fallback labels for the structured cancellation reasons (migration 00486).
+// i18n `trip.cancel_reason_<code>` overrides these when present.
+const DRIVER_REASON_LABELS: Record<CancellationReasonCode, string> = {
+  no_show: 'El pasajero no apareció',
+  breakdown: 'Avería / problema mecánico',
+  safety: 'Seguridad / incomodidad',
+  emergency: 'Emergencia',
+  changed_plans: 'Cambio de planes',
+  other: 'Otro motivo',
+  // Not offered to drivers, but typed for completeness.
+  driver_delay: 'Demora',
+  wrong_price: 'Precio incorrecto',
+  passenger_gone: 'El pasajero no está',
+};
 
 function useTripSteps() {
   const { t } = useTranslation('driver');
@@ -585,7 +601,8 @@ export function DriverTripView() {
   const canCancel =
     activeTrip.status === 'accepted' ||
     activeTrip.status === 'driver_en_route' ||
-    activeTrip.status === 'arrived_at_pickup';
+    activeTrip.status === 'arrived_at_pickup' ||
+    activeTrip.status === 'in_progress';
 
   const actionLabel = ACTION_LABELS[activeTrip.status];
 
@@ -652,27 +669,20 @@ export function DriverTripView() {
     );
   };
 
+  // Cancel now requires a STRUCTURED reason (migration 00486): legit reasons
+  // (no_show / breakdown / safety / emergency) are exempt from the reputation
+  // penalty; the rest go through the normal progression. The old free-text
+  // 'Cancelado por el conductor' never matched the exemption gate.
+  const [cancelReasonVisible, setCancelReasonVisible] = useState(false);
+
+  const submitCancel = (code: CancellationReasonCode) => {
+    setCancelReasonVisible(false);
+    cancelTrip(code);
+  };
+
   const handleCancel = () => {
-    if (Platform.OS === 'web') {
-      // Alert.alert buttons don't work on web — use window.confirm
-      const confirmed = window.confirm(
-        `${t('trip.cancel_title')}\n\n${t('trip.cancel_body')}`,
-      );
-      if (confirmed) cancelTrip('Cancelado por el conductor');
-      return;
-    }
-    Alert.alert(
-      t('trip.cancel_title'),
-      t('trip.cancel_body'),
-      [
-        { text: t('trip.sos_cancel'), style: 'cancel' },
-        {
-          text: t('trip.cancel_confirm'),
-          style: 'destructive',
-          onPress: () => cancelTrip('Cancelado por el conductor'),
-        },
-      ],
-    );
+    triggerHaptic('warning');
+    setCancelReasonVisible(true);
   };
 
   return (
@@ -991,7 +1001,7 @@ export function DriverTripView() {
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          onPress={() => cancelTrip('passenger_no_show')}
+          onPress={() => cancelTrip('no_show')}
           accessibilityRole="button"
           accessibilityLabel={`${t('trip.passenger_no_show')} — ${t('trip.cancel_no_show')}`}
         >
@@ -1116,6 +1126,71 @@ export function DriverTripView() {
           The post-trip TripCompleteView still shows it as part of the
           earnings breakdown so the surge stays visible where it
           actually matters (the receipt). */}
+
+      {/* Structured cancellation reason picker (migration 00486). Replaces the
+          old 2-string Alert; legit reasons are exempt from the reputation hit. */}
+      <Modal
+        visible={cancelReasonVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCancelReasonVisible(false)}
+      >
+        <Pressable
+          onPress={() => setCancelReasonVisible(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}
+        >
+          <Pressable
+            onPress={() => { /* swallow taps on the card */ }}
+            style={{
+              backgroundColor: midnightEmber.map.bg.elevated,
+              borderTopLeftRadius: midnightEmber.radius.sheet,
+              borderTopRightRadius: midnightEmber.radius.sheet,
+              paddingHorizontal: 20,
+              paddingTop: 20,
+              paddingBottom: 32,
+            }}
+          >
+            <Text variant="h4" style={{ color: midnightEmber.map.text.primary, marginBottom: 4 }}>
+              {t('trip.cancel_title', { defaultValue: 'Cancelar viaje' })}
+            </Text>
+            <Text variant="caption" style={{ color: midnightEmber.map.text.secondary, marginBottom: 16 }}>
+              {t('trip.cancel_reason_label', { defaultValue: '¿Por qué cancelás el viaje?' })}
+            </Text>
+            {DRIVER_CANCELLATION_REASONS.map((code) => (
+              <Pressable
+                key={code}
+                onPress={() => submitCancel(code)}
+                accessibilityRole="button"
+                accessibilityLabel={t(`trip.cancel_reason_${code}`, { defaultValue: DRIVER_REASON_LABELS[code] })}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 14,
+                  paddingHorizontal: 16,
+                  marginBottom: 8,
+                  borderRadius: midnightEmber.radius.card,
+                  borderWidth: 1,
+                  borderColor: midnightEmber.map.line.hairline,
+                }}
+              >
+                <Ionicons name="chevron-forward" size={18} color={midnightEmber.map.text.tertiary} />
+                <Text variant="body" style={{ color: midnightEmber.map.text.primary, marginLeft: 8 }}>
+                  {t(`trip.cancel_reason_${code}`, { defaultValue: DRIVER_REASON_LABELS[code] })}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => setCancelReasonVisible(false)}
+              accessibilityRole="button"
+              style={{ paddingVertical: 14, alignItems: 'center', marginTop: 4 }}
+            >
+              <Text variant="body" style={{ color: midnightEmber.map.text.secondary, fontWeight: '600' }}>
+                {t('trip.cancel_dismiss', { defaultValue: 'No, volver' })}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
     </DraggableSheet>
   );
