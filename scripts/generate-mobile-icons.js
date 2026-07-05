@@ -31,10 +31,10 @@ const APPS = [
     dir: path.join(ROOT, 'apps/driver/assets'),
     iconSource: 'icon.png',
     wordmarkSource: 'wordmark-hd.png',
-    // Driver icon logo is ORANGE on NAVY. Keep pixels where red channel
-    // dominates (orange/warm), drop the cool-tone navy. No radial mask
-    // needed.
-    keepPixel: (r, g, _b) => r > 150 && r > g + 30,
+    // Driver icon symbol is a hollow WHITE pin + ORANGE bolt on near-black.
+    // Keep near-white AND orange-dominant pixels, drop the dark background
+    // (and the pin's black counter). No radial mask needed.
+    keepPixel: (r, g, b) => (r > 235 && g > 235 && b > 235) || (r > 150 && r > g + 30),
     radialMaskRatio: null,
     // Splash lives on a dark (#111111) background → recolor all non-
     // transparent pixels of the wordmark to white for contrast.
