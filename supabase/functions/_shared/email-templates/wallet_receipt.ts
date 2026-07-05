@@ -18,7 +18,7 @@ import { realEmail } from '../email-guard.ts';
 export interface WalletReceiptData {
   audience: 'user' | 'admin' | 'payer';
   receiptNo: string;        // e.g. "TG-20260511-001"
-  dateLabel: string;        // pre-formatted, locale-aware ("11 de mayo de 2026, 14:30 (Cuba)")
+  dateLabel: string;        // pre-formatted, locale-aware ("11 de mayo de 2026, 14:30")
   user: {
     full_name: string | null;
     email: string | null;
@@ -191,11 +191,11 @@ function fmtUsd(n: number): string {
 function fmtTrc(n: number): string {
   // RECARGA V2: 1 TC = 1 CUP integer. Format with thousands separator and
   // no decimals so a 10500-TC recharge reads "10.500 TriciCoin".
-  return `${Math.round(n).toLocaleString('es-CU')} TriciCoin`;
+  return `${Math.round(n).toLocaleString('es')} TriciCoin`;
 }
 
 function fmtCup(n: number): string {
   // CUP is integer-only in the wallet model. Round to integer and
   // group thousands with the cu-style narrow space.
-  return `${Math.round(n).toLocaleString('es-CU')} CUP`;
+  return `${Math.round(n).toLocaleString('es')} CUP`;
 }

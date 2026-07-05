@@ -27,9 +27,8 @@ export function welcomeHtml(data: WelcomeData): string {
       Hola, <strong>${escapeHtml(greetingName)}</strong> 👋
     </p>
     <p style="margin: 0 0 20px;">
-      Te damos la bienvenida a <strong>TriciGo</strong>, la app cubana de movilidad.
-      Estamos en las 16 provincias y 168 municipios de Cuba — desde Pinar del Río
-      hasta Guantánamo.
+      Te damos la bienvenida a <strong>TriciGo</strong>, tu app de movilidad.
+      Estamos creciendo ciudad por ciudad para llevarte a donde quieras.
     </p>
     <p style="margin: 0 0 12px; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 600; color: ${COLORS.ink};">
       Lo que podés hacer:

@@ -66,7 +66,7 @@ export function driverUnderReviewHtml(data: DriverUnderReviewData): string {
 function formatSubmittedAt(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString('es-CU', {
+    return d.toLocaleDateString('es', {
       day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
       timeZone: 'America/Havana',

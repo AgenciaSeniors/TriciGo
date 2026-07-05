@@ -68,5 +68,5 @@ export function paymentFailedHtml(data: PaymentFailedData): string {
 // ── Helpers (local so the template stays self-contained) ─────────
 
 function fmtCup(n: number): string {
-  return `${Math.round(n).toLocaleString('es-CU')} CUP`;
+  return `${Math.round(n).toLocaleString('es')} CUP`;
 }
