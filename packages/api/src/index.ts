@@ -58,6 +58,11 @@ export { questService } from './services/quest.service';
 export { blogService, type BlogPost } from './services/blog.service';
 export { announcementService, type HomeAnnouncement } from './services/announcement.service';
 export { promotionService, type Promotion, type PromotionType, type ActivePromotion } from './services/promotion.service';
+export {
+  marketingStatsService,
+  type PromoCodePerformance,
+  type ReferralCodePerformance,
+} from './services/marketing-stats.service';
 export { paymentService } from './services/payment.service';
 export { corporateService } from './services/corporate.service';
 export { fleetService } from './services/fleet.service';
