@@ -37,6 +37,13 @@ BEGIN
     RAISE EXCEPTION 'ride_not_found' USING ERRCODE = 'P0001';
   END IF;
 
+  -- Reject unauthenticated callers explicitly. Without this, a NULL caller on a
+  -- ride whose driver is still unassigned (v_driver_user NULL) would slip past
+  -- the membership gate below, because `NULL IS DISTINCT FROM NULL` is FALSE.
+  IF v_caller IS NULL THEN
+    RAISE EXCEPTION 'not_authenticated' USING ERRCODE = 'P0001';
+  END IF;
+
   -- Membership gate: caller must be the rider OR the driver of this ride.
   IF v_caller IS DISTINCT FROM v_rider AND v_caller IS DISTINCT FROM v_driver_user THEN
     RAISE EXCEPTION 'not_authorized_for_ride' USING ERRCODE = 'P0001';
@@ -62,6 +69,12 @@ BEGIN
 END;
 $$;
 
+-- PostgreSQL auto-grants EXECUTE to PUBLIC on every new function, and `anon`
+-- inherits it as a PUBLIC member — so revoking only from `anon` leaves the
+-- grant in place. Revoke from PUBLIC (repo convention: 00124/00125/00212/00213)
+-- then grant only to authenticated. The body's membership gate is the real
+-- guard; this keeps the privilege surface tight as defense-in-depth.
+REVOKE ALL ON FUNCTION public.get_ride_contact_info(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_ride_contact_info(uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.get_ride_contact_info(uuid) TO authenticated;
 
