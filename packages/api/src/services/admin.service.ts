@@ -1211,6 +1211,130 @@ export const adminService = {
     };
   },
 
+  // ==================== COLLUSION CANCELLATION REVIEWS (Fase 2a) ====================
+
+  /**
+   * Re-run the collusion detector (repeated-pair signal) and enqueue/refresh
+   * pending cases. Money-free; the admin still reviews each case by hand.
+   * Returns the number of cases upserted.
+   */
+  async runCollusionDetection(): Promise<number> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('detect_collusion_reviews');
+    if (error) throw error;
+    return (data as number) ?? 0;
+  },
+
+  /** Paginated queue of cancellation-review cases, worst score first. */
+  async getCancellationReviews(status?: string, page = 0, pageSize = 20) {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = supabase
+      .from('cancellation_reviews')
+      .select('*')
+      .order('risk_score', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (status && status !== 'all') query = query.eq('status', status);
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = (data ?? []) as Record<string, unknown>[];
+
+    // Resolve driver (via driver_profiles.user_id) and customer display names.
+    const driverIds = [...new Set(rows.map((r) => r.driver_id as string).filter(Boolean))];
+    const customerIds = [...new Set(rows.map((r) => r.customer_id as string).filter(Boolean))];
+    const driverName: Record<string, string> = {};
+    if (driverIds.length) {
+      const { data: dps } = await supabase.from('driver_profiles').select('id, user_id').in('id', driverIds);
+      const uids = [...new Set(((dps ?? []) as { user_id: string }[]).map((d) => d.user_id).filter(Boolean))];
+      const uName: Record<string, string> = {};
+      if (uids.length) {
+        const { data: us } = await supabase.from('users').select('id, full_name').in('id', uids);
+        for (const u of (us ?? []) as { id: string; full_name: string }[]) uName[u.id] = u.full_name;
+      }
+      for (const d of (dps ?? []) as { id: string; user_id: string }[]) driverName[d.id] = uName[d.user_id] ?? '';
+    }
+    const custName: Record<string, string> = {};
+    if (customerIds.length) {
+      const { data: cs } = await supabase.from('users').select('id, full_name').in('id', customerIds);
+      for (const c of (cs ?? []) as { id: string; full_name: string }[]) custName[c.id] = c.full_name;
+    }
+    return rows.map((r) => ({
+      ...r,
+      driver_name: driverName[r.driver_id as string] ?? null,
+      customer_name: custName[r.customer_id as string] ?? null,
+    }));
+  },
+
+  /** Full detail for one review: names + the rides that form the pattern. */
+  async getCancellationReviewDetail(id: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.from('cancellation_reviews').select('*').eq('id', id).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const review = data as Record<string, unknown>;
+
+    let driver: { name: string; phone: string } | null = null;
+    const { data: dp } = await supabase.from('driver_profiles').select('user_id').eq('id', review.driver_id as string).maybeSingle();
+    if (dp) {
+      const { data: du } = await supabase.from('users').select('full_name, phone').eq('id', (dp as { user_id: string }).user_id).maybeSingle();
+      if (du) driver = { name: (du as { full_name: string }).full_name, phone: (du as { phone: string }).phone };
+    }
+    let customer: { name: string; phone: string } | null = null;
+    const { data: cu } = await supabase.from('users').select('full_name, phone').eq('id', review.customer_id as string).maybeSingle();
+    if (cu) customer = { name: (cu as { full_name: string }).full_name, phone: (cu as { phone: string }).phone };
+
+    const rideIds = (review.ride_ids as string[]) ?? [];
+    let rides: Record<string, unknown>[] = [];
+    if (rideIds.length) {
+      const { data: rs } = await supabase
+        .from('rides')
+        .select('id, status, cancellation_reason_code, canceled_at, estimated_fare_cup, driver_gps_status, pickup_address, dropoff_address')
+        .in('id', rideIds)
+        .order('canceled_at', { ascending: false });
+      rides = (rs ?? []) as Record<string, unknown>[];
+    }
+    return { review, driver, customer, rides };
+  },
+
+  /**
+   * Apply a SOFT sanction (Fase 2a): 'dismiss' | 'warning' | 'reputation'.
+   * Money/suspension/ban are Fase 2b. Delegates to the is_admin()-gated RPC.
+   */
+  async applyCollusionSanction(reviewId: string, level: 'dismiss' | 'warning' | 'reputation', notes: string | undefined, adminId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('apply_collusion_sanction', {
+      p_review_id: reviewId,
+      p_level: level,
+      p_notes: notes ?? null,
+      p_admin_id: adminId,
+    });
+    if (error) throw error;
+    const r = data as { success?: boolean; error?: string; driver_user_id?: string } | null;
+    if (!r || r.error) throw new Error(r?.error ?? 'collusion_sanction_failed');
+
+    // Best-effort: notify the driver of a warning/reputation sanction (due process).
+    if ((level === 'warning' || level === 'reputation') && r.driver_user_id) {
+      await notificationService.sendToUser(
+        r.driver_user_id,
+        'Aviso de la plataforma',
+        'Detectamos cancelaciones que requieren tu atención. Cancelar viajes ya empezados de forma repetida afecta tu reputación.',
+        adminId,
+        { type: 'account' },
+      ).catch((err) => console.warn('[Admin] collusion notify failed:', err));
+    }
+  },
+
+  /** Reverse a soft sanction on appeal (undoes the reputation hit). */
+  async reverseCollusionSanction(reviewId: string, adminId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('reverse_collusion_sanction', { p_review_id: reviewId, p_admin_id: adminId });
+    if (error) throw error;
+    const r = data as { success?: boolean; error?: string } | null;
+    if (!r || r.error) throw new Error(r?.error ?? 'collusion_reverse_failed');
+  },
+
   /**
    * Hide a review (is_visible=false) to moderate a reported abusive review.
    * Logs to admin_actions. RLS policy rev_admin allows admin UPDATE.
