@@ -1,4 +1,8 @@
--- 00486_normalize_cuban_phone_accept_6_prefix.sql
+-- 00487_normalize_cuban_phone_accept_6_prefix.sql
+-- (Renumbered from 00486 to avoid a filename collision with
+--  00486_cancellation_reasons_foundation.sql that landed on master in parallel.
+--  The function was already applied to prod via CREATE OR REPLACE, so this is a
+--  git-only reorder — prod needs no re-apply.)
 --
 -- Accept the new Cuban mobile prefix 6 (ETECSA 63/64) in the canonical phone
 -- normalizer. Since late 2023 every new Cuban SIM — prepaid or postpaid — is
