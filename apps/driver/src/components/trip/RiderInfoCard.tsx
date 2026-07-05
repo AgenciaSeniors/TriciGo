@@ -84,31 +84,30 @@ export function RiderInfoCard({
         </View>
       </View>
 
-      {/* Contact actions. Tapping the card opens chat; the "Llamar" pill is a
-          nested Pressable that claims the touch, so it dials instead of
-          navigating to chat. Call shows only when the rider phone resolved. */}
+      {/* Contact actions — icon-only pills so the passenger name (the key
+          "who am I picking up" info) keeps its width on narrow phones and at
+          large system font sizes. The text labels live in the TripActionToolbar
+          directly below. Tapping the card opens chat; the "Llamar" pill is a
+          nested Pressable that claims the touch, so it dials instead. Call
+          shows only when the rider phone resolved. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         {riderPhone && onCall ? (
           <Pressable
             onPress={onCall}
             hitSlop={8}
             style={{
-              flexDirection: 'row',
               alignItems: 'center',
-              gap: 4,
+              justifyContent: 'center',
               backgroundColor: midnightEmber.map.bg.surface,
               borderRadius: midnightEmber.radius.input,
-              paddingVertical: 8,
               paddingHorizontal: 12,
+              minWidth: 44,
               minHeight: 44,
             }}
             accessibilityRole="button"
             accessibilityLabel={t('trip.call_passenger', { defaultValue: 'Llamar al pasajero' })}
           >
-            <Ionicons name="call" size={14} color={midnightEmber.state.info} />
-            <Text variant="caption" style={{ color: midnightEmber.state.info }}>
-              {t('trip.toolbar_call', { defaultValue: 'Llamar' })}
-            </Text>
+            <Ionicons name="call" size={18} color={midnightEmber.state.info} />
           </Pressable>
         ) : null}
 
@@ -116,20 +115,18 @@ export function RiderInfoCard({
             action discoverable. */}
         <View
           style={{
-            flexDirection: 'row',
             alignItems: 'center',
-            gap: 4,
+            justifyContent: 'center',
             backgroundColor: midnightEmber.map.bg.surface,
             borderRadius: midnightEmber.radius.input,
-            paddingVertical: 8,
             paddingHorizontal: 12,
+            minWidth: 44,
             minHeight: 44,
           }}
+          accessibilityRole="button"
+          accessibilityLabel={t('trip.chat_passenger', { defaultValue: 'Chat con pasajero' })}
         >
-          <Ionicons name="chatbubble" size={14} color={midnightEmber.accent[500]} />
-          <Text variant="caption" style={{ color: midnightEmber.accent[500] }}>
-            {t('trip.toolbar_chat', { defaultValue: 'Chat' })}
-          </Text>
+          <Ionicons name="chatbubble" size={18} color={midnightEmber.accent[500]} />
         </View>
       </View>
     </Pressable>

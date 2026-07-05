@@ -97,7 +97,12 @@ export function TripActionToolbar({
     <View
       style={{
         flexDirection: 'row',
+        flexWrap: 'wrap',
         justifyContent: 'space-around',
+        // Wrap gracefully to a second line on narrow phones / large system
+        // fonts instead of overflowing the row: this toolbar can show up to 5
+        // buttons (Maps·Guía·Llamar·Chat·SOS) during the pickup phase.
+        gap: 8,
         marginBottom: 8,
         marginTop: 4,
       }}
