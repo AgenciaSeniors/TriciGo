@@ -115,6 +115,7 @@
     "pickup_address": "Recogida",
     "dropoff_address": "Destino",
     "call_passenger": "Llamar al pasajero",
+    "toolbar_call": "Llamar",
     "chat_passenger": "Chat con pasajero",
     "sos": "SOS - Emergencia",
     "sos_confirm": "¿Estás en peligro? Se registrará un reporte de emergencia.",

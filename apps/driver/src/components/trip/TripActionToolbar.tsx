@@ -33,6 +33,10 @@ interface TripActionToolbarProps {
   onStartInAppNav: (target: { latitude: number; longitude: number }) => void;
   onSOS: () => void;
   rideId: string;
+  /** Rider phone (E.164). When present, the "Llamar" button is shown. */
+  riderPhone?: string | null;
+  /** Fired when the driver taps "Llamar" — opens the dialer. */
+  onCallPassenger?: () => void;
 }
 
 interface ToolbarButtonProps {
@@ -84,6 +88,8 @@ export function TripActionToolbar({
   onStartInAppNav,
   onSOS,
   rideId,
+  riderPhone,
+  onCallPassenger,
 }: TripActionToolbarProps) {
   const { t } = useTranslation('driver');
 
@@ -118,6 +124,15 @@ export function TripActionToolbar({
             onStartInAppNav(navTarget);
           }}
           accessibilityLabel={t('trip.restart_nav', { defaultValue: 'Restart navigation' })}
+        />
+      )}
+      {riderPhone && onCallPassenger && (
+        <ToolbarButton
+          icon="call"
+          label={t('trip.toolbar_call', { defaultValue: 'Llamar' })}
+          color={midnightEmber.state.info}
+          onPress={onCallPassenger}
+          accessibilityLabel={t('trip.call_passenger', { defaultValue: 'Llamar al pasajero' })}
         />
       )}
       <ToolbarButton

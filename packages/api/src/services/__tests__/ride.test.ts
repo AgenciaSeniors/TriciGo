@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { maskPhone } from '@tricigo/utils';
 import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
@@ -1420,5 +1421,61 @@ describe('rideService._matchDriversForRide (audit #18)', () => {
       expect.any(String),
       expect.objectContaining({ type: 'delivery_searching' }),
     );
+  });
+});
+
+describe('rideService.getRideWithRider — phone for the "Llamar al pasajero" button', () => {
+  beforeEach(() => {
+    mockFrom.mockReset();
+    mockFrom.mockImplementation(() => createMockQueryChain());
+    mockRpc.mockReset();
+  });
+
+  it('maps rider_phone + masked phone from get_ride_contact_info', async () => {
+    // 1) rides fetch, 2) get_ride_party_profiles, 3) get_ride_contact_info
+    mockFrom.mockReturnValueOnce(
+      createMockQueryChain({ data: { id: UUID.RIDE_1, status: 'accepted' }, error: null }),
+    );
+    mockRpc.mockReturnValueOnce(
+      createMockQueryChain({
+        data: { rider_name: 'Ana', rider_avatar_url: null, rider_rating: 4.8 },
+        error: null,
+      }),
+    );
+    mockRpc.mockReturnValueOnce(
+      createMockQueryChain({
+        data: { rider_phone: '+5355512345', driver_phone: '+5355599999' },
+        error: null,
+      }),
+    );
+
+    const result = await rideService.getRideWithRider(UUID.RIDE_1);
+
+    expect(result?.rider_name).toBe('Ana');
+    expect(result?.rider_phone).toBe('+5355512345');
+    expect(result?.rider_masked_phone).toBe(maskPhone('+5355512345'));
+    expect(mockRpc).toHaveBeenCalledWith('get_ride_contact_info', { p_ride_id: UUID.RIDE_1 });
+  });
+
+  it('tolerates a missing/denied contact RPC — phone stays null, no throw', async () => {
+    mockFrom.mockReturnValueOnce(
+      createMockQueryChain({ data: { id: UUID.RIDE_1, status: 'accepted' }, error: null }),
+    );
+    mockRpc.mockReturnValueOnce(
+      createMockQueryChain({
+        data: { rider_name: 'Ana', rider_avatar_url: null, rider_rating: 5 },
+        error: null,
+      }),
+    );
+    // Migration not applied yet / not authorized → PostgREST error, data null.
+    mockRpc.mockReturnValueOnce(
+      createMockQueryChain({ data: null, error: { message: 'function get_ride_contact_info does not exist' } }),
+    );
+
+    const result = await rideService.getRideWithRider(UUID.RIDE_1);
+
+    expect(result?.rider_name).toBe('Ana');
+    expect(result?.rider_phone).toBeNull();
+    expect(result?.rider_masked_phone).toBeNull();
   });
 });

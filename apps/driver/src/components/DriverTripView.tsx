@@ -551,6 +551,7 @@ export function DriverTripView() {
     name: string;
     avatarUrl: string | null;
     rating: number;
+    phone: string | null;
   } | null>(null);
   useEffect(() => {
     if (!activeTrip?.id) return;
@@ -562,11 +563,21 @@ export function DriverTripView() {
           name: data.rider_name ?? 'Pasajero',
           avatarUrl: data.rider_avatar_url ?? null,
           rating: data.rider_rating ?? 5,
+          phone: data.rider_phone ?? null,
         });
       })
       .catch(() => { /* best-effort: hide the card if the RPC is unavailable */ });
     return () => { cancelled = true; };
   }, [activeTrip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Call the passenger to confirm the pickup. Mirrors the client's
+  // RideActiveView.handleCall: direct dial via tel:, gated on the phone
+  // resolving (button is only shown when riderInfo.phone is present).
+  const handleCallPassenger = useCallback(() => {
+    const phone = riderInfo?.phone;
+    if (!phone) return;
+    Linking.openURL(`tel:${phone}`).catch(() => { /* no dialer available */ });
+  }, [riderInfo?.phone]);
 
   // PR-B: action color per phase collapses from a 5-hue rainbow into a
   // single accent-intensity scale. The progression `accent[300]` →
@@ -849,6 +860,8 @@ export function DriverTripView() {
           riderAvatarUrl={riderInfo.avatarUrl}
           riderRating={riderInfo.rating}
           rideId={activeTrip.id}
+          riderPhone={riderInfo.phone}
+          onCall={handleCallPassenger}
         />
       ) : null}
 
@@ -956,6 +969,8 @@ export function DriverTripView() {
         onStartInAppNav={(target) => inAppNav.startNavigation(target, isTripPhaseForNav ? pendingNavWaypoints : [])}
         onSOS={handleSOS}
         rideId={activeTrip.id}
+        riderPhone={riderInfo?.phone ?? null}
+        onCallPassenger={handleCallPassenger}
       />
 
       {/* Chained ride banner */}
