@@ -262,7 +262,7 @@ export default function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted 
               value={m.driver_phone}
               onChangeText={(v) => updateMember(i, 'driver_phone', v)}
               keyboardType="phone-pad"
-              placeholder="+53 5XXXXXXX"
+              placeholder="+53 5XXXXXXX o 6XXXXXXX"
             />
             <View className="h-2" />
             <Input

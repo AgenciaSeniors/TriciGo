@@ -103,7 +103,7 @@ export function FareSplitCard({ rideId, userId, estimatedFareTrc }: Props) {
           type="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="+53 5XXXXXXX"
+          placeholder="+53 5XXXXXXX o 6XXXXXXX"
           style={inputStyle}
         />
         <button

@@ -401,7 +401,7 @@ export default function LoginPage() {
                   type="tel"
                   value={phone}
                   onChange={(e) => { setPhone(e.target.value); setError(null); }}
-                  placeholder="+53 5XXXXXXX"
+                  placeholder="+53 5XXXXXXX o 6XXXXXXX"
                   className="input-base"
                   style={{ fontSize: '1.125rem', letterSpacing: '0.05em' }}
                 />

@@ -341,7 +341,7 @@ export default function EmpresasRegistroPage() {
             value={contactPhone}
             onChange={(e) => setContactPhone(e.target.value)}
             required
-            placeholder="+53 5XXXXXXX"
+            placeholder="+53 5XXXXXXX o 6XXXXXXX"
             style={inputStyle}
           />
         </div>

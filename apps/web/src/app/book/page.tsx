@@ -1451,7 +1451,7 @@ export default function BookPage() {
                     <label htmlFor="delivery-recipient-phone" style={labelStyle}>{t('book.delivery_recipient_phone', { defaultValue: 'Teléfono' })} *</label>
                     <input id="delivery-recipient-phone" type="tel" value={deliveryDetails.recipient_phone}
                       onChange={(e) => setDeliveryDetails(d => ({ ...d, recipient_phone: e.target.value }))}
-                      placeholder="+53 5XXXXXXX"
+                      placeholder="+53 5XXXXXXX o 6XXXXXXX"
                       style={{ ...inputBase, border: phoneInvalid ? '2px solid #ef4444' : '1px solid var(--border)' }}
                     />
                     {phoneInvalid && <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>{t('book.delivery_phone_invalid', { defaultValue: 'Número inválido' })}</span>}

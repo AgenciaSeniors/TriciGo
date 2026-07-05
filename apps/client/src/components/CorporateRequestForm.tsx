@@ -152,7 +152,7 @@ export default function CorporateRequestForm({ onSubmitted, initialError }: Prop
           value={contactPhone}
           onChangeText={setContactPhone}
           keyboardType="phone-pad"
-          placeholder="+53 5XXXXXXX"
+          placeholder="+53 5XXXXXXX o 6XXXXXXX"
         />
         <View className="h-3" />
         <Input

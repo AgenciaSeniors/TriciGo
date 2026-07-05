@@ -87,7 +87,7 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
         value={phone}
         onChangeText={setPhone}
         keyboardType="phone-pad"
-        placeholder="+53 5XXXXXXX"
+        placeholder="+53 5XXXXXXX o 6XXXXXXX"
       />
       <Input
         label={t('trusted_contacts.relationship')}

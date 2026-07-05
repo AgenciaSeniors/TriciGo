@@ -183,7 +183,7 @@ export default function VerifyPhoneScreen() {
                 )}
                 <View className="flex-1">
                   <Input
-                    placeholder={DEMO_MODE ? '999999999' : '5XXXXXXX'}
+                    placeholder={DEMO_MODE ? '999999999' : '5XXXXXXX o 6XXXXXXX'}
                     keyboardType="phone-pad"
                     value={phone}
                     onChangeText={setPhone}

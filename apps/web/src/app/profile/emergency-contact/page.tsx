@@ -166,7 +166,7 @@ export default function EmergencyContactPage() {
             <label htmlFor="ec-phone" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
               {t('profile.emergency_phone', { defaultValue: 'Teléfono' })}
             </label>
-            <input id="ec-phone" type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setError(null); }} placeholder="+53 5XXXXXXX" style={inputStyle} />
+            <input id="ec-phone" type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setError(null); }} placeholder="+53 5XXXXXXX o 6XXXXXXX" style={inputStyle} />
           </div>
           <div>
             <label htmlFor="ec-relationship" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
