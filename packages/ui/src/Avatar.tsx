@@ -81,6 +81,11 @@ export function Avatar({
         <Text
           variant="label"
           style={{ fontSize, color: '#ffffff', fontWeight: '600' }}
+          // Initials are a decorative glyph in a fixed-size circle that can't
+          // grow — like an icon, they must not scale with the OS text-size
+          // setting, or at large accessibility scales the glyph outgrows the
+          // circle (and its injected line box) and clips on iOS.
+          allowFontScaling={false}
         >
           {getInitials(name)}
         </Text>

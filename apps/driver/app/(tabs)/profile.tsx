@@ -329,7 +329,12 @@ function NativeDriverProfileScreen() {
                 accessible
                 accessibilityLabel={`Avatar de ${user?.full_name ?? td('common.driver_label')}`}
               >
-                <Text style={{ color: '#FFFFFF', fontFamily: 'Inter_800ExtraBold', fontSize: 32 }}>
+                {/* Decorative initial in a fixed-size circle — lock font
+                    scaling so max accessibility text size can't clip it. */}
+                <Text
+                  style={{ color: '#FFFFFF', fontFamily: 'Inter_800ExtraBold', fontSize: 32 }}
+                  allowFontScaling={false}
+                >
                   {user?.full_name?.charAt(0)?.toUpperCase() ?? 'C'}
                 </Text>
               </View>
