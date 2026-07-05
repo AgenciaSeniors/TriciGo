@@ -75,6 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/rides', labelKey: 'sidebar.rides', defaultLabel: 'Viajes', icon: Map },
       { href: '/incidents', labelKey: 'sidebar.incidents', defaultLabel: 'Incidentes', icon: AlertTriangle },
+      { href: '/cancellations', labelKey: 'sidebar.cancellations', defaultLabel: 'Cancelaciones', icon: ShieldAlert },
       { href: '/disputes', labelKey: 'sidebar.disputes', defaultLabel: 'Disputas', icon: Scale },
       { href: '/lost-found', labelKey: 'sidebar.lost_found', defaultLabel: 'Objetos perdidos', icon: PackageSearch },
       { href: '/fraud', labelKey: 'sidebar.fraud', defaultLabel: 'Antifraude', icon: ShieldAlert },
