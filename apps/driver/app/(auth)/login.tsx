@@ -215,7 +215,7 @@ export default function LoginScreen() {
               </View>
               <View className="flex-1">
                 <Input
-                  placeholder="5XXXXXXX"
+                  placeholder="5XXXXXXX o 6XXXXXXX"
                   keyboardType="phone-pad"
                   value={phone}
                   onChangeText={handlePhoneChange}

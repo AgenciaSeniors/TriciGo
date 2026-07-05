@@ -281,7 +281,7 @@ export default function TrustedContactsPage() {
             <input
               id="tc-phone"
               type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
-              placeholder="+53 5XXXXXXX"
+              placeholder="+53 5XXXXXXX o 6XXXXXXX"
               style={{
                 width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
                 fontSize: '0.95rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box',

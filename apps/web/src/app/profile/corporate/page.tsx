@@ -1013,7 +1013,7 @@ export default function CorporatePage() {
                               type="tel"
                               value={newEmpPhone}
                               onChange={(e) => setNewEmpPhone(e.target.value)}
-                              placeholder="+53 5XXXXXXX"
+                              placeholder="+53 5XXXXXXX o 6XXXXXXX"
                               style={inputStyle}
                             />
                             <p style={{ ...labelStyle, marginTop: '0.6rem' }}>{t('corporate_employee_role', { defaultValue: 'Rol' })}</p>

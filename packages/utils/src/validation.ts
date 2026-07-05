@@ -4,21 +4,24 @@
 
 /**
  * Validate a Cuban phone number.
- * Cuban mobile numbers: +53 5XXXXXXX (8 digits starting with 5)
+ * Cuban mobile numbers are 8 digits starting with 5 or 6:
+ *   - 5XXXXXXX  (legacy prefix, since 1993)
+ *   - 6XXXXXXX  (new ETECSA prefixes 63/64, assigned to every new SIM since late 2023)
+ * Full E.164 form: +53 5XXXXXXX / +53 6XXXXXXX. Landlines (7 / 2x-4x) are not mobiles.
  */
 export function isValidCubanPhone(phone: string): boolean {
   if (!phone) return false;
   const cleaned = phone.replace(/[\s\-()]/g, '');
-  // With country code: +535XXXXXXX
-  if (/^\+535\d{7}$/.test(cleaned)) return true;
-  // Without country code: 5XXXXXXX
-  if (/^5\d{7}$/.test(cleaned)) return true;
+  // With country code: +53 5XXXXXXX / +53 6XXXXXXX
+  if (/^\+53[56]\d{7}$/.test(cleaned)) return true;
+  // Without country code: 5XXXXXXX / 6XXXXXXX
+  if (/^[56]\d{7}$/.test(cleaned)) return true;
   return false;
 }
 
 /**
  * Normalize a phone number to E.164 format for Cuba.
- * "51234567" → "+5351234567"
+ * "51234567" → "+5351234567", "63234567" → "+5363234567"
  */
 export function normalizeCubanPhone(phone: string): string {
   const cleaned = phone.replace(/[\s\-()]/g, '');
@@ -26,9 +29,9 @@ export function normalizeCubanPhone(phone: string): string {
   if (cleaned.startsWith('+53') && cleaned.length === 11) return cleaned;
   // Country code without +
   if (cleaned.startsWith('53') && cleaned.length === 10) return `+${cleaned}`;
-  // Local number (8 digits starting with 5)
-  if (cleaned.startsWith('5') && cleaned.length === 8) return `+53${cleaned}`;
-  // Short local number without leading 5 — prepend +53
+  // Local mobile number (8 digits starting with 5 or 6)
+  if ((cleaned.startsWith('5') || cleaned.startsWith('6')) && cleaned.length === 8) return `+53${cleaned}`;
+  // Short local number without country code — prepend +53
   if (!cleaned.startsWith('+') && cleaned.length <= 8) return `+53${cleaned}`;
   // Already has +, return as-is
   return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;

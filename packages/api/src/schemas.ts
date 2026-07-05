@@ -3,14 +3,15 @@ import { normalizeCubanPhone } from '@tricigo/utils';
 
 // Base validators
 export const uuidSchema = z.string().uuid('ID inválido');
-// Accept any of the three ways a Cuban user types their number — "+535XXXXXXX",
-// "535XXXXXXX" (no +) or the bare local "5XXXXXXX" — and canonicalize to E.164
-// "+535XXXXXXX" BEFORE the strict regex runs. The regex stays as a post-normalize
+// Accept any of the three ways a Cuban user types their number — "+53 5/6XXXXXXX",
+// "53 5/6XXXXXXX" (no +) or the bare local "5/6XXXXXXX" — and canonicalize to E.164
+// "+53 5/6XXXXXXX" BEFORE the strict regex runs. Cuban mobiles start with 5 (legacy)
+// or 6 (new ETECSA 63/64 prefixes, since late 2023). The regex stays as a post-normalize
 // guard so malformed input still fails. This makes gift recipient lookup (and every
 // other consumer) tolerant to input format while keeping storage canonical.
 export const cubanPhoneSchema = z.preprocess(
   (v) => (typeof v === 'string' ? normalizeCubanPhone(v.trim()) : v),
-  z.string().regex(/^\+53\d{8}$/, 'Número cubano inválido (+53XXXXXXXX)'),
+  z.string().regex(/^\+53[56]\d{7}$/, 'Número cubano inválido (+53 5XXXXXXX o 6XXXXXXX)'),
 );
 
 // Demo mode: when EXPO_PUBLIC_DEMO_MODE=true, relax geographic bounds to global

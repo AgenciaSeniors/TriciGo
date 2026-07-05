@@ -182,7 +182,7 @@ export default function CorporateRequestForm({ userId, onSubmitted, initialError
         <input style={inputStyle} value={contactName} onChange={(e) => setContactName(e.target.value)} />
         <div style={{ height: '0.75rem' }} />
         <label style={labelStyle}>Teléfono *</label>
-        <input style={inputStyle} type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+53 5XXXXXXX" />
+        <input style={inputStyle} type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+53 5XXXXXXX o 6XXXXXXX" />
         <div style={{ height: '0.75rem' }} />
         <label style={labelStyle}>Email</label>
         <input style={inputStyle} type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />

@@ -28,6 +28,14 @@ describe('isValidCubanPhone', () => {
     expect(isValidCubanPhone('59876543')).toBe(true);
   });
 
+  it('accepts new ETECSA mobile prefix 6 (63/64), with and without country code', () => {
+    // Since late 2023 every new Cuban SIM is assigned a 63/64 number.
+    expect(isValidCubanPhone('63234567')).toBe(true);
+    expect(isValidCubanPhone('64123456')).toBe(true);
+    expect(isValidCubanPhone('+5363234567')).toBe(true);
+    expect(isValidCubanPhone('+5364123456')).toBe(true);
+  });
+
   it('accepts phone with spaces/dashes', () => {
     expect(isValidCubanPhone('+53 5123 4567')).toBe(true);
     expect(isValidCubanPhone('5123-4567')).toBe(true);
@@ -53,9 +61,11 @@ describe('isValidCubanPhone', () => {
     expect(isValidCubanPhone('+53abc12345')).toBe(false);
   });
 
-  it('rejects phone not starting with 5 (non-mobile)', () => {
+  it('rejects landline / non-mobile prefixes (7, 2-4)', () => {
+    // Cuban mobiles are 5X or 6X; landlines use 7 (Havana) and 2x/3x/4x — never 6.
     expect(isValidCubanPhone('71234567')).toBe(false);
     expect(isValidCubanPhone('+5371234567')).toBe(false);
+    expect(isValidCubanPhone('41234567')).toBe(false);
   });
 
   it('rejects empty string', () => {
@@ -89,6 +99,13 @@ describe('normalizeCubanPhone', () => {
     expect(normalizeCubanPhone('55512345')).toBe('+5355512345'); // bare local 5XXXXXXX
     expect(normalizeCubanPhone('5355512345')).toBe('+5355512345'); // country code without + (535XXXXXXX)
     expect(normalizeCubanPhone('+5355512345')).toBe('+5355512345'); // already E.164
+  });
+
+  it('normalizes the new 6-prefix (63/64) forms to canonical E.164', () => {
+    expect(normalizeCubanPhone('63234567')).toBe('+5363234567'); // bare local 6XXXXXXX
+    expect(normalizeCubanPhone('64123456')).toBe('+5364123456');
+    expect(normalizeCubanPhone('5363234567')).toBe('+5363234567'); // country code without +
+    expect(normalizeCubanPhone('+5363234567')).toBe('+5363234567'); // already E.164
   });
 
   it('is idempotent (normalizing twice yields the same value)', () => {

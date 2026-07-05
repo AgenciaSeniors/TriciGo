@@ -1126,7 +1126,7 @@ export default function CorporateProfileScreen() {
 
         <Input
           label={t('corporate.employee_phone', { defaultValue: 'Teléfono del empleado' })}
-          placeholder="+53 5XXXXXXX"
+          placeholder="+53 5XXXXXXX o 6XXXXXXX"
           value={newPhone}
           onChangeText={setNewPhone}
           keyboardType="phone-pad"

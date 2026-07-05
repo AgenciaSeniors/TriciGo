@@ -280,7 +280,7 @@ export default function PersonalInfoScreen() {
     if (!phone.trim()) {
       newErrors.phone = t('onboarding.error_phone_required', { defaultValue: 'El teléfono es obligatorio' });
     } else if (!isValidCubanPhone(normalizedPhone)) {
-      newErrors.phone = t('onboarding.error_phone_invalid', { defaultValue: 'Número cubano inválido (5XXXXXXX)' });
+      newErrors.phone = t('onboarding.error_phone_invalid', { defaultValue: 'Número cubano inválido (5XXXXXXX o 6XXXXXXX)' });
     }
     if (email.trim() && !isValidEmail(email.trim())) {
       newErrors.email = t('onboarding.error_invalid_email');
@@ -506,7 +506,7 @@ export default function PersonalInfoScreen() {
                     </View>
                     <View className="flex-1">
                       <Input
-                        placeholder="5XXXXXXX"
+                        placeholder="5XXXXXXX o 6XXXXXXX"
                         keyboardType="phone-pad"
                         maxLength={8}
                         value={phone}

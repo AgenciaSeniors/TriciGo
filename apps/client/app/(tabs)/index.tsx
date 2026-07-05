@@ -1297,7 +1297,7 @@ function WebHomeScreen() {
                   return (
                     <div style={{ marginBottom: 8 }}>
                       <label style={{ fontSize: 12, fontWeight: 600, color: c.textMuted }}>Teléfono *</label>
-                      <input type="tel" value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="+53 5XXXXXXX"
+                      <input type="tel" value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} placeholder="+53 5XXXXXXX o 6XXXXXXX"
                         style={{
                           width: '100%', padding: '8px 10px', borderRadius: 8,
                           border: phoneShowError ? '1px solid #ef4444' : `1px solid ${c.border}`,

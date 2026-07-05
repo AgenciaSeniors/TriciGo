@@ -356,7 +356,7 @@ function NativeProfileScreen() {
                       {user?.full_name ?? 'Usuario'}
                     </Text>
                     <Text style={{ color: tokens.ink.secondary, fontSize: 13, marginTop: 3 }}>
-                      {user?.phone ?? '+53 5XXXXXXX'}
+                      {user?.phone ?? '+53 5XXXXXXX o 6XXXXXXX'}
                     </Text>
                     {/* Tier badge sits below (own row, hugs content) — driver parity. */}
                     {user?.level && (
