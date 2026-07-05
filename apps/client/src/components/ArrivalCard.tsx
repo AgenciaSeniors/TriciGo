@@ -106,7 +106,9 @@ export function ArrivalCard({
             <Image source={{ uri: driverAvatarUrl }} style={styles.avatar} />
           ) : (
             <View style={styles.avatarFallback}>
-              <Text style={styles.avatarInitials}>{getInitials(driverName)}</Text>
+              {/* Decorative initials in a fixed-size circle — lock font
+                  scaling so max accessibility text size can't clip them. */}
+              <Text style={styles.avatarInitials} allowFontScaling={false}>{getInitials(driverName)}</Text>
             </View>
           )}
           <View style={styles.driverInfo}>

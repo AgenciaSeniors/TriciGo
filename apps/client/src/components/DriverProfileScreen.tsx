@@ -129,7 +129,9 @@ export function DriverProfileScreen({ driverUserId }: DriverProfileScreenProps) 
             <Image source={{ uri: avatarUrl }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Text style={styles.initialsText}>{initials}</Text>
+              {/* Decorative initials in a fixed-size circle — lock font
+                  scaling so max accessibility text size can't clip them. */}
+              <Text style={styles.initialsText} allowFontScaling={false}>{initials}</Text>
             </View>
           )}
           <Text style={styles.driverName}>{driverName}</Text>

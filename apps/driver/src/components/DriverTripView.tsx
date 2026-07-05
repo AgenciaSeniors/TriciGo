@@ -591,6 +591,15 @@ export function DriverTripView() {
   // container background no longer needs to encode status.
   const stepperTint = midnightEmber.map.bg.surface;
 
+  // Cancel now requires a STRUCTURED reason (migration 00486): legit reasons
+  // (no_show / breakdown / safety / emergency) are exempt from the reputation
+  // penalty; the rest go through the normal progression. The old free-text
+  // 'Cancelado por el conductor' never matched the exemption gate.
+  // NOTE: declared here (above the early returns below) — a hook after an
+  // early return violates the rules of hooks and crashes on the render where
+  // the component returns early.
+  const [cancelReasonVisible, setCancelReasonVisible] = useState(false);
+
   if (!activeTrip) return null;
 
   // Completed state
@@ -668,12 +677,6 @@ export function DriverTripView() {
       ],
     );
   };
-
-  // Cancel now requires a STRUCTURED reason (migration 00486): legit reasons
-  // (no_show / breakdown / safety / emergency) are exempt from the reputation
-  // penalty; the rest go through the normal progression. The old free-text
-  // 'Cancelado por el conductor' never matched the exemption gate.
-  const [cancelReasonVisible, setCancelReasonVisible] = useState(false);
 
   const submitCancel = (code: CancellationReasonCode) => {
     setCancelReasonVisible(false);
