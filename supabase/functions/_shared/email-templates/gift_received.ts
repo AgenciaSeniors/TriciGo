@@ -89,13 +89,13 @@ export function giftReceivedHtml(data: GiftReceivedData): string {
 // ── Helpers (local so the template stays self-contained) ─────────
 
 function fmtTrc(n: number): string {
-  return `${Math.round(n).toLocaleString('es-CU')} TriciCoin`;
+  return `${Math.round(n).toLocaleString('es')} TriciCoin`;
 }
 
 function formatGiftDate(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString('es-CU', {
+    return d.toLocaleDateString('es', {
       day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
       timeZone: 'America/Havana',

@@ -485,7 +485,7 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
   page.drawText('RECARGA CONFIRMADA', {
     x: left, y: y - 22, size: 10, font: helvBold, color: rgb(1, 1, 1),
   });
-  // RECARGA V2: TC = CUP (no decimals). Format with es-CU grouping so
+  // RECARGA V2: TC = CUP (no decimals). Format with es grouping so
   // 10500 reads as "10.500 TC". 1 TC == 1 CUP, so the wallet "TriciCoin"
   // figure equals the CUP equivalent at the snapshot rate.
   const tcLabel = `${formatTcAmount(amounts.tcCredited)} TriciCoin acreditados`;
@@ -567,7 +567,7 @@ async function buildReceiptPdf(args: PdfArgs): Promise<Uint8Array> {
     'referencial al momento de la transacción y puede variar al gastar.',
     { x: left, y: footerY + 14, size: 8, font: helv, color: muted },
   );
-  page.drawText(`${BRAND_NAME} · Cuba · ${SUPPORT_EMAIL}`, {
+  page.drawText(`${BRAND_NAME} · ${SUPPORT_EMAIL}`, {
     x: left, y: footerY - 4, size: 8, font: helvBold, color: ink,
   });
   // Web origin right-aligned on the same baseline.
@@ -722,34 +722,33 @@ const WEEKDAY_ES: Record<number, string> = {
 
 function formatDateLong(iso: string): string {
   const d = new Date(iso);
-  // We want "Domingo 11 de mayo de 2026, 14:30 (Cuba)" — the native
-  // toLocaleDateString lowercases the weekday and lacks the locale
-  // suffix. Stitch the parts manually to guarantee output stability
-  // across Deno/V8 minor versions (which have shifted "es-CU" output
-  // before).
+  // We want "Domingo 11 de mayo de 2026, 14:30" — the native
+  // toLocaleDateString lowercases the weekday, so we stitch the parts
+  // manually to guarantee output stability across Deno/V8 minor
+  // versions. Dates are rendered in America/Havana (local operating time).
   const havanaDate = new Date(d.toLocaleString('en-US', { timeZone: 'America/Havana' }));
   const weekday = WEEKDAY_ES[havanaDate.getDay()] ?? '';
-  const datePart = d.toLocaleDateString('es-CU', {
+  const datePart = d.toLocaleDateString('es', {
     day: 'numeric', month: 'long', year: 'numeric',
     timeZone: 'America/Havana',
   });
-  const timePart = d.toLocaleTimeString('es-CU', {
+  const timePart = d.toLocaleTimeString('es', {
     hour: '2-digit', minute: '2-digit', hour12: false,
     timeZone: 'America/Havana',
   });
-  return `${weekday} ${datePart}, ${timePart} (Cuba)`;
+  return `${weekday} ${datePart}, ${timePart}`;
 }
 
 function formatCup(cup: number): string {
-  return new Intl.NumberFormat('es-CU', { maximumFractionDigits: 0 }).format(Math.round(cup)) + ' CUP';
+  return new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(Math.round(cup)) + ' CUP';
 }
 
 // RECARGA V2: TC = CUP. The wallet stores integer CUP, so format with
-// the es-CU thousands separator and zero decimals. The internal
+// the es thousands separator and zero decimals. The internal
 // representation may include a trailing .00 (from numeric columns),
 // hence the Math.round to drop float noise before grouping.
 function formatTcAmount(tc: number): string {
-  return new Intl.NumberFormat('es-CU', { maximumFractionDigits: 0 }).format(Math.round(tc));
+  return new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(Math.round(tc));
 }
 
 function capitalize(s: string): string {

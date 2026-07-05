@@ -96,7 +96,7 @@ export interface LayoutOptions {
   body: string;
   /** Optional CTA at the bottom of the body. */
   cta?: { label: string; href: string };
-  /** Footer brand line. Defaults to "TriciGo · Cuba". */
+  /** Footer brand line. Defaults to "TriciGo". */
   footerBrand?: string;
   /** Optional small print under the footer brand (legal, support). */
   footerNote?: string;
@@ -108,7 +108,7 @@ export function wrapHtml(opts: LayoutOptions): string {
     hero,
     body,
     cta,
-    footerBrand = 'TriciGo · Cuba',
+    footerBrand = 'TriciGo',
     footerNote,
   } = opts;
 

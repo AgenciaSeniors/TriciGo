@@ -133,7 +133,7 @@ function humanizeCategory(slug: string): string {
 function formatDeliveryDate(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString('es-CU', {
+    return d.toLocaleDateString('es', {
       day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
       timeZone: 'America/Havana',
@@ -144,5 +144,5 @@ function formatDeliveryDate(iso: string): string {
 }
 
 function fmtCup(n: number): string {
-  return `${Math.round(n).toLocaleString('es-CU')} CUP`;
+  return `${Math.round(n).toLocaleString('es')} CUP`;
 }

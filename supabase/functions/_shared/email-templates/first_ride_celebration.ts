@@ -32,7 +32,7 @@ export function firstRideCelebrationHtml(data: FirstRideCelebrationData): string
     </p>
     <p style="margin: 0 0 16px;">
       Esperamos que la pasada haya sido cómoda. Con TriciGo te movés por toda
-      Cuba — del triciclo de tu barrio al auto para distancias largas.
+      la ciudad — del triciclo de tu barrio al auto para distancias largas.
     </p>
     <p style="margin: 0 0 8px; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 600; color: ${COLORS.ink};">
       Algunos tips:
