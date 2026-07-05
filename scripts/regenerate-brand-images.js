@@ -93,6 +93,24 @@ function bbox({ data, width, height }, alphaMin = 15) {
   return { minX, minY, maxX, maxY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
+// bbox of pixels matching a color predicate (opaque-art masters where the
+// subject is segmented by color, not alpha).
+function colorBbox({ data, width, height }, keep) {
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (data[i + 3] > 8 && keep(data[i], data[i + 1], data[i + 2])) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  return { minX, minY, maxX, maxY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
 function crop(img, box) {
   const out = Buffer.alloc(box.w * box.h * 4);
   for (let y = 0; y < box.h; y++) {
@@ -411,48 +429,51 @@ async function fixIconSeam() {
   console.log(`  wrote apps/client/assets/icon.png  ${width}x${height}  ${(before / 1024).toFixed(1)}KB -> ${(fs.statSync(file).size / 1024).toFixed(1)}KB`);
 }
 
-// ---------- 4c) driver icon master: full-bleed + optical pin scale ----------
+// ---------- 4c) driver icon master: geometric parity with the client ----------
 
-// The driver icon kept the OLD inset rounded-badge composition (#723 only
-// fixed the client) and its pin is a hollow white outline — geometrically
-// identical to the client's (595x705 vs 595x704, verified 2026-07-02) but
-// perceived ~15% smaller next to the client's solid white pin in the App
-// Store. Fix (user decision): recompose full-bleed — flat near-black canvas
-// (badge interior and outer corners are all ~rgb(19,19,19); the old inset
-// edge is just a delta<=19 AA line) + the pin scaled up 10% at its original
-// center. Idempotency guard: skip when the pin already exceeds 72% of the
-// canvas height (original is 69%, scaled is ~76%).
+// #732 recomposed the driver icon full-bleed and scaled its hollow pin +10%
+// (optical compensation next to the client's solid pin). That left the two
+// launcher icons geometrically UNEQUAL: driver pin 75.5% of canvas height
+// vs client 69% — visibly different sizes side by side on iOS / the stores.
+// New rule (user decision 2026-07-05): the pins are geometric twins. The
+// client master is the single source of truth — its pin bbox is measured at
+// runtime (never hardcoded) and the driver symbol (pin + bolt) is scaled
+// and positioned to the same height and center. Idempotent: skips when the
+// driver symbol already matches the client metrics within tolerance.
 async function fixDriverIcon() {
-  console.log('4c) apps/driver/assets/icon.png: full-bleed + pin +10%');
+  console.log('4c) apps/driver/assets/icon.png: match client pin geometry');
   const file = P('apps/driver/assets/icon.png');
+
+  // Reference metrics: client pin = near-white pixels on the flat orange.
+  const client = await loadRaw(P('apps/client/assets/icon.png'));
+  const ref = colorBbox(client, (r, g, b) => r > 240 && g > 240 && b > 240);
+  const refCx = (ref.minX + ref.maxX) / 2, refCy = (ref.minY + ref.maxY) / 2;
+
   const img = await loadRaw(file);
   const { data, width, height } = img;
   const px = (x, y) => (y * width + x) * 4;
   const corners = [[10, 10], [width - 11, 10], [10, height - 11], [width - 11, height - 11]];
   const bg = [0, 1, 2].map((c) => Math.round(corners.reduce((a, [x, y]) => a + data[px(x, y) + c], 0) / 4));
-  // pin bbox = pixels deviating strongly from the near-black background
-  let minX = width, minY = height, maxX = -1, maxY = -1;
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const i = px(x, y);
-    const d = Math.max(Math.abs(data[i] - bg[0]), Math.abs(data[i + 1] - bg[1]), Math.abs(data[i + 2] - bg[2]));
-    if (d > 60) {
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-    }
-  }
-  const pinH = maxY - minY + 1;
-  if (pinH / height > 0.72) {
-    console.log(`  pin already at ${(100 * pinH / height).toFixed(0)}% height — skip (idempotent)`);
+  // driver symbol bbox = pixels deviating strongly from the near-black bg
+  // (catches the white pin AND the orange bolt; both share the pin's bbox)
+  const sym = colorBbox(img, (r, g, b) =>
+    Math.max(Math.abs(r - bg[0]), Math.abs(g - bg[1]), Math.abs(b - bg[2])) > 60);
+  const symCx = (sym.minX + sym.maxX) / 2, symCy = (sym.minY + sym.maxY) / 2;
+
+  if (Math.abs(sym.h - ref.h) <= 6 && Math.abs(symCx - refCx) <= 4 && Math.abs(symCy - refCy) <= 4) {
+    console.log(`  symbol ${sym.w}x${sym.h} @ (${symCx},${symCy}) already matches client ${ref.w}x${ref.h} @ (${refCx},${refCy}) — skip (idempotent)`);
     return;
   }
-  const M = 6, SCALE = 1.10;
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-  const crop = { left: minX - M, top: minY - M, width: maxX - minX + 1 + 2 * M, height: maxY - minY + 1 + 2 * M };
-  const newW = Math.round(crop.width * SCALE), newH = Math.round(crop.height * SCALE);
-  const left = Math.round(cx - newW / 2), top = Math.round(cy - newH / 2);
-  // safety fuse: the scaled pin must keep >=60px margin (iOS corner mask)
+
+  const M = 6, s = ref.h / sym.h;
+  const crop = { left: sym.minX - M, top: sym.minY - M, width: sym.w + 2 * M, height: sym.h + 2 * M };
+  const newW = Math.round(crop.width * s), newH = Math.round(crop.height * s);
+  // place so the symbol center lands exactly on the client pin center
+  const left = Math.round(refCx - (symCx - crop.left) * s);
+  const top = Math.round(refCy - (symCy - crop.top) * s);
+  // safety fuse: the placed symbol must keep >=60px margin (iOS corner mask)
   if (left < 60 || top < 60 || left + newW > width - 60 || top + newH > height - 60) {
-    throw new Error('fixDriverIcon: scaled pin would leave <60px margin — aborting');
+    throw new Error('fixDriverIcon: parity-scaled symbol would leave <60px margin — aborting');
   }
   const scaledPin = await sharp(data, { raw: { width, height, channels: 4 } })
     .extract(crop)
@@ -463,8 +484,62 @@ async function fixDriverIcon() {
   await sharp({ create: { width, height, channels: 3, background: { r: bg[0], g: bg[1], b: bg[2] } } })
     .composite([{ input: scaledPin, left, top }])
     .png({ compressionLevel: 9 }).toFile(file);
-  console.log(`  pin (${minX},${minY})-(${maxX},${maxY}) scaled x${SCALE} -> ${newW}x${newH} at (${left},${top}) on flat rgb(${bg.join(',')})`);
+  console.log(`  symbol ${sym.w}x${sym.h} @ (${symCx},${symCy}) scaled x${s.toFixed(4)} -> client parity ${ref.w}x${ref.h} @ (${refCx},${refCy}) on flat rgb(${bg.join(',')})`);
   console.log(`  wrote apps/driver/assets/icon.png  ${width}x${height}  ${(before / 1024).toFixed(1)}KB -> ${(fs.statSync(file).size / 1024).toFixed(1)}KB`);
+}
+
+// ---------- 4d) driver notification icon: match client glyph metrics ----------
+
+// generate-driver-icon.js rendered the driver status-bar glyph with
+// fit:'contain' into the full 96px canvas → glyph height 96/96 (touches the
+// canvas edges) while the client glyph is 66/96. Android scales both icons
+// to the same dp box, so the driver notification mark rendered ~45% bigger
+// than the client's. Re-derive the silhouette from the (parity-matched)
+// icon.png symbol at the client's measured glyph height and center.
+async function fixDriverNotificationIcon() {
+  console.log('4e) apps/driver/assets/notification-icon.png: match client glyph metrics');
+  const file = P('apps/driver/assets/notification-icon.png');
+
+  // Reference metrics: client glyph alpha bbox (56x66 in the 96 canvas).
+  const refImg = await loadRaw(P('apps/client/assets/notification-icon.png'));
+  const ref = bbox(refImg);
+  const refCx = (ref.minX + ref.maxX) / 2, refCy = (ref.minY + ref.maxY) / 2;
+  const canvas = refImg.width; // 96
+
+  const cur = await loadRaw(file);
+  const curB = bbox(cur);
+  const curCx = (curB.minX + curB.maxX) / 2, curCy = (curB.minY + curB.maxY) / 2;
+  if (Math.abs(curB.h - ref.h) <= 2 && Math.abs(curCx - refCx) <= 2 && Math.abs(curCy - refCy) <= 2) {
+    console.log(`  glyph ${curB.w}x${curB.h} @ (${curCx},${curCy}) already matches client ${ref.w}x${ref.h} @ (${refCx},${refCy}) — skip (idempotent)`);
+    return;
+  }
+
+  // Silhouette source: the hi-res icon.png symbol (white pin + orange bolt
+  // → pure white alpha mask; Android tints notification icons itself).
+  const icon = await loadRaw(P('apps/driver/assets/icon.png'));
+  const px = (x, y) => (y * icon.width + x) * 4;
+  const corners = [[10, 10], [icon.width - 11, 10], [10, icon.height - 11], [icon.width - 11, icon.height - 11]];
+  const bg = [0, 1, 2].map((c) => Math.round(corners.reduce((a, [x, y]) => a + icon.data[px(x, y) + c], 0) / 4));
+  const mask = Buffer.alloc(icon.data.length);
+  for (let i = 0; i < icon.data.length; i += 4) {
+    const d = Math.max(Math.abs(icon.data[i] - bg[0]), Math.abs(icon.data[i + 1] - bg[1]), Math.abs(icon.data[i + 2] - bg[2]));
+    if (d > 60) {
+      mask[i] = 255; mask[i + 1] = 255; mask[i + 2] = 255; mask[i + 3] = 255;
+    }
+  }
+  const maskImg = { data: mask, width: icon.width, height: icon.height };
+  const symB = bbox(maskImg);
+  const sil = crop(maskImg, symB);
+  const newH = ref.h;
+  const newW = Math.round(symB.w * (ref.h / symB.h));
+  const scaled = await sharp(sil.data, { raw: { width: sil.width, height: sil.height, channels: 4 } })
+    .resize(newW, newH, { kernel: sharp.kernel.lanczos3, fit: 'fill' })
+    .png().toBuffer();
+  const left = Math.round(refCx - newW / 2), top = Math.round(refCy - newH / 2);
+  await sharp({ create: { width: canvas, height: canvas, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: scaled, left, top }])
+    .png({ compressionLevel: 9 }).toFile(file);
+  console.log(`  glyph ${curB.w}x${curB.h} -> ${newW}x${newH} at (${left},${top}) — client parity ${ref.w}x${ref.h} @ (${refCx},${refCy})`);
 }
 
 // ---------- 5) web PWA icons from the 1024 master ----------
@@ -521,7 +596,8 @@ async function defringeWebIcons() {
   await fixNotificationIcon();
   await cleanStrays();
   await fixIconSeam(); // must run BEFORE regenerateIcon512 (512/192 derive from the master)
-  await fixDriverIcon();
+  await fixDriverIcon(); // must run BEFORE fixDriverNotificationIcon (silhouette derives from icon.png)
+  await fixDriverNotificationIcon();
   await regenerateIcon512();
   await regenerateTricoinSmall();
   await defringeWebIcons();
