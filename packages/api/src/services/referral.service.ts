@@ -22,7 +22,13 @@ const DEFAULT_BONUS_CUP = 500; // 500 CUP whole pesos
 function isMissingFunctionError(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   if (error.code === 'PGRST202') return true;
-  return !!error.message && /function .* does not exist|could not find the function/i.test(error.message);
+  // Match ONLY the PostgREST "RPC not in schema cache" phrasing. Do NOT match a
+  // generic Postgres "function <x> does not exist" (42883) — that can come from
+  // an unresolved call INSIDE the RPC body (e.g. gen_random_bytes when the
+  // search_path is wrong, see migration 00491). Such runtime errors must
+  // propagate, not silently trigger the legacy fallback that returns an
+  // unredeemable placeholder code.
+  return !!error.message && /could not find the function/i.test(error.message);
 }
 
 export const referralService = {

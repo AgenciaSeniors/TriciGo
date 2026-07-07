@@ -40,6 +40,20 @@ describe('referralService', () => {
         code: '42501',
       });
     });
+
+    it('propagates a runtime "function does not exist" error (42883) instead of returning a fake code', async () => {
+      // Regression for the referral bug: gen_random_bytes(5) unresolved inside
+      // the RPC body raised 42883. The old regex mis-classified it as a missing
+      // RPC and returned an unredeemable placeholder. It must now propagate.
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: '42883', message: 'function gen_random_bytes(integer) does not exist' },
+      });
+
+      await expect(
+        referralService.getOrCreateReferralCode('a1b2c3d4-ef56-7890-abcd-ef1234567890'),
+      ).rejects.toMatchObject({ code: '42883' });
+    });
   });
 
   describe('getOrCreateReferralCode (legacy fallback when migration not applied)', () => {
