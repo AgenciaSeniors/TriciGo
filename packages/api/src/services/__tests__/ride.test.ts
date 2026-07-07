@@ -1022,12 +1022,25 @@ describe('rideService.previewCancellationImpact', () => {
     expect(mockRpc).toHaveBeenCalledWith('preview_cancellation_rating_impact', { p_ride_id: 'ride-1', p_reason: 'safety' });
   });
 
-  it('returns a grace default when the RPC is absent (migration not applied)', async () => {
-    mockRpc.mockResolvedValue({ data: null, error: { message: 'Function not found' } });
+  it('returns a grace default when the RPC is genuinely absent (PGRST202)', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST202', message: 'Could not find the function public.preview_cancellation_rating_impact in the schema cache' },
+    });
 
     const result = await rideService.previewCancellationImpact('ride-1');
-    expect(result.rating_penalized).toBe(false);
-    expect(result.is_grace).toBe(true);
+    expect(result).not.toBeNull();
+    expect(result?.rating_penalized).toBe(false);
+    expect(result?.is_grace).toBe(true);
+  });
+
+  it('returns null (unknown) on a transient error instead of a fake grace', async () => {
+    // A transient/unexpected error must NOT be reported as "no penalty" — the
+    // UI shows "couldn't compute" so the user is not falsely reassured.
+    mockRpc.mockResolvedValue({ data: null, error: { code: '08006', message: 'connection failure' } });
+
+    const result = await rideService.previewCancellationImpact('ride-1');
+    expect(result).toBeNull();
   });
 });
 

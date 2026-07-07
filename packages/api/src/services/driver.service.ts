@@ -25,6 +25,7 @@ import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { uploadFileFromUri } from './_storage-upload';
 import { notificationService } from './notification.service';
+import { exchangeRateService } from './exchange-rate.service';
 
 /**
  * Transform raw Supabase ride data to proper GeoPoint coordinates.
@@ -864,16 +865,11 @@ export const driverService = {
       (configs ?? []).map((c: { key: string; value: string }) => [c.key, c.value]),
     );
 
-    // Fetch current exchange rate
-    let exchangeRate = 510;
-    try {
-      const { data: rateRow } = await supabase
-        .from('exchange_rates')
-        .select('usd_cup_rate')
-        .eq('is_current', true)
-        .single();
-      if (rateRow) exchangeRate = Number(rateRow.usd_cup_rate);
-    } catch { /* fallback */ }
+    // Fetch the current exchange rate via the shared service, which reads the
+    // live `is_current` row and has its own fallback chain (platform_config →
+    // DEFAULT_EXCHANGE_RATE). Avoids the old hardcoded 510 that drifted ~24%
+    // below the real rate (~670) and was shown to the driver as the USD hint.
+    const exchangeRate = await exchangeRateService.getUsdCupRate();
 
     return {
       currentRate: profile?.custom_per_km_rate_cup ?? null,

@@ -40,6 +40,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { cubanLight, cubanDark, colors, midnightEmber } from '@tricigo/theme';
 import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
+import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import type { Ride } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -105,6 +106,19 @@ function NativeEarningsScreen() {
 
   const [period, setPeriod] = useState<Period>('day');
   const [txExpanded, setTxExpanded] = useState(false);
+
+  // Live USD/CUP rate for the "≈ $X" hint. Mirrors wallet.tsx: the service has
+  // its own fallback chain, so this shows the real rate (~670) instead of the
+  // stale DEFAULT_EXCHANGE_RATE constant. Seed with the constant while it loads.
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
+  useEffect(() => {
+    let alive = true;
+    exchangeRateService
+      .getUsdCupRate()
+      .then((r) => { if (alive) setExchangeRate(r); })
+      .catch(() => { /* keep DEFAULT_EXCHANGE_RATE */ });
+    return () => { alive = false; };
+  }, []);
 
   // N2 — personal peak hours
   const { data: peakHours, loading: peakHoursLoading } = useDriverPeakHours({
@@ -335,7 +349,7 @@ function NativeEarningsScreen() {
                       ...TABULAR,
                     }}
                   >
-                    {tripsCountLabel} · ≈ {formatUSD(trcToUsd(periodStats.netEarnings, DEFAULT_EXCHANGE_RATE))}
+                    {tripsCountLabel} · ≈ {formatUSD(trcToUsd(periodStats.netEarnings, exchangeRate))}
                   </Text>
                 </View>
               )}

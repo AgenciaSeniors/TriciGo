@@ -1056,14 +1056,19 @@ export const rideService = {
   /**
    * Preview the RATING impact of cancelling now (without applying it).
    * Shows the user exactly how their visible stars would move before
-   * confirming. Tolerates the RPC being absent (migration 00371 not yet
-   * applied) by returning a grace / no-impact default — never throws.
+   * confirming.
+   *
+   * Returns a grace / no-impact default ONLY when the RPC is genuinely absent
+   * (migration 00371 not applied → the whole cancellation-rating system is off,
+   * so "no penalty" is the truth). Any OTHER error (transient/unexpected) is
+   * UNKNOWN and returns `null`, so the UI can show "couldn't compute" instead of
+   * falsely reassuring the user that cancelling is free.
    */
   async previewCancellationImpact(
     rideId: string,
     reason?: string,
-  ): Promise<CancellationRatingImpact> {
-    const fallback: CancellationRatingImpact = {
+  ): Promise<CancellationRatingImpact | null> {
+    const grace: CancellationRatingImpact = {
       rating_penalized: false,
       is_grace: true,
       cancel_count_24h: 0,
@@ -1080,12 +1085,22 @@ export const rideService = {
         p_ride_id: rideId,
         p_reason: reason ?? null,
       });
-      if (error) throw error;
+      if (error) {
+        // Only PostgREST's "RPC not in schema" signal counts as absent. A
+        // generic runtime "does not exist" is deliberately NOT matched (it can
+        // come from inside the RPC body — see the referral gen_random_bytes
+        // incident) so it surfaces as unknown rather than a fake grace.
+        const missingRpc =
+          error.code === 'PGRST202' ||
+          /could not find the function|not found in the schema cache/i.test(error.message ?? '');
+        return missingRpc ? grace : null;
+      }
 
       const row = (Array.isArray(data) ? data[0] : data) as
         | (Partial<CancellationRatingImpact> & { error?: string })
         | null;
-      if (!row || row.error) return fallback;
+      if (!row) return grace;
+      if (row.error) return null;
       return {
         rating_penalized: row.rating_penalized ?? false,
         is_grace: row.is_grace ?? true,
@@ -1095,7 +1110,7 @@ export const rideService = {
         stars_after: row.stars_after ?? null,
       };
     } catch {
-      return fallback;
+      return null;
     }
   },
 
