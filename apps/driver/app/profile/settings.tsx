@@ -44,9 +44,8 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
-import { notificationService, driverService, authService } from '@tricigo/api';
+import { notificationService, authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
-import { useDriverStore } from '@/stores/driver.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
@@ -100,12 +99,8 @@ export default function DriverSettingsScreen() {
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
-  const profile = useDriverStore((s) => s.profile);
 
   // Existing state
-  const [autoAcceptEnabled, setAutoAcceptEnabled] = useState(false);
-  const [autoAcceptEligible, setAutoAcceptEligible] = useState(false);
-  const [autoAcceptLoading, setAutoAcceptLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, boolean>>({});
   const [smsEnabled, setSmsEnabled] = useState(false);
@@ -147,12 +142,6 @@ export default function DriverSettingsScreen() {
     AsyncStorage.getItem(SILENT_MODE_KEY).then((v) => { if (v !== null) setSilentModeEnabled(v === 'true'); }).catch(() => {});
     AsyncStorage.getItem(SILENT_MODE_TIMER_KEY).then((v) => { if (v !== null) setSilentModeTimer(Number(v)); }).catch(() => {});
   }, [userId]);
-
-  useEffect(() => {
-    if (!profile?.id) return;
-    setAutoAcceptEnabled(!!profile.auto_accept_enabled);
-    driverService.isEligibleForAutoAccept(profile.id).then(setAutoAcceptEligible).catch(() => {});
-  }, [profile?.id]);
 
   const toggleLanguage = () => {
     const cycle = ['es', 'en', 'pt'] as const;
@@ -200,19 +189,6 @@ export default function DriverSettingsScreen() {
     const next = SILENT_TIMER_OPTIONS[(idx + 1) % SILENT_TIMER_OPTIONS.length]!.minutes;
     setSilentModeTimer(next);
     AsyncStorage.setItem(SILENT_MODE_TIMER_KEY, String(next));
-  };
-
-  const handleAutoAcceptToggle = async (enabled: boolean) => {
-    if (!profile?.id) return;
-    setAutoAcceptEnabled(enabled);
-    setAutoAcceptLoading(true);
-    try {
-      await driverService.setAutoAccept(profile.id, enabled);
-    } catch {
-      setAutoAcceptEnabled(!enabled);
-    } finally {
-      setAutoAcceptLoading(false);
-    }
   };
 
   const handleSmsToggle = async (enabled: boolean) => {
@@ -481,38 +457,6 @@ export default function DriverSettingsScreen() {
                 />
               </View>
             )}
-          </Card>
-
-          {/* Auto-accept rides */}
-          <Card theme="light" variant="surface" padding="md" className="mb-3">
-            <SettingsRow
-              icon="flash-outline"
-              title={t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
-              subtitle={
-                autoAcceptEligible
-                  ? autoAcceptEnabled
-                    ? t('profile.auto_accept_on_desc', { defaultValue: 'Aceptación automática. 5s para cancelar.' })
-                    : t('profile.auto_accept_off_desc', { defaultValue: 'Aceptación manual requerida.' })
-                  : t('profile.auto_accept_not_eligible', { defaultValue: 'Disponible con 50+ viajes y 4.5+ rating' })
-              }
-              right={
-                <Switch
-                  value={autoAcceptEnabled}
-                  disabled={!autoAcceptEligible || autoAcceptLoading}
-                  onValueChange={handleAutoAcceptToggle}
-                  trackColor={SWITCH_TRACK}
-                  accessibilityLabel={t('profile.auto_accept_toggle', { defaultValue: 'Auto-aceptar viajes' })}
-                  // V3 — mirror visual disabled state in the a11y tree so
-                  // VoiceOver/TalkBack announces "dimmed" / "disabled".
-                  // Eligibility gating (50+ trips, 4.5+ rating) is opaque
-                  // to screen-reader users without this.
-                  accessibilityState={{
-                    checked: autoAcceptEnabled,
-                    disabled: !autoAcceptEligible || autoAcceptLoading,
-                  }}
-                />
-              }
-            />
           </Card>
 
           {/* SMS Alerts */}
