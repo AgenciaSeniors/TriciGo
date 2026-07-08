@@ -10,6 +10,7 @@ interface DriverRideState {
   incomingRequests: TimestampedRide[];
   activeTrip: Ride | null;
   isAdvancing: boolean;
+  isDriverCanceling: boolean;
 
   addRequest: (ride: Ride) => void;
   removeRequest: (rideId: string) => void;
@@ -18,6 +19,7 @@ interface DriverRideState {
   setActiveTrip: (trip: Ride | null) => void;
   updateActiveTrip: (trip: Ride) => void;
   setIsAdvancing: (v: boolean) => void;
+  setDriverCanceling: (v: boolean) => void;
   reset: () => void;
 }
 
@@ -25,6 +27,7 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   incomingRequests: [],
   activeTrip: null,
   isAdvancing: false,
+  isDriverCanceling: false,
 
   addRequest: (ride) =>
     set((s) => {
@@ -70,6 +73,8 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   clearRequests: () => set({ incomingRequests: [] }),
 
   setIsAdvancing: (v) => set({ isAdvancing: v }),
+
+  setDriverCanceling: (v) => set({ isDriverCanceling: v }),
 
   setActiveTrip: (activeTrip) => set({ activeTrip }),
 
@@ -118,5 +123,5 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
     set({ activeTrip: trip });
   },
 
-  reset: () => set({ incomingRequests: [], activeTrip: null, isAdvancing: false }),
+  reset: () => set({ incomingRequests: [], activeTrip: null, isAdvancing: false, isDriverCanceling: false }),
 }));

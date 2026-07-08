@@ -26,8 +26,7 @@
  *   - BUG-221: usar duración NEUTRA 40 km/h en el fallback, no la
  *     `estimated_duration_s` per-vehículo.
  *   - presenceService.joinRideSearch / leaveRideSearch
- *   - trackValidationEvent en accept/reject/auto-accept
- *   - Skeleton mientras AsyncStorage carga la preferencia de auto-accept
+ *   - trackValidationEvent en accept/reject/expire
  *   - Haptics en cada acción
  *
  * Lo que cambió:
@@ -36,8 +35,10 @@
  *   - Profit badge `<StatusBadge>` superior → eliminado.
  *   - Progress bar con 3 colores (verde/amarillo/rojo) → 1 familia accent
  *     con intensidad según urgencia.
- *   - Auto-accept toggle: 3 conditional branches → línea persistente
- *     debajo del CTA, siempre visible.
+ *   - Auto-accept ELIMINADO: la inacción ahora DESCARTA la oferta. El
+ *     contador es una ventana de vencimiento; al llegar a 0 se llama
+ *     onReject (el conductor debe tocar "Aceptar" para tomar el viaje).
+ *     La línea inferior muestra "Vence en {{seconds}}s".
  *   - Reject 50/50 → asimétrico 28/72.
  *   - 12+ hex literals inline → 0; todo via `midnightEmber.*`.
  *   - 10 ocurrencias de `<RNText>` con Inter inline → consumen
@@ -45,7 +46,6 @@
  */
 import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import { View, Animated, Pressable, Text as RNText, Easing } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCUP, cupToTrcCentavos, haversineDistance, jitterLocation, triggerHaptic } from '@tricigo/utils';
@@ -75,14 +75,10 @@ interface IncomingRideCardProps {
   riderRating?: number | null;
 }
 
-// Auto-accept timing por nivel de rentabilidad (ms tolerance, no color).
-// Menos rentable → más tiempo para que el driver decida activamente.
+// Profit tier is kept purely as an analytics tag on accept/reject/expire
+// events. It no longer drives any auto-accept timing — inaction on an
+// offer now DECLINES it (the driver must tap "Aceptar" to take the ride).
 type ProfitTier = 'great' | 'good' | 'short';
-const AUTO_ACCEPT_SECONDS: Record<ProfitTier, number> = {
-  great: 8,   // good deals — accept fast
-  good: 12,
-  short: 15,  // give the driver time to opt out
-};
 
 function IncomingRideCardInner({
   ride,
@@ -198,59 +194,39 @@ function IncomingRideCardInner({
     return 'short';
   }, [netEarnings, pickupDistanceKm]);
 
-  // ── Auto-accept preference ────────────────────────────
-  const [autoAcceptEnabled, setAutoAcceptEnabled] = useState(false);
-  const [autoAcceptLoaded, setAutoAcceptLoaded] = useState(false);
-
-  useEffect(() => {
-    AsyncStorage.getItem('@tricigo/auto_accept_enabled').then((val) => {
-      if (val !== null) setAutoAcceptEnabled(val === 'true');
-      else setAutoAcceptEnabled(true);
-      setAutoAcceptLoaded(true);
-    });
-  }, []);
-
-  const toggleAutoAccept = useCallback(async () => {
-    const next = !autoAcceptEnabled;
-    setAutoAcceptEnabled(next);
-    await AsyncStorage.setItem('@tricigo/auto_accept_enabled', String(next));
-  }, [autoAcceptEnabled]);
-
-  // ── Countdown ─────────────────────────────────────────
-  // Cuando auto-accept está activo: countdown de 8/12/15s (según tier).
-  // Cuando está desactivado: usamos la ventana servidor 30s.
-  // En ambos casos: UNA sola progress bar arriba del card, intensidad
-  // del color sigue una familia (accent → accent oscuro → danger).
-  const autoAcceptDuration = AUTO_ACCEPT_SECONDS[profitTier];
+  // ── Offer expiry countdown ────────────────────────────
+  // Inaction now DECLINES the offer (industry-standard). The countdown
+  // runs the server offer window (offer_expires_at, else 30s — matching
+  // the stale-request sweep in useIncomingRequests). When it hits 0 we
+  // call onReject to dismiss the offer locally; the ride stays `searching`
+  // for other drivers. UNA sola progress bar arriba, intensidad del color
+  // sigue una familia (accent → accent oscuro → danger).
   const OFFER_WINDOW_MS = 30_000;
 
+  const computeWindowMs = useCallback(() => {
+    const expiresAt = ride.offer_expires_at
+      ? new Date(ride.offer_expires_at).getTime()
+      : null;
+    return expiresAt ? Math.max(0, expiresAt - Date.now()) : OFFER_WINDOW_MS;
+  }, [ride.offer_expires_at]);
+
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const [secondsLeft, setSecondsLeft] = useState(autoAcceptDuration);
-  const autoAcceptFiredRef = useRef(false);
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    Math.max(1, Math.ceil(computeWindowMs() / 1000)),
+  );
+  const expiredFiredRef = useRef(false);
 
   useEffect(() => {
-    if (!autoAcceptLoaded) return;
-    autoAcceptFiredRef.current = false;
+    expiredFiredRef.current = false;
 
-    const useAutoAccept = autoAcceptEnabled;
-    const totalMs = useAutoAccept
-      ? autoAcceptDuration * 1000
-      : (() => {
-          const expiresAt = ride.offer_expires_at
-            ? new Date(ride.offer_expires_at).getTime()
-            : null;
-          return expiresAt
-            ? Math.max(0, expiresAt - Date.now())
-            : OFFER_WINDOW_MS;
-        })();
-
+    const totalMs = computeWindowMs();
     const totalS = Math.max(1, Math.ceil(totalMs / 1000));
-    setSecondsLeft(useAutoAccept ? autoAcceptDuration : totalS);
+    setSecondsLeft(totalS);
 
     progressAnim.setValue(0);
     Animated.timing(progressAnim, {
       toValue: 1,
-      duration: totalMs,
+      duration: Math.max(0, totalMs),
       easing: Easing.linear,
       useNativeDriver: false,
     }).start();
@@ -259,7 +235,7 @@ function IncomingRideCardInner({
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          if (useAutoAccept) autoAcceptFiredRef.current = true;
+          expiredFiredRef.current = true;
           return 0;
         }
         return prev - 1;
@@ -268,25 +244,25 @@ function IncomingRideCardInner({
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ride.id, autoAcceptEnabled, autoAcceptLoaded, autoAcceptDuration]);
+  }, [ride.id]);
 
-  // Side-effect of auto-accept firing (outside setState).
+  // Side-effect of the offer expiring (outside setState). Declines the
+  // offer — the mirror image of the old auto-accept: no action = no ride.
   useEffect(() => {
-    if (autoAcceptFiredRef.current && secondsLeft === 0 && autoAcceptEnabled) {
-      autoAcceptFiredRef.current = false;
-      triggerHaptic('success');
-      trackValidationEvent('driver_ride_auto_accepted', {
+    if (expiredFiredRef.current && secondsLeft === 0) {
+      expiredFiredRef.current = false;
+      triggerHaptic('warning');
+      trackValidationEvent('driver_ride_offer_expired', {
         profit_level: profitTier,
-        countdown_duration: autoAcceptDuration,
         distance_km: pickupDistanceKm,
         net_earnings: netEarnings,
       }, ride.id);
       Toast.show({
-        type: 'success',
-        text1: t('home.ride_accepted', { defaultValue: '¡Viaje aceptado!' }),
+        type: 'info',
+        text1: t('home.offer_expired', { defaultValue: 'Oferta expirada' }),
         visibilityTime: 1500,
       });
-      onAccept(ride.id);
+      onReject?.(ride.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft]);
@@ -307,32 +283,6 @@ function IncomingRideCardInner({
     triggerHaptic('medium');
     onAccept(ride.id);
   }, [onAccept, ride.id]);
-
-  // ── Skeleton mientras carga la pref auto-accept ──────
-  const skeletonPulse = useRef(new Animated.Value(0.4)).current;
-  useEffect(() => {
-    if (!autoAcceptLoaded) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(skeletonPulse, { toValue: 0.8, duration: 800, useNativeDriver: true }),
-          Animated.timing(skeletonPulse, { toValue: 0.4, duration: 800, useNativeDriver: true }),
-        ]),
-      ).start();
-    }
-  }, [autoAcceptLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!autoAcceptLoaded) {
-    return (
-      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}>
-        <Animated.View style={{
-          height: 320,
-          borderRadius: midnightEmber.radius.hero,
-          backgroundColor: midnightEmber.map.bg.surface,
-          opacity: skeletonPulse,
-        }} />
-      </View>
-    );
-  }
 
   // ── Derived display values ────────────────────────────
   const tripDistanceKm = ride.estimated_distance_m
@@ -710,7 +660,7 @@ function IncomingRideCardInner({
           </Pressable>
         </View>
 
-        {/* ── Auto-accept persistent line (siempre visible) ── */}
+        {/* ── Offer expiry caption ── */}
         <View style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -718,76 +668,22 @@ function IncomingRideCardInner({
           marginTop: 14,
           gap: 6,
         }}>
-          {autoAcceptEnabled ? (
-            <>
-              <Ionicons
-                name="timer-outline"
-                size={13}
-                color={midnightEmber.map.text.tertiary}
-              />
-              <RNText style={{
-                ...midnightEmber.text.caption,
-                color: midnightEmber.map.text.tertiary,
-              }}>
-                {secondsLeft > 0
-                  ? t('home.auto_accepting_in', {
-                      seconds: secondsLeft,
-                      defaultValue: 'Auto-aceptar en {{seconds}}s',
-                    })
-                  : t('home.auto_accepting_now', { defaultValue: 'Aceptando viaje…' })}
-              </RNText>
-              <RNText style={{
-                ...midnightEmber.text.caption,
-                color: midnightEmber.map.text.tertiary,
-              }}>·</RNText>
-              {/* V2 — hitSlop bumped 8 → 14: caption text is ~16pt; the
-                   16+14×2 = 44pt effective tap zone clears HIG. The user
-                   may need to disable mid-countdown (8-15s window) so a
-                   reliable tap is critical. Visual stays as a discreet
-                   underline link. */}
-              <Pressable
-                onPress={toggleAutoAccept}
-                hitSlop={14}
-                accessibilityRole="button"
-                accessibilityLabel={t('home.disable_auto_accept', { defaultValue: 'Desactivar' })}
-              >
-                <RNText style={{
-                  ...midnightEmber.text.caption,
-                  color: midnightEmber.map.text.secondary,
-                  textDecorationLine: 'underline',
-                }}>
-                  {t('home.disable_auto_accept', { defaultValue: 'Desactivar' })}
-                </RNText>
-              </Pressable>
-            </>
-          ) : (
-            // V2 — hitSlop bumped 8 → 14 to clear the HIG 44pt minimum
-            // (icon 13pt + caption text ~16pt; the surrounding 14pt
-            // hitSlop expands the effective hit area on all sides).
-            <Pressable
-              onPress={toggleAutoAccept}
-              hitSlop={14}
-              accessibilityRole="button"
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <Ionicons
-                name="timer-outline"
-                size={13}
-                color={midnightEmber.map.text.secondary}
-              />
-              <RNText style={{
-                ...midnightEmber.text.caption,
-                color: midnightEmber.map.text.secondary,
-                textDecorationLine: 'underline',
-              }}>
-                {t('home.enable_auto_accept', { defaultValue: 'Activar auto-aceptar' })}
-              </RNText>
-            </Pressable>
-          )}
+          <Ionicons
+            name="timer-outline"
+            size={13}
+            color={midnightEmber.map.text.tertiary}
+          />
+          <RNText style={{
+            ...midnightEmber.text.caption,
+            color: midnightEmber.map.text.tertiary,
+          }}>
+            {secondsLeft > 0
+              ? t('home.offer_expires_in', {
+                  seconds: secondsLeft,
+                  defaultValue: 'Vence en {{seconds}}s',
+                })
+              : t('home.offer_expired', { defaultValue: 'Oferta expirada' })}
+          </RNText>
         </View>
       </View>
     </View>

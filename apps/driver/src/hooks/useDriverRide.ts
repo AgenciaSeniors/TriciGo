@@ -178,15 +178,60 @@ export function useDriverRideInit() {
       if (!mounted) return;
       const localTrip = useDriverRideStore.getState().activeTrip;
       if (!localTrip || !profile) return;
-      // Only poll for trips that could be waiting on rider confirmation
-      // (status pre-pickup or pre-dropoff). Skip when nothing to gate.
-      const gateableStatus =
-        localTrip.status === 'driver_en_route'
-        || localTrip.status === 'in_progress';
-      if (!gateableStatus) return;
+      // Once the trip is locally terminal there's nothing to poll:
+      // 'completed' keeps rendering TripCompleteView, 'canceled' is cleared.
+      if (localTrip.status === 'completed' || localTrip.status === 'canceled') return;
       try {
         const fresh = await driverService.getActiveTrip(profile.id);
-        if (!fresh || !mounted) return;
+        if (!mounted) return;
+
+        // BUG-active-trip-cancel: the passenger (or an admin) canceled the
+        // trip. Realtime is disabled (subscribeToRide is a no-op, BUG-277)
+        // and checkActive() only runs on mount + app-foreground, so without
+        // this the driver kept seeing the trip until they relaunched the app
+        // ("tenía que salir y volver a entrar"). getActiveTrip filters to
+        // ACTIVE statuses, so a null here means the trip left the active set.
+        // Read the row to tell a real cancel apart from a completion the
+        // local store hasn't caught yet (don't nuke TripCompleteView).
+        if (!fresh) {
+          // The driver's own cancel is mid-flight (cancelTrip sets this and
+          // calls reset() itself); don't announce it as a passenger cancel.
+          if (useDriverRideStore.getState().isDriverCanceling) return;
+          let terminalStatus: string | null = null;
+          try {
+            const row = await rideService.getRideWithDriver(localTrip.id);
+            terminalStatus = row?.status ?? null;
+          } catch { /* best-effort — treat as gone below */ }
+          if (!mounted) return;
+          if (terminalStatus === 'completed') {
+            // A completion the store missed (e.g. offline replay flushed):
+            // surface it as completed so TripCompleteView renders instead
+            // of flashing a bogus "canceled" toast.
+            useDriverRideStore.getState().updateActiveTrip({ ...localTrip, status: 'completed' });
+            return;
+          }
+          // canceled / expired / otherwise gone → clear + tell the driver.
+          triggerHaptic('warning');
+          Toast.show({
+            type: 'info',
+            text1: i18next.t('driver:trip.passenger_canceled_title', { defaultValue: 'Viaje cancelado' }),
+            text2: i18next.t('driver:trip.passenger_canceled_msg', {
+              defaultValue: 'El pasajero canceló el viaje.',
+            }),
+            visibilityTime: 5000,
+          });
+          stopBgLocationTracking().catch(() => { /* best-effort */ });
+          useDriverRideStore.getState().reset();
+          return;
+        }
+
+        // The rest only matters while waiting on rider confirmation
+        // (pre-pickup / pre-dropoff). Skip for accepted / arrived states.
+        const gateableStatus =
+          localTrip.status === 'driver_en_route'
+          || localTrip.status === 'in_progress';
+        if (!gateableStatus) return;
+
         const freshConfirmedAt =
           (fresh as { gps_override_confirmed_at?: string | null }).gps_override_confirmed_at ?? null;
         const localConfirmedAt =
@@ -866,6 +911,10 @@ export function useDriverRideActions() {
     const { activeTrip } = useDriverRideStore.getState();
     if (!activeTrip) return;
 
+    // Mark the driver's own cancel so the foreground poll doesn't mistake
+    // the vanishing active trip for a passenger cancellation. reset() below
+    // clears it on success; the catch clears it if the RPC failed.
+    useDriverRideStore.getState().setDriverCanceling(true);
     try {
       await rideService.cancelRide(activeTrip.id, user?.id, reason);
       // F3 — stop the background location task on cancel so it doesn't keep
@@ -876,6 +925,7 @@ export function useDriverRideActions() {
       activeChannelIdRef.current = null;
       reset();
     } catch {
+      useDriverRideStore.getState().setDriverCanceling(false);
       Toast.show({ type: 'error', text1: i18next.t('driver:trip.cancel_failed') });
     }
   }, [user, reset]);
