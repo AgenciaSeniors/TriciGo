@@ -40,6 +40,7 @@ import {
   Mail,
   MapPin,
   Calendar,
+  Upload,
 } from 'lucide-react';
 
 type DriverWallet = {
@@ -140,6 +141,9 @@ export default function DriverDetailPage() {
   const [contract, setContract] = useState<DriverContract | null>(null);
   const [generatingContract, setGeneratingContract] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadDocTypeRef = useRef<string | null>(null);
+  const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
 
   // ─── Data loading ──────────────────────────────────────────
   useEffect(() => {
@@ -222,6 +226,29 @@ export default function DriverDetailPage() {
     ]);
     setDriver(data);
     setSelfieChecks(checks);
+  };
+
+  const handleAdminUploadDoc = (docType: string) => {
+    pendingUploadDocTypeRef.current = docType;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const docType = pendingUploadDocTypeRef.current;
+    e.target.value = '';
+    if (!file || !docType || !id) return;
+    setUploadingDocType(docType);
+    try {
+      await adminService.uploadDriverDocumentAsAdmin(id, docType, file);
+      await refreshDriver();
+      showToast('success', t('drivers.doc_uploaded_admin', { defaultValue: 'Foto subida correctamente' }));
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
+    } finally {
+      setUploadingDocType(null);
+      pendingUploadDocTypeRef.current = null;
+    }
   };
 
   const handleVerifyDoc = async (
@@ -430,6 +457,13 @@ export default function DriverDetailPage() {
   // approval. selfie is a manual-review photo (admin compares it to the ID);
   // no biometric gate — the removed face_match_score check is NOT restored.
   const REQUIRED_DOC_TYPES = ['national_id', 'drivers_license', 'vehicle_registration', 'vehicle_photo', 'selfie'] as const;
+  // Build an ordered list of all doc types to render:
+  // required types first (even if no doc yet), then any extras (e.g. operating_license).
+  const docsByType = Object.fromEntries(documents.map((d) => [d.document_type, d]));
+  const extraDocTypes = documents
+    .map((d) => d.document_type)
+    .filter((t) => !(REQUIRED_DOC_TYPES as readonly string[]).includes(t));
+  const orderedDocTypes = [...REQUIRED_DOC_TYPES, ...extraDocTypes];
   const requiredVerifiedCount = REQUIRED_DOC_TYPES.filter((type) =>
     documents.some((d) => d.document_type === type && d.is_verified),
   ).length;
@@ -563,20 +597,23 @@ export default function DriverDetailPage() {
               )}
             </div>
 
-            {documents.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-line p-6 flex flex-col items-center justify-center bg-surface-sunken">
-                <FileText size={20} className="text-ink-subtle mb-2" />
-                <span className="text-xs text-ink-subtle">
-                  {t('drivers.no_documents', { defaultValue: 'El conductor aún no subió documentos' })}
-                </span>
-              </div>
-            ) : (
+            {/* Hidden file input shared by all doc upload buttons */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              className="hidden"
+              onChange={handleFileSelected}
+            />
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {documents.map((doc) => {
-                const docType = doc.document_type;
-                const url = docUrls[doc.id];
-                const docVerified = doc.is_verified;
-                const docRejected = !doc.is_verified && !!doc.rejection_reason;
+              {orderedDocTypes.map((docType) => {
+                const doc = docsByType[docType];
+                const url = doc ? docUrls[doc.id] : undefined;
+                const docVerified = doc?.is_verified ?? false;
+                const docRejected = doc ? (!doc.is_verified && !!doc.rejection_reason) : false;
+                const docMissing = !doc;
+                const isUploading = uploadingDocType === docType;
 
                 return (
                   <div
@@ -584,6 +621,7 @@ export default function DriverDetailPage() {
                     className={`rounded-lg border p-3 ${
                       docVerified ? 'border-green-200/80 bg-green-50/30' :
                       docRejected ? 'border-red-200/80 bg-red-50/30' :
+                      docMissing ? 'border-dashed border-line bg-surface-sunken' :
                       'border-line bg-surface-elevated'
                     }`}
                   >
@@ -598,15 +636,35 @@ export default function DriverDetailPage() {
                       <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         docVerified ? 'bg-green-100 text-green-700' :
                         docRejected ? 'bg-red-100 text-red-700' :
+                        docMissing ? 'bg-neutral-100 text-neutral-500' :
                         'bg-yellow-100 text-yellow-700'
                       }`}>
-                        {docVerified ? <CheckCircle2 size={10} /> : docRejected ? <XCircle size={10} /> : <Clock size={10} />}
+                        {docVerified ? <CheckCircle2 size={10} /> : docRejected ? <XCircle size={10} /> : docMissing ? <Upload size={10} /> : <Clock size={10} />}
                         {docVerified ? t('verification.doc_status_verified', { defaultValue: 'Verificado' }) :
                          docRejected ? t('verification.doc_status_rejected', { defaultValue: 'Rechazado' }) :
+                         docMissing ? t('verification.doc_status_missing', { defaultValue: 'Sin foto' }) :
                          t('verification.doc_status_pending', { defaultValue: 'Pendiente' })}
                       </div>
                     </div>
 
+                    {docMissing ? (
+                      /* Missing doc — upload placeholder */
+                      <div className="flex flex-col items-center justify-center gap-2 py-4">
+                        <Upload size={20} className="text-ink-subtle" />
+                        <span className="text-[11px] text-ink-muted text-center">
+                          {t('drivers.doc_not_uploaded', { defaultValue: 'El conductor no subió este documento' })}
+                        </span>
+                        <button
+                          onClick={() => handleAdminUploadDoc(docType)}
+                          disabled={isUploading}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                        >
+                          {isUploading
+                            ? <><Clock size={11} className="animate-spin" /> {t('common.uploading', { defaultValue: 'Subiendo…' })}</>
+                            : <><Upload size={11} /> {t('drivers.upload_for_driver', { defaultValue: 'Subir foto' })}</>}
+                        </button>
+                      </div>
+                    ) : (
                     <div>
                         {/* Preview */}
                         {url && url !== '__error__' && (() => {
@@ -745,12 +803,25 @@ export default function DriverDetailPage() {
                             </div>
                           </div>
                         )}
+
+                        {/* Admin replace — always visible when not in reject panel */}
+                        {!docVerified && rejectingDocId !== doc.id && (
+                          <button
+                            onClick={() => handleAdminUploadDoc(docType)}
+                            disabled={isUploading}
+                            className="mt-1.5 w-full inline-flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-line text-ink-muted hover:bg-surface-sunken disabled:opacity-50 transition-colors"
+                          >
+                            {isUploading
+                              ? <><Clock size={11} className="animate-spin" /> {t('common.uploading', { defaultValue: 'Subiendo…' })}</>
+                              : <><Upload size={11} /> {t('drivers.replace_doc_admin', { defaultValue: 'Reemplazar (admin)' })}</>}
+                          </button>
+                        )}
                     </div>
+                    )}
                   </div>
                 );
               })}
             </div>
-            )}
           </section>
 
           {/* Contract (T&C acceptance — 00405) */}
