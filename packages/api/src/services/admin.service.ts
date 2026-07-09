@@ -318,6 +318,53 @@ export const adminService = {
   },
 
   /**
+   * Upload a driver document on behalf of a driver (admin action).
+   * Used when a driver can't upload due to poor connectivity — the
+   * admin receives the file out-of-band and uploads it server-side.
+   * The storage-upload EF accepts admin JWTs via isAdmin() and
+   * bypasses Storage RLS using the service-role key.
+   */
+  async uploadDriverDocumentAsAdmin(
+    driverId: string,
+    documentType: string,
+    file: File,
+  ): Promise<DriverDocument> {
+    const supabase = getSupabaseClient();
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = `${documentType}_${Date.now()}.${ext}`;
+    const storagePath = `driver-docs/${driverId}/${documentType}/${fileName}`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('bucket', 'driver-documents');
+    formData.append('path', storagePath);
+    formData.append('upsert', 'true');
+    formData.append('contentType', file.type || 'image/jpeg');
+
+    const { data, error } = await supabase.functions.invoke('storage-upload', {
+      body: formData,
+    });
+    if (error) throw error;
+    const errBody = (data as { error?: string } | null)?.error;
+    if (errBody) throw new Error(String(errBody));
+
+    const { data: doc, error: dbErr } = await supabase
+      .from('driver_documents')
+      .insert({
+        driver_id: driverId,
+        document_type: documentType,
+        storage_path: storagePath,
+        file_name: fileName,
+        mime_type: file.type || 'image/jpeg',
+      })
+      .select()
+      .single();
+    if (dbErr) throw dbErr;
+    return doc as DriverDocument;
+  },
+
+  /**
    * Driver T&C-acceptance contract (migration 00405). Returns null when
    * the driver has none yet — or when the migration hasn't been applied
    * (table missing), so the admin UI degrades silently.
