@@ -785,6 +785,7 @@
   },
   "promotions": {
     "title": "Promotions",
+    "delete_in_use": "Can't delete: this promotion was already used in rides. Deactivate it instead of deleting it.",
     "create_promotion": "Create promotion",
     "filter_all": "All",
     "filter_active": "Active",

@@ -228,7 +228,21 @@ export default function PromotionsAdminPage() {
       showToast('success', t('promotions.toast_deleted', { defaultValue: 'Promoción eliminada' }));
       await loadItems();
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      // A promo already redeemed in rides / recorded in promotion_uses keeps its
+      // FK as RESTRICT on purpose (financial/audit history). Surface a friendly
+      // "deactivate instead" message rather than the raw Postgres FK error.
+      const code = (err as { code?: string } | null)?.code;
+      const raw = getErrorMessage(err);
+      const isFkBlocked = code === '23503' || /foreign key|violates foreign/i.test(raw);
+      showToast(
+        'error',
+        isFkBlocked
+          ? t('promotions.delete_in_use', {
+              defaultValue:
+                'No se puede eliminar: esta promoción ya se usó en viajes. Desactivala en lugar de borrarla.',
+            })
+          : raw,
+      );
     }
   };
 
