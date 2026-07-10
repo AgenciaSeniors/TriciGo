@@ -14,6 +14,32 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+// ── Deterministic per-user password ──
+// Reused across every login so we NEVER rotate the password on the happy path.
+// Rotating the password (admin.updateUserById({ password })) revokes the user's
+// OTHER sessions in GoTrue — and client + driver are the SAME auth.users (one
+// synthetic email per phone). That revocation is exactly the "logging in on one
+// app logs me out of the other" bug: the other app's next auto-refresh fails →
+// SIGNED_OUT. With a stable password, login is just signInWithPassword (which
+// does NOT revoke), so both app sessions coexist — same as email/OAuth users.
+async function deriveStablePassword(userId: string): Promise<string> {
+  const secret = Deno.env.get('OTP_PASSWORD_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`otp-pw:${userId}`));
+  const hex = Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  // `Otp1_` prefix guarantees upper/lower/digit classes in case a password-complexity
+  // policy is ever enabled (otherwise a specific user's digest could be unable to log in).
+  return `Otp1_${hex}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: getCorsHeaders(req) });
@@ -136,10 +162,20 @@ Deno.serve(async (req) => {
 
     if (existingUserId) {
       userId = existingUserId;
-      // Ensure the phone is set + confirmed (idempotent; never fatal to login).
-      await supabase.auth.admin
-        .updateUserById(userId, { phone: normalizedPhone, phone_confirm: true })
-        .catch((e) => console.warn('updateUserById phone failed (non-fatal):', e));
+      // Ensure the phone is set + confirmed — but ONLY when it's actually missing.
+      // Writing it on every login is an unnecessary mutation of the shared auth.users
+      // (and a potential second session-revocation source alongside the password write);
+      // skip it once the phone is already present. Never fatal to login.
+      try {
+        const { data: existing } = await supabase.auth.admin.getUserById(userId);
+        if (!existing?.user?.phone) {
+          await supabase.auth.admin
+            .updateUserById(userId, { phone: normalizedPhone, phone_confirm: true })
+            .catch((e) => console.warn('updateUserById phone failed (non-fatal):', e));
+        }
+      } catch (e) {
+        console.warn('getUserById phone check failed (non-fatal):', e);
+      }
     } else {
       // Create new user
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
@@ -160,6 +196,13 @@ Deno.serve(async (req) => {
       }
 
       userId = newUser.user.id;
+
+      // Seed the deterministic password now (no session exists yet → revokes nothing).
+      // This lets the very first login take the write-free signInWithPassword happy path
+      // instead of failing once and healing via the set-then-signin branch below.
+      await supabase.auth.admin
+        .updateUserById(userId, { password: await deriveStablePassword(userId) })
+        .catch((e) => console.warn('seed stable password failed (non-fatal):', e));
 
       // Fix NULL token columns (prevent "Database error querying schema").
       // ROOT CAUSE of the new-user signup 500: `supabase.rpc(...)` returns a
@@ -194,27 +237,42 @@ Deno.serve(async (req) => {
       | { access_token: string; refresh_token: string; expires_in: number; user: unknown }
       | null = null;
 
-    // Strategy A — ephemeral password + signInWithPassword (NEVER log/return the password)
+    // Strategy A — stable-password grant (NEVER log/return the password).
+    // Sign in with the deterministic per-user password. On the happy path this does
+    // NOT write the password, so it does NOT revoke the user's other sessions → the
+    // client and driver apps keep their sessions in parallel. We only write the
+    // password when the sign-in fails (existing user whose password isn't the
+    // deterministic value yet, e.g. first login after this deploy or a secret
+    // rotation). That "heal" write happens once, then every later login is write-free.
+    // NOTE (latent conflict): this clobbers any user-chosen password from
+    // set-password-after-otp on every OTP login. Harmless today — phone users have no
+    // password-login path and password_set_at is unread — but if that's ever enabled,
+    // skip Strategy A (use the magic-link path below) when password_set_at is set.
     try {
-      const tempPassword = `otp_${crypto.randomUUID()}`;
-      const { error: pwSetErr } = await supabase.auth.admin.updateUserById(userId, { password: tempPassword });
-      if (pwSetErr) {
-        console.error('updateUserById(password) failed:', pwSetErr.message);
-      } else {
-        const { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-          email: devEmail,
-          password: tempPassword,
-        });
-        if (pwErr) {
-          console.error('signInWithPassword failed:', pwErr.message);
-        } else if (pwData?.session) {
-          session = {
-            access_token: pwData.session.access_token,
-            refresh_token: pwData.session.refresh_token,
-            expires_in: pwData.session.expires_in,
-            user: pwData.session.user,
-          };
+      const stablePassword = await deriveStablePassword(userId);
+      let { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
+        email: devEmail,
+        password: stablePassword,
+      });
+      if (pwErr) {
+        const { error: pwSetErr } = await supabase.auth.admin.updateUserById(userId, { password: stablePassword });
+        if (pwSetErr) {
+          console.error('updateUserById(password) failed:', pwSetErr.message);
+        } else {
+          ({ data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
+            email: devEmail,
+            password: stablePassword,
+          }));
+          if (pwErr) console.error('signInWithPassword (post-heal) failed:', pwErr.message);
         }
+      }
+      if (pwData?.session) {
+        session = {
+          access_token: pwData.session.access_token,
+          refresh_token: pwData.session.refresh_token,
+          expires_in: pwData.session.expires_in,
+          user: pwData.session.user,
+        };
       }
     } catch (e) {
       console.error('password-grant strategy threw:', e instanceof Error ? e.message : String(e));
