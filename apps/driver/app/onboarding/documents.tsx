@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -57,44 +57,93 @@ export default function DocumentsScreen() {
     setDriverProfileId,
   } = useOnboardingStore();
 
-  // Create driver profile eagerly if not yet created
-  useEffect(() => {
-    if (driverProfileId || !user) return;
+  // Tracks the eager profile-creation so the UI can show progress / retry
+  // instead of a dead-end generic error when the driver taps a document tile
+  // before the profile exists (slow Cuban connections, transient failures).
+  const [profileState, setProfileState] = useState<'creating' | 'ready' | 'error'>(
+    driverProfileId ? 'ready' : 'creating',
+  );
+  // De-dupes concurrent ensureProfile() calls (mount effect + a tap racing it)
+  // so we never fire two createProfile() INSERTs for the same user.
+  const ensuringRef = useRef<Promise<string | null> | null>(null);
 
-    (async () => {
+  /**
+   * Idempotently resolve the driver profile id, creating it if needed.
+   * Prefers fetching an existing profile (avoids the UNIQUE(user_id)
+   * violation when the profile was already created), then creates one.
+   * Concurrent callers share a single in-flight promise. Returns null on
+   * failure so callers can surface a recoverable, retry-on-tap state rather
+   * than the old fire-and-forget effect that left the screen permanently
+   * stuck after one transient network error.
+   */
+  const ensureProfile = useCallback(async (): Promise<string | null> => {
+    const current = useOnboardingStore.getState().driverProfileId;
+    if (current) return current;
+    if (!user) return null;
+    if (ensuringRef.current) return ensuringRef.current;
+
+    const run = (async (): Promise<string | null> => {
       try {
-        console.log('[Documents] Creating driver profile for user:', user.id);
-        const profile = await driverService.createProfile(user.id);
-        console.log('[Documents] Profile created:', profile.id);
-        setDriverProfileId(profile.id);
-      } catch (createErr) {
-        console.warn('[Documents] createProfile failed, trying getProfile:', createErr instanceof Error ? createErr.message : createErr);
-        // Profile may already exist
+        const existing = await driverService.getProfile(user.id);
+        if (existing) {
+          setDriverProfileId(existing.id);
+          return existing.id;
+        }
+        const created = await driverService.createProfile(user.id);
+        setDriverProfileId(created.id);
+        return created.id;
+      } catch (err) {
+        // A concurrent create may have won the UNIQUE(user_id) race — the
+        // profile now exists even though our insert threw. Fetch the winner.
         try {
           const existing = await driverService.getProfile(user.id);
           if (existing) {
-            console.log('[Documents] Existing profile found:', existing.id);
             setDriverProfileId(existing.id);
-          } else {
-            console.error('[Documents] No profile found for user');
+            return existing.id;
           }
-        } catch (getErr) {
-          console.error('[Documents] getProfile also failed:', getErr instanceof Error ? getErr.message : getErr);
+        } catch {
+          // fall through to the failure below
         }
+        console.error('[Documents] ensureProfile failed:', err instanceof Error ? err.message : err);
+        return null;
+      } finally {
+        ensuringRef.current = null;
       }
     })();
-  }, [driverProfileId, user, setDriverProfileId]);
+    ensuringRef.current = run;
+    return run;
+  }, [user, setDriverProfileId]);
+
+  // Create the driver profile eagerly on mount so tapping a tile is instant.
+  useEffect(() => {
+    if (driverProfileId || !user) return;
+    let cancelled = false;
+    setProfileState('creating');
+    ensureProfile().then((id) => {
+      if (!cancelled) setProfileState(id ? 'ready' : 'error');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [driverProfileId, user, ensureProfile]);
 
   /** Document types that accept PDF uploads in addition to images */
   const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'vehicle_registration', 'operating_license'];
 
   const uploadFile = async (docType: DocumentType, uri: string, fileName: string, mimeType?: string) => {
-    if (!driverProfileId) return;
+    // Read the id fresh from the store (not the closed-over render value): a tap
+    // that just triggered ensureProfile() sets it via setState, but this closure
+    // would still see the stale null. Fall back to ensureProfile() as a last resort.
+    const profileId = useOnboardingStore.getState().driverProfileId ?? (await ensureProfile());
+    if (!profileId) {
+      setDocumentError(docType, t('onboarding.error_upload_failed'));
+      return;
+    }
     setDocumentUri(docType, uri, fileName, mimeType);
     setDocumentUploading(docType, true);
     try {
-      console.log('[Documents] Uploading:', docType, 'profileId:', driverProfileId, 'mime:', mimeType);
-      const uploadPromise = driverService.uploadDocument(driverProfileId, docType, uri, fileName, mimeType);
+      console.log('[Documents] Uploading:', docType, 'profileId:', profileId, 'mime:', mimeType);
+      const uploadPromise = driverService.uploadDocument(profileId, docType, uri, fileName, mimeType);
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Upload timeout after 30s')), 30000),
       );
@@ -196,10 +245,25 @@ export default function DocumentsScreen() {
     }
   };
 
-  const handleDocumentPress = (docType: DocumentType) => {
-    if (!driverProfileId) {
-      Alert.alert('Error', t('errors.generic'));
-      return;
+  const handleDocumentPress = async (docType: DocumentType) => {
+    // Ensure the profile exists BEFORE opening the picker so the driver never
+    // frames a photo only to have the upload silently fail. If it's still being
+    // created (or a previous attempt failed), await/retry here — each tap is a
+    // fresh retry — and only surface a friendly, recoverable message on failure.
+    let profileId = useOnboardingStore.getState().driverProfileId;
+    if (!profileId) {
+      setProfileState('creating');
+      profileId = await ensureProfile();
+      setProfileState(profileId ? 'ready' : 'error');
+      if (!profileId) {
+        Alert.alert(
+          t('onboarding.profile_setup_failed_title', { defaultValue: 'Un momento' }),
+          t('onboarding.profile_setup_failed_body', {
+            defaultValue: 'No pudimos preparar tu perfil. Revisa tu conexión y toca de nuevo para reintentar.',
+          }),
+        );
+        return;
+      }
     }
 
     if (PDF_ELIGIBLE_TYPES.includes(docType)) {
@@ -235,6 +299,30 @@ export default function DocumentsScreen() {
         <Text variant="bodySmall" color="secondary" className="mb-6" style={{ color: midnightEmber.map.text.secondary }}>
           {t('onboarding.step_n_of_total', { step: 3, total: 4 })} — {requiredUploadedCount}/{requiredDocs.length}
         </Text>
+
+        {!driverProfileId && profileState === 'creating' && (
+          <View className="flex-row items-center mb-4">
+            <ActivityIndicator size="small" color={midnightEmber.accent[500]} />
+            <Text variant="caption" color="secondary" className="ml-2" style={{ color: midnightEmber.map.text.secondary }}>
+              {t('onboarding.preparing_profile', { defaultValue: 'Preparando tu perfil…' })}
+            </Text>
+          </View>
+        )}
+        {!driverProfileId && profileState === 'error' && (
+          <Pressable
+            onPress={() => {
+              setProfileState('creating');
+              ensureProfile().then((id) => setProfileState(id ? 'ready' : 'error'));
+            }}
+            accessibilityRole="button"
+            className="flex-row items-center mb-4"
+          >
+            <Ionicons name="refresh" size={16} color={midnightEmber.state.danger} />
+            <Text variant="caption" color="error" className="ml-2">
+              {t('onboarding.profile_setup_retry', { defaultValue: 'No pudimos preparar tu perfil. Toca para reintentar.' })}
+            </Text>
+          </Pressable>
+        )}
 
         {documents.map((doc) => (
           <Pressable
