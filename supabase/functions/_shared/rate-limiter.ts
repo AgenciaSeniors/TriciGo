@@ -84,6 +84,39 @@ export async function rateLimit(
   }
 }
 
+/**
+ * Refund one unit of a rate-limit budget for the CURRENT window.
+ *
+ * `rateLimit` increments the counter unconditionally, before the gated
+ * action's outcome is known. Call this when the action ultimately failed and
+ * NO real work was done (e.g. the SMS provider rejected the send), so a user
+ * who never received a code isn't locked out of retrying — the budget is meant
+ * to throttle *successful* sends, not provider failures.
+ *
+ * Best-effort: a missing RPC (migration 00491 not yet applied) or any DB error
+ * is swallowed so it can never block the caller's failure path.
+ */
+export async function refundRateLimit(key: string, windowMs: number): Promise<void> {
+  try {
+    const supabase = getServiceClient();
+    if (!supabase) {
+      // In-memory fallback path: give the local token back.
+      const entry = localStore.get(key);
+      if (entry && entry.count > 0) entry.count--;
+      return;
+    }
+    const windowSeconds = Math.ceil(windowMs / 1000);
+    const { error } = await supabase.rpc('refund_rate_limit', {
+      p_key: key,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) throw error;
+  } catch (err) {
+    // Non-fatal: the token simply stays consumed (conservative).
+    console.warn('[rate-limiter] refund failed (non-fatal):', (err as Error).message);
+  }
+}
+
 export function rateLimitResponse(
   retryAfterMs: number,
   corsHeaders: Record<string, string> = {},
