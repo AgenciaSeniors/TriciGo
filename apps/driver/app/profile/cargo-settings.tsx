@@ -30,27 +30,45 @@ export default function CargoSettingsScreen() {
   const [maxHeight, setMaxHeight] = useState('');
   const [categories, setCategories] = useState<PackageCategory[]>([]);
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // 'loading' → fetching; 'ready' → vehicle loaded; 'error' → fetch failed
+  // (retryable); 'no_vehicle' → driver has no active vehicle to configure.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error' | 'no_vehicle'>('loading');
   const [weightError, setWeightError] = useState('');
   const [categoriesError, setCategoriesError] = useState('');
 
   const lang = (i18n.language ?? 'es') as 'es' | 'en' | 'pt';
 
-  // Load current vehicle cargo settings
-  useEffect(() => {
-    if (!driverId) return;
-    driverService.getVehicle(driverId).then((v) => {
-      if (v) {
-        setVehicleId(v.id);
-        if (v.max_cargo_weight_kg) setMaxWeight(String(v.max_cargo_weight_kg));
-        if (v.max_cargo_length_cm) setMaxLength(String(v.max_cargo_length_cm));
-        if (v.max_cargo_width_cm) setMaxWidth(String(v.max_cargo_width_cm));
-        if (v.max_cargo_height_cm) setMaxHeight(String(v.max_cargo_height_cm));
-        if (v.accepted_cargo_categories?.length) setCategories(v.accepted_cargo_categories);
+  // Load the current vehicle + cargo settings. Returns the vehicle id (or null).
+  // Previously this swallowed a failed getVehicle() and left the form rendered
+  // with vehicleId=null, so "Guardar configuración" silently no-op'd
+  // (`if (!vehicleId) return`) — on Cuba's flaky connections a single failed GET
+  // bricked the screen with no feedback. Now failures surface a retry state.
+  const loadVehicle = useCallback(async (): Promise<string | null> => {
+    if (!driverId) return null;
+    setLoadState('loading');
+    try {
+      const v = await driverService.getVehicle(driverId);
+      if (!v) {
+        setLoadState('no_vehicle');
+        return null;
       }
-      setLoading(false);
-    }).catch(() => setLoading(false));
+      setVehicleId(v.id);
+      setMaxWeight(v.max_cargo_weight_kg ? String(v.max_cargo_weight_kg) : '');
+      setMaxLength(v.max_cargo_length_cm ? String(v.max_cargo_length_cm) : '');
+      setMaxWidth(v.max_cargo_width_cm ? String(v.max_cargo_width_cm) : '');
+      setMaxHeight(v.max_cargo_height_cm ? String(v.max_cargo_height_cm) : '');
+      setCategories(v.accepted_cargo_categories?.length ? v.accepted_cargo_categories : []);
+      setLoadState('ready');
+      return v.id;
+    } catch {
+      setLoadState('error');
+      return null;
+    }
   }, [driverId]);
+
+  useEffect(() => {
+    void loadVehicle();
+  }, [loadVehicle]);
 
   const toggleCategory = useCallback((cat: PackageCategory) => {
     setCategories((prev) =>
@@ -60,7 +78,21 @@ export default function CargoSettingsScreen() {
   }, []);
 
   const handleSave = async () => {
-    if (!vehicleId) return;
+    // If the vehicle never loaded (e.g. a transient fetch failure), retry once
+    // here instead of silently doing nothing — otherwise the button looks dead.
+    let vId = vehicleId;
+    if (!vId) {
+      vId = await loadVehicle();
+      if (!vId) {
+        Alert.alert(
+          t('profile.cargo_vehicle_load_failed_title', { defaultValue: 'No se pudo cargar tu vehículo' }),
+          t('profile.cargo_vehicle_load_failed_body', {
+            defaultValue: 'Revisa tu conexión e inténtalo de nuevo. Si acabas de registrarte, espera la aprobación de tu vehículo.',
+          }),
+        );
+        return;
+      }
+    }
 
     // Validate
     const weight = parseFloat(maxWeight);
@@ -75,7 +107,7 @@ export default function CargoSettingsScreen() {
 
     setSaving(true);
     try {
-      await driverService.updateVehicleCargo(vehicleId, {
+      await driverService.updateVehicleCargo(vId, {
         accepts_cargo: true,
         max_cargo_weight_kg: weight,
         max_cargo_length_cm: maxLength ? parseInt(maxLength, 10) : null,
@@ -101,9 +133,28 @@ export default function CargoSettingsScreen() {
           onBack={() => router.back()}
         />
 
-        {loading ? (
+        {loadState === 'loading' ? (
           <View className="items-center py-20">
             <Text variant="body" color="primary" className="opacity-50">...</Text>
+          </View>
+        ) : loadState === 'error' ? (
+          <View className="items-center py-16 px-4">
+            <Ionicons name="cloud-offline-outline" size={40} color={midnightEmber.state.danger} />
+            <Text variant="body" color="primary" className="mt-3 mb-4 text-center">
+              {t('profile.cargo_vehicle_load_error', { defaultValue: 'No pudimos cargar tu vehículo. Revisa tu conexión.' })}
+            </Text>
+            <Button
+              title={t('common:retry', { defaultValue: 'Reintentar' })}
+              onPress={() => { void loadVehicle(); }}
+              size="md"
+            />
+          </View>
+        ) : loadState === 'no_vehicle' ? (
+          <View className="items-center py-16 px-4">
+            <Ionicons name="car-outline" size={40} color={midnightEmber.screen.text.tertiary} />
+            <Text variant="body" color="primary" className="mt-3 text-center">
+              {t('profile.cargo_no_vehicle', { defaultValue: 'Necesitas un vehículo activo para configurar envíos.' })}
+            </Text>
           </View>
         ) : (
           <>
