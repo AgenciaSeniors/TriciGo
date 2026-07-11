@@ -30,6 +30,16 @@ ALTER TABLE promotion_uses
   ADD CONSTRAINT promotion_uses_promotion_id_fkey
   FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE CASCADE;
 
+-- 2b) admin_promo_audit_log.promo_code_id: DROP the FK (keep the column as a
+--     soft UUID reference). This table is append-only — a trigger
+--     (tg_admin_promo_audit_log_block_mutations) blocks BOTH update and delete,
+--     so neither ON DELETE SET NULL nor CASCADE can run (the cascade's UPDATE/
+--     DELETE is rejected and the promo delete fails). Dropping the FK lets the
+--     immutable audit row survive the promo deletion while retaining the
+--     historical promo_code_id it recorded.
+ALTER TABLE admin_promo_audit_log
+  DROP CONSTRAINT IF EXISTS admin_promo_audit_log_promo_code_id_fkey;
+
 -- 3) Guard the promo-discount trigger so the ON DELETE SET NULL cascade does
 --    NOT rewrite a finished ride's historical discount. Patched in-place from
 --    the LIVE body (never a verbatim rewrite) so no other logic can be lost.
