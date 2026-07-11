@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -18,6 +18,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
 import { compressDocument, formatSizeDelta } from '@/lib/compressDocument';
+import { ensureDriverProfile } from '@/lib/ensureDriverProfile';
 import type { DocumentType } from '@tricigo/types';
 
 function useSteps() {
@@ -54,7 +55,6 @@ export default function DocumentsScreen() {
     setDocumentUploaded,
     setDocumentUploading,
     setDocumentError,
-    setDriverProfileId,
   } = useOnboardingStore();
 
   // Tracks the eager profile-creation so the UI can show progress / retry
@@ -63,56 +63,18 @@ export default function DocumentsScreen() {
   const [profileState, setProfileState] = useState<'creating' | 'ready' | 'error'>(
     driverProfileId ? 'ready' : 'creating',
   );
-  // De-dupes concurrent ensureProfile() calls (mount effect + a tap racing it)
-  // so we never fire two createProfile() INSERTs for the same user.
-  const ensuringRef = useRef<Promise<string | null> | null>(null);
-
   /**
-   * Idempotently resolve the driver profile id, creating it if needed.
-   * Prefers fetching an existing profile (avoids the UNIQUE(user_id)
-   * violation when the profile was already created), then creates one.
-   * Concurrent callers share a single in-flight promise. Returns null on
-   * failure so callers can surface a recoverable, retry-on-tap state rather
-   * than the old fire-and-forget effect that left the screen permanently
-   * stuck after one transient network error.
+   * Idempotently resolve the driver profile id, creating it if needed. Delegates
+   * to the shared ensureDriverProfile() (module-level dedupe + get-first-create +
+   * UNIQUE(user_id)-race recovery) so the SAME resolution runs whether it was
+   * kicked off early (vehicle-info, step 2) or here on the Documents step as a
+   * backstop. Returns null on failure so callers keep the recoverable
+   * retry-on-tap UX instead of a dead-end error.
    */
-  const ensureProfile = useCallback(async (): Promise<string | null> => {
-    const current = useOnboardingStore.getState().driverProfileId;
-    if (current) return current;
-    if (!user) return null;
-    if (ensuringRef.current) return ensuringRef.current;
-
-    const run = (async (): Promise<string | null> => {
-      try {
-        const existing = await driverService.getProfile(user.id);
-        if (existing) {
-          setDriverProfileId(existing.id);
-          return existing.id;
-        }
-        const created = await driverService.createProfile(user.id);
-        setDriverProfileId(created.id);
-        return created.id;
-      } catch (err) {
-        // A concurrent create may have won the UNIQUE(user_id) race — the
-        // profile now exists even though our insert threw. Fetch the winner.
-        try {
-          const existing = await driverService.getProfile(user.id);
-          if (existing) {
-            setDriverProfileId(existing.id);
-            return existing.id;
-          }
-        } catch {
-          // fall through to the failure below
-        }
-        console.error('[Documents] ensureProfile failed:', err instanceof Error ? err.message : err);
-        return null;
-      } finally {
-        ensuringRef.current = null;
-      }
-    })();
-    ensuringRef.current = run;
-    return run;
-  }, [user, setDriverProfileId]);
+  const ensureProfile = useCallback(
+    (): Promise<string | null> => (user ? ensureDriverProfile(user.id) : Promise.resolve(null)),
+    [user],
+  );
 
   // Create the driver profile eagerly on mount so tapping a tile is instant.
   useEffect(() => {

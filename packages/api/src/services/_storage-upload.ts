@@ -54,7 +54,22 @@ export async function uploadFileFromUri(
   const { data, error } = await supabase.functions.invoke('storage-upload', {
     body: formData,
   });
-  if (error) throw error;
+  if (error) {
+    // On a non-2xx the EF returns { error, reason } (e.g. `db_error` for a
+    // transient DB/connection blip vs a bare `forbidden` for a real denial).
+    // supabase-js sets `error` (FunctionsHttpError) with the parsed body in
+    // `error.context` — pull it out so the real cause reaches the UI instead of
+    // the opaque "Edge Function returned a non-2xx status code". Best-effort:
+    // gateway-level errors have no JSON body, so fall back to error.message.
+    let detail = error.message;
+    try {
+      const body = await (error as { context?: Response }).context?.json?.();
+      if (body?.error) detail = body.reason ? `${body.error}: ${body.reason}` : body.error;
+    } catch {
+      /* no JSON body — keep error.message */
+    }
+    throw new Error(detail);
+  }
   const errBody = (data as { error?: string } | null)?.error;
   if (errBody) throw new Error(String(errBody));
 }

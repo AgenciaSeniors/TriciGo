@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Pressable, Switch, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -14,6 +14,8 @@ import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { useOnboardingStore } from '@/stores/onboarding.store';
+import { useAuthStore } from '@/stores/auth.store';
+import { ensureDriverProfile } from '@/lib/ensureDriverProfile';
 import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { isValidPlateNumber, sanitizeText, PACKAGE_CATEGORY_LABELS } from '@tricigo/utils';
@@ -87,6 +89,19 @@ export default function VehicleInfoScreen() {
   const STEPS = useSteps();
   const { isPhone } = useResponsive();
   const { vehicle, setVehicle } = useOnboardingStore();
+  const user = useAuthStore((s) => s.user);
+
+  // Create the driver_profiles row EARLY (step 2) so the Documents step (step 3)
+  // never reaches an upload with a missing profile — the storage-upload EF would
+  // reject that with 403 and the DB row insert would FK-fail. Best-effort +
+  // idempotent (shared module-level dedupe); if it fails on a bad connection the
+  // Documents step retries it as a backstop, exactly as before.
+  useEffect(() => {
+    if (!user?.id || useOnboardingStore.getState().driverProfileId) return;
+    ensureDriverProfile(user.id).catch(() => {
+      /* backstop: onboarding/documents.tsx resolves it on demand */
+    });
+  }, [user?.id]);
 
   // Rebuild the selected slug when returning to this screen.
   // service_type_slug is preferred (set on first selection), but

@@ -118,7 +118,10 @@ export default function DocumentsScreen() {
       await driverService.uploadDocument(driverId, docType, compressed.uri, fileName, uploadMime);
       await fetchData();
     } catch (err) {
-      Alert.alert('Error', t('common.error'));
+      // Show the real cause (e.g. `db_error: ...` / `upload_failed: ...` from the
+      // storage-upload EF) instead of a generic "Error", so a failed re-upload is
+      // diagnosable — mirrors onboarding/documents.tsx.
+      Alert.alert(t('common.error', { defaultValue: 'Error' }), getErrorMessage(err));
     } finally {
       setReuploading(null);
     }
@@ -157,7 +160,8 @@ export default function DocumentsScreen() {
       await driverService.uploadDocument(driverId, docType, compressed.uri, fileName, uploadMime);
       await fetchData();
     } catch (err) {
-      Alert.alert('Error', t('common.error'));
+      // Show the real cause instead of a generic "Error" — see reuploadImage.
+      Alert.alert(t('common.error', { defaultValue: 'Error' }), getErrorMessage(err));
     } finally {
       setReuploading(null);
     }

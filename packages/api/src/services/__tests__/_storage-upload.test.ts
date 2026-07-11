@@ -48,16 +48,48 @@ describe('uploadFileFromUri', () => {
     expect(body.get('contentType')).toBeNull();
   });
 
-  it('throws when the Edge Function returns a gateway error', async () => {
+  it('falls back to error.message on a gateway error with no JSON body', async () => {
+    // A gateway-level failure (no EF response body) → use error.message.
     const uploadErr = { message: 'Network request failed', code: '500' };
     mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: uploadErr });
 
     await expect(
       uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg' }),
-    ).rejects.toEqual(uploadErr);
+    ).rejects.toThrow('Network request failed');
   });
 
-  it('throws when the Edge Function body carries an error', async () => {
+  it('surfaces the EF { error, reason } body from a non-2xx (error.context)', async () => {
+    // On a 503 the EF returns { error:'db_error', reason:'...' }; supabase-js puts
+    // the parsed body on error.context. The thrown Error must carry that reason so
+    // a DB/connection blip is diagnosable instead of an opaque non-2xx message.
+    const httpErr = {
+      message: 'Edge Function returned a non-2xx status code',
+      context: {
+        json: async () => ({ error: 'db_error', reason: 'statement timeout' }),
+      },
+    };
+    mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: httpErr });
+
+    await expect(
+      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg' }),
+    ).rejects.toThrow('db_error: statement timeout');
+  });
+
+  it('uses just the code when the EF body has an error but no reason (forbidden)', async () => {
+    // A genuine authorization denial returns a bare { error:'forbidden' } (no
+    // reason) — no authz detail is leaked.
+    const httpErr = {
+      message: 'Edge Function returned a non-2xx status code',
+      context: { json: async () => ({ error: 'forbidden' }) },
+    };
+    mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: httpErr });
+
+    await expect(
+      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg' }),
+    ).rejects.toThrow('forbidden');
+  });
+
+  it('throws when the Edge Function body carries an error (2xx with { error })', async () => {
     mockFunctionsInvoke.mockResolvedValueOnce({ data: { error: 'bucket not allowed' }, error: null });
 
     await expect(

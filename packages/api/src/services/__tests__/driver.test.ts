@@ -159,12 +159,15 @@ describe('driverService', () => {
     });
 
     it('throws when the storage-upload EF returns an error', async () => {
+      // uploadFileFromUri now normalizes the EF failure into an Error carrying the
+      // real message/reason (see _storage-upload.ts) instead of rethrowing the raw
+      // object — so the cause is diagnosable in the UI.
       const uploadErr = { message: 'Storage full', code: '507' };
       mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: uploadErr });
 
       await expect(
         driverService.uploadDocument('d-1', 'license', 'file:///path/to/license.jpg', 'license.jpg'),
-      ).rejects.toEqual(uploadErr);
+      ).rejects.toThrow('Storage full');
     });
   });
 
@@ -196,12 +199,13 @@ describe('driverService', () => {
     });
 
     it('throws when the storage-upload EF returns an error', async () => {
+      // Normalized to an Error with the real message (see uploadDocument test).
       const uploadErr = { message: 'Network request failed', code: '500' };
       mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: uploadErr });
 
       await expect(
         driverService.uploadSelfieCheck('chk-1', 'd-1', 'file:///tmp/selfie.jpg', 'selfie.jpg'),
-      ).rejects.toEqual(uploadErr);
+      ).rejects.toThrow('Network request failed');
     });
   });
 

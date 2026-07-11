@@ -36,6 +36,20 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB — generous cap for ID/vehicle/avatar photos.
 
+// Typed failure that carries an HTTP status + a diagnosable code/reason.
+// WHY: the authz helpers used to `const { data } = await admin.from(...)` and
+// ignore the query `error`, so a transient DB/connection blip returned
+// data=undefined → authorized=false → a misleading `403 forbidden`,
+// indistinguishable from a genuine authorization denial. Throwing this instead
+// lets the outer catch surface `503 db_error` (retryable infra) vs a real
+// `403 forbidden`. Still fail-closed: no upload happens on any error path.
+class UploadError extends Error {
+  constructor(public status: number, public code: string, public detail?: string) {
+    super(code);
+    this.name = 'UploadError';
+  }
+}
+
 // Per-bucket allowed MIME types. The caller-supplied content-type is stored
 // verbatim and these buckets are PUBLIC → without a whitelist an attacker could
 // upload text/html or image/svg+xml and have it served as active content.
@@ -143,18 +157,20 @@ Deno.serve(async (req: Request) => {
 
     // ─── 3. Per-bucket authorization (mirrors each bucket's RLS WITH CHECK) ───
     const isAdmin = async (): Promise<boolean> => {
-      const { data } = await admin.from('users').select('role').eq('id', user.id).maybeSingle();
+      const { data, error } = await admin.from('users').select('role').eq('id', user.id).maybeSingle();
+      if (error) throw new UploadError(503, 'db_error', error.message);
       return !!data && ['admin', 'super_admin'].includes(data.role as string);
     };
     // The caller owns driverId iff it's their own driver_profiles row.
     const ownsDriverProfile = async (driverId: string): Promise<boolean> => {
       if (!driverId) return false;
-      const { data } = await admin
+      const { data, error } = await admin
         .from('driver_profiles')
         .select('id')
         .eq('id', driverId)
         .eq('user_id', user.id)
         .maybeSingle();
+      if (error) throw new UploadError(503, 'db_error', error.message);
       return !!data?.id;
     };
     // Corporate fleet license uploads (A6-01): the member must belong to a
@@ -163,11 +179,12 @@ Deno.serve(async (req: Request) => {
     // platform admin.
     const canManageFleetMemberDoc = async (corpId: string, memberId: string): Promise<boolean> => {
       if (!corpId || !memberId) return false;
-      const { data: member } = await admin
+      const { data: member, error: memberErr } = await admin
         .from('fleet_members')
         .select('id, fleet:driver_fleets!fleet_id(corporate_account_id)')
         .eq('id', memberId)
         .maybeSingle();
+      if (memberErr) throw new UploadError(503, 'db_error', memberErr.message);
       const fleet = member?.fleet as
         | { corporate_account_id?: string }
         | { corporate_account_id?: string }[]
@@ -178,13 +195,14 @@ Deno.serve(async (req: Request) => {
         : fleet?.corporate_account_id;
       if (!memberCorp || memberCorp !== corpId) return false;
       if (await isAdmin()) return true;
-      const { data: corp } = await admin
+      const { data: corp, error: corpErr } = await admin
         .from('corporate_accounts')
         .select('created_by')
         .eq('id', corpId)
         .maybeSingle();
+      if (corpErr) throw new UploadError(503, 'db_error', corpErr.message);
       if (corp?.created_by === user.id) return true;
-      const { data: emp } = await admin
+      const { data: emp, error: empErr } = await admin
         .from('corporate_employees')
         .select('id')
         .eq('corporate_account_id', corpId)
@@ -192,6 +210,7 @@ Deno.serve(async (req: Request) => {
         .eq('role', 'admin')
         .eq('is_active', true)
         .maybeSingle();
+      if (empErr) throw new UploadError(503, 'db_error', empErr.message);
       return !!emp?.id;
     };
 
@@ -215,20 +234,22 @@ Deno.serve(async (req: Request) => {
     } else if (bucket === 'dispute-evidence') {
       // disputes/{rideId}/{userId}/{file} — uploader's own folder + party to ride.
       if (segs[0] === 'disputes' && segs.length >= 4 && segs[2] === user.id) {
-        const { data: ride } = await admin
+        const { data: ride, error: rideErr } = await admin
           .from('rides')
           .select('customer_id, driver_id')
           .eq('id', segs[1])
           .maybeSingle();
+        if (rideErr) throw new UploadError(503, 'db_error', rideErr.message);
         if (ride) {
           const isCustomer = ride.customer_id === user.id;
           let isDriver = false;
           if (!isCustomer && ride.driver_id) {
-            const { data: dp } = await admin
+            const { data: dp, error: dpErr } = await admin
               .from('driver_profiles')
               .select('id')
               .eq('user_id', user.id)
               .maybeSingle();
+            if (dpErr) throw new UploadError(503, 'db_error', dpErr.message);
             isDriver = !!dp?.id && ride.driver_id === dp.id;
           }
           authorized = isCustomer || isDriver || (await isAdmin());
@@ -257,13 +278,21 @@ Deno.serve(async (req: Request) => {
       upsert,
     });
     if (uploadErr) {
-      throw new Error(`upload_failed: ${uploadErr.message}`);
+      const status = (uploadErr as { statusCode?: number | string }).statusCode;
+      throw new UploadError(Number(status) || 502, 'upload_failed', uploadErr.message);
     }
 
     return jsonResponse(req, { ok: true }, 200);
   } catch (e) {
+    // Surface a diagnosable code + reason (DB blip vs storage failure) instead of
+    // masking everything as a generic `upload_failed`. A genuine authz denial does
+    // NOT reach here — it returns a bare 403 above — so no authz info is leaked.
+    if (e instanceof UploadError) {
+      console.error(`[storage-upload] ${e.code}:`, e.detail ?? '');
+      return jsonResponse(req, { error: e.code, reason: e.detail }, e.status);
+    }
     const msg = e instanceof Error ? e.message : 'unknown_error';
-    console.error('[storage-upload] failed:', msg);
-    return jsonResponse(req, { error: 'upload_failed' }, 500);
+    console.error('[storage-upload] unexpected:', msg);
+    return jsonResponse(req, { error: 'unknown_error', reason: msg }, 500);
   }
 });
