@@ -21,7 +21,7 @@ import {
   StyleSheet,
   useColorScheme,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '@tricigo/ui/Screen';
@@ -50,6 +50,10 @@ const TIER_PILL: Record<UserLevel, { color: string; icon: React.ComponentProps<t
 
 type MenuItem = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
+  // Optional MaterialCommunityIcons glyph. Ionicons has no motorbike, so the
+  // "Vehículo" row uses MCI to show the driver's real vehicle type (moto /
+  // triciclo / auto) instead of a hardcoded car. When set it wins over `icon`.
+  mciIcon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
   onPress: () => void;
   tint: string;
@@ -70,6 +74,22 @@ function NativeDriverProfileScreen() {
   const resetDriver = useDriverStore((s) => s.reset);
   const resetNotifications = useNotificationStore((s) => s.reset);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // BUG-vehicle-type-mismatch: load the driver's real vehicle type so the
+  // "Vehículo" menu row reflects it (moto/triciclo/auto) instead of a
+  // hardcoded car. Stays `undefined` when no vehicle is registered/verified.
+  const [ownVehicleType, setOwnVehicleType] = useState<'auto' | 'moto' | 'triciclo' | 'confort' | undefined>(undefined);
+  useEffect(() => {
+    if (!driverProfile?.id) return;
+    driverService.getVehicle(driverProfile.id).then((v) => {
+      if (!v?.type) return;
+      const vt = String(v.type).toLowerCase();
+      if (vt.startsWith('auto_confort') || vt === 'confort') setOwnVehicleType('confort');
+      else if (vt.startsWith('auto')) setOwnVehicleType('auto');
+      else if (vt.startsWith('moto')) setOwnVehicleType('moto');
+      else if (vt.startsWith('triciclo')) setOwnVehicleType('triciclo');
+    }).catch(() => { /* unknown type → neutral glyph, never a car */ });
+  }, [driverProfile?.id]);
 
   // Cuban palette
   const colorScheme = useColorScheme();
@@ -195,6 +215,18 @@ function NativeDriverProfileScreen() {
           ? { color: '#EF4444', label: td('common.status_suspended', { defaultValue: 'Suspendido' }), icon: 'alert-circle' }
           : null;
 
+  // BUG-vehicle-type-mismatch: map the real vehicle type → menu glyph. Unknown
+  // (no verified vehicle) falls back to a neutral Ionicon, never a car.
+  const vehicleMenuIcon: {
+    mci?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+    ionicon: React.ComponentProps<typeof Ionicons>['name'];
+  } =
+    ownVehicleType === 'moto' ? { mci: 'motorbike', ionicon: 'car-outline' }
+    : ownVehicleType === 'triciclo' ? { mci: 'rickshaw', ionicon: 'car-outline' }
+    : ownVehicleType === 'confort' ? { mci: 'car-estate', ionicon: 'car-outline' }
+    : ownVehicleType === 'auto' ? { mci: 'car', ionicon: 'car-outline' }
+    : { ionicon: 'help-circle-outline' };
+
   const menuSections: MenuSection[] = [
     {
       title: t('profile.section_account', { defaultValue: 'Cuenta' }),
@@ -202,7 +234,7 @@ function NativeDriverProfileScreen() {
         { icon: 'person-outline', label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit'), tint: colors.brand.orange },
         { icon: 'document-text-outline', label: t('profile.documents'), onPress: () => router.push('/profile/documents'), tint: '#F59E0B' },
         { icon: 'location-outline', label: t('profile.saved_zones', { defaultValue: 'Zonas guardadas' }), onPress: () => router.push('/profile/saved-zones'), tint: '#3B82F6' },
-        { icon: 'car-outline', label: t('profile.vehicle', { defaultValue: 'Vehículo' }), onPress: () => router.push('/profile/vehicle'), tint: palette.ink.secondary },
+        { icon: vehicleMenuIcon.ionicon, mciIcon: vehicleMenuIcon.mci, label: t('profile.vehicle', { defaultValue: 'Vehículo' }), onPress: () => router.push('/profile/vehicle'), tint: palette.ink.secondary },
       ],
     },
     {
@@ -262,7 +294,11 @@ function NativeDriverProfileScreen() {
           marginRight: 14,
         }}
       >
-        <Ionicons name={item.icon} size={18} color={item.tint} />
+        {item.mciIcon ? (
+          <MaterialCommunityIcons name={item.mciIcon} size={18} color={item.tint} />
+        ) : (
+          <Ionicons name={item.icon} size={18} color={item.tint} />
+        )}
       </View>
       <Text numberOfLines={1} style={{ flex: 1, color: palette.ink.primary, fontSize: 15, fontWeight: '500' }}>
         {item.label}

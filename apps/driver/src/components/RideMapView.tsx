@@ -1456,51 +1456,80 @@ function RideMapViewInner(
               />
             </MapboxGL.ShapeSource>
 
-            {/* Vehicle icon (rotates with smoothed heading) */}
-            <MapboxGL.ShapeSource
-              id="driver-marker-src"
-              shape={{
-                type: 'Feature',
-                geometry: {
-                  type: 'Point',
-                  coordinates: [renderedDriverCoord.longitude, renderedDriverCoord.latitude],
-                },
-                properties: {
-                  icon: vehicleType ? `marker-${vehicleType}` : 'marker-auto',
-                  heading:
-                    (vehicleType && NON_ROTATING_MARKERS.has(vehicleType))
-                      ? 0
-                      : (effectiveDriverHeading + vehicleMarkerRotationOffset(vehicleType)) % 360,
-                },
-              }}
-            >
-              <MapboxGL.SymbolLayer
-                id="driver-marker-icon"
-                style={{
-                  iconImage: ['get', 'icon'],
-                  // 0.85 = comparable to MARKER.driver.size = 45 (PR #185 1.5×
-                  // sizing). Tune on-device against nearby vehicles (iconSize
-                  // 0.55) — active driver should pop slightly larger.
-                  iconSize: 0.85,
-                  iconAllowOverlap: true,
-                  iconAnchor: 'center',
-                  iconRotate: ['get', 'heading'],
-                  // BUG-marker-bearing-doubling (2026-05-24): without these,
-                  // the icon rotates in VIEWPORT space (Mapbox default for
-                  // SymbolLayer). When the camera bearing also follows the
-                  // driver heading (Uber 3D mode below), both rotations
-                  // compound visually → the nose ends up offset by ~heading°
-                  // from the actual direction of travel. Anchoring to 'map'
-                  // makes iconRotate represent the compass bearing so the
-                  // visual rotation cancels camera rotation correctly.
-                  // The nearby vehicles SymbolLayer below already does this.
-                  iconRotationAlignment: 'map',
-                  // Pitch-align to map so the icon lays flat on the road
-                  // surface in 3D pitch=45 mode (Waze / Google Maps style).
-                  iconPitchAlignment: 'map',
+            {/* Vehicle icon (rotates with smoothed heading) when the type is
+                known. BUG-vehicle-type-mismatch: when it's unknown (e.g. the
+                driver has no verified vehicle yet, getVehicle → null) render a
+                NEUTRAL puck instead of falling back to 'marker-auto', which
+                mislabeled motos/triciclos as a car. */}
+            {vehicleType ? (
+              <MapboxGL.ShapeSource
+                id="driver-marker-src"
+                shape={{
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [renderedDriverCoord.longitude, renderedDriverCoord.latitude],
+                  },
+                  properties: {
+                    icon: `marker-${vehicleType}`,
+                    heading:
+                      NON_ROTATING_MARKERS.has(vehicleType)
+                        ? 0
+                        : (effectiveDriverHeading + vehicleMarkerRotationOffset(vehicleType)) % 360,
+                  },
                 }}
-              />
-            </MapboxGL.ShapeSource>
+              >
+                <MapboxGL.SymbolLayer
+                  id="driver-marker-icon"
+                  style={{
+                    iconImage: ['get', 'icon'],
+                    // 0.85 = comparable to MARKER.driver.size = 45 (PR #185 1.5×
+                    // sizing). Tune on-device against nearby vehicles (iconSize
+                    // 0.55) — active driver should pop slightly larger.
+                    iconSize: 0.85,
+                    iconAllowOverlap: true,
+                    iconAnchor: 'center',
+                    iconRotate: ['get', 'heading'],
+                    // BUG-marker-bearing-doubling (2026-05-24): without these,
+                    // the icon rotates in VIEWPORT space (Mapbox default for
+                    // SymbolLayer). When the camera bearing also follows the
+                    // driver heading (Uber 3D mode below), both rotations
+                    // compound visually → the nose ends up offset by ~heading°
+                    // from the actual direction of travel. Anchoring to 'map'
+                    // makes iconRotate represent the compass bearing so the
+                    // visual rotation cancels camera rotation correctly.
+                    // The nearby vehicles SymbolLayer below already does this.
+                    iconRotationAlignment: 'map',
+                    // Pitch-align to map so the icon lays flat on the road
+                    // surface in 3D pitch=45 mode (Waze / Google Maps style).
+                    iconPitchAlignment: 'map',
+                  }}
+                />
+              </MapboxGL.ShapeSource>
+            ) : (
+              <MapboxGL.ShapeSource
+                id="driver-marker-neutral-src"
+                shape={{
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [renderedDriverCoord.longitude, renderedDriverCoord.latitude],
+                  },
+                  properties: {},
+                }}
+              >
+                <MapboxGL.CircleLayer
+                  id="driver-marker-neutral-dot"
+                  style={{
+                    circleRadius: 9,
+                    circleColor: MAP_COLORS.driver,
+                    circleStrokeWidth: 3,
+                    circleStrokeColor: '#FFFFFF',
+                    circlePitchAlignment: 'map',
+                  }}
+                />
+              </MapboxGL.ShapeSource>
+            )}
           </>
         )}
         {/* 00341 waypoints: numbered StopMarker per passenger-added stop.
