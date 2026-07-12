@@ -785,6 +785,7 @@
   },
   "promotions": {
     "title": "Promoções",
+    "delete_in_use": "Não é possível excluir: esta promoção já foi usada em viagens. Desative-a em vez de excluí-la.",
     "create_promotion": "Criar promoção",
     "filter_all": "Todas",
     "filter_active": "Ativas",
