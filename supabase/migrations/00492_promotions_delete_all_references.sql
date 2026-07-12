@@ -55,7 +55,7 @@ DECLARE
   IF TG_OP = 'UPDATE'
      AND OLD.promo_code_id IS NOT NULL
      AND NEW.promo_code_id IS NULL
-     AND NEW.status IN ('completed', 'cancelled') THEN
+     AND NEW.status IN ('completed', 'canceled') THEN
     RETURN NEW;
   END IF;
 
