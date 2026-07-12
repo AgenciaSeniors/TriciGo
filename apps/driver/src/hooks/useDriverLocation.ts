@@ -178,7 +178,16 @@ export function useDriverLocationTracking(
           return;
         }
 
-        // Request background location when driver has active ride.
+        // Request background location whenever the driver is online.
+        //
+        // Previously this only ran when there was an active ride, so an
+        // online-but-waiting driver never started the foreground service.
+        // When such a driver minimized the app, the foreground heartbeat
+        // timers were suspended by the OS, `last_heartbeat_at` went stale,
+        // and the driver was dropped from matching (3-min accept gate) and
+        // finally auto-offlined (10-min cron). Starting the foreground
+        // service while online keeps the JS runtime alive so heartbeats keep
+        // flowing, and the background task refreshes the heartbeat directly.
         //
         // BUG-Store-Readiness-Driver (W8): Google Play User Data Policy
         // requires a "prominent disclosure" — an in-app explanation
@@ -199,11 +208,12 @@ export function useDriverLocationTracking(
         // (no disclosure needed if already granted). If not, show an
         // Alert.alert as the disclosure (Alert is OK — Google's policy
         // is about content + ordering, not chrome). User taps "Permitir"
-        // → we trigger the system prompt; "Más tarde" → we skip this
-        // ride's background tracking and fall back to foreground-only
-        // updates (rider may see the marker freeze when driver minimizes
-        // the app, but the trip can still complete).
-        if (activeRideId) {
+        // → we trigger the system prompt; "Más tarde" → we skip
+        // background tracking and fall back to foreground-only updates
+        // (the driver may be auto-offlined when they minimize the app, and
+        // the rider may see the marker freeze during a trip, but the app
+        // still works while in the foreground).
+        {
           const current = await Location.getBackgroundPermissionsAsync().catch(
             () => ({ status: 'undetermined' as const }),
           );
@@ -213,8 +223,8 @@ export function useDriverLocationTracking(
             bgDisclosureShownRef.current = true;
             const accepted = await new Promise<boolean>((resolve) => {
               Alert.alert(
-                'Compartir ubicación durante el viaje',
-                'TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras tenés un viaje activo, para que el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, el pasajero pierde tu posición cuando salís de la app.',
+                'Mantenerte en línea en segundo plano',
+                'TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras estás en línea, para que sigas recibiendo viajes y el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, tu estado "en línea" se suspende y el pasajero pierde tu posición cuando salís de la app.',
                 [
                   {
                     text: 'Más tarde',
@@ -246,7 +256,7 @@ export function useDriverLocationTracking(
                 // the driver unaware.
                 Alert.alert(
                   'Ubicación en segundo plano desactivada',
-                  'Sin el permiso "Siempre", el pasajero dejará de verte en el mapa cuando minimices la app o apagues la pantalla durante el viaje. Activalo en Ajustes para que te vea llegar en tiempo real.',
+                  'Sin el permiso "Siempre", tu estado "en línea" se suspende y dejás de recibir viajes cuando minimizás la app o apagás la pantalla. Activalo en Ajustes para seguir recibiendo viajes en segundo plano.',
                   [
                     { text: 'Más tarde', style: 'cancel' },
                     { text: 'Abrir Ajustes', onPress: () => { Linking.openSettings().catch(() => {}); } },
@@ -262,16 +272,21 @@ export function useDriverLocationTracking(
           // above, or pre-existing from a prior ride), start the real
           // background TaskManager task. It runs inside an Android
           // foreground service / iOS UIBackgroundModes=location and keeps
-          // receiving location callbacks even when the driver minimizes
-          // the app, switches to another app, or turns the screen off.
+          // the app process alive even when the driver minimizes the app,
+          // switches to another app, or turns the screen off.
           //
-          // Without this, the foreground-only watchPositionAsync below
-          // freezes the moment the app loses focus on Android — which
-          // breaks the promise that the passenger sees the driver's
-          // marker moving in real time during the active ride.
+          //  - 'online' mode (no active ride): low-frequency; keeps the
+          //    heartbeat alive so the driver stays matchable in background.
+          //  - 'ride' mode (active ride): high-frequency; the passenger
+          //    sees the marker move in real time.
           //
-          // Idempotent: startBgLocationTracking checks if the task is
-          // already running and only updates the persisted ctx.
+          // Without this, the foreground-only watchPositionAsync + heartbeat
+          // timers freeze the moment the app loses focus on Android — which
+          // suspends the driver's "online" state after a few minutes and
+          // breaks live tracking during a trip.
+          //
+          // startBgLocationTracking is idempotent within a mode and restarts
+          // the task when the mode changes (online ⇄ ride).
           const finalBgStatus = await Location.getBackgroundPermissionsAsync().catch(
             () => ({ status: 'undetermined' as const }),
           );
@@ -280,8 +295,12 @@ export function useDriverLocationTracking(
               await startBgLocationTracking({
                 driverId,
                 rideId: activeRideId,
+                mode: activeRideId ? 'ride' : 'online',
               });
-              console.log('[Location] Started background task for ride', activeRideId);
+              console.log('[Location] Started background task', {
+                mode: activeRideId ? 'ride' : 'online',
+                rideId: activeRideId,
+              });
             } catch (bgStartErr) {
               console.warn('[Location] Failed to start background task:', bgStartErr);
               // Fall through — foreground watchPositionAsync below still runs.
