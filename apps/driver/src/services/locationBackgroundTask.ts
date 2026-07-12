@@ -58,6 +58,7 @@
 //     token has expired, Supabase auto-refreshes; if refresh fails,
 //     the upload errors and we buffer for later.
 
+import { AppState } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
@@ -75,6 +76,16 @@ interface BgTaskContext {
   rideId: string | null;
   mode: BgTaskMode;
 }
+
+// The mode the foreground service was ACTUALLY started with (its real update
+// frequency), as opposed to the desired `mode` persisted in the ctx (which the
+// task body reads to decide whether to record ride locations). These diverge
+// when a mode change is deferred because the app is backgrounded (see
+// startBgLocationTracking). Module-scoped: valid while the JS runtime is alive
+// (the foreground service keeps it alive); resets to null if the process is
+// killed and relaunched, in which case the task is no longer registered and the
+// next call takes the initial-start path.
+let startedMode: BgTaskMode | null = null;
 
 /**
  * Persist context the TaskManager task needs to upload locations.
@@ -153,32 +164,46 @@ function updateOptionsForMode(mode: BgTaskMode) {
 export async function startBgLocationTracking(ctx: BgTaskContext): Promise<void> {
   const isRunning = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK).catch(() => false);
 
-  // Detect a mode change BEFORE overwriting the persisted ctx.
-  let prevMode: BgTaskMode | null = null;
-  if (isRunning) {
-    try {
-      const raw = await SecureStore.getItemAsync(CTX_KEY);
-      if (raw) prevMode = (JSON.parse(raw) as BgTaskContext).mode ?? null;
-    } catch {
-      prevMode = null;
-    }
-  }
-
+  // Persist the desired ctx first — the task body reads driverId/rideId from
+  // it on every batch, regardless of whether we (re)start below.
   await persistBgTaskContext(ctx);
 
-  if (isRunning && prevMode === ctx.mode) {
-    return; // already running in the same mode — next batch picks up the new ctx
-  }
-  if (isRunning) {
-    // Mode changed → restart so the new frequency/notification take effect.
-    try {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK);
-    } catch {
-      // best-effort
-    }
+  // Not running yet → initial start. This only happens when the driver goes
+  // online (a foreground action) or the process was relaunched, so starting
+  // the foreground service here is allowed.
+  if (!isRunning) {
+    await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptionsForMode(ctx.mode));
+    startedMode = ctx.mode;
+    return;
   }
 
+  // Running at the desired frequency already → nothing to do; the task picks up
+  // the new rideId from the persisted ctx on its next batch.
+  if (startedMode === ctx.mode) {
+    return;
+  }
+
+  // The running frequency differs from what we want (online ⇄ ride). Applying
+  // the new frequency/notification requires a stop+restart, but restarting a
+  // location foreground service from the background is blocked on Android 12+
+  // (ForegroundServiceStartNotAllowedException). If we're not in the
+  // foreground, SKIP the restart: the service keeps running at its current
+  // frequency (`startedMode` unchanged) while the task already reads the new
+  // mode/rideId from the persisted ctx (so heartbeat + ride-location recording
+  // stay correct). The AppState 'active' listener in useDriverLocation
+  // re-applies the intended frequency on the next foreground. This is the key
+  // guard for a ride that ends — or an auto-accepted ride that starts — while
+  // the app is minimized.
+  if (AppState.currentState !== 'active') {
+    return;
+  }
+  try {
+    await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+  } catch {
+    // best-effort
+  }
   await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptionsForMode(ctx.mode));
+  startedMode = ctx.mode;
 }
 
 /**
@@ -186,6 +211,7 @@ export async function startBgLocationTracking(ctx: BgTaskContext): Promise<void>
  * driver goes offline.
  */
 export async function stopBgLocationTracking(): Promise<void> {
+  startedMode = null;
   const isRunning = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK).catch(() => false);
   if (isRunning) {
     try {
