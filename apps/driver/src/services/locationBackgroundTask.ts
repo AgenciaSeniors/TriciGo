@@ -20,18 +20,29 @@
 // the screen off.
 //
 // Lifecycle:
-//   - useDriverLocation calls `startBgLocationTracking(ctx)` when
-//     activeRideId becomes truthy AND background permission is
-//     granted. The function persists `ctx` (driverId, rideId) to
-//     SecureStore and starts startLocationUpdatesAsync with a
-//     foreground service notification.
+//   - useDriverLocation calls `startBgLocationTracking(ctx)` whenever
+//     the driver is ONLINE (with or without an active ride) AND
+//     background permission is granted. The function persists `ctx`
+//     (driverId, rideId, mode) to SecureStore and starts
+//     startLocationUpdatesAsync with a foreground service notification.
+//   - Two modes:
+//       * 'online' — driver is online waiting for offers. Low-frequency
+//         location + heartbeat. The foreground service keeps the JS
+//         runtime alive so the driver's `last_heartbeat_at` keeps
+//         refreshing even when the app is minimized / screen off.
+//         Without this, backgrounding the app stopped the heartbeat and
+//         the `auto-offline-stale-drivers` cron (10 min) — plus the
+//         3-min `accept_ride_v2` gate — silently suspended the driver.
+//       * 'ride' — driver has an active trip. High-frequency location so
+//         the rider sees the marker move in real time, plus heartbeat.
 //   - The TaskManager task (defined at module scope below) reads the
-//     persisted ctx, uploads each batch of locations via
-//     locationService.recordRideLocation, and falls back to the
+//     persisted ctx, ALWAYS refreshes the heartbeat, and (only when a
+//     rideId is present) uploads each batch of locations via
+//     locationService.recordRideLocation, falling back to the
 //     locationBuffer if the upload fails (network down, etc.).
 //   - useDriverLocation calls `stopBgLocationTracking()` when the
-//     ride completes or the driver goes offline. The function stops
-//     the task and clears the persisted ctx.
+//     driver goes offline. The function stops the task and clears the
+//     persisted ctx.
 //
 // Constraints:
 //   - This module's `TaskManager.defineTask` call MUST run before
@@ -47,19 +58,34 @@
 //     token has expired, Supabase auto-refreshes; if refresh fails,
 //     the upload errors and we buffer for later.
 
+import { AppState } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
-import { locationService } from '@tricigo/api';
+import { driverService, locationService } from '@tricigo/api';
 import { bufferLocation, type BufferedLocation } from './locationBuffer';
 
 export const LOCATION_TASK = 'tricigo-driver-location-bg';
 const CTX_KEY = 'tricigo_bg_location_ctx';
 
+export type BgTaskMode = 'online' | 'ride';
+
 interface BgTaskContext {
   driverId: string;
-  rideId: string;
+  // null while the driver is online but has no active trip yet.
+  rideId: string | null;
+  mode: BgTaskMode;
 }
+
+// The mode the foreground service was ACTUALLY started with (its real update
+// frequency), as opposed to the desired `mode` persisted in the ctx (which the
+// task body reads to decide whether to record ride locations). These diverge
+// when a mode change is deferred because the app is backgrounded (see
+// startBgLocationTracking). Module-scoped: valid while the JS runtime is alive
+// (the foreground service keeps it alive); resets to null if the process is
+// killed and relaunched, in which case the task is no longer registered and the
+// next call takes the initial-start path.
+let startedMode: BgTaskMode | null = null;
 
 /**
  * Persist context the TaskManager task needs to upload locations.
@@ -85,9 +111,46 @@ export async function clearBgTaskContext(): Promise<void> {
   }
 }
 
+// Per-mode location update options.
+//   - 'ride': high frequency so the rider sees the marker move in real
+//     time (matches the foreground watchPositionAsync cadence).
+//   - 'online': low frequency to save battery while the driver is just
+//     waiting for offers. The heartbeat (below) is what keeps the driver
+//     matchable; the foreground service keeps the JS runtime alive so the
+//     hook's setInterval heartbeats also keep firing in background.
+function updateOptionsForMode(mode: BgTaskMode) {
+  const foregroundService = {
+    notificationTitle: 'TriciGo Conductor',
+    notificationBody:
+      mode === 'ride'
+        ? 'Compartiendo tu ubicación con el pasajero durante el viaje activo.'
+        : 'Estás en línea. Podés recibir viajes con la app en segundo plano.',
+    notificationColor: '#111111',
+  };
+  if (mode === 'ride') {
+    return {
+      accuracy: Location.Accuracy.High,
+      timeInterval: 3000, // 3 s minimum between callbacks
+      distanceInterval: 10, // 10 m minimum movement before a callback
+      showsBackgroundLocationIndicator: true, // iOS blue bar
+      foregroundService,
+    };
+  }
+  return {
+    accuracy: Location.Accuracy.Balanced,
+    timeInterval: 60_000, // ~1 fix/min — enough to refresh the heartbeat
+    distanceInterval: 0, // time-based, not movement-gated (stationary driver)
+    showsBackgroundLocationIndicator: true,
+    foregroundService,
+  };
+}
+
 /**
- * Start real background location tracking for an active ride.
- * Idempotent — safe to call multiple times.
+ * Start real background location tracking while the driver is online.
+ * Idempotent within a mode — safe to call multiple times. When the mode
+ * changes (online ⇄ ride) the task is restarted with the new frequency
+ * and notification, because startLocationUpdatesAsync ignores option
+ * changes on an already-running task.
  *
  * On iOS, `showsBackgroundLocationIndicator` shows the blue location
  * indicator in the status bar while the app is in background — Apple
@@ -99,24 +162,48 @@ export async function clearBgTaskContext(): Promise<void> {
  * `FOREGROUND_SERVICE_LOCATION` permission on Android 14+.
  */
 export async function startBgLocationTracking(ctx: BgTaskContext): Promise<void> {
+  const isRunning = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK).catch(() => false);
+
+  // Persist the desired ctx first — the task body reads driverId/rideId from
+  // it on every batch, regardless of whether we (re)start below.
   await persistBgTaskContext(ctx);
-  const isAlreadyRunning = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK).catch(() => false);
-  if (isAlreadyRunning) {
-    return; // task is already running with previous ctx — the next batch will pick up the new ctx
+
+  // Not running yet → initial start. This only happens when the driver goes
+  // online (a foreground action) or the process was relaunched, so starting
+  // the foreground service here is allowed.
+  if (!isRunning) {
+    await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptionsForMode(ctx.mode));
+    startedMode = ctx.mode;
+    return;
   }
-  await Location.startLocationUpdatesAsync(LOCATION_TASK, {
-    accuracy: Location.Accuracy.High,
-    timeInterval: 3000, // 3 s minimum between callbacks (battery-friendly)
-    distanceInterval: 10, // 10 m minimum movement before a callback
-    showsBackgroundLocationIndicator: true, // iOS blue bar
-    foregroundService: {
-      notificationTitle: 'TriciGo Conductor',
-      notificationBody: 'Compartiendo tu ubicación con el pasajero durante el viaje activo.',
-      notificationColor: '#111111',
-    },
-    // pausesUpdatesAutomatically: false is the default; we want continuous
-    // updates while the ride is active.
-  });
+
+  // Running at the desired frequency already → nothing to do; the task picks up
+  // the new rideId from the persisted ctx on its next batch.
+  if (startedMode === ctx.mode) {
+    return;
+  }
+
+  // The running frequency differs from what we want (online ⇄ ride). Applying
+  // the new frequency/notification requires a stop+restart, but restarting a
+  // location foreground service from the background is blocked on Android 12+
+  // (ForegroundServiceStartNotAllowedException). If we're not in the
+  // foreground, SKIP the restart: the service keeps running at its current
+  // frequency (`startedMode` unchanged) while the task already reads the new
+  // mode/rideId from the persisted ctx (so heartbeat + ride-location recording
+  // stay correct). The AppState 'active' listener in useDriverLocation
+  // re-applies the intended frequency on the next foreground. This is the key
+  // guard for a ride that ends — or an auto-accepted ride that starts — while
+  // the app is minimized.
+  if (AppState.currentState !== 'active') {
+    return;
+  }
+  try {
+    await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+  } catch {
+    // best-effort
+  }
+  await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptionsForMode(ctx.mode));
+  startedMode = ctx.mode;
 }
 
 /**
@@ -124,6 +211,7 @@ export async function startBgLocationTracking(ctx: BgTaskContext): Promise<void>
  * driver goes offline.
  */
 export async function stopBgLocationTracking(): Promise<void> {
+  startedMode = null;
   const isRunning = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK).catch(() => false);
   if (isRunning) {
     try {
@@ -142,6 +230,18 @@ export async function stopBgLocationTracking(): Promise<void> {
 interface LocationTaskData {
   locations?: Location.LocationObject[];
 }
+
+// Throttle the background heartbeat to ~once per minute. In 'ride' mode the
+// OS delivers a location batch every few seconds; without this we'd write a
+// heartbeat — and, via the `audit_driver_profiles` trigger, an audit row — on
+// every batch, and add an RPC round-trip of latency before each ride-location
+// upload. 60s matches the foreground heartbeat cadence (useDriverLocation +
+// index.tsx), so this adds no write load beyond what already exists.
+// Module-scoped: the foreground service keeps the JS runtime alive so this
+// persists across batches; if the OS relaunches a killed task it resets to 0
+// and the first batch heartbeats immediately (harmless).
+let lastBgHeartbeatMs = 0;
+const BG_HEARTBEAT_MIN_INTERVAL_MS = 55_000;
 
 TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
   if (error) {
@@ -171,6 +271,29 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
     return;
   }
 
+  // Refresh the heartbeat from the background task (throttled to ~60s). This
+  // is the core fix for "driver goes inactive after minimizing the app":
+  // while online-but-waiting the foreground JS timers are suspended by the
+  // OS, so this task-body heartbeat keeps `last_heartbeat_at` fresh and the
+  // driver matchable. driver_heartbeat is SECURITY DEFINER and uses the
+  // persisted session, so it works headless. Best-effort — never throw out
+  // of the task.
+  const nowMs = Date.now();
+  if (nowMs - lastBgHeartbeatMs > BG_HEARTBEAT_MIN_INTERVAL_MS) {
+    lastBgHeartbeatMs = nowMs;
+    try {
+      await driverService.sendHeartbeat(ctx.driverId);
+    } catch (hbErr) {
+      console.warn('[bg-location-task] heartbeat failed:', hbErr);
+    }
+  }
+
+  // Ride-location upload only makes sense during an active trip. When the
+  // driver is merely online (rideId null), the heartbeat above is the only
+  // work this task does.
+  if (!ctx.rideId) return;
+  const rideId = ctx.rideId;
+
   // Upload each location. recordRideLocation hits the
   // `ride_location_events` table which has RLS allowing the driver to
   // INSERT their own rows. If the upload fails (offline, token
@@ -179,7 +302,7 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
   for (const loc of locations) {
     try {
       await locationService.recordRideLocation({
-        ride_id: ctx.rideId,
+        ride_id: rideId,
         driver_id: ctx.driverId,
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
@@ -194,7 +317,7 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
         speed: loc.coords.speed ?? null,
         accuracy: loc.coords.accuracy ?? null,
         timestamp: loc.timestamp,
-        rideId: ctx.rideId,
+        rideId: rideId,
         driverId: ctx.driverId,
       };
       bufferLocation(buffered);

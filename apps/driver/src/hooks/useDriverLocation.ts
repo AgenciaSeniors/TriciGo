@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, AppState } from 'react-native';
 import * as Location from 'expo-location';
 import { driverService, locationService, getOnlineStatus } from '@tricigo/api';
 import { smoothHeading, mapLogger } from '@tricigo/utils';
@@ -81,6 +81,12 @@ export function useDriverLocationTracking(
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const driverIdRef = useRef(driverId);
   const activeRideIdRef = useRef(activeRideId);
+  // The driver's on-shift toggle (driver_profiles.is_online), mirrored into a
+  // ref so the empty-deps AppState listener reads the CURRENT value instead of
+  // a stale closure. NOTE: this is the availability toggle, NOT network status.
+  // `getOnlineStatus()` from @tricigo/api is NetInfo connectivity — do not use
+  // it as the on-shift signal.
+  const isOnlineRef = useRef(isOnline);
   const lastHeartbeatRef = useRef<number | null>(null);
   // BUG-273: throttle GPS uploads to 1/sec regardless of how fast the OS
   // fires the watchPositionAsync callback (it can fire 5+x/sec at high
@@ -107,6 +113,7 @@ export function useDriverLocationTracking(
   // Keep refs in sync for use inside NetInfo listener
   useEffect(() => { driverIdRef.current = driverId; }, [driverId]);
   useEffect(() => { activeRideIdRef.current = activeRideId; }, [activeRideId]);
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
 
   // Initialize location buffer once
   useEffect(() => {
@@ -178,7 +185,16 @@ export function useDriverLocationTracking(
           return;
         }
 
-        // Request background location when driver has active ride.
+        // Request background location whenever the driver is online.
+        //
+        // Previously this only ran when there was an active ride, so an
+        // online-but-waiting driver never started the foreground service.
+        // When such a driver minimized the app, the foreground heartbeat
+        // timers were suspended by the OS, `last_heartbeat_at` went stale,
+        // and the driver was dropped from matching (3-min accept gate) and
+        // finally auto-offlined (10-min cron). Starting the foreground
+        // service while online keeps the JS runtime alive so heartbeats keep
+        // flowing, and the background task refreshes the heartbeat directly.
         //
         // BUG-Store-Readiness-Driver (W8): Google Play User Data Policy
         // requires a "prominent disclosure" — an in-app explanation
@@ -199,11 +215,12 @@ export function useDriverLocationTracking(
         // (no disclosure needed if already granted). If not, show an
         // Alert.alert as the disclosure (Alert is OK — Google's policy
         // is about content + ordering, not chrome). User taps "Permitir"
-        // → we trigger the system prompt; "Más tarde" → we skip this
-        // ride's background tracking and fall back to foreground-only
-        // updates (rider may see the marker freeze when driver minimizes
-        // the app, but the trip can still complete).
-        if (activeRideId) {
+        // → we trigger the system prompt; "Más tarde" → we skip
+        // background tracking and fall back to foreground-only updates
+        // (the driver may be auto-offlined when they minimize the app, and
+        // the rider may see the marker freeze during a trip, but the app
+        // still works while in the foreground).
+        {
           const current = await Location.getBackgroundPermissionsAsync().catch(
             () => ({ status: 'undetermined' as const }),
           );
@@ -213,8 +230,8 @@ export function useDriverLocationTracking(
             bgDisclosureShownRef.current = true;
             const accepted = await new Promise<boolean>((resolve) => {
               Alert.alert(
-                'Compartir ubicación durante el viaje',
-                'TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras tenés un viaje activo, para que el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, el pasajero pierde tu posición cuando salís de la app.',
+                'Mantenerte en línea en segundo plano',
+                'TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras estás en línea, para que sigas recibiendo viajes y el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, tu estado "en línea" se suspende y el pasajero pierde tu posición cuando salís de la app.',
                 [
                   {
                     text: 'Más tarde',
@@ -246,7 +263,7 @@ export function useDriverLocationTracking(
                 // the driver unaware.
                 Alert.alert(
                   'Ubicación en segundo plano desactivada',
-                  'Sin el permiso "Siempre", el pasajero dejará de verte en el mapa cuando minimices la app o apagues la pantalla durante el viaje. Activalo en Ajustes para que te vea llegar en tiempo real.',
+                  'Sin el permiso "Siempre", tu estado "en línea" se suspende y dejás de recibir viajes cuando minimizás la app o apagás la pantalla. Activalo en Ajustes para seguir recibiendo viajes en segundo plano.',
                   [
                     { text: 'Más tarde', style: 'cancel' },
                     { text: 'Abrir Ajustes', onPress: () => { Linking.openSettings().catch(() => {}); } },
@@ -262,26 +279,40 @@ export function useDriverLocationTracking(
           // above, or pre-existing from a prior ride), start the real
           // background TaskManager task. It runs inside an Android
           // foreground service / iOS UIBackgroundModes=location and keeps
-          // receiving location callbacks even when the driver minimizes
-          // the app, switches to another app, or turns the screen off.
+          // the app process alive even when the driver minimizes the app,
+          // switches to another app, or turns the screen off.
           //
-          // Without this, the foreground-only watchPositionAsync below
-          // freezes the moment the app loses focus on Android — which
-          // breaks the promise that the passenger sees the driver's
-          // marker moving in real time during the active ride.
+          //  - 'online' mode (no active ride): low-frequency; keeps the
+          //    heartbeat alive so the driver stays matchable in background.
+          //  - 'ride' mode (active ride): high-frequency; the passenger
+          //    sees the marker move in real time.
           //
-          // Idempotent: startBgLocationTracking checks if the task is
-          // already running and only updates the persisted ctx.
+          // Without this, the foreground-only watchPositionAsync + heartbeat
+          // timers freeze the moment the app loses focus on Android — which
+          // suspends the driver's "online" state after a few minutes and
+          // breaks live tracking during a trip.
+          //
+          // startBgLocationTracking is idempotent within a mode and restarts
+          // the task when the mode changes (online ⇄ ride).
           const finalBgStatus = await Location.getBackgroundPermissionsAsync().catch(
             () => ({ status: 'undetermined' as const }),
           );
-          if (finalBgStatus.status === 'granted' && driverId) {
+          // Guard against a stale start: startTracking awaits several native
+          // round-trips (permissions, disclosure). If the driver toggled OFFLINE
+          // during those awaits, the effect cleanup set `cancelled` and the
+          // wasTrackingRef effect already stopped the FGS — starting it here
+          // would re-launch it for an off-shift driver with nothing to stop it.
+          if (finalBgStatus.status === 'granted' && driverId && !cancelled && isOnlineRef.current) {
             try {
               await startBgLocationTracking({
                 driverId,
                 rideId: activeRideId,
+                mode: activeRideId ? 'ride' : 'online',
               });
-              console.log('[Location] Started background task for ride', activeRideId);
+              console.log('[Location] Started background task', {
+                mode: activeRideId ? 'ride' : 'online',
+                rideId: activeRideId,
+              });
             } catch (bgStartErr) {
               console.warn('[Location] Failed to start background task:', bgStartErr);
               // Fall through — foreground watchPositionAsync below still runs.
@@ -543,19 +574,80 @@ export function useDriverLocationTracking(
       cancelled = true;
       subscriptionRef.current?.remove();
       subscriptionRef.current = null;
-      // FD1: stop the background TaskManager task when the effect
-      // re-runs with a different activeRideId / driverId / isOnline, or
-      // when the hook unmounts. This is what frees the Android foreground
-      // service notification and stops draining battery once the ride
-      // is over (or the driver goes offline).
-      //
-      // Safe to call even when the task isn't running — stopBgLocationTracking
-      // checks `isTaskRegisteredAsync` internally before issuing a stop.
+      // NOTE: the background TaskManager task is deliberately NOT stopped
+      // here. This effect re-runs on every activeRideId change; stopping the
+      // foreground service on a ride transition means restarting it moments
+      // later, and restarting a location foreground service from the
+      // background is blocked on Android 12+ (ForegroundServiceStartNotAllowed
+      // Exception) — which would silently drop the driver's heartbeat after a
+      // ride that ends (or an auto-accepted ride that starts) while the app is
+      // minimized. The FGS lifecycle is owned by the dedicated effect below,
+      // keyed only on [driverId, isOnline], so it starts when the driver goes
+      // online and stops only when they go offline / log out.
+    };
+  }, [driverId, isOnline, activeRideId]);
+
+  // FD1 / residual-risk fix: own the background foreground-service lifecycle
+  // separately from ride transitions. `startTracking` (above) starts the FGS
+  // when the driver goes online — a foreground action, so the service is never
+  // started from the background. Here we STOP it only on the online→offline
+  // transition (or logout, i.e. driverId cleared), never on a ride start/end.
+  //
+  // Stopping on a ride transition would force a restart moments later, and
+  // restarting a location foreground service from the background is blocked on
+  // Android 12+ (ForegroundServiceStartNotAllowedException) — which would
+  // silently drop the driver's heartbeat after a ride that ends, or an
+  // auto-accepted ride that starts, while the app is minimized.
+  //
+  // We detect the transition with a ref (rather than a cleanup that runs on
+  // every dep change) so that going ONLINE never calls stopBgLocationTracking
+  // — that would clear the persisted ctx and race the start's persist.
+  const wasTrackingRef = useRef(false);
+  useEffect(() => {
+    const shouldTrack = isOnline && !!driverId;
+    const wasTracking = wasTrackingRef.current;
+    wasTrackingRef.current = shouldTrack;
+    if (wasTracking && !shouldTrack) {
       stopBgLocationTracking().catch((e) => {
         console.warn('[Location] stopBgLocationTracking failed:', e);
       });
+    }
+  }, [driverId, isOnline]);
+
+  // Final stop on unmount (logout / app teardown). Separate empty-deps effect
+  // so it fires exactly once, with no concurrent start to race the ctx clear.
+  useEffect(() => {
+    return () => {
+      stopBgLocationTracking().catch(() => {});
     };
-  }, [driverId, isOnline, activeRideId]);
+  }, []);
+
+  // Reconcile the FGS frequency with the desired mode when the app returns to
+  // the foreground. A mode change that occurred while backgrounded (a ride
+  // ending, or an auto-accepted ride starting) deliberately does NOT restart
+  // the FGS — restarting it from the background is blocked on Android 12+ — so
+  // the service can be left at the wrong frequency (e.g. ride-mode 3s while
+  // now merely waiting). Re-applying the mode here, where AppState is 'active',
+  // lets startBgLocationTracking safely restart and downgrade/upgrade. It's a
+  // no-op when the mode already matches (startBgLocationTracking early-returns).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const id = driverIdRef.current;
+      // Gate on the driver's on-shift toggle (isOnlineRef), NOT getOnlineStatus()
+      // — that's network connectivity and would (a) start the FGS for an
+      // OFF-SHIFT driver who just has network, and (b) skip reconcile during a
+      // network blip while genuinely online.
+      if (!id || !isOnlineRef.current) return;
+      const rideId = activeRideIdRef.current;
+      startBgLocationTracking({
+        driverId: id,
+        rideId,
+        mode: rideId ? 'ride' : 'online',
+      }).catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
 
   // BUG-224: heartbeat on its own timer (not tied to GPS callbacks).
   // The cron `auto-offline-stale-drivers` marks drivers offline after 10
