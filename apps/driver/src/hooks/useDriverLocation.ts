@@ -81,6 +81,12 @@ export function useDriverLocationTracking(
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const driverIdRef = useRef(driverId);
   const activeRideIdRef = useRef(activeRideId);
+  // The driver's on-shift toggle (driver_profiles.is_online), mirrored into a
+  // ref so the empty-deps AppState listener reads the CURRENT value instead of
+  // a stale closure. NOTE: this is the availability toggle, NOT network status.
+  // `getOnlineStatus()` from @tricigo/api is NetInfo connectivity — do not use
+  // it as the on-shift signal.
+  const isOnlineRef = useRef(isOnline);
   const lastHeartbeatRef = useRef<number | null>(null);
   // BUG-273: throttle GPS uploads to 1/sec regardless of how fast the OS
   // fires the watchPositionAsync callback (it can fire 5+x/sec at high
@@ -107,6 +113,7 @@ export function useDriverLocationTracking(
   // Keep refs in sync for use inside NetInfo listener
   useEffect(() => { driverIdRef.current = driverId; }, [driverId]);
   useEffect(() => { activeRideIdRef.current = activeRideId; }, [activeRideId]);
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
 
   // Initialize location buffer once
   useEffect(() => {
@@ -290,7 +297,12 @@ export function useDriverLocationTracking(
           const finalBgStatus = await Location.getBackgroundPermissionsAsync().catch(
             () => ({ status: 'undetermined' as const }),
           );
-          if (finalBgStatus.status === 'granted' && driverId) {
+          // Guard against a stale start: startTracking awaits several native
+          // round-trips (permissions, disclosure). If the driver toggled OFFLINE
+          // during those awaits, the effect cleanup set `cancelled` and the
+          // wasTrackingRef effect already stopped the FGS — starting it here
+          // would re-launch it for an off-shift driver with nothing to stop it.
+          if (finalBgStatus.status === 'granted' && driverId && !cancelled && isOnlineRef.current) {
             try {
               await startBgLocationTracking({
                 driverId,
@@ -622,7 +634,11 @@ export function useDriverLocationTracking(
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
       const id = driverIdRef.current;
-      if (!id || !getOnlineStatus()) return;
+      // Gate on the driver's on-shift toggle (isOnlineRef), NOT getOnlineStatus()
+      // — that's network connectivity and would (a) start the FGS for an
+      // OFF-SHIFT driver who just has network, and (b) skip reconcile during a
+      // network blip while genuinely online.
+      if (!id || !isOnlineRef.current) return;
       const rideId = activeRideIdRef.current;
       startBgLocationTracking({
         driverId: id,
