@@ -262,6 +262,23 @@ export const driverService = {
     location?: { latitude: number; longitude: number },
   ): Promise<void> {
     const supabase = getSupabaseClient();
+
+    // 00491: going online requires a registered active vehicle. The DB trigger
+    // enforces this authoritatively; this pre-check surfaces a clean error
+    // instead of the raw trigger exception (and avoids a wasted round-trip).
+    if (isOnline) {
+      const { data: activeVehicle } = await supabase
+        .from('vehicles')
+        .select('id')
+        .eq('driver_id', driverId)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (!activeVehicle) {
+        throw new Error('driver_has_no_active_vehicle_for_online');
+      }
+    }
+
     const updates: Record<string, unknown> = { is_online: isOnline };
     if (location) {
       updates.current_location = `POINT(${location.longitude} ${location.latitude})`;
