@@ -205,6 +205,18 @@ interface LocationTaskData {
   locations?: Location.LocationObject[];
 }
 
+// Throttle the background heartbeat to ~once per minute. In 'ride' mode the
+// OS delivers a location batch every few seconds; without this we'd write a
+// heartbeat — and, via the `audit_driver_profiles` trigger, an audit row — on
+// every batch, and add an RPC round-trip of latency before each ride-location
+// upload. 60s matches the foreground heartbeat cadence (useDriverLocation +
+// index.tsx), so this adds no write load beyond what already exists.
+// Module-scoped: the foreground service keeps the JS runtime alive so this
+// persists across batches; if the OS relaunches a killed task it resets to 0
+// and the first batch heartbeats immediately (harmless).
+let lastBgHeartbeatMs = 0;
+const BG_HEARTBEAT_MIN_INTERVAL_MS = 55_000;
+
 TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
   if (error) {
     console.error('[bg-location-task] error:', error);
@@ -233,17 +245,21 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
     return;
   }
 
-  // ALWAYS refresh the heartbeat from the background task. This is the
-  // core fix for "driver goes inactive after minimizing the app": while
-  // online-but-waiting the foreground JS timers are suspended by the OS,
-  // so this task-body heartbeat (fired on each background location batch)
-  // is what keeps `last_heartbeat_at` fresh and the driver matchable.
-  // driver_heartbeat is SECURITY DEFINER and uses the persisted session,
-  // so it works headless. Best-effort — never throw out of the task.
-  try {
-    await driverService.sendHeartbeat(ctx.driverId);
-  } catch (hbErr) {
-    console.warn('[bg-location-task] heartbeat failed:', hbErr);
+  // Refresh the heartbeat from the background task (throttled to ~60s). This
+  // is the core fix for "driver goes inactive after minimizing the app":
+  // while online-but-waiting the foreground JS timers are suspended by the
+  // OS, so this task-body heartbeat keeps `last_heartbeat_at` fresh and the
+  // driver matchable. driver_heartbeat is SECURITY DEFINER and uses the
+  // persisted session, so it works headless. Best-effort — never throw out
+  // of the task.
+  const nowMs = Date.now();
+  if (nowMs - lastBgHeartbeatMs > BG_HEARTBEAT_MIN_INTERVAL_MS) {
+    lastBgHeartbeatMs = nowMs;
+    try {
+      await driverService.sendHeartbeat(ctx.driverId);
+    } catch (hbErr) {
+      console.warn('[bg-location-task] heartbeat failed:', hbErr);
+    }
   }
 
   // Ride-location upload only makes sense during an active trip. When the
