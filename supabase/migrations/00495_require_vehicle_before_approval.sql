@@ -1,4 +1,5 @@
--- 00491_require_vehicle_before_approval.sql
+-- 00495_require_vehicle_before_approval.sql
+-- (renumbered from 00491 — that number collided with 00491_campaigns_promo_code_on_delete_set_null.sql)
 --
 -- Close the onboarding gap that let drivers be APPROVED (and go online)
 -- without a registered vehicle.
@@ -30,7 +31,7 @@ CREATE OR REPLACE FUNCTION public.tg_driver_profiles_protect_admin_fields()
  SET search_path TO 'public', 'pg_catalog'
 AS $function$
 BEGIN
-  -- 00491 (approval gate): an active vehicle is REQUIRED before a driver can be
+  -- 00495 (approval gate): an active vehicle is REQUIRED before a driver can be
   -- marked 'approved'. Placed ABOVE the is_admin()/service-role bypasses on
   -- purpose — the admin approveDriver UPDATE and the auto-admin EF must both be
   -- gated. Fires only on the transition TO approved (re-saving an already
@@ -58,7 +59,7 @@ BEGIN
       OLD.status;
   END IF;
 
-  -- 00491 (online gate): going online also requires an active vehicle. Approval
+  -- 00495 (online gate): going online also requires an active vehicle. Approval
   -- already requires one, but a vehicle could be deactivated afterwards — this
   -- keeps a vehicle-less driver from ever appearing online (and as a car).
   IF NEW.is_online IS DISTINCT FROM OLD.is_online
