@@ -59,6 +59,7 @@ function NavigationOverlayInner({
       currentStep.maneuver_modifier,
       currentStep.name,
       t as (key: string, opts?: Record<string, unknown>) => string,
+      currentStep.maneuver_exit,
     ) ?? currentStep.name ?? '';
   } catch {
     icon = 'navigate-outline';
@@ -75,6 +76,7 @@ function NavigationOverlayInner({
         nextStep.maneuver_modifier,
         nextStep.name,
         t as (key: string, opts?: Record<string, unknown>) => string,
+        nextStep.maneuver_exit,
       )
     : null;
 

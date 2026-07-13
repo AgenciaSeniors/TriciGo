@@ -4,6 +4,9 @@ export * from './validation';
 export * from './ride-config';
 export * from './cuba-geo';
 export * from './geo';
+// Pure turn-by-turn helpers (spoken instructions + maneuver arc-length),
+// extracted from the driver hook so they're unit-testable without React Native.
+export * from './navigation';
 export * from './fareCalculator';
 export * from './farePresentation';
 export * from './ledger';

@@ -595,6 +595,12 @@ export interface NavigationStep {
   maneuver_modifier: string;
   /** Maneuver location [lat, lng] */
   maneuver_location: [number, number];
+  /**
+   * Roundabout/rotary exit number (1-based) when the provider supplies it.
+   * Lets the voice say "toma la salida 2" instead of a plain "gira".
+   * Undefined for non-roundabout maneuvers.
+   */
+  maneuver_exit?: number;
   /** Step geometry as [lat, lng] pairs */
   geometry: [number, number][];
   /**
@@ -1300,7 +1306,7 @@ async function fetchETAsOSRM(
  * of each NON-final leg is the "arrive" at passenger waypoint `legIndex`, so
  * it's tagged with `waypoint_index` for the "Llegaste a la Parada N" voice cue.
  */
-function parseNavigationRoute(route: {
+export function parseNavigationRoute(route: {
   geometry?: { coordinates?: [number, number][] };
   distance?: number;
   duration?: number;
@@ -1334,6 +1340,7 @@ function parseNavigationRoute(route: {
           ? [step.maneuver.location[1], step.maneuver.location[0]]
           : [0, 0],
         geometry: stepCoords,
+        ...(typeof step.maneuver?.exit === 'number' ? { maneuver_exit: step.maneuver.exit } : {}),
         ...(isWaypointArrival ? { waypoint_index: legIdx } : {}),
       });
     });

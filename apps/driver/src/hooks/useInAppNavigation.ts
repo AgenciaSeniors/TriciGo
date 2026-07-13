@@ -3,7 +3,10 @@ import * as Speech from 'expo-speech';
 import {
   fetchNavigationRoute,
   haversineDistance,
-  distanceToPolyline,
+  projectPointOnPolyline,
+  computeManeuverAlongDistances,
+  buildSpokenInstruction,
+  buildSpokenInstructionWithDistance,
   type NavigationStep,
   type NavigationRouteResult,
   type GeoPoint,
@@ -114,6 +117,17 @@ export function useInAppNavigation(
   const departAnnouncedRef = useRef<boolean>(false);
   const preAnnouncedStepRef = useRef<number>(-1);
   const imminentAnnouncedStepRef = useRef<number>(-1);
+  /**
+   * Clear all per-step announce latches. Called on stop AND on every route
+   * replacement (reroute / waypoint re-thread) so the voice re-announces the
+   * depart + upcoming turns of the NEW route — otherwise the route recalculates
+   * but the voice stays silent/stale on the old plan.
+   */
+  const resetAnnouncements = useCallback(() => {
+    departAnnouncedRef.current = false;
+    preAnnouncedStepRef.current = -1;
+    imminentAnnouncedStepRef.current = -1;
+  }, []);
   /** Keep voiceEnabled fresh without re-running the step-advance effect. */
   const voiceEnabledRef = useRef(voiceEnabled);
   useEffect(() => {
@@ -146,6 +160,18 @@ export function useInAppNavigation(
   }, [route, steps, currentStepIndex]);
 
   const routeCoordinates = route?.coordinates ?? [];
+
+  /**
+   * Distance-along-route (arc-length, meters) of each step's maneuver, projected
+   * onto the route polyline. Step tracking uses THIS instead of straight-line
+   * distance to a maneuver point — on Cuba's dense parallel-street grid a driver
+   * one block over can be <50 m (straight) from a turn they're not approaching.
+   * Recomputed only when the route changes.
+   */
+  const maneuverAlongM = useMemo(
+    () => computeManeuverAlongDistances(route?.coordinates ?? [], route?.steps ?? []),
+    [route],
+  );
 
   // Fetch route from current driver position to destination
   const fetchRoute = useCallback(async (from: GeoPoint, to: GeoPoint): Promise<NavigationRouteResult | null> => {
@@ -194,11 +220,12 @@ export function useInAppNavigation(
       if (result && result.steps.length > 0) {
         setRoute(result);
         setCurrentStepIndex(0);
+        resetAnnouncements();
       }
     } finally {
       setIsRerouting(false);
     }
-  }, [isNavigating, driverLocation, fetchRoute]);
+  }, [isNavigating, driverLocation, fetchRoute, resetAnnouncements]);
 
   const stopNavigation = useCallback(() => {
     setIsNavigating(false);
@@ -207,12 +234,10 @@ export function useInAppNavigation(
     destinationRef.current = null;
     waypointsRef.current = [];
     navWpKeyRef.current = '';
-    departAnnouncedRef.current = false;
-    preAnnouncedStepRef.current = -1;
-    imminentAnnouncedStepRef.current = -1;
+    resetAnnouncements();
     // Cancel any pending utterance when navigation ends.
     Speech.stop().catch(() => {});
-  }, []);
+  }, [resetAnnouncements]);
 
   /**
    * BUG-278: Depart announcement on navigation start.
@@ -222,9 +247,7 @@ export function useInAppNavigation(
    */
   useEffect(() => {
     if (!isNavigating) {
-      departAnnouncedRef.current = false;
-      preAnnouncedStepRef.current = -1;
-      imminentAnnouncedStepRef.current = -1;
+      resetAnnouncements();
       return;
     }
     if (!voiceEnabledRef.current) return;
@@ -241,7 +264,7 @@ export function useInAppNavigation(
       .finally(() => {
         Speech.speak(text, { language: 'es-ES', rate: 1.0, pitch: 1.0 });
       });
-  }, [isNavigating, steps]);
+  }, [isNavigating, steps, resetAnnouncements]);
 
   // Cleanup: stop TTS if the hook unmounts mid-utterance.
   useEffect(() => {
@@ -251,41 +274,57 @@ export function useInAppNavigation(
   }, []);
 
   /**
-   * BUG-278: distance-aware voice + step advance.
+   * BUG-278: distance-aware voice + step advance. Distances are measured
+   * ALONG the route (arc-length via `projectPointOnPolyline`), not straight-
+   * line to a maneuver point — the latter mis-fires on Cuba's dense parallel
+   * streets (a driver one block over is <50 m straight from a turn they're
+   * not approaching).
    *
    * Three triggers per step transition:
-   *   1. PRE-ANNOUNCE at 200 m before step[i+1].maneuver_location:
+   *   1. PRE-ANNOUNCE at 200 m before the next maneuver:
    *      "En 200 metros, gira a la derecha por Calle X". Skipped if
    *      step[i].distance_m < PRE_ANNOUNCE_DISTANCE_M (the previous
    *      maneuver was less than 200 m back, so a pre-announce would
    *      stack on top of the previous imminent).
    *   2. IMMINENT at 50 m: "Gira a la derecha". Always fires.
-   *   3. ADVANCE at 20 m: increment currentStepIndex silently. The
-   *      voice has already played, the visual overlay updates to show
-   *      the next instruction.
+   *   3. ADVANCE at 20 m: increment currentStepIndex silently once the
+   *      driver has reached/passed the maneuver along the route.
    *
-   * We compute the distance to the NEXT step's maneuver every render
-   * (cheap haversine) and gate each trigger by an idempotency ref so
-   * the same step never speaks twice.
+   * Announce + advance only fire while the driver is ON the route; if they
+   * deviate, the reroute below rebuilds the plan (and resets the announce
+   * latches so the voice follows the NEW route).
    */
   useEffect(() => {
     if (!isNavigating || !driverLocation || !route || steps.length === 0) return;
 
-    // Mid-route: pre-announce + imminent + advance to next step
-    if (currentStepIndex < steps.length - 1) {
-      const nextStep = steps[currentStepIndex + 1];
-      const nextStepManeuver = nextStep?.maneuver_location;
-      if (nextStep && nextStepManeuver) {
-        const distToNext = haversineDistance(driverLocation, {
-          latitude: nextStepManeuver[0],
-          longitude: nextStepManeuver[1],
-        });
-        const targetIdx = currentStepIndex + 1;
+    const routeCoords = route.coordinates;
+    if (!routeCoords || routeCoords.length < 2) return;
 
-        // Pre-announce — only if there's enough room before the turn
+    // Project the driver onto the route ONCE: how far along it they are
+    // (arc-length) and how far off it (perpendicular drift). Announce timing,
+    // step advance, and the reroute decision below all derive from these.
+    const routePolyline: GeoPoint[] = routeCoords.map(
+      (pair: [number, number]) => ({ latitude: pair[0], longitude: pair[1] }),
+    );
+    const proj = projectPointOnPolyline(driverLocation, routePolyline);
+    const driverAlongM = proj.distanceAlongRouteM;
+    const driftM = haversineDistance(driverLocation, proj.projectedPoint);
+    const onRoute = driftM <= REROUTE_THRESHOLD_M;
+
+    // Mid-route: pre-announce + imminent + advance to next step.
+    if (currentStepIndex < steps.length - 1) {
+      const targetIdx = currentStepIndex + 1;
+      const nextStep = steps[targetIdx];
+      const targetAlongM = maneuverAlongM[targetIdx];
+      if (nextStep && targetAlongM != null) {
+        // Road distance to the next maneuver (along the route), not straight-line.
+        const distToNext = Math.max(0, targetAlongM - driverAlongM);
         const currentStepLen = steps[currentStepIndex]?.distance_m ?? 0;
+
+        // Pre-announce — only while on-route, and only if there's room before the turn
         if (
           voiceEnabledRef.current &&
+          onRoute &&
           preAnnouncedStepRef.current !== targetIdx &&
           distToNext <= PRE_ANNOUNCE_DISTANCE_M &&
           distToNext > IMMINENT_ANNOUNCE_DISTANCE_M &&
@@ -300,9 +339,10 @@ export function useInAppNavigation(
             });
         }
 
-        // Imminent — always fires at 50 m
+        // Imminent — fires at 50 m along the route
         if (
           voiceEnabledRef.current &&
+          onRoute &&
           imminentAnnouncedStepRef.current !== targetIdx &&
           distToNext <= IMMINENT_ANNOUNCE_DISTANCE_M
         ) {
@@ -315,22 +355,30 @@ export function useInAppNavigation(
             });
         }
 
-        // Advance step
-        if (distToNext < STEP_ADVANCE_THRESHOLD_M) {
+        // Advance once the driver has reached/passed the maneuver along the
+        // route — but only while genuinely on-route; if they left the route,
+        // don't advance, let the reroute below rebuild the plan.
+        if (onRoute && driverAlongM >= targetAlongM - STEP_ADVANCE_THRESHOLD_M) {
           setCurrentStepIndex((prev) => prev + 1);
           return;
         }
       }
     }
 
-    // Last step → arrival
+    // Last step → arrival. Prefer along-route distance; fall back to straight-
+    // line so arrival still fires if GPS drifts off-route near the destination.
     if (currentStepIndex === steps.length - 1) {
       const lastStep = steps[steps.length - 1]!;
-      const distToEnd = haversineDistance(driverLocation, {
+      const lastAlongM = maneuverAlongM[steps.length - 1] ?? 0;
+      const alongToEnd = Math.max(0, lastAlongM - driverAlongM);
+      const straightToEnd = haversineDistance(driverLocation, {
         latitude: lastStep.maneuver_location[0]!,
         longitude: lastStep.maneuver_location[1]!,
       });
-      if (distToEnd < STEP_ADVANCE_THRESHOLD_M) {
+      const reachedEnd = onRoute
+        ? alongToEnd < STEP_ADVANCE_THRESHOLD_M
+        : straightToEnd < STEP_ADVANCE_THRESHOLD_M;
+      if (reachedEnd) {
         if (voiceEnabledRef.current && imminentAnnouncedStepRef.current !== currentStepIndex) {
           imminentAnnouncedStepRef.current = currentStepIndex;
           Speech.stop()
@@ -344,56 +392,35 @@ export function useInAppNavigation(
       }
     }
 
-    // Check if driver deviated from route — trigger reroute.
-    //
-    // BUG-298: measure perpendicular distance to the FULL route polyline
-    // (not vertex-distance to the current step's geometry).
-    //
-    // Old behavior: iterated `currentStep.geometry` vertices and used
-    // `haversineDistance(driver, vertex)`. Two problems:
-    //   1. Vertex-distance overestimates when step segments are long: a
-    //      driver 100m perpendicular to a 200m segment can be 141m from
-    //      the nearest vertex → false positive (rerouting when on-route).
-    //   2. If the driver cuts a corner past the current step, the current
-    //      step's geometry stays behind them, so the deviation against
-    //      the OLD step keeps growing without considering segments ahead.
-    //
-    // New behavior: use `distanceToPolyline` against `route.coordinates`
-    // (full route), matching what the client RideMapView already does in
-    // `useDriverToPickupRoute.ts` (BUG-279).
-    const routeCoords = route?.coordinates;
-    if (routeCoords && routeCoords.length >= 2) {
-      const routePolyline: GeoPoint[] = routeCoords.map(
-        (pair: [number, number]) => ({ latitude: pair[0], longitude: pair[1] }),
-      );
-      const minDistToRoute = distanceToPolyline(driverLocation, routePolyline);
-
-      const now = Date.now();
-      if (
-        minDistToRoute > REROUTE_THRESHOLD_M &&
-        now - lastRerouteRef.current > REROUTE_COOLDOWN_MS &&
-        destinationRef.current &&
-        !isRerouting
-      ) {
-        lastRerouteRef.current = now;
-        setIsRerouting(true);
-        // eslint-disable-next-line no-console
-        console.log('[useInAppNavigation] reroute', {
-          off_m: Math.round(minDistToRoute),
-          threshold_m: REROUTE_THRESHOLD_M,
-          since_last_ms: now - (lastRerouteRef.current - REROUTE_COOLDOWN_MS),
-        });
-        fetchRoute(driverLocation, destinationRef.current)
-          .then((newRoute) => {
-            if (newRoute && newRoute.steps.length > 0) {
-              setRoute(newRoute);
-              setCurrentStepIndex(0);
-            }
-          })
-          .finally(() => setIsRerouting(false));
-      }
+    // Driver deviated from the route → reroute. driftM is the perpendicular
+    // distance to the full route polyline (BUG-298). On success we replace the
+    // route AND clear the announce latches so the voice follows the NEW route —
+    // previously the route recalculated but the voice stayed silent/stale.
+    const now = Date.now();
+    if (
+      driftM > REROUTE_THRESHOLD_M &&
+      now - lastRerouteRef.current > REROUTE_COOLDOWN_MS &&
+      destinationRef.current &&
+      !isRerouting
+    ) {
+      lastRerouteRef.current = now;
+      setIsRerouting(true);
+      // eslint-disable-next-line no-console
+      console.log('[useInAppNavigation] reroute', {
+        off_m: Math.round(driftM),
+        threshold_m: REROUTE_THRESHOLD_M,
+      });
+      fetchRoute(driverLocation, destinationRef.current)
+        .then((newRoute) => {
+          if (newRoute && newRoute.steps.length > 0) {
+            setRoute(newRoute);
+            setCurrentStepIndex(0);
+            resetAnnouncements();
+          }
+        })
+        .finally(() => setIsRerouting(false));
     }
-  }, [driverLocation, isNavigating, route, steps, currentStepIndex, currentStep, fetchRoute, stopNavigation, isRerouting]);
+  }, [driverLocation, isNavigating, route, steps, currentStepIndex, maneuverAlongM, fetchRoute, stopNavigation, isRerouting, resetAnnouncements]);
 
   return {
     isNavigating,
@@ -410,78 +437,6 @@ export function useInAppNavigation(
     updateNavWaypoints,
     stopNavigation,
   };
-}
-
-/**
- * BUG-278: pre-announce variant — speak the maneuver with a distance
- * prefix ("En 200 metros, gira a la derecha por Calle X"). Used when
- * the driver is approaching but not yet at the turn. The plain
- * `buildSpokenInstruction` is reserved for the imminent (50 m) call.
- */
-export function buildSpokenInstructionWithDistance(
-  step: NavigationStep,
-  distance_m: number,
-): string {
-  const { maneuver_type, maneuver_modifier, name } = step;
-  const street = name?.trim();
-  const distText = `En ${distance_m} metros`;
-
-  if (maneuver_type === 'arrive') {
-    return step.waypoint_index != null
-      ? `${distText} llegarás a la Parada ${step.waypoint_index + 1}`
-      : `${distText} llegarás a tu destino`;
-  }
-
-  const direction = (() => {
-    switch (maneuver_modifier) {
-      case 'left': return 'gira a la izquierda';
-      case 'sharp left': return 'gira cerrado a la izquierda';
-      case 'slight left': return 'gira ligeramente a la izquierda';
-      case 'right': return 'gira a la derecha';
-      case 'sharp right': return 'gira cerrado a la derecha';
-      case 'slight right': return 'gira ligeramente a la derecha';
-      case 'uturn': return 'haz un giro en U';
-      case 'straight':
-      default: return 'continúa recto';
-    }
-  })();
-
-  return street ? `${distText}, ${direction} por ${street}` : `${distText}, ${direction}`;
-}
-
-/**
- * Build a plain-Spanish sentence for text-to-speech from a NavigationStep.
- * Independent of i18n so the TTS effect can stay decoupled from React
- * translation contexts. Cuban market is Spanish-first, so we hardcode ES.
- */
-export function buildSpokenInstruction(step: NavigationStep): string {
-  const { maneuver_type, maneuver_modifier, name } = step;
-  const street = name?.trim();
-
-  if (maneuver_type === 'arrive') {
-    return step.waypoint_index != null
-      ? `Llegaste a la Parada ${step.waypoint_index + 1}`
-      : 'Llegaste a tu destino';
-  }
-  if (maneuver_type === 'depart') {
-    return street ? `Dirígete por ${street}` : 'Inicia el recorrido';
-  }
-
-  const direction = (() => {
-    switch (maneuver_modifier) {
-      case 'left': return 'Gira a la izquierda';
-      case 'sharp left': return 'Gira cerrado a la izquierda';
-      case 'slight left': return 'Gira ligeramente a la izquierda';
-      case 'right': return 'Gira a la derecha';
-      case 'sharp right': return 'Gira cerrado a la derecha';
-      case 'slight right': return 'Gira ligeramente a la derecha';
-      case 'uturn': return 'Haz un giro en U';
-      case 'straight':
-      default: return 'Continúa recto';
-    }
-  })();
-
-  return street ? `${direction} por ${street}` : direction;
 }
 
 /**
@@ -509,21 +464,63 @@ export function getManeuverIcon(type: string, modifier: string): string {
 }
 
 /**
- * Get a human-readable label for a maneuver.
+ * Get a human-readable label for a maneuver. Mirrors the spoken instruction
+ * (`buildSpokenInstruction`) so the on-screen turn strip matches the voice:
+ * branches on `type` (roundabout/fork/merge/ramp/end-of-road) before the
+ * modifier switch, and never asserts "recto" on an unknown modifier.
  */
 export function getManeuverLabel(
   type: string,
   modifier: string,
   streetName: string,
   t: (key: string, opts?: Record<string, unknown>) => string,
+  exit?: number,
 ): string {
+  const street = streetName?.trim() ?? '';
+  const onto = street ? ` ${t('nav.onto', { defaultValue: 'por' })} ${street}` : '';
+  const side = modifier.includes('left')
+    ? t('nav.left', { defaultValue: 'izquierda' })
+    : modifier.includes('right')
+      ? t('nav.right', { defaultValue: 'derecha' })
+      : '';
+  const keepGoing = t('nav.continue_plain', { defaultValue: 'Continúa' });
+
   if (type === 'arrive') {
     return t('nav.arrive', { defaultValue: 'Llegaste a tu destino' });
   }
   if (type === 'depart') {
-    return streetName
-      ? t('nav.depart_on', { street: streetName, defaultValue: `Dirígete por ${streetName}` })
+    return street
+      ? t('nav.depart_on', { street, defaultValue: `Dirígete por ${street}` })
       : t('nav.depart', { defaultValue: 'Inicia el recorrido' });
+  }
+  if (type === 'roundabout' || type === 'rotary') {
+    if (exit != null && exit > 0) {
+      return street
+        ? t('nav.roundabout_exit_onto', { exit, street, defaultValue: `En la rotonda, toma la salida ${exit} hacia ${street}` })
+        : t('nav.roundabout_exit', { exit, defaultValue: `En la rotonda, toma la salida ${exit}` });
+    }
+    return side
+      ? `${t('nav.roundabout_side', { side, defaultValue: `En la rotonda, gira a la ${side}` })}${onto}`
+      : `${t('nav.roundabout', { defaultValue: 'En la rotonda, continúa' })}${onto}`;
+  }
+  if (type === 'fork') {
+    return side ? `${t('nav.fork_side', { side, defaultValue: `Mantente a la ${side}` })}${onto}` : `${keepGoing}${onto}`;
+  }
+  if (type === 'merge') {
+    return side
+      ? `${t('nav.merge_side', { side, defaultValue: `Incorpórate a la ${side}` })}${onto}`
+      : `${t('nav.merge', { defaultValue: 'Incorpórate' })}${onto}`;
+  }
+  if (type === 'end of road') {
+    return side ? `${t('nav.end_of_road_side', { side, defaultValue: `Al final de la calle, gira a la ${side}` })}${onto}` : `${keepGoing}${onto}`;
+  }
+  if (type === 'on ramp' || type === 'off ramp') {
+    return side
+      ? `${t('nav.ramp_side', { side, defaultValue: `Toma la salida a la ${side}` })}${onto}`
+      : `${t('nav.ramp', { defaultValue: 'Toma la salida' })}${onto}`;
+  }
+  if (type === 'new name' || type === 'notification') {
+    return `${keepGoing}${onto}`;
   }
 
   const direction = (() => {
@@ -535,12 +532,11 @@ export function getManeuverLabel(
       case 'sharp right': return t('nav.sharp_right', { defaultValue: 'Gira cerrado a la derecha' });
       case 'slight right': return t('nav.slight_right', { defaultValue: 'Gira ligeramente a la derecha' });
       case 'uturn': return t('nav.uturn', { defaultValue: 'Haz un giro en U' });
-      case 'straight':
-      default: return t('nav.continue', { defaultValue: 'Continúa recto' });
+      case 'straight': return t('nav.continue', { defaultValue: 'Continúa recto' });
+      default: return null;
     }
   })();
 
-  return streetName
-    ? `${direction} ${t('nav.onto', { defaultValue: 'por' })} ${streetName}`
-    : direction;
+  // Unknown/blank modifier on a real turn: DON'T assert "recto".
+  return direction ? `${direction}${onto}` : `${keepGoing}${onto}`;
 }
