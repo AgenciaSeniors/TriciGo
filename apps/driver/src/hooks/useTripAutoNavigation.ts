@@ -23,7 +23,7 @@ import type { GeoPoint } from '@tricigo/utils';
 interface InAppNavigation {
   isNavigating: boolean;
   isLoading: boolean;
-  startNavigation: (target: GeoPoint, waypoints?: GeoPoint[]) => void;
+  startNavigation: (target: GeoPoint, waypoints?: GeoPoint[], options?: { intro?: boolean }) => void;
   updateNavWaypoints: (waypoints: GeoPoint[]) => void;
 }
 
@@ -82,7 +82,8 @@ export function useTripAutoNavigation({
 
     if (dropoffLocation) {
       autoRetargetedRef.current = true;
-      inAppNav.startNavigation(dropoffLocation, pendingWaypoints);
+      // Trip is starting (passenger aboard) → play the welcome message first.
+      inAppNav.startNavigation(dropoffLocation, pendingWaypoints, { intro: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, !!driverLocation, inAppNav.isNavigating, inAppNav.isLoading]);

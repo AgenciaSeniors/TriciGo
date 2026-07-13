@@ -15,6 +15,16 @@
  */
 import { projectPointOnPolyline, type NavigationStep, type GeoPoint } from './geo';
 
+/**
+ * Spoken welcome + safety reminder played once at trip start (status →
+ * in_progress), before the first navigation instruction. Vehicle-agnostic
+ * ("toma las precauciones necesarias") so it fits triciclo / moto / auto
+ * without asserting a seatbelt the vehicle may not have. Hardcoded ES to match
+ * the rest of the driver voice guidance (Cuban market is Spanish-first).
+ */
+export const TRIP_INTRO_ES =
+  'Estás viajando con TriciGo. Por tu seguridad, toma las precauciones necesarias y disfruta tu viaje.';
+
 /** Uppercase the first character of a phrase. */
 function capitalize(s: string): string {
   return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
