@@ -95,7 +95,10 @@ function ActiveTripMap({
     if (slug.startsWith('auto_')) return 'auto';
     if (slug.startsWith('moto_')) return 'moto';
     if (slug.startsWith('triciclo_')) return 'triciclo';
-    return 'auto'; // safe default for unknown service types
+    // BUG-vehicle-type-mismatch: an unknown/empty service_type must NOT
+    // silently render the driver as a car. Return undefined so the map
+    // draws a neutral marker instead of defaulting to the almendrón.
+    return undefined;
   }, [activeTrip?.service_type]);
   return (
     <RideMapView
@@ -198,7 +201,11 @@ function NativeDriverHomeScreen() {
 
   // BUG-218: own vehicle type for the IDLE map marker (was hardcoded
   // "triciclo"). Maps DriverProfile vehicle.type → marker icon slug.
-  const [ownVehicleType, setOwnVehicleType] = useState<'auto' | 'moto' | 'triciclo' | 'confort'>('auto');
+  // BUG-vehicle-type-mismatch: default is `undefined` (unknown), NOT 'auto'.
+  // Drivers whose vehicle isn't registered/verified yet (getVehicle → null)
+  // were being drawn as a car; now they get a neutral marker until the real
+  // type resolves.
+  const [ownVehicleType, setOwnVehicleType] = useState<'auto' | 'moto' | 'triciclo' | 'confort' | undefined>(undefined);
   useEffect(() => {
     if (!profile?.id) return;
     driverService.getVehicle(profile.id).then((vehicle) => {
@@ -208,7 +215,7 @@ function NativeDriverHomeScreen() {
       else if (t.startsWith('auto')) setOwnVehicleType('auto');
       else if (t.startsWith('moto')) setOwnVehicleType('moto');
       else if (t.startsWith('triciclo')) setOwnVehicleType('triciclo');
-    }).catch(() => { /* keep default 'auto' */ });
+    }).catch(() => { /* unknown type → neutral marker, never a car */ });
   }, [profile?.id]);
 
   // Fetch service type configs once for fare calculation
