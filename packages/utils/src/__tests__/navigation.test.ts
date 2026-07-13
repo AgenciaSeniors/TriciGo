@@ -3,6 +3,7 @@ import {
   buildSpokenInstruction,
   buildSpokenInstructionWithDistance,
   computeManeuverAlongDistances,
+  TRIP_INTRO_ES,
 } from '../navigation';
 import type { NavigationStep } from '../geo';
 
@@ -164,5 +165,13 @@ describe('computeManeuverAlongDistances', () => {
   it('is safe on a degenerate (single-point) route', () => {
     const steps: NavigationStep[] = [mk({}), mk({})];
     expect(computeManeuverAlongDistances([[23.13, -82.38]], steps)).toEqual([0, 0]);
+  });
+});
+
+describe('TRIP_INTRO_ES — trip-start welcome message', () => {
+  it('mentions the brand and safety, and is non-empty (copy regression guard)', () => {
+    expect(TRIP_INTRO_ES).toContain('TriciGo');
+    expect(TRIP_INTRO_ES.toLowerCase()).toContain('seguridad');
+    expect(TRIP_INTRO_ES.trim().length).toBeGreaterThan(20);
   });
 });

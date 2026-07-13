@@ -7,6 +7,7 @@ import {
   computeManeuverAlongDistances,
   buildSpokenInstruction,
   buildSpokenInstructionWithDistance,
+  TRIP_INTRO_ES,
   type NavigationStep,
   type NavigationRouteResult,
   type GeoPoint,
@@ -74,8 +75,15 @@ export interface InAppNavState {
 }
 
 export interface UseInAppNavigationReturn extends InAppNavState {
-  /** Start navigating to a destination, optionally through pending stops */
-  startNavigation: (destination: GeoPoint, waypoints?: GeoPoint[]) => Promise<void>;
+  /**
+   * Start navigating to a destination, optionally through pending stops.
+   * Pass `{ intro: true }` (trip start) to play the welcome message first.
+   */
+  startNavigation: (
+    destination: GeoPoint,
+    waypoints?: GeoPoint[],
+    options?: { intro?: boolean },
+  ) => Promise<void>;
   /** Re-thread the active route through a new set of pending stops (no restart) */
   updateNavWaypoints: (waypoints: GeoPoint[]) => Promise<void>;
   /** Stop navigation */
@@ -105,6 +113,13 @@ export function useInAppNavigation(
   const waypointsRef = useRef<GeoPoint[]>([]);
   const navWpKeyRef = useRef<string>('');
   const lastRerouteRef = useRef(0);
+  /**
+   * Play the trip-start welcome (TRIP_INTRO_ES) once, before the depart
+   * instruction. Set only when navigation starts with { intro: true } (the
+   * in_progress trip start), cleared after the first depart. Deliberately NOT
+   * cleared by resetAnnouncements() so a mid-trip reroute doesn't replay it.
+   */
+  const introPendingRef = useRef<boolean>(false);
   /**
    * BUG-278: separate refs for the three announce phases per step so
    * each fires once and only once.
@@ -184,9 +199,15 @@ export function useInAppNavigation(
     );
   }, []);
 
-  const startNavigation = useCallback(async (destination: GeoPoint, waypoints: GeoPoint[] = []) => {
+  const startNavigation = useCallback(async (
+    destination: GeoPoint,
+    waypoints: GeoPoint[] = [],
+    options?: { intro?: boolean },
+  ) => {
     if (!driverLocation || isNavigating || isLoading) return;
     setIsLoading(true);
+    // Queue the trip-start welcome for the depart announce (in_progress only).
+    introPendingRef.current = options?.intro ?? false;
     destinationRef.current = destination;
     waypointsRef.current = waypoints;
     navWpKeyRef.current = waypoints.map((w) => `${w.latitude},${w.longitude}`).join('|');
@@ -234,6 +255,7 @@ export function useInAppNavigation(
     destinationRef.current = null;
     waypointsRef.current = [];
     navWpKeyRef.current = '';
+    introPendingRef.current = false;
     resetAnnouncements();
     // Cancel any pending utterance when navigation ends.
     Speech.stop().catch(() => {});
@@ -256,13 +278,33 @@ export function useInAppNavigation(
     if (!step) return;
 
     departAnnouncedRef.current = true;
-    const text = buildSpokenInstruction(step);
-    if (!text) return;
+    const departText = buildSpokenInstruction(step);
+    // Trip start (in_progress) plays a welcome BEFORE the first instruction;
+    // pickup nav and reroutes don't. Fires once — clear the flag now.
+    const playIntro = introPendingRef.current;
+    introPendingRef.current = false;
+    if (!playIntro && !departText) return;
+
+    const speakDepart = () => {
+      if (departText && voiceEnabledRef.current) {
+        Speech.speak(departText, { language: 'es-ES', rate: 1.0, pitch: 1.0 });
+      }
+    };
 
     Speech.stop()
       .catch(() => {})
       .finally(() => {
-        Speech.speak(text, { language: 'es-ES', rate: 1.0, pitch: 1.0 });
+        if (playIntro) {
+          // Welcome first; the depart instruction follows when it finishes.
+          Speech.speak(TRIP_INTRO_ES, {
+            language: 'es-ES',
+            rate: 1.0,
+            pitch: 1.0,
+            onDone: speakDepart,
+          });
+        } else {
+          speakDepart();
+        }
       });
   }, [isNavigating, steps, resetAnnouncements]);
 
