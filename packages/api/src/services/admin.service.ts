@@ -422,6 +422,24 @@ export const adminService = {
     adminId: string,
   ): Promise<void> {
     const supabase = getSupabaseClient();
+
+    // 00491: a driver cannot be approved without a registered active vehicle.
+    // Onboarding persists the vehicle only at the final review Submit, so an
+    // admin could otherwise approve from the documents alone and leave an
+    // "approved" driver with no vehicle (shown as a car on the map). The DB
+    // trigger enforces this authoritatively; this pre-check surfaces a clean
+    // error to the admin UI instead of the raw trigger exception.
+    const { data: activeVehicle } = await supabase
+      .from('vehicles')
+      .select('id')
+      .eq('driver_id', driverId)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    if (!activeVehicle) {
+      throw new Error('driver_has_no_active_vehicle');
+    }
+
     const { error } = await supabase
       .from('driver_profiles')
       .update({

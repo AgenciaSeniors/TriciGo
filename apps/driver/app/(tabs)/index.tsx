@@ -811,18 +811,26 @@ function NativeDriverHomeScreen() {
         visibilityTime: 2200,
       });
     } catch (err) {
-      logger.error('[Toggle] Failed to set online status', { error: getErrorMessage(err) });
+      const rawMsg = getErrorMessage(err);
+      logger.error('[Toggle] Failed to set online status', { error: rawMsg });
+      // 00491: friendly message when the driver has no registered vehicle
+      // (service pre-check + DB trigger). Otherwise show the raw error.
+      const friendly = /driver_has_no_active_vehicle/.test(rawMsg)
+        ? t('driver.online_needs_vehicle', {
+            defaultValue: 'Registra tu vehículo antes de conectarte.',
+          })
+        : rawMsg;
       Toast.show({
         type: 'error',
         text1: t('common.status_change_failed'),
-        text2: getErrorMessage(err),
+        text2: friendly,
         visibilityTime: 5000,
       });
       triggerHaptic('error');
     } finally {
       setToggling(false);
     }
-  }, [profile, isOnline, setOnline, activeTrip]);
+  }, [profile, isOnline, setOnline, activeTrip, t]);
 
   const handleToggleBreak = useCallback(async () => {
     if (!profile || togglingBreak) return;

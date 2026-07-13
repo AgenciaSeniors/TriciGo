@@ -377,6 +377,15 @@ export default function DriverDetailPage() {
 
   const handleApprove = async () => {
     if (!id) return;
+    // 00491: a driver cannot be approved without a registered active vehicle.
+    // Block early with a clear message (the service + DB trigger enforce it too).
+    if (!driver?.vehicle) {
+      setActionsMenuOpen(false);
+      showToast('error', t('drivers.approve_needs_vehicle', {
+        defaultValue: 'No se puede aprobar: el conductor no tiene un vehículo registrado. Debe completar el registro del vehículo primero.',
+      }));
+      return;
+    }
     setActionLoading(true);
     setActionsMenuOpen(false);
     try {
@@ -384,7 +393,12 @@ export default function DriverDetailPage() {
       await refreshDriver();
       showToast('success', t('drivers.approved_success', { defaultValue: 'Conductor aprobado' }));
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      const msg = getErrorMessage(err);
+      showToast('error', /driver_has_no_active_vehicle/.test(msg)
+        ? t('drivers.approve_needs_vehicle', {
+            defaultValue: 'No se puede aprobar: el conductor no tiene un vehículo registrado. Debe completar el registro del vehículo primero.',
+          })
+        : msg);
     } finally {
       setActionLoading(false);
     }

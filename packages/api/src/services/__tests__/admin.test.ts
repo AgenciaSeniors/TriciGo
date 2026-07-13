@@ -271,23 +271,27 @@ describe('adminService', () => {
 
   describe('approveDriver', () => {
     it('updates driver status to approved and logs admin action', async () => {
+      // 00491: approval first pre-checks an active vehicle.
+      const vehicleChain = createMockQueryChain({ data: { id: 'v-1' }, error: null });
       const updateChain = createMockQueryChain({ data: null, error: null });
       const insertChain = createMockQueryChain({ data: null, error: null });
 
       mockFrom
+        .mockReturnValueOnce(vehicleChain)  // vehicles pre-check
         .mockReturnValueOnce(updateChain)   // driver_profiles.update
         .mockReturnValueOnce(insertChain);  // admin_actions.insert
-      // 3rd call (driver_profiles.select for notification) uses default chain
+      // 4th call (driver_profiles.select for notification) uses default chain
 
       await adminService.approveDriver('d-1', 'admin-1');
 
-      expect(mockFrom).toHaveBeenNthCalledWith(1, 'driver_profiles');
+      expect(mockFrom).toHaveBeenNthCalledWith(1, 'vehicles');
+      expect(mockFrom).toHaveBeenNthCalledWith(2, 'driver_profiles');
       expect(updateChain.update).toHaveBeenCalledWith(expect.objectContaining({
         status: 'approved',
         approved_at: expect.any(String),
       }));
       expect(updateChain.eq).toHaveBeenCalledWith('id', 'd-1');
-      expect(mockFrom).toHaveBeenNthCalledWith(2, 'admin_actions');
+      expect(mockFrom).toHaveBeenNthCalledWith(3, 'admin_actions');
       expect(insertChain.insert).toHaveBeenCalledWith({
         admin_id: 'admin-1',
         action: 'approve_driver',
@@ -296,9 +300,18 @@ describe('adminService', () => {
       });
     });
 
+    it('throws driver_has_no_active_vehicle when the driver has no active vehicle (00491)', async () => {
+      const vehicleChain = createMockQueryChain({ data: null, error: null }); // no vehicle
+      mockFrom.mockReturnValueOnce(vehicleChain);
+
+      await expect(adminService.approveDriver('d-1', 'admin-1')).rejects.toThrow(/driver_has_no_active_vehicle/);
+    });
+
     it('throws if update fails', async () => {
+      // 00491: mock an active vehicle so the flow reaches the update.
+      const vehicleChain = createMockQueryChain({ data: { id: 'v-1' }, error: null });
       const chain = createMockQueryChain({ data: null, error: { message: 'Update failed', code: '42P01' } });
-      mockFrom.mockReturnValueOnce(chain);
+      mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
 
       await expect(adminService.approveDriver('d-1', 'admin-1')).rejects.toEqual({ message: 'Update failed', code: '42P01' });
     });

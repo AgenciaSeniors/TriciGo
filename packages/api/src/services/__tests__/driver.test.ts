@@ -352,17 +352,29 @@ describe('driverService', () => {
   // ==================== setOnlineStatus ====================
   describe('setOnlineStatus', () => {
     it('updates online status with location', async () => {
+      // 00491: going online first pre-checks an active vehicle.
+      const vehicleChain = createMockQueryChain({ data: { id: 'v-1' }, error: null });
       const chain = createMockQueryChain({ data: null, error: null });
-      mockFrom.mockReturnValueOnce(chain);
+      mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
 
       await driverService.setOnlineStatus('d-1', true, { latitude: 4.6, longitude: -74.08 });
 
+      expect(mockFrom).toHaveBeenCalledWith('vehicles');
       expect(mockFrom).toHaveBeenCalledWith('driver_profiles');
       expect(chain.update).toHaveBeenCalledWith({
         is_online: true,
         current_location: 'POINT(-74.08 4.6)',
       });
       expect(chain.eq).toHaveBeenCalledWith('id', 'd-1');
+    });
+
+    it('throws driver_has_no_active_vehicle_for_online when the driver has no active vehicle (00491)', async () => {
+      const vehicleChain = createMockQueryChain({ data: null, error: null }); // no vehicle
+      mockFrom.mockReturnValueOnce(vehicleChain);
+
+      await expect(
+        driverService.setOnlineStatus('d-1', true, { latitude: 4.6, longitude: -74.08 }),
+      ).rejects.toThrow(/driver_has_no_active_vehicle_for_online/);
     });
 
     it('throws on supabase error', async () => {
@@ -392,8 +404,11 @@ describe('driverService', () => {
           "driver_not_approved_for_online: status=pending_verification — cannot go online until approved by admin",
         code: 'P0001',
       };
+      // 00491: the service pre-checks an active vehicle first; mock one so the
+      // flow reaches the update and the trigger error surfaces.
+      const vehicleChain = createMockQueryChain({ data: { id: 'v-1' }, error: null });
       const chain = createMockQueryChain({ data: null, error: err });
-      mockFrom.mockReturnValueOnce(chain);
+      mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
 
       await expect(
         driverService.setOnlineStatus('d-1', true, { latitude: 4.6, longitude: -74.08 }),
