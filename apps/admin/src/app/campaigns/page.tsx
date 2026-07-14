@@ -354,33 +354,10 @@ export default function CampaignsPage() {
           }
         }
 
-        // SMS — only when the channel is explicitly 'sms'. "Ambos" means
-        // push + email (per the channel labels + page copy); it must NOT
-        // silently blast paid SMS via D7.
-        if (formChannel === 'sms' && userIds.length > 0) {
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-            // Keep SMS body short (<160 chars for single-segment delivery)
-            const smsBody = formTitle.length + formBody.length > 140
-              ? `${formTitle}: ${formBody.slice(0, 140 - formTitle.length)}…`
-              : `${formTitle}: ${formBody}`;
-            const res = await fetch(`${supabaseUrl}/functions/v1/send-bulk-sms`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${session?.access_token ?? ''}`,
-                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
-              },
-              body: JSON.stringify({ user_ids: userIds, body: smsBody }),
-            });
-            const json = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-            if (json.sent) sentCount = Math.max(sentCount, Number(json.sent));
-          } catch (err) {
-            warnings.push(t('campaigns.warn_sms_failed', { defaultValue: 'Guardada, pero falló el envío de SMS: {{error}}', error: getErrorMessage(err) }));
-          }
-        }
+        // Note: marketing SMS was intentionally removed. Per the SMS
+        // cost policy, SMS is reserved for authentication and emergency
+        // only — campaigns go out over push and/or email. The channel
+        // picker (CHANNEL_KEYS) offers push / email / both, never SMS.
 
         campaignData.sent_at = new Date().toISOString();
         campaignData.sent_count = sentCount;

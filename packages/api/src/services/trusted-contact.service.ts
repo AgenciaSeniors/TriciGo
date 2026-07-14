@@ -3,6 +3,17 @@ import { getSupabaseClient } from '../client';
 
 const MAX_CONTACTS = 5;
 
+/**
+ * True when a write failed because the `email` column isn't applied yet
+ * (mig 00496 pending). Lets the service retry without `email` so the app
+ * keeps working when deployed ahead of the migration.
+ */
+function isMissingEmailColumn(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  const msg = e?.message ?? '';
+  return e?.code === '42703' || /column.*email.*does not exist/i.test(msg) || /schema cache/i.test(msg);
+}
+
 export const trustedContactService = {
   async getContacts(userId: string): Promise<TrustedContact[]> {
     const supabase = getSupabaseClient();
@@ -20,6 +31,7 @@ export const trustedContactService = {
     user_id: string;
     name: string;
     phone: string;
+    email?: string;
     relationship?: string;
     auto_share?: boolean;
     is_emergency?: boolean;
@@ -36,33 +48,58 @@ export const trustedContactService = {
       throw { message: 'Maximum contacts reached', code: 'MAX_CONTACTS' };
     }
 
-    const { data, error } = await supabase
+    const base = {
+      user_id: params.user_id,
+      name: params.name,
+      phone: params.phone,
+      relationship: params.relationship || null,
+      auto_share: params.auto_share ?? true,
+      is_emergency: params.is_emergency ?? false,
+    };
+    // Empty/whitespace email → null (SMS fallback, current behavior).
+    const email = params.email?.trim() ? params.email.trim().toLowerCase() : null;
+
+    let { data, error } = await supabase
       .from('trusted_contacts')
-      .insert({
-        user_id: params.user_id,
-        name: params.name,
-        phone: params.phone,
-        relationship: params.relationship || null,
-        auto_share: params.auto_share ?? true,
-        is_emergency: params.is_emergency ?? false,
-      })
+      .insert({ ...base, email })
       .select()
       .single();
+
+    // Tolerate the email column not being applied yet (mig 00496).
+    if (error && isMissingEmailColumn(error)) {
+      ({ data, error } = await supabase
+        .from('trusted_contacts')
+        .insert(base)
+        .select()
+        .single());
+    }
     if (error) throw error;
     return data as TrustedContact;
   },
 
   async updateContact(
     contactId: string,
-    updates: Partial<Pick<TrustedContact, 'name' | 'phone' | 'relationship' | 'auto_share' | 'is_emergency'>>,
+    updates: Partial<Pick<TrustedContact, 'name' | 'phone' | 'email' | 'relationship' | 'auto_share' | 'is_emergency'>>,
   ): Promise<TrustedContact> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('trusted_contacts')
       .update(updates)
       .eq('id', contactId)
       .select()
       .single();
+
+    // Tolerate the email column not being applied yet (mig 00496).
+    if (error && 'email' in updates && isMissingEmailColumn(error)) {
+      const rest = { ...updates };
+      delete rest.email;
+      ({ data, error } = await supabase
+        .from('trusted_contacts')
+        .update(rest)
+        .eq('id', contactId)
+        .select()
+        .single());
+    }
     if (error) throw error;
     return data as TrustedContact;
   },

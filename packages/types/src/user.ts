@@ -56,6 +56,7 @@ export interface TrustedContact {
   user_id: string;
   name: string;
   phone: string;
+  email?: string | null;
   relationship: string;
   auto_share: boolean;
   is_emergency: boolean;
