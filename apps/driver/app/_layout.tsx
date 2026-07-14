@@ -19,7 +19,7 @@ import { useDriverRideStore } from '@/stores/ride.store';
 import { useLocationStore } from '@/stores/location.store';
 import { useThemeStore, useSystemThemeSync } from '@/stores/theme.store';
 import { colors } from '@tricigo/theme';
-import { getSupabaseClient } from '@tricigo/api';
+import { getSupabaseClient, driverService } from '@tricigo/api';
 import { ErrorBoundary } from '@tricigo/ui/ErrorBoundary';
 import { initSentry, Sentry } from '@/lib/sentry';
 import Toast from 'react-native-toast-message';
@@ -111,6 +111,9 @@ function RootNavigator() {
   const isLoading = useAuthStore((s) => s.isLoading);
   const driverProfile = useDriverStore((s) => s.profile);
   const isProfileLoaded = useDriverStore((s) => s.isProfileLoaded);
+  const profileLoadError = useDriverStore((s) => s.profileLoadError);
+  const setProfile = useDriverStore((s) => s.setProfile);
+  const authUserId = useAuthStore((s) => s.user?.id);
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const segments = useSegments();
 
@@ -274,7 +277,23 @@ function RootNavigator() {
     }
   }, [isAuthenticated, isLoading, isProfileLoaded, driverProfile, segments]);
 
-  if (isLoading) {
+  // If the initial profile fetch FAILED (network/timeout — common on flaky
+  // Cuban connectivity) we must not fall back to the registration form. Instead
+  // we stay on the loading spinner and retry in the background until it resolves.
+  // On success the store sets isProfileLoaded → this effect tears down its timer.
+  useEffect(() => {
+    if (!profileLoadError || driverProfile || !authUserId) return;
+    const id = setInterval(async () => {
+      const result = await driverService.getProfileResilient(authUserId);
+      if (result.ok) setProfile(result.profile);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [profileLoadError, driverProfile, authUserId, setProfile]);
+
+  // Keep the spinner up while an authenticated driver's profile is still
+  // resolving (or retrying after a failed fetch) — never render past it into a
+  // blank screen or the onboarding form.
+  if (isLoading || (isAuthenticated && !isProfileLoaded)) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.neutral[900] }}>
         <ActivityIndicator size="large" color={colors.brand.orange} />

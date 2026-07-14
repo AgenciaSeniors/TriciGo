@@ -40,6 +40,7 @@ import { IncomingRideCard } from '@/components/IncomingRideCard';
 import { DriverTripView, useActiveTripMapData } from '@/components/DriverTripView';
 import { HomeBottomSheet } from '@/components/HomeBottomSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDemandHotspots } from '@/hooks/useDemandHotspots';
@@ -57,6 +58,27 @@ import type { Ride } from '@tricigo/types';
 import { SubmitPoiSheet } from '@tricigo/ui';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+type OwnVehicleType = 'auto' | 'moto' | 'triciclo' | 'confort';
+
+// Map a raw vehicles.type string to the marker slug. Module-scoped so it can be
+// reused by the cache-hydration and the network-refetch paths without changing
+// identity.
+function mapOwnVehicleType(raw?: string | null): OwnVehicleType | undefined {
+  if (!raw) return undefined;
+  const t = String(raw).toLowerCase();
+  if (t.startsWith('auto_confort') || t === 'confort') return 'confort';
+  if (t.startsWith('auto')) return 'auto';
+  if (t.startsWith('moto')) return 'moto';
+  if (t.startsWith('triciclo')) return 'triciclo';
+  return undefined;
+}
+
+// Per-driver cache of the resolved vehicle marker type. The type only comes
+// from a network fetch (getVehicle); caching it makes the correct marker show
+// instantly on next launch and — crucially — offline, instead of falling back
+// to the neutral dot whenever that one fetch fails on a flaky network.
+const OWN_VEHICLE_TYPE_CACHE_KEY = (driverId: string) => `driver_own_vehicle_type_v1:${driverId}`;
 
 // BUG-218: dedicated wrapper for the active-trip map render.
 // `useActiveTripMapData()` is a hook (calls `useDriverRideStore`,
@@ -205,18 +227,48 @@ function NativeDriverHomeScreen() {
   // Drivers whose vehicle isn't registered/verified yet (getVehicle → null)
   // were being drawn as a car; now they get a neutral marker until the real
   // type resolves.
-  const [ownVehicleType, setOwnVehicleType] = useState<'auto' | 'moto' | 'triciclo' | 'confort' | undefined>(undefined);
-  useEffect(() => {
-    if (!profile?.id) return;
-    driverService.getVehicle(profile.id).then((vehicle) => {
-      if (!vehicle?.type) return;
-      const t = String(vehicle.type).toLowerCase();
-      if (t.startsWith('auto_confort') || t === 'confort') setOwnVehicleType('confort');
-      else if (t.startsWith('auto')) setOwnVehicleType('auto');
-      else if (t.startsWith('moto')) setOwnVehicleType('moto');
-      else if (t.startsWith('triciclo')) setOwnVehicleType('triciclo');
-    }).catch(() => { /* unknown type → neutral marker, never a car */ });
+  const [ownVehicleType, setOwnVehicleType] = useState<OwnVehicleType | undefined>(undefined);
+
+  // Refetch the vehicle type from the network and persist it. Stable identity
+  // (keyed on profile.id) so it can be wired to focus/foreground retries.
+  const refetchOwnVehicleType = useCallback(() => {
+    const id = profile?.id;
+    if (!id) return;
+    driverService.getVehicle(id).then((vehicle) => {
+      const mapped = mapOwnVehicleType(vehicle?.type);
+      if (mapped) {
+        setOwnVehicleType(mapped);
+        AsyncStorage.setItem(OWN_VEHICLE_TYPE_CACHE_KEY(id), mapped).catch(() => {});
+      }
+      // On null/unknown we keep the last known value (cache) rather than
+      // downgrading to the neutral marker on a transient empty read.
+    }).catch(() => { /* offline/transient → keep cached value, retry on focus */ });
   }, [profile?.id]);
+
+  // BUG (driver-map): the vehicle type was fetched once with no retry and no
+  // cache. If that single request failed on a flaky network, `ownVehicleType`
+  // stayed undefined and the marker fell back to the neutral blue dot for the
+  // WHOLE session (it never recovered — the effect only re-ran on profile.id).
+  // That's why the triciclo icon showed "sometimes": it depended purely on
+  // whether that one fetch happened to succeed at launch. Fix: hydrate from a
+  // per-driver cache immediately (instant + offline), then refresh.
+  useEffect(() => {
+    const id = profile?.id;
+    if (!id) return;
+    let cancelled = false;
+    AsyncStorage.getItem(OWN_VEHICLE_TYPE_CACHE_KEY(id)).then((cached) => {
+      const mapped = mapOwnVehicleType(cached);
+      // `prev ?? mapped` so a fresh network result already set never gets
+      // clobbered by the slower cache read.
+      if (!cancelled && mapped) setOwnVehicleType((prev) => prev ?? mapped);
+    }).catch(() => {});
+    refetchOwnVehicleType();
+    return () => { cancelled = true; };
+  }, [profile?.id, refetchOwnVehicleType]);
+
+  // Retry when the app returns to the foreground / the Inicio tab regains focus,
+  // so a fetch that failed while offline recovers without an app restart.
+  useRefreshOnFocus(refetchOwnVehicleType);
 
   // Fetch service type configs once for fare calculation
   useEffect(() => {

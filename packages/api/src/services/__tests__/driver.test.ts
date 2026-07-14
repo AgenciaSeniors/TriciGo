@@ -71,6 +71,65 @@ describe('driverService', () => {
     });
   });
 
+  // ==================== getProfileResilient ====================
+  // Distinguishes a genuine "no profile" (row absent) from a *failed* fetch
+  // (network/timeout/transient DB error). The driver app must NOT treat a
+  // failed fetch as "new user → onboarding", so this returns a discriminated
+  // result and retries transient errors before giving up.
+  describe('getProfileResilient', () => {
+    it('returns { ok: true, profile } when the row exists', async () => {
+      const mockProfile = { id: 'd-1', user_id: 'u-1', status: 'approved' };
+      const chain = createMockQueryChain();
+      chain.maybeSingle.mockResolvedValue({ data: mockProfile, error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      const result = await driverService.getProfileResilient('u-1', { retries: 2, delayMs: 0 });
+
+      expect(result).toEqual({ ok: true, profile: mockProfile });
+    });
+
+    it('returns { ok: true, profile: null } when the row is genuinely absent', async () => {
+      const chain = createMockQueryChain();
+      chain.maybeSingle.mockResolvedValue({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      const result = await driverService.getProfileResilient('u-1', { retries: 2, delayMs: 0 });
+
+      expect(result).toEqual({ ok: true, profile: null });
+      // Genuine absence must NOT be retried — one fetch only.
+      expect(mockFrom).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a transient error and then succeeds', async () => {
+      const mockProfile = { id: 'd-1', user_id: 'u-1', status: 'approved' };
+      const failChain = createMockQueryChain();
+      failChain.maybeSingle.mockResolvedValue({ data: null, error: { message: 'timeout', code: '57014' } });
+      const okChain = createMockQueryChain();
+      okChain.maybeSingle.mockResolvedValue({ data: mockProfile, error: null });
+      mockFrom.mockReturnValueOnce(failChain).mockReturnValueOnce(okChain);
+
+      const result = await driverService.getProfileResilient('u-1', { retries: 3, delayMs: 0 });
+
+      expect(result).toEqual({ ok: true, profile: mockProfile });
+      expect(mockFrom).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns { ok: false, error } after exhausting retries', async () => {
+      const err = { message: 'network down', code: 'ECONN' };
+      mockFrom.mockImplementation(() => {
+        const chain = createMockQueryChain();
+        chain.maybeSingle.mockResolvedValue({ data: null, error: err });
+        return chain;
+      });
+
+      const result = await driverService.getProfileResilient('u-1', { retries: 2, delayMs: 0 });
+
+      expect(result).toEqual({ ok: false, error: err });
+      // initial attempt + 2 retries = 3 fetches
+      expect(mockFrom).toHaveBeenCalledTimes(3);
+    });
+  });
+
   // ==================== createProfile ====================
   describe('createProfile', () => {
     it('inserts driver profile and returns it', async () => {

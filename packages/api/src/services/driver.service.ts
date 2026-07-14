@@ -56,6 +56,65 @@ export const driverService = {
   },
 
   /**
+   * Resilient profile fetch used by the app's boot/routing logic.
+   *
+   * `getProfile` collapses two very different outcomes into `null`/throw:
+   *   - the row is genuinely absent (a brand-new applicant), and
+   *   - the fetch FAILED (network timeout, transient DB error, token race).
+   * Routing that treats both as "no profile → onboarding" wrongly bounces an
+   * already-approved driver back into the registration form when their fetch
+   * merely fails — very common on flaky Cuban connectivity.
+   *
+   * This returns a discriminated result so the caller can tell them apart, and
+   * retries transient failures before giving up. A genuine `null` (row absent,
+   * no error) is returned immediately as `{ ok: true, profile: null }` and is
+   * NOT retried.
+   */
+  async getProfileResilient(
+    userId: string,
+    opts?: { retries?: number; delayMs?: number; timeoutMs?: number },
+  ): Promise<{ ok: true; profile: DriverProfile | null } | { ok: false; error: unknown }> {
+    const retries = opts?.retries ?? 3;
+    const delayMs = opts?.delayMs ?? 600;
+    const timeoutMs = opts?.timeoutMs ?? 8000;
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        // Time-box each attempt so a hung getProfile (flaky network / stalled
+        // socket) fails fast into the retry/spinner path instead of stalling the
+        // whole boot. The auth hook used to withTimeout(getProfile); that
+        // fail-fast lives here now that the profile layer is getProfileResilient.
+        const profile = await Promise.race([
+          this.getProfile(userId),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`getProfile timed out after ${timeoutMs}ms`)),
+              timeoutMs,
+            );
+          }),
+        ]);
+        // Success — includes a genuine `null` (row absent). Do not retry.
+        return { ok: true, profile };
+      } catch (error) {
+        lastError = error;
+        if (attempt < retries && delayMs > 0) {
+          // Linear-ish backoff; keeps the app on a spinner, not the reg form.
+          await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+        }
+      } finally {
+        // Always clear the timeout timer so a fast success/failure never leaks a
+        // pending timer (which would keep the process — and vitest — alive).
+        if (timer) clearTimeout(timer);
+      }
+    }
+
+    logger.warn('[driverService] getProfileResilient exhausted retries', { userId });
+    return { ok: false, error: lastError };
+  },
+
+  /**
    * Create initial driver profile (start onboarding).
    */
   async createProfile(userId: string): Promise<DriverProfile> {
