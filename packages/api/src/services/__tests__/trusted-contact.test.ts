@@ -115,7 +115,70 @@ describe('trustedContactService', () => {
         relationship: 'Madre',
         auto_share: true,
         is_emergency: true,
+        email: null,
       });
+      expect(result).toEqual(mockContact);
+    });
+
+    it('inserts normalized (lowercased) email when provided', async () => {
+      const mockContact = { id: 'tc-1', user_id: 'u-1', name: 'Mama', email: 'ana@correo.com' };
+
+      const mockCountEq = vi.fn().mockResolvedValue({ count: 1, error: null });
+      const mockCountSelect = vi.fn(() => ({ eq: mockCountEq }));
+
+      const mockSingle = vi.fn().mockResolvedValue({ data: mockContact, error: null });
+      const mockInsertSelect = vi.fn(() => ({ single: mockSingle }));
+      const mockInsert = vi.fn(() => ({ select: mockInsertSelect }));
+
+      mockFrom
+        .mockReturnValueOnce({ select: mockCountSelect })
+        .mockReturnValueOnce({ insert: mockInsert });
+
+      const result = await trustedContactService.addContact({
+        user_id: 'u-1',
+        name: 'Mama',
+        phone: '+5355555555',
+        email: '  Ana@Correo.com  ',
+      });
+
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'ana@correo.com' }),
+      );
+      expect(result).toEqual(mockContact);
+    });
+
+    it('retries insert without email when the column is missing (mig 00496 pending)', async () => {
+      const mockContact = { id: 'tc-1', user_id: 'u-1', name: 'Mama' };
+
+      const mockCountEq = vi.fn().mockResolvedValue({ count: 1, error: null });
+      const mockCountSelect = vi.fn(() => ({ eq: mockCountEq }));
+
+      // First insert: column-missing error (42703).
+      const missingColErr = { message: `column "email" does not exist`, code: '42703' };
+      const mockSingle1 = vi.fn().mockResolvedValue({ data: null, error: missingColErr });
+      const mockInsertSelect1 = vi.fn(() => ({ single: mockSingle1 }));
+      const mockInsert1 = vi.fn(() => ({ select: mockInsertSelect1 }));
+
+      // Retry insert (without email): success.
+      const mockSingle2 = vi.fn().mockResolvedValue({ data: mockContact, error: null });
+      const mockInsertSelect2 = vi.fn(() => ({ single: mockSingle2 }));
+      const mockInsert2 = vi.fn(() => ({ select: mockInsertSelect2 }));
+
+      mockFrom
+        .mockReturnValueOnce({ select: mockCountSelect })
+        .mockReturnValueOnce({ insert: mockInsert1 })
+        .mockReturnValueOnce({ insert: mockInsert2 });
+
+      const result = await trustedContactService.addContact({
+        user_id: 'u-1',
+        name: 'Mama',
+        phone: '+5355555555',
+        email: 'ana@correo.com',
+      });
+
+      // First attempt carried the email; retry dropped it.
+      expect(mockInsert1).toHaveBeenCalledWith(expect.objectContaining({ email: 'ana@correo.com' }));
+      expect(mockInsert2).toHaveBeenCalledWith(expect.not.objectContaining({ email: expect.anything() }));
       expect(result).toEqual(mockContact);
     });
 

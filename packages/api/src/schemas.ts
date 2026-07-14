@@ -192,6 +192,9 @@ export const addContactSchema = z.object({
   user_id: uuidSchema,
   name: z.string().min(1).max(200),
   phone: cubanPhoneSchema,
+  // Optional: when present, ride notifications go to email instead of SMS
+  // (cost saving, mig 00497). Empty string = SMS fallback (current behavior).
+  email: z.string().trim().toLowerCase().email().max(320).optional().or(z.literal('')),
   relationship: z.string().max(100).optional(),
   auto_share: z.boolean().optional(),
   is_emergency: z.boolean().optional(),

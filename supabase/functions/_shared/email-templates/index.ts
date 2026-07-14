@@ -91,6 +91,16 @@ import {
   driverDocumentRejectedSubject,
   type DriverDocumentRejectedData,
 } from './driver_document_rejected.ts';
+import {
+  trustedContactRideStartedHtml,
+  trustedContactRideStartedSubject,
+  type TrustedContactRideStartedData,
+} from './trusted_contact_ride_started.ts';
+import {
+  trustedContactRideCompletedHtml,
+  trustedContactRideCompletedSubject,
+  type TrustedContactRideCompletedData,
+} from './trusted_contact_ride_completed.ts';
 
 export type TemplateKey =
   | 'welcome'
@@ -109,7 +119,9 @@ export type TemplateKey =
   | 'driver_approved'
   | 'driver_rejected'
   | 'driver_suspended'
-  | 'driver_document_rejected';
+  | 'driver_document_rejected'
+  | 'trusted_contact_ride_started'
+  | 'trusted_contact_ride_completed';
 
 export interface RenderedTemplate {
   subject: string;
@@ -247,6 +259,20 @@ export function renderTemplate(
         html: driverDocumentRejectedHtml(d),
       };
     }
+    case 'trusted_contact_ride_started': {
+      const d = data as TrustedContactRideStartedData;
+      return {
+        subject: subjectOverride ?? trustedContactRideStartedSubject,
+        html: trustedContactRideStartedHtml(d),
+      };
+    }
+    case 'trusted_contact_ride_completed': {
+      const d = data as TrustedContactRideCompletedData;
+      return {
+        subject: subjectOverride ?? trustedContactRideCompletedSubject,
+        html: trustedContactRideCompletedHtml(d),
+      };
+    }
     default: {
       // Exhaustiveness check — TS will flag this if a TemplateKey
       // case is missing above.
@@ -281,7 +307,9 @@ export function isTemplateKey(key: string): key is TemplateKey {
     key === 'driver_approved' ||
     key === 'driver_rejected' ||
     key === 'driver_suspended' ||
-    key === 'driver_document_rejected'
+    key === 'driver_document_rejected' ||
+    key === 'trusted_contact_ride_started' ||
+    key === 'trusted_contact_ride_completed'
   );
 }
 

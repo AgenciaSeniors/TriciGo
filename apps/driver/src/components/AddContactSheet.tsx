@@ -33,6 +33,7 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
   const { t } = useTranslation('common');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [relationship, setRelationship] = useState('');
   const [autoShare, setAutoShare] = useState(true);
   const [isEmergency, setIsEmergency] = useState(false);
@@ -41,6 +42,7 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
   const resetForm = () => {
     setName('');
     setPhone('');
+    setEmail('');
     setRelationship('');
     setAutoShare(true);
     setIsEmergency(false);
@@ -52,6 +54,12 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
       Alert.alert(t('error'), t('errors.invalid_phone'));
       return;
     }
+    // Email is optional; when provided it must be valid (trip updates go
+    // to email instead of SMS). Empty = SMS fallback.
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      Alert.alert(t('error'), t('errors.invalid_email', { defaultValue: 'Correo inválido' }));
+      return;
+    }
     setSaving(true);
     try {
       await trustedContactService.addContact({
@@ -59,6 +67,7 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
         name: name.trim(),
         // E.164 (+53...) — D7 can't deliver raw local 8-digit numbers.
         phone: normalizeCubanPhone(phone.trim()),
+        email: email.trim(),
         relationship: relationship.trim(),
         auto_share: autoShare,
         is_emergency: isEmergency,
@@ -106,6 +115,14 @@ export function AddContactSheet({ visible, onClose, userId, onAdded }: AddContac
         onChangeText={setPhone}
         keyboardType="phone-pad"
         placeholder="+53 5XXXXXXX o 6XXXXXXX"
+      />
+      <Input
+        label={t('trusted_contacts.email_optional', { defaultValue: 'Email (opcional)' })}
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        placeholder="ejemplo@correo.com"
       />
       <Input
         label={t('trusted_contacts.relationship')}

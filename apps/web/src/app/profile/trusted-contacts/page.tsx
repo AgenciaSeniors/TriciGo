@@ -25,6 +25,7 @@ export default function TrustedContactsPage() {
   const [showForm, setShowForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newRelationship, setNewRelationship] = useState('');
   const [newIsEmergency, setNewIsEmergency] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -97,6 +98,12 @@ export default function TrustedContactsPage() {
       setError(t('web.invalid_phone', { defaultValue: 'Ingresá un número de teléfono cubano válido.' }));
       return;
     }
+    // Email is optional; when provided it must be valid (trip updates go to
+    // email instead of SMS). Empty = SMS fallback.
+    if (newEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
+      setError(t('web.invalid_email', { defaultValue: 'Ingresá un correo válido.' }));
+      return;
+    }
     setAdding(true);
     setError(null); // Clear any previous error
     try {
@@ -105,12 +112,14 @@ export default function TrustedContactsPage() {
         name: newName.trim(),
         // E.164 (+53...) — D7 can't deliver raw local 8-digit numbers.
         phone: normalizeCubanPhone(newPhone.trim()),
+        email: newEmail.trim(),
         relationship: newRelationship.trim(),
         auto_share: true,
         is_emergency: newIsEmergency,
       });
       setNewName('');
       setNewPhone('');
+      setNewEmail('');
       setNewRelationship('');
       setNewIsEmergency(false);
       setShowForm(false);
@@ -289,6 +298,20 @@ export default function TrustedContactsPage() {
             />
           </div>
 
+          <div style={{ marginBottom: '1rem' }}>
+            <label htmlFor="tc-email" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.email_optional', { defaultValue: 'Email (opcional)' })}</label>
+            <input
+              id="tc-email"
+              type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="ejemplo@correo.com"
+              autoCapitalize="none"
+              style={{
+                width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
+                fontSize: '0.95rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
           <div style={{ marginBottom: '1.25rem' }}>
             <label htmlFor="tc-relationship" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.relationship', { defaultValue: 'Relacion' })}</label>
             <input
@@ -314,7 +337,7 @@ export default function TrustedContactsPage() {
 
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <button
-              onClick={() => { setShowForm(false); setNewName(''); setNewPhone(''); setNewRelationship(''); setNewIsEmergency(false); }}
+              onClick={() => { setShowForm(false); setNewName(''); setNewPhone(''); setNewEmail(''); setNewRelationship(''); setNewIsEmergency(false); }}
               style={{
                 flex: 1, padding: '0.75rem', background: 'transparent', color: 'var(--text-secondary)',
                 border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
