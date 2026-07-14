@@ -69,11 +69,38 @@ async function fetchUserDirectWeb(userId: string, accessToken: string, anonKey: 
   return rows?.[0] ?? null;
 }
 
+/**
+ * Load the driver profile resiliently and update the store.
+ *
+ * A FAILED fetch (network/timeout/token race) must NOT be mistaken for
+ * "no profile", otherwise an already-approved driver gets bounced into the
+ * registration form. `getProfileResilient` retries transient errors and
+ * returns a discriminated result: on success we set the profile (a genuine
+ * `null` still routes new applicants to onboarding); on failure we flag the
+ * error and keep any previously-loaded profile so routing waits/retries
+ * instead of forcing onboarding.
+ */
+async function applyDriverProfile(
+  userId: string,
+  setProfile: (profile: any) => void,
+  setProfileError: () => void,
+  mounted: { current: boolean },
+) {
+  const result = await driverService.getProfileResilient(userId);
+  if (!mounted.current) return;
+  if (result.ok) {
+    setProfile(result.profile);
+  } else {
+    setProfileError();
+  }
+}
+
 /** Helper: load user + driver profile and update stores */
 async function loadUserAndProfile(
   setUser: (user: any) => void,
   setProfile: (profile: any) => void,
   setProfileLoaded: () => void,
+  setProfileError: () => void,
   reset: () => void,
   mounted: { current: boolean },
   userId?: string,
@@ -87,14 +114,7 @@ async function loadUserAndProfile(
     setUser(user);
     if (user) {
       identifyUser(user.id, { email: realEmail(user.email) ?? undefined, role: 'driver' });
-      try {
-        const dp = await driverService.getProfile(user.id);
-        if (mounted.current) setProfile(dp);
-      } catch {
-        // No driver profile yet — user needs onboarding
-        // Still mark profile as loaded so routing can proceed
-        if (mounted.current) setProfileLoaded();
-      }
+      await applyDriverProfile(user.id, setProfile, setProfileError, mounted);
     } else {
       // No user — mark profile loaded to unblock routing
       if (mounted.current) setProfileLoaded();
@@ -109,6 +129,7 @@ export function useAuthInit() {
   const reset = useAuthStore((s) => s.reset);
   const setProfile = useDriverStore((s) => s.setProfile);
   const setProfileLoaded = useDriverStore((s) => s.setProfileLoaded);
+  const setProfileError = useDriverStore((s) => s.setProfileError);
   const resetDriver = useDriverStore((s) => s.reset);
 
   useEffect(() => {
@@ -134,7 +155,7 @@ export function useAuthInit() {
           // waits for _notifyAllSubscribers → circular deadlock.
           setTimeout(() => {
             if (!mounted.current) return;
-            loadUserAndProfile(setUser, setProfile, setProfileLoaded, reset, mounted, (session as any)?.user?.id);
+            loadUserAndProfile(setUser, setProfile, setProfileLoaded, setProfileError, reset, mounted, (session as any)?.user?.id);
           }, 0);
         }
       },
@@ -166,12 +187,7 @@ export function useAuthInit() {
                 setUser(user);
                 identifyUser(user.id, { email: realEmail(user.email) ?? undefined, role: 'driver' });
                 // Load driver profile in parallel (non-blocking for initial render)
-                try {
-                  const dp = await driverService.getProfile(user.id);
-                  if (mounted.current) setProfile(dp);
-                } catch {
-                  if (mounted.current) setProfileLoaded();
-                }
+                await applyDriverProfile(user.id, setProfile, setProfileError, mounted);
                 return;
               }
             }
@@ -185,7 +201,7 @@ export function useAuthInit() {
       try {
         const session = await withTimeout(authService.getSession(), 8000, 'getSession');
         if (session && mounted.current) {
-          await loadUserAndProfile(setUser, setProfile, setProfileLoaded, reset, mounted, session.user?.id);
+          await loadUserAndProfile(setUser, setProfile, setProfileLoaded, setProfileError, reset, mounted, session.user?.id);
         } else if (mounted.current) {
           reset();
         }
@@ -209,12 +225,7 @@ export function useAuthInit() {
                   if (mounted.current && user) {
                     setUser(user);
                     identifyUser(user.id, { email: realEmail(user.email) ?? undefined, role: 'driver' });
-                    try {
-                      const dp = await driverService.getProfile(user.id);
-                      if (mounted.current) setProfile(dp);
-                    } catch {
-                      if (mounted.current) setProfileLoaded();
-                    }
+                    await applyDriverProfile(user.id, setProfile, setProfileError, mounted);
                     return;
                   }
                 }
@@ -256,12 +267,7 @@ export function useAuthInit() {
                 console.warn('[Auth] Safety timeout: restored session via direct REST');
                 setUser(user);
                 identifyUser(user.id, { email: realEmail(user.email) ?? undefined, role: 'driver' });
-                try {
-                  const dp = await driverService.getProfile(user.id);
-                  if (mounted.current) setProfile(dp);
-                } catch {
-                  if (mounted.current) setProfileLoaded();
-                }
+                await applyDriverProfile(user.id, setProfile, setProfileError, mounted);
                 return;
               }
             }
@@ -315,5 +321,5 @@ export function useAuthInit() {
         getSupabaseClient().removeChannel(profileChannel);
       }
     };
-  }, [setUser, reset, setProfile, setProfileLoaded, resetDriver]);
+  }, [setUser, reset, setProfile, setProfileLoaded, setProfileError, resetDriver]);
 }
