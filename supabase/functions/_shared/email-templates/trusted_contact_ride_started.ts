@@ -5,7 +5,7 @@
 // AFTER UPDATE status 'searching'->'accepted') to each auto-share
 // trusted contact that HAS an email on file. Contacts without an
 // email fall back to SMS (D7). Migrated to email to save SMS cost
-// (mig 00496). The CTA points at the public live-tracking page
+// (mig 00497). The CTA points at the public live-tracking page
 // https://tricigo.com/track/share/<token>.
 //
 // data: { contact_name, rider_name, share_url }

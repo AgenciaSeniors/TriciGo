@@ -5,7 +5,7 @@ const MAX_CONTACTS = 5;
 
 /**
  * True when a write failed because the `email` column isn't applied yet
- * (mig 00496 pending). Lets the service retry without `email` so the app
+ * (mig 00497 pending). Lets the service retry without `email` so the app
  * keeps working when deployed ahead of the migration.
  */
 function isMissingEmailColumn(error: unknown): boolean {
@@ -65,7 +65,7 @@ export const trustedContactService = {
       .select()
       .single();
 
-    // Tolerate the email column not being applied yet (mig 00496).
+    // Tolerate the email column not being applied yet (mig 00497).
     if (error && isMissingEmailColumn(error)) {
       ({ data, error } = await supabase
         .from('trusted_contacts')
@@ -89,7 +89,7 @@ export const trustedContactService = {
       .select()
       .single();
 
-    // Tolerate the email column not being applied yet (mig 00496).
+    // Tolerate the email column not being applied yet (mig 00497).
     if (error && 'email' in updates && isMissingEmailColumn(error)) {
       const rest = { ...updates };
       delete rest.email;

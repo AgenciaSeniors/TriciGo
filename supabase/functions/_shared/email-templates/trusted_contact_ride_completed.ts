@@ -4,7 +4,7 @@
 // Sent by notify_trusted_contacts_on_complete (DB trigger on `rides`
 // AFTER UPDATE status ->'completed') to each auto-share trusted
 // contact that HAS an email on file. Contacts without an email fall
-// back to SMS (D7). Migrated to email to save SMS cost (mig 00496).
+// back to SMS (D7). Migrated to email to save SMS cost (mig 00497).
 // No CTA — this is a plain "arrived safely" notice.
 //
 // data: { contact_name, rider_name }
