@@ -1,5 +1,5 @@
 -- ============================================================
--- 00496: Trusted contacts — email channel (cost saving)
+-- 00497: Trusted contacts — email channel (cost saving)
 --
 -- D7 Networks SMS costs ~$0.05-0.08 per message. To economize,
 -- the two NON-emergency trusted-contact notifications (ride
