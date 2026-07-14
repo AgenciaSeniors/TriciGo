@@ -253,7 +253,6 @@ export function useAuthInit() {
   const setUser = useAuthStore((s) => s.setUser);
   const reset = useAuthStore((s) => s.reset);
   const setProfile = useDriverStore((s) => s.setProfile);
-  const setProfileLoaded = useDriverStore((s) => s.setProfileLoaded);
   const setProfileError = useDriverStore((s) => s.setProfileError);
   const resetDriver = useDriverStore((s) => s.reset);
 
@@ -456,5 +455,5 @@ export function useAuthInit() {
         getSupabaseClient().removeChannel(profileChannel);
       }
     };
-  }, [setUser, reset, setProfile, setProfileLoaded, setProfileError, resetDriver]);
+  }, [setUser, reset, setProfile, setProfileError, resetDriver]);
 }
