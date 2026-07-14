@@ -19,18 +19,37 @@ export interface TrustedContactRideCompletedData {
 
 export const trustedContactRideCompletedSubject = '✅ Llegó a su destino — TriciGo';
 
+// Success accent (green-50 panel + green-600 pill) — local so the
+// template stays self-contained; brand tokens don't carry a green tint.
+const SUCCESS_BG = '#F0FDF4';
+
 export function trustedContactRideCompletedHtml(data: TrustedContactRideCompletedData): string {
   const contact = data.contact_name?.trim() || 'Hola';
   const rider = data.rider_name?.trim() || 'Tu contacto';
 
+  const arrivedCard = `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 4px 0 8px; background: ${SUCCESS_BG}; border-radius: 12px;">
+      <tr>
+        <td style="padding: 18px 20px; font-family: ${FONT_STACK};">
+          <span style="display: inline-block; padding: 4px 12px; background: ${COLORS.success}; border-radius: 999px; font-size: 12px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;">
+            Viaje finalizado
+          </span>
+          <p style="margin: 12px 0 0; font-size: 15px; line-height: 1.55; color: ${COLORS.text};">
+            <strong style="color: ${COLORS.ink};">${escapeHtml(rider)}</strong> llegó a su destino
+            de forma segura. El seguimiento en vivo ya se cerró.
+          </p>
+        </td>
+      </tr>
+    </table>`;
+
   const body = `
     <p style="margin: 0 0 16px; font-family: ${FONT_STACK}; font-size: 16px; color: ${COLORS.ink};">
-      Hola ${escapeHtml(contact)},
+      Hola <strong>${escapeHtml(contact)}</strong>,
     </p>
-    <p style="margin: 0 0 16px;">
-      <strong>${escapeHtml(rider)}</strong> llegó a su destino de forma segura. El viaje con
-      TriciGo terminó.
+    <p style="margin: 0 0 20px;">
+      Buenas noticias: el viaje que estabas siguiendo terminó bien.
     </p>
+    ${arrivedCard}
   `;
 
   return wrapHtml({
@@ -40,6 +59,6 @@ export function trustedContactRideCompletedHtml(data: TrustedContactRideComplete
       subtitle: `${rider} completó su viaje de forma segura`,
     },
     body,
-    footerNote: '¿Dudas? Escribinos a soporte@tricigo.com.',
+    footerNote: 'Recibís este aviso porque sos contacto de confianza. ¿Dudas? Escribinos a soporte@tricigo.com.',
   });
 }
