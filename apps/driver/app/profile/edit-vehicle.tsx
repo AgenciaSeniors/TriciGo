@@ -133,18 +133,25 @@ export default function EditVehicleScreen() {
   }, []);
 
   // ── Photo picking ─────────────────────────────────────────────────────────
-  const pickPhoto = useCallback(async (index: number) => {
-    // Ask for photos permission first (Apple 2.1(a) — avoid the iOS
+  const pickPhoto = useCallback(async (index: number, source: 'camera' | 'gallery' = 'gallery') => {
+    // Ask for the right permission first (Apple 2.1(a) — avoid the iOS
     // "Missing camera or camera roll permission" throw).
-    if (!(await ensurePickerPermission('gallery', tc))) return;
+    const useCamera = source === 'camera' && Platform.OS !== 'web';
+    if (!(await ensurePickerPermission(useCamera ? 'camera' : 'gallery', tc))) return;
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-        // Vehicle photos are rectangular — skip the forced OS square crop
-        // (the crop window was too cramped to frame the whole vehicle).
-        allowsEditing: false,
-      });
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            quality: 0.7,
+            allowsEditing: false,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.7,
+            // Vehicle photos are rectangular — skip the forced OS square crop
+            // (the crop window was too cramped to frame the whole vehicle).
+            allowsEditing: false,
+          });
 
       if (result.canceled || !result.assets?.[0]) return;
 
@@ -168,6 +175,22 @@ export default function EditVehicleScreen() {
       Alert.alert('Error', tc('errors.generic'));
     }
   }, [tc, t]);
+
+  // Let the driver take the photo with the camera instead of the gallery. On many
+  // Android phones the gallery is Google Photos, which fails to load on Cuba's
+  // connection and shows "Se produjo un error, vuelve a intentarlo más tarde";
+  // the camera bypasses it entirely.
+  const choosePhotoSource = useCallback((index: number) => {
+    Alert.alert(
+      t('profile.vehicle_photo_label', { defaultValue: 'Foto del vehículo' }),
+      t('onboarding.choose_photo_source', { defaultValue: '¿Cómo quieres agregar la foto?' }),
+      [
+        { text: t('onboarding.take_photo', { defaultValue: 'Tomar foto' }), onPress: () => pickPhoto(index, 'camera') },
+        { text: t('onboarding.pick_from_gallery', { defaultValue: 'Seleccionar de galería' }), onPress: () => pickPhoto(index, 'gallery') },
+        { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+      ],
+    );
+  }, [pickPhoto, t]);
 
   // ── Validation ────────────────────────────────────────────────────────────
   const validate = (): boolean => {
@@ -400,7 +423,7 @@ export default function EditVehicleScreen() {
               {photos.map((photo, index) => (
                 <Pressable
                   key={photo.type}
-                  onPress={() => pickPhoto(index)}
+                  onPress={() => choosePhotoSource(index)}
                   className="flex-row items-center p-3 rounded-xl mb-3"
                   style={{ backgroundColor: midnightEmber.screen.bg.sunken }}
                 >

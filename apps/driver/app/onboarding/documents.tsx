@@ -120,12 +120,18 @@ export default function DocumentsScreen() {
     }
   };
 
-  const pickImage = async (docType: DocumentType) => {
-    const isCamera = docType === 'selfie';
+  const pickImage = async (docType: DocumentType, source?: 'camera' | 'gallery') => {
+    // Selfie is always the front camera. Other docs default to the gallery, but
+    // the caller can request the camera (source='camera') — this lets drivers
+    // capture the vehicle photo without going through Google Photos, whose picker
+    // fails to load on Cuba's flaky link and shows its own "Se produjo un error,
+    // vuelve a intentarlo más tarde" dialog (a Google error, external to the app).
+    const isSelfie = docType === 'selfie';
     const isWeb = Platform.OS === 'web';
+    const useCamera = !isWeb && (isSelfie || source === 'camera');
 
     if (!isWeb) {
-      if (isCamera) {
+      if (useCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) {
           Alert.alert(t('onboarding.permission_required', { defaultValue: 'Permiso requerido' }), t('onboarding.camera_access_needed', { defaultValue: 'Necesitamos acceso a la cámara.' }));
@@ -140,9 +146,13 @@ export default function DocumentsScreen() {
       }
     }
 
-    const useCamera = isCamera && !isWeb;
     const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true, cameraType: ImagePicker.CameraType.front })
+      ? await ImagePicker.launchCameraAsync(
+          isSelfie
+            ? { quality: 0.7, allowsEditing: true, cameraType: ImagePicker.CameraType.front }
+            // Vehicle photo is rectangular — back camera, no forced square crop.
+            : { mediaTypes: ['images'], quality: 0.7, allowsEditing: false },
+        )
       : await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 0.7,
@@ -235,6 +245,19 @@ export default function DocumentsScreen() {
         [
           { text: t('onboarding.from_gallery', { defaultValue: 'Foto / Galería' }), onPress: () => pickImage(docType) },
           { text: t('onboarding.upload_pdf', { defaultValue: 'Documento (PDF)' }), onPress: () => pickDocument(docType) },
+          { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        ],
+      );
+    } else if (docType === 'vehicle_photo') {
+      // Offer the camera first so drivers can bypass Google Photos (its picker
+      // errors out on Cuba's connection). Taking the shot is also the natural
+      // action for a vehicle photo.
+      Alert.alert(
+        t('onboarding.vehicle_photo', { defaultValue: 'Foto del vehículo' }),
+        t('onboarding.choose_photo_source', { defaultValue: '¿Cómo quieres agregar la foto?' }),
+        [
+          { text: t('onboarding.take_photo', { defaultValue: 'Tomar foto' }), onPress: () => pickImage(docType, 'camera') },
+          { text: t('onboarding.pick_from_gallery', { defaultValue: 'Seleccionar de galería' }), onPress: () => pickImage(docType, 'gallery') },
           { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
         ],
       );
