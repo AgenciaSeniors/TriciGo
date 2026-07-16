@@ -104,6 +104,7 @@ export type { PackageSpecs, VehicleCargoCapabilities, CompatibilityResult } from
 export { logger, setLogContext, clearLogContext } from './logger';
 // Crash-proof star-rating formatter (rating_avg can be null for new accounts).
 export { formatRating } from './rating';
+export { isVersionOutdated } from './version';
 export { offlineQueue } from './offlineQueue';
 export { fuzzyMatch, stripAccents } from './fuzzyMatch';
 export { SHARE_BASE_URL, buildShareUrl } from './shareRide';

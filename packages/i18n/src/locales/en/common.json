@@ -402,6 +402,13 @@
     "permission_message": "Allow notifications to receive ride updates"
   },
 
+  "update": {
+    "available_title": "Update available",
+    "available_body": "A new version of TriciGo is available. Update to get the latest improvements and fixes.",
+    "update_button": "Update",
+    "later_button": "Later"
+  },
+
   "location": {
     "permission_title": "Location",
     "permission_message": "We need your location to track the ride",
