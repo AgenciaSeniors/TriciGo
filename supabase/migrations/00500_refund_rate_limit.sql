@@ -1,4 +1,6 @@
--- 00491_refund_rate_limit.sql
+-- 00500_refund_rate_limit.sql
+-- (renumbered from 00491 — that number was already taken by
+--  00491_campaigns_promo_code_on_delete_set_null.sql)
 --
 -- Refund one unit of a rate-limit budget for the CURRENT fixed window.
 --

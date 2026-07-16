@@ -93,7 +93,7 @@ export async function rateLimit(
  * who never received a code isn't locked out of retrying — the budget is meant
  * to throttle *successful* sends, not provider failures.
  *
- * Best-effort: a missing RPC (migration 00491 not yet applied) or any DB error
+ * Best-effort: a missing RPC (migration 00500 not yet applied) or any DB error
  * is swallowed so it can never block the caller's failure path.
  */
 export async function refundRateLimit(key: string, windowMs: number): Promise<void> {
