@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["DriverOverlayModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.driveroverlay.DriverOverlayModule"]
+  }
+}

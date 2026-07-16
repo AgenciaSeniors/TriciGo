@@ -741,5 +741,11 @@
     "status_under_review": "Em análise",
     "status_suspended": "Suspenso",
     "status_rejected": "Rejeitado"
+  },
+  "overlay": {
+    "prompt_title": "Não perca nenhuma corrida",
+    "prompt_body": "Permita que o TriciGo apareça sobre outros apps: quando chegar uma corrida, o app abrirá sozinho mesmo se você estiver usando outro aplicativo, e você verá um botão flutuante para voltar rápido.",
+    "prompt_enable": "Ativar",
+    "prompt_later": "Agora não"
   }
 }

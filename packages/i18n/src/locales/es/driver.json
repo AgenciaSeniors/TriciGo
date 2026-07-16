@@ -742,5 +742,11 @@
     "status_under_review": "En revisión",
     "status_suspended": "Suspendido",
     "status_rejected": "Rechazado"
+  },
+  "overlay": {
+    "prompt_title": "No te pierdas ningún viaje",
+    "prompt_body": "Permite que TriciGo aparezca sobre otras apps: cuando llegue un viaje, la app se abrirá sola aunque estés usando otra aplicación, y verás un botón flotante para volver rápido.",
+    "prompt_enable": "Activar",
+    "prompt_later": "Ahora no"
   }
 }

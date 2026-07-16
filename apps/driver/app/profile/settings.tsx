@@ -33,7 +33,7 @@
  * Microcopy unification stays out of scope; PR-B3 owns it.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, Switch, Alert, useColorScheme } from 'react-native';
+import { View, Pressable, Switch, Alert, useColorScheme, Platform, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -51,6 +51,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsGroup } from '@/components/settings/SettingsGroup';
+import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
@@ -114,6 +115,18 @@ export default function DriverSettingsScreen() {
   const [preferredZone, setPreferredZone] = useState('any');
   const [silentModeEnabled, setSilentModeEnabled] = useState(false);
   const [silentModeTimer, setSilentModeTimer] = useState(0);
+
+  // "Display over other apps" (Android): auto-launch on ride offer + floating
+  // bubble. Android gives no callback when the user returns from the system
+  // Settings screen, so re-read the grant every time the app regains focus.
+  const [overlayGranted, setOverlayGranted] = useState(() => DriverOverlay.canDrawOverlays());
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setOverlayGranted(DriverOverlay.canDrawOverlays());
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     // Load existing preferences
@@ -401,6 +414,27 @@ export default function DriverSettingsScreen() {
               </View>
             )}
           </Card>
+
+          {/* Overlay permission (Android): auto-launch on offer + floating bubble.
+              Gated on module presence — on an old APK (OTA JS) the row would
+              be a dead button (openOverlaySettings is a no-op there). */}
+          {Platform.OS === 'android' && isDriverOverlayAvailable && (
+            <Card theme="light" variant="surface" padding="md" className="mt-3">
+              <MenuRow
+                icon="albums-outline"
+                label={t('overlay.settings_title', { defaultValue: 'Mostrar sobre otras apps' })}
+                subtitle={
+                  overlayGranted
+                    ? t('overlay.settings_granted', { defaultValue: 'Activado: la app se abre sola al llegar un viaje' })
+                    : t('overlay.settings_denied', { defaultValue: 'Actívalo para que la app se abra sola al llegar un viaje' })
+                }
+                value={overlayGranted ? t('overlay.settings_on', { defaultValue: 'Sí' }) : t('overlay.settings_off', { defaultValue: 'No' })}
+                iconBg="warning"
+                onPress={() => DriverOverlay.openOverlaySettings()}
+                showBorder={false}
+              />
+            </Card>
+          )}
         </SettingsGroup>
 
         {/* ── Group 3: Trabajo ────────────────────────────────────────── */}

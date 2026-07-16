@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
+import DriverOverlay from '../../modules/driver-overlay';
 import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus } from '@tricigo/api';
 import { triggerHaptic, playSound, logger, mapLogger } from '@tricigo/utils';
 import { stopBgLocationTracking } from '@/services/locationBackgroundTask';
@@ -300,6 +301,10 @@ export function useIncomingRequests(isOnline: boolean) {
   const removeStaleRequests = useDriverRideStore((s) => s.removeStaleRequests);
   const clearRequests = useDriverRideStore((s) => s.clearRequests);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  // Throttle bringAppToForeground when offers arrive back-to-back: relaunching
+  // an already-foregrounded task is a cheap no-op, but there's no reason to
+  // spam startActivity either.
+  const lastForegroundLaunchRef = useRef(0);
 
   // Periodically remove stale requests (>30s old) and notify driver
   useEffect(() => {
@@ -340,6 +345,23 @@ export function useIncomingRequests(isOnline: boolean) {
         addRequest(ride);
         triggerHaptic('warning');
         playSound('new_request');
+        // Android: if the driver is in another app, pull TriciGo on top so
+        // the 30s offer window isn't wasted digging through notifications.
+        // The SYSTEM_ALERT_WINDOW grant exempts us from background-activity-
+        // launch restrictions; without it (or without the native module in
+        // the binary) canDrawOverlays() is false and the push-notification
+        // path (00332 → send-push) remains the UX. Only genuine Realtime
+        // INSERTs trigger this — the 30s poll fallback below must NOT yank
+        // the driver out of another app for offers they already saw.
+        if (
+          Platform.OS === 'android' &&
+          AppState.currentState !== 'active' &&
+          Date.now() - lastForegroundLaunchRef.current > 3000 &&
+          DriverOverlay.canDrawOverlays()
+        ) {
+          lastForegroundLaunchRef.current = Date.now();
+          DriverOverlay.bringAppToForeground();
+        }
       },
       // On UPDATE (ride status changed)
       (ride) => {
