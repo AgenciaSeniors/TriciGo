@@ -8,6 +8,7 @@ import { useRideStore } from '@/stores/ride.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import type { User } from '@tricigo/types';
+import { SECURE_STORE_SERVICE } from '@/lib/secureStoreService';
 
 // ── Offline auth cache ──
 // The Supabase session survives offline in SecureStore, but the in-memory auth
@@ -84,14 +85,41 @@ const storageOps =
       }
     : (() => {
         const SecureStore = require('expo-secure-store');
+        // iOS only: expo-secure-store defaults to WHEN_UNLOCKED, which makes the
+        // item unreadable while the device is LOCKED. The passenger app has no
+        // background location task, so it is less exposed than the driver app
+        // (Sentry TRICIGO-MOBILE-14), but it is still woken while locked — by a
+        // push notification — and reads the session on that path. Kept identical
+        // to apps/driver/src/hooks/useAuth.ts on purpose. No-op on Android, whose
+        // keystore has no equivalent locked-device restriction.
+        // See SECURE_STORE_SERVICE for why the service rename is load-bearing.
+        const secureStoreOptions = {
+          keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+          keychainService: SECURE_STORE_SERVICE,
+        };
+        return {
+          get: (key: string) => SecureStore.getItemAsync(key, secureStoreOptions),
+          set: (key: string, value: string) =>
+            SecureStore.setItemAsync(key, value, secureStoreOptions),
+          remove: (key: string) => SecureStore.deleteItemAsync(key, secureStoreOptions),
+        };
+      })();
+
+// Entries written before the service rename, under expo-secure-store's default
+// service. Read-only: createStorageAdapter adopts them into the current store on
+// first read, then clears them.
+const legacyStorageOps =
+  Platform.OS === 'web'
+    ? undefined
+    : (() => {
+        const SecureStore = require('expo-secure-store');
         return {
           get: (key: string) => SecureStore.getItemAsync(key),
-          set: (key: string, value: string) => SecureStore.setItemAsync(key, value),
           remove: (key: string) => SecureStore.deleteItemAsync(key),
         };
       })();
 
-const adapter = createStorageAdapter(storageOps);
+const adapter = createStorageAdapter(storageOps, { legacy: legacyStorageOps });
 configureStorage(adapter);
 
 /** Wrap a promise with a timeout */
@@ -185,7 +213,12 @@ export function useAuthInit() {
             );
           }
         } else if (mounted) {
-          reset();
+          // Same rule as the listener above: a null session is "we could not
+          // read one", not "there isn't one". getSession() used to REJECT on a
+          // locked keychain and land in the catch below, which hydrates; the
+          // adapter now reports that read as null, so this branch must hydrate
+          // too. hydrateFromCacheOrReset resets by itself when nothing is cached.
+          await hydrateFromCacheOrReset(setUser, reset, () => mounted);
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -229,16 +262,28 @@ export function useAuthInit() {
     const { data: { subscription } } = authService.onAuthStateChange(
       (event, session) => {
         if (!mounted) return;
-        if (event === 'SIGNED_OUT' || !session) {
+        if (event === 'SIGNED_OUT') {
           resetAnalytics();
           reset();
           useRideStore.getState().resetAll();
           useChatStore.getState().reset();
           useNotificationStore.getState().reset();
-          // Only wipe the offline cache on an EXPLICIT sign-out. A transient
-          // null session must not erase the snapshot we rely on to stay logged
-          // in offline.
-          if (event === 'SIGNED_OUT') clearAuthCache();
+          // Safe to wipe the offline cache: this is an EXPLICIT sign-out, not a
+          // session we merely failed to read.
+          clearAuthCache();
+        } else if (!session) {
+          // A null session that did NOT arrive as SIGNED_OUT means "we could not
+          // read one", not "there isn't one" — the iOS keychain reports a locked
+          // read as null now rather than throwing it into the void
+          // (createStorageAdapter). Rehydrate from the offline snapshot instead
+          // of bouncing to login; it falls back to reset() by itself when there
+          // is genuinely nothing cached. Kept in step with the driver app.
+          // Deferred: SDK calls inside this callback deadlock
+          // _notifyAllSubscribers (see the note below).
+          setTimeout(() => {
+            if (!mounted) return;
+            void hydrateFromCacheOrReset(setUser, reset, () => mounted);
+          }, 0);
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           // IMPORTANT: Defer SDK calls to avoid deadlock.
           // _notifyAllSubscribers awaits this callback. If we call

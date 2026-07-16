@@ -64,9 +64,38 @@ import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import { driverService, locationService } from '@tricigo/api';
 import { bufferLocation, type BufferedLocation } from './locationBuffer';
+import { SECURE_STORE_SERVICE } from '@/lib/secureStoreService';
 
 export const LOCATION_TASK = 'tricigo-driver-location-bg';
 const CTX_KEY = 'tricigo_bg_location_ctx';
+
+// iOS only: expo-secure-store defaults to WHEN_UNLOCKED, which makes the item
+// unreadable while the device is LOCKED — precisely when this task runs, with
+// the phone locked in the driver's pocket. AFTER_FIRST_UNLOCK keeps the ctx
+// encrypted at rest until the first unlock after boot, then readable while
+// locked. No-op on Android. Must match the options used in
+// apps/driver/src/hooks/useAuth.ts for the session. See Sentry TRICIGO-MOBILE-14
+// and SECURE_STORE_SERVICE for why the service rename is what makes it stick.
+const CTX_STORE_OPTIONS = {
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+  keychainService: SECURE_STORE_SERVICE,
+};
+
+/**
+ * Read the ctx, falling back to where it lived before the service rename.
+ *
+ * Returns the raw string, or throws if the keychain refused us — the caller has
+ * to tell "unreadable" from "absent" apart. The fallback matters for the upgrade
+ * itself: without it, the first batch after the update would find nothing under
+ * the new service and stop the task, dropping a mid-shift driver offline until
+ * he next opened the app. The legacy copy is not adopted (unlike the session):
+ * the ctx is disposable, and the next persistBgTaskContext supersedes it.
+ */
+async function readBgTaskContextRaw(): Promise<string | null> {
+  const current = await SecureStore.getItemAsync(CTX_KEY, CTX_STORE_OPTIONS);
+  if (current !== null) return current;
+  return SecureStore.getItemAsync(CTX_KEY);
+}
 
 export type BgTaskMode = 'online' | 'ride';
 
@@ -93,7 +122,17 @@ let startedMode: BgTaskMode | null = null;
  */
 export async function persistBgTaskContext(ctx: BgTaskContext): Promise<void> {
   try {
-    await SecureStore.setItemAsync(CTX_KEY, JSON.stringify(ctx));
+    // A plain write, deliberately. Never delete-then-write here: this runs on
+    // every AppState → 'active' (useDriverLocation → startBgLocationTracking),
+    // the `await` yields the JS thread, and a location batch landing in that gap
+    // would read the ctx as ABSENT — which the task body reads as "the driver
+    // signed out" and answers with stopLocationUpdatesAsync(), unregistering
+    // itself. startBgLocationTracking captured isRunning before this call, so it
+    // would not restart it either: the shift would die exactly the way
+    // TRICIGO-MOBILE-14 kills it. The service rename (CTX_STORE_OPTIONS) is what
+    // gets AFTER_FIRST_UNLOCK applied — the first write under the new service is
+    // a SecItemAdd — so no delete is needed to migrate.
+    await SecureStore.setItemAsync(CTX_KEY, JSON.stringify(ctx), CTX_STORE_OPTIONS);
   } catch {
     // best-effort — if SecureStore fails, the task will skip uploads
   }
@@ -105,6 +144,13 @@ export async function persistBgTaskContext(ctx: BgTaskContext): Promise<void> {
  */
 export async function clearBgTaskContext(): Promise<void> {
   try {
+    await SecureStore.deleteItemAsync(CTX_KEY, CTX_STORE_OPTIONS);
+  } catch {
+    // best-effort
+  }
+  try {
+    // Also the pre-rename copy, which readBgTaskContextRaw still falls back to —
+    // leaving it behind would resurrect a stale driverId/rideId after a stop.
     await SecureStore.deleteItemAsync(CTX_KEY);
   } catch {
     // best-effort
@@ -255,18 +301,41 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
   // Load ctx fresh on every batch — handles the case where the user
   // accepts a new ride after the previous one ends (ctx is re-persisted
   // by useDriverLocation in that case).
-  let ctx: BgTaskContext | null = null;
+  // "Could not read the ctx" and "there is no ctx" are NOT the same thing, and
+  // conflating them cost drivers their shift: on iOS the keychain rejects reads
+  // while the device is locked (errSecInteractionNotAllowed), so a locked phone
+  // in the driver's pocket looked exactly like a signed-out driver and this task
+  // shut its own location updates down — killing the heartbeat and making the
+  // driver unmatchable until he relaunched the app (Sentry TRICIGO-MOBILE-14).
+  // Reads should now succeed (CTX_STORE_OPTIONS), so this flag is the safety net.
+  let raw: string | null = null;
+  let ctxReadFailed = false;
   try {
-    const raw = await SecureStore.getItemAsync(CTX_KEY);
-    if (raw) ctx = JSON.parse(raw) as BgTaskContext;
+    raw = await readBgTaskContextRaw();
   } catch {
-    ctx = null;
+    ctxReadFailed = true;
+  }
+
+  let ctx: BgTaskContext | null = null;
+  if (raw) {
+    try {
+      ctx = JSON.parse(raw) as BgTaskContext;
+    } catch {
+      // Corrupt ctx — genuinely unusable, so fall through to the stop path
+      // rather than keeping a no-op task alive forever.
+      ctx = null;
+    }
   }
 
   if (!ctx) {
-    // No ctx persisted — likely the task was started by the OS after a
-    // crash recovery, but the user hasn't logged back in. Stop the
-    // task to avoid burning battery on no-op callbacks.
+    if (ctxReadFailed) {
+      // Unreadable, not absent. Skip this batch but stay registered — the next
+      // one (or the first after an unlock) reads the ctx and resumes uploading.
+      return;
+    }
+    // Genuinely no ctx persisted — likely the task was started by the OS after
+    // a crash recovery, but the user hasn't logged back in. Stop the task to
+    // avoid burning battery on no-op callbacks.
     await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
     return;
   }
