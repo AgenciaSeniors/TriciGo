@@ -71,14 +71,24 @@ export async function sendSmsViaD7(
 
   const result = await res.json().catch(() => ({} as Record<string, unknown>));
   const requestId = (result as { request_id?: string }).request_id;
+  const errors = (result as { errors?: unknown }).errors;
   console.log('[d7] send:', JSON.stringify({
     status: res.status,
     request_id: requestId,
-    errors: (result as { errors?: unknown }).errors,
+    errors,
   }));
 
+  // D7's /messages/v1/send can return HTTP 200 with a per-recipient `errors`
+  // payload (rejected number, blocked route) and NO request_id. Treat that as a
+  // failure — otherwise send-sms-otp reports a false "code enviado" and the
+  // caller burns a rate-limit token for an SMS that never went out.
+  const hasErrors = errors != null && (
+    Array.isArray(errors) ? errors.length > 0 : Object.keys(errors as object).length > 0
+  );
+  const accepted = res.ok && !!requestId && !hasErrors;
+
   // Best-effort delivery tracking — process-sms-dlr updates the status later.
-  if (res.ok && requestId && opts?.tracker) {
+  if (accepted && opts?.tracker) {
     try {
       await opts.tracker.from('sms_deliveries').insert({
         request_id: requestId,
@@ -94,5 +104,5 @@ export async function sendSmsViaD7(
     }
   }
 
-  return { ok: res.ok, status: res.status, requestId, error: res.ok ? undefined : result };
+  return { ok: accepted, status: res.status, requestId, error: accepted ? undefined : (errors ?? result) };
 }

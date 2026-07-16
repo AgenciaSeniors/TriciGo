@@ -1,7 +1,27 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
-import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { rateLimit, rateLimitResponse, refundRateLimit } from '../_shared/rate-limiter.ts';
 import { resolveDemoOtp } from '../_shared/demo-otp.ts';
 import { sendSmsViaD7 } from '../_shared/d7.ts';
+
+// ── OTP send rate limits ──────────────────────────────────────────────
+// Two tumbling-window budgets gate every send. Tuned for Cuba (2026-07-10):
+//
+// Per-phone caps SMS-spam of ONE victim number. 6/10min = 36 SMS/hour, the
+// SAME hourly ceiling as the old 3/5min but a more forgiving burst so a user
+// retrying (client resend timer paces to ~1/min) isn't locked out mid-login.
+//
+// Per-IP is an aggregate cap. The old 5/10min was hostile to ETECSA's
+// carrier-grade NAT, where many unrelated subscribers share one public IP —
+// 5 requests from ANY of them in 10min locked out everyone else on that IP
+// (verified: ETECSA IPs hit 2× the cap). Raised to 30/10min: CGNAT-friendly
+// while still bounding a single-IP flood (per-phone still caps each victim).
+//
+// Failed sends are REFUNDED (see refundOtpBudget) so provider failures don't
+// consume a user's budget — the tokens throttle delivered SMS, not failures.
+const IP_MAX = 30;
+const IP_WINDOW_MS = 10 * 60 * 1000;
+const PHONE_MAX = 6;
+const PHONE_WINDOW_MS = 10 * 60 * 1000;
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -16,6 +36,20 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+// Normalize a phone to E.164, applying Cuban ETECSA rules for local inputs.
+// Mirrors @tricigo/utils normalizeCubanPhone / _normalize_cuban_phone (00487)
+// — kept inline because Deno Edge Functions can't import @tricigo/utils.
+function normalizePhone(raw: string): string {
+  const cleaned = raw.replace(/[\s\-()]/g, '');
+  const digits = cleaned.replace(/\D/g, '');
+  // Bare Cuban local mobile: 8 digits starting with 5 (legacy) or 6 (new 63/64)
+  if (/^[56]\d{7}$/.test(digits)) return `+53${digits}`;
+  // Cuban country code without +: 53 + 8-digit subscriber number
+  if (/^53\d{8}$/.test(digits)) return `+${digits}`;
+  // Otherwise treat as already-international E.164; just ensure a leading +
+  return cleaned.startsWith('+') ? cleaned : `+${cleaned}`;
+}
+
 // D7 Networks is the SOLE OTP/SMS provider (Cuba + rest of world).
 // Twilio Verify + Meta WhatsApp fallback were removed 2026-06-07.
 // All phones now follow one flow: generate a 6-digit code, store it in
@@ -27,9 +61,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Rate limit: 5 requests per IP per 10 minutes
+    // Per-IP rate limit (see IP_MAX above). CGNAT-tolerant.
     const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = await rateLimit(`send-sms-otp:${clientIP}`, 5, 10 * 60 * 1000);
+    const rl = await rateLimit(`send-sms-otp:${clientIP}`, IP_MAX, IP_WINDOW_MS);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, getCorsHeaders(req));
 
     const { phone } = await req.json();
@@ -41,8 +75,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Normalize phone: ensure starts with +
-    const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+    // Normalize to E.164. For Cuban destinations apply the canonical ETECSA
+    // normalization (mirrors @tricigo/utils normalizeCubanPhone /
+    // _normalize_cuban_phone — can't import @tricigo/utils into Deno) so a bare
+    // 8-digit local number can't be mis-routed to the wrong country code
+    // (e.g. "51234567" → "+51234567" = Peru instead of "+5351234567" = Cuba).
+    const normalizedPhone = normalizePhone(phone);
 
     // BUG-086: Validate E.164 phone format
     const e164Regex = /^\+[1-9]\d{6,14}$/;
@@ -53,10 +91,28 @@ Deno.serve(async (req) => {
       );
     }
 
-    // BUG-186: per-phone rate limit. Caps OTP-spam abuse where an
-    // attacker rotates IPs to hammer the provider with OTP requests
-    // for a victim's phone. 3 OTPs per phone per 5 minutes is generous.
-    const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, 3, 5 * 60 * 1000);
+    // Cuba guard: any +53 destination must be a valid ETECSA mobile (5/6 + 7
+    // digits). Blocks malformed +53 numbers and landlines from silently
+    // consuming a code + burning provider cost on an undeliverable send.
+    // International numbers (+55 Brazil, etc.) skip this and pass on E.164 alone.
+    if (normalizedPhone.startsWith('+53') && !/^\+53[56]\d{7}$/.test(normalizedPhone)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid Cuban phone. Use +53 5XXXXXXX or +53 6XXXXXXX.' }),
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Refund both budgets when a send fails downstream (provider reject /
+    // misconfig / DB error) so a user who never received a code isn't locked
+    // out of retrying. Windows MUST match the rateLimit() calls above/below.
+    const refundOtpBudget = async () => {
+      await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
+      await refundRateLimit(`send-sms-otp:${clientIP}`, IP_WINDOW_MS);
+    };
+
+    // BUG-186: per-phone rate limit. Caps OTP-spam of one victim number
+    // (an attacker rotating IPs). See PHONE_MAX above.
+    const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_MAX, PHONE_WINDOW_MS);
     if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
 
     const supabase = createClient(
@@ -103,6 +159,7 @@ Deno.serve(async (req) => {
     // ── All phones → D7 Networks SMS + otp_codes (sole provider) ──
     if (!Deno.env.get('D7_API_TOKEN')) {
       console.error('[send-sms-otp] D7_API_TOKEN not configured');
+      await refundOtpBudget();
       return new Response(
         JSON.stringify({ error: 'SMS service not configured' }),
         { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
@@ -122,6 +179,7 @@ Deno.serve(async (req) => {
 
     if (insertError) {
       console.error('Failed to store OTP:', insertError);
+      await refundOtpBudget();
       return new Response(
         JSON.stringify({ error: 'Failed to generate verification code' }),
         { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
@@ -136,6 +194,8 @@ Deno.serve(async (req) => {
 
     if (!result.ok) {
       console.error('[send-sms-otp] D7 send failed:', JSON.stringify(result.error));
+      // No SMS went out → give the rate-limit tokens back so the user can retry.
+      await refundOtpBudget();
       return new Response(
         JSON.stringify({ success: false, error: 'SMS provider failed' }),
         { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
