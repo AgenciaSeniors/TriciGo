@@ -51,7 +51,7 @@ import { notificationService } from './notification.service';
 import { validate, createRideSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
 import { realtimeStatusLogger } from './_realtime-status';
-import { AuthError, ValidationError, ForbiddenError } from '../errors';
+import { AppError, AuthError, ValidationError, ForbiddenError } from '../errors';
 import { deliveryService } from './delivery.service';
 
 export interface CreateRideParams {
@@ -1006,6 +1006,7 @@ export const rideService = {
     const result = data as {
       success?: boolean;
       error?: string;
+      status?: string;
       rating_penalized?: boolean;
       is_grace?: boolean;
       cancel_count_24h?: number;
@@ -1018,6 +1019,15 @@ export const rideService = {
       const code = result?.error ?? 'unknown';
       if (code === 'unauthorized') {
         throw new ForbiddenError('User is not the customer or driver of this ride');
+      }
+      // The ride is already terminal (the other party or an admin cancelled it,
+      // or this is a double-tap). Typed so callers can treat it as "intent
+      // already satisfied" and clear their local trip instead of reporting a
+      // failure — the ride IS cancelled, just not by this call.
+      if (code === 'ride_already_closed') {
+        throw new AppError(`cancel_ride failed: ${code}`, 'RIDE_ALREADY_CLOSED', 409, {
+          status: result?.status ?? null,
+        });
       }
       throw new Error(`cancel_ride failed: ${code}`);
     }

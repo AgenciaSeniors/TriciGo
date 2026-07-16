@@ -179,6 +179,7 @@
     "cancel_reason_other": "Otro motivo",
     "status_update_failed": "No se pudo actualizar el estado del viaje",
     "cancel_failed": "No se pudo cancelar el viaje",
+    "cancel_already_closed": "El viaje ya estaba cancelado",
     "eta_driver_to_pickup": "Llegando al pasajero en ~{{minutes}} min",
     "eta_to_destination": "Destino en ~{{minutes}} min",
     "eta_driver_arrived": "Llegaste al punto de recogida",

@@ -978,6 +978,22 @@ describe('rideService.cancelRide', () => {
 
     await expect(rideService.cancelRide('ride-1', 'user-1')).rejects.toThrow();
   });
+
+  it('throws a typed RIDE_ALREADY_CLOSED error when the ride is already closed', async () => {
+    // The ride reached a terminal state before this call landed (admin cancel,
+    // the other party cancelled, or a double-tap). Callers need to tell this
+    // apart from a real failure: the user's intent is already satisfied, so the
+    // UI should clear the trip instead of claiming the cancel failed.
+    mockRpc.mockResolvedValueOnce({
+      data: { error: 'ride_already_closed', status: 'canceled' },
+      error: null,
+    });
+
+    await expect(rideService.cancelRide('ride-1', 'user-1')).rejects.toMatchObject({
+      code: 'RIDE_ALREADY_CLOSED',
+      details: { status: 'canceled' },
+    });
+  });
 });
 
 // ============================================================

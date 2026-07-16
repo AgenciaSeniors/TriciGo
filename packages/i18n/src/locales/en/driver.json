@@ -179,6 +179,7 @@
     "cancel_reason_other": "Other reason",
     "status_update_failed": "Could not update ride status",
     "cancel_failed": "Could not cancel the trip",
+    "cancel_already_closed": "This trip was already canceled",
     "eta_driver_to_pickup": "Arriving at passenger in ~{{minutes}} min",
     "eta_to_destination": "Destination in ~{{minutes}} min",
     "eta_driver_arrived": "You arrived at pickup",
