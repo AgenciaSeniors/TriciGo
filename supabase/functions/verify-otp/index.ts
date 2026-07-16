@@ -118,12 +118,22 @@ Deno.serve(async (req) => {
         recentlyVerified = !!(recent && recent.length > 0);
       }
       if (!recentlyVerified) {
+        // Map the RPC error to a STABLE, client-facing `reason` code so the app can
+        // show a precise message. `no_active_code` (expired / never issued / already
+        // used) → "expired" — the fix is always "request a new code". `invalid_code`
+        // (wrong digits) → "invalid" — the fix is "retype". Kept distinct from the
+        // human `error` string, which stays English (the client localizes off `reason`).
         const errCode = result?.error;
+        const reason =
+          errCode === 'too_many_attempts' ? 'too_many_attempts'
+          : errCode === 'invalid_code' ? 'invalid'
+          : 'expired';
         const userMsg =
-          errCode === 'too_many_attempts' ? 'Too many attempts. Request a new code.'
-          : 'Invalid or expired code';
+          reason === 'too_many_attempts' ? 'Too many attempts. Request a new code.'
+          : reason === 'invalid' ? 'Incorrect code. Check the digits.'
+          : 'Code expired. Request a new one.';
         return new Response(
-          JSON.stringify({ error: userMsg, attempts_remaining: result?.attempts_remaining }),
+          JSON.stringify({ error: userMsg, reason, attempts_remaining: result?.attempts_remaining }),
           { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }

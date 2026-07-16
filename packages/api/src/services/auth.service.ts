@@ -107,7 +107,30 @@ export const authService = {
       body: { phone, code: token },
     });
 
-    if (error) throw error;
+    if (error) {
+      // supabase-js wraps non-2xx EF responses in a FunctionsHttpError with the raw
+      // Response on `context`. Surface the EF's stable `reason` (expired / invalid /
+      // too_many_attempts) on `.code` so the UI can show a precise message instead
+      // of a generic one. Fall back to the raw error when the body is unreadable.
+      let reason: string | null = null;
+      let efMsg: string | null = null;
+      const ctx = (error as { context?: Response } | null)?.context;
+      if (ctx) {
+        try {
+          const body = await ctx.clone().json();
+          if (typeof body?.reason === 'string') reason = body.reason;
+          if (typeof body?.error === 'string') efMsg = body.error;
+        } catch {
+          /* body unreadable/consumed — fall through to the raw error */
+        }
+      }
+      if (reason || efMsg) {
+        const e = new Error(efMsg ?? reason ?? 'Verification failed') as Error & { code?: string };
+        if (reason) e.code = reason;
+        throw e;
+      }
+      throw error;
+    }
     if (data?.error) throw new Error(data.error);
 
     // Set the session from the Edge Function response
