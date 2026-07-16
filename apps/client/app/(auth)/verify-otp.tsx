@@ -89,7 +89,7 @@ export default function VerifyOTPScreen() {
         .then((info) => deviceService.registerLoginDevice(info))
         .catch(() => {});
       // Navigation is automatic via auth guard
-    } catch {
+    } catch (err) {
       if (sessionEstablishedRef.current) {
         // The code was accepted; only the profile fetch failed (network).
         // Tapping Verify again resumes at phase 2 (no OTP re-burn), and the
@@ -97,7 +97,19 @@ export default function VerifyOTPScreen() {
         // are never permanently stranded.
         setError(t('auth.profile_fetch_retry', { defaultValue: 'Conexión inestable. Tocá "Verificar" otra vez.' }));
       } else {
-        setError(t('errors.generic'));
+        // Distinguish "expired" from "wrong digits" via the EF's stable reason
+        // code (set by authService.verifyOTP) — a generic "algo salió mal" left
+        // the user unsure whether to retype or request a new code.
+        const reason = (err as { code?: string } | null)?.code;
+        setError(
+          reason === 'expired'
+            ? t('auth.otp_expired', { defaultValue: 'El código expiró. Pedí uno nuevo.' })
+            : reason === 'invalid'
+              ? t('auth.otp_incorrect', { defaultValue: 'Código incorrecto. Revisá los dígitos.' })
+              : reason === 'too_many_attempts'
+                ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pedí un código nuevo.' })
+                : t('errors.generic'),
+        );
       }
     } finally {
       setLoading(false);

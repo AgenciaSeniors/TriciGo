@@ -214,7 +214,16 @@ export default function LoginPage() {
       if (uid) await routeAfterAuth(uid);
       else router.push('/book');
     } catch (err) {
-      setError(t('auth.invalid_otp'));
+      // Distinguish "expired" from "wrong digits" via the EF's stable reason code
+      // (set by authService.verifyOTP) instead of a blanket "invalid" message.
+      const reason = (err as { code?: string } | null)?.code;
+      setError(
+        reason === 'expired'
+          ? t('auth.otp_expired', { defaultValue: 'El código expiró. Pedí uno nuevo.' })
+          : reason === 'too_many_attempts'
+            ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pedí un código nuevo.' })
+            : t('auth.invalid_otp'),
+      );
       console.error(err);
     } finally {
       setLoading(false);

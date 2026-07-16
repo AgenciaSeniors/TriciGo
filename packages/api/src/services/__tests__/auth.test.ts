@@ -81,6 +81,24 @@ describe('authService', () => {
 
       await expect(authService.verifyOTP('+573001234567', '000000')).rejects.toEqual(err);
     });
+
+    it('surfaces the EF reason code (expired vs invalid) on .code', async () => {
+      // supabase-js wraps non-2xx EF responses in a FunctionsHttpError with the raw
+      // Response on `context`; verifyOTP parses its JSON body to expose `reason`.
+      const err = {
+        message: 'Edge Function returned a non-2xx status code',
+        context: {
+          clone: () => ({
+            json: async () => ({ error: 'Code expired. Request a new one.', reason: 'expired' }),
+          }),
+        },
+      };
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: err });
+
+      await expect(
+        authService.verifyOTP('+573001234567', '000000'),
+      ).rejects.toMatchObject({ code: 'expired' });
+    });
   });
 
   // ==================== getSession ====================

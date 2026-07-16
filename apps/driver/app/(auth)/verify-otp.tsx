@@ -82,7 +82,7 @@ export default function VerifyOTPScreen() {
       } catch {
         // No driver profile yet - will redirect to onboarding
       }
-    } catch {
+    } catch (err) {
       if (sessionEstablishedRef.current) {
         // The code was accepted; only the profile fetch failed (network).
         // Retrying resumes at phase 2 (no OTP re-burn); the stored session
@@ -90,8 +90,20 @@ export default function VerifyOTPScreen() {
         setError(t('auth.profile_fetch_retry', { defaultValue: 'Conexión inestable. Tocá "Verificar" otra vez.' }));
         Toast.show({ type: 'error', text1: t('auth.profile_fetch_retry', { defaultValue: 'Conexión inestable. Tocá "Verificar" otra vez.' }), visibilityTime: 2500 });
       } else {
-        setError(t('errors.generic'));
-        Toast.show({ type: 'error', text1: t('auth.invalid_otp', { defaultValue: 'Código inválido' }), visibilityTime: 2500 });
+        // Distinguish "expired" from "wrong digits" via the EF's stable reason
+        // code (set by authService.verifyOTP) so the driver knows whether to
+        // retype or request a new code.
+        const reason = (err as { code?: string } | null)?.code;
+        const msg =
+          reason === 'expired'
+            ? t('auth.otp_expired', { defaultValue: 'El código expiró. Pedí uno nuevo.' })
+            : reason === 'invalid'
+              ? t('auth.otp_incorrect', { defaultValue: 'Código incorrecto. Revisá los dígitos.' })
+              : reason === 'too_many_attempts'
+                ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pedí un código nuevo.' })
+                : t('errors.generic');
+        setError(msg);
+        Toast.show({ type: 'error', text1: msg, visibilityTime: 2500 });
       }
       // Let the user retry — reset the auto-submit guard.
       autoVerifiedRef.current = false;
