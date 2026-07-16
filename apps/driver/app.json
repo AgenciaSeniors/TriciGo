@@ -72,7 +72,7 @@
         {
           "android": {
             "compileSdkVersion": 36,
-            "targetSdkVersion": 35,
+            "targetSdkVersion": 36,
             "minSdkVersion": 24,
             "manifestQueries": {
               "package": [
@@ -88,6 +88,7 @@
       ],
       "./plugins/with-privacy-manifest",
       "./plugins/with-user-leave-hint-safe",
+      "./plugins/with-large-screen-compat",
       "expo-router",
       "expo-localization",
       "expo-apple-authentication",
