@@ -42,7 +42,7 @@ import { DriverTripView, useActiveTripMapData } from '@/components/DriverTripVie
 import { HomeBottomSheet } from '@/components/HomeBottomSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import { useOverlayBubble } from '@/hooks/useOverlayBubble';
-import DriverOverlay from '../../modules/driver-overlay';
+import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -875,7 +875,7 @@ function NativeDriverHomeScreen() {
       // while the driver is in another app, and shows the floating bubble in
       // the background. Never blocks going online; declining sets the flag
       // so we don't nag — the settings screen keeps a persistent entry.
-      if (newStatus && Platform.OS === 'android' && !DriverOverlay.canDrawOverlays()) {
+      if (newStatus && Platform.OS === 'android' && isDriverOverlayAvailable && !DriverOverlay.canDrawOverlays()) {
         const OVERLAY_PROMPT_KEY = '@tricigo/overlay_prompt_shown';
         AsyncStorage.getItem(OVERLAY_PROMPT_KEY).then((shown) => {
           if (shown) return;

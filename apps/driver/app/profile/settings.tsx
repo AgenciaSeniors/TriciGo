@@ -51,7 +51,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsGroup } from '@/components/settings/SettingsGroup';
-import DriverOverlay from '../../modules/driver-overlay';
+import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
@@ -415,8 +415,10 @@ export default function DriverSettingsScreen() {
             )}
           </Card>
 
-          {/* Overlay permission (Android): auto-launch on offer + floating bubble */}
-          {Platform.OS === 'android' && (
+          {/* Overlay permission (Android): auto-launch on offer + floating bubble.
+              Gated on module presence — on an old APK (OTA JS) the row would
+              be a dead button (openOverlaySettings is a no-op there). */}
+          {Platform.OS === 'android' && isDriverOverlayAvailable && (
             <Card theme="light" variant="surface" padding="md" className="mt-3">
               <MenuRow
                 icon="albums-outline"

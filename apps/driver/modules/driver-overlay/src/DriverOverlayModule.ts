@@ -51,4 +51,12 @@ const fallbackDriverOverlay = {
   hideBubble(): void {},
 };
 
+// True when the native module is actually in the binary. Gate any UI that
+// *invites* the user to grant the permission (go-online prompt, settings row)
+// on this — on an old APK receiving this JS via OTA, canDrawOverlays() is
+// false but openOverlaySettings() is ALSO a no-op, so the invitation would be
+// a dead button. Behavior call sites (showBubble/bringAppToForeground) don't
+// need it: canDrawOverlays() already short-circuits them.
+export const isDriverOverlayAvailable = nativeDriverOverlay != null;
+
 export default nativeDriverOverlay ?? fallbackDriverOverlay;
