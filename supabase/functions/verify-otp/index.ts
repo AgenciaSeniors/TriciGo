@@ -237,6 +237,20 @@ Deno.serve(async (req) => {
       | { access_token: string; refresh_token: string; expires_in: number; user: unknown }
       | null = null;
 
+    // Resolve the user's ACTUAL email. For OAuth/email-origin accounts whose phone
+    // was linked later, this is NOT the synthetic devEmail (e.g. a real gmail). Using
+    // devEmail for session minting made Strategy B's generateLink CREATE a brand-new
+    // synthetic-email user and mint a session for THAT empty user — the "app asks for
+    // all my data again as if I never registered" bug. Fall back to devEmail (correct
+    // for phone-only users, where email === devEmail).
+    let authEmail = devEmail;
+    try {
+      const { data: u } = await supabase.auth.admin.getUserById(userId);
+      if (u?.user?.email) authEmail = u.user.email;
+    } catch (e) {
+      console.warn('getUserById(email) failed, using devEmail:', e instanceof Error ? e.message : String(e));
+    }
+
     // Strategy A — stable-password grant (NEVER log/return the password).
     // Sign in with the deterministic per-user password. On the happy path this does
     // NOT write the password, so it does NOT revoke the user's other sessions → the
@@ -251,7 +265,7 @@ Deno.serve(async (req) => {
     try {
       const stablePassword = await deriveStablePassword(userId);
       let { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-        email: devEmail,
+        email: authEmail,
         password: stablePassword,
       });
       if (pwErr) {
@@ -260,7 +274,7 @@ Deno.serve(async (req) => {
           console.error('updateUserById(password) failed:', pwSetErr.message);
         } else {
           ({ data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-            email: devEmail,
+            email: authEmail,
             password: stablePassword,
           }));
           if (pwErr) console.error('signInWithPassword (post-heal) failed:', pwErr.message);
@@ -283,7 +297,7 @@ Deno.serve(async (req) => {
       try {
         const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
           type: 'magiclink',
-          email: devEmail,
+          email: authEmail,
         });
         const hashedToken = linkData?.properties?.hashed_token;
         if (linkError) {
