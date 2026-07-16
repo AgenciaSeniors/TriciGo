@@ -63,6 +63,10 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   tier_platino_min_trips: { type: 'number', helpKey: 'platform_config.tier_platino_min_trips_help' },
   tier_diamante_min_trips: { type: 'number', helpKey: 'platform_config.tier_diamante_min_trips_help' },
 
+  // ── App update prompt (latest published store version per app) ──
+  client_latest_version: { type: 'text', helpKey: 'platform_config.client_latest_version_help' },
+  driver_latest_version: { type: 'text', helpKey: 'platform_config.driver_latest_version_help' },
+
   // ── Routing experiment (Google Directions vs Mapbox; OFF by default) ──
   routing_google_enabled: { type: 'text', helpKey: 'platform_config.routing_google_enabled_help' },
   routing_google_daily_cap: { type: 'number', helpKey: 'platform_config.routing_google_daily_cap_help' },

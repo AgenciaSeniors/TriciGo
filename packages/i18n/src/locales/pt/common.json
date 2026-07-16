@@ -401,6 +401,13 @@
     "permission_message": "Permita notificações para receber atualizações da sua viagem"
   },
 
+  "update": {
+    "available_title": "Atualização disponível",
+    "available_body": "Há uma nova versão do TriciGo disponível. Atualize para receber as últimas melhorias e correções.",
+    "update_button": "Atualizar",
+    "later_button": "Mais tarde"
+  },
+
   "location": {
     "permission_title": "Localização",
     "permission_message": "Precisamos da sua localização para rastrear a viagem",

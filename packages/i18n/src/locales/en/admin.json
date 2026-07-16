@@ -1208,6 +1208,8 @@
     "tier_oro_min_trips_help": "Minimum completed trips for Gold tier (rider + driver). Default 20",
     "tier_platino_min_trips_help": "Minimum completed trips for Platinum tier (rider + driver). Default 50",
     "tier_diamante_min_trips_help": "Minimum completed trips for Diamond tier (rider + driver). Default 100",
+    "client_latest_version_help": "Latest RIDER app version published in the stores (e.g. 1.2.0). On open, users on a lower version see a prompt linking to Play Store / App Store. Update after each store release.",
+    "driver_latest_version_help": "Latest DRIVER app version published in the stores (e.g. 1.2.0). On open, drivers on a lower version see a prompt linking to Play Store / App Store. Update after each store release.",
     "routing_google_enabled_help": "Experiment: use Google Directions instead of Mapbox for routes. Set 'true' to enable (requires the GOOGLE_DIRECTIONS_API_KEY secret). Default false.",
     "routing_google_daily_cap_help": "Daily cap on Google Directions calls; once exceeded, falls back to Mapbox. Default 2000.",
     "referral_bonus_cup_help": "Referral bonus amount in CUP (credited as TriciCoin, 1:1). Applies to NEW referrals; pending ones keep the amount they were created with. Default 500.",
