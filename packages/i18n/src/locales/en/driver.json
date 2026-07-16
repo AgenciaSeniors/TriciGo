@@ -742,5 +742,11 @@
     "status_under_review": "Under review",
     "status_suspended": "Suspended",
     "status_rejected": "Rejected"
+  },
+  "overlay": {
+    "prompt_title": "Never miss a ride",
+    "prompt_body": "Allow TriciGo to appear over other apps: when a ride arrives, the app will open by itself even if you're using another app, and you'll see a floating button to jump back quickly.",
+    "prompt_enable": "Enable",
+    "prompt_later": "Not now"
   }
 }

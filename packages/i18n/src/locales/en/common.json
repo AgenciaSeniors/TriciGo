@@ -649,5 +649,12 @@
     "address_destination": "Destination",
     "address_placeholder": "Search address...",
     "address_no_results": "No addresses found"
+  },
+  "overlay": {
+    "settings_title": "Display over other apps",
+    "settings_granted": "Enabled: the app opens by itself when a ride arrives",
+    "settings_denied": "Enable it so the app opens by itself when a ride arrives",
+    "settings_on": "Yes",
+    "settings_off": "No"
   }
 }

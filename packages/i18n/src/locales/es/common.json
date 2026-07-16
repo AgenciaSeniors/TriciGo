@@ -649,5 +649,12 @@
     "address_destination": "Destino",
     "address_placeholder": "Buscar direccion...",
     "address_no_results": "No se encontraron direcciones"
+  },
+  "overlay": {
+    "settings_title": "Mostrar sobre otras apps",
+    "settings_granted": "Activado: la app se abre sola al llegar un viaje",
+    "settings_denied": "Actívalo para que la app se abra sola al llegar un viaje",
+    "settings_on": "Sí",
+    "settings_off": "No"
   }
 }

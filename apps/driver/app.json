@@ -53,7 +53,8 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.CAMERA",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ],
       "intentFilters": [
         {

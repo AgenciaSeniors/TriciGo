@@ -646,5 +646,12 @@
     "address_destination": "Destino",
     "address_placeholder": "Buscar endereco...",
     "address_no_results": "Nenhum endereco encontrado"
+  },
+  "overlay": {
+    "settings_title": "Sobrepor a outros apps",
+    "settings_granted": "Ativado: o app abre sozinho quando chega uma corrida",
+    "settings_denied": "Ative para que o app abra sozinho quando chegar uma corrida",
+    "settings_on": "Sim",
+    "settings_off": "Não"
   }
 }

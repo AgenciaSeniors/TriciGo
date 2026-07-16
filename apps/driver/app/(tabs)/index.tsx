@@ -4,6 +4,7 @@ import {
   Pressable,
   FlatList,
   Image,
+  Alert,
   Animated,
   Dimensions,
   StyleSheet,
@@ -40,6 +41,8 @@ import { IncomingRideCard } from '@/components/IncomingRideCard';
 import { DriverTripView, useActiveTripMapData } from '@/components/DriverTripView';
 import { HomeBottomSheet } from '@/components/HomeBottomSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
+import { useOverlayBubble } from '@/hooks/useOverlayBubble';
+import DriverOverlay from '../../modules/driver-overlay';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -525,6 +528,11 @@ function NativeDriverHomeScreen() {
   // Subscribe to incoming requests when online
   useIncomingRequests(isOnline && !activeTrip);
 
+  // Floating bubble over other apps while online + backgrounded (Android,
+  // requires the "Display over other apps" grant). Stays during an active
+  // trip too — the driver still wants a one-tap way back into the app.
+  useOverlayBubble(isOnline);
+
   // GPS tracking when online
   useDriverLocationTracking(profile?.id ?? null, isOnline, activeTrip?.id ?? null);
 
@@ -862,6 +870,38 @@ function NativeDriverHomeScreen() {
           : t('driver.now_offline_sub', { defaultValue: 'No recibirás nuevas ofertas hasta que te conectes.' }),
         visibilityTime: 2200,
       });
+      // One-time overlay-permission pitch (Android): with "Mostrar sobre
+      // otras apps" granted, the app launches itself when an offer arrives
+      // while the driver is in another app, and shows the floating bubble in
+      // the background. Never blocks going online; declining sets the flag
+      // so we don't nag — the settings screen keeps a persistent entry.
+      if (newStatus && Platform.OS === 'android' && !DriverOverlay.canDrawOverlays()) {
+        const OVERLAY_PROMPT_KEY = '@tricigo/overlay_prompt_shown';
+        AsyncStorage.getItem(OVERLAY_PROMPT_KEY).then((shown) => {
+          if (shown) return;
+          Alert.alert(
+            t('overlay.prompt_title', { defaultValue: 'No te pierdas ningún viaje' }),
+            t('overlay.prompt_body', {
+              defaultValue:
+                'Permite que TriciGo aparezca sobre otras apps: cuando llegue un viaje, la app se abrirá sola aunque estés usando otra aplicación, y verás un botón flotante para volver rápido.',
+            }),
+            [
+              {
+                text: t('overlay.prompt_later', { defaultValue: 'Ahora no' }),
+                style: 'cancel',
+                onPress: () => { AsyncStorage.setItem(OVERLAY_PROMPT_KEY, '1').catch(() => {}); },
+              },
+              {
+                text: t('overlay.prompt_enable', { defaultValue: 'Activar' }),
+                onPress: () => {
+                  AsyncStorage.setItem(OVERLAY_PROMPT_KEY, '1').catch(() => {});
+                  DriverOverlay.openOverlaySettings();
+                },
+              },
+            ],
+          );
+        }).catch(() => {});
+      }
     } catch (err) {
       const rawMsg = getErrorMessage(err);
       logger.error('[Toggle] Failed to set online status', { error: rawMsg });

@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- "Display over other apps". User-granted once via Settings; unlocks BOTH
+       halves of this module: drawing the floating bubble (TYPE_APPLICATION_OVERLAY)
+       and starting MainActivity from the background when a ride offer arrives
+       (SAW holders are exempt from Android 10+ background-activity-launch
+       restrictions). Merged into the app manifest by the Gradle manifest merger. -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <application>
+    <service
+      android:name="expo.modules.driveroverlay.BubbleService"
+      android:exported="false" />
+  </application>
+</manifest>
