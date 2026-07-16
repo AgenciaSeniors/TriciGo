@@ -50,39 +50,38 @@ jobs:
         env:
           CI: true
 
-      # Apply Supabase migrations on every push to master.
+      # ─────────────────────────────────────────────────────────────────────
+      # DO NOT ADD A `supabase db push` STEP HERE. It would destroy production.
       #
-      # The fresh CI runner has no link state, so `db push --linked` fails with
-      # "Cannot find project ref. Have you run supabase link?". We fix that with
-      # an explicit `link` step using the project ref baked into the workflow.
+      # There used to be one, gated on a SUPABASE_DB_PASSWORD secret that was
+      # never set — so it always skipped, and printed a warning inviting an
+      # operator to "add the secret to enable post-merge migrations". Setting
+      # that secret would have detonated the following (verified 2026-07-16):
       #
-      # Both link and push need a DB password to authenticate the direct
-      # postgres:// connection. We read it from SUPABASE_DB_PASSWORD; if it's
-      # not configured we skip the push with a warning rather than failing the
-      # whole CI run (the operator can apply via Supabase MCP / CLI manually).
-      - name: Setup Supabase CLI
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      - name: Apply Supabase migrations
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          PROJECT_REF: lqaufszburqvlslpcuac
-        run: |
-          if [ -z "${SUPABASE_DB_PASSWORD:-}" ]; then
-            echo "::warning::SUPABASE_DB_PASSWORD secret not set — skipping migration push."
-            echo "::warning::Add it under repo Settings → Secrets → Actions to enable post-merge migrations."
-            exit 0
-          fi
-          # Link explicitly so `db push --linked` finds the project ref. The
-          # link state lives in supabase/.temp on the runner — it's discarded
-          # at the end of the job, which is fine; we re-link on every run.
-          supabase link --project-ref "$PROJECT_REF"
-          # Push will be a no-op when all local migrations are already in the
-          # remote `supabase_migrations.schema_migrations` table (e.g. when
-          # the operator already applied via MCP).
-          supabase db push --linked
+      # Migrations here are applied via the Supabase MCP, which registers them
+      # in `supabase_migrations.schema_migrations` by TIMESTAMP (e.g.
+      # 20260716163835) — NOT by filename. `db push` matches by FILENAME
+      # (00500_x.sql -> version "00500"). Only ~79 numeric versions are
+      # registered, and they stop at 00109. So `db push` would consider ~389
+      # already-applied migrations (00110..00500) as pending and re-run them
+      # IN ORDER against production:
+      #
+      #   - 00223 re-defines `complete_ride_and_pay` -> clobbers the live 00340
+      #     version (tricicoin/mixed-payment fix, weather surge, ...). This is
+      #     the RPC that charges the rider and pays the driver.
+      #   - 00153 re-defines `accept_ride_v2` -> clobbers the live 00377
+      #     version (strict estimate/final pricing parity).
+      #   - ...then it dies at 00235_wallet_v2_receipts.sql (CREATE TABLE with
+      #     no IF NOT EXISTS, table already exists) and NEVER restores the newer
+      #     definitions it just overwrote.
+      #
+      # Net effect: the money core silently reverts by months, mid-push.
+      #
+      # Migrations are applied deliberately, one at a time, via the Supabase
+      # MCP (or `supabase db push` run by hand against a reconciled registry).
+      # Before re-introducing any automated push, `schema_migrations` must first
+      # be reconciled to filename versions — and that reconciliation must audit
+      # each migration individually, because some in git were intentionally
+      # never applied (see CLAUDE.md "MCP migration guard"); blanket-marking
+      # them applied would skip them forever.
+      # ─────────────────────────────────────────────────────────────────────
