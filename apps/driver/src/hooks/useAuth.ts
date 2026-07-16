@@ -9,6 +9,7 @@ import { useDriverStore } from '@/stores/driver.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useDriverRideStore } from '@/stores/ride.store';
 import type { User } from '@tricigo/types';
+import { SECURE_STORE_SERVICE } from '@/lib/secureStoreService';
 
 // ── Offline auth cache ──
 // The Supabase session lives in SecureStore and survives offline, but the
@@ -74,14 +75,53 @@ const storageOps =
       }
     : (() => {
         const SecureStore = require('expo-secure-store');
+        // iOS only: expo-secure-store defaults to WHEN_UNLOCKED, which makes the
+        // item unreadable while the device is LOCKED. This app is woken in the
+        // background by the location task while the phone sits locked in the
+        // driver's pocket — the normal case for a driver — so the session must
+        // be readable then. Without this the keychain rejected with
+        // errSecInteractionNotAllowed on every locked wake, the background task
+        // read the session as absent and shut its own location updates down
+        // (Sentry TRICIGO-MOBILE-14). AFTER_FIRST_UNLOCK still keeps the item
+        // encrypted at rest until the first unlock after boot. No-op on Android,
+        // whose keystore has no equivalent locked-device restriction.
+        //
+        // The service rename is what makes the option take effect on an install
+        // that already holds a session. expo-secure-store applies
+        // keychainAccessible on its SecItemAdd path only; an existing key takes
+        // the SecItemUpdate path, which rewrites the value and leaves
+        // kSecAttrAccessible untouched forever. keychainService is part of the
+        // keychain's primary key, so writing under a new one is an Add, and the
+        // accessibility sticks. The old entry is adopted (see `legacy` below)
+        // rather than deleted-and-rewritten: nothing may delete a session before
+        // its replacement is safely stored.
+        const secureStoreOptions = {
+          keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+          keychainService: SECURE_STORE_SERVICE,
+        };
+        return {
+          get: (key: string) => SecureStore.getItemAsync(key, secureStoreOptions),
+          set: (key: string, value: string) =>
+            SecureStore.setItemAsync(key, value, secureStoreOptions),
+          remove: (key: string) => SecureStore.deleteItemAsync(key, secureStoreOptions),
+        };
+      })();
+
+// Entries written before the service rename, under expo-secure-store's default
+// service. Read-only: createStorageAdapter adopts them into the current store on
+// first read, then clears them.
+const legacyStorageOps =
+  Platform.OS === 'web'
+    ? undefined
+    : (() => {
+        const SecureStore = require('expo-secure-store');
         return {
           get: (key: string) => SecureStore.getItemAsync(key),
-          set: (key: string, value: string) => SecureStore.setItemAsync(key, value),
           remove: (key: string) => SecureStore.deleteItemAsync(key),
         };
       })();
 
-const adapter = createStorageAdapter(storageOps);
+const adapter = createStorageAdapter(storageOps, { legacy: legacyStorageOps });
 configureStorage(adapter);
 
 /** Wrap a promise with a timeout */
@@ -266,16 +306,30 @@ export function useAuthInit() {
       (event, session) => {
         if (!mounted.current) return;
 
-        if (event === 'SIGNED_OUT' || !session) {
+        if (event === 'SIGNED_OUT') {
           resetAnalytics();
           reset();
           resetDriver();
           useChatStore.getState().reset();
           useDriverRideStore.getState().reset();
-          // Only wipe the offline cache on an EXPLICIT sign-out. A transient
-          // null session must not erase the snapshot we rely on to stay logged
-          // in offline.
-          if (event === 'SIGNED_OUT') clearAuthCache();
+          // Safe to wipe the offline cache: this is an EXPLICIT sign-out, not a
+          // session we merely failed to read.
+          clearAuthCache();
+        } else if (!session) {
+          // A null session that did NOT arrive as SIGNED_OUT means "we could not
+          // read one", not "there isn't one" — the iOS keychain reports a locked
+          // read as null now rather than throwing it into the void
+          // (createStorageAdapter). Resetting here would bounce the driver to
+          // login for exactly the reason #802/#804 taught us not to, and a
+          // re-login needs an OTP SMS. Rehydrate from the offline snapshot
+          // instead; it falls back to reset() by itself when there is genuinely
+          // nothing cached, so a never-logged-in user still lands on login.
+          // Deferred: SDK calls inside this callback deadlock
+          // _notifyAllSubscribers (see the note below).
+          setTimeout(() => {
+            if (!mounted.current) return;
+            void hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted);
+          }, 0);
         } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           // IMPORTANT: Defer SDK calls to avoid deadlock.
           // _notifyAllSubscribers awaits this callback. If we call
@@ -331,7 +385,15 @@ export function useAuthInit() {
         if (session && mounted.current) {
           await loadUserAndProfile(setUser, setProfile, setProfileError, reset, mounted, session.user?.id);
         } else if (mounted.current) {
-          reset();
+          // Same rule as the listener above, and for the same reason: a null
+          // session here is "we could not read one", not "there isn't one".
+          // getSession() used to REJECT when the keychain was locked (the throw
+          // propagated out of GoTrue's __loadSession) and landed in the catch
+          // below, which hydrates; now the adapter reports the locked read as
+          // null, so this branch has to hydrate too or it would bounce the
+          // driver to login with an intact session sitting in the keychain.
+          // hydrateFromCacheOrReset resets by itself when nothing is cached.
+          await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted);
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
