@@ -934,11 +934,11 @@ export function useDriverRideActions() {
     if (!activeTrip) return;
 
     // Mark the driver's own cancel so the foreground poll doesn't mistake
-    // the vanishing active trip for a passenger cancellation. reset() below
-    // clears it on success; the catch clears it if the RPC failed.
+    // the vanishing active trip for a passenger cancellation. clearTrip()
+    // clears it via reset(); the catch clears it if the RPC failed.
     useDriverRideStore.getState().setDriverCanceling(true);
-    try {
-      await rideService.cancelRide(activeTrip.id, user?.id, reason);
+
+    const clearTrip = () => {
       // F3 — stop the background location task on cancel so it doesn't keep
       // uploading to a ride that no longer exists.
       stopBgLocationTracking().catch(() => { /* best-effort */ });
@@ -946,7 +946,26 @@ export function useDriverRideActions() {
       channelRef.current = null;
       activeChannelIdRef.current = null;
       reset();
-    } catch {
+    };
+
+    try {
+      await rideService.cancelRide(activeTrip.id, user?.id, reason);
+      clearTrip();
+    } catch (err: unknown) {
+      // The ride was already terminal before this call landed: the passenger or
+      // an admin cancelled it first, or this is a double-tap. The trip IS gone,
+      // so tear down exactly like a success. Reporting "cancel failed" here
+      // would be a lie AND would strand a dead trip on the driver's screen.
+      if ((err as { code?: string })?.code === 'RIDE_ALREADY_CLOSED') {
+        clearTrip();
+        Toast.show({
+          type: 'info',
+          text1: i18next.t('driver:trip.cancel_already_closed'),
+        });
+        return;
+      }
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error('[DriverRide] cancelTrip failed', { error: errMsg, rideId: activeTrip.id });
       useDriverRideStore.getState().setDriverCanceling(false);
       Toast.show({ type: 'error', text1: i18next.t('driver:trip.cancel_failed') });
     }
