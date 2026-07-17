@@ -6,6 +6,7 @@ import { adminService, reviewService, DOC_REJECTION_PRESETS } from '@tricigo/api
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
+import { DeletePendingAccountModal } from '@/components/ui/DeletePendingAccountModal';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import type {
   DriverProfile,
@@ -133,6 +134,7 @@ export default function DriverDetailPage() {
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [walletAdjusting, setWalletAdjusting] = useState(false);
+  const [deleteAccountModalOpen, setDeleteAccountModalOpen] = useState(false);
   const [graceTripsModalOpen, setGraceTripsModalOpen] = useState(false);
   const [graceTripsCount, setGraceTripsCount] = useState('5');
   const [graceTripsReason, setGraceTripsReason] = useState('');
@@ -587,6 +589,18 @@ export default function DriverDetailPage() {
                 >
                   <span className="text-base leading-none">★</span>
                   {t('admin_ops.grace_trips_btn', { defaultValue: 'Dar viajes de gracia' })}
+                </button>
+
+                {/* Delete pending/empty account — frees the phone for re-registration.
+                    The EF re-checks a strict safety gate (refuses if balance/rides). */}
+                <div className="border-t border-line my-1" />
+                <button
+                  onClick={() => { setDeleteAccountModalOpen(true); setActionsMenuOpen(false); }}
+                  disabled={actionLoading}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors text-left"
+                >
+                  <XCircle size={14} />
+                  {t('users.delete_account_btn', { defaultValue: 'Eliminar cuenta' })}
                 </button>
               </div>
             )}
@@ -1308,6 +1322,15 @@ export default function DriverDetailPage() {
         loading={walletAdjusting}
         onCancel={() => setWalletModalOpen(false)}
         onConfirm={handleAdjustDriverQuota}
+      />
+
+      {/* Delete pending/empty account (frees phone for re-registration) */}
+      <DeletePendingAccountModal
+        open={deleteAccountModalOpen}
+        userId={profile.user_id}
+        userName={profile.users.full_name || profile.users.phone}
+        onClose={() => setDeleteAccountModalOpen(false)}
+        onDeleted={() => { setDeleteAccountModalOpen(false); router.push('/drivers'); }}
       />
 
       {/* Grace Trips Modal */}
