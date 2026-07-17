@@ -6,7 +6,13 @@ const mockFrom = vi.fn(() => createMockQueryChain());
 const mockRpc = vi.fn();
 const mockCreateSignedUrl = vi.fn();
 const mockStorage = { from: vi.fn(() => ({ createSignedUrl: mockCreateSignedUrl })) };
-const mockSupabase = { from: mockFrom, rpc: mockRpc, storage: mockStorage };
+const mockInvoke = vi.fn();
+const mockSupabase = {
+  from: mockFrom,
+  rpc: mockRpc,
+  storage: mockStorage,
+  functions: { invoke: mockInvoke },
+};
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -518,6 +524,58 @@ describe('adminService', () => {
       mockFrom.mockReturnValueOnce(chain);
 
       await expect(adminService.updateUserLevel('u-1', 'plata')).rejects.toEqual(err);
+    });
+  });
+
+  // ==================== Delete pending account ====================
+  describe('checkPendingAccountDeletable', () => {
+    it('returns the EF dry-run result', async () => {
+      const dryRun = {
+        deletable: true,
+        blockers: [],
+        summary: { user_id: 'u-1', rides_as_customer: 0, rides_as_driver: 0, wallet_balance_total: 0 },
+      };
+      mockInvoke.mockResolvedValueOnce({ data: dryRun, error: null });
+
+      const result = await adminService.checkPendingAccountDeletable('u-1');
+
+      expect(mockInvoke).toHaveBeenCalledWith('admin-delete-pending-account', {
+        body: { user_id: 'u-1' },
+      });
+      expect(result).toEqual(dryRun);
+    });
+
+    it('surfaces the EF error body on failure', async () => {
+      const ctx = new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
+      mockInvoke.mockResolvedValueOnce({ data: null, error: { message: 'non-2xx', context: ctx } });
+
+      await expect(adminService.checkPendingAccountDeletable('u-1')).rejects.toThrow('forbidden');
+    });
+  });
+
+  describe('deletePendingAccount', () => {
+    it('confirms deletion and returns the summary', async () => {
+      const summary = { user_id: 'u-1', rides_as_customer: 0, rides_as_driver: 0, wallet_balance_total: 0 };
+      mockInvoke.mockResolvedValueOnce({ data: { success: true, summary }, error: null });
+
+      const result = await adminService.deletePendingAccount('u-1', 'stuck onboarding');
+
+      expect(mockInvoke).toHaveBeenCalledWith('admin-delete-pending-account', {
+        body: { user_id: 'u-1', confirm: true, reason: 'stuck onboarding' },
+      });
+      expect(result).toEqual(summary);
+    });
+
+    it('throws a typed error carrying blockers when the gate refuses (409)', async () => {
+      const ctx = new Response(
+        JSON.stringify({ error: 'not_deletable', blockers: ['has_balance', 'has_rides'] }),
+        { status: 409 },
+      );
+      mockInvoke.mockResolvedValueOnce({ data: null, error: { message: 'non-2xx', context: ctx } });
+
+      await expect(
+        adminService.deletePendingAccount('u-1'),
+      ).rejects.toMatchObject({ message: 'not_deletable', blockers: ['has_balance', 'has_rides'] });
     });
   });
 

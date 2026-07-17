@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { adminService, reviewService } from '@tricigo/api';
+import type { PendingAccountDeletability } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
@@ -64,6 +65,49 @@ export default function UserDetailPage() {
   const [confirmModal, setConfirmModal] = useState<{open: boolean; action: () => void; title: string; message: string}>({open: false, action: () => {}, title: '', message: ''});
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [walletAdjusting, setWalletAdjusting] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteChecking, setDeleteChecking] = useState(false);
+  const [deletability, setDeletability] = useState<PendingAccountDeletability | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+
+  const openDeleteModal = async () => {
+    if (!id) return;
+    setDeleteModalOpen(true);
+    setDeletability(null);
+    setDeleteReason('');
+    setDeleteChecking(true);
+    try {
+      const result = await adminService.checkPendingAccountDeletable(id);
+      setDeletability(result);
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
+      setDeleteModalOpen(false);
+    } finally {
+      setDeleteChecking(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      await adminService.deletePendingAccount(id, deleteReason || undefined);
+      showToast('success', t('users.delete_account_success'));
+      setDeleteModalOpen(false);
+      router.push('/users');
+    } catch (err) {
+      // The server re-checks the safety gate; surface its blockers if it refused.
+      const blockers = (err as { blockers?: string[] }).blockers;
+      if (blockers?.length) {
+        setDeletability((prev) => (prev ? { ...prev, deletable: false, blockers } : prev));
+      } else {
+        showToast('error', getErrorMessage(err));
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleAdjustWallet = async (args: { accountType: WalletAccountType; amountCup: number; reason: string }) => {
     if (!id) return;
@@ -230,6 +274,14 @@ export default function UserDetailPage() {
               className="px-4 py-2 rounded-lg text-sm font-medium bg-green-500 text-white hover:bg-green-600 transition-colors disabled:opacity-50"
             >
               {blockUpdating ? t('common.processing') : t('users.unblock_user')}
+            </button>
+          )}
+          {user.role !== 'admin' && user.role !== 'super_admin' && (
+            <button
+              onClick={openDeleteModal}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500 text-red-600 hover:bg-red-50 transition-colors"
+            >
+              {t('users.delete_account_btn')}
             </button>
           )}
         </div>
@@ -488,10 +540,85 @@ export default function UserDetailPage() {
         onConfirm={handleAdjustWallet}
       />
 
+      {/* Delete Pending Account Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-account-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md my-auto max-h-[90dvh] overflow-y-auto">
+            <h3 id="delete-account-title" className="text-lg font-bold mb-2">{t('users.delete_account_title')}</h3>
+            <p className="text-sm text-ink-muted mb-4">{t('users.delete_account_desc')}</p>
+
+            {deleteChecking ? (
+              <p className="text-sm text-ink-subtle py-4">{t('users.delete_account_checking')}</p>
+            ) : deletability ? (
+              <div className="mb-4">
+                <div className="bg-surface-sunken rounded-lg p-3 mb-3 space-y-1">
+                  <p className="text-sm font-medium">{user.full_name || user.phone}</p>
+                  <p className="text-xs text-ink-muted">
+                    {t('users.delete_account_summary_rides', {
+                      customer: deletability.summary.rides_as_customer,
+                      driver: deletability.summary.rides_as_driver,
+                    })}
+                  </p>
+                  <p className="text-xs text-ink-muted">
+                    {t('users.delete_account_summary_balance', {
+                      balance: formatCurrency(deletability.summary.wallet_balance_total),
+                    })}
+                  </p>
+                </div>
+                {deletability.deletable ? (
+                  <p className="text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
+                    {t('users.delete_account_deletable')}
+                  </p>
+                ) : (
+                  <div className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">
+                    <p className="font-medium mb-1">{t('users.delete_account_not_deletable')}</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {deletability.blockers.map((b) => (
+                        <li key={b}>{t(`users.delete_blocker_${b}`, { defaultValue: b })}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {deletability?.deletable && (
+              <input
+                type="text"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder={t('users.delete_account_reason_ph')}
+                aria-label={t('users.delete_account_reason_ph')}
+                className="w-full border border-line bg-surface text-ink rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-primary-500"
+              />
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setDeleteModalOpen(false); setDeletability(null); setDeleteReason(''); }}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-ink-muted hover:bg-surface-sunken transition-colors disabled:opacity-50"
+              >
+                {t('common.cancel')}
+              </button>
+              {deletability?.deletable && (
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? t('common.processing') : t('users.delete_account_confirm')}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Block User Modal */}
       {blockModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div role="dialog" aria-modal="true" aria-labelledby="block-user-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="block-user-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md my-auto max-h-[90dvh] overflow-y-auto">
             <h3 id="block-user-title" className="text-lg font-bold mb-4">{t('users.block_user')}</h3>
             <p className="text-sm text-ink-muted mb-4">{t('users.block_confirm')}</p>
             <textarea

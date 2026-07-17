@@ -450,6 +450,10 @@ verify_jwt = false
 verify_jwt = false
 [functions.delete-account]
 verify_jwt = false
+# Admin-initiated delete of a pending/empty account; does its own auth.getUser
+# + admin-role check inside (target comes from the body).
+[functions.admin-delete-pending-account]
+verify_jwt = false
 [functions.upload-delivery-photo]
 verify_jwt = false
 [functions.storage-upload]

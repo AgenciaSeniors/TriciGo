@@ -346,10 +346,10 @@ export default function GiftsPage() {
 
       {freezeModal.open ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
           onClick={() => setFreezeModal((p) => ({ ...p, open: false }))}
         >
-          <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+          <div className="admin-card my-auto max-h-[90dvh] w-full max-w-md overflow-y-auto p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
             <h3 className="font-display text-[18px] font-semibold text-ink">
               {t('gifts.freeze_title', { defaultValue: 'Congelar billetera' })}
             </h3>

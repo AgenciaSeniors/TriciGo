@@ -91,10 +91,10 @@ export function SendGiftModal({ open, loading = false, onConfirm, onCancel }: Se
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
       onClick={() => !loading && onCancel()}
     >
-      <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="admin-card my-auto max-h-[90dvh] w-full max-w-md overflow-y-auto p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div>
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
             {t('gifts.send_eyebrow', { defaultValue: 'Regalo manual' })}

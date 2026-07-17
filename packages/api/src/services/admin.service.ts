@@ -8,6 +8,47 @@ function escapeLikePattern(pattern: string): string {
   return pattern.replace(/[%_\\]/g, '\\$&');
 }
 
+/**
+ * supabase-js wraps a non-2xx Edge Function response in a FunctionsHttpError
+ * with the raw Response on `error.context`. Pull the JSON body out so the
+ * structured `{ error, blockers }` reaches the caller instead of a generic
+ * "Edge Function returned a non-2xx status code".
+ */
+async function readFunctionErrorBody(
+  error: unknown,
+): Promise<{ error?: string; blockers?: string[] } | null> {
+  const ctx = (error as { context?: Response } | null)?.context;
+  if (!ctx || typeof ctx.clone !== 'function') return null;
+  try {
+    return await ctx.clone().json();
+  } catch {
+    return null;
+  }
+}
+
+/** Snapshot of a pending account, returned by the delete-pending-account EF. */
+export interface PendingAccountSummary {
+  user_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  role: string;
+  driver_status: string | null;
+  wallet_balance_total: number;
+  wallet_held_total: number;
+  rides_as_customer: number;
+  rides_as_driver: number;
+  created_at: string | null;
+}
+
+/** Dry-run result: whether an account is safe to delete + why not. */
+export interface PendingAccountDeletability {
+  deletable: boolean;
+  /** Blocker codes: system_account | self | is_staff | has_balance | has_rides */
+  blockers: string[];
+  summary: PendingAccountSummary;
+}
+
 import type {
   AdminAction,
   AuditLog,
@@ -1587,6 +1628,48 @@ export const adminService = {
       target_id: userId,
       reason: reason ?? null,
     });
+  },
+
+  /**
+   * Delete a *pending / empty* account so the person can register again.
+   *
+   * Backed by the `admin-delete-pending-account` Edge Function (service-role):
+   * it re-checks a strict safety gate server-side and REFUSES if the account
+   * has a non-zero wallet balance, any non-cancelled ride, or is staff/system.
+   * `checkPendingAccountDeletable` is a DRY RUN (mutates nothing) used to gate
+   * the UI and explain blockers; `deletePendingAccount` performs the deletion.
+   */
+  async checkPendingAccountDeletable(userId: string): Promise<PendingAccountDeletability> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('admin-delete-pending-account', {
+      body: { user_id: userId },
+    });
+    if (error) {
+      const parsed = await readFunctionErrorBody(error);
+      throw new Error(parsed?.error ?? error.message);
+    }
+    return data as PendingAccountDeletability;
+  },
+
+  async deletePendingAccount(userId: string, reason?: string): Promise<PendingAccountSummary> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('admin-delete-pending-account', {
+      body: { user_id: userId, confirm: true, reason },
+    });
+    if (error) {
+      const parsed = await readFunctionErrorBody(error);
+      // Surface the safety-gate refusal as a typed error carrying the blockers
+      // so the UI can explain exactly why the account can't be deleted.
+      if (parsed?.error === 'not_deletable') {
+        const e = new Error('not_deletable') as Error & { blockers?: string[] };
+        e.blockers = parsed.blockers ?? [];
+        throw e;
+      }
+      throw new Error(parsed?.error ?? error.message);
+    }
+    const body = data as { success?: boolean; summary?: PendingAccountSummary; error?: string };
+    if (body?.error) throw new Error(body.error);
+    return body.summary as PendingAccountSummary;
   },
 
   // ==================== RIDE DETAIL ====================

@@ -388,8 +388,8 @@ export default function BusinessDetailPage() {
 
       {/* Reject modal */}
       {showRejectModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div role="dialog" aria-modal="true" aria-labelledby="reject-modal-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="reject-modal-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md my-auto max-h-[90dvh] overflow-y-auto">
             <h3 id="reject-modal-title" className="text-lg font-bold mb-4">{t('businesses.reject')}</h3>
             <textarea
               className="w-full border rounded-lg p-3 text-sm mb-4"
@@ -420,8 +420,8 @@ export default function BusinessDetailPage() {
 
       {/* Suspend modal */}
       {showSuspendModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div role="dialog" aria-modal="true" aria-labelledby="suspend-modal-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="suspend-modal-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md my-auto max-h-[90dvh] overflow-y-auto">
             <h3 id="suspend-modal-title" className="text-lg font-bold mb-4">{t('businesses.suspend')}</h3>
             <textarea
               className="w-full border rounded-lg p-3 text-sm mb-4"
