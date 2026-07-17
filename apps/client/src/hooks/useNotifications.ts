@@ -36,6 +36,15 @@ const PREF_KEYS: Record<string, string> = {
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
+    // ride_offer_launch is a data-only companion message for the DRIVER
+    // app's background auto-launch task. It can reach the client too when
+    // the same account is logged into both apps (user_devices doesn't
+    // distinguish apps). It has no title/body — presenting it would drop an
+    // EMPTY notification in the tray. Never show it here.
+    if (notification.request.content.data?.type === 'ride_offer_launch') {
+      return { shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false, shouldShowBanner: false, shouldShowList: false };
+    }
+
     // Check master toggle first
     const masterPref = await AsyncStorage.getItem(NOTIF_PREF_KEY);
     if (masterPref === 'false') {

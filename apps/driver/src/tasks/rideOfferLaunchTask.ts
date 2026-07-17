@@ -31,7 +31,7 @@
 //     side effects from app/_layout.tsx before the OS can fire it.
 //   - The task body runs without React state; only module-scoped
 //     imports are available.
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
 import { logger } from '@tricigo/utils';
@@ -59,11 +59,16 @@ export function extractNotificationType(raw: unknown): string | undefined {
     if (!cand || typeof cand !== 'object') continue;
     const obj = cand as Record<string, unknown>;
     if (typeof obj.type === 'string') return obj.type;
-    if (typeof obj.body === 'string') {
-      try {
-        const parsed = JSON.parse(obj.body) as Record<string, unknown>;
-        if (typeof parsed?.type === 'string') return parsed.type;
-      } catch { /* body wasn't JSON — keep probing */ }
+    // Expo → FCM puts the request's `data` JSON in the `body` key of the
+    // data map; RemoteMessageSerializer additionally mirrors it as
+    // `dataString` (the documented cross-platform key). Probe both.
+    for (const key of ['body', 'dataString'] as const) {
+      if (typeof obj[key] === 'string') {
+        try {
+          const parsed = JSON.parse(obj[key] as string) as Record<string, unknown>;
+          if (typeof parsed?.type === 'string') return parsed.type;
+        } catch { /* not JSON — keep probing */ }
+      }
     }
     if (obj.data && typeof obj.data === 'object') {
       const inner = obj.data as Record<string, unknown>;
@@ -77,6 +82,12 @@ TaskManager.defineTask(RIDE_OFFER_LAUNCH_TASK, async ({ data, error }) => {
   try {
     if (error || Platform.OS !== 'android') return;
     if (extractNotificationType(data) !== 'ride_offer_launch') return;
+
+    // FirebaseMessagingDelegate.onMessageReceived runs task consumers
+    // unconditionally (also in foreground). Launching while active would
+    // be a no-op anyway (SINGLE_TOP) — skip it explicitly, mirroring the
+    // Realtime path's AppState gate.
+    if (AppState.currentState === 'active') return;
 
     const now = Date.now();
     if (now - lastLaunchAt < 3000) return;
