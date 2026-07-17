@@ -35,6 +35,15 @@ const PREF_KEYS: Record<string, string> = {
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
+    // ride_offer_launch is the data-only companion message that wakes the
+    // background auto-launch task (src/tasks/rideOfferLaunchTask.ts). It
+    // carries no title/body; in foreground it still reaches this handler,
+    // and presenting it would drop an EMPTY notification in the tray. Never
+    // show it — the visible offer push is a separate message.
+    if (notification.request.content.data?.type === 'ride_offer_launch') {
+      return { shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false, shouldShowBanner: false, shouldShowList: false };
+    }
+
     // Check master toggle first
     const masterPref = await AsyncStorage.getItem(NOTIF_PREF_KEY);
     if (masterPref === 'false') {

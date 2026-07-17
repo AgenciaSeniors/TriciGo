@@ -170,15 +170,19 @@ Deno.serve(async (req) => {
     // Fetch device tokens for all target users
     const { data: devices, error } = await supabase
       .from('user_devices')
-      .select('push_token')
+      .select('push_token, platform')
       .in('user_id', targetIds)
       .not('push_token', 'is', null);
 
     if (error) throw error;
 
-    const tokens = (devices ?? [])
-      .map((d: { push_token: string | null }) => d.push_token)
+    const deviceRows = (devices ?? []) as { push_token: string | null; platform: string | null }[];
+    const tokens = deviceRows
+      .map((d) => d.push_token)
       .filter(Boolean) as string[];
+    const androidTokens = deviceRows
+      .filter((d) => d.push_token && d.platform === 'android')
+      .map((d) => d.push_token) as string[];
 
     if (tokens.length === 0) {
       // Still persist to inbox even if no push tokens (user can see in-app)
@@ -280,6 +284,37 @@ Deno.serve(async (req) => {
       }
     }));
 
+    // Ride offers: additionally send a DATA-ONLY, high-priority message to
+    // Android devices. No title/body → Expo delivers it as an FCM data
+    // message, which shows nothing but wakes the driver app's background
+    // task ('ride-offer-launch-task', apps/driver/src/tasks/
+    // rideOfferLaunchTask.ts) so it can bring the app to the foreground —
+    // the Realtime-WebSocket launch path (PR #807) loses the race against
+    // FCM in background and drops silently when the channel dies.
+    // Old builds without the task ignore this message; the visible offer
+    // push above remains their UX. Best-effort: launch failures never
+    // affect the visible push outcome, and no extra inbox row is written.
+    let launchSent = 0;
+    if (category === 'ride_offer' && androidTokens.length > 0) {
+      await Promise.all(androidTokens.map(async (token: string) => {
+        try {
+          const launchResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: token,
+              priority: 'high' as const,
+              data: { ...pushData, type: 'ride_offer_launch' },
+            }),
+          });
+          if (!launchResponse.ok) return;
+          const launchResult = await launchResponse.json();
+          const launchTicket = Array.isArray(launchResult.data) ? launchResult.data[0] : launchResult.data;
+          if (launchTicket?.status === 'ok') launchSent++;
+        } catch { /* best-effort — visible push already covers the driver */ }
+      }));
+    }
+
     if (deadTokens.length > 0) {
       const { error: cleanupErr } = await supabase
         .from('user_devices')
@@ -312,7 +347,8 @@ Deno.serve(async (req) => {
     console.info(
       `[send-push] summary: sent=${sent} failed=${failed} total_tokens=${tokens.length}` +
       `${errorCodes.length ? ' errors=' + [...new Set(errorCodes)].join(',') : ''}` +
-      ` targets=${targetIds.length}${category ? ' category=' + category : ''}`,
+      ` targets=${targetIds.length}${category ? ' category=' + category : ''}` +
+      `${category === 'ride_offer' ? ` launch_sent=${launchSent}/${androidTokens.length}` : ''}`,
     );
 
     return new Response(

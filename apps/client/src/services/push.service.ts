@@ -9,11 +9,21 @@ import { getSupabaseClient, notificationService } from '@tricigo/api';
 // to stay compatible with the older types installed — cast through
 // `any` so both shapes compile.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }) as any,
+  handleNotification: async (notification) => {
+    // ride_offer_launch: data-only companion message for the DRIVER app's
+    // auto-launch task; reaches the client when one account is logged into
+    // both apps. No title/body — presenting it would show an empty
+    // notification. (Same gate lives in hooks/useNotifications.ts; which
+    // handler wins depends on import order, so both must carry it.)
+    if (notification.request.content.data?.type === 'ride_offer_launch') {
+      return { shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false } as any;
+    }
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    } as any;
+  },
 });
 
 export async function registerForPushNotifications(): Promise<string | null> {
