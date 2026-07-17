@@ -1,0 +1,108 @@
+# Publish an OTA (JS-only) update via EAS Update.
+#
+# ALWAYS publish OTA updates through this workflow — never `eas update` from a
+# local machine. Two reasons, both verified:
+#
+# 1. env inlining: `eas update` bundles JS locally and does NOT read the env
+#    block in eas.json (that only applies to `eas build`). Without the
+#    EXPO_PUBLIC_* vars below, the bundle inlines an EMPTY Supabase URL and
+#    Mapbox token — and ships that to the whole fleet over the air.
+#
+# 2. fingerprint parity (driver): apps/driver uses runtimeVersion policy
+#    "fingerprint", which content-hashes native-affecting files including the
+#    local config plugins (plugins/with-*.js). A Windows checkout (CRLF)
+#    produces a different hash than a Linux checkout (LF), so an update
+#    published from Windows would target a runtime no CI/EAS-built binary has
+#    and silently never arrive. Publishing from this Linux runner guarantees
+#    the hash matches Linux-built binaries.
+#
+# Corollary of (2): driver STORE builds must also be produced from a Linux
+# tree (eas-build.yml / GitHub Actions), not from a Windows machine.
+
+name: EAS Update (OTA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app to publish an OTA update for'
+        type: choice
+        options:
+          - client
+          - driver
+        required: true
+      message:
+        description: 'Update message (shown in the EAS dashboard)'
+        type: string
+        required: true
+
+concurrency:
+  group: eas-update-${{ inputs.app }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish OTA update (${{ inputs.app }})
+    # OTA updates reach real users on next launch — only ever publish master.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Expo & EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pre-flight — export bundle and verify env inlining BEFORE publishing
+        working-directory: apps/${{ inputs.app }}
+        env:
+          # Mirror of eas.json build.base.env + production profile.
+          # `eas update` does NOT read eas.json env — these MUST be set here.
+          EXPO_PUBLIC_SUPABASE_URL: https://lqaufszburqvlslpcuac.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc
+          EXPO_PUBLIC_MAPBOX_TOKEN: pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg
+          EXPO_PUBLIC_SENTRY_DSN: https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296
+          EXPO_PUBLIC_POSTHOG_API_KEY: phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9
+          EXPO_PUBLIC_DEMO_MODE: 'false'
+        run: |
+          # Export with the same env the publish step uses. If inlining is
+          # broken (empty Supabase URL / Mapbox token), fail HERE — before
+          # anything ships. One platform is representative: env inlining is
+          # identical across platforms.
+          npx expo export --platform android --output-dir preflight-dist
+          if ! grep -rq "lqaufszburqvlslpcuac.supabase.co" preflight-dist/_expo/static/js; then
+            echo "::error::Supabase URL not found in the exported bundle — EXPO_PUBLIC_* env inlining failed. NOT publishing."
+            exit 1
+          fi
+          echo "Bundle contains the Supabase URL — env inlining OK, safe to publish"
+          rm -rf preflight-dist
+
+      - name: Publish update to the production channel
+        working-directory: apps/${{ inputs.app }}
+        env:
+          # Same env as the pre-flight step — keep both blocks in sync.
+          EXPO_PUBLIC_SUPABASE_URL: https://lqaufszburqvlslpcuac.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc
+          EXPO_PUBLIC_MAPBOX_TOKEN: pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg
+          EXPO_PUBLIC_SENTRY_DSN: https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296
+          EXPO_PUBLIC_POSTHOG_API_KEY: phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9
+          EXPO_PUBLIC_DEMO_MODE: 'false'
+        run: |
+          eas update --channel production --message "${{ inputs.message }}" --non-interactive
