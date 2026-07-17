@@ -31,6 +31,9 @@ import { useAuthDeepLink } from '@/hooks/useAuthDeepLink';
 // can fire the task), so it lives in _layout (executed early on app
 // boot, including during background-launch recovery).
 import '@/services/locationBackgroundTask';
+// Push-driven offer auto-launch: same side-effect contract as above —
+// defineTask must be registered before FCM can fire the background task.
+import '@/tasks/rideOfferLaunchTask';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { Platform } from 'react-native';
 import '../global.css';
