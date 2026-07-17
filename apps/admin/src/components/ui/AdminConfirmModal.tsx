@@ -40,8 +40,8 @@ export function AdminConfirmModal({
   if (!open) return null;
   const btnColor = variant === 'danger' ? 'bg-red-600 hover:bg-red-700' : variant === 'warning' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary-500 hover:bg-primary-600';
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
-      <div role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl p-6 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4" onClick={onCancel}>
+      <div role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl p-6 max-w-md w-full my-auto max-h-[90dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h3 id="confirm-modal-title" className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 mb-2">{title}</h3>
         <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">{message}</p>
         {onInputChange && (

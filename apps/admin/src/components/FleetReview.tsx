@@ -193,8 +193,8 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
 
       {/* Reject modal */}
       {rejectingId && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div role="dialog" aria-modal="true" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div role="dialog" aria-modal="true" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md my-auto max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">Rechazar conductor</h3>
             <textarea
               className="w-full border rounded-lg p-3 text-sm mb-4"

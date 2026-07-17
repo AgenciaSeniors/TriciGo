@@ -210,7 +210,7 @@ export default function FraudAlertsPage() {
       {/* Resolve modal */}
       {resolveModalId && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm animate-fade-in"
           role="dialog"
           aria-modal="true"
           aria-labelledby="fraud-resolve-title"
@@ -221,7 +221,7 @@ export default function FraudAlertsPage() {
             }
           }}
         >
-          <div className="relative mx-4 w-full max-w-md overflow-hidden rounded-2xl border border-line bg-surface-elevated shadow-elev-3">
+          <div className="relative my-auto max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-line bg-surface-elevated shadow-elev-3">
             <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
               <div>
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-subtle">

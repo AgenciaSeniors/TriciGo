@@ -536,7 +536,7 @@ export default function DriverDetailPage() {
               <MoreVertical size={14} />
             </button>
             {actionsMenuOpen && (
-              <div className="absolute right-0 mt-1 w-56 rounded-lg border border-line bg-surface-elevated shadow-lg overflow-hidden z-20">
+              <div className="absolute left-0 sm:left-auto sm:right-0 mt-1 w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-line bg-surface-elevated shadow-lg overflow-hidden z-20">
                 {(status === 'under_review' || status === 'pending_verification' || status === 'rejected' || status === 'suspended') && (
                   <button
                     onClick={handleApprove}
@@ -1219,14 +1219,14 @@ export default function DriverDetailPage() {
       {/* ─── Reason modal ──────────────────────────────── */}
       {showReasonModal && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4"
           role="dialog"
           aria-modal="true"
           onClick={(e) => {
             if (e.target === e.currentTarget) { setShowReasonModal(null); setReason(''); }
           }}
         >
-          <div className="bg-surface-elevated rounded-xl w-full max-w-lg shadow-xl">
+          <div className="bg-surface-elevated rounded-xl w-full max-w-lg shadow-xl my-auto max-h-[90dvh] overflow-y-auto">
             <div className="p-5 border-b border-line">
               <h3 className="text-lg font-semibold text-ink">
                 {showReasonModal === 'reject'
@@ -1312,8 +1312,8 @@ export default function DriverDetailPage() {
 
       {/* Grace Trips Modal */}
       {graceTripsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !graceTripsSubmitting && setGraceTripsModalOpen(false)}>
-          <div className="admin-card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4" onClick={() => !graceTripsSubmitting && setGraceTripsModalOpen(false)}>
+          <div className="admin-card my-auto max-h-[90dvh] w-full max-w-md overflow-y-auto p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
               {t('admin_ops.grace_eyebrow', { defaultValue: 'Bonificación' })}
             </p>

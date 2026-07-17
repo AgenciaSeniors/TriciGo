@@ -542,8 +542,8 @@ export default function UserDetailPage() {
 
       {/* Delete Pending Account Modal */}
       {deleteModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div role="dialog" aria-modal="true" aria-labelledby="delete-account-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-account-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md my-auto max-h-[90dvh] overflow-y-auto">
             <h3 id="delete-account-title" className="text-lg font-bold mb-2">{t('users.delete_account_title')}</h3>
             <p className="text-sm text-ink-muted mb-4">{t('users.delete_account_desc')}</p>
 
@@ -617,8 +617,8 @@ export default function UserDetailPage() {
 
       {/* Block User Modal */}
       {blockModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div role="dialog" aria-modal="true" aria-labelledby="block-user-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="block-user-title" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md my-auto max-h-[90dvh] overflow-y-auto">
             <h3 id="block-user-title" className="text-lg font-bold mb-4">{t('users.block_user')}</h3>
             <p className="text-sm text-ink-muted mb-4">{t('users.block_confirm')}</p>
             <textarea
