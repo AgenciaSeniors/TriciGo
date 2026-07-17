@@ -70,7 +70,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Pre-flight — export bundle and verify env inlining BEFORE publishing
+      - name: Export the bundle
         working-directory: apps/${{ inputs.app }}
         env:
           # Mirror of eas.json build.base.env + production profile.
@@ -82,27 +82,51 @@ jobs:
           EXPO_PUBLIC_POSTHOG_API_KEY: phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9
           EXPO_PUBLIC_DEMO_MODE: 'false'
         run: |
-          # Export with the same env the publish step uses. If inlining is
-          # broken (empty Supabase URL / Mapbox token), fail HERE — before
-          # anything ships. One platform is representative: env inlining is
-          # identical across platforms.
-          npx expo export --platform android --output-dir preflight-dist
-          if ! grep -rq "lqaufszburqvlslpcuac.supabase.co" preflight-dist/_expo/static/js; then
-            echo "::error::Supabase URL not found in the exported bundle — EXPO_PUBLIC_* env inlining failed. NOT publishing."
+          # --clear: never trust a warm Metro cache. Verified locally that a
+          # warm cache reuses modules with a PREVIOUS run's env value already
+          # inlined, which silently masks a missing variable.
+          npx expo export --platform android --platform ios --output-dir dist --clear
+
+      - name: Verify env inlining — gate before anything ships
+        working-directory: apps/${{ inputs.app }}
+        run: |
+          # Assert every runtime-critical value actually landed in the bundle.
+          # Checking only one is not enough: a typo in a single env key would
+          # let the others pass and still ship a broken bundle.
+          #
+          # The Mapbox token is the most dangerous. Both apps do
+          #   MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
+          # in app/_layout.tsx — that is JS, so an OTA can change it. An empty
+          # token throws MapboxConfigurationException, and the driver's home
+          # screen IS the map: the app would crash on launch, fleet-wide.
+          #
+          # grep -F works on the Hermes .hbc bytecode: string literals survive
+          # in the string table. Verified against a real export.
+          fail=0
+          check() {
+            if grep -rqF "$2" dist/_expo/static/js; then
+              echo "  OK   $1"
+            else
+              echo "::error::$1 missing from the exported bundle — EXPO_PUBLIC_* env inlining failed. NOT publishing."
+              fail=1
+            fi
+          }
+          check "Supabase URL"  "lqaufszburqvlslpcuac.supabase.co"
+          check "Mapbox token"  "pk.eyJ1IjoidHJpY2lnbyI"
+          if [ "$fail" -ne 0 ]; then
             exit 1
           fi
-          echo "Bundle contains the Supabase URL — env inlining OK, safe to publish"
-          rm -rf preflight-dist
+          echo "Env inlining verified — safe to publish"
 
-      - name: Publish update to the production channel
+      - name: Publish the verified bundle to the production channel
         working-directory: apps/${{ inputs.app }}
-        env:
-          # Same env as the pre-flight step — keep both blocks in sync.
-          EXPO_PUBLIC_SUPABASE_URL: https://lqaufszburqvlslpcuac.supabase.co
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc
-          EXPO_PUBLIC_MAPBOX_TOKEN: pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg
-          EXPO_PUBLIC_SENTRY_DSN: https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296
-          EXPO_PUBLIC_POSTHOG_API_KEY: phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9
-          EXPO_PUBLIC_DEMO_MODE: 'false'
         run: |
-          eas update --channel production --message "${{ inputs.message }}" --non-interactive
+          # --input-dir + --skip-bundler publish EXACTLY the artifact verified
+          # in the step above. Letting `eas update` re-bundle would mean
+          # verifying one bundle and shipping a different one.
+          eas update \
+            --channel production \
+            --message "${{ inputs.message }}" \
+            --input-dir dist \
+            --skip-bundler \
+            --non-interactive
