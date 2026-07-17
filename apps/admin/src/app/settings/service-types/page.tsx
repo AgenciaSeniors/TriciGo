@@ -29,7 +29,13 @@ export default function ServiceTypesPage() {
     async function fetch() {
       try {
         const data = await adminService.getServiceTypeConfigs();
-        if (!cancelled) setConfigs(data);
+        // Hide 'mensajeria'. Its row still exists and must stay active — the
+        // clients query the slug — but its fares are dead: a delivery is
+        // priced as the vehicle the rider picks (#419), so nothing is ever
+        // charged with these numbers. Showing them invited two mistakes:
+        // reading them as the delivery price, and toggling the row inactive,
+        // which breaks the web estimate that expects the slug to resolve.
+        if (!cancelled) setConfigs(data.filter((c) => c.slug !== 'mensajeria'));
       } catch (err) {
         // Error handled by UI
         setError(getErrorMessage(err));

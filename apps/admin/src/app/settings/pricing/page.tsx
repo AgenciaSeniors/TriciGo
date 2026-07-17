@@ -13,13 +13,17 @@ import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
 const PAGE_SIZE = 20;
 
+// 'mensajeria' is deliberately absent from both lists. A delivery is priced as
+// the vehicle the rider picks (#419): the ride is created with that vehicle's
+// service_type, so it matches the vehicle's pricing rules. No ride is ever
+// created with service_type='mensajeria', which made the filter show an empty
+// list and let an admin author rules that could never apply.
 const SERVICE_TAB_KEYS = [
   { labelKey: 'pricing.filter_all', value: 'all' },
   { labelKey: 'pricing.filter_triciclo', value: 'triciclo_basico' },
   { labelKey: 'pricing.filter_moto', value: 'moto_standard' },
   { labelKey: 'pricing.filter_auto', value: 'auto_standard' },
   { labelKey: 'pricing.filter_confort', value: 'auto_confort' },
-  { labelKey: 'pricing.filter_mensajeria', value: 'mensajeria' },
 ] as const;
 
 const SERVICE_OPTIONS = [
@@ -27,7 +31,6 @@ const SERVICE_OPTIONS = [
   'moto_standard',
   'auto_standard',
   'auto_confort',
-  'mensajeria',
 ];
 
 const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
