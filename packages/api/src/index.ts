@@ -11,6 +11,7 @@ export { rideService } from './services/ride.service';
 export { driverService } from './services/driver.service';
 export { reviewService } from './services/review.service';
 export { adminService } from './services/admin.service';
+export type { PendingAccountSummary, PendingAccountDeletability } from './services/admin.service';
 export {
   DOC_REJECTION_PRESETS,
   buildRejectionMessage,
