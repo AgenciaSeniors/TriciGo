@@ -18,6 +18,7 @@ import { isValidEmail, isValidCubanPhone, normalizeCubanPhone, PACKAGE_CATEGORY_
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
+import { resizeImageForCrop } from '@/lib/compressDocument';
 import type { Vehicle } from '@tricigo/types';
 
 const VEHICLE_TYPE_LABELS: Record<string, string> = {
@@ -105,14 +106,15 @@ export default function EditProfileScreen() {
     // throws "Missing camera or camera roll permission" on iOS (Apple 2.1(a)).
     if (!(await ensurePickerPermission(useGallery ? 'gallery' : 'camera', t))) return;
     try {
+      // quality 0.8 (not 1): the crop modal outputs a 384px JPEG anyway.
       const pickerResult = useGallery
         ? await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 1,
+            quality: 0.8,
           })
         : await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 1,
+            quality: 0.8,
           });
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
@@ -122,8 +124,11 @@ export default function EditProfileScreen() {
         Alert.alert('Error', t('errors.generic'));
         return;
       }
+      // Downscale to ≤1600px BEFORE the crop modal so a huge photo doesn't
+      // OOM-kill the app during the interactive crop on low-RAM Android.
+      const safe = await resizeImageForCrop(asset.uri, asset.width, asset.height);
       // Open the shared crop modal — confirm dispara el upload real.
-      setPendingCrop({ uri: asset.uri, width: asset.width, height: asset.height });
+      setPendingCrop({ uri: safe.uri, width: safe.width, height: safe.height });
     } catch {
       Alert.alert('Error', t('errors.generic'));
     }

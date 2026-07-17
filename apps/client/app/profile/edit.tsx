@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@tricigo/theme';
 import { useTokens } from '@/hooks/useTokens';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
+import { resizeImageForCrop } from '@/lib/compressImage';
 
 interface PendingCrop {
   uri: string;
@@ -47,14 +48,16 @@ export default function EditProfileScreen() {
       // We do NOT request `allowsEditing` from the picker — Android 13+ uses
       // the system Photo Picker which ignores it. We always show our own
       // circular crop modal so behavior is consistent across platforms.
+      // quality 0.8 (not 1): the crop modal outputs a 384px JPEG anyway, so full
+      // quality only bloats the intermediate file written to cache.
       const pickerResult = source === 'camera'
         ? await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 1,
+            quality: 0.8,
           })
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 1,
+            quality: 0.8,
           });
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
@@ -71,7 +74,11 @@ export default function EditProfileScreen() {
         return;
       }
 
-      setPendingCrop({ uri: asset.uri, width: asset.width, height: asset.height });
+      // Downscale to ≤1600px BEFORE the crop modal so a huge gallery/camera
+      // photo doesn't OOM-kill the app during the interactive crop on low-RAM
+      // Android. Returns the resized dims so the crop geometry stays correct.
+      const safe = await resizeImageForCrop(asset.uri, asset.width, asset.height);
+      setPendingCrop({ uri: safe.uri, width: safe.width, height: safe.height });
     } catch (err) {
       const msg = String((err as { message?: string } | undefined)?.message ?? err ?? '');
       console.error('[ProfileEdit] Image pick failed:', msg);

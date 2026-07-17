@@ -83,9 +83,15 @@ export default function DisputeFormScreen() {
       // photos are 4–12 MP; uploading several raw over a Cuban 3G link times out
       // and kills the whole submission. ~1600px / q0.7 JPEG → ~150–400 KB each
       // (also normalizes iOS HEIC → JPEG so the upload MIME matches the bytes).
-      const compressed = await Promise.all(
-        result.assets.map((a) => compressImage(a.uri).then((r) => r.uri)),
-      );
+      //
+      // Compress SEQUENTIALLY, not with Promise.all: each manipulate decodes the
+      // full-res bitmap (48–430 MB for a 12–108 MP photo), so decoding up to 4 at
+      // once multiplies the peak and OOM-kills the app on low-RAM Android.
+      const compressed: string[] = [];
+      for (const a of result.assets) {
+        const r = await compressImage(a.uri);
+        compressed.push(r.uri);
+      }
       setEvidenceUris((prev) => [...prev, ...compressed].slice(0, MAX_EVIDENCE_PHOTOS));
     }
   };
