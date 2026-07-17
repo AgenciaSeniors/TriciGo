@@ -1911,6 +1911,101 @@ git worktree remove <temp>
 
 **Pendiente / residual:** `OTP_PASSWORD_SECRET` no se pudo setear desde el sandbox (sin CLI auth) → queda para el usuario (dashboard EF secrets o `npx supabase secrets set OTP_PASSWORD_SECRET=$(openssl rand -hex 32) --project-ref lqaufszburqvlslpcuac` desde un dir vacío tras `supabase login`); el fallback a service-role key funciona mientras tanto. Residual aceptado: el 1er login post-deploy de cada usuario existente escribe el password 1 vez (heal → revoca su única sesión previa; invisible). Conflicto latente documentado en el código: el password determinístico clobbea cualquier password propio de `set-password-after-otp` (inactivo hoy: sin login-por-password para phone users).
 
+### Sembrar un viaje de prueba para UN conductor específico (patrón canónico, verificado 2026-07-16)
+
+Para QA manual ("lanzale un viaje al conductor X y que le suene el celu") **sin** que la oferta les llegue a otros conductores reales que estén online.
+
+**El problema:** `INSERT INTO rides (status='searching')` dispara `trg_on_ride_insert_dispatch` → `dispatch_ride(id)` → `find_best_drivers(..., limit 10, radius 5000)` → inserta una fila en `ride_offers` **por cada** conductor elegible del radio. Y `trg_notify_driver_new_offer` (AFTER INSERT en `ride_offers`) manda el push. **Borrar después las ofertas ajenas NO sirve**: el `net.http_post` ya quedó encolado en la misma transacción y el push sale igual al commitear.
+
+**La palanca:** `tg_rides_normalize_scheduling` (BEFORE INSERT) deriva `is_scheduled := (scheduled_at IS NOT NULL AND scheduled_at > now())`, y `on_ride_insert_dispatch` **NO despacha** los programados a futuro. Entonces: crear el ride programado → desprogramarlo → insertar la oferta a mano solo para el conductor objetivo. Todo en **una transacción atómica**: nadie más ve una oferta ni recibe push.
+
+```sql
+BEGIN;
+INSERT INTO rides (
+  id, customer_id, service_type, status, payment_method,
+  pickup_location, pickup_address, dropoff_location, dropoff_address,
+  estimated_fare_cup, estimated_distance_m, estimated_duration_s,
+  passenger_count, ride_mode, scheduled_at
+) VALUES (
+  '<uuid-fijo>', '<customer_id>', 'triciclo_basico', 'searching', 'cash',
+  ST_SetSRID(ST_MakePoint(<lng_pickup>, <lat_pickup>),4326)::geography, '<dirección pickup>',
+  ST_SetSRID(ST_MakePoint(<lng_drop>, <lat_drop>),4326)::geography, '<dirección destino>',
+  <fare>, <dist_m>, <dur_s>, 1, 'passenger',
+  now() + interval '1 hour'          -- ← evita el auto-dispatch
+);
+UPDATE rides SET scheduled_at = NULL, is_scheduled = false WHERE id = '<uuid-fijo>';
+INSERT INTO ride_offers (ride_id, driver_profile_id, composite_score, distance_m, expires_at)
+VALUES ('<uuid-fijo>', '<driver_profile_id>', 0.76, <dist_driver_al_pickup>,
+        now() + interval '2 minutes');   -- el default (offer_ttl_seconds) es 30s: poco para QA
+COMMIT;
+```
+
+**Gotchas verificados:**
+- **El gate de un-viaje-activo se bypassea.** `trg_enforce_one_active_ride_per_customer` es **BEFORE INSERT only** y exceptúa los programados → este patrón puede dejar al pasajero con 2 viajes activos (estado que la app real nunca produce). **Cerrar siempre el viaje anterior antes de lanzar otro** (`admin_cancel_ride`).
+- **Una oferta vencida NO cancela el ride**: el `expires_at` pasa, la oferta desaparece de la pantalla del conductor, pero el ride sigue `searching` y el pasajero sigue ocupado. Cancelar explícito.
+- **Fare floor**: `tg_rides_validate_estimated_fare` rechaza `estimated_fare_cup < min_fare_cup` del `service_type_configs` (triciclo_basico = 1505 al 2026-07-16). Calcular la tarifa con la config viva, no a ojo.
+- **`auth.uid()` NULL (MCP/service-role) es lo que hace funcionar el patrón**: salta el rate-limit (`tg_rides_rate_limit`) y `normalize_scheduling` no resetea campos. Si impersonás a alguien en la misma transacción, cambia el comportamiento.
+- **`ride_offers.driver_profile_id` es `driver_profiles.id`**, NO `users.id`.
+- **No hay ningún gate geográfico**: prod aceptó sin chistar un ride con pickup/dropoff en Brasil (`city_id` NULL). Útil para QA desde el exterior; la tarifa igual sale en CUP (los precios son de la config cubana, no cambian por país).
+- **Limpieza**: `admin_cancel_ride('<uuid>', '<motivo>')` impersonando admin (`set_config('request.jwt.claim.sub', '<admin_user_id>', true)`). Vía admin = **sin evento reputacional** para nadie (ver `cancellation_rating_events`); un `cancel_ride` normal fuera de la ventana de gracia (120s) sí deja marca.
+
+### `rpc_attempt_log` — evidencia forense de qué pasó en un RPC (verificado 2026-07-16)
+
+Varios RPCs críticos (`cancel_ride`, `accept_ride_v2`, …) llaman `log_rpc_attempt(rpc, caller, target, outcome, metadata)`, que escribe en **`public.rpc_attempt_log`** (la tabla NO se llama `rpc_attempts`). `log_rpc_attempt` tiene `EXCEPTION WHEN OTHERS THEN NULL` → nunca puede tumbar al RPC que la llama.
+
+**Es la primera parada cuando el usuario reporta "la app me dijo error X"**: da el `outcome` exacto (`unauthenticated` / `ride_not_found` / `ride_already_closed` / `unauthorized` / `success`) con timestamp y metadata, sin depender de logs del cliente.
+
+```sql
+SELECT rpc_name, caller_uid, target_id, outcome, metadata, created_at
+FROM rpc_attempt_log WHERE created_at > NOW() - interval '30 minutes'
+ORDER BY created_at DESC LIMIT 20;
+```
+
+**Ojo con el timestamp**: `created_at` es `now()` = **hora de inicio de la transacción**, no del INSERT. Dos operaciones concurrentes pueden aparecer en orden contraintuitivo. Y los early-returns (que hacen `RETURN`, no `RAISE`) **sí** quedan registrados; un fallo por excepción de trigger haría rollback y **no** dejaría rastro — la ausencia de fila no prueba que no se intentó.
+
+**Caso real:** el usuario reportó "No se pudo cancelar el viaje" en la app conductor. El log mostró `cancel_ride → ride_already_closed` a las 18:03:03.430, y el `canceled_at` del ride (cancelación admin) a las 18:03:03.515: **una carrera**, no un bug del RPC. Pero el mismo log destapó un bug real: otro conductor canceló OK (`success`) y su app disparó 4 intentos más → 4 × `ride_already_closed` → 4 carteles rojos tras un cancel exitoso (arreglado en #814).
+
+### `ride_already_closed` NO es un fallo — la intención ya está satisfecha (#814)
+
+`cancel_ride` devuelve `{"error":"ride_already_closed","status":"canceled"}` cuando el viaje ya es terminal (la otra parte o un admin lo cerró primero, o es doble-tap). **El viaje SÍ está cancelado.** Tratarlo como error genérico es mentirle al usuario **y** dejar un viaje muerto colgado en pantalla.
+
+**Patrón canónico:** `ride.service.cancelRide` lanza `AppError` con `code: 'RIDE_ALREADY_CLOSED'` (409) + `details.status`. El caller lo trata **como éxito**: mismo teardown que el happy path + mensaje honesto (`driver:trip.cancel_already_closed`). Implementado en `apps/driver/src/hooks/useDriverRide.ts` (`cancelTrip`).
+
+**Deuda conocida:** el cliente (`apps/client/src/hooks/useRide.ts`) y la web (`apps/web/src/app/track/[id]/page.tsx`) **siguen tratándolo como fallo genérico** — el `AppError` tipado ya les deja el camino hecho.
+
+**Lección transversal:** un `catch {}` que se traga el error sin loguear hace el bug indiagnosticable desde la app (era el caso). Loguear siempre con contexto (`rideId`).
+
+### Ajustar saldo de wallet: usar `admin_adjust_wallet`, NUNCA `UPDATE wallet_accounts.balance` (verificado 2026-07-16)
+
+El ancla USD del conductor (`wallet_accounts.anchor_usd_cents`) la mantiene **`trg_ledger_maintain_usd_anchor`, un trigger sobre `ledger_entries`** — NO hay trigger sobre `wallet_accounts`. Consecuencia: un `UPDATE` directo del `balance` **no toca el ancla** → queda respaldando un saldo que ya no existe y la próxima revaluación cambiaria regala o destruye valor.
+
+```sql
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '<admin_user_id>', true);  -- el RPC exige auth.uid() = p_admin_user_id
+SELECT admin_adjust_wallet('<target_user_id>'::uuid, 'tricicoin'::wallet_account_type,
+                           -320733, '<motivo ≥3 chars>', '<admin_user_id>'::uuid);
+COMMIT;
+```
+
+**Detalles del RPC:** acepta montos **negativos** (solo rechaza 0); soporta `customer_cash|driver_cash|corporate_cash|tricicoin`; un admin **no puede** ajustar su propia wallet. En **créditos** inyecta `anchor_directives` (`unbacked_cup_delta`) al metadata de la transacción; en **débitos** no, y el trigger reduce el ancla **proporcionalmente** (verificado: 330,733 CUP / $501.11 → 10,000 CUP / $15.15 = exactamente 10000/330733 del ancla). Deja rastro en `ledger_transactions` (type `adjustment`) + `admin_actions`.
+
+### Auto-launch de oferta en el conductor: 2 canales (realtime frágil vs push fiable) — #807 + #817
+
+**Diagnóstico en vivo 2026-07-16** (dispositivo real, APK 1.2.0, permiso overlay concedido): repro 1 = la app **no** se abrió (solo llegó el push); repro 2 = se abrió **con demora**, el push llegó primero.
+
+**Causa:** el auto-launch de #807 se dispara desde el **WebSocket de Realtime** (`subscribeToNewRides` → `DriverOverlay.bringAppToForeground()`), que (a) se cae en silencio en background — el propio código tiene un poll de respaldo de 30s que **a propósito NO lanza la app**, y (b) aun conectado pierde la carrera contra FCM (socket despriorizado en background + re-fetch del ride antes de lanzar). El push (trigger `trg_notify_driver_new_offer` → EF `send-push`) es el canal rápido y fiable, pero solo visible.
+
+**Rediseño (#817, mergeado, PENDIENTE de activar):** `send-push` manda, para `category='ride_offer'`, un **2º mensaje data-only high-priority** (`type: 'ride_offer_launch'`, solo a devices `platform='android'`) → despierta el background task `apps/driver/src/tasks/rideOfferLaunchTask.ts` (`Notifications.registerTaskAsync` + `TaskManager.defineTask` con import por side-effect en `_layout.tsx`, mismo contrato que el task FD1 de ubicación) → `bringAppToForeground()`. El camino realtime queda como redundancia (launch duplicado = no-op por `SINGLE_TOP` + throttle 3s).
+
+**Para activarlo hacen falta LAS DOS piezas** (ninguna rompe nada por separado): (1) `npx supabase functions deploy send-push --project-ref lqaufszburqvlslpcuac`; (2) **rebuild del APK** conductor (sin OTA). Sin (1), el APK nuevo se comporta como hoy; sin (2), el mensaje no lo escucha nadie.
+
+**Verificado contra el fuente de `expo-notifications@55.0.18`** (no contra la doc — 3 casos borde encontrados así):
+- `FirebaseMessagingDelegate.onMessageReceived` corre los task consumers **incondicionalmente**, también en foreground → el task necesita gate de `AppState`.
+- En **background**, un data-only nunca se presenta (`ExpoHandlingDelegate.shouldPresent()` exige title o text) → **los APKs viejos lo ignoran por completo**. En **foreground** sí llega al handler JS → con `shouldShowAlert:true` mostraría una **notificación vacía**: hay que gatear `ride_offer_launch` en los 3 handlers (driver `useNotifications`, client `useNotifications` **y** client `push.service.ts` — ambos setean el handler global y gana el del import order; el cliente puede recibirlo porque `user_devices` no distingue apps).
+- `RemoteMessageSerializer` espeja el JSON del `data.body` de FCM también como `dataString` (key cross-platform documentada) → sondear ambas.
+
+**Diagnóstico si reaparece "no se abre sola":** (1) ¿aparece la **burbuja flotante** al minimizar? Sí ⇒ el permiso `SYSTEM_ALERT_WINDOW` está OK (misma llave para burbuja y launch) y el problema es el canal, no el permiso. (2) versión del APK ≥ rebuild post-#817. (3) `launch_sent=N/M` en el summary log de `send-push`. (4) Sentry: `logger.warn('[rideOfferLaunch] …')`. El modo de falla es **silencioso-benigno**: siempre queda el push visible.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
