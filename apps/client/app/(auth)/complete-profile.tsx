@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { SwitchAccountFooter } from '@/components/auth/SwitchAccountFooter';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
+import { resizeImageForCrop } from '@/lib/compressImage';
 
 interface PendingCrop {
   uri: string;
@@ -45,9 +46,10 @@ export default function CompleteProfileScreen() {
       // Pick at full quality; the shared circular AvatarCropModal handles framing
       // so the crop UX + output spec match the edit-profile screen (Android 13+'s
       // system picker ignores allowsEditing, so we never rely on it).
+      // quality 0.8 (not 1): the crop modal outputs a 384px JPEG anyway.
       const pickerResult = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 });
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
       const asset = pickerResult.assets[0];
@@ -55,7 +57,10 @@ export default function CompleteProfileScreen() {
         Alert.alert(t('error'), t('errors.generic'));
         return;
       }
-      setPendingCrop({ uri: asset.uri, width: asset.width, height: asset.height });
+      // Downscale to ≤1600px BEFORE the crop modal to avoid OOM on low-RAM
+      // Android with a huge photo. Returns resized dims for correct crop geometry.
+      const safe = await resizeImageForCrop(asset.uri, asset.width, asset.height);
+      setPendingCrop({ uri: safe.uri, width: safe.width, height: safe.height });
     } catch {
       Alert.alert(t('error'), t('errors.generic'));
     }

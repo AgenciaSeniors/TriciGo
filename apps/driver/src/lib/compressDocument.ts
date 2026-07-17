@@ -98,6 +98,42 @@ export async function compressDocument(
   }
 }
 
+/**
+ * Downscale a just-picked image to a safe max dimension BEFORE it enters the
+ * interactive crop UI (AvatarCropModal).
+ *
+ * Why: the crop modal renders the source full-res in an `Animated.Image` AND
+ * runs a second crop-manipulate on it. Feeding a 12–108 MP original decodes a
+ * 48–430 MB ARGB bitmap and OOM-kills the app on low-RAM Android — the app
+ * "se bloquea y regresa atrás" (a native kill a JS try/catch can't catch).
+ * Capping the longest side to 1600px first bounds the interactive peak memory.
+ *
+ * Returns the resized dimensions so the crop geometry (which maps display px →
+ * original px) stays correct. Best-effort: on any failure or an
+ * already-small image, returns the original uri + given dimensions.
+ */
+export async function resizeImageForCrop(
+  uri: string,
+  width: number,
+  height: number,
+): Promise<{ uri: string; width: number; height: number }> {
+  if (Math.max(width, height) <= MAX_DIMENSION) return { uri, width, height };
+  try {
+    // Cap the LONGEST side regardless of orientation (manipulator keeps aspect).
+    const action =
+      width >= height
+        ? { resize: { width: MAX_DIMENSION } }
+        : { resize: { height: MAX_DIMENSION } };
+    const out = await ImageManipulator.manipulateAsync(uri, [action], {
+      compress: JPEG_QUALITY,
+      format: ImageManipulator.SaveFormat.JPEG,
+    });
+    return { uri: out.uri, width: out.width, height: out.height };
+  } catch {
+    return { uri, width, height };
+  }
+}
+
 /** Human-readable "1.2 MB → 340 KB" string. Used in toast messages. */
 export function formatSizeDelta(originalBytes: number, compressedBytes: number): string {
   const fmt = (b: number) => {
