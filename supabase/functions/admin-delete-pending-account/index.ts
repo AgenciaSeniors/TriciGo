@@ -31,8 +31,8 @@
 //                      normal self-delete flow — avoids losing the acting admin)
 //   • is_staff       : role ∈ {admin, super_admin}
 //   • has_balance    : any wallet_account with balance ≠ 0 or held_balance ≠ 0
-//   • has_rides      : any ride (as customer OR as driver) not 'cancelled'
-// A pending driver profile, cancelled-only rides, and an incomplete profile are
+//   • has_rides      : any ride (as customer OR as driver) not 'canceled'
+// A pending driver profile, canceled-only rides, and an incomplete profile are
 // all disposable and do NOT block.
 //
 // On confirm, the actual delete reuses the same idempotent machinery as
@@ -163,12 +163,14 @@ Deno.serve(async (req: Request) => {
     const walletHeldTotal = (wallets ?? []).reduce(
       (s, w) => s + Number(w.held_balance ?? 0), 0);
 
-    // Rides as customer (any status other than 'cancelled' counts as history).
+    // Rides as customer (any status other than 'canceled' counts as history).
+    // NOTE: the ride_status enum uses the single-L US spelling 'canceled';
+    // 'cancelled' is NOT a valid label and makes PostgREST throw 22P02.
     const { count: ridesAsCustomer, error: rcErr } = await admin
       .from('rides')
       .select('id', { count: 'exact', head: true })
       .eq('customer_id', userId)
-      .neq('status', 'cancelled');
+      .neq('status', 'canceled');
     if (rcErr) throw new Error(`customer_rides_lookup_failed: ${rcErr.message}`);
 
     // Rides as driver (needs the driver_profiles.id).
@@ -178,7 +180,7 @@ Deno.serve(async (req: Request) => {
         .from('rides')
         .select('id', { count: 'exact', head: true })
         .eq('driver_id', driverProfile.id)
-        .neq('status', 'cancelled');
+        .neq('status', 'canceled');
       if (rdErr) throw new Error(`driver_rides_lookup_failed: ${rdErr.message}`);
       ridesAsDriver = count ?? 0;
     }
