@@ -20,8 +20,15 @@ import { getErrorMessage } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
+import {
+  markPickerLaunch,
+  clearPickerMarker,
+  consumeRecoveredPickerAsset,
+} from '@/lib/cameraRecovery';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { DriverDocument, SelfieCheck, DocumentType } from '@tricigo/types';
+
+const RECOVERY_FLOW = 'profile-doc-reupload';
 
 const DOC_TYPE_KEY: Record<string, string> = {
   national_id: 'onboarding.national_id',
@@ -73,44 +80,18 @@ export default function DocumentsScreen() {
   // admin approval/rejection should reflect without a full restart).
   useRefreshOnFocus(fetchData);
 
-  const reuploadImage = useCallback(async (docType: DocumentType, source?: 'camera' | 'gallery') => {
+  // Shared tail of reuploadImage (compress + upload + refresh) — also the
+  // re-entry point for the recovery path after Android killed the app mid-capture.
+  const processReuploadAsset = useCallback(async (docType: DocumentType, assetUri: string, assetMime?: string) => {
     if (!driverId) return;
-    const isSelfie = docType === 'selfie';
-    // Selfie is always the front camera. Other docs can be captured with the
-    // camera when requested (source='camera') so drivers bypass Google Photos —
-    // its picker fails to load on Cuba's connection and shows "Se produjo un
-    // error, vuelve a intentarlo más tarde" (a Google error, external to the app).
-    const useCamera = Platform.OS !== 'web' && (isSelfie || source === 'camera');
-    // Ask for camera/photos permission first (Apple 2.1(a) — avoid the iOS
-    // "Missing camera or camera roll permission" throw).
-    if (!(await ensurePickerPermission(useCamera ? 'camera' : 'gallery', tc))) return;
     setReuploading(docType);
-
     try {
-      const result = useCamera
-        ? await ImagePicker.launchCameraAsync(
-            isSelfie
-              ? { mediaTypes: 'images', quality: 0.7, cameraType: ImagePicker.CameraType.front }
-              // Vehicle photo is rectangular — back camera, no forced square crop.
-              : { mediaTypes: 'images', quality: 0.7 },
-          )
-        : await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: 'images',
-            quality: 0.7,
-          });
-
-      if (result.canceled || !result.assets?.[0]) {
-        setReuploading(null);
-        return;
-      }
-
-      const asset = result.assets[0];
       const fileName = `${docType}-${Date.now()}.jpg`;
-      const mimeType = asset.mimeType ?? 'image/jpeg';
+      const mimeType = assetMime ?? 'image/jpeg';
 
       // Compress before upload — see compressDocument.ts docstring for
       // rationale (Cuba connectivity).
-      const compressed = await compressDocument(asset.uri, mimeType);
+      const compressed = await compressDocument(assetUri, mimeType);
       if (compressed.wasCompressed && compressed.originalBytes > 0) {
         Toast.show({
           type: 'info',
@@ -130,7 +111,65 @@ export default function DocumentsScreen() {
     } finally {
       setReuploading(null);
     }
-  }, [driverId, fetchData, t, tc]);
+  }, [driverId, fetchData, t]);
+
+  const reuploadImage = useCallback(async (docType: DocumentType, source?: 'camera' | 'gallery') => {
+    if (!driverId) return;
+    const isSelfie = docType === 'selfie';
+    // Selfie is always the front camera. Other docs can be captured with the
+    // camera when requested (source='camera') so drivers bypass Google Photos —
+    // its picker fails to load on Cuba's connection and shows "Se produjo un
+    // error, vuelve a intentarlo más tarde" (a Google error, external to the app).
+    const useCamera = Platform.OS !== 'web' && (isSelfie || source === 'camera');
+    // Ask for camera/photos permission first (Apple 2.1(a) — avoid the iOS
+    // "Missing camera or camera roll permission" throw).
+    if (!(await ensurePickerPermission(useCamera ? 'camera' : 'gallery', tc))) return;
+    setReuploading(docType);
+
+    try {
+      // Mark the launch so the relaunched app can recover the photo if the OS
+      // kills our process while the camera/gallery is open (cameraRecovery.ts).
+      await markPickerLaunch(RECOVERY_FLOW, { docType });
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync(
+            isSelfie
+              ? { mediaTypes: 'images', quality: 0.7, cameraType: ImagePicker.CameraType.front }
+              // Vehicle photo is rectangular — back camera, no forced square crop.
+              : { mediaTypes: 'images', quality: 0.7 },
+          )
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: 'images',
+            quality: 0.7,
+          });
+      await clearPickerMarker(); // returned alive — no recovery needed
+
+      if (result.canceled || !result.assets?.[0]) {
+        setReuploading(null);
+        return;
+      }
+
+      const asset = result.assets[0];
+      await processReuploadAsset(docType, asset.uri, asset.mimeType ?? undefined);
+    } catch (err) {
+      Alert.alert(t('common.error', { defaultValue: 'Error' }), getErrorMessage(err));
+      setReuploading(null);
+    }
+  }, [driverId, processReuploadAsset, t, tc]);
+
+  // Recovery: if Android killed the app while the picker was open for a
+  // re-upload, resume it when the driver returns to this screen. The consume
+  // is one-shot, so effect re-runs are no-ops.
+  useEffect(() => {
+    if (!driverId) return;
+    let cancelled = false;
+    consumeRecoveredPickerAsset(RECOVERY_FLOW).then((rec) => {
+      if (cancelled || !rec) return;
+      const docType = rec.meta.docType as DocumentType | undefined;
+      if (!docType || !(docType in DOC_TYPE_KEY)) return;
+      void processReuploadAsset(docType, rec.asset.uri, rec.asset.mimeType ?? undefined);
+    });
+    return () => { cancelled = true; };
+  }, [driverId, processReuploadAsset]);
 
   const reuploadDocument = useCallback(async (docType: DocumentType) => {
     if (!driverId) return;
