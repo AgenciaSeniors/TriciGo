@@ -19,7 +19,14 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 import { resizeImageForCrop } from '@/lib/compressDocument';
+import {
+  markPickerLaunch,
+  clearPickerMarker,
+  consumeRecoveredPickerAsset,
+} from '@/lib/cameraRecovery';
 import type { Vehicle } from '@tricigo/types';
+
+const RECOVERY_FLOW = 'avatar-edit';
 
 const VEHICLE_TYPE_LABELS: Record<string, string> = {
   triciclo: 'Triciclo',
@@ -60,6 +67,22 @@ export default function EditProfileScreen() {
   // Pending crop — when the user picks a photo, we open the AvatarCropModal
   // (parity D1 with client). Stays null until the modal confirms or cancels.
   const [pendingCrop, setPendingCrop] = useState<{ uri: string; width: number; height: number } | null>(null);
+
+  // Recovery: if Android killed the app while the avatar camera/gallery was
+  // open (common on low-RAM devices — the user sees the app "go back"), pick
+  // up the captured photo on remount and reopen the crop modal with it.
+  // consumeRecoveredPickerAsset is one-shot, so effect re-runs are no-ops.
+  useEffect(() => {
+    let cancelled = false;
+    consumeRecoveredPickerAsset(RECOVERY_FLOW).then(async (rec) => {
+      if (cancelled || !rec) return;
+      const { asset } = rec;
+      if (!asset.width || !asset.height) return;
+      const safe = await resizeImageForCrop(asset.uri, asset.width, asset.height);
+      if (!cancelled) setPendingCrop({ uri: safe.uri, width: safe.width, height: safe.height });
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Vehicle state (full object)
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
@@ -106,6 +129,9 @@ export default function EditProfileScreen() {
     // throws "Missing camera or camera roll permission" on iOS (Apple 2.1(a)).
     if (!(await ensurePickerPermission(useGallery ? 'gallery' : 'camera', t))) return;
     try {
+      // Mark the launch so the relaunched app can recover the photo if the OS
+      // kills our process while the camera/gallery is open (cameraRecovery.ts).
+      await markPickerLaunch(RECOVERY_FLOW);
       // quality 0.8 (not 1): the crop modal outputs a 384px JPEG anyway.
       const pickerResult = useGallery
         ? await ImagePicker.launchImageLibraryAsync({
@@ -116,6 +142,7 @@ export default function EditProfileScreen() {
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.8,
           });
+      await clearPickerMarker(); // returned alive — no recovery needed
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
 

@@ -19,7 +19,14 @@ import { useOnboardingStore } from '@/stores/onboarding.store';
 import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
 import { compressDocument, formatSizeDelta } from '@/lib/compressDocument';
 import { ensureDriverProfile } from '@/lib/ensureDriverProfile';
+import {
+  markPickerLaunch,
+  clearPickerMarker,
+  consumeRecoveredPickerAsset,
+} from '@/lib/cameraRecovery';
 import type { DocumentType } from '@tricigo/types';
+
+const RECOVERY_FLOW = 'onboarding-doc';
 
 function useSteps() {
   const { t } = useTranslation('driver');
@@ -105,9 +112,13 @@ export default function DocumentsScreen() {
     setDocumentUploading(docType, true);
     try {
       console.log('[Documents] Uploading:', docType, 'profileId:', profileId, 'mime:', mimeType);
+      // Outer budget must OUTLAST uploadFileFromUri's own bound (45s/attempt ×2
+      // + 2s backoff ≈ 92s worst case) or it fires mid-retry: the UI would show
+      // an error while the background retry still succeeds. 100s also bounds
+      // the post-upload PostgREST insert, which has no timeout of its own.
       const uploadPromise = driverService.uploadDocument(profileId, docType, uri, fileName, mimeType);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Upload timeout after 30s')), 30000),
+        setTimeout(() => reject(new Error('Upload timeout after 100s')), 100_000),
       );
       await Promise.race([uploadPromise, timeoutPromise]);
       setDocumentUploaded(docType);
@@ -146,6 +157,10 @@ export default function DocumentsScreen() {
       }
     }
 
+    // Mark the launch: on low-RAM Android the OS may kill our process while
+    // the camera (or Google Photos) is foregrounded. The marker lets the
+    // relaunched app recover the photo and resume the upload (cameraRecovery.ts).
+    await markPickerLaunch(RECOVERY_FLOW, { docType });
     const result = useCamera
       ? await ImagePicker.launchCameraAsync(
           isSelfie
@@ -161,9 +176,15 @@ export default function DocumentsScreen() {
           // document, so skip editing and upload the full photo for human review.
           allowsEditing: false,
         });
+    await clearPickerMarker(); // returned alive — no recovery needed
 
     if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
+    await processPickedAsset(docType, result.assets[0]);
+  };
+
+  // Shared tail of pickImage (compress + upload) — also the re-entry point for
+  // the recovery path after Android killed the app mid-capture.
+  const processPickedAsset = async (docType: DocumentType, asset: ImagePicker.ImagePickerAsset) => {
     const fileName = asset.fileName ?? `${docType}_${Date.now()}.jpg`;
     const mimeType = asset.mimeType ?? 'image/jpeg';
 
@@ -185,6 +206,24 @@ export default function DocumentsScreen() {
     const uploadMime = compressed.wasCompressed ? 'image/jpeg' : mimeType;
     await uploadFile(docType, compressed.uri, fileName, uploadMime);
   };
+
+  // Recovery: if Android killed the app while a picker was open for one of the
+  // document tiles, resume the compress+upload with the recovered photo. The
+  // consume is one-shot, so the mount-only effect is safe; uploadFile resolves
+  // the profile id fresh from the store (or re-creates it) on its own.
+  useEffect(() => {
+    let cancelled = false;
+    consumeRecoveredPickerAsset(RECOVERY_FLOW).then((rec) => {
+      if (cancelled || !rec) return;
+      const docType = rec.meta.docType as DocumentType | undefined;
+      if (!docType || !(docType in DOC_LABELS)) return;
+      void processPickedAsset(docType, rec.asset);
+    });
+    return () => { cancelled = true; };
+    // processPickedAsset is a plain per-render function; the consume is
+    // one-shot so running this only on mount is both safe and intended.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickDocument = async (docType: DocumentType) => {
     try {

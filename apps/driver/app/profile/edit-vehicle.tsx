@@ -17,7 +17,14 @@ import { driverService } from '@tricigo/api';
 import { isValidPlateNumber } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
+import {
+  markPickerLaunch,
+  clearPickerMarker,
+  consumeRecoveredPickerAsset,
+} from '@/lib/cameraRecovery';
 import type { VehicleType, DocumentType } from '@tricigo/types';
+
+const RECOVERY_FLOW = 'edit-vehicle-photo';
 
 // ── Vehicle type configs ──────────────────────────────────────────────────────
 const VEHICLE_CONFIGS = [
@@ -133,12 +140,35 @@ export default function EditVehicleScreen() {
   }, []);
 
   // ── Photo picking ─────────────────────────────────────────────────────────
+  // Shared tail of pickPhoto (compress + fill the slot) — also the re-entry
+  // point for the recovery path after Android killed the app mid-capture.
+  const applyPickedPhoto = useCallback(async (index: number, asset: ImagePicker.ImagePickerAsset) => {
+    // Compress now (while the user is still looking at the picker) so
+    // the subsequent save uploads a small file. Cuba connectivity:
+    // 3 × 4 MB vehicle photos takes forever on edge/3G.
+    const compressed = await compressDocument(asset.uri, asset.mimeType ?? 'image/jpeg');
+    if (compressed.wasCompressed && compressed.originalBytes > 0) {
+      Toast.show({
+        type: 'info',
+        text1: t('onboarding.document_compressed', { defaultValue: 'Imagen optimizada' }),
+        text2: formatSizeDelta(compressed.originalBytes, compressed.compressedBytes),
+        visibilityTime: 2000,
+      });
+    }
+    setPhotos((prev) => prev.map((p, i) =>
+      i === index ? { ...p, uri: compressed.uri, uploaded: false, error: null } : p,
+    ));
+  }, [t]);
+
   const pickPhoto = useCallback(async (index: number, source: 'camera' | 'gallery' = 'gallery') => {
     // Ask for the right permission first (Apple 2.1(a) — avoid the iOS
     // "Missing camera or camera roll permission" throw).
     const useCamera = source === 'camera' && Platform.OS !== 'web';
     if (!(await ensurePickerPermission(useCamera ? 'camera' : 'gallery', tc))) return;
     try {
+      // Mark the launch so the relaunched app can recover the photo if the OS
+      // kills our process while the camera/gallery is open (cameraRecovery.ts).
+      await markPickerLaunch(RECOVERY_FLOW, { index: String(index) });
       const result = useCamera
         ? await ImagePicker.launchCameraAsync({
             mediaTypes: ['images'],
@@ -152,29 +182,28 @@ export default function EditVehicleScreen() {
             // (the crop window was too cramped to frame the whole vehicle).
             allowsEditing: false,
           });
+      await clearPickerMarker(); // returned alive — no recovery needed
 
       if (result.canceled || !result.assets?.[0]) return;
-
-      const asset = result.assets[0];
-      // Compress now (while the user is still looking at the picker) so
-      // the subsequent save uploads a small file. Cuba connectivity:
-      // 3 × 4 MB vehicle photos takes forever on edge/3G.
-      const compressed = await compressDocument(asset.uri, asset.mimeType ?? 'image/jpeg');
-      if (compressed.wasCompressed && compressed.originalBytes > 0) {
-        Toast.show({
-          type: 'info',
-          text1: t('onboarding.document_compressed', { defaultValue: 'Imagen optimizada' }),
-          text2: formatSizeDelta(compressed.originalBytes, compressed.compressedBytes),
-          visibilityTime: 2000,
-        });
-      }
-      setPhotos((prev) => prev.map((p, i) =>
-        i === index ? { ...p, uri: compressed.uri, uploaded: false, error: null } : p,
-      ));
+      await applyPickedPhoto(index, result.assets[0]);
     } catch {
       Alert.alert('Error', tc('errors.generic'));
     }
-  }, [tc, t]);
+  }, [tc, applyPickedPhoto]);
+
+  // Recovery: if Android killed the app while the picker was open for one of
+  // the 3 verification slots, restore the photo into its slot on remount.
+  // consumeRecoveredPickerAsset is one-shot, so effect re-runs are no-ops.
+  useEffect(() => {
+    let cancelled = false;
+    consumeRecoveredPickerAsset(RECOVERY_FLOW).then((rec) => {
+      if (cancelled || !rec) return;
+      const index = Number.parseInt(rec.meta.index ?? '', 10);
+      if (!Number.isInteger(index) || index < 0 || index > 2) return;
+      void applyPickedPhoto(index, rec.asset);
+    });
+    return () => { cancelled = true; };
+  }, [applyPickedPhoto]);
 
   // Let the driver take the photo with the camera instead of the gallery. On many
   // Android phones the gallery is Google Photos, which fails to load on Cuba's

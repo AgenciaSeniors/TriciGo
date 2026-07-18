@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Alert, Pressable, ActionSheetIOS, Platform, KeyboardAvoidingView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
@@ -17,6 +17,13 @@ import { useThemeStore } from '@/stores/theme.store';
 import { SwitchAccountFooter } from '@/components/auth/SwitchAccountFooter';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 import { resizeImageForCrop } from '@/lib/compressImage';
+import {
+  markPickerLaunch,
+  clearPickerMarker,
+  consumeRecoveredPickerAsset,
+} from '@/lib/cameraRecovery';
+
+const RECOVERY_FLOW = 'avatar-complete';
 
 interface PendingCrop {
   uri: string;
@@ -37,6 +44,22 @@ export default function CompleteProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
 
+  // Recovery: if Android killed the app while the avatar camera/gallery was
+  // open (common on low-RAM devices — the user sees the app "go back"), pick
+  // up the captured photo on remount and reopen the crop modal with it.
+  // consumeRecoveredPickerAsset is one-shot, so effect re-runs are no-ops.
+  useEffect(() => {
+    let cancelled = false;
+    consumeRecoveredPickerAsset(RECOVERY_FLOW).then(async (rec) => {
+      if (cancelled || !rec) return;
+      const { asset } = rec;
+      if (!asset.width || !asset.height) return;
+      const safe = await resizeImageForCrop(asset.uri, asset.width, asset.height);
+      if (!cancelled) setPendingCrop({ uri: safe.uri, width: safe.width, height: safe.height });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const pickFromSource = async (source: 'camera' | 'gallery') => {
     if (!user) return;
     // Ask for camera/photos permission first; without it expo-image-picker
@@ -46,10 +69,14 @@ export default function CompleteProfileScreen() {
       // Pick at full quality; the shared circular AvatarCropModal handles framing
       // so the crop UX + output spec match the edit-profile screen (Android 13+'s
       // system picker ignores allowsEditing, so we never rely on it).
+      // Mark the launch so the relaunched app can recover the photo if the OS
+      // kills our process while the camera/gallery is open (cameraRecovery.ts).
+      await markPickerLaunch(RECOVERY_FLOW);
       // quality 0.8 (not 1): the crop modal outputs a 384px JPEG anyway.
       const pickerResult = source === 'camera'
         ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+      await clearPickerMarker(); // returned alive — no recovery needed
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
       const asset = pickerResult.assets[0];

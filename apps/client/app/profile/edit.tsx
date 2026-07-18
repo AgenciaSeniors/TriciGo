@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Alert, Pressable, ActionSheetIOS, Platform } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,6 +19,13 @@ import { colors } from '@tricigo/theme';
 import { useTokens } from '@/hooks/useTokens';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 import { resizeImageForCrop } from '@/lib/compressImage';
+import {
+  markPickerLaunch,
+  clearPickerMarker,
+  consumeRecoveredPickerAsset,
+} from '@/lib/cameraRecovery';
+
+const RECOVERY_FLOW = 'avatar-edit';
 
 interface PendingCrop {
   uri: string;
@@ -39,6 +46,22 @@ export default function EditProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
 
+  // Recovery: if Android killed the app while the avatar camera/gallery was
+  // open (common on low-RAM devices — the user sees the app "go back"), pick
+  // up the captured photo on remount and reopen the crop modal with it.
+  // consumeRecoveredPickerAsset is one-shot, so effect re-runs are no-ops.
+  useEffect(() => {
+    let cancelled = false;
+    consumeRecoveredPickerAsset(RECOVERY_FLOW).then(async (rec) => {
+      if (cancelled || !rec) return;
+      const { asset } = rec;
+      if (!asset.width || !asset.height) return;
+      const safe = await resizeImageForCrop(asset.uri, asset.width, asset.height);
+      if (!cancelled) setPendingCrop({ uri: safe.uri, width: safe.width, height: safe.height });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const pickFromSource = async (source: 'camera' | 'gallery') => {
     if (!user) return;
     // Ask for camera/photos permission first; without it expo-image-picker
@@ -48,6 +71,9 @@ export default function EditProfileScreen() {
       // We do NOT request `allowsEditing` from the picker — Android 13+ uses
       // the system Photo Picker which ignores it. We always show our own
       // circular crop modal so behavior is consistent across platforms.
+      // Mark the launch so the relaunched app can recover the photo if the OS
+      // kills our process while the camera/gallery is open (cameraRecovery.ts).
+      await markPickerLaunch(RECOVERY_FLOW);
       // quality 0.8 (not 1): the crop modal outputs a 384px JPEG anyway, so full
       // quality only bloats the intermediate file written to cache.
       const pickerResult = source === 'camera'
@@ -59,6 +85,7 @@ export default function EditProfileScreen() {
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.8,
           });
+      await clearPickerMarker(); // returned alive — no recovery needed
 
       if (pickerResult.canceled || !pickerResult.assets[0]) return;
 

@@ -76,6 +76,7 @@
       "./plugins/with-privacy-manifest",
       "./plugins/with-user-leave-hint-safe",
       "./plugins/with-large-screen-compat",
+      "./plugins/with-large-heap",
       "expo-router",
       "expo-localization",
       "expo-apple-authentication",
