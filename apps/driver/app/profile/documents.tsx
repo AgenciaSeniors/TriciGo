@@ -116,11 +116,15 @@ export default function DocumentsScreen() {
   const reuploadImage = useCallback(async (docType: DocumentType, source?: 'camera' | 'gallery') => {
     if (!driverId) return;
     const isSelfie = docType === 'selfie';
-    // Selfie is always the front camera. Other docs can be captured with the
-    // camera when requested (source='camera') so drivers bypass Google Photos —
-    // its picker fails to load on Cuba's connection and shows "Se produjo un
-    // error, vuelve a intentarlo más tarde" (a Google error, external to the app).
-    const useCamera = Platform.OS !== 'web' && (isSelfie || source === 'camera');
+    // An explicit `source` always wins; otherwise the selfie defaults to the
+    // front camera and every other doc to the gallery. The selfie was
+    // camera-ONLY until 2026-07-17: a driver who denied the camera permission
+    // could never replace it (Android stops re-prompting after two denials).
+    // Other docs get the camera on request to bypass Google Photos — its picker
+    // fails to load on Cuba's connection and shows "Se produjo un error, vuelve
+    // a intentarlo más tarde" (a Google error, external to the app).
+    // Mirrors onboarding/documents.tsx — keep the two in sync.
+    const useCamera = Platform.OS !== 'web' && (source ? source === 'camera' : isSelfie);
     // Ask for camera/photos permission first (Apple 2.1(a) — avoid the iOS
     // "Missing camera or camera roll permission" throw).
     if (!(await ensurePickerPermission(useCamera ? 'camera' : 'gallery', tc))) return;
@@ -222,12 +226,14 @@ export default function DocumentsScreen() {
           { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
         ],
       );
-    } else if (docType === 'vehicle_photo') {
-      // Offer the camera first so drivers can bypass Google Photos (its picker
-      // errors out on Cuba's connection). Taking the shot is also the natural
-      // action for a vehicle photo.
+    } else if (docType === 'vehicle_photo' || docType === 'selfie') {
+      // Camera first (the natural action for both), gallery as the escape hatch
+      // — vehicle_photo to bypass Google Photos, selfie so a denied camera
+      // permission can't lock the driver out of replacing it. See reuploadImage.
       Alert.alert(
-        t('onboarding.vehicle_photo', { defaultValue: 'Foto del vehículo' }),
+        // Falls back to the raw type if the label key is missing — same guard
+        // as the document list below (DOC_TYPE_KEY is keyed by DB strings).
+        DOC_TYPE_KEY[docType] ? t(DOC_TYPE_KEY[docType]!) : docType,
         t('onboarding.choose_photo_source', { defaultValue: '¿Cómo quieres agregar la foto?' }),
         [
           { text: t('onboarding.take_photo', { defaultValue: 'Tomar foto' }), onPress: () => reuploadImage(docType, 'camera') },

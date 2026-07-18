@@ -65,6 +65,33 @@ export default function ReviewScreen() {
   const handleSubmit = async () => {
     if (!user || !driverProfileId) return;
 
+    // Guard against submitting an EMPTY draft. The onboarding store is in-memory,
+    // so it starts blank whenever the Documents step is reached WITHOUT walking
+    // steps 1–2 first — most notably a rejected driver tapping "Volver a subir
+    // documentos" (pending.tsx), which jumps straight here. Submitting blank would
+    // (a) overwrite users.full_name with '' — silent data loss — and then
+    // (b) hard-fail in registerVehicle (vehicles.type is NOT NULL, year = NaN).
+    // Bounce them to the earliest incomplete step instead. On the normal wizard
+    // path both steps are already filled, so this never trips.
+    if (!personalInfo.full_name.trim()) {
+      Toast.show({
+        type: 'info',
+        text1: t('onboarding.complete_personal_first', { defaultValue: 'Primero completa tus datos personales.' }),
+        visibilityTime: 3000,
+      });
+      router.replace('/onboarding/personal-info');
+      return;
+    }
+    if (!vehicle.type || !vehicle.make.trim() || !vehicle.model.trim() || !vehicle.plate_number.trim() || !vehicle.year.trim()) {
+      Toast.show({
+        type: 'info',
+        text1: t('onboarding.complete_vehicle_first', { defaultValue: 'Primero completa los datos de tu vehículo.' }),
+        visibilityTime: 3000,
+      });
+      router.replace('/onboarding/vehicle-info');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     try {
