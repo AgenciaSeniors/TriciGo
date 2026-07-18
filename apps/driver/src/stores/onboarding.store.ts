@@ -48,6 +48,17 @@ export interface DocumentDraft {
   optional?: boolean;
 }
 
+/**
+ * Minimal shape of a `driver_documents` row needed to hydrate a draft. Kept
+ * structural (not the full DriverDocument) so the store stays independent of
+ * the DB row type.
+ */
+export interface ServerDocumentSummary {
+  document_type: string;
+  file_name?: string | null;
+  mime_type?: string | null;
+}
+
 interface OnboardingState {
   personalInfo: PersonalInfoDraft;
   vehicle: VehicleDraft;
@@ -60,6 +71,7 @@ interface OnboardingState {
   setDocumentUploaded: (type: DocumentType) => void;
   setDocumentUploading: (type: DocumentType, uploading: boolean) => void;
   setDocumentError: (type: DocumentType, error: string | null) => void;
+  hydrateUploadedDocuments: (serverDocs: ServerDocumentSummary[]) => void;
   setDriverProfileId: (id: string) => void;
   reset: () => void;
 }
@@ -153,6 +165,47 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
         d.document_type === type ? { ...d, error, uploading: false } : d,
       ),
     })),
+
+  /**
+   * Mark drafts as uploaded for documents that already exist on the server.
+   *
+   * This store is in-memory only: an app restart mid-onboarding wipes every
+   * `uploaded` flag while the files are still in `driver_documents`. Without
+   * hydration the Documents step shows everything as missing, so drivers
+   * re-upload the same files on every attempt and — if even one doc never
+   * lands — Submit stays disabled forever (the selfie dead-end that blocked
+   * a real driver's registration, 2026-07-17).
+   *
+   * Only PRISTINE drafts are touched. A draft that is uploading, already
+   * uploaded, re-picked this session (uri set), or holding an error keeps its
+   * local state: the session's progress always wins over the server snapshot,
+   * so hydration can never clobber an in-flight upload or hide a real error.
+   */
+  hydrateUploadedDocuments: (serverDocs) =>
+    set((s) => {
+      // Latest row per type. Callers pass newest-first (getDocuments orders by
+      // uploaded_at desc), and uploadDocument INSERTs a new row per attempt —
+      // so keep the FIRST occurrence and ignore the older re-upload rows.
+      const latest = new Map<string, ServerDocumentSummary>();
+      for (const doc of serverDocs) {
+        if (!latest.has(doc.document_type)) latest.set(doc.document_type, doc);
+      }
+
+      return {
+        documents: s.documents.map((d) => {
+          const isPristine = d.uri === '' && !d.uploaded && !d.uploading && !d.error;
+          if (!isPristine) return d;
+          const server = latest.get(d.document_type);
+          if (!server) return d;
+          return {
+            ...d,
+            uploaded: true,
+            fileName: server.file_name ?? '',
+            mimeType: server.mime_type ?? null,
+          };
+        }),
+      };
+    }),
 
   setDriverProfileId: (id) => set({ driverProfileId: id }),
 

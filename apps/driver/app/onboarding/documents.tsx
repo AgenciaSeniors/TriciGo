@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -62,6 +62,7 @@ export default function DocumentsScreen() {
     setDocumentUploaded,
     setDocumentUploading,
     setDocumentError,
+    hydrateUploadedDocuments,
   } = useOnboardingStore();
 
   // Tracks the eager profile-creation so the UI can show progress / retry
@@ -95,6 +96,43 @@ export default function DocumentsScreen() {
       cancelled = true;
     };
   }, [driverProfileId, user, ensureProfile]);
+
+  // Resume: mark docs already on the server as uploaded. The draft store is
+  // in-memory, so an app restart (or a connection drop that kills the app
+  // mid-onboarding — routine in Cuba) wipes every `uploaded` flag while the
+  // files are still in driver_documents. Without this the driver re-uploads
+  // everything on each attempt and, if one doc never lands, Submit stays
+  // disabled forever. Hydration NEVER clobbers local progress — the store only
+  // touches pristine drafts.
+  const [hydrating, setHydrating] = useState(false);
+  const hydratedProfileRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!driverProfileId || hydratedProfileRef.current === driverProfileId) return;
+    // Claim before awaiting so a re-render (or StrictMode double-mount) can't
+    // fire a second fetch for the same profile.
+    hydratedProfileRef.current = driverProfileId;
+    let cancelled = false;
+    setHydrating(true);
+    driverService
+      .getDocuments(driverProfileId)
+      .then((docs) => {
+        if (!cancelled) hydrateUploadedDocuments(docs);
+      })
+      .catch((err) => {
+        // Offline / transient: leave the drafts as-is and let the driver upload
+        // normally. Releasing the claim lets a later remount retry. Never
+        // surfaced as an error — nothing the driver can act on, and a failed
+        // hydration only costs a redundant re-upload.
+        if (!cancelled) hydratedProfileRef.current = null;
+        console.warn('[Documents] Hydration failed:', getErrorMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled) setHydrating(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [driverProfileId, hydrateUploadedDocuments]);
 
   /** Document types that accept PDF uploads in addition to images */
   const PDF_ELIGIBLE_TYPES: DocumentType[] = ['national_id', 'drivers_license', 'vehicle_registration', 'operating_license'];
@@ -132,14 +170,21 @@ export default function DocumentsScreen() {
   };
 
   const pickImage = async (docType: DocumentType, source?: 'camera' | 'gallery') => {
-    // Selfie is always the front camera. Other docs default to the gallery, but
-    // the caller can request the camera (source='camera') — this lets drivers
-    // capture the vehicle photo without going through Google Photos, whose picker
-    // fails to load on Cuba's flaky link and shows its own "Se produjo un error,
-    // vuelve a intentarlo más tarde" dialog (a Google error, external to the app).
+    // An explicit `source` always wins; otherwise the selfie defaults to the
+    // front camera and every other doc to the gallery.
+    //
+    // The selfie used to be camera-ONLY. That made it a dead-end: Android stops
+    // showing the permission dialog after two denials, so a driver who denied
+    // the camera hit "Necesitamos acceso a la cámara" forever on the one
+    // REQUIRED doc with no alternative — Submit could never enable (2026-07-17).
+    // The gallery escape hatch mirrors vehicle_photo (#803), which needs it for
+    // a different reason: Google Photos' picker fails to load on Cuba's flaky
+    // link and shows its own "Se produjo un error, vuelve a intentarlo más
+    // tarde" dialog (a Google error, external to the app). Between the two,
+    // every required photo now has both routes.
     const isSelfie = docType === 'selfie';
     const isWeb = Platform.OS === 'web';
-    const useCamera = !isWeb && (isSelfie || source === 'camera');
+    const useCamera = !isWeb && (source ? source === 'camera' : isSelfie);
 
     if (!isWeb) {
       if (useCamera) {
@@ -287,12 +332,12 @@ export default function DocumentsScreen() {
           { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
         ],
       );
-    } else if (docType === 'vehicle_photo') {
-      // Offer the camera first so drivers can bypass Google Photos (its picker
-      // errors out on Cuba's connection). Taking the shot is also the natural
-      // action for a vehicle photo.
+    } else if (docType === 'vehicle_photo' || docType === 'selfie') {
+      // Camera first (the natural action for both), gallery as the escape hatch
+      // — vehicle_photo to bypass Google Photos, selfie so a denied camera
+      // permission can't dead-end the whole registration. See pickImage.
       Alert.alert(
-        t('onboarding.vehicle_photo', { defaultValue: 'Foto del vehículo' }),
+        t(DOC_LABELS[docType]),
         t('onboarding.choose_photo_source', { defaultValue: '¿Cómo quieres agregar la foto?' }),
         [
           { text: t('onboarding.take_photo', { defaultValue: 'Tomar foto' }), onPress: () => pickImage(docType, 'camera') },
@@ -329,6 +374,14 @@ export default function DocumentsScreen() {
             <ActivityIndicator size="small" color={midnightEmber.accent[500]} />
             <Text variant="caption" color="secondary" className="ml-2" style={{ color: midnightEmber.map.text.secondary }}>
               {t('onboarding.preparing_profile', { defaultValue: 'Preparando tu perfil…' })}
+            </Text>
+          </View>
+        )}
+        {hydrating && (
+          <View className="flex-row items-center mb-4">
+            <ActivityIndicator size="small" color={midnightEmber.accent[500]} />
+            <Text variant="caption" color="secondary" className="ml-2" style={{ color: midnightEmber.map.text.secondary }}>
+              {t('onboarding.checking_uploaded', { defaultValue: 'Revisando documentos ya subidos…' })}
             </Text>
           </View>
         )}
