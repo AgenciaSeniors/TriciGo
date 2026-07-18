@@ -32,6 +32,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
+import { Sentry } from './sentry';
 
 const MARKER_KEY = '@tricigo/pending-picker-flow';
 
@@ -94,9 +95,31 @@ async function capture(): Promise<void> {
 
     const pending = await ImagePicker.getPendingResultAsync();
     // null → nothing pending; { code, message } → picker itself errored.
-    if (!pending || 'code' in pending) return;
-    if (pending.canceled || !pending.assets?.[0]) return;
-    recovered = { marker, asset: pending.assets[0] };
+    const asset =
+      pending && !('code' in pending) && !pending.canceled
+        ? (pending.assets?.[0] ?? null)
+        : null;
+
+    // TELEMETRY — this is the field instrument for the "se bloquea y regresa
+    // atrás" reports: a surviving marker on relaunch means Android KILLED our
+    // process while the picker was foregrounded (the normal path clears it).
+    // Counting these in Sentry, tagged by flow + whether a photo was actually
+    // recovered, turns the process-death hypothesis into measurable data
+    // (filter by message; device model arrives in the event context).
+    Sentry.captureMessage('picker-process-death: app killed during photo capture', {
+      level: 'info',
+      tags: {
+        recovery_flow: marker.flow,
+        recovery_recovered: asset ? 'yes' : 'no',
+      },
+      extra: {
+        marker_age_s: Math.round((Date.now() - marker.ts) / 1000),
+        meta: marker.meta ?? null,
+      },
+    });
+
+    if (!asset) return;
+    recovered = { marker, asset };
   } catch {
     /* best-effort */
   }
