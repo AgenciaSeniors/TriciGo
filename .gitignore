@@ -94,3 +94,6 @@ tmp-apk/
 # these into a commit on 2026-07-30; ignoring them makes that impossible.
 .commit-msg-temp.txt
 .pr-body-temp.md
+
+# graphify knowledge-graph output (local dev tool, not a project dependency)
+graphify-out/
