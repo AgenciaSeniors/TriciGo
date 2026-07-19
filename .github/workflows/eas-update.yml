@@ -35,6 +35,16 @@ on:
         description: 'Update message (shown in the EAS dashboard)'
         type: string
         required: true
+      rollout_percentage:
+        description: 'Fraction of the fleet reached immediately. Start small; widen with the "ops" workflow once it looks healthy.'
+        type: choice
+        options:
+          - '10'
+          - '25'
+          - '50'
+          - '100'
+        default: '10'
+        required: true
 
 concurrency:
   group: eas-update-${{ inputs.app }}
@@ -124,9 +134,30 @@ jobs:
           # --input-dir + --skip-bundler publish EXACTLY the artifact verified
           # in the step above. Letting `eas update` re-bundle would mean
           # verifying one bundle and shipping a different one.
+          #
+          # --rollout-percentage: an OTA reaches devices on next launch with no
+          # store review in between, so a bad bundle is a fleet-wide event with
+          # no backstop. Users outside the rollout keep serving the previous
+          # update on the branch — or, for the first OTA on a runtime, the
+          # binary's embedded bundle. Either way they are unaffected.
+          # Widen with .github/workflows/eas-update-ops.yml (promote), which
+          # republishes THIS SAME group rather than building a new bundle.
           eas update \
             --channel production \
             --message "${{ inputs.message }}" \
+            --rollout-percentage ${{ inputs.rollout_percentage }} \
             --input-dir dist \
             --skip-bundler \
             --non-interactive
+
+      - name: What to do next
+        run: |
+          echo "Published to ${{ inputs.rollout_percentage }}% of the ${{ inputs.app }} fleet."
+          echo ""
+          echo "WATCH before widening: Sentry for a crash spike, and EAS"
+          echo "  eas channel:insights production   (adoption / crashes / unique users)"
+          echo ""
+          echo "Then run 'EAS Update — ops' with:"
+          echo "  promote  -> take this same update group to 100%"
+          echo "  pause    -> stop the channel serving updates (fastest brake, no publish)"
+          echo "  rollback -> republish the previous update, or the embedded bundle"

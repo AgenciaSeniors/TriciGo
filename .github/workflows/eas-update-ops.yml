@@ -1,0 +1,165 @@
+# Post-publish levers for an OTA update: promote, pause, rollback, resume.
+#
+# WHY THIS IS A SEPARATE WORKFLOW
+# eas-update.yml ships a bundle. This one is what you reach for when that bundle
+# is already out there — either because it looks healthy and you want to widen
+# it, or because it does not and you want it gone. Under incident pressure the
+# emergency actions must be findable without reading a publish workflow, so they
+# live in their own file with their own name.
+#
+# An OTA reaches devices on next launch with no store review in between. That is
+# the whole point, and it is also why "how do I undo this" has to be as
+# rehearsed as "how do I ship this".
+#
+# WHICH LEVER, WHEN
+#   pause     Fastest. Stops the channel serving ANY update — devices fall back
+#             to what they already have. No publish, no build, takes effect
+#             immediately. Reach for this first when you are not yet sure what
+#             broke; it buys time without committing to a diagnosis.
+#   rollback  Republishes the update group published BEFORE the latest one. If
+#             there is no earlier update, it publishes a rollback to the
+#             binary's EMBEDDED bundle — i.e. back to exactly what the store
+#             build shipped. Use once you know the current update is the problem.
+#   resume    Undo a pause.
+#   promote   The happy path: take an existing update group to 100%. Republishes
+#             the SAME group, so what widens is the bundle you already verified
+#             and watched — not a fresh build off a moved master.
+
+name: EAS Update — ops (promote / pause / rollback / resume)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app'
+        type: choice
+        options:
+          - client
+          - driver
+        required: true
+      action:
+        description: 'pause = stop serving updates (fastest brake) · rollback = republish previous/embedded · resume = undo pause · promote = widen to 100%'
+        type: choice
+        options:
+          - pause
+          - rollback
+          - resume
+          - promote
+        required: true
+      group_id:
+        description: 'Update group ID. Required for promote. Optional for rollback (auto-resolved to the latest group when blank).'
+        type: string
+        required: false
+      message:
+        description: 'Why (shown in the EAS dashboard; used by rollback/promote)'
+        type: string
+        required: false
+
+concurrency:
+  group: eas-update-${{ inputs.app }} # shared with eas-update.yml: never publish and roll back at once
+  cancel-in-progress: false
+
+jobs:
+  ops:
+    name: '${{ inputs.action }} (${{ inputs.app }})'
+    # Same guard as the publish workflow: these commands move what real devices run.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Expo & EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── pause / resume: no bundle involved, so nothing to verify ────────────
+      - name: Pause the production channel
+        if: inputs.action == 'pause'
+        working-directory: apps/${{ inputs.app }}
+        run: |
+          eas channel:pause production --non-interactive
+          echo "::notice::Channel PAUSED. Devices keep whatever update they already downloaded; no new ones are served. Diagnose, then 'rollback' or 'resume'."
+
+      - name: Resume the production channel
+        if: inputs.action == 'resume'
+        working-directory: apps/${{ inputs.app }}
+        run: |
+          eas channel:resume production --non-interactive
+          echo "::notice::Channel RESUMED — updates are being served again."
+
+      # ── rollback: resolve the group first, and say out loud what it will hit ─
+      - name: Roll back
+        if: inputs.action == 'rollback'
+        working-directory: apps/${{ inputs.app }}
+        env:
+          GROUP_IN: ${{ inputs.group_id }}
+          MSG: ${{ inputs.message }}
+        run: |
+          set -o pipefail
+          GROUP="$GROUP_IN"
+
+          if [ -z "$GROUP" ]; then
+            # `eas update:rollback` requires an explicit group in non-interactive
+            # mode. Hunting a UUID in the dashboard mid-incident is exactly when
+            # people paste the wrong one, so resolve it here — but print it before
+            # acting, and fail loudly rather than guess.
+            echo "No group_id given — resolving the latest update group on the production branch..."
+            BRANCH=$(eas channel:view production --json --non-interactive \
+                      | jq -r '.currentBranchMapping.data[0].branchMappingLogic.operand // .updateBranches[0].name // empty' 2>/dev/null || true)
+            if [ -z "$BRANCH" ] || [ "$BRANCH" = "null" ]; then
+              echo "::error::Could not resolve the branch behind channel 'production'. Re-run with group_id set explicitly (EAS dashboard → Updates)."
+              exit 1
+            fi
+            echo "  channel production -> branch $BRANCH"
+            GROUP=$(eas update:list --branch "$BRANCH" --limit 1 --json --non-interactive \
+                     | jq -r '.currentPage[0].group // .[0].group // empty' 2>/dev/null || true)
+            if [ -z "$GROUP" ] || [ "$GROUP" = "null" ]; then
+              echo "::error::Could not resolve the latest update group on branch '$BRANCH'. Re-run with group_id set explicitly (EAS dashboard → Updates)."
+              exit 1
+            fi
+          fi
+
+          echo "::notice::Rolling back update group $GROUP"
+          eas update:rollback "$GROUP" \
+            --message "${MSG:-emergency rollback}" \
+            --non-interactive
+          echo "::notice::Rolled back. Devices pick this up on next launch. If there was no earlier update, they are now back on the store build's embedded bundle."
+
+      # ── promote: widen the bundle you already watched, not a new one ────────
+      - name: Promote to 100%
+        if: inputs.action == 'promote'
+        working-directory: apps/${{ inputs.app }}
+        env:
+          GROUP_IN: ${{ inputs.group_id }}
+          MSG: ${{ inputs.message }}
+        run: |
+          if [ -z "$GROUP_IN" ]; then
+            echo "::error::promote needs group_id — the update group you watched at partial rollout. Deliberately not auto-resolved: widening the WRONG group to the whole fleet is the mistake this guard exists to prevent."
+            exit 1
+          fi
+          # --group republishes that exact group, so the bytes reaching 100% are
+          # the bytes that were already verified and observed at partial rollout.
+          eas update:republish \
+            --group "$GROUP_IN" \
+            --destination-channel production \
+            --rollout-percentage 100 \
+            --message "${MSG:-promote to 100%}" \
+            --non-interactive
+          echo "::notice::Update group $GROUP_IN is now at 100%."
