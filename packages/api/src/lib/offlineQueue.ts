@@ -10,6 +10,8 @@ export type QueuedMutation = {
   params: unknown[];
   timestamp: number;
   retries: number;
+  /** Epoch ms before which this mutation must not be retried. */
+  nextAttemptAt?: number;
 };
 
 export type ProcessingStatus = {
@@ -27,6 +29,10 @@ type StorageAdapter = {
 
 const QUEUE_KEY = '@tricigo/offline-queue';
 const MAX_RETRIES = 3;
+// The queue is replayed on every online signal, not just on an offline->online
+// transition, so a mutation must serve a backoff between attempts. Without it a
+// burst of NetInfo events drains MAX_RETRIES in a second and drops the work.
+const RETRY_BACKOFF_MS = 30_000;
 
 let storage: StorageAdapter | null = null;
 let queue: QueuedMutation[] = [];
@@ -180,14 +186,22 @@ async function processQueue() {
   isProcessing = true;
   const total = queue.length;
   let index = 0;
+  let cursor = 0;
 
-  while (queue.length > 0 && isOnline) {
-    const mutation = queue[0]!;
+  while (cursor < queue.length && isOnline) {
+    const mutation = queue[cursor]!;
     const handler = handlers[mutation.action];
 
     if (!handler) {
-      // No handler, discard
-      queue.shift();
+      // Handlers are registered during startup and the replay can win that
+      // race. Skip — never discard — so the mutation survives until its
+      // handler lands and registerOfflineMutation replays the queue.
+      cursor++;
+      continue;
+    }
+
+    if (mutation.nextAttemptAt && mutation.nextAttemptAt > Date.now()) {
+      cursor++;
       continue;
     }
 
@@ -203,7 +217,7 @@ async function processQueue() {
 
     try {
       await handler(...mutation.params);
-      queue.shift();
+      queue.splice(cursor, 1);
       await saveQueue();
       notifyListeners();
     } catch (err) {
@@ -213,11 +227,15 @@ async function processQueue() {
         break;
       }
 
-      // Non-network error — retry up to MAX_RETRIES
+      // Non-network error — retry up to MAX_RETRIES, spaced by a backoff so
+      // repeated online signals cannot exhaust the budget in one burst.
       mutation.retries += 1;
       if (mutation.retries >= MAX_RETRIES) {
         console.warn(`[OfflineQueue] Discarding mutation after ${MAX_RETRIES} retries:`, mutation.action);
-        queue.shift();
+        queue.splice(cursor, 1);
+      } else {
+        mutation.nextAttemptAt =
+          Date.now() + RETRY_BACKOFF_MS * 2 ** (mutation.retries - 1);
       }
       await saveQueue();
       notifyListeners();

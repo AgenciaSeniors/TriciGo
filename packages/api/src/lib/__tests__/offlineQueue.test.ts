@@ -127,6 +127,35 @@ describe('offlineQueue', () => {
       expect(handler).toHaveBeenCalledWith({ rideId: 'ride-1' });
       expect(fresh.getPendingCount()).toBe(0);
     });
+
+    it('keeps a persisted mutation whose handler is not registered yet', async () => {
+      // The replay now starts as soon as the queue loads, which can win the race
+      // against handler registration (lazy import, slow bundle). A mutation the
+      // app cannot execute *yet* must survive until its handler shows up.
+      const fresh = await loadFreshModule();
+      const persistedStorage = createMockStorage();
+      persistedStorage._store.set(
+        '@tricigo/offline-queue',
+        JSON.stringify([
+          {
+            id: 'persisted-1',
+            action: 'ride.complete',
+            params: [{ rideId: 'ride-1' }],
+            timestamp: 1,
+            retries: 0,
+          },
+        ]),
+      );
+
+      await fresh.initOfflineQueue(persistedStorage);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(fresh.getPendingCount()).toBe(1);
+
+      const handler = vi.fn(async () => {});
+      fresh.registerOfflineMutation('ride.complete', handler);
+      await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+      expect(fresh.getPendingCount()).toBe(0);
+    });
   });
 
   describe('network error handling', () => {
@@ -151,6 +180,29 @@ describe('offlineQueue', () => {
       await expect(mod.executeOrQueue('val.fail')).rejects.toThrow('validation failed');
       expect(mod.getOnlineStatus()).toBe(true);
       expect(mod.getPendingCount()).toBe(0);
+    });
+
+    it('does not burn the retry budget on online signals that arrive back to back', async () => {
+      // NetInfo re-fires with isConnected === true on every transport change
+      // (wifi <-> cellular, isInternetReachable flips). Replaying the queue on
+      // each of those is correct; charging a retry for each is not — three
+      // events in a second would silently drop the mutation.
+      const handler = vi.fn(async () => {
+        throw new Error('Internal server error');
+      });
+      mod.registerOfflineMutation('incident.sos', handler);
+
+      mod.setOnlineStatus(false);
+      await mod.executeOrQueue('incident.sos', { rideId: 'ride-1' });
+      expect(mod.getPendingCount()).toBe(1);
+
+      for (let i = 0; i < 4; i++) {
+        mod.setOnlineStatus(true);
+        await new Promise((r) => setTimeout(r, 10));
+      }
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(mod.getPendingCount()).toBe(1);
     });
   });
 
