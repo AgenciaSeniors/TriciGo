@@ -411,30 +411,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    // FX rate is MANDATORY (round 3 decision). Block the recharge if
-    // missing or stale (> 24h). Forces the operator to monitor the
-    // sync-exchange-rate cron — failing closed is better than crediting
-    // the wallet with the wrong amount of CUP.
-    const { data: rateRow } = await supabase
-      .from('exchange_rates')
-      .select('usd_cup_rate, created_at')
-      .eq('is_current', true)
-      .single();
-
-    const FX_STALE_MS = 24 * 60 * 60 * 1000;
-    const fxTooOld = !rateRow?.created_at
-      || (Date.now() - new Date(rateRow.created_at).getTime()) > FX_STALE_MS;
-    if (!rateRow?.usd_cup_rate || fxTooOld) {
+    // FX rate is MANDATORY (round 3 decision). Block the recharge if missing or
+    // stale. Failing closed is better than crediting the wallet with the wrong
+    // amount of CUP. The window now comes from getFreshFx (single definition,
+    // reads platform_config.exchange_rate_max_age_hours, clamped [1,72]h) instead
+    // of a local 24h constant — see _shared/fx-freshness.ts for why.
+    const fx = await getFreshFx(supabase);
+    if (!fx.ok) {
+      console.error(`[create-netopia-payment-intent] fx_unavailable reason=${fx.reason} ageHours=${fx.ageHours?.toFixed(1) ?? 'n/a'} maxAgeHours=${fx.maxAgeHours}`);
       return new Response(
-        JSON.stringify({
-          ok: false,
-          error: 'fx_unavailable',
-          detail: 'Tipo de cambio USD→CUP no disponible o desactualizado. Intentalo más tarde.',
-        }),
+        JSON.stringify({ ok: false, error: 'fx_unavailable', detail: FX_UNAVAILABLE_DETAIL }),
         { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
-    const exchangeRate = rateRow.usd_cup_rate;
+    const exchangeRate = fx.rate!;
 
     // RECARGA V2 math (locked in design rounds 1 & 2):
     //   amount_usd   = the NET that the user picked (input).

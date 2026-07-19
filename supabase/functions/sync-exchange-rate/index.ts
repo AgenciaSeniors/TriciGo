@@ -53,17 +53,52 @@ function pickRate(v: unknown): number | null {
 }
 
 async function fetchFromAPI(token: string): Promise<number | null> {
-  const res = await fetch('https://tasas.eltoque.com/v1/trmi', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+  let res: Response;
+  try {
+    res = await fetch('https://tasas.eltoque.com/v1/trmi', {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    // Network error / timeout. Distinct from a non-2xx so the retry loop can log it.
+    console.error(`[sync-exchange-rate] trmi API fetch failed: ${err}`);
+    return null;
+  }
   if (!res.ok) {
     console.error(`[sync-exchange-rate] trmi API HTTP ${res.status}`);
     return null;
   }
-  const d = await res.json();
+  const d = await res.json().catch(() => null);
   const rate = pickRate(d?.tasas?.USD) ?? pickRate(d?.USD);
   if (rate === null) {
     console.error(`[sync-exchange-rate] trmi API 200 but USD unparseable; keys=${JSON.stringify(Object.keys(d?.tasas ?? d ?? {}))}`);
   }
   return rate;
+}
+
+// tasas.eltoque.com sits behind Cloudflare, which intermittently challenges Supabase
+// Edge's datacenter egress: observed 2026-07-19 with three identical calls minutes
+// apart returning 200, 502(all_methods_failed), 200. A single transient miss used to
+// throw away that whole hour's sync, because the scraper fallback is dead (403) and
+// there was no retry. A miss is not dangerous on its own — the freshness window is 24h
+// and this runs hourly, so it takes 24 consecutive failures to block recharges — but
+// retrying is nearly free and keeps the feed from developing holes.
+// Bounded on purpose: 3 attempts, ~2s of added worst-case latency.
+async function fetchFromAPIWithRetry(token: string, attempts = 3): Promise<number | null> {
+  for (let i = 0; i < attempts; i++) {
+    const rate = await fetchFromAPI(token);
+    if (rate !== null) {
+      if (i > 0) console.log(`[sync-exchange-rate] trmi API recovered on attempt ${i + 1}/${attempts}`);
+      return rate;
+    }
+    if (i < attempts - 1) {
+      const backoffMs = 500 * (i + 1) ** 2; // 500ms, 2000ms
+      console.warn(`[sync-exchange-rate] trmi attempt ${i + 1}/${attempts} failed; retrying in ${backoffMs}ms`);
+      await new Promise((r) => setTimeout(r, backoffMs));
+    }
+  }
+  console.error(`[sync-exchange-rate] trmi API failed all ${attempts} attempts`);
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -90,7 +125,7 @@ Deno.serve(async (req) => {
 
     let rate: number | null = null;
     let source = '';
-    if (token && token.trim() !== '') { rate = await fetchFromAPI(token); if (rate) source = 'eltoque_api'; }
+    if (token && token.trim() !== '') { rate = await fetchFromAPIWithRetry(token); if (rate) source = 'eltoque_api'; }
     if (!rate) { rate = await scrapeElToque(); if (rate) source = 'eltoque_scraping'; }
     if (!rate || isNaN(rate) || rate <= 0) {
       // This branch used to return silently. pg_cron cannot see it either -- job 23 runs
