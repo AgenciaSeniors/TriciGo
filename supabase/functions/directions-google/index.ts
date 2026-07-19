@@ -200,7 +200,19 @@ Deno.serve(async (req: Request) => {
   }
 
   if (Math.random() < 0.01) {
-    supabase.rpc('google_dir_cache_cleanup').catch(() => { /* best effort */ });
+    // Fire-and-forget cache GC. Uses .then(onOk, onErr), NOT .catch: supabase.rpc()
+    // returns a PostgrestFilterBuilder, which is a *thenable* but not a Promise —
+    // it has .then and NO .catch, so `.catch(...)` throws
+    //   TypeError: supabase.rpc(...).catch is not a function
+    // This line sits outside every try/catch in the handler, so that TypeError
+    // would reject the Deno.serve handler and return 500 instead of the route —
+    // on 1% of requests, looking exactly like a Google Directions outage.
+    // Same defect that caused the new-user signup 500 in verify-otp (#622); see
+    // the warning comment at verify-otp/index.ts:216.
+    supabase.rpc('google_dir_cache_cleanup').then(
+      () => {},
+      (e: unknown) => console.warn('[directions-google] cache cleanup failed (non-fatal):', e),
+    );
   }
 
   return jsonResponse({ ...normalized, source: 'google' }, 200);

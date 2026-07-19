@@ -36,10 +36,20 @@ import { join } from 'node:path';
 // Verified: removing the fx-freshness import from create-netopia-payment-intent
 // reproduces exactly TS2304 x2 ("Cannot find name 'getFreshFx'" /
 // "'FX_UNAVAILABLE_DETAIL'"), i.e. this set would have caught the real incident.
+//
+// TS2551 was NOT gated originally because it had one pre-existing hit — and that
+// hit turned out to be a live bug, not noise: `supabase.rpc(...).catch(...)` in
+// directions-google. PostgrestFilterBuilder is a thenable with no .catch, so that
+// throws a TypeError. It is the same defect that produced the new-user signup 500
+// in verify-otp (#622). With it fixed the count is zero, so the code can gate and
+// the whole ".catch on a Postgrest builder" family is now caught at PR time.
+// Lesson: a lone pre-existing "error" is worth reading before writing it off as
+// baseline noise.
 const FATAL = {
   TS2304: "Cannot find name (identifier used but never imported/declared)",
   TS2305: "Module has no exported member (importing something that doesn't exist)",
   TS2307: "Cannot find module (broken import path)",
+  TS2551: "Property does not exist, did you mean...? (calling a method that isn't there)",
   TS2552: "Cannot find name, did you mean...? (typo'd identifier)",
 };
 
