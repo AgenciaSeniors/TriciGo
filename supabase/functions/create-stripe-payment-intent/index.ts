@@ -25,6 +25,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getStripe } from '../_shared/stripe.ts';
 import { realEmail } from '../_shared/email-guard.ts';
+import { getFreshFx, FX_UNAVAILABLE_DETAIL } from '../_shared/fx-freshness.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -148,15 +149,14 @@ Deno.serve(async (req) => {
       return J(400, { ok: false, error: 'amount_too_high', max_usd: MAX_USD, kind: isCorporate ? 'corporate' : 'customer' });
     }
 
-    // FX is MANDATORY and fails closed if missing / stale (> 24h) — never
-    // credit the wallet with the wrong amount of CUP.
-    const { data: rateRow } = await supabase
-      .from('exchange_rates').select('usd_cup_rate, created_at').eq('is_current', true).single();
-    const fxTooOld = !rateRow?.created_at || (Date.now() - new Date(rateRow.created_at).getTime()) > 24 * 60 * 60 * 1000;
-    if (!rateRow?.usd_cup_rate || fxTooOld) {
-      return J(503, { ok: false, error: 'fx_unavailable', detail: 'Tipo de cambio USD→CUP no disponible o desactualizado. Intentalo más tarde.' });
+    // FX is MANDATORY and fails closed if missing / stale — never credit the
+    // wallet with the wrong amount of CUP. Window from getFreshFx (shared).
+    const fx = await getFreshFx(supabase);
+    if (!fx.ok) {
+      console.error(`[create-stripe-payment-intent] fx_unavailable reason=${fx.reason} ageHours=${fx.ageHours?.toFixed(1) ?? 'n/a'} maxAgeHours=${fx.maxAgeHours}`);
+      return J(503, { ok: false, error: 'fx_unavailable', detail: FX_UNAVAILABLE_DETAIL });
     }
-    const exchangeRate = rateRow.usd_cup_rate as number;
+    const exchangeRate = fx.rate as number;
 
     // Fee math (locked): payer pays the fee ADDITIVELY; only the NET is
     // credited as CUP. feeUsd = MAX(amt×3%, $0.50); charge = amt + fee.

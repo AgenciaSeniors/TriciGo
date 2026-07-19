@@ -8,6 +8,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getStripe } from '../_shared/stripe.ts';
 import { sanitizePayerName } from '../_shared/sanitize.ts';
+import { getFreshFx, FX_UNAVAILABLE_DETAIL } from '../_shared/fx-freshness.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -78,13 +79,14 @@ Deno.serve(async (req) => {
       return J(409, { ok: false, error: 'recipient_wallet_frozen', detail: 'La billetera del destinatario está suspendida.' });
     }
 
-    // FX staleness (fail closed if missing / > 24h).
-    const { data: rateRow } = await supabase.from('exchange_rates').select('usd_cup_rate, created_at').eq('is_current', true).single();
-    const fxTooOld = !rateRow?.created_at || (Date.now() - new Date(rateRow.created_at).getTime()) > 24 * 60 * 60 * 1000;
-    if (!rateRow?.usd_cup_rate || fxTooOld) {
-      return J(503, { ok: false, error: 'fx_unavailable', detail: 'Tipo de cambio no disponible. Intentalo más tarde.' });
+    // FX staleness (fail closed if missing / stale). Window from getFreshFx —
+    // one shared definition, reads platform_config.exchange_rate_max_age_hours.
+    const fx = await getFreshFx(supabase);
+    if (!fx.ok) {
+      console.error(`[create-stripe-recharge-intent] fx_unavailable reason=${fx.reason} ageHours=${fx.ageHours?.toFixed(1) ?? 'n/a'} maxAgeHours=${fx.maxAgeHours}`);
+      return J(503, { ok: false, error: 'fx_unavailable', detail: FX_UNAVAILABLE_DETAIL });
     }
-    const exchangeRate = rateRow.usd_cup_rate as number;
+    const exchangeRate = fx.rate as number;
 
     // Fee math: payer pays the fee additively (same model as the NETOPIA recharge).
     const feeUsd = Math.max(Number((amt * 0.03).toFixed(2)), 0.50);
