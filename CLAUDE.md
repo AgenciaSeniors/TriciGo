@@ -1498,6 +1498,23 @@ Migration de referencia: `00340_complete_ride_and_pay_tricicoin_mixed_fix.sql` c
 
 `getSupabaseClient()` devuelve `SupabaseClient` **sin** el genérico `<Database>` (ver `packages/api/src/client.ts`). Consecuencia crítica: `.rpc('fn', {args})`, `.from(t).insert/update/upsert({...})`, `.eq('col',...)`, `.select('cols')` son **loosely-typed** → **`tsc` NO caza typos** de nombre de RPC-arg, columna ni payload. Esa clase de bug es **runtime-only** (PostgREST `PGRST202` "función no encontrada" / `42703` "columna no existe") y suele estar en code paths que no se ejercitan seguido (admin, sitemap, métodos muertos). **Si algún día el cliente se tipa con `<Database>`, esta clase entera la cubre tsc y este sweep deja de hacer falta.**
 
+#### Cuánto cuesta tiparlo: **113 errores, 0 bugs reales** (medido 2026-07-19)
+
+Se midió la cascada de verdad (rama descartable, revertida): `supabase gen types` → `packages/api/src/database.types.ts` (9.720 líneas, 121 tablas) + `getSupabaseClient(): SupabaseClient<Database>` + `createClient<Database>`, y `npx tsc --noEmit -p <proyecto>/tsconfig.json` en los 5 proyectos.
+
+| Proyecto | Errores | Baseline |
+|---|---|---|
+| `packages/api` | **103** | 0 |
+| `apps/web` / `admin` / `client` | 3 c/u | 0 |
+| `apps/driver` | 1 | 0 |
+| **Total** | **113** | **0** |
+
+- **Baseline 0 en los 5** → los 113 son atribuibles al cambio, sin ruido. (Ojo: `npx tsc -p packages/api/tsconfig.json` reporta además **28 errores preexistentes en `__tests__/`** que `pnpm check-types` no ve porque su tarea de turbo excluye los tests. No tienen relación con esto.)
+- **Concentración: 65% en 4 archivos** — `poi` (21), `ride` (17), `driver` (16), `admin` (13) `.service.ts`. El resto se reparte de a 3-5.
+- **Dos patrones mecánicos, sin decisiones de diseño:** (a) **ensanchamiento de enum** — el código pasa `string` donde la DB tiene un CHECK restringido (`document_type`, `role`, `status` de rides); (b) **`jsonb` → `Json`** — los RPC que devuelven jsonb se tipan `Json`, así que leer `.success`/`.error` exige cast (los 6 TS2339 son todos `driver.service.ts:438-451`).
+- **Las apps casi no sufren** (10 de 113) porque 53 de sus usos del cliente son `.auth.*` — **el genérico NO toca ese módulo** — y hacen 131 llamadas `.from()`/`.rpc()` contra las 539 de `packages/api`: la capa de servicios absorbe el impacto. Sus 10 son nulabilidad (`string \| null` → `string`) y una interfaz local `SupabaseLike` que deja de matchear.
+- **Cero bugs reales.** Se verificaron uno por uno los TS2339, TS2769 y los de nulabilidad: las guardas en runtime **están** (ej. `useDriverPosition.ts` guarda `rideId` en las líneas 47/91 y `driverIdCache` en 126/133); es narrowing de TS a través de closures async. **No esperes que tiparlo destape algo roto — el valor es preventivo**, cubrir permanentemente las 539 llamadas y jubilar este sweep manual.
+
 **Cómo barrer (mecánico, alta precisión, contra prod viva):**
 
 1. **RPC args vs firma real.** Extraé toda `.rpc('fn', {keys})` del repo (parser que captura el 1er string literal + las top-level keys del 2º arg objeto, depth-aware). Por cada `fn`, traé `pg_get_function_arguments(oid)` + `pronargs`/`pronargdefaults` de prod. Reglas PostgREST: (a) **arg extra** del cliente que NO está en los params → la función no resuelve (PGRST202); (b) **param requerido** (los primeros `pronargs − pronargdefaults`, los defaults van trailing en PG) que ningún call site provee → falla. El union de keys cross-call-site hace el check (a) conservador (caza cualquier site).
