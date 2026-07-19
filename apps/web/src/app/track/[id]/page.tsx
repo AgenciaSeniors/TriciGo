@@ -1533,7 +1533,10 @@ export default function TrackRidePage() {
                     let confirmMsg = t('track.cancel_confirm_free', { defaultValue: '¿Seguro que quieres cancelar este viaje? No afecta tu calificación.' });
                     try {
                       const impact = await rideService.previewCancellationImpact(rideId);
-                      if (impact?.rating_penalized) {
+                      if (impact === null) {
+                        // Couldn't compute the impact — don't claim it's free.
+                        confirmMsg = t('track.cancel_confirm', { defaultValue: '¿Seguro que quieres cancelar este viaje?' });
+                      } else if (impact.rating_penalized) {
                         confirmMsg = typeof impact.stars_after === 'number'
                           ? t('track.cancel_confirm_rating', { defaultValue: `Cancelar ahora baja tu calificación a ★${impact.stars_after.toFixed(1)}. ¿Continuar?` })
                           : t('track.cancel_confirm_rating_generic', { defaultValue: 'Cancelar ahora baja tu calificación. ¿Continuar?' });

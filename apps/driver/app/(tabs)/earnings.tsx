@@ -22,7 +22,7 @@
  *   Hook (intacto):
  *     - useEarningsData — fetch (critical / deferred / trend / tx pagination)
  */
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -40,6 +40,7 @@ import { EmptyState } from '@tricigo/ui/EmptyState';
 import { useTranslation } from '@tricigo/i18n';
 import { cubanLight, cubanDark, colors, midnightEmber } from '@tricigo/theme';
 import { formatCUP, formatUSD, trcToUsd, DEFAULT_EXCHANGE_RATE } from '@tricigo/utils';
+import { exchangeRateService } from '@tricigo/api/services/exchange-rate';
 import type { Ride } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -105,6 +106,24 @@ function NativeEarningsScreen() {
 
   const [period, setPeriod] = useState<Period>('day');
   const [txExpanded, setTxExpanded] = useState(false);
+
+  // Live USD/CUP rate for the "≈ $X" hint. The DEFAULT_EXCHANGE_RATE constant is
+  // 520 while the real rate is ~665, so the hint overstated earnings by ~28%
+  // (100,000 TC displayed as $192.31 instead of $150.38). Seed with the constant
+  // so there is never a blank, then replace it with the live rate.
+  //
+  // Refetched on focus, not just on mount: Expo tabs do NOT unmount, so a plain
+  // useEffect([]) would freeze this at whatever the rate was when the app booted
+  // — the stale-on-mount class in CLAUDE.md. wallet.tsx re-reads the rate inside
+  // its useFocusEffect for the same reason.
+  const [exchangeRate, setExchangeRate] = useState(DEFAULT_EXCHANGE_RATE);
+  const refetchRate = useCallback(() => {
+    exchangeRateService
+      .getUsdCupRate()
+      .then(setExchangeRate)
+      .catch(() => { /* keep the previous value; the hint is an approximation */ });
+  }, []);
+  useRefreshOnFocus(refetchRate);
 
   // N2 — personal peak hours
   const { data: peakHours, loading: peakHoursLoading } = useDriverPeakHours({
@@ -335,7 +354,7 @@ function NativeEarningsScreen() {
                       ...TABULAR,
                     }}
                   >
-                    {tripsCountLabel} · ≈ {formatUSD(trcToUsd(periodStats.netEarnings, DEFAULT_EXCHANGE_RATE))}
+                    {tripsCountLabel} · ≈ {formatUSD(trcToUsd(periodStats.netEarnings, exchangeRate))}
                   </Text>
                 </View>
               )}
