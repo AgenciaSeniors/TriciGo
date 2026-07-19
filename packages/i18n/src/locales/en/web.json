@@ -19,7 +19,14 @@
     "success": "Top-up sent! The receipt was emailed to you.",
     "cancelled": "Payment cancelled.",
     "processing": "Payment in progress. We'll email you the receipt and credit the wallet once confirmed.",
-    "error": "Couldn't process. Please try again."
+    "error": "Couldn't process. Please try again.",
+    "rate_updated": "Updated {{ago}}",
+    "rate_ago_minutes": "a few minutes ago",
+    "rate_ago_hours": "{{count}}h ago",
+    "rate_ago_days": "{{count}}d ago",
+    "rate_stale_hours": "This rate hasn't updated in {{count}}h, so the TriciCoin amount may change. You can still continue.",
+    "rate_stale_days": "This rate hasn't updated in {{count}}d, so the TriciCoin amount may change. You can still continue.",
+    "error_region": "Card payments aren't available from your country. Ask someone abroad to top up for you."
   },
   "offline": "No connection — check your network.",
   "support": {

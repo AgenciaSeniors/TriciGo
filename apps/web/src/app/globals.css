@@ -87,6 +87,12 @@
   --success: #22c55e;
   --error: #ef4444;
   --warning: #f59e0b;
+  /* Warning SURFACE tokens (advisory notices), paired light/dark so a callout
+     never inherits a light-mode text colour on a dark card. --warning alone is
+     a fill colour and fails contrast as body text on tinted backgrounds. */
+  --warning-bg: rgba(245, 158, 11, 0.10);
+  --warning-border: rgba(180, 120, 0, 0.35);
+  --warning-text: #7a4f00;
   --max-width: 1200px;
 
   /* Spacing scale */
@@ -158,6 +164,11 @@
   --success: #22c55e;
   --error: #ef4444;
   --warning: #f59e0b;
+  /* Dark: lighter amber text on a low-alpha tint — the light-mode #7a4f00 would
+     be unreadable here (that is the whole point of pairing these). */
+  --warning-bg: rgba(245, 158, 11, 0.14);
+  --warning-border: rgba(245, 158, 11, 0.38);
+  --warning-text: #fcd34d;
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
@@ -192,6 +203,9 @@
     --success: #22c55e;
     --error: #ef4444;
     --warning: #f59e0b;
+    --warning-bg: rgba(245, 158, 11, 0.14);
+    --warning-border: rgba(245, 158, 11, 0.38);
+    --warning-text: #fcd34d;
   }
 }
 

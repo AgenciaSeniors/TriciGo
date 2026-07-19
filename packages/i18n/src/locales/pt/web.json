@@ -19,7 +19,14 @@
     "success": "Recarga enviada! O comprovante foi enviado ao seu email.",
     "cancelled": "Pagamento cancelado.",
     "processing": "Pagamento em andamento. Enviamos o comprovante por email e a carteira é creditada ao confirmar.",
-    "error": "Não foi possível processar. Tente novamente."
+    "error": "Não foi possível processar. Tente novamente.",
+    "rate_updated": "Atualizada {{ago}}",
+    "rate_ago_minutes": "há alguns minutos",
+    "rate_ago_hours": "há {{count}} h",
+    "rate_ago_days": "há {{count}} d",
+    "rate_stale_hours": "Esta taxa não é atualizada há {{count}} h, então o valor em TriciCoin pode mudar. Você pode continuar mesmo assim.",
+    "rate_stale_days": "Esta taxa não é atualizada há {{count}} d, então o valor em TriciCoin pode mudar. Você pode continuar mesmo assim.",
+    "error_region": "Pagamentos com cartão não estão disponíveis no seu país. Peça a alguém no exterior para fazer a recarga."
   },
   "offline": "Sem conexão — verifique sua rede.",
   "support": {
