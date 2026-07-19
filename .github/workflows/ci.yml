@@ -29,6 +29,14 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # The Edge Functions are Deno and live outside every tsconfig in the
+      # monorepo, so `pnpm check-types` never saw them. Needed by
+      # `pnpm check:ef-types` below.
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -41,6 +49,17 @@ jobs:
       # floating import (@2, @latest, jsr/npm without a full semver) lands again.
       - name: Check Edge Function imports are pinned
         run: pnpm check:ef-imports
+
+      # Guardrail: `pnpm check-types` does NOT cover supabase/functions (Deno,
+      # outside every tsconfig). PR #828 shipped an Edge Function that CALLED
+      # getFreshFx without importing it — a guaranteed ReferenceError on the main
+      # NETOPIA payment path — and it reached production with CI fully green,
+      # because `node --check` only validates syntax. This gates on the small set
+      # of type errors that always crash at runtime (TS2304/2305/2307/2552),
+      # which measured ZERO on master, while merely reporting the 34 pre-existing
+      # non-fatal ones so the check can go green on day one.
+      - name: Type check Edge Functions (runtime-fatal only)
+        run: pnpm check:ef-types
 
       - name: Type check
         run: pnpm check-types
