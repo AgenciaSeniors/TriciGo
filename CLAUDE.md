@@ -2010,16 +2010,42 @@ COMMIT;
 
 **La trampa.** Un cron que hace `SELECT net.http_post(...)` solo **encola** la request y devuelve un `request_id`. `cron.job_run_details` registra el resultado del `SELECT` (siempre `succeeded`), **nunca el HTTP**. Prueba del incidente: el runid 608668 corrió 36 ms con `status='succeeded'` mientras `net._http_response` id 77583 guardaba `status_code=502` en ese mismo segundo. **91 corridas verdes consecutivas con la función fallando siempre.**
 
-Aplica a **7 crons**: 22 (auto-admin), 23 (sync-exchange-rate), 24 (sync-weather), 25 (behavioral-emails), 33/34 (keepwarm, 401 por diseño), 35 (proxy-health).
+Aplicaba a **7 crons**: 22 (auto-admin), 23 (sync-exchange-rate), 24 (sync-weather), 25 (behavioral-emails), 33/34 (keepwarm, 401 por diseño), 35 (proxy-health). **Los 7 están instrumentados desde las migs 00506/00507** — ver abajo.
+
+> **REGLA: todo cron nuevo que llame a una Edge Function DEBE usar `public.cron_http_post(...)`, nunca `net.http_post` directo.** Si usás el crudo, ese job vuelve a ser invisible y nadie se entera hasta que un usuario reporta el síntoma.
+>
+> ```sql
+> SELECT cron.schedule('mi-job', '*/10 * * * *', $$
+>   SELECT public.cron_http_post('mi-job',
+>     url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/mi-ef',
+>     headers := jsonb_build_object('Content-Type','application/json',
+>                  'Authorization','Bearer '||get_service_role_key(),
+>                  'apikey', get_service_role_key()),
+>     body    := '{}'::jsonb);
+> $$);
+> ```
+> Si la EF devuelve algo que **no** es 2xx por diseño (como los keepwarm, que dan 401 a propósito), registrarlo o va a alertar para siempre:
+> `INSERT INTO cron_http_expectations (jobname, ok_statuses, note) VALUES ('mi-job', ARRAY[200,401], 'por qué');`
+
+**Cómo funciona.** `cron_http_post` envuelve `net.http_post` y loguea `request_id → jobname` en `cron_http_calls`; `check_cron_http_failures()` (cron `40 * * * *`) joinea contra `net._http_response` y alerta por email cuando **cambia el conjunto** de jobs fallando (un job que sigue caído no spamea; uno nuevo que se suma sí avisa). Estado en `platform_config.cron_http_health_{status,signature,detail,at}`.
+
+Detalles que hacen falta si algún día se toca:
+- **`net._http_response` NO tiene columna `url`**, y `net.http_request_queue` (que sí la tiene) se vacía al procesarse → después del hecho **no se puede** joinear una respuesta con su job. Por eso el mapeo se registra al llamar.
+- El helper toma **los mismos argumentos nombrados** que `net.http_post`, así que instrumentar un cron existente es una **sustitución textual de prefijo** (headers/body quedan byte-idénticos, no se retipea auth).
+- Dispara primero y loguea después, con el INSERT en su propio bloque de excepción → el peor caso es "sin trackear", nunca "sin enviar".
+- Retención de `net._http_response` = **6 h** → la ventana del reconciliador es 90 min.
 
 **Diagnóstico canónico — NUNCA confiar en `cron.job_run_details` para saber si una EF anduvo:**
 ```sql
--- El estado REAL de las llamadas HTTP de los crons:
-SELECT status_code, left(content,200) AS content, count(*), max(created) AS last_seen
-FROM net._http_response WHERE created > now() - interval '24 hours'
+-- Ahora con atribución por job (lo que antes era imposible):
+SELECT c.jobname, resp.status_code, count(*), max(c.called_at) AS last_seen,
+       left(max(resp.content), 120) AS sample
+FROM cron_http_calls c
+JOIN net._http_response resp ON resp.id = c.request_id
+WHERE c.called_at > now() - interval '6 hours'
 GROUP BY 1,2 ORDER BY last_seen DESC;
 ```
-`net._http_response` **no guarda la URL** — correlacionar por el minuto del schedule, o buscar por el contenido del error (`content ILIKE '%all_methods_failed%'`). Alternativa más directa: `get_logs service=edge-function` y filtrar por slug.
+Para lo que quedó fuera de la ventana de 6 h: `get_logs service=edge-function` y filtrar por slug.
 
 **Incidente que lo destapó (tipo de cambio congelado 4 días, recargas caídas).** Dos capas:
 1. **Bug latente de 4 meses:** `fetchFromAPI` en `sync-exchange-rate` solo aceptaba la forma **anidada** (`d.tasas.USD.median`). La API de elTOQUE devuelve el USD como **número plano**: `{"tasas":{"USD":665.0},...}`. Devolvía `null` en cada corrida y caía al scraper. Prueba dura: `SELECT source, count(*) FROM exchange_rates GROUP BY source` → 2771 filas `eltoque_scraping`, **cero `eltoque_api`, jamás**.
@@ -2038,6 +2064,37 @@ GROUP BY 1,2 ORDER BY last_seen DESC;
 **Por qué el watchdog es SQL puro y NO una Edge Function:** una EF invocada por `net.http_post` **heredaría exactamente la misma ceguera**. La detección corre dentro de la base leyendo `exchange_rates` directo; el único HTTP es el email, que es la *acción*, no la *detección*.
 
 **Cómo probar un alerta sin spamear** (`business_notification_email` son 3 destinatarios reales): correr todo dentro de `BEGIN; ... ROLLBACK;` — `net.http_post` inserta en `net.http_request_queue`, que **es transaccional**, así que el rollback cancela el envío. Verificado: `emails_sent=3` con **cero** requests en `net._http_response`. Confirmar el rollback releyendo las keys de config después.
+
+### Trampa plpgsql: una variable `RECORD` hace shadowing del alias SQL con el mismo nombre
+
+**Bug real (mig 00507).** Declarar `r RECORD` para un `FOR` loop **y** usar `r` como alias de tabla en una query de la misma función:
+
+```sql
+DECLARE r RECORD;                               -- para el FOR loop
+...
+SELECT ... FROM net._http_response r WHERE r.status_code IS NULL   -- alias `r`
+-- ERROR: record "r" is not assigned yet
+```
+
+plpgsql resuelve `r.status_code` contra la **variable RECORD sin asignar**, no contra el alias SQL. Probado en aislamiento: con `DECLARE r RECORD` da el error; renombrando la variable a `v_row` la misma query funciona.
+
+**Por qué es peligroso:** si la función tiene `EXCEPTION WHEN OTHERS` (como todo watchdog defensivo), el error se traga y la función queda **muda pero rota** — devuelve `{"ok":false,...}` y nadie mira. El watchdog de crons estuvo ciego desde que se aplicó hasta que se corrió a mano.
+
+**Regla:** prefijar SIEMPRE las variables plpgsql (`v_*`, `c_*`) y no usar alias SQL de una sola letra que puedan colisionar. Renombrar de los **dos** lados.
+
+### Verificar la superficie correcta (2 incidentes el mismo día, 2026-07-19)
+
+Dos veces en una sesión la verificación fue **real pero sobre la superficie equivocada**, y las dos veces llegó a producción:
+
+| Se verificó | Por qué no sirvió | Qué lo destapó |
+|---|---|---|
+| "los 6 archivos TS parsean" (`node --check`) | valida **sintaxis**, no identificadores → un import faltante parsea perfecto | el output del deploy: la EF rota subió **un archivo menos** al bundle |
+| "la query de detección funciona" (suelta, en rollback) | el shadowing plpgsql **solo existe dentro de la función** | correr la **función desplegada** |
+
+**Regla operativa:** probar **el artefacto que se despliega**, no una pieza suya en un contexto distinto. Corolarios verificados:
+- Un archivo `_shared/` faltante en el output de `supabase functions deploy` **significa que falta un import**. Comparar contra las EFs hermanas.
+- Para una función SQL, ejecutar `SELECT mi_funcion(...)` después de aplicar — no solo su query interna.
+- `pnpm check-types` **no cubre** `supabase/functions` (son Deno, fuera de todo tsconfig). Para eso está `pnpm check:ef-types` (`deno check`, gatea solo TS2304/2305/2307/2552 — los que siempre crashean en runtime — y reporta los ~34 preexistentes sin bloquear).
 
 ### Recordatorio para Claude
 
