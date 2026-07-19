@@ -9,6 +9,32 @@ type Recipient = { found: boolean; fullName?: string };
 type ResultStatus = 'ok' | 'cancel' | 'processing' | null;
 type Provider = 'netopia' | 'stripe';
 
+/** Rate age past which we warn. The Edge Functions hard-reject at 24h, so this
+ *  leaves the user a real heads-up window rather than a surprise failure. */
+const RATE_STALE_WARN_H = 12;
+
+type EfErrorBody = { ok?: boolean; error?: string; detail?: string; redirectUrl?: string };
+
+/**
+ * Pull the server's own message out of a failed functions.invoke().
+ *
+ * supabase-js wraps a non-2xx in a FunctionsHttpError whose `context` is the raw
+ * Response — the JSON body (and therefore the EF's `detail`) is NOT on the error
+ * object itself. Without this the page discarded a precise, already-translated
+ * message (e.g. "Tipo de cambio USD→CUP no disponible o desactualizado") and
+ * showed a generic "no se pudo procesar", which is what made the FX outage
+ * undiagnosable from the UI.
+ */
+async function efErrorBody(err: unknown): Promise<EfErrorBody | null> {
+  const ctx = (err as { context?: unknown })?.context;
+  if (!ctx || typeof (ctx as Response).json !== 'function') return null;
+  try {
+    return (await (ctx as Response).json()) as EfErrorBody;
+  } catch {
+    return null; // non-JSON body (gateway HTML, empty 502, ...)
+  }
+}
+
 export default function RechargePage() {
   const { t } = useTranslation('web');
   const { value: enabled, loading: flagLoading } = useFeatureFlagState('diaspora_recharge_enabled');
@@ -20,6 +46,7 @@ export default function RechargePage() {
   const [payerName, setPayerName] = useState('');
   const [email, setEmail] = useState('');
   const [rate, setRate] = useState<number | null>(null);
+  const [rateAgeH, setRateAgeH] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState<'phone' | 'amount' | 'name' | 'email' | null>(null);
@@ -31,11 +58,22 @@ export default function RechargePage() {
   const abortRef = useRef<AbortController | null>(null);
 
   // Current FX rate for the live "will receive" preview.
+  //
+  // fetched_at is read alongside the rate on purpose. This page used to quote
+  // with identical confidence whether the rate was 5 minutes or 5 days old: during
+  // the 2026-07-15 feed outage it showed a frozen 660 as if live, and the pay
+  // button then failed with a generic error. The recharge Edge Functions reject a
+  // rate older than 24h, so the age is not cosmetic — it predicts whether paying
+  // will work at all.
   useEffect(() => {
     (async () => {
       const { data } = await getSupabaseClient()
-        .from('exchange_rates').select('usd_cup_rate').eq('is_current', true).single();
+        .from('exchange_rates').select('usd_cup_rate, fetched_at').eq('is_current', true).single();
       if (data?.usd_cup_rate) setRate(Number(data.usd_cup_rate));
+      if (data?.fetched_at) {
+        // Math.abs: a clock-skewed future timestamp reads as stale, never as fresh.
+        setRateAgeH(Math.abs(Date.now() - new Date(data.fetched_at as string).getTime()) / 3_600_000);
+      }
     })();
   }, []);
 
@@ -93,6 +131,14 @@ export default function RechargePage() {
   const fee = computeRechargeFeeUsd(amt);
   const total = computeRechargeChargeUsd(amt);
   const willReceive = rate && amt > 0 ? Math.round(amt * rate) : 0;
+
+  // Human age of the quoted rate. Coarse on purpose — the useful signal is the
+  // order of magnitude ("a few minutes" vs "3 days"), not the exact minute.
+  const rateAge = rateAgeH === null ? null
+    : rateAgeH < 1 ? t('recharge.rate_ago_minutes')
+    : rateAgeH < 24 ? t('recharge.rate_ago_hours', { count: Math.round(rateAgeH) })
+    : t('recharge.rate_ago_days', { count: Math.round(rateAgeH / 24) });
+  const rateStale = rateAgeH !== null && rateAgeH >= RATE_STALE_WARN_H;
   const amountTooLow = amt > 0 && amt < 20;
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
   const payerNameValid = payerName.trim().length >= 2;
@@ -106,9 +152,21 @@ export default function RechargePage() {
       const { data, error: efErr } = await getSupabaseClient().functions.invoke(`create-${provider}-recharge-intent`, {
         body: { phone: canonicalPhone(phone), amount_usd: amt, payer_email: email, payer_name: payerName.trim() },
       });
-      const res = data as { ok?: boolean; redirectUrl?: string };
-      if (efErr || !res?.ok || !res.redirectUrl) throw new Error('failed');
-      window.location.href = res.redirectUrl; // → provider hosted page (NETOPIA / Stripe)
+      // Prefer the server's own message. On a non-2xx it lives in the Response
+      // body behind efErr.context; on a 200-with-ok:false it is already in data.
+      const body: EfErrorBody | null = efErr ? await efErrorBody(efErr) : (data as EfErrorBody);
+      if (efErr || !body?.ok || !body.redirectUrl) {
+        // region_unsupported is the one detail the EFs return in English, and this
+        // page is Spanish-first for the diaspora — translate that one, pass the
+        // rest through (they are already user-facing Spanish).
+        const msg = body?.error === 'region_unsupported'
+          ? t('recharge.error_region')
+          : (body?.detail ?? t('recharge.error'));
+        setError(msg);
+        setSubmitting(false);
+        return;
+      }
+      window.location.href = body.redirectUrl; // → provider hosted page (NETOPIA / Stripe)
     } catch {
       setError(t('recharge.error'));
       setSubmitting(false);
@@ -253,7 +311,11 @@ export default function RechargePage() {
         <div style={{
           background: 'var(--bg-hover, rgba(0,0,0,0.03))', borderRadius: 14, padding: '0.9rem 1rem', marginBottom: '1.25rem',
         }}>
-          <SummaryRow label={t('recharge.rate')} value={rate ? `${rate.toLocaleString('es-CU')} CUP / USD` : '—'} />
+          <SummaryRow
+            label={t('recharge.rate')}
+            value={rate ? `${rate.toLocaleString('es-CU')} CUP / USD` : '—'}
+            hint={rate && rateAge ? t('recharge.rate_updated', { ago: rateAge }) : undefined}
+          />
           <SummaryRow label={t('recharge.fee')} value={`$${fee.toFixed(2)}`} />
           <SummaryRow label={t('recharge.total')} value={`$${total.toFixed(2)}`} bold />
           <div style={{ height: 1, background: 'var(--border-light)', margin: '0.65rem 0' }} />
@@ -263,6 +325,32 @@ export default function RechargePage() {
               {willReceive.toLocaleString('es-CU')} TriciCoin
             </span>
           </div>
+
+          {/* Stale-rate notice. Advisory, never blocking: the Edge Function still
+              accepts the payment under 24h, so refusing here would cost a real
+              recharge to prevent a small quote drift. Uses an icon + wording (not
+              colour alone) so it survives colour-blindness and greyscale. */}
+          {rateStale && rateAgeH !== null && (
+            <div
+              role="status"
+              style={{
+                display: 'flex', alignItems: 'flex-start', gap: '0.45rem',
+                marginTop: '0.7rem', padding: '0.55rem 0.65rem',
+                borderRadius: 10,
+                border: '1px solid var(--warning-border, rgba(180,120,0,0.35))',
+                background: 'var(--warning-bg, rgba(255,176,32,0.10))',
+                color: 'var(--warning-text, #8a5a00)',
+                fontSize: '0.78rem', lineHeight: 1.45,
+              }}
+            >
+              <span style={{ flexShrink: 0, marginTop: 1 }}><IconInfo /></span>
+              <span>
+                {rateAgeH! < 24
+                  ? t('recharge.rate_stale_hours', { count: Math.round(rateAgeH!) })
+                  : t('recharge.rate_stale_days', { count: Math.round(rateAgeH! / 24) })}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 4 — payer name */}
@@ -325,11 +413,16 @@ export default function RechargePage() {
   );
 }
 
-function SummaryRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function SummaryRow({ label, value, bold, hint }: { label: string; value: string; bold?: boolean; hint?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '0.22rem 0' }}>
       <span style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{label}</span>
-      <span style={{ color: 'var(--text-primary)', fontSize: '0.92rem', fontWeight: bold ? 700 : 500, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
+        {/* Age sits beside the rate, not on its own row: it qualifies this number
+            specifically, and a separate row would read as another cost line. */}
+        {hint && <span style={{ color: 'var(--text-tertiary, var(--text-secondary))', fontSize: '0.76rem' }}>{hint}</span>}
+        <span style={{ color: 'var(--text-primary)', fontSize: '0.92rem', fontWeight: bold ? 700 : 500, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      </span>
     </div>
   );
 }
