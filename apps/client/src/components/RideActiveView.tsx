@@ -865,8 +865,9 @@ export function RideActiveView() {
     triggerHaptic('light');
     setPreviewLoading(true);
     try {
-      // Project the rating impact of cancelling now. The service tolerates
-      // the RPC being absent (returns a grace default) and never throws.
+      // Project the rating impact of cancelling now. Returns a grace default
+      // only when the RPC is genuinely absent; a transient error yields null
+      // (unknown) so the sheet shows "couldn't compute" instead of "no penalty".
       const impact = activeRide
         ? await rideService.previewCancellationImpact(activeRide.id)
         : null;
@@ -1704,6 +1705,7 @@ export function RideActiveView() {
         onConfirm={handleCancelConfirm}
         isLoading={isLoading}
         ratingImpact={ratingImpact}
+        previewLoading={previewLoading}
         rideStatus={activeRide?.status ?? null}
       />
 

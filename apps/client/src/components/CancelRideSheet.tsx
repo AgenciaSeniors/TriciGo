@@ -20,8 +20,12 @@ interface CancelRideSheetProps {
   onConfirm: (reason: CancellationReasonCode) => void;
   /** Whether cancel is in progress */
   isLoading: boolean;
-  /** Projected rating impact of cancelling now (stars, not money) */
+  /** Projected rating impact of cancelling now (stars, not money). `null` means
+   *  the preview couldn't be computed (transient error) — distinct from a real
+   *  no-penalty result. */
   ratingImpact?: CancellationRatingImpact | null;
+  /** Whether the rating-impact preview is still being fetched. */
+  previewLoading?: boolean;
   /** Current ride status for emotional driver context */
   rideStatus?: string | null;
 }
@@ -49,6 +53,7 @@ function CancelRideSheetInner({
   onConfirm,
   isLoading,
   ratingImpact,
+  previewLoading,
   rideStatus,
 }: CancelRideSheetProps) {
   const { t } = useTranslation('rider');
@@ -168,12 +173,23 @@ function CancelRideSheetInner({
             })}
           </Text>
         </View>
-      ) : (
+      ) : (exempt || ratingImpact) ? (
         <View className="rounded-xl px-4 py-3 mb-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700">
           <View className="flex-row items-center">
             <Ionicons name="checkmark-circle" size={16} color={colors.success.DEFAULT} />
             <Text variant="body" className="ml-2 text-green-700 dark:text-green-300 font-medium">
               {t('ride.cancel_no_penalty', { defaultValue: 'Sin penalización' })}
+            </Text>
+          </View>
+        </View>
+      ) : previewLoading ? null : (
+        // Preview couldn't be computed (transient error). Don't claim "no
+        // penalty" — the server may still apply one. Show a neutral notice.
+        <View className="rounded-xl px-4 py-3 mb-4 bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700">
+          <View className="flex-row items-center">
+            <Ionicons name="help-circle-outline" size={16} color={colors.neutral[400]} />
+            <Text variant="body" className="ml-2 text-neutral-600 dark:text-neutral-300 font-medium">
+              {t('ride.cancel_impact_unknown', { defaultValue: 'No pudimos calcular el impacto en tu calificación' })}
             </Text>
           </View>
         </View>
