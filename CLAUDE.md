@@ -176,6 +176,22 @@ $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 
 > Nota: `google-services.json` también es gitignored y falta en worktrees frescos, pero su warning (`Could not parse Expo config: android.googleServicesFile`) es **benigno** para el dev client — ese archivo solo se usa en build/prebuild (ya está horneado en el APK), no afecta el bundle JS servido por Metro.
 
+#### Lo mismo aplica a `apps/web`, pero el archivo se llama `.env.local` (verificado 2026-07-19)
+
+**Ojo con el nombre:** cliente y driver usan `.env`; **web usa `.env.local`** (convención de Next.js, gitignored por `.gitignore:35`). Copiar el archivo equivocado no hace nada.
+
+```powershell
+Copy-Item "C:\Users\Eduardo\TriciGo\apps\web\.env.local" "<worktree>\apps\web\.env.local" -Force
+```
+
+Contiene `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` (los que rompen todo), más `NEXT_PUBLIC_MAPBOX_TOKEN`, `NEXT_PUBLIC_POSTHOG_*`, `NEXT_PUBLIC_SENTRY_DSN` y `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT`.
+
+**Verificación al bootear:** Next debe imprimir `- Environments: .env.local`. **Si esa línea NO aparece, el archivo falta** — es el equivalente al `env: load .env` de Metro.
+
+**Síntoma sin el archivo (medido, no deducido):** `getEnvVar` en `packages/api/src/client.ts` **lanza** `Missing environment variable: SUPABASE_URL`, el error boundary lo atrapa y la página muestra **"Algo salió mal — Ha ocurrido un error inesperado"**.
+
+> **La trampa:** el servidor igual responde **`GET /recargar 200`**. Un chequeo con `curl` dice que la página está sana; el fallo solo se ve **abriéndola**. No confundir esto con un bug de la feature ni con un feature flag apagado.
+
 ### Tres caminos para testear desde el celu
 
 **A. Dev client APK ya instalado (lo más común)** — Buscar en el celu el icono "TriciGo" o "TriciGo (Dev)". Abrirlo, "Enter URL manually", `exp://192.168.x.x:8081`, reload. Funciona TODO (Mapbox, NETOPIA WebBrowser, Sentry, expo-dev-client). El proyecto importa varios módulos nativos así que esto es el camino canónico para QA real.
