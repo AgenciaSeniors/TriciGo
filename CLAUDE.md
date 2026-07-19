@@ -2006,6 +2006,39 @@ COMMIT;
 
 **Diagnóstico si reaparece "no se abre sola":** (1) ¿aparece la **burbuja flotante** al minimizar? Sí ⇒ el permiso `SYSTEM_ALERT_WINDOW` está OK (misma llave para burbuja y launch) y el problema es el canal, no el permiso. (2) versión del APK ≥ rebuild post-#817. (3) `launch_sent=N/M` en el summary log de `send-push`. (4) Sentry: `logger.warn('[rideOfferLaunch] …')`. El modo de falla es **silencioso-benigno**: siempre queda el push visible.
 
+### `pg_cron` + `net.http_post` es CIEGO a los fallos de la Edge Function (verificado 2026-07-19)
+
+**La trampa.** Un cron que hace `SELECT net.http_post(...)` solo **encola** la request y devuelve un `request_id`. `cron.job_run_details` registra el resultado del `SELECT` (siempre `succeeded`), **nunca el HTTP**. Prueba del incidente: el runid 608668 corrió 36 ms con `status='succeeded'` mientras `net._http_response` id 77583 guardaba `status_code=502` en ese mismo segundo. **91 corridas verdes consecutivas con la función fallando siempre.**
+
+Aplica a **7 crons**: 22 (auto-admin), 23 (sync-exchange-rate), 24 (sync-weather), 25 (behavioral-emails), 33/34 (keepwarm, 401 por diseño), 35 (proxy-health).
+
+**Diagnóstico canónico — NUNCA confiar en `cron.job_run_details` para saber si una EF anduvo:**
+```sql
+-- El estado REAL de las llamadas HTTP de los crons:
+SELECT status_code, left(content,200) AS content, count(*), max(created) AS last_seen
+FROM net._http_response WHERE created > now() - interval '24 hours'
+GROUP BY 1,2 ORDER BY last_seen DESC;
+```
+`net._http_response` **no guarda la URL** — correlacionar por el minuto del schedule, o buscar por el contenido del error (`content ILIKE '%all_methods_failed%'`). Alternativa más directa: `get_logs service=edge-function` y filtrar por slug.
+
+**Incidente que lo destapó (tipo de cambio congelado 4 días, recargas caídas).** Dos capas:
+1. **Bug latente de 4 meses:** `fetchFromAPI` en `sync-exchange-rate` solo aceptaba la forma **anidada** (`d.tasas.USD.median`). La API de elTOQUE devuelve el USD como **número plano**: `{"tasas":{"USD":665.0},...}`. Devolvía `null` en cada corrida y caía al scraper. Prueba dura: `SELECT source, count(*) FROM exchange_rates GROUP BY source` → 2771 filas `eltoque_scraping`, **cero `eltoque_api`, jamás**.
+2. **El gatillo:** el 2026-07-15 `eltoque.com` empezó a responder **403 con `Cf-Mitigated: challenge`** (Cloudflare bot management). Murió el scraper que tapaba el bug → las dos fuentes en `null` → `502 all_methods_failed` → tasa congelada → pasadas 24h, las 4 EFs de pago devuelven `503 fx_unavailable`.
+
+**Lección general — un fallback que nunca se ejerció no es un fallback.** Si tenés 2 fuentes y una tapa a la otra, **verificá que AMBAS hayan escrito alguna vez** (agrupá por `source`/proveedor). Una fuente con 0 filas históricas está rota, no de respaldo. Vale para pagos, SMS, geocoding, push.
+
+**Lo que NO hay que hacer** (verificado, son callejones sin salida):
+- **NO subir `exchange_rate_max_age_hours` para "desbloquear recargas".** Las 4 EFs de pago **hardcodean 24h contra `created_at` y ni leen esa key**. Lo único que toca es `revalue_anchored_wallets`, y subirla **reactivaría la revaluación de dinero contra una tasa vieja** — justo lo que el fail-closed previene. Peor que no hacer nada.
+- **NO cambiar a Stripe.** Mismo gate FX, y `stripe_enabled=false` por el KYC pendiente.
+- **NO revivir el scraper spoofeando headers.** Es un managed challenge de Cloudflare; Supabase Edge sale por rangos de datacenter.
+- **NO tocar `exchange_rates` con INSERT/UPDATE crudo.** Usar siempre `upsert_exchange_rate(...)` — aplica la banda `[100,5000]`, maneja `is_current` y dispara `recompute_cup_from_usd_prices`.
+
+**Watchdog (mig 00503, aplicado).** `check_exchange_rate_freshness()` + cron 36 (`20 * * * *`) alerta por email en **transición** `ok↔stale` (patrón de `proxy-health/index.ts:158-181`, sin spam horario), a las **20 h** (config `fx_stale_alert_hours`) → ~4 h de margen antes de que las recargas se rompan a las 24 h. Estado en `platform_config.fx_health_{status,at,detail}`.
+
+**Por qué el watchdog es SQL puro y NO una Edge Function:** una EF invocada por `net.http_post` **heredaría exactamente la misma ceguera**. La detección corre dentro de la base leyendo `exchange_rates` directo; el único HTTP es el email, que es la *acción*, no la *detección*.
+
+**Cómo probar un alerta sin spamear** (`business_notification_email` son 3 destinatarios reales): correr todo dentro de `BEGIN; ... ROLLBACK;` — `net.http_post` inserta en `net.http_request_queue`, que **es transaccional**, así que el rollback cancela el envío. Verificado: `emails_sent=3` con **cero** requests en `net._http_response`. Confirmar el rollback releyendo las keys de config después.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.

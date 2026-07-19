@@ -33,15 +33,37 @@ async function scrapeElToque(): Promise<number | null> {
   return null;
 }
 
+// The trmi endpoint returns USD as a bare number today:
+//   {"tasas":{"MLC":429.14,"USD":665.0,...},"date":"2026-07-18",...}
+// Older/other tiers nest it as an object ({median,avg,venta}). The previous version of
+// this parser only handled the NESTED shape, so it returned null on every call and the
+// EF silently fell through to scrapeElToque() -- all 2771 historical rows landed with
+// source='eltoque_scraping' and zero with 'eltoque_api'. That masked the breakage until
+// eltoque.com started answering 403 to the scraper on 2026-07-15, at which point BOTH
+// sources failed and the rate froze. Accept either shape so neither can regress silently.
+function pickRate(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+  if (v && typeof v === 'object') {
+    for (const k of ['median', 'avg', 'venta', 'value']) {
+      const n = Number((v as Record<string, unknown>)[k]);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return null;
+}
+
 async function fetchFromAPI(token: string): Promise<number | null> {
   const res = await fetch('https://tasas.eltoque.com/v1/trmi', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`[sync-exchange-rate] trmi API HTTP ${res.status}`);
+    return null;
+  }
   const d = await res.json();
-  if (d?.tasas?.USD?.median) return Number(d.tasas.USD.median);
-  if (d?.USD?.median) return Number(d.USD.median);
-  if (d?.tasas?.USD?.venta) return Number(d.tasas.USD.venta);
-  if (typeof d?.USD === 'number') return d.USD;
-  return null;
+  const rate = pickRate(d?.tasas?.USD) ?? pickRate(d?.USD);
+  if (rate === null) {
+    console.error(`[sync-exchange-rate] trmi API 200 but USD unparseable; keys=${JSON.stringify(Object.keys(d?.tasas ?? d ?? {}))}`);
+  }
+  return rate;
 }
 
 Deno.serve(async (req) => {
@@ -71,6 +93,12 @@ Deno.serve(async (req) => {
     if (token && token.trim() !== '') { rate = await fetchFromAPI(token); if (rate) source = 'eltoque_api'; }
     if (!rate) { rate = await scrapeElToque(); if (rate) source = 'eltoque_scraping'; }
     if (!rate || isNaN(rate) || rate <= 0) {
+      // This branch used to return silently. pg_cron cannot see it either -- job 23 runs
+      // SELECT net.http_post(...), which only ENQUEUES and returns a request_id, so
+      // cron.job_run_details logged 91 consecutive 'succeeded' runs while every one of
+      // them 502'd. With no log line there was nothing to grep or alert on, and the rate
+      // sat frozen for 4 days. Make the failure loud.
+      console.error('[sync-exchange-rate] all_methods_failed: trmi API and eltoque.com scrape both returned null');
       return new Response(JSON.stringify({ ok: false, error: 'all_methods_failed' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
