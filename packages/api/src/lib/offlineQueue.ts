@@ -32,6 +32,7 @@ let storage: StorageAdapter | null = null;
 let queue: QueuedMutation[] = [];
 let isProcessing = false;
 let isOnline = true;
+let initialization: Promise<void> = Promise.resolve();
 
 // Registry of mutation handlers
 const handlers: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
@@ -58,9 +59,14 @@ function notifyListeners() {
 /**
  * Initialize the offline queue with a storage adapter.
  */
-export function initOfflineQueue(storageAdapter: StorageAdapter) {
+export function initOfflineQueue(storageAdapter: StorageAdapter): Promise<void> {
   storage = storageAdapter;
-  loadQueue();
+  initialization = loadQueue();
+  void initialization.then(() => {
+    notifyListeners();
+    if (isOnline) void processQueue();
+  });
+  return initialization;
 }
 
 /**
@@ -71,17 +77,15 @@ export function registerOfflineMutation(
   handler: (...args: unknown[]) => Promise<unknown>,
 ) {
   handlers[action] = handler;
+  if (isOnline) void processQueue();
 }
 
 /**
  * Set online/offline status.
  */
 export function setOnlineStatus(online: boolean) {
-  const wasOffline = !isOnline;
   isOnline = online;
-  if (online && wasOffline) {
-    processQueue();
-  }
+  if (online) void processQueue();
 }
 
 /**
@@ -133,6 +137,10 @@ export async function executeOrQueue(
     throw new Error(`No handler registered for action: ${action}`);
   }
 
+  // Never mutate the in-memory queue until its persisted state is loaded.
+  // Otherwise a late load can overwrite work enqueued during app startup.
+  await initialization;
+
   if (isOnline) {
     try {
       const result = await handler(...params);
@@ -166,6 +174,7 @@ async function enqueue(action: string, params: unknown[]) {
 }
 
 async function processQueue() {
+  await initialization;
   if (isProcessing || queue.length === 0 || !isOnline) return;
 
   isProcessing = true;

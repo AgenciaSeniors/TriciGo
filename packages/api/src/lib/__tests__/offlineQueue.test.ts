@@ -24,9 +24,7 @@ describe('offlineQueue', () => {
   beforeEach(async () => {
     mod = await loadFreshModule();
     storage = createMockStorage();
-    mod.initOfflineQueue(storage);
-    // Wait a tick for loadQueue to finish
-    await new Promise((r) => setTimeout(r, 10));
+    await mod.initOfflineQueue(storage);
   });
 
   describe('initOfflineQueue + registerOfflineMutation', () => {
@@ -101,6 +99,34 @@ describe('offlineQueue', () => {
       expect(handler).toHaveBeenCalledTimes(2);
       expect(mod.getPendingCount()).toBe(0);
     });
+
+    it('replays a persisted queue after an online app restart', async () => {
+      const fresh = await loadFreshModule();
+      const persistedStorage = createMockStorage();
+      persistedStorage._store.set(
+        '@tricigo/offline-queue',
+        JSON.stringify([
+          {
+            id: 'persisted-1',
+            action: 'ride.complete',
+            params: [{ rideId: 'ride-1' }],
+            timestamp: 1,
+            retries: 0,
+          },
+        ]),
+      );
+      const handler = vi.fn(async () => {});
+
+      fresh.initOfflineQueue(persistedStorage);
+      fresh.registerOfflineMutation('ride.complete', handler);
+      // NetInfo commonly reports `true` on startup while the module already
+      // defaults to online. That stable state must still flush persisted work.
+      fresh.setOnlineStatus(true);
+      await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+
+      expect(handler).toHaveBeenCalledWith({ rideId: 'ride-1' });
+      expect(fresh.getPendingCount()).toBe(0);
+    });
   });
 
   describe('network error handling', () => {
@@ -154,6 +180,38 @@ describe('offlineQueue', () => {
       const parsed = JSON.parse(savedData!);
       expect(parsed).toHaveLength(1);
       expect(parsed[0].action).toBe('persist');
+    });
+
+    it('does not overwrite a new mutation while the persisted queue is loading', async () => {
+      const fresh = await loadFreshModule();
+      let releaseLoad!: (value: string) => void;
+      const delayedStorage = createMockStorage();
+      delayedStorage.getItem.mockImplementation(
+        () => new Promise<string>((resolve) => { releaseLoad = resolve; }),
+      );
+      const persisted = JSON.stringify([
+        {
+          id: 'persisted-1',
+          action: 'persist',
+          params: ['old'],
+          timestamp: 1,
+          retries: 0,
+        },
+      ]);
+      fresh.registerOfflineMutation('persist', vi.fn(async () => {}));
+      fresh.initOfflineQueue(delayedStorage);
+      fresh.setOnlineStatus(false);
+
+      const enqueue = fresh.executeOrQueue('persist', 'new');
+      releaseLoad(persisted);
+      await enqueue;
+
+      expect(fresh.getPendingMutations().map((mutation) => mutation.params[0])).toEqual([
+        'old',
+        'new',
+      ]);
+      const saved = delayedStorage.setItem.mock.calls.at(-1)?.[1];
+      expect(JSON.parse(saved ?? '[]')).toHaveLength(2);
     });
   });
 });
