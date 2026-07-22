@@ -1,24 +1,36 @@
 #!/bin/bash
 # ============================================================
-# TriciGo — NETOPIA payment-proxy watchdog (VPS-local).
+# TriciGo — NETOPIA payment-proxy watchdog (VPS-local). v2 (2026-07-21).
 #
 # Run every 5 min by systemd (ops/squid/systemd/tricigo-proxy-healthcheck.*).
-# Verifies the two proxy layers the in-app card checkout depends on, reports the
-# result to the `proxy-health` Edge Function (which alerts + records state), and
-# auto-restarts the failing service after N consecutive failures.
+# Probes the two proxy layers the in-app card checkout depends on, CLASSIFIES
+# each failure (VPS service broken vs NETOPIA/upstream broken — decided with a
+# direct-from-VPS control probe), reports per-layer state to the `proxy-health`
+# EF (which debounces alerts), and auto-restarts a service ONLY when the
+# failure is actually that service's fault:
 #
-#   1. squid CONNECT tunnel  — mints a local ephemeral HMAC token (same scheme
-#      as hmac_auth.sh / the mint EF) and curls the NETOPIA card page THROUGH
-#      the tunnel. 200 = the tunnel is alive and NETOPIA reachable.
-#   2. nginx /np-proxy/      — the server->API reverse proxy the create/webhook
-#      EFs use. Reachable and not 403/5xx = alive.
+#   squid layer   — mint a local ephemeral HMAC token (same scheme as
+#                   hmac_auth.sh / the mint EF) and curl the NETOPIA card page
+#                   THROUGH the tunnel.
+#                     200                              → ok
+#                     curl rc=7 (proxy refuses)        → down (squid dead)
+#                     fail + direct(/ui/card) == 200   → down (squid broken)
+#                     fail + direct(/ui/card) fails    → upstream (NETOPIA —
+#                       restarting squid is useless; 2026-07-20 incident)
+#   npproxy layer — curl nginx /np-proxy/ with the x-proxy-secret.
+#                     404 (NETOPIA answers /pay/)      → ok (normal response)
+#                     403                              → config (secret drift;
+#                       a reload can't fix it → alert only)
+#                     000/5xx + direct(/pay/) fails    → upstream (NETOPIA;
+#                       2026-07-21 502 blips)
+#                     000/5xx + direct(/pay/) fine     → down (nginx broken)
 #
 # Config (env file, root:root 600): /etc/tricigo/proxy-health.env
 #   PROXY_HEALTH_URL   = https://<project>.supabase.co/functions/v1/proxy-health
 #   PROXY_HEALTH_SECRET= <shared secret, == EF env PROXY_HEALTH_SECRET>
 #   NP_PROXY_SECRET    = <x-proxy-secret, == the nginx /np-proxy/ guard>
-# Secret for minting: /etc/squid/hmac_secret (proxy:proxy 600 — this script runs
-# as root via systemd, so it can read it).
+# Secret for minting: /etc/squid/hmac_secret (proxy:proxy 600 — this script
+# runs as root via systemd, so it can read it).
 #
 # Install: see ops/squid/README.md.
 # ============================================================
@@ -27,9 +39,9 @@ set -u
 HMAC_SECRET_FILE=/etc/squid/hmac_secret
 ENV_FILE=/etc/tricigo/proxy-health.env
 STATE_DIR=/run/tricigo-proxy
-FAIL_FILE="$STATE_DIR/consecutive_fails"
-RESTART_THRESHOLD=2          # 2 * 5 min = ~10 min of failure before a restart
+RESTART_THRESHOLD=2          # 2 * 5 min ≈ 10 min of service-fault failure before restart
 NETOPIA_PROBE_URL="https://secure.mobilpay.ro/ui/card"
+NETOPIA_PAY_URL="https://secure.mobilpay.ro/pay/"
 NP_PROXY_URL="https://tricigo.com/np-proxy/"
 
 mkdir -p "$STATE_DIR"
@@ -39,13 +51,16 @@ log() { logger -t tricigo-proxy-health "$*"; }
 
 # ── 1. squid tunnel probe (mint a local ephemeral token, curl through squid) ──
 squid_http=000
+squid_rc=99
 if [ -s "$HMAC_SECRET_FILE" ]; then
   secret=$(cat "$HMAC_SECRET_FILE")
   exp=$(( $(date +%s) + 600 ))
   sig=$(printf '%s' "$exp" | openssl dgst -sha256 -hmac "$secret" -r 2>/dev/null | cut -d' ' -f1)
   if [ -n "$sig" ]; then
     squid_http=$(curl -s -x "http://$exp:$sig@127.0.0.1:13128" \
-      --max-time 25 -o /dev/null -w '%{http_code}' "$NETOPIA_PROBE_URL" 2>/dev/null || echo 000)
+      --max-time 25 -o /dev/null -w '%{http_code}' "$NETOPIA_PROBE_URL" 2>/dev/null)
+    squid_rc=$?
+    [ -n "$squid_http" ] || squid_http=000
   fi
 fi
 
@@ -53,50 +68,89 @@ fi
 npproxy_http=000
 if [ -n "${NP_PROXY_SECRET:-}" ]; then
   npproxy_http=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' \
-    -H "x-proxy-secret: $NP_PROXY_SECRET" "$NP_PROXY_URL" 2>/dev/null || echo 000)
+    -H "x-proxy-secret: $NP_PROXY_SECRET" "$NP_PROXY_URL" 2>/dev/null)
+  [ -n "$npproxy_http" ] || npproxy_http=000
 fi
 
-# ── Decide health ──
-# squid: 200 required (tunnel alive AND NETOPIA reachable through the clean IP).
-# np-proxy: anything that isn't a hard failure. 403 = secret drift (guard
-# rejecting us) → treat as failure; 000/502/503/504 = upstream/proxy down.
-squid_ok=false; [ "$squid_http" = "200" ] && squid_ok=true
-npproxy_ok=false
+# ── 3. Classify each layer: the VPS service's fault vs NETOPIA/upstream ──
+# The direct control probes hit NETOPIA from this box WITHOUT the proxy layer:
+# if NETOPIA fails both through and around the proxy, the proxy is innocent.
+direct_card="-"
+direct_pay="-"
+
+squid_state=ok
+if [ "$squid_http" != "200" ]; then
+  direct_card=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' "$NETOPIA_PROBE_URL" 2>/dev/null)
+  [ -n "$direct_card" ] || direct_card=000
+  if [ "$squid_rc" = "7" ]; then
+    squid_state=down            # squid isn't even accepting connections
+  elif [ "$direct_card" = "200" ]; then
+    squid_state=down            # NETOPIA fine from this box → squid is broken
+  else
+    squid_state=upstream        # NETOPIA failing with AND without the tunnel
+  fi
+fi
+
+npproxy_state=ok
 case "$npproxy_http" in
-  000|403|500|502|503|504) npproxy_ok=false ;;
-  *) npproxy_ok=true ;;
+  403) npproxy_state=config ;;  # x-proxy-secret drift — a reload can't fix it
+  000|500|502|503|504)
+    direct_pay=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' "$NETOPIA_PAY_URL" 2>/dev/null)
+    [ -n "$direct_pay" ] || direct_pay=000
+    case "$direct_pay" in
+      000|500|502|503|504) npproxy_state=upstream ;;
+      *)                   npproxy_state=down ;;   # NETOPIA fine direct → nginx broken
+    esac ;;
 esac
 
 status=ok
-$squid_ok || status=down
-$npproxy_ok || status=down
+{ [ "$squid_state" = ok ] && [ "$npproxy_state" = ok ]; } || status=down
 
-# ── Report to the proxy-health EF (records state + de-duped alert) ──
+# ── 4. Report to the proxy-health EF (per-layer state; the EF debounces) ──
 if [ -n "${PROXY_HEALTH_URL:-}" ] && [ -n "${PROXY_HEALTH_SECRET:-}" ]; then
   curl -s --max-time 15 -X POST "$PROXY_HEALTH_URL" \
     -H "Content-Type: application/json" \
     -H "x-proxy-alert-secret: $PROXY_HEALTH_SECRET" \
-    -d "{\"source\":\"vps-watchdog\",\"status\":\"$status\",\"squid_http\":\"$squid_http\",\"npproxy_http\":\"$npproxy_http\"}" \
+    -d "{\"source\":\"vps-watchdog\",\"status\":\"$status\",\"squid_http\":\"$squid_http\",\"npproxy_http\":\"$npproxy_http\",\"squid_state\":\"$squid_state\",\"npproxy_state\":\"$npproxy_state\",\"direct_card_http\":\"$direct_card\",\"direct_pay_http\":\"$direct_pay\"}" \
     >/dev/null 2>&1 || log "report POST failed"
 fi
 
-# ── Consecutive-failure tracking + auto-restart ──
-fails=$(cat "$FAIL_FILE" 2>/dev/null || echo 0)
+# ── 5. Per-layer consecutive-failure tracking + TARGETED remediation ──
+# Restart a service ONLY when the failure is the service's own fault ('down').
+# 'upstream' (NETOPIA broken) and 'config' (secret drift): a restart fixes
+# nothing and kills live payment tunnels — never auto-restart for those
+# (2026-07-20: 4 useless squid restarts during a NETOPIA-side stall).
+fails_squid=$(cat "$STATE_DIR/fails_squid" 2>/dev/null || echo 0)
+fails_npproxy=$(cat "$STATE_DIR/fails_npproxy" 2>/dev/null || echo 0)
+
+if [ "$squid_state" = "down" ]; then
+  fails_squid=$((fails_squid + 1))
+  if [ "$fails_squid" -ge "$RESTART_THRESHOLD" ]; then
+    log "restarting squid (fails=$fails_squid)"
+    systemctl restart squid
+    fails_squid=0
+  fi
+else
+  fails_squid=0
+fi
+
+if [ "$npproxy_state" = "down" ]; then
+  fails_npproxy=$((fails_npproxy + 1))
+  if [ "$fails_npproxy" -ge "$RESTART_THRESHOLD" ]; then
+    log "reloading nginx (fails=$fails_npproxy)"
+    systemctl reload nginx || systemctl restart nginx
+    fails_npproxy=0
+  fi
+else
+  fails_npproxy=0
+fi
+
+echo "$fails_squid"   > "$STATE_DIR/fails_squid"
+echo "$fails_npproxy" > "$STATE_DIR/fails_npproxy"
+
 if [ "$status" = "ok" ]; then
-  echo 0 > "$FAIL_FILE"
   log "ok squid=$squid_http npproxy=$npproxy_http"
   exit 0
 fi
-
-fails=$((fails + 1))
-echo "$fails" > "$FAIL_FILE"
-log "DOWN squid=$squid_http npproxy=$npproxy_http fails=$fails"
-
-if [ "$fails" -ge "$RESTART_THRESHOLD" ]; then
-  # Restart only the failing service; systemd Restart=always covers crashes,
-  # this covers "running but not serving" (hung worker, bad reconfigure).
-  $squid_ok   || { log "restarting squid";  systemctl restart squid; }
-  $npproxy_ok || { log "reloading nginx";    systemctl reload nginx || systemctl restart nginx; }
-  echo 0 > "$FAIL_FILE"
-fi
+log "DOWN squid=$squid_http/$squid_state npproxy=$npproxy_http/$npproxy_state direct_card=$direct_card direct_pay=$direct_pay fails=$fails_squid/$fails_npproxy"
 exit 1

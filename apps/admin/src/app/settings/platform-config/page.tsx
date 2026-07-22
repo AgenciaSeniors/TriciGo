@@ -34,6 +34,7 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   netopia_max_recharge_cup: { type: 'number', helpKey: 'platform_config.netopia_max_recharge_cup_help' },
   netopia_fee_usd: { type: 'number', helpKey: 'platform_config.netopia_fee_usd_help' },
   netopia_fee_type: { type: 'text', helpKey: 'platform_config.netopia_fee_type_help' },
+  netopia_proxy_alert_after_s: { type: 'number', helpKey: 'platform_config.netopia_proxy_alert_after_s_help' },
   // ── Stripe legacy (kept as a row but no longer used) ──
   stripe_enabled: { type: 'text', helpKey: 'platform_config.stripe_enabled_help' },
   // ── Other ──
