@@ -30,7 +30,9 @@
 //   • Honest classification (watchdog v2 payload): 'down' = the VPS service
 //     itself is broken (ssh/restart useful) vs 'upstream' = NETOPIA failing
 //     both through AND around the proxy (direct-from-VPS control probe also
-//     fails → do NOT touch the VPS) vs 'config' = /np-proxy/ 403 secret drift.
+//     fails → do NOT touch the VPS) vs 'config' = broken configuration:
+//     /np-proxy/ 403 (x-proxy-secret drift) OR the watchdog's own probe could
+//     not run at all (NP_PROXY_SECRET unset / hmac_secret missing — HTTP "-").
 //   • The edge layer alerts ONLY if the vps-watchdog has ALSO been silent
 //     >15 min (⇒ the whole VPS is likely down). Edge-only failures while the
 //     watchdog reports fine are recorded but never emailed (path noise
@@ -97,7 +99,10 @@ function explainState(layer: LayerName, state: LayerState): string {
       : 'NETOPIA (/pay/) devuelve error también consultada en directo desde el VPS: problema del lado de NETOPIA. No toques el VPS.';
   }
   if (state === 'config') {
-    return 'El guard x-proxy-secret devuelve 403 → drift de secreto. Comparar el secreto del server block nginx (/etc/nginx/sites-available/tricigo.com) con NETOPIA_PROXY_SECRET (EF) y NP_PROXY_SECRET (/etc/tricigo/proxy-health.env). Un reload de nginx NO lo arregla.';
+    if (layer === 'squid') {
+      return 'El watchdog no pudo mintear el token efímero: /etc/squid/hmac_secret falta, está vacío o es ilegible. OJO: el helper de auth de squid lee el MISMO archivo, así que el checkout real probablemente también esté fallando (407). Fix: restaurar el secreto (openssl rand -hex 32 > /etc/squid/hmac_secret; chown proxy:proxy; chmod 600) y verificar que NETOPIA_PROXY_HMAC_SECRET de la EF mint tenga el mismo valor. Reiniciar squid NO lo arregla.';
+    }
+    return 'El guard x-proxy-secret no valida. Si el HTTP es 403 → drift de secreto entre el server block nginx (/etc/nginx/sites-available/tricigo.com) y NETOPIA_PROXY_SECRET (EF) / NP_PROXY_SECRET (/etc/tricigo/proxy-health.env). Si el HTTP es «-» → el watchdog no tiene NP_PROXY_SECRET configurado y la sonda ni corrió (nginx puede estar perfecto). Es configuración: ni reload ni restart lo arreglan.';
   }
   // state === 'down'
   if (layer === 'squid') {
@@ -111,7 +116,11 @@ function explainState(layer: LayerName, state: LayerState): string {
 
 function subjectFor(layer: LayerName, state: LayerState): string {
   if (state === 'upstream') return `NETOPIA con problemas (${layer})`;
-  if (state === 'config') return `drift de secreto x-proxy-secret (${layer})`;
+  if (state === 'config') {
+    return layer === 'squid'
+      ? 'secreto HMAC del túnel roto/ausente (squid)'
+      : `secreto x-proxy-secret roto/ausente (${layer})`;
+  }
   if (layer === 'edge') return 'VPS inaccesible desde internet';
   return `${layer} caído en el VPS`;
 }

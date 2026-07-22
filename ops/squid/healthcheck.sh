@@ -12,18 +12,28 @@
 #   squid layer   — mint a local ephemeral HMAC token (same scheme as
 #                   hmac_auth.sh / the mint EF) and curl the NETOPIA card page
 #                   THROUGH the tunnel.
+#                     hmac_secret missing/empty        → config (the probe
+#                       can't even run — and squid's auth helper reads the
+#                       SAME file, so real checkouts are likely 407ing too;
+#                       restarting squid can't fix a missing file)
 #                     200                              → ok
 #                     curl rc=7 (proxy refuses)        → down (squid dead)
 #                     fail + direct(/ui/card) == 200   → down (squid broken)
 #                     fail + direct(/ui/card) fails    → upstream (NETOPIA —
 #                       restarting squid is useless; 2026-07-20 incident)
 #   npproxy layer — curl nginx /np-proxy/ with the x-proxy-secret.
+#                     NP_PROXY_SECRET not set          → config (the probe
+#                       never ran — nginx may be perfectly fine; blaming it
+#                       with a fake 'down' + reload would be the same class
+#                       of misdiagnosis this watchdog exists to prevent)
 #                     404 (NETOPIA answers /pay/)      → ok (normal response)
 #                     403                              → config (secret drift;
 #                       a reload can't fix it → alert only)
 #                     000/5xx + direct(/pay/) fails    → upstream (NETOPIA;
 #                       2026-07-21 502 blips)
 #                     000/5xx + direct(/pay/) fine     → down (nginx broken)
+#
+# HTTP code "-" in the report/journal = that probe never ran (config state).
 #
 # Config (env file, root:root 600): /etc/tricigo/proxy-health.env
 #   PROXY_HEALTH_URL   = https://<project>.supabase.co/functions/v1/proxy-health
@@ -50,13 +60,16 @@ mkdir -p "$STATE_DIR"
 log() { logger -t tricigo-proxy-health "$*"; }
 
 # ── 1. squid tunnel probe (mint a local ephemeral token, curl through squid) ──
-squid_http=000
+# "-" = the probe never ran (secret missing → 'config', never a fake 'down').
+squid_probe_ran=false
+squid_http="-"
 squid_rc=99
 if [ -s "$HMAC_SECRET_FILE" ]; then
   secret=$(cat "$HMAC_SECRET_FILE")
   exp=$(( $(date +%s) + 600 ))
   sig=$(printf '%s' "$exp" | openssl dgst -sha256 -hmac "$secret" -r 2>/dev/null | cut -d' ' -f1)
   if [ -n "$sig" ]; then
+    squid_probe_ran=true
     squid_http=$(curl -s -x "http://$exp:$sig@127.0.0.1:13128" \
       --max-time 25 -o /dev/null -w '%{http_code}' "$NETOPIA_PROBE_URL" 2>/dev/null)
     squid_rc=$?
@@ -65,7 +78,7 @@ if [ -s "$HMAC_SECRET_FILE" ]; then
 fi
 
 # ── 2. np-proxy reverse-proxy probe ──
-npproxy_http=000
+npproxy_http="-"
 if [ -n "${NP_PROXY_SECRET:-}" ]; then
   npproxy_http=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' \
     -H "x-proxy-secret: $NP_PROXY_SECRET" "$NP_PROXY_URL" 2>/dev/null)
@@ -79,7 +92,11 @@ direct_card="-"
 direct_pay="-"
 
 squid_state=ok
-if [ "$squid_http" != "200" ]; then
+if [ "$squid_probe_ran" != "true" ]; then
+  squid_state=config            # hmac_secret missing/empty/unreadable — the
+                                # watchdog can't mint; squid may be fine (and a
+                                # restart can't conjure the secret back)
+elif [ "$squid_http" != "200" ]; then
   direct_card=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' "$NETOPIA_PROBE_URL" 2>/dev/null)
   [ -n "$direct_card" ] || direct_card=000
   if [ "$squid_rc" = "7" ]; then
@@ -93,6 +110,7 @@ fi
 
 npproxy_state=ok
 case "$npproxy_http" in
+  -)   npproxy_state=config ;;  # NP_PROXY_SECRET not set — the probe never ran
   403) npproxy_state=config ;;  # x-proxy-secret drift — a reload can't fix it
   000|500|502|503|504)
     direct_pay=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' "$NETOPIA_PAY_URL" 2>/dev/null)

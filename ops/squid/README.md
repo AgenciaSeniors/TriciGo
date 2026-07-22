@@ -230,7 +230,12 @@ Each layer also has `_since` (episode start) and `_alerted` (down email sent).
 **States**: `ok` · `down` (the VPS service itself is broken → ssh/restart
 useful) · `upstream` (NETOPIA failing both **through and around** the proxy —
 decided with a direct-from-VPS control probe → do NOT touch the VPS) ·
-`config` (`/np-proxy/` 403 → x-proxy-secret drift; a reload can't fix it).
+`config` (broken configuration — a reload/restart can't fix it): `/np-proxy/`
+403 = x-proxy-secret drift, **or** the watchdog's own probe could not run at
+all (`NP_PROXY_SECRET` unset in `/etc/tricigo/proxy-health.env`, or
+`/etc/squid/hmac_secret` missing/empty — squid's auth helper reads that same
+file, so real checkouts are likely 407ing too). HTTP code `-` in the
+journal/report means exactly that: the probe never ran.
 
 **Debounce**: a layer must be continuously non-ok for
 `platform_config.netopia_proxy_alert_after_s` (default 600 s ≈ 3 probe cycles)
