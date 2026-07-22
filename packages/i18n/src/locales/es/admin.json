@@ -1184,6 +1184,7 @@
     "error_saving": "Error al guardar",
     "max_driver_rate_multiplier": "Multiplicador máximo tarifa conductor",
     "max_driver_rate_multiplier_help": "Límite superior para tarifas personalizadas (ej: 2.0 = 2x el default)",
+    "netopia_proxy_alert_after_s_help": "Segundos que una capa del proxy de pagos debe estar caída de forma continua antes del correo de alerta (default 600 ≈ 3 sondas). 0 = alertar al primer fallo.",
     "default_per_km_rate_cup": "Tarifa por km por defecto (CUP)",
     "default_per_km_rate_cup_help": "Tarifa base por kilómetro en CUP para todos los conductores",
     "commission_rate": "Tasa de comisión",

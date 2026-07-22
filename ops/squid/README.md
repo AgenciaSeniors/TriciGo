@@ -108,7 +108,7 @@ Files in this dir map to the VPS as follows:
 |---|---|---|
 | `squid.conf` | `/etc/squid/squid.conf` | canonical hardened config (auth + abuse limits) |
 | `logrotate-squid` | `/etc/logrotate.d/squid` | 30-day log retention (was 2) |
-| `healthcheck.sh` | `/etc/squid/healthcheck.sh` | watchdog: probes squid+np-proxy, reports, auto-restarts |
+| `healthcheck.sh` | `/etc/squid/healthcheck.sh` | watchdog v2: probes squid+np-proxy, classifies VPS-fault vs NETOPIA-fault, reports per-layer, restarts only on real service fault |
 | `anomaly-alert.sh` | `/etc/squid/anomaly-alert.sh` | log-only digest of non-payment CONNECT destinations |
 | `systemd/tricigo-proxy-healthcheck.{service,timer}` | `/etc/systemd/system/` | runs the watchdog every 5 min |
 | `systemd/squid.service.d-override.conf` | `/etc/systemd/system/squid.service.d/override.conf` | `Restart=always` |
@@ -198,8 +198,47 @@ ssh root@187.77.214.236 'htpasswd -b /etc/squid/passwd tricigo <NEW_PASS> && sys
 ```sh
 # watchdog ran + reported
 ssh root@187.77.214.236 'journalctl -u tricigo-proxy-healthcheck.service -n 20 --no-pager'
-# force a failure → alert + auto-restart
-ssh root@187.77.214.236 'systemctl stop squid; sleep 1; /etc/squid/healthcheck.sh; systemctl is-active squid'
+# force a squid failure → recorded as squid=down; NO email yet (debounce) and
+# no restart on the 1st strike (RESTART_THRESHOLD=2)
+ssh root@187.77.214.236 'systemctl stop squid; sleep 1; /etc/squid/healthcheck.sh; systemctl start squid; /etc/squid/healthcheck.sh'
 # health recorded in the DB
 #   SELECT key, value FROM platform_config WHERE key LIKE 'netopia_proxy_health%';
 ```
+
+---
+
+## Health states + debounced alerts (v2, 2026-07-21)
+
+Why v2: the v1 alerting kept ONE shared state key written by two reporters
+with different scopes, so a squid-only incident flapped the state every ~2 min
+→ **10 emails for one incident** (2026-07-20 — which was a NETOPIA-side edge
+stall; the VPS was healthy and the 4 auto-restarts were useless). Single-probe
+blips (2026-07-21 NETOPIA 502s) also emailed immediately.
+
+**Layers** (each `platform_config` key has exactly ONE writer — no flapping):
+
+| Key | Writer | What it probes |
+|---|---|---|
+| `netopia_proxy_health_squid` | vps-watchdog | CONNECT tunnel :13128 → NETOPIA card page |
+| `netopia_proxy_health_npproxy` | vps-watchdog | nginx `/np-proxy/` → NETOPIA `/pay/` |
+| `netopia_proxy_health_edge` | edge-probe (pg_cron) | `/np-proxy/` fetched from the Supabase edge |
+| `netopia_proxy_health` | EF (rollup) | worst-of the three (back-compat) |
+
+Each layer also has `_since` (episode start) and `_alerted` (down email sent).
+`netopia_proxy_watchdog_last_at` = last vps-watchdog report of any kind.
+
+**States**: `ok` · `down` (the VPS service itself is broken → ssh/restart
+useful) · `upstream` (NETOPIA failing both **through and around** the proxy —
+decided with a direct-from-VPS control probe → do NOT touch the VPS) ·
+`config` (`/np-proxy/` 403 → x-proxy-secret drift; a reload can't fix it).
+
+**Debounce**: a layer must be continuously non-ok for
+`platform_config.netopia_proxy_alert_after_s` (default 600 s ≈ 3 probe cycles)
+before the ONE alert email; the recovery email is sent only if that alert went
+out. The `edge` layer alerts only if the vps-watchdog has ALSO been silent
+>15 min (⇒ the whole VPS is likely down); edge-only failures with a live
+watchdog are recorded but never emailed (Supabase↔VPS path noise).
+
+**Auto-restart** (watchdog): only on `down` (2 consecutive strikes), never on
+`upstream`/`config` — restarting a healthy squid kills live payment tunnels
+and fixes nothing.

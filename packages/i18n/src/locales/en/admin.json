@@ -1184,6 +1184,7 @@
     "error_saving": "Error saving",
     "max_driver_rate_multiplier": "Max driver rate multiplier",
     "max_driver_rate_multiplier_help": "Upper limit for custom driver rates (e.g., 2.0 = 2x default)",
+    "netopia_proxy_alert_after_s_help": "Seconds a payment-proxy layer must be continuously down before the alert email (default 600 ≈ 3 probes). 0 = alert on first failure.",
     "default_per_km_rate_cup": "Default per-km rate (CUP)",
     "default_per_km_rate_cup_help": "Base per-kilometer rate in CUP for all drivers",
     "commission_rate": "Commission rate",
