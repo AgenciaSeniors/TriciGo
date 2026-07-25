@@ -644,7 +644,20 @@ export const rideService = {
       await supabase.from('ride_waypoints').insert(waypointRows);
     }
 
-    // Create delivery details if cargo ride
+    // Create delivery details if cargo ride.
+    //
+    // This used to swallow the failure with a logger.error and carry on, which
+    // produced the worst possible outcome: a live cargo ride with no
+    // delivery_details row. That ride can be dispatched and accepted, and then
+    // NEVER completed — tg_rides_require_delivery_proof (00438) blocks the
+    // transition to 'completed' because there is no row to hold the OTP and the
+    // delivery photo. Only an admin can unstick it, and the driver discovers
+    // this at the customer's door.
+    //
+    // So: atomic or cancelled. The two callers that create the details
+    // themselves (useRide, book/page) already cancel on failure; this makes the
+    // nested-payload path behave the same way instead of being the one entry
+    // point that leaves debris.
     if (validParams.ride_mode === 'cargo' && validParams.delivery_details) {
       try {
         await deliveryService.createDeliveryDetails({
@@ -663,6 +676,27 @@ export const rideService = {
         });
       } catch (err) {
         logger.error('delivery_details_creation_failed', { error: (err as Error).message, rideId: rideData.id });
+
+        // Cancel the ride we just created so it cannot be dispatched, accepted
+        // and then stranded. Best-effort: if the cancel itself fails the ride
+        // is still orphaned, so say so in the log and let the error surface —
+        // the caller must not be told the booking succeeded.
+        let canceled = true;
+        try {
+          await rideService.cancelRide(rideData.id, undefined, 'delivery_details_failed');
+        } catch (cancelErr) {
+          canceled = false;
+          logger.error('delivery_details_orphan_cancel_failed', {
+            error: (cancelErr as Error).message,
+            rideId: rideData.id,
+          });
+        }
+
+        throw new Error(
+          canceled
+            ? `delivery_details_creation_failed: ${(err as Error).message}`
+            : `delivery_details_creation_failed_and_ride_orphaned: ${(err as Error).message}`,
+        );
       }
     }
 

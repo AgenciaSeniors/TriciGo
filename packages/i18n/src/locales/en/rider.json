@@ -1,4 +1,17 @@
 {
+  "delivery": {
+    "accompany": "I'm travelling with the package",
+    "description_placeholder": "What's in the package",
+    "details": "Delivery details",
+    "instructions": "Special instructions (optional)",
+    "package_category": "Category",
+    "price_by_vehicle": "Depends on vehicle",
+    "recipient_name": "Recipient",
+    "recipient_phone": "Phone",
+    "vehicle": "Delivery vehicle",
+    "weight": "Estimated weight (kg)"
+  },
+
   "home": {
     "greeting": "Hey, {{name}}!",
     "where_to": "Where to?",

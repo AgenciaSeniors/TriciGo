@@ -1,4 +1,17 @@
 {
+  "delivery": {
+    "accompany": "Vou junto com o pacote",
+    "description_placeholder": "Descrição do pacote",
+    "details": "Dados da entrega",
+    "instructions": "Instruções especiais (opcional)",
+    "package_category": "Categoria",
+    "price_by_vehicle": "Conforme o veículo",
+    "recipient_name": "Destinatário",
+    "recipient_phone": "Telefone",
+    "vehicle": "Veículo de entrega",
+    "weight": "Peso estimado (kg)"
+  },
+
   "home": {
     "greeting": "Olá, {{name}}!",
     "where_to": "Para onde?",
