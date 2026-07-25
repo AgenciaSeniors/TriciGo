@@ -66,7 +66,10 @@ export default function DevicesPage() {
     if (!confirm(t('web.sign_out_all_confirm', { defaultValue: 'Cerrar sesion en todos los dispositivos? Tendras que iniciar sesion de nuevo en cada uno.' }))) return;
     setLoggingOut(true);
     try {
-      await authService.signOut();
+      // Global scope: this is the one action where the user explicitly
+      // asked to end sessions everywhere. The plain `signOut()` is
+      // local-only by design.
+      await authService.signOutAllDevices();
     } catch (err) {
       console.error('Error signing out everywhere:', err);
     } finally {

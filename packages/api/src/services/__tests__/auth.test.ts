@@ -265,6 +265,68 @@ describe('authService', () => {
       // Local signOut still runs despite the revoke RPC failure
       expect(mockAuth.signOut).toHaveBeenCalled();
     });
+
+    // The scope is the whole point of this method. supabase-js
+    // defaults to `scope: 'global'`, which terminates every session
+    // the user has — so an ordinary logout on the web used to kick
+    // the phone too. If someone drops the option, this fails.
+    it("signs out only this device (scope: 'local')", async () => {
+      mockAuth.getUser.mockResolvedValue({ data: { user: null }, error: null });
+      mockAuth.signOut.mockResolvedValue({ error: null });
+
+      await authService.signOut();
+
+      expect(mockAuth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    });
+  });
+
+  // ==================== signOutAllDevices ====================
+  describe('signOutAllDevices', () => {
+    it("terminates every session (scope: 'global')", async () => {
+      mockAuth.getUser.mockResolvedValue({ data: { user: null }, error: null });
+      mockAuth.signOut.mockResolvedValue({ error: null });
+
+      await authService.signOutAllDevices();
+
+      expect(mockAuth.signOut).toHaveBeenCalledWith({ scope: 'global' });
+    });
+
+    it('records the revocation with its own reason', async () => {
+      mockAuth.getUser.mockResolvedValue({
+        data: { user: { id: 'u-42' } },
+        error: null,
+      });
+      mockRpc.mockResolvedValue({ data: { success: true }, error: null });
+      mockAuth.signOut.mockResolvedValue({ error: null });
+
+      await authService.signOutAllDevices();
+
+      expect(mockRpc).toHaveBeenCalledWith('revoke_user_tokens', {
+        p_user_id: 'u-42',
+        p_reason: 'user_signout_all_devices',
+      });
+    });
+
+    it('still signs out when the revoke RPC fails (best-effort)', async () => {
+      mockAuth.getUser.mockResolvedValue({
+        data: { user: { id: 'u-42' } },
+        error: null,
+      });
+      mockRpc.mockRejectedValue(new Error('function revoke_user_tokens does not exist'));
+      mockAuth.signOut.mockResolvedValue({ error: null });
+
+      await authService.signOutAllDevices();
+
+      expect(mockAuth.signOut).toHaveBeenCalledWith({ scope: 'global' });
+    });
+
+    it('throws on supabase error', async () => {
+      mockAuth.getUser.mockResolvedValue({ data: { user: null }, error: null });
+      const err = { message: 'Sign out failed', code: '500' };
+      mockAuth.signOut.mockResolvedValue({ error: err });
+
+      await expect(authService.signOutAllDevices()).rejects.toEqual(err);
+    });
   });
 
   // ==================== onAuthStateChange ====================

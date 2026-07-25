@@ -62,7 +62,10 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     const supabase = getSupabaseClient();
-    await supabase.auth.signOut();
+    // `scope: 'local'` is required: supabase-js defaults to 'global',
+    // which would also end the user's session on their phone. Ordinary
+    // logout must only affect this browser. See authService.signOut().
+    await supabase.auth.signOut({ scope: 'local' });
     setUser(null);
   };
 

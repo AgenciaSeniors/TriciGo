@@ -238,44 +238,86 @@ export const authService = {
   },
 
   /**
-   * Sign out the current user.
+   * Sign out the current user ON THIS DEVICE ONLY.
    *
-   * CC-01 (security audit 2026-05-23, mig 00297): in addition to
-   * the local Supabase signOut (which clears storage), we call
-   * `revoke_user_tokens()` RPC to write a server-side revocation
-   * timestamp. RLS policies that use `is_session_revoked()` will
-   * reject any subsequent request carrying the old JWT, closing
-   * the ~1h replay window where a captured token was still
-   * server-valid post-logout.
+   * The `scope: 'local'` is load-bearing and must stay explicit.
+   * `supabase.auth.signOut()` defaults to `scope: 'global'`
+   * (verified in @supabase/auth-js 2.99.1,
+   * `GoTrueClient.js:1745` — `async signOut(options = { scope:
+   * 'global' })`), which terminates EVERY session the user has.
+   * This method backs the ordinary "Cerrar sesión" button, so the
+   * default made logging out of the web also kick the phone —
+   * for a driver, mid-shift and with no explanation. Use
+   * `signOutAllDevices()` when the user actually asked for that.
+   *
+   * CC-01 (security audit 2026-05-23, mig 00297): we also call
+   * `revoke_user_tokens()` to write a server-side revocation
+   * timestamp, intended to close the ~1h window where a captured
+   * JWT stays server-valid post-logout.
+   *
+   * NOTE: that revocation is currently INERT. `revoke_user_tokens`
+   * only upserts a row into `auth_revocations`, and the only
+   * reader — `is_session_revoked()` — has zero callers: no RPC and
+   * no RLS policy references it (verified against production
+   * 2026-07-25). The call is kept because it costs nothing, still
+   * records an audit trail, and starts working the moment
+   * `is_session_revoked()` is wired into RLS. Do not mistake it for
+   * an active control.
    *
    * The revoke call is best-effort: if the RPC fails (network,
    * migration not yet deployed, transient DB error), we still
-   * complete the local signOut so the user UX isn't blocked. The
-   * old token retains its server-side validity in that case —
-   * tradeoff is acceptable because (a) the primary signOut path
-   * (local clear) always succeeds and (b) failed RPC is captured
-   * in Sentry for ops follow-up.
+   * complete the signOut so the user UX isn't blocked.
    */
   async signOut() {
     const supabase = getSupabaseClient();
 
-    // Server-side revocation first (best-effort). If it fails,
-    // log and continue to local signOut — never block the user.
+    await this._recordRevocation('user_signout');
+
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) throw error;
+  },
+
+  /**
+   * Sign out the current user on ALL devices, terminating every
+   * active session server-side (all refresh tokens are destroyed).
+   *
+   * Backs the "Cerrar sesión en todos los dispositivos" action on
+   * the devices screen — the one case where the global scope is
+   * what the user actually asked for.
+   *
+   * Caveat worth knowing: access tokens already issued stay valid
+   * until they expire (~1h), so other devices are cut off at their
+   * next token refresh rather than instantly. That is a GoTrue
+   * property, not something this method can tighten.
+   */
+  async signOutAllDevices() {
+    const supabase = getSupabaseClient();
+
+    await this._recordRevocation('user_signout_all_devices');
+
+    const { error } = await supabase.auth.signOut({ scope: 'global' });
+    if (error) throw error;
+  },
+
+  /**
+   * Best-effort audit row in `auth_revocations`. Never throws —
+   * a failure here must not block the user from signing out.
+   * See the note in `signOut()` about this being inert today.
+   */
+  async _recordRevocation(reason: string) {
+    const supabase = getSupabaseClient();
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.id) {
         await supabase.rpc('revoke_user_tokens', {
           p_user_id: user.id,
-          p_reason: 'user_signout',
+          p_reason: reason,
         });
       }
     } catch {
       // Migration may not be applied yet (frontend-tolerant);
-      // or transient error. Local signOut still runs below.
+      // or transient error. The signOut still runs.
     }
-
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
   },
 
   /**

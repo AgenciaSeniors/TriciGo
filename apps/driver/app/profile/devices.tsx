@@ -126,7 +126,10 @@ export default function DriverDevicesScreen() {
   const doSignOutAll = async () => {
     setSigningOut(true);
     try {
-      await authService.signOut();
+      // Global scope: this is the one action where the user explicitly
+      // asked to end sessions everywhere. The plain `signOut()` is
+      // local-only by design.
+      await authService.signOutAllDevices();
       reset();
       resetDriver();
       resetNotifications();
