@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
@@ -7,7 +7,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Card } from '@tricigo/ui/Card';
 import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
-import { deliveryService } from '@tricigo/api';
+import { deliveryService, DELIVERY_OTP_LOCKOUT_SECONDS } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
 import { midnightEmber } from '@tricigo/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,6 +53,21 @@ export function DeliveryPhotoSheet({
   const [otpError, setOtpError] = useState<string | null>(null);
   const [validatingOtp, setValidatingOtp] = useState(false);
   const [otpUnavailable, setOtpUnavailable] = useState(false);
+  // validate_delivery_otp rate-limits to 5 tries per 600s per ride (00427).
+  // Mirrored locally only so the countdown can be shown — the server is the
+  // authority, so killing the app does not buy extra attempts.
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [nowTs, setNowTs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const id = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
+
+  const lockRemainingS = lockedUntil ? Math.max(0, Math.ceil((lockedUntil - nowTs) / 1000)) : 0;
+  const otpLocked = lockRemainingS > 0;
+  const lockLabel = `${Math.floor(lockRemainingS / 60)}:${String(lockRemainingS % 60).padStart(2, '0')}`;
 
   const isDelivery = phase === 'delivery';
   const requiresOtp = isDelivery && !otpUnavailable;
@@ -90,6 +105,9 @@ export function DeliveryPhotoSheet({
   }, [t]);
 
   const validateOtp = useCallback(async () => {
+    // Spending a call the server will only reject wastes the driver's data and
+    // their patience.
+    if (otpLocked) return;
     if (otp.length !== 4) {
       setOtpError(t('trip.otp_must_be_4_digits', { defaultValue: 'Ingrese 4 dígitos' }));
       return;
@@ -117,6 +135,18 @@ export function DeliveryPhotoSheet({
       } else if (result.error === 'invalid_otp') {
         triggerHaptic('error');
         setOtpError(t('trip.otp_invalid', { defaultValue: 'Código incorrecto. Pídalo al destinatario.' }));
+      } else if (result.error === 'too_many_attempts') {
+        // The RPC locks this ride's OTP for 10 minutes after 5 failed tries.
+        // Without this branch the driver saw a generic "error al validar" while
+        // standing at the customer's door, with no way to know that retrying
+        // was pointless or for how long.
+        triggerHaptic('error');
+        setLockedUntil(Date.now() + DELIVERY_OTP_LOCKOUT_SECONDS * 1000);
+        setOtpError(
+          t('trip.otp_too_many_attempts', {
+            defaultValue: 'Demasiados intentos. Espere 10 minutos antes de reintentar.',
+          }),
+        );
       } else if (result.error === 'forbidden') {
         setOtpError(t('trip.otp_forbidden', { defaultValue: 'No autorizado para validar este envío.' }));
       } else {
@@ -231,15 +261,17 @@ export function DeliveryPhotoSheet({
           />
           <Button
             title={
-              validatingOtp
-                ? t('trip.validating_otp', { defaultValue: 'Validando...' })
-                : t('trip.validate_otp', { defaultValue: 'Validar código' })
+              otpLocked
+                ? t('trip.otp_retry_in', { defaultValue: 'Reintente en {{time}}', time: lockLabel })
+                : validatingOtp
+                  ? t('trip.validating_otp', { defaultValue: 'Validando...' })
+                  : t('trip.validate_otp', { defaultValue: 'Validar código' })
             }
             size="lg"
             fullWidth
             onPress={validateOtp}
             loading={validatingOtp}
-            disabled={validatingOtp || otp.length !== 4}
+            disabled={validatingOtp || otpLocked || otp.length !== 4}
           />
         </View>
       )}

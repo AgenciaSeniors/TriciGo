@@ -99,7 +99,7 @@ export {
 } from './announcementCta';
 export type { AnnouncementCtaAction, AnnouncementCtaTarget } from './announcementCta';
 export { translateNetopiaError } from './netopia-errors';
-export { deliveryVehicleToSlug, isPackageCompatible, PACKAGE_CATEGORY_LABELS, INCOMPATIBILITY_REASON_LABELS } from './delivery';
+export { deliveryVehicleToSlug, isCargoRide, isPackageCompatible, PACKAGE_CATEGORY_LABELS, INCOMPATIBILITY_REASON_LABELS } from './delivery';
 export type { PackageSpecs, VehicleCargoCapabilities, CompatibilityResult } from './delivery';
 export { logger, setLogContext, clearLogContext } from './logger';
 // Crash-proof star-rating formatter (rating_avg can be null for new accounts).

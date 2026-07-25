@@ -172,6 +172,7 @@
     "payment_cash": "Dinheiro",
     "payment_tricicoin": "TriciCoin",
     "payment_mixed": "Misto",
+    "payment_stripe": "Cartão",
     "saved_locations_title": "Locais salvos",
     "add_location": "Adicionar local",
     "location_label": "Rótulo",
@@ -510,6 +511,8 @@
     "a11y_extra_space_desc": "Preciso de espaço adicional",
     "saved": "Preferências salvas"
   },
+
+  "payment_mixed": "Misto",
 
   "coming_soon": "Em breve",
 

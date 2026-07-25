@@ -83,8 +83,17 @@ export interface PublicDeliveryView {
 /** Result of validate_delivery_otp RPC. */
 export interface ValidateOtpResult {
   success: boolean;
-  error?: 'forbidden' | 'no_otp_set' | 'invalid_otp' | string;
+  /** `too_many_attempts` comes from check_rate_limit inside the RPC: 5 tries per
+      600s per ride (00427). It was missing from this union, so the UI had no
+      branch for it and showed a generic failure while the driver stood locked
+      out at the customer's door. */
+  error?: 'forbidden' | 'no_otp_set' | 'invalid_otp' | 'too_many_attempts' | string;
 }
+
+/** Rate-limit window enforced by validate_delivery_otp (check_rate_limit, 00427):
+    5 attempts per 600 seconds, keyed per ride. Mirrored here so the UI can tell
+    the driver how long the wait is instead of just saying "error". */
+export const DELIVERY_OTP_LOCKOUT_SECONDS = 600;
 
 export const deliveryService = {
   /**
