@@ -121,6 +121,69 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
   }
 }
 
+/**
+ * Android: ensure the high-importance 'rides' channel exists so
+ * killed-app pushes (the server sends channelId:'rides') make sound +
+ * heads-up. Creating a channel needs no permission and is idempotent,
+ * so it runs before the pref/permission gates — a device whose channel
+ * is missing stays silent even after the user re-enables everything.
+ * Mirrors the client (apps/client/src/services/push.service.ts).
+ */
+async function ensureAndroidRidesChannel() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('rides', {
+    name: 'Viajes y ofertas',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+  });
+}
+
+/** Outcome of a push-token registration attempt. */
+export type PushRegistrationResult = 'registered' | 'denied' | 'error';
+
+/**
+ * Register this device's push token for `userId`.
+ *
+ * Exported because the settings screen must be able to re-register on
+ * demand: turning the master notifications switch OFF deletes the token
+ * row server-side, and turning it back ON has to put it back. Without
+ * this the server had no token until the next cold start — meaning no
+ * ride offers at all — while the switch sat there looking enabled.
+ *
+ * Distinguishes 'denied' from 'error' so the caller can tell an
+ * actionable OS-permission problem from a transient failure.
+ */
+export async function registerPushTokenForUser(
+  userId: string,
+): Promise<PushRegistrationResult> {
+  try {
+    await ensureAndroidRidesChannel();
+
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') return 'denied';
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: Constants.expoConfig?.extra?.eas?.projectId,
+    });
+
+    await notificationService.registerPushToken(
+      userId,
+      tokenData.data,
+      Platform.OS,
+    );
+    return 'registered';
+  } catch {
+    return 'error';
+  }
+}
+
 export function useNotificationSetup(userId: string | null | undefined) {
   const responseListenerRef = useRef<Notifications.EventSubscription | null>(null);
   const registeredRef = useRef(false);
@@ -133,43 +196,15 @@ export function useNotificationSetup(userId: string | null | undefined) {
 
     async function register() {
       try {
-        // Android: ensure the high-importance 'rides' channel exists so
-        // killed-app pushes (the server sends channelId:'rides') make
-        // sound + heads-up. Channel creation needs no permission and is
-        // idempotent, so do it first — before the pref/permission gates.
-        // Mirrors the client (apps/client/src/services/push.service.ts).
-        if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('rides', {
-            name: 'Viajes y ofertas',
-            importance: Notifications.AndroidImportance.HIGH,
-            vibrationPattern: [0, 250, 250, 250],
-          });
-        }
+        // Before the pref gate on purpose — see ensureAndroidRidesChannel.
+        await ensureAndroidRidesChannel();
 
         const pref = await AsyncStorage.getItem(NOTIF_PREF_KEY);
         if (pref === 'false') return;
 
-        const { status: existing } = await Notifications.getPermissionsAsync();
-        let finalStatus = existing;
-
-        if (existing !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-
-        if (finalStatus !== 'granted') return;
-
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId: Constants.expoConfig?.extra?.eas?.projectId,
-        });
+        const result = await registerPushTokenForUser(userId!);
         if (cancelled) return;
-
-        await notificationService.registerPushToken(
-          userId!,
-          tokenData.data,
-          Platform.OS,
-        );
-        registeredRef.current = true;
+        if (result === 'registered') registeredRef.current = true;
       } catch {
         // Silent — notifications are best-effort
       }

@@ -113,6 +113,58 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
   }
 }
 
+/** Outcome of a push-token registration attempt. */
+export type PushRegistrationResult = 'registered' | 'denied' | 'error';
+
+/**
+ * Register this device's push token for `userId`.
+ *
+ * Exported because the settings screen must be able to re-register on
+ * demand: turning the master notifications switch OFF deletes the token
+ * row server-side, and turning it back ON has to put it back. Without
+ * this the server had no token until the next cold start, while the
+ * switch sat there looking enabled.
+ *
+ * Deliberately NOT reusing `registerForPushNotifications()` from
+ * `src/services/push.service.ts`, even though it does the same job:
+ * importing that module installs a second `setNotificationHandler` that
+ * does not consult the master/category preferences, and which handler
+ * wins depends on import order (see the note in that file). Pulling it
+ * into the settings screen could silently disable notification
+ * suppression app-wide.
+ *
+ * Distinguishes 'denied' from 'error' so the caller can tell an
+ * actionable OS-permission problem from a transient failure.
+ */
+export async function registerPushTokenForUser(
+  userId: string,
+): Promise<PushRegistrationResult> {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') return 'denied';
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: Constants.expoConfig?.extra?.eas?.projectId,
+    });
+
+    await notificationService.registerPushToken(
+      userId,
+      tokenData.data,
+      Platform.OS,
+    );
+    return 'registered';
+  } catch {
+    return 'error';
+  }
+}
+
 export function useNotificationSetup(userId: string | null | undefined) {
   const responseListenerRef = useRef<Notifications.EventSubscription | null>(null);
   const registeredRef = useRef(false);
@@ -128,27 +180,9 @@ export function useNotificationSetup(userId: string | null | undefined) {
         const pref = await AsyncStorage.getItem(NOTIF_PREF_KEY);
         if (pref === 'false') return;
 
-        const { status: existing } = await Notifications.getPermissionsAsync();
-        let finalStatus = existing;
-
-        if (existing !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
-
-        if (finalStatus !== 'granted') return;
-
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId: Constants.expoConfig?.extra?.eas?.projectId,
-        });
+        const result = await registerPushTokenForUser(userId!);
         if (cancelled) return;
-
-        await notificationService.registerPushToken(
-          userId!,
-          tokenData.data,
-          Platform.OS,
-        );
-        registeredRef.current = true;
+        if (result === 'registered') registeredRef.current = true;
       } catch {
         // Silent — notifications are best-effort
       }

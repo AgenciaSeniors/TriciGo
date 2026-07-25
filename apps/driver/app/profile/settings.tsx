@@ -49,6 +49,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { registerPushTokenForUser } from '@/hooks/useNotifications';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsGroup } from '@/components/settings/SettingsGroup';
 import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
@@ -168,7 +169,9 @@ export default function DriverSettingsScreen() {
     setNotificationsEnabled(enabled);
     await AsyncStorage.setItem(NOTIF_PREF_KEY, String(enabled)).catch(() => {});
 
-    if (!enabled && userId) {
+    if (!userId) return;
+
+    if (!enabled) {
       try {
         const tokenData = await Notifications.getExpoPushTokenAsync({
           projectId: Constants.expoConfig?.extra?.eas?.projectId,
@@ -177,7 +180,30 @@ export default function DriverSettingsScreen() {
       } catch {
         /* best-effort */
       }
+      return;
     }
+
+    // Turning the switch back ON must re-register the token: the OFF
+    // branch above deleted it server-side. Writing AsyncStorage alone
+    // left the server with no token — so no ride offers at all — until
+    // the next cold start, while the switch showed "on".
+    const result = await registerPushTokenForUser(userId);
+
+    if (result === 'denied') {
+      // The OS permission is off, so no offer can reach this driver.
+      // Don't leave the switch claiming otherwise.
+      setNotificationsEnabled(false);
+      await AsyncStorage.setItem(NOTIF_PREF_KEY, 'false').catch(() => {});
+      Alert.alert(
+        t('profile.notif_permission_title', { defaultValue: 'Notificaciones bloqueadas' }),
+        t('profile.notif_permission_msg', {
+          defaultValue:
+            'Tu teléfono tiene las notificaciones de TriciGo desactivadas. Sin ellas no vas a recibir ofertas de viaje. Actívalas desde los ajustes del sistema.',
+        }),
+      );
+    }
+    // 'error' is transient (network, Expo token service). Leave the
+    // switch on: useNotificationSetup retries on the next foreground.
   };
 
   const handleCategoryToggle = useCallback(async (key: string, enabled: boolean) => {
