@@ -88,8 +88,8 @@ export default function RideDetailScreen() {
 
           // Fetch delivery details when this is a cargo ride. We need
           // the OTP column too so the customer can share it with the
-          // recipient — getDeliveryDetails() does SELECT * so it's
-          // already included.
+          // recipient — getDeliveryDetails() returns it for the customer
+          // (and admins) and masks it for the driver (00511).
           if (rideData && rideData.ride_mode === 'cargo') {
             try {
               const dd = await deliveryService.getDeliveryDetails(id);
