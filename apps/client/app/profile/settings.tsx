@@ -7,6 +7,7 @@ import { ProfileSection } from '@/components/profile/ProfileSection';
 import { ProfileRow } from '@/components/profile/ProfileRow';
 import { useTokens } from '@/hooks/useTokens';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { registerPushTokenForUser } from '@/hooks/useNotifications';
 import { useTranslation } from '@tricigo/i18n';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, authService, customerService } from '@tricigo/api';
@@ -129,7 +130,9 @@ export default function SettingsScreen() {
     setNotificationsEnabled(enabled);
     await AsyncStorage.setItem(NOTIF_PREF_KEY, String(enabled)).catch(() => {});
 
-    if (!enabled && userId) {
+    if (!userId) return;
+
+    if (!enabled) {
       try {
         const tokenData = await Notifications.getExpoPushTokenAsync({
           projectId: Constants.expoConfig?.extra?.eas?.projectId,
@@ -138,7 +141,30 @@ export default function SettingsScreen() {
       } catch {
         /* best-effort */
       }
+      return;
     }
+
+    // Turning the switch back ON must re-register the token: the OFF
+    // branch above deleted it server-side. Writing AsyncStorage alone
+    // left the server with no token — and no way to reach the user —
+    // until the next cold start, while the switch showed "on".
+    const result = await registerPushTokenForUser(userId);
+
+    if (result === 'denied') {
+      // The OS permission is off, so nothing we do in-app can deliver a
+      // notification. Don't leave the switch claiming otherwise.
+      setNotificationsEnabled(false);
+      await AsyncStorage.setItem(NOTIF_PREF_KEY, 'false').catch(() => {});
+      Alert.alert(
+        t('profile.notif_permission_title', { defaultValue: 'Notificaciones bloqueadas' }),
+        t('profile.notif_permission_msg', {
+          defaultValue:
+            'Tu teléfono tiene las notificaciones de TriciGo desactivadas. Actívalas desde los ajustes del sistema para volver a recibirlas.',
+        }),
+      );
+    }
+    // 'error' is transient (network, Expo token service). Leave the
+    // switch on: useNotificationSetup retries on the next foreground.
   };
 
   const handleCategoryToggle = useCallback(async (key: string, enabled: boolean) => {
