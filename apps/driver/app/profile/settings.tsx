@@ -156,12 +156,29 @@ export default function DriverSettingsScreen() {
     setAcceptsLongTrips(prefs?.accepts_long_trips !== false);
   }, [driverProfileId]);
 
-  const toggleLanguage = () => {
+  const toggleLanguage = async () => {
     const cycle = ['es', 'en', 'pt'] as const;
     const idx = cycle.indexOf(currentLang as typeof cycle[number]);
     const next = cycle[(idx + 1) % cycle.length]!;
+    // Apply locally first so the UI reacts instantly, and persist to
+    // AsyncStorage — `app-providers` reads `tricigo_language` on boot, so
+    // that is what actually survives a restart.
     i18n.changeLanguage(next);
-    AsyncStorage.setItem('tricigo_language', next);
+    AsyncStorage.setItem('tricigo_language', next).catch(() => {});
+
+    // Mirror to the server. The client app has always done this; the
+    // driver never did, so `users.preferred_language` stayed at its
+    // default for every driver. It is what the admin console displays,
+    // and the natural column for any server-sent copy (emails, SMS) to
+    // localize from — a driver reading the app in English still got
+    // Spanish from the server, with nothing to explain why.
+    if (!userId) return;
+    try {
+      await authService.updateProfile(userId, { preferred_language: next });
+    } catch (err) {
+      // Non-fatal: the local change already took effect.
+      logger.warn('[DriverSettings] Failed to persist language', { error: String(err) });
+    }
   };
 
   const handleNotificationToggle = async (enabled: boolean) => {
