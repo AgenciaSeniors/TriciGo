@@ -21,6 +21,10 @@ type StatusFilter = 'all' | 'searching' | 'accepted' | 'in_progress' | 'complete
 
 const EMPTY_FILTERS = {
   serviceType: '',
+  // Shipments cannot be isolated by service_type: a delivery is stored with the
+  // chosen vehicle's slug, so it is indistinguishable from a normal moto/auto
+  // ride there. ride_mode is the only discriminator.
+  rideMode: '',
   paymentMethod: '',
   dateFrom: '',
   dateTo: '',
@@ -93,6 +97,7 @@ export default function RidesPage() {
       const query: Record<string, string> = {};
       if (statusFilter !== 'all') query.status = statusFilter;
       if (filters.serviceType) query.serviceType = filters.serviceType;
+      if (filters.rideMode) query.rideMode = filters.rideMode;
       if (filters.paymentMethod) query.paymentMethod = filters.paymentMethod;
       if (filters.dateFrom) query.dateFrom = filters.dateFrom;
       if (filters.dateTo) query.dateTo = filters.dateTo;
@@ -108,7 +113,7 @@ export default function RidesPage() {
     } finally {
       if (isLatest()) setLoading(false);
     }
-  }, [page, statusFilter, filters.serviceType, filters.paymentMethod, filters.dateFrom, filters.dateTo, debouncedSearch, selectedCity, beginRequest]);
+  }, [page, statusFilter, filters.serviceType, filters.rideMode, filters.paymentMethod, filters.dateFrom, filters.dateTo, debouncedSearch, selectedCity, beginRequest]);
 
   useEffect(() => {
     void fetchRides();
@@ -325,7 +330,23 @@ export default function RidesPage() {
               <option value="triciclo_basico">{t('rides.type_triciclo', { defaultValue: 'Triciclo' })}</option>
               <option value="moto_standard">{t('rides.type_moto', { defaultValue: 'Moto' })}</option>
               <option value="auto_standard">{t('rides.type_auto', { defaultValue: 'Auto' })}</option>
-              <option value="mensajeria">{t('rides.type_mensajeria', { defaultValue: 'Mensajería' })}</option>
+              <option value="auto_confort">{t('rides.type_auto_confort', { defaultValue: 'Confort' })}</option>
+            </select>
+          </label>
+          {/* Replaces the old service_type='mensajeria' option, which matched
+              zero rows: no ride is ever stored with that service_type. */}
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
+              {t('filters.ride_mode', { defaultValue: 'Modo' })}
+            </span>
+            <select
+              value={filters.rideMode}
+              onChange={(e) => updateFilter('rideMode', e.target.value)}
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
+            >
+              <option value="">{t('rides.type_all', { defaultValue: 'Todos' })}</option>
+              <option value="passenger">{t('rides.mode_passenger', { defaultValue: 'Pasajero' })}</option>
+              <option value="cargo">{t('rides.mode_cargo', { defaultValue: 'Envío' })}</option>
             </select>
           </label>
           <label className="flex flex-col gap-1">

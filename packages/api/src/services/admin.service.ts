@@ -80,6 +80,7 @@ import type { DriverStatus } from '@tricigo/types';
 import type { UserLevel } from '@tricigo/types';
 import { havanaDayRangeUtc } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
+import type { DeliveryDetails } from './delivery.service';
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
 import { buildRejectionMessage } from './_driverDocRejectionPresets';
@@ -660,6 +661,10 @@ export const adminService = {
       dateTo?: string;
       search?: string;
       cityId?: string;
+      /** 'cargo' = shipments, 'passenger' = normal rides. Filtering by
+          service_type cannot isolate shipments: a delivery is stored with the
+          chosen vehicle's slug, so it looks like any other moto/auto ride. */
+      rideMode?: 'passenger' | 'cargo';
     } = {},
     page = 0,
     pageSize = 20,
@@ -679,6 +684,9 @@ export const adminService = {
     }
     if (filters.serviceType) {
       query = query.eq('service_type', filters.serviceType);
+    }
+    if (filters.rideMode) {
+      query = query.eq('ride_mode', filters.rideMode);
     }
     if (filters.paymentMethod) {
       query = query.eq('payment_method', filters.paymentMethod);
@@ -1727,12 +1735,33 @@ export const adminService = {
       .single();
     if (cust) customerInfo = { name: cust.full_name, phone: cust.phone };
 
+    // Shipment details for a cargo ride. The admin is the ONLY party who can
+    // unstick a delivery that cannot complete — tg_rides_require_delivery_proof
+    // (00438) blocks completion until the recipient OTP is validated and the
+    // delivery photo is uploaded, and is_admin() is the only bypass. Until now
+    // this screen showed none of it, so the person holding the override had no
+    // way to see what was missing.
+    //
+    // `delivery` stays null for passenger rides, and also when a cargo ride has
+    // NO delivery_details row at all — that second case is the orphan the UI
+    // needs to call out, so the caller distinguishes it via ride.ride_mode.
+    let delivery: DeliveryDetails | null = null;
+    if (ride.ride_mode === 'cargo') {
+      const { data: dd } = await supabase
+        .from('delivery_details')
+        .select('*')
+        .eq('ride_id', rideId)
+        .maybeSingle();
+      delivery = (dd as DeliveryDetails) ?? null;
+    }
+
     return {
       ride,
       transitions: (transitionsRes.data as RideTransition[]) ?? [],
       pricing: (pricingRes.data as RidePricingSnapshot) ?? null,
       driverInfo,
       customerInfo,
+      delivery,
     };
   },
 

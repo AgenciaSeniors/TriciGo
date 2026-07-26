@@ -7,6 +7,7 @@ import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import type { Ride, RidePricingSnapshot, RideTransition } from '@tricigo/types';
+import type { DeliveryDetails } from '@tricigo/api';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -49,12 +50,21 @@ const PAYMENT_KEY: Record<string, string> = {
   stripe: 'rides.payment_tropipay',
 };
 
+const PACKAGE_CATEGORY_KEY: Record<string, string> = {
+  documentos: 'rides.cargo_cat_documentos',
+  paquete_pequeno: 'rides.cargo_cat_paquete_pequeno',
+  paquete_grande: 'rides.cargo_cat_paquete_grande',
+  comida: 'rides.cargo_cat_comida',
+  fragil: 'rides.cargo_cat_fragil',
+};
+
 type RideDetail = {
   ride: Ride;
   transitions: RideTransition[];
   pricing: RidePricingSnapshot | null;
   driverInfo: { name: string; phone: string } | null;
   customerInfo: { name: string; phone: string } | null;
+  delivery: DeliveryDetails | null;
 };
 
 export default function RideDetailPage() {
@@ -128,8 +138,31 @@ export default function RideDetailPage() {
     );
   }
 
-  const { ride, transitions, pricing, driverInfo, customerInfo } = detail;
+  const { ride, transitions, pricing, driverInfo, customerInfo, delivery } = detail;
   const fare = ride.final_fare_cup ?? ride.estimated_fare_cup;
+
+  // A cargo ride is stored with the chosen vehicle's slug, so ride_mode is the
+  // only way to tell a shipment from a normal ride.
+  const isCargo = ride.ride_mode === 'cargo';
+
+  // What still blocks completion. tg_rides_require_delivery_proof (00438)
+  // refuses the move to 'completed' until BOTH the recipient OTP is validated
+  // and the delivery photo exists; is_admin() is the only bypass. Spelling the
+  // blockers out is the point of this card — the admin holds the override and
+  // could not see what it was for.
+  const proofBlockers: string[] = [];
+  if (isCargo && ride.status !== 'completed' && ride.status !== 'canceled') {
+    if (!delivery) {
+      proofBlockers.push(t('rides.cargo_blocker_no_details', { defaultValue: 'Faltan los datos del envío' }));
+    } else {
+      if (!delivery.delivery_otp_validated_at) {
+        proofBlockers.push(t('rides.cargo_blocker_otp', { defaultValue: 'Falta validar el código del destinatario' }));
+      }
+      if (!delivery.delivery_photo_url) {
+        proofBlockers.push(t('rides.cargo_blocker_photo', { defaultValue: 'Falta la foto de entrega' }));
+      }
+    }
+  }
 
   return (
     <div className="max-w-4xl">
@@ -217,6 +250,125 @@ export default function RideDetailPage() {
           </dl>
         </div>
       </div>
+
+      {/* Shipment (cargo) */}
+      {isCargo && (
+        <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6 mb-8">
+          <h2 className="text-lg font-bold mb-4">{t('rides.cargo_section', { defaultValue: 'Envío' })}</h2>
+
+          {/* Blockers first: this is what the admin opened the page for. Icon +
+              text, never colour alone. */}
+          {proofBlockers.length > 0 && (
+            <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 mb-4">
+              <svg className="w-5 h-5 shrink-0 text-amber-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.19-1.458-1.516-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-amber-900">
+                  {t('rides.cargo_cannot_complete', { defaultValue: 'Este envío todavía no puede completarse' })}
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {proofBlockers.map((b) => (
+                    <li key={b} className="text-sm text-amber-800">· {b}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {!delivery ? (
+            <p className="text-sm text-ink-muted">
+              {t('rides.cargo_no_details', {
+                defaultValue: 'Este viaje es un envío pero no tiene datos de paquete guardados. No se puede completar salvo por un admin.',
+              })}
+            </p>
+          ) : (
+            <>
+              <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                <div>
+                  <dt className="text-sm text-ink-muted">{t('rides.cargo_recipient', { defaultValue: 'Destinatario' })}</dt>
+                  <dd className="text-sm font-medium">
+                    {delivery.recipient_name || '—'}
+                    {delivery.recipient_phone ? ` (${delivery.recipient_phone})` : ''}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-ink-muted">{t('rides.cargo_category', { defaultValue: 'Categoría' })}</dt>
+                  <dd className="text-sm font-medium">
+                    {delivery.package_category && PACKAGE_CATEGORY_KEY[delivery.package_category]
+                      ? t(PACKAGE_CATEGORY_KEY[delivery.package_category]!)
+                      : delivery.package_category || '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-ink-muted">{t('rides.cargo_description', { defaultValue: 'Paquete' })}</dt>
+                  <dd className="text-sm font-medium">{delivery.package_description || '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm text-ink-muted">{t('rides.cargo_size', { defaultValue: 'Peso y medidas' })}</dt>
+                  <dd className="text-sm font-medium tabular-nums">
+                    {[
+                      delivery.estimated_weight_kg != null ? `${delivery.estimated_weight_kg} kg` : null,
+                      delivery.package_length_cm && delivery.package_width_cm && delivery.package_height_cm
+                        ? `${delivery.package_length_cm}×${delivery.package_width_cm}×${delivery.package_height_cm} cm`
+                        : null,
+                    ].filter(Boolean).join(' · ') || '—'}
+                  </dd>
+                </div>
+                {delivery.special_instructions && (
+                  <div className="md:col-span-2">
+                    <dt className="text-sm text-ink-muted">{t('rides.cargo_instructions', { defaultValue: 'Instrucciones' })}</dt>
+                    <dd className="text-sm font-medium">{delivery.special_instructions}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-sm text-ink-muted">{t('rides.cargo_otp', { defaultValue: 'Código de entrega' })}</dt>
+                  <dd className="text-sm font-medium tabular-nums">
+                    {delivery.delivery_otp ?? '—'}
+                    {delivery.delivery_otp_validated_at ? (
+                      <span className="ml-2 text-green-700">
+                        {t('rides.cargo_otp_validated', { defaultValue: 'validado' })} · {formatAdminDate(delivery.delivery_otp_validated_at)}
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-ink-subtle">
+                        {t('rides.cargo_otp_pending', { defaultValue: 'sin validar' })}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+
+              {(delivery.pickup_photo_url || delivery.delivery_photo_url) && (
+                <div className="flex flex-wrap gap-4 mt-4">
+                  {([
+                    ['rides.cargo_photo_pickup', 'Foto de recogida', delivery.pickup_photo_url],
+                    ['rides.cargo_photo_delivery', 'Foto de entrega', delivery.delivery_photo_url],
+                  ] as const).map(([key, fallback, url]) =>
+                    url ? (
+                      <figure key={key}>
+                        <a href={url} target="_blank" rel="noopener noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={t(key, { defaultValue: fallback })}
+                            className="w-32 h-32 object-cover rounded-lg border border-line"
+                            width={128}
+                            height={128}
+                            loading="lazy"
+                          />
+                        </a>
+                        <figcaption className="text-xs text-ink-subtle mt-1">
+                          {t(key, { defaultValue: fallback })}
+                        </figcaption>
+                      </figure>
+                    ) : null,
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Pricing snapshot */}
       {pricing && (
