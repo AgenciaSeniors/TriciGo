@@ -117,19 +117,46 @@ export const deliveryService = {
   },
 
   /**
-   * Get delivery details for a ride.
+   * Get delivery details for a ride, scoped to the caller's role.
+   *
+   * Goes through the `get_delivery_details_for_ride` RPC (00511) rather than
+   * reading the table. Two reasons, and the second is the important one:
+   *
+   *  1. The table's SELECT policy only admits the customer and admins. The
+   *     driver reads exclusively through this RPC.
+   *  2. `delivery_otp` comes back NULL for the driver. That code is the proof
+   *     of delivery — the recipient dictates it at drop-off — so the driver
+   *     must never be able to read it off their own screen. A plain
+   *     `select('*')` would hand it over and defeat
+   *     trg_rides_require_delivery_proof (00438) and the +5% cargo bonus.
+   *
+   * Falls back to the old direct read when the RPC is absent, so a build that
+   * ships ahead of migration 00511 behaves exactly as it did before.
    */
   async getDeliveryDetails(rideId: string): Promise<DeliveryDetails | null> {
     const supabase = getSupabaseClient();
 
-    const { data, error } = await supabase
-      .from('delivery_details')
-      .select('*')
-      .eq('ride_id', rideId)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc('get_delivery_details_for_ride', {
+      p_ride_id: rideId,
+    });
 
-    if (error) throw new Error(error.message);
-    return data as DeliveryDetails | null;
+    if (error) {
+      // 42883 = undefined_function — migration 00511 not applied yet.
+      if (error.code === '42883' || /function.*does not exist/i.test(error.message)) {
+        const { data: legacy, error: legacyError } = await supabase
+          .from('delivery_details')
+          .select('*')
+          .eq('ride_id', rideId)
+          .maybeSingle();
+
+        if (legacyError) throw new Error(legacyError.message);
+        return legacy as DeliveryDetails | null;
+      }
+      throw new Error(error.message);
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row ?? null) as DeliveryDetails | null;
   },
 
   /**
