@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createMockQueryChain } from './helpers/mockSupabase';
+import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
 const mockFrom = vi.fn(() => createMockQueryChain());
@@ -908,6 +908,92 @@ describe('driverService', () => {
       mockFrom.mockReturnValueOnce(chain);
 
       await expect(driverService.getCancellationPenalties('u-1')).rejects.toEqual(err);
+    });
+  });
+
+  // ==================== updateMatchPreferences ====================
+  describe('updateMatchPreferences', () => {
+    it('merges into existing preferences instead of replacing them', async () => {
+      // Migration 00257 backfilled keys the matching engine does not read
+      // (music_preference, accepts_minors_alone). A blind overwrite would
+      // silently destroy them, so the merge behavior is the point of this
+      // method and is asserted here.
+      const readChain = createMockQueryChain({
+        data: { preferences: { music_preference: 'any', accepts_minors_alone: true } },
+        error: null,
+      });
+      const writeChain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(readChain).mockReturnValueOnce(writeChain);
+
+      const result = await driverService.updateMatchPreferences(UUID.DRIVER_1, {
+        max_distance_km: 3,
+      });
+
+      expect(writeChain.update).toHaveBeenCalledWith({
+        preferences: {
+          music_preference: 'any',
+          accepts_minors_alone: true,
+          max_distance_km: 3,
+        },
+      });
+      expect(writeChain.eq).toHaveBeenCalledWith('id', UUID.DRIVER_1);
+      expect(result).toEqual({
+        music_preference: 'any',
+        accepts_minors_alone: true,
+        max_distance_km: 3,
+      });
+    });
+
+    it('removes the key when passed null, so the NULL-safe filter passes', async () => {
+      // "Sin límite" must DELETE max_distance_km, not store 0 — the engine
+      // checks `IS NULL`, and a 0 would filter out every ride.
+      const readChain = createMockQueryChain({
+        data: { preferences: { max_distance_km: 3, accepts_long_trips: false } },
+        error: null,
+      });
+      const writeChain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(readChain).mockReturnValueOnce(writeChain);
+
+      const result = await driverService.updateMatchPreferences(UUID.DRIVER_1, {
+        max_distance_km: null,
+      });
+
+      expect(writeChain.update).toHaveBeenCalledWith({
+        preferences: { accepts_long_trips: false },
+      });
+      expect(result).toEqual({ accepts_long_trips: false });
+    });
+
+    it('handles a driver whose preferences column is empty', async () => {
+      const readChain = createMockQueryChain({ data: { preferences: {} }, error: null });
+      const writeChain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(readChain).mockReturnValueOnce(writeChain);
+
+      const result = await driverService.updateMatchPreferences(UUID.DRIVER_1, {
+        accepts_long_trips: false,
+      });
+
+      expect(result).toEqual({ accepts_long_trips: false });
+    });
+
+    it('throws when the read fails', async () => {
+      const err = { message: 'DB error', code: '42P01' };
+      mockFrom.mockReturnValueOnce(createMockQueryChain({ data: null, error: err }));
+
+      await expect(
+        driverService.updateMatchPreferences(UUID.DRIVER_1, { max_distance_km: 2 }),
+      ).rejects.toEqual(err);
+    });
+
+    it('throws when the write fails', async () => {
+      const err = { message: 'DB error', code: '42P01' };
+      mockFrom
+        .mockReturnValueOnce(createMockQueryChain({ data: { preferences: {} }, error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: null, error: err }));
+
+      await expect(
+        driverService.updateMatchPreferences(UUID.DRIVER_1, { max_distance_km: 2 }),
+      ).rejects.toEqual(err);
     });
   });
 });

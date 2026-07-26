@@ -44,8 +44,10 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
-import { notificationService, authService } from '@tricigo/api';
+import { notificationService, authService, driverService } from '@tricigo/api';
+import { logger } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { useDriverStore } from '@/stores/driver.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
@@ -65,29 +67,18 @@ const NOTIF_CATEGORIES = [
 
 const LANG_LABELS: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' };
 
-// AsyncStorage keys for new settings
-const SOUND_NEW_REQUEST_KEY = '@tricigo/sound_new_request';
-const SOUND_MESSAGE_KEY = '@tricigo/sound_message';
-const NIGHT_MODE_KEY = '@tricigo/night_mode';
-const PREFERRED_ZONE_KEY = '@tricigo/preferred_zone';
-const SILENT_MODE_KEY = '@tricigo/silent_mode';
-const SILENT_MODE_TIMER_KEY = '@tricigo/silent_mode_timer';
-
-const ZONE_OPTIONS = [
-  { key: 'any', labelKey: 'profile.zone_any' },
-  { key: 'centro', labelKey: 'profile.zone_centro' },
-  { key: 'vedado', labelKey: 'profile.zone_vedado' },
-  { key: 'miramar', labelKey: 'profile.zone_miramar' },
-  { key: 'habana_vieja', labelKey: 'profile.zone_habana_vieja' },
-  { key: 'airport', labelKey: 'profile.zone_airport' },
-];
-
-const SILENT_TIMER_OPTIONS = [
-  { minutes: 0, labelKey: 'profile.silent_indefinite' },
-  { minutes: 30, labelKey: 'profile.silent_30min' },
-  { minutes: 60, labelKey: 'profile.silent_1h' },
-  { minutes: 120, labelKey: 'profile.silent_2h' },
-];
+/**
+ * Max-distance options, in km, for the "Distancia máxima" row.
+ *
+ * `null` means no limit and CLEARS the key — `find_best_drivers` guards
+ * the check with `IS NULL`, so an absent key is the only way to express
+ * "no restriction". Storing 0 would filter the driver out of every ride.
+ *
+ * The values stay at or below the dispatch radius (5 km by default);
+ * anything larger would be a no-op the driver could not tell apart from
+ * a working setting.
+ */
+const MAX_DISTANCE_OPTIONS: (number | null)[] = [null, 1, 2, 3, 5];
 
 // Switch trackColor reused everywhere — extract once.
 const SWITCH_TRACK = {
@@ -109,13 +100,14 @@ export default function DriverSettingsScreen() {
   const [smsLoading, setSmsLoading] = useState(false);
   const currentLang = i18n.language ?? 'es';
 
-  // New settings state
-  const [soundNewRequest, setSoundNewRequest] = useState(true);
-  const [soundMessage, setSoundMessage] = useState(true);
-  const [nightModeEnabled, setNightModeEnabled] = useState(false);
-  const [preferredZone, setPreferredZone] = useState('any');
-  const [silentModeEnabled, setSilentModeEnabled] = useState(false);
-  const [silentModeTimer, setSilentModeTimer] = useState(0);
+  // Matching preferences — these live in `driver_profiles.preferences`
+  // and are honored by `find_best_drivers`. They replace a set of
+  // switches (night mode, offer sounds, work zone, "no recibir viajes")
+  // that wrote to AsyncStorage and had no consumer anywhere.
+  const driverProfileId = useDriverStore((s) => s.profile?.id);
+  const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
+  const [acceptsLongTrips, setAcceptsLongTrips] = useState(true);
+  const [prefsSaving, setPrefsSaving] = useState(false);
 
   // "Display over other apps" (Android): auto-launch on ride offer + floating
   // bubble. Android gives no callback when the user returns from the system
@@ -147,15 +139,16 @@ export default function DriverSettingsScreen() {
     if (userId) {
       notificationService.getSmsPreference(userId).then(setSmsEnabled).catch(() => {});
     }
-
-    // Load new settings
-    AsyncStorage.getItem(SOUND_NEW_REQUEST_KEY).then((v) => { if (v !== null) setSoundNewRequest(v === 'true'); }).catch(() => {});
-    AsyncStorage.getItem(SOUND_MESSAGE_KEY).then((v) => { if (v !== null) setSoundMessage(v === 'true'); }).catch(() => {});
-    AsyncStorage.getItem(NIGHT_MODE_KEY).then((v) => { if (v !== null) setNightModeEnabled(v === 'true'); }).catch(() => {});
-    AsyncStorage.getItem(PREFERRED_ZONE_KEY).then((v) => { if (v !== null) setPreferredZone(v); }).catch(() => {});
-    AsyncStorage.getItem(SILENT_MODE_KEY).then((v) => { if (v !== null) setSilentModeEnabled(v === 'true'); }).catch(() => {});
-    AsyncStorage.getItem(SILENT_MODE_TIMER_KEY).then((v) => { if (v !== null) setSilentModeTimer(Number(v)); }).catch(() => {});
   }, [userId]);
+
+  // Matching preferences come from the profile already in the store —
+  // no extra fetch. An absent key means "no restriction", which is
+  // exactly how the matching engine reads it.
+  useEffect(() => {
+    const prefs = useDriverStore.getState().profile?.preferences;
+    setMaxDistanceKm(typeof prefs?.max_distance_km === 'number' ? prefs.max_distance_km : null);
+    setAcceptsLongTrips(prefs?.accepts_long_trips !== false);
+  }, [driverProfileId]);
 
   const toggleLanguage = () => {
     const cycle = ['es', 'en', 'pt'] as const;
@@ -211,23 +204,51 @@ export default function DriverSettingsScreen() {
     await AsyncStorage.setItem(key, String(enabled)).catch(() => {});
   }, []);
 
-  const handleToggle = (key: string, setter: (v: boolean) => void) => async (enabled: boolean) => {
-    setter(enabled);
-    await AsyncStorage.setItem(key, String(enabled)).catch(() => {});
+  /**
+   * Persist a matching preference and keep the store in sync, so the
+   * value survives navigating away without an extra fetch. Reverts the
+   * local state if the write fails — a preference that looks saved but
+   * isn't would misrepresent which rides the driver can receive.
+   */
+  const saveMatchPreferences = async (
+    updates: { max_distance_km?: number | null; accepts_long_trips?: boolean | null },
+    revert: () => void,
+  ) => {
+    if (!driverProfileId) return;
+    setPrefsSaving(true);
+    try {
+      const next = await driverService.updateMatchPreferences(driverProfileId, updates);
+      const profile = useDriverStore.getState().profile;
+      if (profile) useDriverStore.getState().setProfile({ ...profile, preferences: next });
+    } catch (err) {
+      revert();
+      logger.warn('[DriverSettings] Failed to save matching preferences', { error: String(err) });
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        t('profile.prefs_save_failed', { defaultValue: 'No se pudo guardar. Intentá de nuevo.' }),
+      );
+    } finally {
+      setPrefsSaving(false);
+    }
   };
 
-  const handleZoneChange = () => {
-    const idx = ZONE_OPTIONS.findIndex((z) => z.key === preferredZone);
-    const next = ZONE_OPTIONS[(idx + 1) % ZONE_OPTIONS.length]!.key;
-    setPreferredZone(next);
-    AsyncStorage.setItem(PREFERRED_ZONE_KEY, next);
+  const handleMaxDistanceChange = () => {
+    const idx = MAX_DISTANCE_OPTIONS.findIndex((v) => v === maxDistanceKm);
+    const next = MAX_DISTANCE_OPTIONS[(idx + 1) % MAX_DISTANCE_OPTIONS.length] ?? null;
+    const previous = maxDistanceKm;
+    setMaxDistanceKm(next);
+    saveMatchPreferences({ max_distance_km: next }, () => setMaxDistanceKm(previous));
   };
 
-  const handleSilentTimerChange = () => {
-    const idx = SILENT_TIMER_OPTIONS.findIndex((o) => o.minutes === silentModeTimer);
-    const next = SILENT_TIMER_OPTIONS[(idx + 1) % SILENT_TIMER_OPTIONS.length]!.minutes;
-    setSilentModeTimer(next);
-    AsyncStorage.setItem(SILENT_MODE_TIMER_KEY, String(next));
+  const handleLongTripsToggle = (enabled: boolean) => {
+    setAcceptsLongTrips(enabled);
+    // `true` clears the key rather than storing it: absent means "no
+    // restriction", which is the engine's default and keeps the column
+    // free of rows that only restate the default.
+    saveMatchPreferences(
+      { accepts_long_trips: enabled ? null : false },
+      () => setAcceptsLongTrips(!enabled),
+    );
   };
 
   const handleSmsToggle = async (enabled: boolean) => {
@@ -336,52 +357,10 @@ export default function DriverSettingsScreen() {
             />
           </Card>
 
-          {/* Night mode */}
-          <Card theme="light" variant="surface" padding="md">
-            <SettingsRow
-              icon="moon-outline"
-              title={t('profile.night_mode_toggle', { defaultValue: 'Reducir brillo nocturno' })}
-              subtitle={t('profile.night_mode_desc', { defaultValue: 'Reduce el brillo automáticamente de 10pm a 6am' })}
-              right={
-                <Switch
-                  value={nightModeEnabled}
-                  onValueChange={handleToggle(NIGHT_MODE_KEY, setNightModeEnabled)}
-                  trackColor={SWITCH_TRACK}
-                />
-              }
-            />
-          </Card>
         </SettingsGroup>
 
         {/* ── Group 2: Audio ──────────────────────────────────────────── */}
         <SettingsGroup title={t('profile.section_audio', { defaultValue: 'Audio' })}>
-          {/* Sounds — two switches in one card */}
-          <Card theme="light" variant="surface" padding="md" className="mb-3">
-            <SettingsRow
-              icon="volume-high-outline"
-              title={t('profile.sound_new_request', { defaultValue: 'Nueva solicitud' })}
-              right={
-                <Switch
-                  value={soundNewRequest}
-                  onValueChange={handleToggle(SOUND_NEW_REQUEST_KEY, setSoundNewRequest)}
-                  trackColor={SWITCH_TRACK}
-                />
-              }
-            />
-            <SettingsRow
-              icon="chatbubble-outline"
-              title={t('profile.sound_message', { defaultValue: 'Mensaje recibido' })}
-              right={
-                <Switch
-                  value={soundMessage}
-                  onValueChange={handleToggle(SOUND_MESSAGE_KEY, setSoundMessage)}
-                  trackColor={SWITCH_TRACK}
-                />
-              }
-              withTopBorder
-            />
-          </Card>
-
           {/* Notifications + sub-categories */}
           <Card theme="light" variant="surface" padding="md">
             <SettingsRow
@@ -465,58 +444,48 @@ export default function DriverSettingsScreen() {
 
         {/* ── Group 3: Trabajo ────────────────────────────────────────── */}
         <SettingsGroup title={t('profile.section_work', { defaultValue: 'Trabajo' })}>
-          {/* Preferred zone */}
+          {/* Matching preferences. Unlike the zone selector and the
+              "No recibir viajes" switch that used to sit here, these two
+              are read by find_best_drivers, so they genuinely change
+              which rides reach this driver. To pause offers without
+              going offline, use Modo Descanso on the Inicio tab — that
+              is the control that actually does it. */}
           <Card theme="light" variant="surface" padding="md" className="mb-3">
             <MenuRow
-              icon="location-outline"
-              label={t('profile.preferred_zone', { defaultValue: 'Zona de trabajo' })}
-              subtitle={t('profile.preferred_zone_desc', { defaultValue: 'Prioriza viajes en esta zona' })}
-              value={t(
-                ZONE_OPTIONS.find((z) => z.key === preferredZone)?.labelKey ?? 'profile.zone_any',
-                { defaultValue: preferredZone },
-              )}
+              icon="resize-outline"
+              label={t('profile.max_distance', { defaultValue: 'Distancia máxima' })}
+              subtitle={t('profile.max_distance_desc', {
+                defaultValue: 'Solo recibís viajes con recogida dentro de esta distancia',
+              })}
+              value={
+                maxDistanceKm === null
+                  ? t('profile.max_distance_none', { defaultValue: 'Sin límite' })
+                  : t('profile.max_distance_km', { km: maxDistanceKm, defaultValue: `${maxDistanceKm} km` })
+              }
               iconBg="warning"
-              onPress={handleZoneChange}
+              onPress={prefsSaving ? undefined : handleMaxDistanceChange}
               showBorder={false}
             />
           </Card>
 
-          {/* Silent mode + nested duration */}
           <Card theme="light" variant="surface" padding="md" className="mb-3">
             <SettingsRow
-              icon="volume-mute-outline"
-              title={t('profile.silent_mode', { defaultValue: 'No recibir viajes' })}
-              subtitle={t('profile.silent_mode_desc', { defaultValue: 'Pausa solicitudes sin desconectarte' })}
+              icon="trail-sign-outline"
+              title={t('profile.accepts_long_trips', { defaultValue: 'Aceptar viajes largos' })}
+              subtitle={t('profile.accepts_long_trips_desc', {
+                defaultValue: 'Si lo apagás, no vas a recibir viajes de larga distancia',
+              })}
               right={
                 <Switch
-                  value={silentModeEnabled}
-                  onValueChange={handleToggle(SILENT_MODE_KEY, setSilentModeEnabled)}
+                  value={acceptsLongTrips}
+                  disabled={prefsSaving}
+                  onValueChange={handleLongTripsToggle}
                   trackColor={SWITCH_TRACK}
+                  accessibilityLabel={t('profile.accepts_long_trips', { defaultValue: 'Aceptar viajes largos' })}
+                  accessibilityState={{ checked: acceptsLongTrips, disabled: prefsSaving }}
                 />
               }
             />
-            {silentModeEnabled && (
-              <View
-                style={{
-                  marginTop: 8,
-                  paddingTop: 8,
-                  borderTopWidth: 1,
-                  borderTopColor: midnightEmber.screen.line.default,
-                }}
-              >
-                <MenuRow
-                  icon="timer-outline"
-                  label={t('profile.silent_timer', { defaultValue: 'Duración' })}
-                  value={t(
-                    SILENT_TIMER_OPTIONS.find((o) => o.minutes === silentModeTimer)?.labelKey
-                      ?? 'profile.silent_indefinite',
-                    { defaultValue: 'Indefinido' },
-                  )}
-                  onPress={handleSilentTimerChange}
-                  showBorder={false}
-                />
-              </View>
-            )}
           </Card>
 
           {/* SMS Alerts */}

@@ -5,6 +5,7 @@
 
 import type {
   DriverProfile,
+  DriverMatchPreferences,
   DriverDocument,
   DriverPeakHourCell,
   DriverPerformanceTrendDay,
@@ -983,6 +984,54 @@ export const driverService = {
       .update({ custom_per_km_rate_cup: customPerKmRate })
       .eq('id', driverId);
     if (error) throw error;
+  },
+
+  /**
+   * Update the driver's matching preferences in
+   * `driver_profiles.preferences`.
+   *
+   * These are honored by `find_best_drivers` today — no migration is
+   * needed. See `DriverMatchPreferences` for the exact filters.
+   *
+   * Pass `null` for a field to CLEAR it, which is what "no limit" means:
+   * the engine's checks are `IS NULL`-guarded, so an absent key is the
+   * only way to express "no restriction". Storing 0 for
+   * `max_distance_km` would filter the driver out of every ride.
+   *
+   * Read-modify-write rather than a blind update: migration 00257
+   * backfilled the column with keys the matching engine does not read
+   * (`music_preference`, `accepts_minors_alone`), and overwriting the
+   * whole object would silently discard them.
+   */
+  async updateMatchPreferences(
+    driverId: string,
+    updates: {
+      max_distance_km?: number | null;
+      accepts_long_trips?: boolean | null;
+    },
+  ): Promise<DriverMatchPreferences> {
+    const supabase = getSupabaseClient();
+
+    const { data: current, error: readError } = await supabase
+      .from('driver_profiles')
+      .select('preferences')
+      .eq('id', driverId)
+      .single();
+    if (readError) throw readError;
+
+    const next: Record<string, unknown> = { ...(current?.preferences ?? {}) };
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === undefined) delete next[key];
+      else next[key] = value;
+    }
+
+    const { error } = await supabase
+      .from('driver_profiles')
+      .update({ preferences: next })
+      .eq('id', driverId);
+    if (error) throw error;
+
+    return next as DriverMatchPreferences;
   },
 
   /**
