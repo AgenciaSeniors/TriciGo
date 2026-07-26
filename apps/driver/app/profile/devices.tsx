@@ -101,21 +101,21 @@ export default function DriverDevicesScreen() {
 
   const handleRemove = (device: KnownDevice) => {
     Alert.alert(
-      t('devices.remove_title', { defaultValue: 'Quitar dispositivo' }),
-      t('devices.remove_confirm', {
+      t('devices.revoke_confirm_title', { defaultValue: 'Quitar dispositivo' }),
+      t('devices.revoke_confirm_msg', {
         defaultValue: 'Se quitará este dispositivo de tu lista. El próximo inicio de sesión desde él se tratará como nuevo.',
       }),
       [
         { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
         {
-          text: t('devices.remove', { defaultValue: 'Quitar' }),
+          text: t('devices.revoke', { defaultValue: 'Quitar' }),
           style: 'destructive',
           onPress: async () => {
             try {
               await deviceService.revokeDevice(device.id);
               await load();
             } catch {
-              Alert.alert('Error', t('devices.remove_error', { defaultValue: 'No se pudo quitar el dispositivo.' }));
+              Alert.alert('Error', t('devices.revoke_error', { defaultValue: 'No se pudo quitar el dispositivo.' }));
             }
           },
         },
@@ -148,14 +148,14 @@ export default function DriverDevicesScreen() {
 
   const handleSignOutAll = () => {
     Alert.alert(
-      t('devices.signout_all_title', { defaultValue: 'Cerrar sesión en todos los dispositivos' }),
-      t('devices.signout_all_confirm', {
+      t('devices.sign_out_all_confirm_title', { defaultValue: 'Cerrar sesión en todos los dispositivos' }),
+      t('devices.sign_out_all_confirm_msg', {
         defaultValue: 'Se cerrará tu sesión en este y todos los demás dispositivos. Tendrás que iniciar sesión de nuevo.',
       }),
       [
         { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
         {
-          text: t('devices.signout_all', { defaultValue: 'Cerrar sesión' }),
+          text: t('devices.sign_out_all', { defaultValue: 'Cerrar sesión en todos' }),
           style: 'destructive',
           onPress: doSignOutAll,
         },
@@ -267,14 +267,14 @@ export default function DriverDevicesScreen() {
                           })}
                           android_ripple={{ color: `${midnightEmber.state.danger}26` }}
                           accessibilityRole="button"
-                          accessibilityLabel={t('devices.remove', { defaultValue: 'Quitar' })}
+                          accessibilityLabel={t('devices.revoke', { defaultValue: 'Quitar' })}
                         >
                           <Ionicons name="trash-outline" size={16} color={midnightEmber.state.danger} />
                           <Text
                             variant="caption"
                             style={{ color: midnightEmber.state.danger, marginLeft: 6, fontWeight: '600' }}
                           >
-                            {t('devices.remove', { defaultValue: 'Quitar' })}
+                            {t('devices.revoke', { defaultValue: 'Quitar' })}
                           </Text>
                         </Pressable>
                       )}
@@ -305,7 +305,7 @@ export default function DriverDevicesScreen() {
                 })}
                 android_ripple={{ color: `${midnightEmber.state.danger}26` }}
                 accessibilityRole="button"
-                accessibilityLabel={t('devices.signout_all', { defaultValue: 'Cerrar sesión en todos los dispositivos' })}
+                accessibilityLabel={t('devices.sign_out_all_button', { defaultValue: 'Cerrar sesión en todos los dispositivos' })}
               >
                 {signingOut ? (
                   <ActivityIndicator size="small" color={midnightEmber.state.danger} />
@@ -316,7 +316,7 @@ export default function DriverDevicesScreen() {
                   variant="body"
                   style={{ color: midnightEmber.state.danger, marginLeft: 8, fontWeight: '600' }}
                 >
-                  {t('devices.signout_all', { defaultValue: 'Cerrar sesión en todos los dispositivos' })}
+                  {t('devices.sign_out_all_button', { defaultValue: 'Cerrar sesión en todos los dispositivos' })}
                 </Text>
               </Pressable>
             </View>
