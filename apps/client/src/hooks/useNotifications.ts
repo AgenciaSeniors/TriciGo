@@ -8,6 +8,79 @@ import { router } from 'expo-router';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
+/**
+ * The four on-device toggles the notification handler below consults.
+ * These are the ONLY values that gate whether a notification is shown.
+ */
+export const LOCAL_NOTIF_KEYS = {
+  rides: '@tricigo/notif_rides',
+  chat: '@tricigo/notif_chat',
+  wallet: '@tricigo/notif_wallet',
+  promos: '@tricigo/notif_promos',
+} as const;
+
+/**
+ * Maps a `notification_preferences` column (what the settings screen
+ * persists, and what the web writes too) to the on-device key that
+ * actually enforces it.
+ *
+ * This mapping exists because the two halves were built and never
+ * connected: the handler read these four keys, the settings screen only
+ * ever wrote the server columns under different names, so `getItem`
+ * always returned null and no category toggle suppressed anything.
+ *
+ * Kept here, next to the handler that consumes the keys, so the mapping
+ * cannot drift away from its only enforcement point.
+ *
+ * `driver_approval` is intentionally absent: it is a driver-only
+ * category, never delivered to a passenger, so it has no local key.
+ */
+export const SERVER_PREF_TO_LOCAL_KEY = {
+  ride_updates: LOCAL_NOTIF_KEYS.rides,
+  chat_messages: LOCAL_NOTIF_KEYS.chat,
+  payment_updates: LOCAL_NOTIF_KEYS.wallet,
+  promotions: LOCAL_NOTIF_KEYS.promos,
+} as const;
+
+export type ServerNotifPref = keyof typeof SERVER_PREF_TO_LOCAL_KEY;
+
+/**
+ * Mirror server-side preferences onto the device keys the handler reads.
+ * Call after loading preferences, and whenever one is toggled, so a
+ * change made here or on another device actually takes effect.
+ */
+export async function syncNotifPrefsToDevice(
+  prefs: Partial<Record<ServerNotifPref, boolean>>,
+): Promise<void> {
+  await Promise.all(
+    (Object.entries(prefs) as [ServerNotifPref, boolean | undefined][]).map(
+      ([pref, value]) => {
+        const key = SERVER_PREF_TO_LOCAL_KEY[pref];
+        if (!key || typeof value !== 'boolean') return Promise.resolve();
+        return AsyncStorage.setItem(key, String(value)).catch(() => {});
+      },
+    ),
+  );
+}
+
+/**
+ * Read the on-device preferences. Used by the settings screen to paint
+ * the switches from the values that are actually in force, instead of
+ * defaulting everything to "on" until the server responds.
+ */
+export async function readDeviceNotifPrefs(): Promise<Record<ServerNotifPref, boolean>> {
+  const prefs = Object.keys(SERVER_PREF_TO_LOCAL_KEY) as ServerNotifPref[];
+  const entries = await Promise.all(
+    prefs.map(async (pref) => {
+      const stored = await AsyncStorage.getItem(SERVER_PREF_TO_LOCAL_KEY[pref]).catch(() => null);
+      // Absent means "never turned off" — the handler treats anything
+      // other than the string 'false' as enabled.
+      return [pref, stored !== 'false'] as const;
+    }),
+  );
+  return Object.fromEntries(entries) as Record<ServerNotifPref, boolean>;
+}
+
 // Preference keys for granular filtering. Multiple notification
 // `data.type` values can map to the same toggle when they belong to
 // the same UX category (e.g. all ride-related events share the
@@ -17,23 +90,29 @@ const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 // handler defaults to shouldShowAlert: true.
 const PREF_KEYS: Record<string, string> = {
   // Ride lifecycle
-  ride: '@tricigo/notif_rides',
-  ride_matching: '@tricigo/notif_rides',
-  proximity: '@tricigo/notif_rides',
+  ride: LOCAL_NOTIF_KEYS.rides,
+  ride_matching: LOCAL_NOTIF_KEYS.rides,
+  proximity: LOCAL_NOTIF_KEYS.rides,
   // Chat
-  chat: '@tricigo/notif_chat',
+  chat: LOCAL_NOTIF_KEYS.chat,
   // Wallet / payments
-  wallet: '@tricigo/notif_wallet',
-  payment: '@tricigo/notif_wallet',
-  wallet_recharge: '@tricigo/notif_wallet',
-  wallet_recharge_refund: '@tricigo/notif_wallet',
+  wallet: LOCAL_NOTIF_KEYS.wallet,
+  payment: LOCAL_NOTIF_KEYS.wallet,
+  wallet_recharge: LOCAL_NOTIF_KEYS.wallet,
+  wallet_recharge_refund: LOCAL_NOTIF_KEYS.wallet,
   // Marketing / content (admin novedades, blog, promos)
-  promo: '@tricigo/notif_promos',
-  announcement: '@tricigo/notif_promos',
-  blog: '@tricigo/notif_promos',
-  news: '@tricigo/notif_promos',
+  promo: LOCAL_NOTIF_KEYS.promos,
+  announcement: LOCAL_NOTIF_KEYS.promos,
+  blog: LOCAL_NOTIF_KEYS.promos,
+  news: LOCAL_NOTIF_KEYS.promos,
 };
 
+// THE notification handler for this app — there must be exactly one.
+// `setNotificationHandler` replaces the global handler instead of adding
+// to it, so a second call anywhere silently disables everything below.
+// `src/services/push.service.ts` used to make one and, being imported
+// later by the root layout, won: preferences were never consulted in the
+// foreground. Its handler is gone; keep it that way.
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     // ride_offer_launch is a data-only companion message for the DRIVER
@@ -125,13 +204,12 @@ export type PushRegistrationResult = 'registered' | 'denied' | 'error';
  * this the server had no token until the next cold start, while the
  * switch sat there looking enabled.
  *
- * Deliberately NOT reusing `registerForPushNotifications()` from
- * `src/services/push.service.ts`, even though it does the same job:
- * importing that module installs a second `setNotificationHandler` that
- * does not consult the master/category preferences, and which handler
- * wins depends on import order (see the note in that file). Pulling it
- * into the settings screen could silently disable notification
- * suppression app-wide.
+ * Overlaps with `registerForPushNotifications()` in
+ * `src/services/push.service.ts`, which the root layout calls once at
+ * startup. They are kept separate on purpose: that one resolves the user
+ * from the session and returns a token, this one takes an explicit
+ * userId and reports WHY it failed, which is what the settings toggle
+ * needs in order to react.
  *
  * Distinguishes 'denied' from 'error' so the caller can tell an
  * actionable OS-permission problem from a transient failure.
