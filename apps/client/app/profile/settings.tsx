@@ -7,7 +7,12 @@ import { ProfileSection } from '@/components/profile/ProfileSection';
 import { ProfileRow } from '@/components/profile/ProfileRow';
 import { useTokens } from '@/hooks/useTokens';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
-import { registerPushTokenForUser } from '@/hooks/useNotifications';
+import {
+  registerPushTokenForUser,
+  syncNotifPrefsToDevice,
+  readDeviceNotifPrefs,
+  type ServerNotifPref,
+} from '@/hooks/useNotifications';
 import { useTranslation } from '@tricigo/i18n';
 import { i18n } from '@tricigo/i18n';
 import { notificationService, authService, customerService } from '@tricigo/api';
@@ -20,13 +25,15 @@ import type { Language, PaymentMethod, CustomerProfile } from '@tricigo/types';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
+// Only categories a passenger can actually receive. `driver_approval`
+// used to be listed here too — it is a driver-only notification, so the
+// row let passengers toggle something that was never sent to them.
 const NOTIF_CATEGORIES = [
   { key: 'ride_updates', icon: 'car-outline' as const, labelKey: 'profile.notif_rides' },
   { key: 'chat_messages', icon: 'chatbubble-outline' as const, labelKey: 'profile.notif_chat' },
   { key: 'payment_updates', icon: 'wallet-outline' as const, labelKey: 'profile.notif_wallet' },
   { key: 'promotions', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
-  { key: 'driver_approval', icon: 'checkmark-circle-outline' as const, labelKey: 'profile.notif_driver_approval' },
-] as const;
+] as const satisfies readonly { key: ServerNotifPref; icon: string; labelKey: string }[];
 
 const LANGUAGE_CYCLE: Language[] = ['es', 'en', 'pt'];
 const PAYMENT_CYCLE: PaymentMethod[] = ['cash', 'tricicoin', 'mixed'];
@@ -39,7 +46,9 @@ export default function SettingsScreen() {
   const reset = useAuthStore((s) => s.reset);
   const setUser = useAuthStore((s) => s.setUser);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [categoryPrefs, setCategoryPrefs] = useState<Record<string, boolean>>({});
+  // Keyed by `notification_preferences` column, so a typo in a category
+  // key fails to compile instead of silently never matching.
+  const [categoryPrefs, setCategoryPrefs] = useState<Partial<Record<ServerNotifPref, boolean>>>({});
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsLoading, setSmsLoading] = useState(false);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
@@ -52,19 +61,32 @@ export default function SettingsScreen() {
       if (val !== null) setNotificationsEnabled(val === 'true');
     }).catch(() => {});
 
+    // Paint the switches from the on-device values first. Those are what
+    // actually gate delivery, and they're available immediately — before
+    // this, the switches rendered "on" for everything until the server
+    // replied, briefly lying to a user who had turned something off.
+    readDeviceNotifPrefs().then(setCategoryPrefs).catch(() => {});
+
     // Load category preferences from server
     if (userId) {
       notificationService.getPreferences(userId).then((prefs) => {
         if (prefs) {
-          setCategoryPrefs({
+          const next = {
             ride_updates: prefs.ride_updates,
             chat_messages: prefs.chat_messages,
             payment_updates: prefs.payment_updates,
             promotions: prefs.promotions,
-            driver_approval: prefs.driver_approval,
-          });
+          };
+          setCategoryPrefs(next);
+          // The server is the cross-device source of truth, but the
+          // handler only reads AsyncStorage — mirror it down, otherwise a
+          // preference set on the web never takes effect on this phone.
+          syncNotifPrefsToDevice(next);
         }
-      }).catch(() => {});
+      }).catch(() => {
+        // Offline / RPC failure: the device values loaded above stay in
+        // force, so the last known preferences still apply.
+      });
 
       // Load SMS preference from server
       notificationService.getSmsPreference(userId).then(setSmsEnabled).catch(() => {});
@@ -167,14 +189,22 @@ export default function SettingsScreen() {
     // switch on: useNotificationSetup retries on the next foreground.
   };
 
-  const handleCategoryToggle = useCallback(async (key: string, enabled: boolean) => {
+  const handleCategoryToggle = useCallback(async (key: ServerNotifPref, enabled: boolean) => {
     setCategoryPrefs((prev) => ({ ...prev, [key]: enabled }));
+
+    // Write the on-device key first: it is the one the notification
+    // handler consults, so this is what makes the toggle do anything at
+    // all. The server write below is for cross-device sync (and for the
+    // server-side filtering that will consume the same columns).
+    await syncNotifPrefsToDevice({ [key]: enabled });
+
     if (userId) {
       try {
         await notificationService.updatePreferences(userId, { [key]: enabled });
       } catch {
-        // Revert on error
+        // Revert both sides together so they can't disagree.
         setCategoryPrefs((prev) => ({ ...prev, [key]: !enabled }));
+        await syncNotifPrefsToDevice({ [key]: !enabled });
       }
     }
   }, [userId]);

@@ -4,27 +4,21 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
 
-// Configure notification behavior. The newer NotificationBehavior
-// interface requires shouldShowBanner / shouldShowList too, but we want
-// to stay compatible with the older types installed — cast through
-// `any` so both shapes compile.
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    // ride_offer_launch: data-only companion message for the DRIVER app's
-    // auto-launch task; reaches the client when one account is logged into
-    // both apps. No title/body — presenting it would show an empty
-    // notification. (Same gate lives in hooks/useNotifications.ts; which
-    // handler wins depends on import order, so both must carry it.)
-    if (notification.request.content.data?.type === 'ride_offer_launch') {
-      return { shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false } as any;
-    }
-    return {
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    } as any;
-  },
-});
+// NOTE: this module deliberately no longer calls setNotificationHandler.
+//
+// It used to, and because `setNotificationHandler` REPLACES the global
+// handler rather than adding one, the last module evaluated won. The
+// root layout imports `@/providers/app-providers` (which pulls in
+// hooks/useNotifications) at line 25 and this file at line 38, so THIS
+// handler overwrote the one in useNotifications — and this one only
+// gated `ride_offer_launch`. It consulted neither the master
+// notifications toggle nor the per-category preferences, so foreground
+// presentation ignored every notification setting the user had chosen.
+//
+// The single handler now lives in `src/hooks/useNotifications.ts`, which
+// is always loaded: `app-providers.tsx` mounts `useNotificationSetup()`
+// at the app root. Keep it that way — do not reintroduce a handler here,
+// or the preferences silently stop being enforced again.
 
 export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice) {
