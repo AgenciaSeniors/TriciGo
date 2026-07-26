@@ -347,7 +347,10 @@ export default function RideDetailPage() {
                     url ? (
                       <figure key={key}>
                         <a href={url} target="_blank" rel="noopener noreferrer">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          {/* Plain <img>, not next/image: these are Supabase
+                              Storage URLs whose host is not in the images
+                              remotePatterns allowlist, and an admin thumbnail
+                              does not need the optimizer. */}
                           <img
                             src={url}
                             alt={t(key, { defaultValue: fallback })}
