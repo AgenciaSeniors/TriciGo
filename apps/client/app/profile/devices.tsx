@@ -287,7 +287,7 @@ export default function DevicesScreen() {
           <Text style={{ color: '#EF4444', fontSize: 15, fontWeight: '600', marginLeft: 8 }}>
             {signingOutAll
               ? t('common.processing', { defaultValue: 'Procesando...' })
-              : t('devices.sign_out_all', { defaultValue: 'Cerrar sesión en todos los dispositivos' })}
+              : t('devices.sign_out_all_button', { defaultValue: 'Cerrar sesión en todos los dispositivos' })}
           </Text>
         </Pressable>
       </View>
