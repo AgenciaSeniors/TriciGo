@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Pressable, FlatList, Alert, TextInput, useColorScheme } from 'react-native';
+import { View, Pressable, FlatList, Alert, TextInput, useColorScheme, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -13,6 +13,11 @@ import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { supportService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
+
+// Same contact details the onboarding screen already links to
+// (apps/driver/app/onboarding/pending.tsx:18).
+const SUPPORT_EMAIL = 'soporte@tricigo.com';
+const SUPPORT_PHONE = '+5545998622511';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
 
@@ -172,14 +177,29 @@ export default function DriverHelpScreen() {
               {/* Contact info */}
               <Card theme="light" variant="filled" padding="md" className="mt-1 mb-6 bg-white">
                 <Text variant="body" color="primary" className="font-semibold mb-2">{t('profile.help_contact')}</Text>
-                <View className="flex-row items-center mb-1">
+                {/* Both rows were plain <Text>: the contact details were
+                    shown but could not be tapped, so reaching support meant
+                    copying them by hand. */}
+                <Pressable
+                  className="flex-row items-center mb-1"
+                  onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Soporte%20TriciGo`)}
+                  accessibilityRole="link"
+                  accessibilityLabel={SUPPORT_EMAIL}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
+                >
                   <Ionicons name="mail-outline" size={18} color={midnightEmber.screen.text.tertiary} />
-                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">soporte@tricigo.com</Text>
-                </View>
-                <View className="flex-row items-center">
-                  <Ionicons name="call-outline" size={18} color={midnightEmber.screen.text.tertiary} />
-                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">+5545998622511</Text>
-                </View>
+                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{SUPPORT_EMAIL}</Text>
+                </Pressable>
+                <Pressable
+                  className="flex-row items-center"
+                  onPress={() => Linking.openURL(`https://wa.me/${SUPPORT_PHONE.replace(/\D/g, '')}`)}
+                  accessibilityRole="link"
+                  accessibilityLabel={SUPPORT_PHONE}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
+                >
+                  <Ionicons name="logo-whatsapp" size={18} color={midnightEmber.screen.text.tertiary} />
+                  <Text variant="bodySmall" color="primary" className="ml-2 opacity-60">{SUPPORT_PHONE}</Text>
+                </Pressable>
               </Card>
 
               {/* Create ticket button */}

@@ -8,8 +8,14 @@ import { MenuRow } from '@tricigo/ui/MenuRow';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
+import Constants from 'expo-constants';
 
-const APP_VERSION = '1.0.0';
+// Read the version from the build instead of hardcoding it. This was
+// pinned at '1.0.0' while app.json had long moved on (1.3.0 at the time
+// of writing), so the screen misreported the build to anyone who asked
+// support "what version are you on?". The `?? '—'` avoids inventing a
+// number if the manifest is somehow unavailable.
+const APP_VERSION = Constants.expoConfig?.version ?? '—';
 
 type RoutePath = Parameters<typeof router.push>[0];
 

@@ -2265,7 +2265,10 @@ function IdleView() {
           balanceUsd={walletBalance / usdCupRate}
           mode={mode}
           label={t('home.balance_label', { defaultValue: 'Saldo disponible' })}
-          onPress={() => router.push('/wallet' as never)}
+          // '/wallet' does not exist — apps/client/app/wallet/ only holds
+          // gift.tsx, so this landed on +not-found. The `as never` cast was
+          // silencing the typed-route error that would have caught it.
+          onPress={() => router.push('/(tabs)/wallet')}
         />
 
         {/* ── Destination ask ── */}

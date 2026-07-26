@@ -147,17 +147,25 @@ export default function SafetyCenterScreen() {
           />
         </View>
 
-        {/* Trusted Contacts */}
+        {/* Emergency contact — its own entry point.
+            This used to be a read-only line inside the Trusted Contacts
+            card: it reported "sin contacto de emergencia" while the only
+            screen that can set one (profile/emergency-contact) had no
+            navigation to it anywhere in the app, so the passenger was
+            told about a gap they had no way to close. The web already
+            links it from its safety page; this restores parity. */}
         <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 12, ...CARD_SHADOW }}>
           <Pressable
             className="flex-row items-center"
-            onPress={() => router.push('/profile/trusted-contacts')}
+            onPress={() => router.push('/profile/emergency-contact')}
+            accessibilityRole="button"
+            accessibilityLabel={t('profile.emergency_contact_title')}
           >
-            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#FF4D001A', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-              <Ionicons name="people-outline" size={20} color="#FF4D00" />
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#EF44441A', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="medkit-outline" size={20} color="#EF4444" />
             </View>
             <View className="flex-1">
-              <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('trusted_contacts.title')}</Text>
+              <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('profile.emergency_contact_title')}</Text>
               {emergencyContact ? (
                 <Text variant="caption" style={{ color: tokens.ink.secondary }}>
                   {emergencyContact.name} — {emergencyContact.phone}
@@ -165,6 +173,24 @@ export default function SafetyCenterScreen() {
               ) : (
                 <Text variant="caption" style={{ color: tokens.ink.secondary }}>{t('profile.no_emergency_contact')}</Text>
               )}
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={tokens.ink.subtle} />
+          </Pressable>
+        </View>
+
+        {/* Trusted Contacts */}
+        <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginBottom: 12, ...CARD_SHADOW }}>
+          <Pressable
+            className="flex-row items-center"
+            onPress={() => router.push('/profile/trusted-contacts')}
+            accessibilityRole="button"
+            accessibilityLabel={t('trusted_contacts.title')}
+          >
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#FF4D001A', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="people-outline" size={20} color="#FF4D00" />
+            </View>
+            <View className="flex-1">
+              <Text variant="body" className="font-semibold" style={{ color: tokens.ink.primary }}>{t('trusted_contacts.title')}</Text>
               {trustedCount > 0 && (
                 <Text variant="caption" style={{ color: tokens.ink.secondary }}>
                   {t('safety.trusted_contacts_count', { count: trustedCount })}

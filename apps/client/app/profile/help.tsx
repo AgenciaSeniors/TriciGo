@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Pressable, FlatList, RefreshControl } from 'react-native';
+import { View, Pressable, FlatList, RefreshControl, Linking } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -20,6 +20,10 @@ import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
 import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { SupportTicket, TicketCategory } from '@tricigo/types';
+
+// Same contact details support.tsx already links to (support.tsx:30,37).
+const SUPPORT_EMAIL = 'soporte@tricigo.com';
+const SUPPORT_PHONE = '+5545998622511';
 
 const FAQ_KEYS = [
   'faq_q1', 'faq_q2', 'faq_q3', 'faq_q4', 'faq_q5',
@@ -254,14 +258,29 @@ export default function HelpScreen() {
               {/* Contact info */}
               <View style={{ backgroundColor: tokens.bg.elev1, borderRadius: 16, padding: 16, marginTop: 4, marginBottom: 24, ...CARD_SHADOW }}>
                 <Text variant="body" className="font-semibold mb-2" style={{ color: tokens.ink.primary }}>{t('profile.help_contact')}</Text>
-                <View className="flex-row items-center mb-1">
+                {/* Both rows were plain <Text>: the contact details were
+                    shown but could not be tapped, so reaching support meant
+                    copying them by hand. Same targets support.tsx uses. */}
+                <Pressable
+                  className="flex-row items-center mb-1"
+                  onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Soporte%20TriciGo`)}
+                  accessibilityRole="link"
+                  accessibilityLabel={SUPPORT_EMAIL}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
+                >
                   <Ionicons name="mail-outline" size={18} color={tokens.ink.secondary} />
-                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>soporte@tricigo.com</Text>
-                </View>
-                <View className="flex-row items-center">
-                  <Ionicons name="call-outline" size={18} color={tokens.ink.secondary} />
-                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>+5545998622511</Text>
-                </View>
+                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>{SUPPORT_EMAIL}</Text>
+                </Pressable>
+                <Pressable
+                  className="flex-row items-center"
+                  onPress={() => Linking.openURL(`https://wa.me/${SUPPORT_PHONE.replace(/\D/g, '')}`)}
+                  accessibilityRole="link"
+                  accessibilityLabel={SUPPORT_PHONE}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, minHeight: 44 })}
+                >
+                  <Ionicons name="logo-whatsapp" size={18} color={tokens.ink.secondary} />
+                  <Text variant="bodySmall" style={{ color: tokens.ink.secondary, marginLeft: 8 }}>{SUPPORT_PHONE}</Text>
+                </Pressable>
               </View>
 
               {/* Create ticket button */}
