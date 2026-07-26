@@ -56,7 +56,17 @@ export default function SettingsPage() {
       notificationService.getSmsPreference(userId),
     ]).then(([prefs, sms]) => {
       if (prefs) {
-        setPushNotifications(prefs.ride_updates);
+        // The web exposes ONE coarse "push" switch over three columns
+        // that `handleTogglePush` writes together. It used to read back
+        // only `ride_updates`, so a user who disabled just chat or
+        // payments in the mobile app saw this switch ON — and toggling
+        // it would then overwrite all three. Deriving it from all three
+        // means "on" honestly means "all push categories on"; anything
+        // partial reads as off, and turning it on re-enables the set.
+        // Per-category control stays in the mobile app.
+        setPushNotifications(
+          prefs.ride_updates && prefs.chat_messages && prefs.payment_updates,
+        );
         setEmailNotifications(prefs.promotions);
       }
       setSmsNotifications(sms);
