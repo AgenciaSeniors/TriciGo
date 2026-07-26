@@ -233,7 +233,6 @@ function NativeDriverProfileScreen() {
       items: [
         { icon: 'person-outline', label: t('profile.edit_profile'), onPress: () => router.push('/profile/edit'), tint: colors.brand.orange },
         { icon: 'document-text-outline', label: t('profile.documents'), onPress: () => router.push('/profile/documents'), tint: '#F59E0B' },
-        { icon: 'location-outline', label: t('profile.saved_zones', { defaultValue: 'Zonas guardadas' }), onPress: () => router.push('/profile/saved-zones'), tint: '#3B82F6' },
         { icon: vehicleMenuIcon.ionicon, mciIcon: vehicleMenuIcon.mci, label: t('profile.vehicle', { defaultValue: 'Vehículo' }), onPress: () => router.push('/profile/vehicle'), tint: palette.ink.secondary },
       ],
     },

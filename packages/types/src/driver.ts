@@ -33,8 +33,37 @@ export interface DriverProfile {
   custom_per_km_rate_cup: number | null;
   /** Whether the driver has auto-accept enabled for incoming rides */
   auto_accept_enabled: boolean;
+  /** Matching preferences honored by `find_best_drivers` (see DriverMatchPreferences) */
+  preferences: DriverMatchPreferences;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Driver matching preferences, stored in `driver_profiles.preferences`
+ * (jsonb). Only the fields below are read by the matching engine — see
+ * `find_best_drivers`, which filters on:
+ *
+ *   (dp.preferences->>'max_distance_km') IS NULL
+ *     OR ST_Distance(dp.current_location, pickup) <= max_distance_km * 1000
+ *
+ *   NOT is_long_trip
+ *     OR (dp.preferences->>'accepts_long_trips') IS NULL
+ *     OR (dp.preferences->>'accepts_long_trips')::boolean IS TRUE
+ *
+ * Both checks are NULL-safe: an absent key means "no restriction", so a
+ * driver who never touched these settings is never filtered out.
+ *
+ * The column was added by migration 00257 and backfilled with additional
+ * keys (`music_preference`, `accepts_minors_alone`) that the matching
+ * engine does NOT read. They are deliberately left out of this type —
+ * adding them here would imply they do something.
+ */
+export interface DriverMatchPreferences {
+  /** Max distance in km between driver and pickup. Absent = no limit. */
+  max_distance_km?: number;
+  /** Whether the driver accepts long trips. Absent = accepts them. */
+  accepts_long_trips?: boolean;
 }
 
 export type ScoreEventType =
