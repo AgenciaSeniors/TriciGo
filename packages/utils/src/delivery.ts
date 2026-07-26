@@ -22,6 +22,24 @@ export function deliveryVehicleToSlug(type: VehicleType): ServiceTypeSlug {
   return VEHICLE_TO_SLUG[type];
 }
 
+// ── Is this ride carrying a package? ──
+// `ride_mode` is the authority: a delivery is stored with the chosen VEHICLE's
+// slug (moto_standard / triciclo_basico / auto_standard / auto_confort) plus
+// ride_mode='cargo'. Checking service_type alone silently never matches — that
+// is what made the driver's cargo badge invisible while the delivery card right
+// above it rendered fine.
+//
+// 'triciclo_cargo' is kept as a second signal: it is a real service slug in the
+// enum (a cargo-only tricycle), distinct from a mensajería order.
+//
+// Shared so the offer card and the active-trip view cannot drift apart again.
+export function isCargoRide(
+  ride: { ride_mode?: string | null; service_type?: string | null } | null | undefined,
+): boolean {
+  if (!ride) return false;
+  return ride.ride_mode === 'cargo' || ride.service_type === 'triciclo_cargo';
+}
+
 // ── Package specs for compatibility checking ──
 export interface PackageSpecs {
   weightKg?: number;

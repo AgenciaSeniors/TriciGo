@@ -430,6 +430,8 @@
     "tricicoin": "TriciCoin",
     "cash": "Dinheiro",
     "mixed": "Misto",
+    "mixed_desc": "Parte créditos, parte dinheiro",
+    "stripe": "Cartão",
     "corporate": "Corporativo",
     "insufficient_balance": "Saldo insuficiente",
     "pending_title": "Pagamento pendente",

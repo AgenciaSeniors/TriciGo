@@ -48,7 +48,7 @@ import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react'
 import { View, Animated, Pressable, Text as RNText, Easing } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
-import { formatCUP, cupToTrcCentavos, haversineDistance, jitterLocation, triggerHaptic } from '@tricigo/utils';
+import { formatCUP, cupToTrcCentavos, haversineDistance, jitterLocation, triggerHaptic, isCargoRide } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { presenceService, trackValidationEvent, walletService } from '@tricigo/api';
 import { midnightEmber } from '@tricigo/theme';
@@ -531,7 +531,7 @@ function IncomingRideCardInner({
         }}>
           <Chip icon={vehicleIcon} />
           <Chip label={paymentLabel} />
-          {(ride.service_type === 'triciclo_cargo' || ride.ride_mode === 'cargo') && (
+          {isCargoRide(ride) && (
             <Chip
               icon="cube-outline"
               label={t('home.cargo_chip', { defaultValue: 'Cargo' })}

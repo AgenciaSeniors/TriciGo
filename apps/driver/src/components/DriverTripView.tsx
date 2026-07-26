@@ -34,6 +34,7 @@ import {
   formatDistance,
   triggerHaptic,
   haversineDistance,
+  isCargoRide,
 } from '@tricigo/utils';
 import type { GeoPoint } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
@@ -1095,7 +1096,7 @@ export function DriverTripView() {
 
       {/* Cargo + Corporate badges */}
       <TripBadgesRow
-        isCargo={activeTrip.service_type === 'triciclo_cargo'}
+        isCargo={isCargoRide(activeTrip)}
         isCorporate={!!activeTrip.corporate_account_id}
       />
 
