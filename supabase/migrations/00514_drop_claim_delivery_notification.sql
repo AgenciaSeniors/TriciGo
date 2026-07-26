@@ -1,0 +1,31 @@
+-- 00514: drop claim_delivery_notification — its only caller no longer exists.
+--
+-- The RPC existed to serve one thing: the `notify-delivery-recipient` Edge
+-- Function, which took the atomic claim on delivery_recipient_notified_at
+-- before sending the recipient's SMS. Migration 00327 replaced that EF with a
+-- SQL-native trigger (notify_delivery_recipient_on_accept) that takes the claim
+-- inline with its own UPDATE ... WHERE delivery_recipient_notified_at IS NULL,
+-- and said so at the time: "La EF notify-delivery-recipient queda deployed pero
+-- unused". The EF was removed from the repo in #852 and deleted from production
+-- on 2026-07-26. Nothing calls this function any more.
+--
+-- Verified orphaned before dropping, against production:
+--   * no other DB function or trigger references it (pg_proc.prosrc scan)
+--   * zero callers across apps/, packages/ and supabase/functions/
+--   * pg_depend reports no dependencies beyond the normal ones
+--   * the live recipient-SMS path does NOT use it — the trigger POSTs straight
+--     to send-sms and holds its own claim
+--
+-- Why bother dropping a function nobody calls: this was a security finding.
+-- 00454 (audit AUD2-005) had to harden it because SECURITY DEFINER plus a
+-- grant to `authenticated` meant any logged-in user could claim ANY cargo ride,
+-- which both fired an SMS at the recipient (D7 cost, spam vector) and returned
+-- their phone, name and addresses. The fix restricted the claim to the ride's
+-- assigned driver or an admin. Removing the function retires that surface
+-- outright instead of leaving a hardened-but-unused SECURITY DEFINER entry
+-- point sitting in the schema for the next reader to wonder about.
+--
+-- Recoverable from git if it is ever needed again: defined in 00325, extended
+-- in 00326, hardened in 00454.
+
+DROP FUNCTION IF EXISTS public.claim_delivery_notification(UUID);
