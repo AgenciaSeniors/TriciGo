@@ -65,6 +65,17 @@ const nextConfig: NextConfig = {
         destination: '/blog',
         permanent: true,
       },
+      // The SMS that tells a package recipient to follow their delivery pointed
+      // at /delivery/<share_token>, a route that never existed — the recipient
+      // got a 404. Migration 00513 changes the trigger to emit /track/share/,
+      // which is the page that actually renders the delivery. This redirect
+      // covers any message already in the wild and any copy still carrying the
+      // old shape.
+      {
+        source: '/delivery/:token',
+        destination: '/track/share/:token',
+        permanent: true,
+      },
     ];
   },
   async headers() {
