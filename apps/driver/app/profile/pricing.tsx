@@ -1,3 +1,31 @@
+/**
+ * Custom per-km rate — CURRENTLY INERT. Do not add a link to this screen.
+ *
+ * The screen works and saves `driver_profiles.custom_per_km_rate_cup`, but
+ * nothing charges that rate any more:
+ *
+ * - `accept_ride_v2` reads the column into a variable and then does not use
+ *   it. Migration 00377 removed the fare recalculation on accept, because
+ *   `estimated_fare_cup` (createRide + the 00299 snapshot) is the contract
+ *   with the passenger. Reintroducing that recalculation is explicitly
+ *   forbidden — it is what caused passengers to be quoted one price and
+ *   charged another.
+ * - `find_nearby_vehicles` only projects the column to the client, which
+ *   never uses it for an estimate.
+ * - `IncomingRideCard` uses it solely as a fallback when
+ *   `estimated_fare_cup` is missing or zero, which the snapshot contract
+ *   makes effectively unreachable.
+ *
+ * So a driver who set a rate here would change neither what the passenger
+ * pays nor what they themselves are shown. That is why this screen has no
+ * inbound navigation, and why an audit (2026-07) deliberately left it that
+ * way instead of "fixing" the missing link.
+ *
+ * To actually revive the feature, the rate has to enter the fare at
+ * ESTIMATE time (createRide / the pricing path that feeds the snapshot),
+ * not at accept time. Until someone does that, linking this screen would
+ * hand drivers a control that does nothing.
+ */
 import React, { useState, useEffect } from 'react';
 import { View, TextInput, ActivityIndicator, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';

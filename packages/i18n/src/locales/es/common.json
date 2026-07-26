@@ -291,6 +291,8 @@
     "notif_trip_requests": "Solicitudes de viaje",
     "notif_sms": "Alertas por SMS",
     "notif_sms_desc": "Recibe alertas de viaje por SMS cuando no tengas conexion. Puede generar cargos del operador.",
+    "voice_guidance": "Guia por voz",
+    "voice_guidance_desc": "Indicaciones habladas durante la navegacion",
     "max_distance": "Distancia maxima",
     "max_distance_desc": "Solo recibis viajes con recogida dentro de esta distancia",
     "max_distance_none": "Sin limite",
