@@ -128,7 +128,10 @@ export default function DevicesScreen() {
           onPress: async () => {
             setSigningOutAll(true);
             try {
-              await authService.signOut();
+              // Global scope: this is the one action where the user
+              // explicitly asked to end sessions everywhere. The plain
+              // `signOut()` is local-only by design.
+              await authService.signOutAllDevices();
               // Auth guard handles redirect once the session is cleared.
               reset();
             } catch (err) {

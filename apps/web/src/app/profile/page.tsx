@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getSupabaseClient } from '@tricigo/api';
+import { authService, getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { realEmail } from '@tricigo/utils';
 
@@ -112,7 +112,15 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     setLoggingOut(true);
-    await getSupabaseClient().auth.signOut();
+    // Go through authService rather than the raw client: it applies the
+    // local scope (supabase-js defaults to 'global', which would also end
+    // the session on the user's phone) and records the revocation row.
+    try {
+      await authService.signOut();
+    } catch {
+      // Never trap the user in a half-logged-out state — the redirect
+      // below leaves the app either way.
+    }
     window.location.href = '/';
   };
 

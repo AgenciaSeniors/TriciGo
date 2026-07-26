@@ -90,7 +90,9 @@ export function Header() {
 
   const handleLogout = async () => {
     const supabase = createBrowserClient();
-    await supabase.auth.signOut();
+    // `scope: 'local'` is required: supabase-js defaults to 'global', which
+    // would also end this admin's sessions elsewhere (e.g. their phone).
+    await supabase.auth.signOut({ scope: 'local' });
     router.push('/login');
     router.refresh();
   };

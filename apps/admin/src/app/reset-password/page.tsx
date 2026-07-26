@@ -96,8 +96,12 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      // Sign out after password update so they log in fresh
-      await supabase.auth.signOut();
+      // Sign out after password update so they log in fresh.
+      // `scope: 'global'` is DELIBERATE here (and explicit so a future
+      // sweep toward 'local' doesn't silently weaken it): after a password
+      // change, any session still held by whoever knew the old password
+      // must die too.
+      await supabase.auth.signOut({ scope: 'global' });
       setSuccess(true);
     } catch {
       setError(t('reset_password.error_generic'));
