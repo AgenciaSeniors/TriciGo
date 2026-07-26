@@ -78,6 +78,91 @@ const VALID_CATEGORIES = new Set([
   'wallet_v2_migration',
 ]);
 
+// Which categories a user may opt out of, and the
+// `notification_preferences` column that governs each.
+//
+// Until now this table was written by the apps and read by nobody: every
+// push went to every token regardless of what the user had chosen. The
+// settings screens looked like they worked because the value saved and
+// reloaded correctly.
+//
+// This is an ALLOW-list, deliberately. Any category absent from it is
+// always delivered — a notification system must fail toward delivering,
+// never toward silence. The categories kept unconditional are the ones
+// where dropping a message causes real harm:
+//
+//   ride_offer / ride_offer_launch  a driver's income depends on these
+//   sos                             safety
+//   dispute_update, lost_item       money and property already in dispute
+//   delivery                        an in-flight package
+//   system, wallet_v2_migration     operational / one-shot migrations
+//
+// `driver_approval` exists as a column but no caller ever sends that
+// category, so it has nothing to map to.
+const FILTERABLE_CATEGORY_TO_PREF: Record<string, string> = {
+  // Ride lifecycle updates (not offers)
+  ride: 'ride_updates',
+  ride_matching: 'ride_updates',
+  proximity: 'ride_updates',
+  scheduled_ride: 'ride_updates',
+  ride_updates: 'ride_updates',
+  // Chat
+  chat: 'chat_messages',
+  // Money movements the user can already see in-app
+  payment: 'payment_updates',
+  wallet_recharge: 'payment_updates',
+  wallet_recharge_refund: 'payment_updates',
+  wallet_credit: 'payment_updates',
+  wallet_debit: 'payment_updates',
+  // Marketing / content
+  promo: 'promotions',
+  announcement: 'promotions',
+  blog: 'promotions',
+  news: 'promotions',
+  campaign: 'promotions',
+};
+
+/**
+ * Drop users who opted out of this category.
+ *
+ * Fail-open by construction: a missing preferences row means the user
+ * never changed anything (all defaults are true), and a query error
+ * returns the list untouched. Only an explicit `false` removes anyone.
+ */
+async function filterByPreferences(
+  supabase: ReturnType<typeof createClient>,
+  userIds: string[],
+  category: string | undefined,
+): Promise<{ ids: string[]; skipped: number }> {
+  const prefColumn = category ? FILTERABLE_CATEGORY_TO_PREF[category] : undefined;
+  if (!prefColumn) return { ids: userIds, skipped: 0 };
+
+  try {
+    const { data, error } = await supabase
+      .from('notification_preferences')
+      .select(`user_id, ${prefColumn}`)
+      .in('user_id', userIds);
+    if (error) throw error;
+
+    const optedOut = new Set(
+      (data ?? [])
+        .filter((row: Record<string, unknown>) => row[prefColumn] === false)
+        .map((row: Record<string, unknown>) => row.user_id as string),
+    );
+    if (optedOut.size === 0) return { ids: userIds, skipped: 0 };
+
+    const ids = userIds.filter((id) => !optedOut.has(id));
+    return { ids, skipped: userIds.length - ids.length };
+  } catch (err) {
+    // Never let a preferences lookup stop a notification.
+    console.warn(
+      `[send-push] preference filter failed for category "${category}", delivering to all:`,
+      (err as Error).message,
+    );
+    return { ids: userIds, skipped: 0 };
+  }
+}
+
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -167,11 +252,28 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch device tokens for all target users
+    // Honor the user's category preferences. `deliverIds` is used for
+    // everything downstream — tokens AND the inbox row — because opting
+    // out of a category means "don't send me this", not "send it quietly".
+    const { ids: deliverIds, skipped: optedOutCount } =
+      await filterByPreferences(supabase, targetIds, category);
+
+    if (deliverIds.length === 0) {
+      console.info(
+        `[send-push] summary: sent=0 failed=0 total_tokens=0 targets=${targetIds.length}` +
+        `${category ? ' category=' + category : ''} opted_out=${optedOutCount} (all recipients opted out)`,
+      );
+      return new Response(
+        JSON.stringify({ sent: 0, failed: 0, total_tokens: 0, opted_out: optedOutCount }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Fetch device tokens for the remaining users
     const { data: devices, error } = await supabase
       .from('user_devices')
       .select('push_token, platform')
-      .in('user_id', targetIds)
+      .in('user_id', deliverIds)
       .not('push_token', 'is', null);
 
     if (error) throw error;
@@ -191,7 +293,7 @@ Deno.serve(async (req) => {
           ...(data ?? {}),
           ...(category ? { type: category } : {}),
         };
-        const notifRows = targetIds.map((uid: string) => ({
+        const notifRows = deliverIds.map((uid: string) => ({
           user_id: uid,
           type: category ?? 'system',
           title,
@@ -204,7 +306,7 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ message: 'No devices found', sent: 0, failed: 0 }),
+        JSON.stringify({ message: 'No devices found', sent: 0, failed: 0, opted_out: optedOutCount }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -327,9 +429,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Persist to in-app notification inbox for each target user
+    // Persist to in-app notification inbox for each delivered user
     try {
-      const notifRows = targetIds.map((uid: string) => ({
+      const notifRows = deliverIds.map((uid: string) => ({
         user_id: uid,
         type: category ?? 'system',
         title,
@@ -348,11 +450,12 @@ Deno.serve(async (req) => {
       `[send-push] summary: sent=${sent} failed=${failed} total_tokens=${tokens.length}` +
       `${errorCodes.length ? ' errors=' + [...new Set(errorCodes)].join(',') : ''}` +
       ` targets=${targetIds.length}${category ? ' category=' + category : ''}` +
+      `${optedOutCount > 0 ? ` opted_out=${optedOutCount}` : ''}` +
       `${category === 'ride_offer' ? ` launch_sent=${launchSent}/${androidTokens.length}` : ''}`,
     );
 
     return new Response(
-      JSON.stringify({ sent, failed, total_tokens: tokens.length }),
+      JSON.stringify({ sent, failed, total_tokens: tokens.length, opted_out: optedOutCount }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err) {
