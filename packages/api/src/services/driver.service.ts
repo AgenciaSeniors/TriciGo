@@ -800,6 +800,18 @@ export const driverService = {
 
   /**
    * Enable or disable auto-accept for incoming rides.
+   *
+   * INERT — has no callers, and enabling it would change nothing. No
+   * database function reads `driver_profiles.auto_accept_enabled`
+   * (verified against production 2026-07): dispatch creates a
+   * `ride_offers` row and waits for the driver either way. Nothing
+   * auto-accepts on their behalf.
+   *
+   * Kept because the column and this setter are the natural place to
+   * build on if auto-accept is ever implemented, but do NOT wire a
+   * settings toggle to it as-is — that would give drivers a switch that
+   * silently does nothing, which is exactly the problem the 2026-07
+   * settings audit was cleaning up.
    */
   async setAutoAccept(driverId: string, enabled: boolean): Promise<void> {
     const supabase = getSupabaseClient();

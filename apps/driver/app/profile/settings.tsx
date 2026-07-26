@@ -52,6 +52,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { registerPushTokenForUser } from '@/hooks/useNotifications';
+import { useVoiceGuidancePref } from '@/hooks/useVoiceGuidancePref';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsGroup } from '@/components/settings/SettingsGroup';
 import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
@@ -105,6 +106,11 @@ export default function DriverSettingsScreen() {
   // switches (night mode, offer sounds, work zone, "no recibir viajes")
   // that wrote to AsyncStorage and had no consumer anywhere.
   const driverProfileId = useDriverStore((s) => s.profile?.id);
+  // Same persisted key the trip navigation reads, so the two stay in
+  // agreement. (A trip view already mounted keeps its own copy until
+  // remount — acceptable, since you cannot be navigating and sitting in
+  // Settings at the same moment.)
+  const [voiceGuidanceEnabled, setVoiceGuidanceEnabled] = useVoiceGuidancePref();
   const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
   const [acceptsLongTrips, setAcceptsLongTrips] = useState(true);
   const [prefsSaving, setPrefsSaving] = useState(false);
@@ -361,6 +367,29 @@ export default function DriverSettingsScreen() {
 
         {/* ── Group 2: Audio ──────────────────────────────────────────── */}
         <SettingsGroup title={t('profile.section_audio', { defaultValue: 'Audio' })}>
+          {/* Voice guidance. The preference already existed and is honored
+              by the trip navigation strip, but the only way to reach it was
+              a button that appears mid-trip — so a driver who wanted the
+              voice off had to be driving to turn it off. */}
+          <Card theme="light" variant="surface" padding="md" className="mb-3">
+            <SettingsRow
+              icon="volume-high-outline"
+              title={t('profile.voice_guidance', { defaultValue: 'Guía por voz' })}
+              subtitle={t('profile.voice_guidance_desc', {
+                defaultValue: 'Indicaciones habladas durante la navegación',
+              })}
+              right={
+                <Switch
+                  value={voiceGuidanceEnabled}
+                  onValueChange={setVoiceGuidanceEnabled}
+                  trackColor={SWITCH_TRACK}
+                  accessibilityLabel={t('profile.voice_guidance', { defaultValue: 'Guía por voz' })}
+                  accessibilityState={{ checked: voiceGuidanceEnabled }}
+                />
+              }
+            />
+          </Card>
+
           {/* Notifications + sub-categories */}
           <Card theme="light" variant="surface" padding="md">
             <SettingsRow

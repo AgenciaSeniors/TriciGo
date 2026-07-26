@@ -291,6 +291,8 @@
     "notif_trip_requests": "Trip requests",
     "notif_sms": "SMS Alerts",
     "notif_sms_desc": "Receive ride alerts via SMS when offline. Carrier charges may apply.",
+    "voice_guidance": "Voice guidance",
+    "voice_guidance_desc": "Spoken directions while navigating",
     "max_distance": "Maximum distance",
     "max_distance_desc": "You only get rides whose pickup is within this distance",
     "max_distance_none": "No limit",
