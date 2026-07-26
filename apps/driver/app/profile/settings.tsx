@@ -237,7 +237,13 @@ export default function DriverSettingsScreen() {
     updates: { max_distance_km?: number | null; accepts_long_trips?: boolean | null },
     revert: () => void,
   ) => {
-    if (!driverProfileId) return;
+    if (!driverProfileId) {
+      // The caller already changed what is on screen. Without this the row
+      // would show the new value and never save it — a control that lies,
+      // which is the exact thing this screen was cleaned up to stop doing.
+      revert();
+      return;
+    }
     setPrefsSaving(true);
     try {
       const next = await driverService.updateMatchPreferences(driverProfileId, updates);

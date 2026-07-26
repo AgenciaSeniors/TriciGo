@@ -769,6 +769,7 @@
     "my_location": "Minha localização",
     "active": "Ativo",
     "status_approved": "Ativo",
+    "status_pending_verification": "Pendente de verificação",
     "status_under_review": "Em análise",
     "status_suspended": "Suspenso",
     "status_rejected": "Rejeitado"

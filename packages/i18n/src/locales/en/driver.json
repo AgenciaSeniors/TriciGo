@@ -770,6 +770,7 @@
     "my_location": "My location",
     "active": "Active",
     "status_approved": "Active",
+    "status_pending_verification": "Pending verification",
     "status_under_review": "Under review",
     "status_suspended": "Suspended",
     "status_rejected": "Rejected"

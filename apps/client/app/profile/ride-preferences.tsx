@@ -11,6 +11,8 @@ import { colors } from '@tricigo/theme';
 import Toast from 'react-native-toast-message';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { customerService } from '@tricigo/api';
+import { logger } from '@tricigo/utils';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import type { RidePreferences, AccessibilityNeed } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
@@ -39,17 +41,31 @@ export default function RidePreferencesScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [prefs, setPrefs] = useState<RidePreferences>({});
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  const loadProfile = useCallback(() => {
     if (!userId) { setLoading(false); return; }
+    setLoading(true);
+    setLoadError(false);
     customerService.ensureProfile(userId).then((profile) => {
       setProfileId(profile.id);
       setPrefs(profile.ride_preferences ?? {});
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((err) => {
+      // Without this the screen rendered the full, fully interactive form
+      // with `profileId === null`: every switch flipped, the ride-store draft
+      // updated, and `savePrefs` bailed out at its `if (!profileId) return`
+      // without saving or saying anything. The preferences looked stored and
+      // were gone next session.
+      logger.warn('[RidePreferences] Failed to load profile', { error: String(err) });
+      setLoadError(true);
+      setLoading(false);
+    });
   }, [userId]);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
 
   useEffect(() => {
     return () => {
@@ -107,6 +123,23 @@ export default function RidePreferencesScreen() {
         <View className="flex-1 px-4 pt-4">
           <SkeletonCard />
         </View>
+      </Screen>
+    );
+  }
+
+  // No profile means nothing can be saved. Show that instead of a form that
+  // accepts every tap and silently discards it.
+  if (loadError) {
+    return (
+      <Screen>
+        <ScreenHeader title={t('preferences.title')} onBack={() => router.back()} />
+        <ErrorState
+          title={t('errors.generic_title', { defaultValue: 'Error' })}
+          description={t('errors.preferences_load_failed', {
+            defaultValue: 'No pudimos cargar tus preferencias. Revisá tu conexión e intentá de nuevo.',
+          })}
+          onRetry={loadProfile}
+        />
       </Screen>
     );
   }

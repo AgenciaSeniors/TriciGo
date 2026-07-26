@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Switch, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -54,6 +54,9 @@ export default function SettingsScreen() {
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const currentLang = (i18n.language ?? 'es') as Language;
+  // Bumped on every category toggle; a load that started before the bump
+  // discards its result instead of overwriting the user's choice.
+  const prefsGenerationRef = useRef(0);
 
   const loadSettings = useCallback(() => {
     // Load master toggle
@@ -61,28 +64,44 @@ export default function SettingsScreen() {
       if (val !== null) setNotificationsEnabled(val === 'true');
     }).catch(() => {});
 
+    // Snapshot the toggle generation for this load. `loadSettings` runs on
+    // mount AND on every focus/foreground (useRefreshOnFocus), so a server
+    // response can land after the user has already flipped a switch. Without
+    // this guard the stale response overwrote both the UI and the device key,
+    // silently undoing the change — and on a slow connection that window is
+    // seconds wide, not milliseconds.
+    const generation = prefsGenerationRef.current;
+
     // Paint the switches from the on-device values first. Those are what
     // actually gate delivery, and they're available immediately — before
     // this, the switches rendered "on" for everything until the server
     // replied, briefly lying to a user who had turned something off.
-    readDeviceNotifPrefs().then(setCategoryPrefs).catch(() => {});
+    readDeviceNotifPrefs().then((devicePrefs) => {
+      if (prefsGenerationRef.current !== generation) return;
+      setCategoryPrefs(devicePrefs);
+    }).catch(() => {});
 
     // Load category preferences from server
     if (userId) {
       notificationService.getPreferences(userId).then((prefs) => {
-        if (prefs) {
-          const next = {
-            ride_updates: prefs.ride_updates,
-            chat_messages: prefs.chat_messages,
-            payment_updates: prefs.payment_updates,
-            promotions: prefs.promotions,
-          };
-          setCategoryPrefs(next);
-          // The server is the cross-device source of truth, but the
-          // handler only reads AsyncStorage — mirror it down, otherwise a
-          // preference set on the web never takes effect on this phone.
-          syncNotifPrefsToDevice(next);
-        }
+        if (!prefs) return;
+        // The user touched a switch while this was in flight — their choice
+        // is newer than this response. Dropping it is the only safe option:
+        // applying it would revert them, and merging per-key would still
+        // race on the key they just changed.
+        if (prefsGenerationRef.current !== generation) return;
+
+        const next = {
+          ride_updates: prefs.ride_updates,
+          chat_messages: prefs.chat_messages,
+          payment_updates: prefs.payment_updates,
+          promotions: prefs.promotions,
+        };
+        setCategoryPrefs(next);
+        // The server is the cross-device source of truth, but the
+        // handler only reads AsyncStorage — mirror it down, otherwise a
+        // preference set on the web never takes effect on this phone.
+        syncNotifPrefsToDevice(next);
       }).catch(() => {
         // Offline / RPC failure: the device values loaded above stay in
         // force, so the last known preferences still apply.
@@ -190,6 +209,8 @@ export default function SettingsScreen() {
   };
 
   const handleCategoryToggle = useCallback(async (key: ServerNotifPref, enabled: boolean) => {
+    // Invalidate any load already in flight — its data predates this choice.
+    prefsGenerationRef.current += 1;
     setCategoryPrefs((prev) => ({ ...prev, [key]: enabled }));
 
     // Write the on-device key first: it is the one the notification
