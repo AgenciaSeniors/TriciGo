@@ -8,27 +8,66 @@
 // accessible URL — outside the app — that explains how to delete the
 // account, in addition to the in-app deletion flow.
 //
-// This page satisfies that requirement. It does NOT perform the actual
-// deletion (that requires authentication and lives inside the mobile
-// app + edge function). Instead, it:
-//   1. Explains what the in-app flow does and where to find it.
-//   2. Lists the data that gets removed vs. anonymized (audit trail
+// This page satisfies that requirement. It:
+//   1. Deletes the account directly when the visitor is signed in
+//      (see below).
+//   2. Explains the equivalent in-app flow.
+//   3. Lists the data that gets removed vs. anonymized (audit trail
 //      stays per AML compliance).
-//   3. Provides a mailto: fallback for users who have already deleted
+//   4. Provides a mailto: fallback for users who have already deleted
 //      the app or lost access to their phone — support manually
 //      verifies identity and triggers the same edge function.
+//
+// (1) was missing until the 2026-07 settings audit: the page said
+// deletion "requires authentication and lives inside the mobile app",
+// and `/profile/settings` linked here as its "Eliminar mi cuenta"
+// action. So a signed-in web user who asked to delete their account was
+// handed an explainer and told to email support — while the mobile app
+// did it in one tap. `deleteAccount()` needs nothing the browser lacks:
+// the edge function derives the user from the JWT.
 //
 // Linked from `apps/web/src/app/web-footer.tsx` Legal section, and
 // declared in `apps/client/store-metadata/data-safety.md` as the
 // public deletion URL for Play Console.
 // ============================================================
 
+import { useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
+import { authService } from '@tricigo/api';
+import { useAuth } from '../../providers';
 
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
 
+/** Typed confirmation, mirroring the driver app's Alert.prompt flow. */
+const CONFIRM_WORD = 'ELIMINAR';
+
 export default function AccountDeletePage() {
   const { t } = useTranslation('web');
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const canDelete = confirmText.trim().toUpperCase() === CONFIRM_WORD && !deleting;
+
+  async function handleDelete() {
+    if (!canDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      // Same edge function the mobile app calls. It resolves the user
+      // from the JWT, so the browser cannot delete anyone else.
+      await authService.deleteAccount();
+      window.location.href = '/';
+    } catch {
+      setDeleting(false);
+      setDeleteError(
+        t('account_delete.delete_error', {
+          defaultValue: 'No pudimos eliminar la cuenta. Intentá de nuevo o escribinos a soporte.',
+        }),
+      );
+    }
+  }
 
   const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
     t('account_delete.mail_subject', { defaultValue: 'Solicitud de eliminación de cuenta' }),
@@ -50,6 +89,80 @@ export default function AccountDeletePage() {
             'Tenés derecho a solicitar la eliminación de tu cuenta y de los datos personales asociados en cualquier momento.',
         })}
       </p>
+
+      {/* Signed-in visitors delete here, no detour through support. */}
+      {!authLoading && isAuthenticated && (
+        <section
+          style={{
+            marginBottom: '2rem',
+            padding: '1.25rem',
+            border: '1px solid rgba(239,68,68,0.4)',
+            background: 'rgba(239,68,68,0.08)',
+            borderRadius: 12,
+          }}
+        >
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+            {t('account_delete.now_title', { defaultValue: 'Eliminar mi cuenta ahora' })}
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+            {t('account_delete.now_body', {
+              defaultValue:
+                'Estás con la sesión abierta, así que podés eliminarla desde acá. La acción es inmediata e irreversible.',
+            })}
+          </p>
+          <label
+            htmlFor="confirm-delete"
+            style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.9375rem' }}
+          >
+            {t('account_delete.now_confirm_label', {
+              defaultValue: 'Para confirmar, escribí ELIMINAR:',
+            })}
+          </label>
+          <input
+            id="confirm-delete"
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            autoComplete="off"
+            disabled={deleting}
+            style={{
+              width: '100%',
+              maxWidth: 280,
+              padding: '0.625rem 0.75rem',
+              borderRadius: 8,
+              border: '1px solid var(--border, rgba(0,0,0,0.2))',
+              background: 'var(--bg-card, #fff)',
+              color: 'var(--text-primary, #111)',
+              marginBottom: '1rem',
+            }}
+          />
+          <div>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={!canDelete}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: canDelete ? '#EF4444' : 'rgba(239,68,68,0.4)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                fontWeight: 600,
+                cursor: canDelete ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {deleting
+                ? t('account_delete.now_deleting', { defaultValue: 'Eliminando…' })
+                : t('account_delete.now_cta', { defaultValue: 'Eliminar mi cuenta' })}
+            </button>
+          </div>
+          {deleteError && (
+            <p role="alert" style={{ color: '#EF4444', marginTop: '0.75rem', fontSize: '0.9375rem' }}>
+              {deleteError}
+            </p>
+          )}
+        </section>
+      )}
 
       <section style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>
