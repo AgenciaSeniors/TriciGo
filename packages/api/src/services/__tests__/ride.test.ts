@@ -40,6 +40,13 @@ vi.mock('../notification.service', () => ({
   },
 }));
 
+// Mock the delivery service — createRide writes delivery_details for cargo
+// rides, and the interesting behaviour is what happens when that write fails.
+const { mockCreateDeliveryDetails } = vi.hoisted(() => ({ mockCreateDeliveryDetails: vi.fn() }));
+vi.mock('../delivery.service', () => ({
+  deliveryService: { createDeliveryDetails: mockCreateDeliveryDetails },
+}));
+
 // Import after mock is set up
 import { rideService } from '../ride.service';
 
@@ -911,6 +918,84 @@ describe('rideService.createRide', () => {
         discount_amount_cup: 500,
       }),
     ).resolves.toBeDefined();
+  });
+
+  // A cargo ride with no delivery_details row can be dispatched and accepted,
+  // and then can NEVER be completed: tg_rides_require_delivery_proof (00438)
+  // blocks the transition because there is no row to hold the OTP and the
+  // delivery photo. Only an admin can unstick it, and the driver finds out at
+  // the customer's door. So the booking is atomic or it is cancelled — it must
+  // never half-succeed.
+  const CARGO_PARAMS = {
+    service_type: 'moto_standard' as const,
+    payment_method: 'cash' as const,
+    pickup_latitude: 23.1352,
+    pickup_longitude: -82.3599,
+    pickup_address: 'Capitolio',
+    dropoff_latitude: 23.1375,
+    dropoff_longitude: -82.3964,
+    dropoff_address: 'Hotel Nacional',
+    estimated_fare_cup: 2000,
+    ride_mode: 'cargo' as const,
+    delivery_details: {
+      package_description: 'Sobre',
+      recipient_name: 'Ana',
+      recipient_phone: '+5355551234',
+      client_accompanies: false,
+    },
+  };
+
+  function mockRideInsert(id: string) {
+    mockFrom.mockReturnValue({
+      insert: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: { id, customer_id: 'user-1', status: 'searching' },
+            error: null,
+          }),
+        }),
+      }),
+    });
+  }
+
+  it('saves delivery details for a cargo ride', async () => {
+    mockRideInsert('ride-cargo-ok');
+    mockCreateDeliveryDetails.mockResolvedValueOnce({ id: 'dd-1' });
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    await expect(rideService.createRide(CARGO_PARAMS)).resolves.toBeDefined();
+
+    expect(mockCreateDeliveryDetails).toHaveBeenCalledWith(
+      expect.objectContaining({ ride_id: 'ride-cargo-ok', recipient_name: 'Ana' }),
+    );
+    expect(mockRpc).not.toHaveBeenCalledWith('cancel_ride', expect.anything());
+  });
+
+  it('cancels the ride and rethrows when the delivery details cannot be saved', async () => {
+    mockRideInsert('ride-cargo-fail');
+    mockCreateDeliveryDetails.mockRejectedValueOnce(new Error('rls denied'));
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    await expect(rideService.createRide(CARGO_PARAMS)).rejects.toThrow(
+      /delivery_details_creation_failed/,
+    );
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'cancel_ride',
+      expect.objectContaining({ p_ride_id: 'ride-cargo-fail' }),
+    );
+  });
+
+  it('reports the ride as orphaned when even the cancel fails', async () => {
+    mockRideInsert('ride-cargo-orphan');
+    mockCreateDeliveryDetails.mockRejectedValueOnce(new Error('rls denied'));
+    mockRpc.mockRejectedValue(new Error('network down'));
+
+    // The caller must never be told the booking succeeded, and the message has
+    // to distinguish "cleaned up" from "there is a live ride with no package".
+    await expect(rideService.createRide(CARGO_PARAMS)).rejects.toThrow(
+      /delivery_details_creation_failed_and_ride_orphaned/,
+    );
   });
 });
 
