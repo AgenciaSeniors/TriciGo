@@ -103,7 +103,10 @@ export default function DriverDevicesScreen() {
     Alert.alert(
       t('devices.revoke_confirm_title', { defaultValue: 'Quitar dispositivo' }),
       t('devices.revoke_confirm_msg', {
-        defaultValue: 'Se quitará este dispositivo de tu lista. El próximo inicio de sesión desde él se tratará como nuevo.',
+        // `device` is required: the shared string names the device. Without
+        // it i18next renders the literal "{{device}}" in the dialog.
+        device: deviceTitle(device),
+        defaultValue: 'Se quitará "{{device}}" de tus dispositivos conocidos. El próximo inicio de sesión desde ese dispositivo se tratará como nuevo.',
       }),
       [
         { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
@@ -245,8 +248,12 @@ export default function DriverDevicesScreen() {
                           </Text>
                         )}
                         <Text variant="caption" style={{ color: midnightEmber.screen.text.tertiary }}>
-                          {t('devices.last_seen', { defaultValue: 'Visto por última vez' })}{' '}
-                          {formatLastSeen(device.last_seen_at)}
+                          {t('devices.last_seen', {
+                            // The shared string embeds the date; concatenating
+                            // it separately printed "{{when}}" next to it.
+                            when: formatLastSeen(device.last_seen_at),
+                            defaultValue: 'Visto por última vez {{when}}',
+                          })}
                         </Text>
                       </View>
 

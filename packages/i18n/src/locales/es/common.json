@@ -684,7 +684,7 @@
     "no_blocked_desc": "Las personas que bloquees aparecerán acá.",
     "this_user": "Usuario",
     "unblock": "Desbloquear",
-    "unblock_confirm": "este usuario",
+    "unblock_confirm": "Volveras a poder emparejarte con {{name}}.",
     "unblock_title": "Desbloquear usuario",
     "unblocked_ok": "Usuario desbloqueado"
   },

@@ -684,7 +684,7 @@
     "no_blocked_desc": "People you block will show up here.",
     "this_user": "User",
     "unblock": "Unblock",
-    "unblock_confirm": "this user",
+    "unblock_confirm": "You'll be able to be matched with {{name}} again.",
     "unblock_title": "Unblock user",
     "unblocked_ok": "User unblocked"
   },
