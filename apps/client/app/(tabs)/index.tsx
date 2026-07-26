@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion } from '@tricigo/api';
@@ -26,6 +26,7 @@ import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
 import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
+import { useDeliveryVehicles } from '@/hooks/useDeliveryVehicles';
 import { useTestVehicles } from '@/hooks/useTestVehicles';
 import { SubmitPoiSheet } from '@tricigo/ui';
 import { RideActiveView } from '@/components/RideActiveView';
@@ -2954,7 +2955,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
 
     return () => { cancelled = true; };
   }, []);
-  const { t } = useTranslation('rider');
+  const { t, i18n } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
   const mode: 'light' | 'dark' = resolvedScheme;
@@ -3005,6 +3006,50 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     () => (userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null),
     [userCenter],
   );
+
+  // ── Which vehicles can actually carry this package ──
+  // Dispatch filters cargo offers fail-closed on accepts_cargo, weight and
+  // category (00326 wired up by 00512). A rider who picks a vehicle that
+  // cannot take their package gets ZERO offers and a ride that searches until
+  // the stale-ride watchdog cancels it — with nothing on screen saying why.
+  // These specs are the ones the form already collects; no extra fields are
+  // asked of the rider.
+  const deliverySpecs = useMemo(
+    () => ({
+      weightKg: draft.delivery.estimatedWeightKg ? parseFloat(draft.delivery.estimatedWeightKg) : undefined,
+      category: draft.delivery.packageCategory ?? undefined,
+    }),
+    [draft.delivery.estimatedWeightKg, draft.delivery.packageCategory],
+  );
+  const { options: deliveryVehicleOptions } = useDeliveryVehicles(deliverySpecs);
+  const deliveryReasonLang: 'es' | 'en' | 'pt' =
+    i18n.language?.startsWith('en') ? 'en' : i18n.language?.startsWith('pt') ? 'pt' : 'es';
+
+  // Changing the weight or category can invalidate a vehicle already chosen.
+  // Leaving it selected would let the rider book a delivery nobody can accept,
+  // so the selection is cleared and they are asked to pick again.
+  const selectedDeliveryOption = draft.delivery.deliveryVehicleType
+    ? deliveryVehicleOptions.find((o) => o.type === draft.delivery.deliveryVehicleType)
+    : undefined;
+  useEffect(() => {
+    if (selectedDeliveryOption && !selectedDeliveryOption.compatibility.compatible) {
+      setDeliveryField('deliveryVehicleType', null);
+    }
+  }, [selectedDeliveryOption, setDeliveryField]);
+
+  const deliveryBlockedNote = useMemo(() => {
+    const blocked = deliveryVehicleOptions.filter((o) => !o.compatibility.compatible);
+    if (blocked.length === 0) return null;
+    if (blocked.length === deliveryVehicleOptions.length) {
+      return t('delivery.no_vehicle_fits', {
+        defaultValue: 'Ningún vehículo puede llevar este paquete. Revisá el peso o la categoría.',
+      });
+    }
+    const first = blocked[0]!;
+    const label = ({ moto: 'Moto', triciclo: 'Triciclo', auto: 'Auto', confort: 'Confort' } as const)[first.type];
+    const reason = INCOMPATIBILITY_REASON_LABELS[first.compatibility.reason ?? '']?.[deliveryReasonLang];
+    return reason ? `${label}: ${reason.toLowerCase()}` : null;
+  }, [deliveryVehicleOptions, deliveryReasonLang, t]);
 
   // Compute selectedEstimate from allFareEstimates for the current service type.
   // Mensajería se cobra al precio del VEHÍCULO elegido (alinea con la web): resuelve
@@ -3517,17 +3562,43 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                      selection actually sticks and `deliveryVehicleToSlug`
                      can do its job at submit time. */}
                 <Text variant="caption" color="tertiary" style={{ marginBottom: 4 }}>{t('delivery.vehicle', { defaultValue: 'Vehículo de envío' })}</Text>
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
                   {(['moto', 'triciclo', 'auto', 'confort'] as const).map((vt) => {
                     const vLabel = ({ moto: 'Moto', triciclo: 'Triciclo', auto: 'Auto', confort: 'Confort' } as const)[vt];
                     const isSel = draft.delivery.deliveryVehicleType === vt;
+                    // Dispatch enforces accepts_cargo, weight and category
+                    // fail-closed (00326 + 00512). Picking a vehicle that
+                    // cannot take this package no longer just under-matches —
+                    // it produces ZERO offers and a ride that searches until
+                    // the watchdog kills it, with nothing on screen explaining
+                    // why. So the mismatch is surfaced here, before booking.
+                    const opt = deliveryVehicleOptions.find((o) => o.type === vt);
+                    const blocked = opt ? !opt.compatibility.compatible : false;
+                    const reason = blocked
+                      ? INCOMPATIBILITY_REASON_LABELS[opt!.compatibility.reason ?? '']?.[deliveryReasonLang] ?? null
+                      : null;
                     return (
-                      <Pressable key={vt} onPress={() => setDeliveryField('deliveryVehicleType', vt)} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: isSel ? 2 : 1, borderColor: isSel ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isSel ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev1 : '#fff'), alignItems: 'center' }}>
+                      <Pressable
+                        key={vt}
+                        onPress={() => { if (!blocked) setDeliveryField('deliveryVehicleType', vt); }}
+                        disabled={blocked}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSel, disabled: blocked }}
+                        accessibilityLabel={reason ? `${vLabel} — ${reason}` : vLabel}
+                        style={{ flex: 1, paddingVertical: 8, borderRadius: 8, opacity: blocked ? 0.45 : 1, borderWidth: isSel ? 2 : 1, borderColor: isSel ? colors.brand.orange : (mode === 'dark' ? tokens.line : colors.neutral[200]), backgroundColor: isSel ? (mode === 'dark' ? tokens.accent.orangeGlow : '#FFF5F0') : (mode === 'dark' ? tokens.bg.elev1 : '#fff'), alignItems: 'center' }}
+                      >
                         <Text variant="caption" style={{ fontWeight: isSel ? '700' : '400', color: isSel ? colors.brand.orange : (mode === 'dark' ? tokens.ink.secondary : colors.neutral[600]), fontSize: 11 }}>{vLabel}</Text>
                       </Pressable>
                     );
                   })}
                 </View>
+                {/* The reason in words, not just a dimmed chip: greying out
+                    alone tells the rider nothing about what to change. */}
+                {deliveryBlockedNote && (
+                  <Text variant="caption" color="tertiary" style={{ marginBottom: 8, fontSize: 11 }}>
+                    {deliveryBlockedNote}
+                  </Text>
+                )}
                 {/* Recipient */}
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
                   <View style={{ flex: 1 }}>
