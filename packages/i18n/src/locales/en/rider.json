@@ -4,6 +4,7 @@
     "description_placeholder": "What's in the package",
     "details": "Delivery details",
     "instructions": "Special instructions (optional)",
+    "no_vehicle_fits": "No vehicle can carry this package. Check the weight or the category.",
     "package_category": "Category",
     "price_by_vehicle": "Depends on vehicle",
     "recipient_name": "Recipient",
