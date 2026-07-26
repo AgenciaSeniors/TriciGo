@@ -4,6 +4,7 @@
     "description_placeholder": "Descrição do pacote",
     "details": "Dados da entrega",
     "instructions": "Instruções especiais (opcional)",
+    "no_vehicle_fits": "Nenhum veículo pode levar este pacote. Revise o peso ou a categoria.",
     "package_category": "Categoria",
     "price_by_vehicle": "Conforme o veículo",
     "recipient_name": "Destinatário",
