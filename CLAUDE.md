@@ -2081,6 +2081,35 @@ Para lo que quedó fuera de la ventana de 6 h: `get_logs service=edge-function` 
 
 **Cómo probar un alerta sin spamear** (`business_notification_email` son 3 destinatarios reales): correr todo dentro de `BEGIN; ... ROLLBACK;` — `net.http_post` inserta en `net.http_request_queue`, que **es transaccional**, así que el rollback cancela el envío. Verificado: `emails_sent=3` con **cero** requests en `net._http_response`. Confirmar el rollback releyendo las keys de config después.
 
+### Trampa plpgsql: `RAISE EXCEPTION 'texto' USING MESSAGE = …` aborta con 42601 (verificado 2026-07-27, mig 00519)
+
+**Síntoma que ve el usuario final:** un toast con el texto crudo **"RAISE option already specified: MESSAGE"** en vez del mensaje que la función quería dar. Reportado por un conductor al tocar "Llegué al destino".
+
+**Causa:** la cadena de formato de `RAISE EXCEPTION 'texto'` **ya define** la opción `MESSAGE`. Agregar `USING MESSAGE = …` la define por segunda vez y Postgres aborta la sentencia con `42601`. Es error **de runtime** (`exec_stmt_raise`), no de compilación → la función se crea sin chistar, pasa cualquier `check-types`/deploy, y **solo explota cuando esa rama concreta se ejecuta**. Puede vivir meses dormida en una rama de guarda.
+
+```sql
+-- Reproducción mínima:
+DO $$ BEGIN RAISE EXCEPTION 'gps_required' USING MESSAGE = 'x'; END $$;
+--> ERROR: 42601: RAISE option already specified: MESSAGE
+```
+
+**Forma correcta** (el código legible por máquina va a `DETAIL`, que PostgREST expone como `error.details`):
+
+```sql
+RAISE EXCEPTION USING
+  ERRCODE = 'P0001',
+  MESSAGE = format('Estás a %s m del %s. Acércate más para confirmar.', v_dist, v_target_es),
+  DETAIL  = 'too_far_for_bypass';
+```
+
+**Barrido:** `grep -rn "USING MESSAGE" supabase/migrations/` y revisar cada hit — si la línea del `RAISE` trae además una cadena de formato, está roto. Ojo que **basta con mirar la migración más nueva de cada función**, pero para saber qué corre hoy hay que ir a `pg_get_functiondef` (ver más abajo).
+
+**Amplificador:** `driver.service.updateRideStatus` (y varios services) hacen `throw new Error(error.message)` y la app renderiza `errMsg` **crudo** en el toast. Cualquier `RAISE` mal formado llega tal cual a la pantalla del usuario. Al tocar mensajes de error server-side, recordá que son **copy de UI**: español neutro, accionable.
+
+**Cómo se agrava:** las dos ramas rotas estaban en la verja de proximidad de `update_ride_status_v2`, y el conductor **debe** pasar por `arrived_at_destination` para poder finalizar → el viaje quedaba trabado sin salida. Cuando un guard de estado falla, revisá si el usuario queda en un callejón sin salida, no solo si el mensaje es feo.
+
+**Lección de método (se repitió en esta sesión):** la migración en git **no es** lo que corre en prod. `00233` era la última migración de `update_ride_status_v2` en el repo, pero `00432` había reescrito la función agregando el guard RLC-01. Reescribir desde `00233` habría **borrado ese guard en silencio**. Patrón: transcribir el cuerpo desde `pg_get_functiondef`/`prosrc` vivo, y **probar la fidelidad con hash** — revertir los cambios intencionales sobre el archivo nuevo debe reproducir `md5(prosrc)` y `length(prosrc)` exactos de prod.
+
 ### Trampa plpgsql: una variable `RECORD` hace shadowing del alias SQL con el mismo nombre
 
 **Bug real (mig 00507).** Declarar `r RECORD` para un `FOR` loop **y** usar `r` como alias de tabla en una query de la misma función:
