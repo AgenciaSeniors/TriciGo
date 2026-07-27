@@ -1,4 +1,9 @@
 {
+  "chat": {
+    "in_chat": "O motorista está no chat",
+    "message_read": "Lido",
+    "message_sent": "Enviado"
+  },
   "app_name": "TriciGo",
   "loading": "Carregando...",
   "error": "Ocorreu um erro",

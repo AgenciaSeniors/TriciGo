@@ -17,11 +17,10 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { getSupabaseClient, rideService } from '@tricigo/api';
+import { getSupabaseClient, rideService, chatService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { getQuickRepliesForRole } from '@tricigo/utils';
 import { useChat } from '@/hooks/useChat';
-import { stampChatRead } from '@/hooks/useUnreadChatCount';
 
 const MAX_CHARS = 500;
 const CHAR_WARN = 400;
@@ -89,15 +88,19 @@ export default function ChatPage() {
     return () => { cancelled = true; };
   }, [rideId]);
 
-  // Stamp last-read on mount + unmount so the tracking-screen unread badge
-  // clears (parity con el sellado de last-read del chat móvil).
+  const { messages, loading, remoteTyping, remotePresent, sendMessage, notifyTyping } = useChat(rideId, userId);
+
+  // Opening the chat IS reading it: stamp read_at server-side (00516), which
+  // clears this rider's unread badge AND turns the driver's bubbles
+  // double-checked. Re-runs as messages arrive so a conversation read live
+  // does not leave its last line unread.
+  //
+  // Replaces the localStorage "last read" timestamp, which only this browser
+  // could see.
   useEffect(() => {
     if (!rideId) return;
-    stampChatRead(rideId);
-    return () => stampChatRead(rideId);
-  }, [rideId]);
-
-  const { messages, loading, remoteTyping, sendMessage, notifyTyping } = useChat(rideId, userId);
+    chatService.markRead(rideId).catch(() => { /* best-effort */ });
+  }, [rideId, messages.length]);
 
   // Auto-scroll to bottom on new messages OR typing toggle
   useEffect(() => {
@@ -167,7 +170,14 @@ export default function ChatPage() {
         <div>
           <h1 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{driverName}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-            {driverSubtitle ?? t('web.chat_ride', { defaultValue: 'Chat del viaje' })}
+            {/* Presence replaces the static subtitle only while the driver
+                actually has this chat open — and says exactly that, not the
+                broader "online" the app cannot know. Absent, the subtitle
+                falls back to identity info, which is what the rider needs to
+                confirm they are messaging the right person. */}
+            {remotePresent
+              ? t('chat.in_chat', { defaultValue: 'El conductor está en el chat' })
+              : driverSubtitle ?? t('web.chat_ride', { defaultValue: 'Chat del viaje' })}
           </p>
         </div>
       </div>
@@ -229,6 +239,20 @@ export default function ChatPage() {
                     {isPending
                       ? t('web.message_pending', { defaultValue: 'Pendiente · sin red' })
                       : new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' })}
+                    {/* Read state, own messages only — a check mark on the
+                        driver's own line would mean nothing to the rider.
+                        ✓ sent · ✓✓ the driver opened the chat (read_at, 00516).
+                        Parity with both mobile apps. */}
+                    {isMine && !isPending && (
+                      <span
+                        aria-label={msg.read_at
+                          ? t('chat.message_read', { defaultValue: 'Leído' })
+                          : t('chat.message_sent', { defaultValue: 'Enviado' })}
+                        style={{ marginLeft: '0.35rem', opacity: msg.read_at ? 1 : 0.75 }}
+                      >
+                        {msg.read_at ? '✓✓' : '✓'}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>

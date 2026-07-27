@@ -461,6 +461,9 @@
   },
 
   "chat": {
+    "in_chat": "O motorista está no chat",
+    "message_read": "Lido",
+    "message_sent": "Enviado",
     "title": "Chat",
     "placeholder": "Escreva uma mensagem...",
     "send": "Enviar",

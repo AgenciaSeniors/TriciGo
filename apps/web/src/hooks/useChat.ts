@@ -80,6 +80,9 @@ export interface UseChatResult {
   messages: ChatMessageUI[];
   loading: boolean;
   remoteTyping: boolean;
+  /** Does the other party currently have this chat open? Realtime presence —
+   *  narrower than "is online", which is all it can honestly report. */
+  remotePresent: boolean;
   sendMessage: (body: string) => Promise<void>;
   notifyTyping: () => void;
 }
@@ -88,6 +91,7 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
   const [messages, setMessages] = useState<ChatMessageUI[]>([]);
   const [loading, setLoading] = useState(true);
   const [remoteTyping, setRemoteTyping] = useState(false);
+  const [remotePresent, setRemotePresent] = useState(false);
 
   const messagesRef = useRef<ChatMessageUI[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -125,11 +129,18 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
       });
     });
 
-    typingChannel = chatService.subscribeToTyping(rideId, userId, () => {
-      setRemoteTyping(true);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => setRemoteTyping(false), TYPING_TIMEOUT_MS);
-    });
+    // Typing AND presence ride this one channel — a second channel per open
+    // chat buys nothing that an already-subscribed one cannot report.
+    typingChannel = chatService.subscribeToTyping(
+      rideId,
+      userId,
+      () => {
+        setRemoteTyping(true);
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => setRemoteTyping(false), TYPING_TIMEOUT_MS);
+      },
+      setRemotePresent,
+    );
 
     // Polling fallback every 8s in case realtime drops silently.
     const pollInterval = window.setInterval(async () => {
@@ -243,5 +254,5 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
     chatService.broadcastTyping(rideId, userId);
   }, [rideId, userId]);
 
-  return { messages, loading, remoteTyping, sendMessage, notifyTyping };
+  return { messages, loading, remoteTyping, remotePresent, sendMessage, notifyTyping };
 }
