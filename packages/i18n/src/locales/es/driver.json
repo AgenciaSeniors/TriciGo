@@ -526,6 +526,11 @@
 
   "chat": {
     "title": "Chat",
+    "in_chat": "En el chat",
+    "rider": "Pasajero",
+    "input_placeholder": "Escribe un mensaje...",
+    "toolbar_chat_unread_one": "Chat, {{count}} sin leer",
+    "toolbar_chat_unread_other": "Chat, {{count}} sin leer",
     "placeholder": "Escribe un mensaje...",
     "send": "Enviar",
     "no_messages": "Sin mensajes aún. ¡Envía el primero!",

@@ -72,10 +72,59 @@ for (const file of files) {
   }
 }
 
+// ── Shared-source contract: the quick replies ────────────────────────────────
+// packages/utils/src/chatQuickReplies.ts is the single source of truth for
+// which canned replies exist and which role sees each one. Every entry there
+// is rendered as `chat.quick_<key>`, so a preset with no matching locale entry
+// silently renders its own key name.
+//
+// This is deliberately narrow rather than a blanket "every key used in code
+// must exist in es". That blanket rule would fight a documented convention:
+// throwaway labels are allowed to live as t('key', { defaultValue: '…' }) with
+// no JSON entry at all, so it would report hundreds of intentional cases and be
+// switched off within a week. What broke here was not a missing translation but
+// a BROKEN CONTRACT — the driver screen asked for `quick_waiting` and
+// `quick_thanks` while the shared source declares `wait_please` and
+// `thank_you`. Checking the contract catches that with no noise.
+const QUICK_REPLY_SOURCE = 'packages/utils/src/chatQuickReplies.ts';
+const contractBreaks = [];
+try {
+  const src = readFileSync(QUICK_REPLY_SOURCE, 'utf8');
+  const presets = [...src.matchAll(/key:\s*'([a-z0-9_]+)'\s*,[\s\S]*?roles:\s*\[([^\]]*)\]/g)].map(
+    (m) => ({ key: m[1], roles: m[2] }),
+  );
+  if (presets.length === 0) {
+    contractBreaks.push(`${QUICK_REPLY_SOURCE} — no presets parsed; has QUICK_REPLIES changed shape?`);
+  }
+  // rider → rider.json, driver → driver.json
+  for (const { key, roles } of presets) {
+    for (const [role, ns] of [['rider', 'rider.json'], ['driver', 'driver.json']]) {
+      if (!roles.includes(`'${role}'`)) continue;
+      for (const locale of [SOURCE, ...TARGETS]) {
+        const keys = new Set(flatten(load(locale, ns)));
+        if (!keys.has(`chat.quick_${key}`)) {
+          contractBreaks.push(`${locale}/${ns}  chat.quick_${key}  (declared for '${role}' in QUICK_REPLIES)`);
+        }
+      }
+    }
+  }
+} catch (err) {
+  contractBreaks.push(`${QUICK_REPLY_SOURCE} — cannot be checked (${err.message})`);
+}
+
 if (stale.length > 0) {
   console.warn(`\n⚠ ${stale.length} key(s) exist in en/pt but not in es (likely stale, not failing):`);
   for (const s of stale.slice(0, 20)) console.warn(`  ${s}`);
   if (stale.length > 20) console.warn(`  … and ${stale.length - 20} more`);
+}
+
+if (contractBreaks.length > 0) {
+  console.error(`\n✖ ${contractBreaks.length} quick-reply preset(s) have no locale entry:\n`);
+  for (const c of contractBreaks) console.error(`  ${c}`);
+  console.error(
+    '\nEvery entry in QUICK_REPLIES renders as chat.quick_<key>. Add the missing\n' +
+      'entries, or remove the preset from the shared source if it is not wanted.\n',
+  );
 }
 
 if (missing.length > 0) {
@@ -86,7 +135,11 @@ if (missing.length > 0) {
       "out of es/ too and rely on t('key', { defaultValue: '…' }) instead — the point is\n" +
       'that es/ and en/pt agree on what counts as real copy.\n',
   );
-  process.exit(1);
 }
 
-console.log(`✓ i18n parity: ${files.length} namespace(s) × ${TARGETS.length} locale(s), no missing translations`);
+if (missing.length > 0 || contractBreaks.length > 0) process.exit(1);
+
+console.log(
+  `✓ i18n parity: ${files.length} namespace(s) × ${TARGETS.length} locale(s), no missing translations` +
+    '\n✓ quick-reply presets: every entry in QUICK_REPLIES has a locale entry for each role that sees it',
+);

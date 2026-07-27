@@ -25,7 +25,8 @@ import { router } from 'expo-router';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { openNavigation } from '@/utils/navigation';
-import { midnightEmber } from '@tricigo/theme';
+import { midnightEmber, colors } from '@tricigo/theme';
+import { useUnreadChatCount } from '@/hooks/useUnreadChatCount';
 
 interface TripActionToolbarProps {
   navTarget: { latitude: number; longitude: number } | null;
@@ -46,6 +47,9 @@ interface ToolbarButtonProps {
   onPress: () => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
+  /** Unread count shown as a badge on the icon. Mirrors the rider's
+   *  TripActionBar so the two toolbars read the same way. */
+  badgeCount?: number;
 }
 
 function ToolbarButton({
@@ -55,7 +59,9 @@ function ToolbarButton({
   onPress,
   accessibilityLabel,
   accessibilityHint,
+  badgeCount,
 }: ToolbarButtonProps) {
+  const showBadge = badgeCount != null && badgeCount > 0;
   return (
     <Pressable
       onPress={onPress}
@@ -74,7 +80,29 @@ function ToolbarButton({
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
     >
-      <Ionicons name={icon} size={22} color={color} />
+      <View>
+        <Ionicons name={icon} size={22} color={color} />
+        {showBadge && (
+          <View
+            style={{
+              position: 'absolute',
+              top: -6,
+              right: -10,
+              minWidth: 18,
+              height: 18,
+              borderRadius: 9,
+              paddingHorizontal: 4,
+              backgroundColor: colors.error.DEFAULT,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>
+              {badgeCount > 9 ? '9+' : String(badgeCount)}
+            </Text>
+          </View>
+        )}
+      </View>
       <Text variant="caption" style={{ color, fontSize: 10, marginTop: 2 }}>
         {label}
       </Text>
@@ -92,6 +120,7 @@ export function TripActionToolbar({
   onCallPassenger,
 }: TripActionToolbarProps) {
   const { t } = useTranslation('driver');
+  const { count: unreadChatCount, markRead: markChatRead } = useUnreadChatCount(rideId ?? null);
 
   return (
     <View
@@ -144,8 +173,16 @@ export function TripActionToolbar({
         icon="chatbubble"
         label={t('trip.toolbar_chat', { defaultValue: 'Chat' })}
         color={midnightEmber.map.text.secondary}
-        onPress={() => router.push(`/chat/${rideId}`)}
-        accessibilityLabel={t('chat.title', { defaultValue: 'Chat' })}
+        onPress={() => { markChatRead(); router.push(`/chat/${rideId}`); }}
+        badgeCount={unreadChatCount}
+        accessibilityLabel={
+          unreadChatCount > 0
+            ? t('chat.toolbar_chat_unread', {
+                count: unreadChatCount,
+                defaultValue: 'Chat, {{count}} sin leer',
+              })
+            : t('chat.title', { defaultValue: 'Chat' })
+        }
       />
       <ToolbarButton
         icon="alert-circle"

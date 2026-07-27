@@ -14,7 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
-import { rideService, blockService, incidentService } from '@tricigo/api';
+import { rideService, blockService, incidentService, chatService } from '@tricigo/api';
+import { getQuickRepliesForRole } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '@/stores/auth.store';
 import { useChatStore } from '@/stores/chat.store';
@@ -48,12 +49,29 @@ export default function ChatScreen() {
   const user = useAuthStore((s) => s.user);
   const messages = useChatStore((s) => s.messages);
   const remoteTyping = useChatStore((s) => s.remoteTyping);
+  // Realtime presence on the chat channel: does the rider have THIS chat open?
+  const riderInChat = useChatStore((s) => s.remotePresent);
   const flatListRef = useRef<FlatList<any>>(null);
 
   useChatInit(rideId!);
   const { sendMessage, notifyTyping } = useChatActions(rideId!);
 
   const userId = user?.id;
+
+  // Opening the chat IS reading it: stamp read_at so the rider's bubbles turn
+  // double-checked and this driver's unread badge clears.
+  useEffect(() => {
+    if (!rideId) return;
+    chatService.markRead(rideId).catch(() => { /* best-effort */ });
+  }, [rideId, messages.length]);
+
+  const driverQuickReplies = useMemo(
+    () => getQuickRepliesForRole('driver').map((qr) => ({
+      id: qr.key,
+      text: t(`chat.quick_${qr.key}` as never, { defaultValue: qr.key }),
+    })),
+    [t],
+  );
 
   /** Build a flat list of items that includes date separators interleaved with messages. */
   type ListItem =
@@ -109,7 +127,10 @@ export default function ChatScreen() {
         message={msg.body}
         timestamp={new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'America/Havana' })}
         isOwn={msg.sender_id === userId}
-        isRead={false}
+        // Was hardcoded false, which made ChatBubble's double check
+        // unreachable and the single check meaningless. read_at (00516) is the
+        // fact behind it now.
+        isRead={!!msg.read_at}
         theme="light"
       />
     );
@@ -241,9 +262,17 @@ export default function ChatScreen() {
             <Text style={{ fontSize: 16, fontWeight: '600', color: '#0F172A', fontFamily: 'Inter' }}>
               {riderName || t('chat.rider', { defaultValue: 'Pasajero' })}
             </Text>
-            <Text style={{ fontSize: 12, color: '#10B981', fontFamily: 'Inter' }}>
-              {t('chat.online', { defaultValue: 'En línea' })}
-            </Text>
+            {/* Was an unconditional "En línea" with no presence source behind
+                 it — the header claimed the rider was there whether or not
+                 they had the app open. Now it reflects Realtime presence on
+                 the chat channel, and says only what that actually proves:
+                 the rider has THIS chat open. Absent → nothing is shown,
+                 rather than a comforting guess. */}
+            {riderInChat && (
+              <Text style={{ fontSize: 12, color: '#10B981', fontFamily: 'Inter' }}>
+                {t('chat.in_chat', { defaultValue: 'En el chat' })}
+              </Text>
+            )}
           </View>
           {/* Safety menu (Apple Guideline 1.2): block / report the rider from
                the chat. Replaces the old dead call button. */}
@@ -301,12 +330,13 @@ export default function ChatScreen() {
         {/* Input bar */}
         <ChatInput
           onSend={handleSend}
-          quickReplies={[
-            { id: '1', text: t('chat.quick_on_my_way', { defaultValue: 'Estoy en camino' }) },
-            { id: '2', text: t('chat.quick_arriving', { defaultValue: 'Estoy llegando' }) },
-            { id: '3', text: t('chat.quick_waiting', { defaultValue: 'Estoy esperando' }) },
-            { id: '4', text: t('chat.quick_thanks', { defaultValue: '¡Gracias!' }) },
-          ]}
+          // Was four hardcoded replies. Two of them asked for
+          // `chat.quick_waiting` / `chat.quick_thanks`, keys that exist in no
+          // locale — so English and Portuguese drivers always read Spanish.
+          // A third offered "Estoy en camino", which the shared source marks
+          // as a RIDER line. Driving it from getQuickRepliesForRole keeps the
+          // wording, the roles and the translations in one place.
+          quickReplies={driverQuickReplies}
           theme="light"
           placeholder={t('chat.input_placeholder', { defaultValue: 'Escribe un mensaje...' })}
         />
