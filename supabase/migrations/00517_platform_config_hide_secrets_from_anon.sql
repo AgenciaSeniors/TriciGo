@@ -1,5 +1,23 @@
 -- ============================================================
--- 00516 — Stop serving platform_config secrets to the public API key
+-- 00517 — Stop serving platform_config secrets to the public API key
+--
+-- RENUMBERED from 00516. Two parallel sessions both picked 00516 and both
+-- landed: this one (#875) and `00516_ride_messages_read_receipts.sql` (#871).
+-- This file moved rather than that one because the chat number is cited in
+-- 14+ code comments across apps/ and packages/ (useUnreadChatCount, the chat
+-- screens, chat.service, its tests, the shared types, the admin ride detail),
+-- while this number appeared only inside this file. Fewer moving parts wins
+-- over "whoever applied first keeps the number" — this one was applied first.
+--
+-- ALREADY APPLIED TO PRODUCTION under the old filename. Both migrations were
+-- applied through the MCP, which registers `version` as a TIMESTAMP, not as
+-- the number — so the rename cannot cause a re-apply. In
+-- `supabase_migrations.schema_migrations` this row still reads
+-- `version 20260727040806, name 00516_platform_config_hide_secrets_from_anon`,
+-- and the COMMENT text on the function and table still says 00516. That drift
+-- is cosmetic and deliberately left alone: rewriting comments in production to
+-- match a file rename is not worth a second write. Verify by object, never by
+-- migration number.
 --
 -- `platform_config` held its SELECT policy as `USING (true)` for role
 -- `public`, and `anon` carries a table-level SELECT grant. PostgREST has
@@ -68,7 +86,7 @@ $$;
 COMMENT ON FUNCTION public.platform_config_is_secret(TEXT) IS
   'True for platform_config keys that must never reach the public API key. '
   'Classified by naming convention so a secret added later is hidden by '
-  'default. Used by the pc_select RLS policy (00516).';
+  'default. Used by the pc_select RLS policy (00517).';
 
 -- `is_admin()` CANNOT be used directly in this policy. It calls
 -- `current_user_role()`, which `anon` has no EXECUTE grant on, so the
@@ -112,7 +130,7 @@ CREATE POLICY pc_select ON public.platform_config
 
 COMMENT ON TABLE public.platform_config IS
   'Platform tunables. READABLE BY THE PUBLIC API KEY except keys matching '
-  'platform_config_is_secret() (00516) — anon holds a SELECT grant and the '
+  'platform_config_is_secret() (00517) — anon holds a SELECT grant and the '
   'publishable key ships in every app build. Never add a credential here '
   'under a name that does not end in _token/_secret/_signature/_hash/'
   '_api_key/_password, or it will be served publicly. Writes are '
