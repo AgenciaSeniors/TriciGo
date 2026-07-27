@@ -75,7 +75,22 @@ export default function RechargeScreen() {
   }>(null);
   const [openingReceipt, setOpeningReceipt] = useState(false);
 
-  const selectedAmount = Number(amount);
+  // NaN-safe. `Number('')` is 0, but `Number('20.5.5')`, `Number('-')` and
+  // `Number('1e')` are NaN — all reachable through a numeric keyboard (which
+  // admits `.` and `-` on Android) or a paste. Every comparison against NaN
+  // is false, so an unguarded NaN slipped past BOTH gates in handleRecharge
+  // (`<= 0` and the MIN/MAX range check), left the pay button enabled
+  // (`disabled={selectedAmount <= 0 …}`), and reached the edge function as
+  // `amountUsd: NaN` — which JSON.stringify serialises to `null`.
+  //
+  // Collapsing invalid input to 0 fixes all of it at once: the guards return,
+  // the button disables, and the fee breakdown hides. The client screen
+  // already did this via `parseFloat` + an explicit `isNaN` check
+  // (apps/client/app/(tabs)/wallet.tsx); the driver was the one that missed
+  // it. Kept on `Number` rather than `parseFloat` deliberately — it is the
+  // stricter of the two ("20abc" is NaN here, but 20 under parseFloat).
+  const parsedAmount = Number(amount);
+  const selectedAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
 
   // RECARGA V2 PARITY: open the just-generated PDF via signed URL.
   const openSuccessReceipt = useCallback(async () => {

@@ -502,6 +502,8 @@
     "verifying_desc": "This may take a few seconds.",
     "success_title": "Top-up successful",
     "success_desc": "Your balance has been updated.",
+    "settling_title": "Payment received",
+    "settling_desc": "We're confirming your payment. Your balance will update in a few minutes.",
     "view_receipt": "View receipt",
     "generating_receipt": "Generating receipt…",
     "view_receipt_aria": "View my top-up receipts",

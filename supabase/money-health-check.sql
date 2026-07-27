@@ -112,16 +112,45 @@ JOIN ledger_transactions lt ON lt.id = le.transaction_id
 JOIN wallet_accounts wa ON wa.id = le.account_id AND wa.account_type='platform_revenue'
 GROUP BY lt.type ORDER BY total DESC;
 
--- 10) DOUBLE-ENTRY — every ledger transaction must net to 0 (debits = credits),
---    and the global sum of all entries must be 0. Any row = a transaction that
---    minted/burned money without a counterparty (e.g. the cargo bonus before
---    00414 credited the driver with no platform debit). Added 2026-06-13.
-SELECT 'UNBALANCED_TXN' AS check, lt.id::text AS txn, lt.idempotency_key,
-       COALESCE(SUM(le.amount), 0) AS net
+-- 10) DOUBLE-ENTRY — three distinct defects, one query. Added 2026-06-13,
+--     narrowed 2026-07-27 (see below).
+--
+--       (a) a transaction with NO entries at all — recorded, but no money moved;
+--       (b) a SINGLE-entry transaction of an INTERNAL type — a leg that was never
+--           written. This is exactly the cargo-bonus class: before 00414 it credited
+--           the driver with no platform debit;
+--       (c) a MULTI-LEG transaction that does not net to 0 — money minted or burned
+--           mid-transfer.
+--
+--     `recharge`, `adjustment` and `refund` are the ONLY types allowed to stand alone:
+--     their counterparty is a card or platform goodwill, not another wallet. This
+--     mirrors the exclusion 10b already documents, which the original check omitted.
+--
+--     WHY THIS WAS NARROWED. As written, this check flagged every single-entry
+--     transaction, so it reported the by-design external ones as "minted/burned money
+--     without a counterparty". It read as 0 rows on 2026-07-01 only because no admin
+--     adjustments existed yet; the launch bonuses (Fundador and the driver bonuses,
+--     2026-07-04 onward) pushed it to 90 rows of pure noise — under the most alarming
+--     heading in the file, on the one script that is supposed to be trustworthy about
+--     money. A check that always fires teaches you to skip it, which is worse than not
+--     having it.
+--
+--     Verified against production 2026-07-27: every internal type is 100% multi-leg
+--     (fx_revaluation 122, commission 8, promo_credit 7, transfer_out 6, ride_payment 4,
+--     transfer_in 1 — zero single-entry among them), so the allow-list costs no real
+--     coverage. Confirmed by simulation in a rolled-back transaction that a single-entry
+--     `commission` is still caught and labelled.
+SELECT 'UNBALANCED_TXN' AS check, lt.id::text AS txn, lt.type::text AS tx_type,
+       lt.idempotency_key, COUNT(le.id) AS entries, COALESCE(SUM(le.amount), 0) AS net,
+       CASE WHEN COUNT(le.id) = 0 THEN 'transaction has no entries at all'
+            WHEN COUNT(le.id) = 1 THEN 'single entry on an internal type: a leg was never written'
+            ELSE 'multi-leg transaction does not net to zero' END AS defect
 FROM ledger_transactions lt
 LEFT JOIN ledger_entries le ON le.transaction_id = lt.id
-GROUP BY lt.id, lt.idempotency_key
-HAVING COALESCE(SUM(le.amount), 0) <> 0;
+GROUP BY lt.id, lt.type, lt.idempotency_key
+HAVING COUNT(le.id) = 0
+    OR (COUNT(le.id) = 1 AND lt.type::text NOT IN ('recharge', 'adjustment', 'refund'))
+    OR (COUNT(le.id) >= 2 AND COALESCE(SUM(le.amount), 0) <> 0);
 
 -- 10b) GLOBAL DOUBLE-ENTRY IMBALANCE — entries belonging to MULTI-LEG (internal)
 --      transactions must net to 0 globally. Single-entry txns are external by design

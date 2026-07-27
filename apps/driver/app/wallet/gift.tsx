@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Pressable, ScrollView, Share, useColorScheme, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -13,7 +13,7 @@ import { colors, cubanLight, cubanDark } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
 import { walletService } from '@tricigo/api/services/wallet';
-import { formatCUP, getErrorMessage, triggerHaptic } from '@tricigo/utils';
+import { formatCUP, getErrorMessage, triggerHaptic, newGiftIdempotencyKey } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { GiftQrScanner } from '@/components/GiftQrScanner';
 
@@ -132,14 +132,33 @@ export default function DriverGiftScreen() {
   const numericAmount = parseInt(amount, 10);
   const amountValid = Number.isFinite(numericAmount) && numericAmount > 0 && numericAmount <= balance;
 
+  // One key per attempt (00518). It survives a retry — this send has no
+  // timeout, so an error can surface long after the RPC already committed,
+  // and replaying with the same key returns the original transfer instead of
+  // debiting twice. It is discarded whenever the recipient, amount or note
+  // changes, because replaying a key after an edit would resend the OLD gift
+  // and silently drop the correction.
+  const idempotencyKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    idempotencyKeyRef.current = null;
+  }, [recipient?.id, amount, note]);
+
   const handleSend = async () => {
     if (!userId || !recipient || !amountValid) return;
+    if (!idempotencyKeyRef.current) idempotencyKeyRef.current = newGiftIdempotencyKey();
     setSubmitting(true);
     try {
       // Driver "Regalar" gifts from the driver wallet (tricicoin) — the one
       // shown on this screen. Passing it explicitly avoids the role-based
       // fallback debiting the wrong wallet for multi-role/admin accounts.
-      await walletService.sendGift(userId, recipient.id, numericAmount, note.trim() || undefined, 'tricicoin');
+      await walletService.sendGift(
+        userId,
+        recipient.id,
+        numericAmount,
+        note.trim() || undefined,
+        'tricicoin',
+        idempotencyKeyRef.current,
+      );
       triggerHaptic('light');
       Toast.show({
         type: 'success',

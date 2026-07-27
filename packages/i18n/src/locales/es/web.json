@@ -502,6 +502,8 @@
     "verifying_desc": "Esto puede tardar unos segundos.",
     "success_title": "Recarga exitosa",
     "success_desc": "Tu saldo ha sido actualizado.",
+    "settling_title": "Pago recibido",
+    "settling_desc": "Estamos confirmando tu pago. Tu saldo se actualizará en unos minutos.",
     "view_receipt": "Ver recibo",
     "generating_receipt": "Generando recibo…",
     "view_receipt_aria": "Ver mis comprobantes de recarga",

@@ -740,29 +740,39 @@ function NativeWalletScreen() {
   const prevBalanceRef = useRef(0);
 
   useEffect(() => {
-    if (balance?.available != null) {
-      const prev = prevBalanceRef.current;
-      const next = balance.available;
-      if (next > prev && prev > 0) {
-        // Count up animation
-        const diff = next - prev;
-        const steps = 20;
-        const stepTime = 50; // 1s total
-        let step = 0;
-        const interval = setInterval(() => {
-          step++;
-          setDisplayBalance(Math.round(prev + (diff * step / steps)));
-          if (step >= steps) {
-            clearInterval(interval);
-            setDisplayBalance(next);
-          }
-        }, stepTime);
-        return () => clearInterval(interval);
-      } else {
-        setDisplayBalance(next);
-      }
-      prevBalanceRef.current = next;
+    if (balance?.available == null) return;
+
+    const prev = prevBalanceRef.current;
+    const next = balance.available;
+
+    // Record the new baseline BEFORE the early return below. The cleanup
+    // `return` used to sit inside the count-up branch, which made this
+    // assignment unreachable on exactly the path that needs it: after the
+    // first animated increase the ref stayed frozen at the pre-recharge
+    // value, so the SECOND recharge animated from that stale figure. With
+    // 100 → 200 → 300 the hero visibly dropped from 200 back to 100 and
+    // climbed to 300 — a balance the user never had, rendered as fact in
+    // the primary figure (and in the USD subtitle derived from it).
+    prevBalanceRef.current = next;
+
+    if (next > prev && prev > 0) {
+      // Count up animation
+      const diff = next - prev;
+      const steps = 20;
+      const stepTime = 50; // 1s total
+      let step = 0;
+      const interval = setInterval(() => {
+        step++;
+        setDisplayBalance(Math.round(prev + (diff * step / steps)));
+        if (step >= steps) {
+          clearInterval(interval);
+          setDisplayBalance(next);
+        }
+      }, stepTime);
+      return () => clearInterval(interval);
     }
+
+    setDisplayBalance(next);
   }, [balance?.available]);
 
   // Recharge state — amount is in USD now (min 20 per business rules)

@@ -180,6 +180,11 @@ export default function WalletPage() {
   // very second the user lands on success — the receipts page handles
   // the "in process" state gracefully.
   const [successIntentId, setSuccessIntentId] = useState<string | null>(null);
+  // Whether the intent actually reached `completed`, or the poll simply ran
+  // out while it was still in flight. Both land on the `success` step — the
+  // payment is very likely fine and the user should get the receipt link
+  // either way — but only the settled case may claim the balance moved.
+  const [rechargeSettled, setRechargeSettled] = useState(true);
   const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_EXCHANGE_RATE);
 
   // ── Auth effect ──
@@ -286,6 +291,7 @@ export default function WalletPage() {
         if (intent.status === 'completed') {
           setSuccessIntentId(intentId);
           setReceiptReady(false);
+          setRechargeSettled(true);
           setRechargeStep('success');
           // Refresh balance + transactions so the new credit shows. Read the
           // refs (not the captured state): by the time the poll resolves the
@@ -320,8 +326,16 @@ export default function WalletPage() {
           setRechargeError(intent.error_message ? translateNetopiaError(intent.error_message) : t('wallet.failed_short', { defaultValue: 'El pago no pudo ser procesado' }));
           setRechargeStep('failed');
         } else {
-          // Still pending after poll exhausted — soft success (webhook will land soon)
+          // Poll exhausted with the intent still `created` / `pending` /
+          // `processing`. The payment is most likely fine and the webhook is
+          // just late, so we still show the success step and the receipt
+          // link — but we do NOT say the balance was updated, because we
+          // never confirmed it and the refresh above (which only runs on the
+          // `completed` branch) never ran. The mobile screens already word
+          // this branch honestly ("Verificando tu pago…"); the web claimed
+          // "Tu saldo ha sido actualizado" over an unresolved intent.
           setSuccessIntentId(intentId);
+          setRechargeSettled(false);
           setRechargeStep('success');
         }
       } catch (err) {
@@ -725,24 +739,34 @@ export default function WalletPage() {
 
           {rechargeStep === 'success' && (
             <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-              {/* Visual: success badge with checkmark SVG (no emoji). */}
+              {/* Visual: checkmark when the credit is confirmed, clock while it
+                  is still settling. The badge is the first thing read, so it
+                  must not say "done" over an unresolved intent. */}
               <div
                 aria-hidden
                 style={{
                   width: 64, height: 64, borderRadius: '50%',
-                  background: 'rgba(22, 163, 74, 0.12)',
-                  color: '#16a34a',
+                  background: rechargeSettled ? 'rgba(22, 163, 74, 0.12)' : 'rgba(217, 119, 6, 0.12)',
+                  color: rechargeSettled ? '#16a34a' : '#d97706',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   marginBottom: '0.75rem',
                 }}
               >
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
+                  {rechargeSettled
+                    ? <polyline points="20 6 9 17 4 12" />
+                    : <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></>}
                 </svg>
               </div>
-              <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>{t('wallet.success_title', { defaultValue: 'Recarga exitosa' })}</p>
+              <p style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>
+                {rechargeSettled
+                  ? t('wallet.success_title', { defaultValue: 'Recarga exitosa' })
+                  : t('wallet.settling_title', { defaultValue: 'Pago recibido' })}
+              </p>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 1rem' }}>
-                {t('wallet.success_desc', { defaultValue: 'Tu saldo ha sido actualizado.' })}
+                {rechargeSettled
+                  ? t('wallet.success_desc', { defaultValue: 'Tu saldo ha sido actualizado.' })
+                  : t('wallet.settling_desc', { defaultValue: 'Estamos confirmando tu pago. Tu saldo se actualizará en unos minutos.' })}
               </p>
               {/* RECARGA V2: surface the receipt as soon as the user lands on success.
                   The PDF generation runs async post-webhook (a few seconds), so the
