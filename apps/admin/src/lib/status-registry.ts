@@ -65,6 +65,7 @@ const REGISTRY: Record<Domain, Record<string, StatusMeta>> = {
     driver_en_route: { label: 'En camino', i18nKey: 'status_registry.ride.driver_en_route', tone: 'info', icon: ArrowLeftRight },
     arrived_at_pickup: { label: 'En origen', i18nKey: 'status_registry.ride.arrived_at_pickup', tone: 'info', icon: Clock },
     in_progress: { label: 'En curso', i18nKey: 'status_registry.ride.in_progress', tone: 'primary', icon: ArrowLeftRight },
+    arrived_at_destination: { label: 'En destino', i18nKey: 'status_registry.ride.arrived_at_destination', tone: 'primary', icon: Clock },
     completed: { label: 'Completado', i18nKey: 'status_registry.ride.completed', tone: 'success', icon: CheckCircle2 },
     canceled: { label: 'Cancelado', i18nKey: 'status_registry.ride.canceled', tone: 'danger', icon: XCircle },
     disputed: { label: 'En disputa', i18nKey: 'status_registry.ride.disputed', tone: 'warning', icon: Scale },
