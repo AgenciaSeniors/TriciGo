@@ -12,7 +12,7 @@
 // there is no path at all, so the trip was stuck for good (ride 409513b3,
 // 2026-07-27).
 //
-// The server-side half (migration 00520) accepts the ride's own GPS trail as
+// The server-side half (migration 00521) accepts the ride's own GPS trail as
 // proof of arrival, which rescues drivers on any build. This buffer is the
 // client half: it preserves the *moment* of the tap, so the replay carries the
 // coordinates the driver actually had when they pressed the button instead of
