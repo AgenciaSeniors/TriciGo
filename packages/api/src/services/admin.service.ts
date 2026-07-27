@@ -81,6 +81,17 @@ import type { UserLevel } from '@tricigo/types';
 import { havanaDayRangeUtc } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import type { DeliveryDetails } from './delivery.service';
+
+/** One line of a ride's chat as the admin panel needs it: the text, when it was
+ *  said, whether it was read, and WHO said it — resolved server-side because
+ *  sender_id alone means nothing to a screen that only knows names. */
+export interface AdminRideMessage {
+  id: string;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+  senderRole: 'customer' | 'driver' | 'unknown';
+}
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
 import { buildRejectionMessage } from './_driverDocRejectionPresets';
@@ -1710,6 +1721,7 @@ export const adminService = {
 
     // Fetch driver info if assigned
     let driverInfo: { name: string; phone: string } | null = null;
+    let driverUserId: string | null = null;
     if (ride.driver_id) {
       const { data: dp } = await supabase
         .from('driver_profiles')
@@ -1717,6 +1729,7 @@ export const adminService = {
         .eq('id', ride.driver_id)
         .single();
       if (dp) {
+        driverUserId = dp.user_id as string;
         const { data: usr } = await supabase
           .from('users')
           .select('full_name, phone')
@@ -1755,6 +1768,35 @@ export const adminService = {
       delivery = (dd as DeliveryDetails) ?? null;
     }
 
+    // The ride's chat. RLS on ride_messages (rm_select) has granted is_admin()
+    // since the table was created, but nothing in the admin ever read it — so
+    // investigating "he said / she said" in a dispute meant querying the
+    // database by hand. The capability existed; the screen did not.
+    //
+    // Sender role is resolved here rather than in the UI: the page has the
+    // driver's NAME but not their user_id, and sender_id is a users.id, so the
+    // component could not tell who spoke without this.
+    const { data: msgRows } = await supabase
+      .from('ride_messages')
+      .select('*')
+      .eq('ride_id', rideId)
+      .order('created_at', { ascending: true });
+
+    const messages: AdminRideMessage[] = ((msgRows ?? []) as Record<string, unknown>[]).map((m) => ({
+      id: m.id as string,
+      body: m.body as string,
+      created_at: m.created_at as string,
+      // read_at only exists once migration 00516 lands; undefined before that,
+      // and the UI simply omits the read indicator.
+      read_at: (m.read_at as string | null | undefined) ?? null,
+      senderRole:
+        m.sender_id === ride.customer_id
+          ? 'customer'
+          : driverUserId && m.sender_id === driverUserId
+            ? 'driver'
+            : 'unknown',
+    }));
+
     return {
       ride,
       transitions: (transitionsRes.data as RideTransition[]) ?? [],
@@ -1762,6 +1804,7 @@ export const adminService = {
       driverInfo,
       customerInfo,
       delivery,
+      messages,
     };
   },
 

@@ -295,6 +295,10 @@
     "actions_section": "Actions"
   },
   "rides": {
+    "chat_section": "Conversation",
+    "chat_empty": "Passenger and driver exchanged no messages on this ride.",
+    "chat_unknown_sender": "Unknown",
+    "chat_read_at": "read",
     "title": "Ride management",
     "active": "Active",
     "completed": "Completed",
