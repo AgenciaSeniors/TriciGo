@@ -191,8 +191,16 @@ export function useChatActions(rideId: string) {
       for (const item of q) {
         try {
           const msg = await chatService.sendMessage(item.rideId, item.senderId, item.body);
-          // Remove from queue + replace local pending entry with real msg
           await removeFromQueue(item.localId);
+          // The queue is GLOBAL but the store holds a single thread with no
+          // ride id. Without this guard, a message queued on ride A while
+          // offline lands in whatever chat happens to be open when the network
+          // returns — the passenger's conversation shows a bubble that was
+          // never meant for it. The message itself goes to the right ride
+          // (sendMessage uses item.rideId); it is the local echo that leaks.
+          // The web hook has carried this guard for a while; the mobile ones
+          // never got it.
+          if (item.rideId !== rideId) continue;
           const cur = useChatStore.getState().messages;
           useChatStore.getState().setMessages(cur.filter((m) => m.id !== item.localId));
           addMessage(msg);
@@ -204,7 +212,7 @@ export function useChatActions(rideId: string) {
       }
     });
     return () => unsubscribe();
-  }, [addMessage]);
+  }, [addMessage, rideId]);
 
   /** Call on every keystroke — internally debounces broadcasts */
   const notifyTyping = useCallback(() => {

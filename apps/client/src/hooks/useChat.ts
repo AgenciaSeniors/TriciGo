@@ -54,12 +54,28 @@ export function useChatInit(rideId: string) {
     let msgChannel: ReturnType<typeof chatService.subscribeToMessages> | null = null;
     let typingChannel: ReturnType<typeof chatService.subscribeToTyping> | null = null;
 
+    // Every message id this mount has already handled. The poll below used to
+    // dedupe against the STORE, which caps at MAX_MESSAGES (200): past that
+    // length the trimmed-off messages are no longer "existing", so every poll
+    // re-fetched them and re-appended them AT THE END — the thread reordered
+    // itself every 8 seconds, permanently. An unbounded Set remembers what was
+    // seen regardless of what the store still holds. (The driver hook has
+    // always done it this way; this brings the rider in line.)
+    const seenIds = new Set<string>();
+
     chatService
       .getMessages(rideId)
-      .then(setMessages)
+      .then((msgs) => {
+        msgs.forEach((m) => seenIds.add(m.id));
+        setMessages(msgs);
+      })
       .catch((err) => logger.warn('[Chat] Failed to load messages:', { error: String(err) }));
 
-    msgChannel = chatService.subscribeToMessages(rideId, addMessage);
+    msgChannel = chatService.subscribeToMessages(rideId, (msg) => {
+      if (seenIds.has(msg.id)) return;
+      seenIds.add(msg.id);
+      addMessage(msg);
+    });
 
     // Subscribe to typing events
     if (userId) {
@@ -80,13 +96,11 @@ export function useChatInit(rideId: string) {
     const pollInterval = setInterval(async () => {
       try {
         const fresh = await chatService.getMessages(rideId);
-        const existing = useChatStore.getState().messages;
-        const existingIds = new Set(existing.map((m) => m.id));
-        const newMessages = fresh.filter((m) => !existingIds.has(m.id));
+        const newMessages = fresh.filter((m) => !seenIds.has(m.id));
         if (newMessages.length > 0) {
           // eslint-disable-next-line no-console
           console.log('[Chat] poll: new messages found', { count: newMessages.length });
-          newMessages.forEach((m) => addMessage(m));
+          newMessages.forEach((m) => { seenIds.add(m.id); addMessage(m); });
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -173,8 +187,16 @@ export function useChatActions(rideId: string) {
       for (const item of q) {
         try {
           const msg = await chatService.sendMessage(item.rideId, item.senderId, item.body);
-          // Remove from queue + replace local pending entry with real msg
           await removeFromQueue(item.localId);
+          // The queue is GLOBAL but the store holds a single thread with no
+          // ride id. Without this guard, a message queued on ride A while
+          // offline lands in whatever chat happens to be open when the network
+          // returns — the other party's conversation shows a bubble that was
+          // never meant for it. The message itself goes to the right ride
+          // (sendMessage uses item.rideId); it is the local echo that leaks.
+          // The web hook has carried this guard for a while; the mobile ones
+          // never got it.
+          if (item.rideId !== rideId) continue;
           const cur = useChatStore.getState().messages;
           useChatStore.getState().setMessages(cur.filter((m) => m.id !== item.localId));
           addMessage(msg);
@@ -186,7 +208,7 @@ export function useChatActions(rideId: string) {
       }
     });
     return () => unsubscribe();
-  }, [addMessage]);
+  }, [addMessage, rideId]);
 
   /** Call on every keystroke — internally debounces broadcasts */
   const notifyTyping = useCallback(() => {
