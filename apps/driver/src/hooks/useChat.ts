@@ -56,6 +56,7 @@ export function useChatInit(rideId: string) {
   const setMessages = useChatStore((s) => s.setMessages);
   const addMessage = useChatStore((s) => s.addMessage);
   const setRemoteTyping = useChatStore((s) => s.setRemoteTyping);
+  const setRemotePresent = useChatStore((s) => s.setRemotePresent);
   const reset = useChatStore((s) => s.reset);
   const userId = useAuthStore((s) => s.user?.id);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,16 +93,22 @@ export function useChatInit(rideId: string) {
       })
       .catch((err) => console.warn('[Chat] Failed to load messages:', err));
 
-    // Subscribe to typing events
+    // Typing AND presence share this one channel on purpose — a third channel
+    // per open chat is the connection pressure BUG-277 was about.
     if (userId) {
-      typingChannel = chatService.subscribeToTyping(rideId, userId, () => {
-        setRemoteTyping(true);
-        // Auto-clear after timeout
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => {
-          setRemoteTyping(false);
-        }, TYPING_TIMEOUT_MS);
-      });
+      typingChannel = chatService.subscribeToTyping(
+        rideId,
+        userId,
+        () => {
+          setRemoteTyping(true);
+          // Auto-clear after timeout
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => {
+            setRemoteTyping(false);
+          }, TYPING_TIMEOUT_MS);
+        },
+        setRemotePresent,
+      );
     }
 
     // BUG-242: polling fallback every 8s (was 30s) to handle Cuban

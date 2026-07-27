@@ -128,25 +128,58 @@ export const chatService = {
   // ==================== TYPING INDICATOR ====================
 
   /**
-   * Subscribe to typing events for a ride chat.
-   * Uses Supabase Realtime Broadcast (ephemeral, no DB writes).
+   * Subscribe to typing events — and, optionally, to presence.
+   *
+   * Both ride on the SAME ephemeral channel on purpose. A third channel per
+   * open chat screen is exactly the connection pressure BUG-277 was about
+   * (OkHttp maxRequestsPerHost), and presence needs no more than a channel
+   * that is already subscribed.
+   *
+   * `onPresence` reports whether the OTHER party currently has this chat
+   * open — not whether they are online in the app. Anything the UI says
+   * about it has to be worded that narrowly, or it is a guess dressed up as
+   * a fact.
+   *
    * Returns the channel so the caller can unsubscribe.
    */
   subscribeToTyping(
     rideId: string,
     myUserId: string,
     onTyping: (userId: string) => void,
+    onPresence?: (otherPartyPresent: boolean) => void,
   ) {
     const supabase = getSupabaseClient();
-    return supabase
-      .channel(`typing:${rideId}`)
+    const channel = supabase
+      .channel(`typing:${rideId}`, { config: { presence: { key: myUserId } } })
       .on('broadcast', { event: 'typing' }, (payload) => {
         const senderId = payload.payload?.user_id as string | undefined;
         if (senderId && senderId !== myUserId) {
           onTyping(senderId);
         }
-      })
-      .subscribe(realtimeStatusLogger('chat_typing'));
+      });
+
+    if (onPresence) {
+      const report = () => {
+        const keys = Object.keys(channel.presenceState() ?? {});
+        onPresence(keys.some((k) => k !== myUserId));
+      };
+      channel
+        .on('presence', { event: 'sync' }, report)
+        .on('presence', { event: 'join' }, report)
+        .on('presence', { event: 'leave' }, report);
+    }
+
+    const log = realtimeStatusLogger('chat_typing');
+    channel.subscribe((status, err) => {
+      log(status, err);
+      // track() only works once the socket is joined; announcing earlier is
+      // a silent no-op and the other side never sees us.
+      if (onPresence && status === 'SUBSCRIBED') {
+        void channel.track({ user_id: myUserId });
+      }
+    });
+
+    return channel;
   },
 
   /**
