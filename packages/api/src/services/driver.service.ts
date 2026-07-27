@@ -490,7 +490,7 @@ export const driverService = {
   async updateRideStatus(
     rideId: string,
     status: RideStatus,
-    opts?: { driverLat?: number; driverLng?: number; noGpsMode?: boolean },
+    opts?: { driverLat?: number; driverLng?: number },
   ): Promise<{
     success: boolean;
     gated?: boolean;
@@ -498,9 +498,9 @@ export const driverService = {
     distance_m?: number;
     target?: string;
     threshold_m?: number;
-    no_gps_validation?: boolean;
-    no_gps_remaining?: number;
     rider_bypass_used?: boolean;
+    offline_trail_used?: boolean;
+    trail_arrived_at?: string;
   }> {
     if (status === 'completed') {
       throw new Error('Use completeRide() for ride completion');
@@ -511,12 +511,16 @@ export const driverService = {
     // BUG-244: route through update_ride_status_v2 RPC for proximity gate
     // on arrived_at_pickup / arrived_at_destination. Other transitions
     // pass through unchanged.
+    // p_no_gps_mode is deliberately NOT sent. The RPC still declares it (with a
+    // default) so installed builds that pass it keep resolving, but the body has
+    // never read it — see migration 00522. The broken-GPS path is the separate
+    // rider-consent flow: reportGpsUnavailable -> rider_respond_to_gps_unavailable
+    // -> driver_gps_status='rider_consented', which update_ride_status_v2 honours.
     const { data, error } = await supabase.rpc('update_ride_status_v2', {
       p_ride_id: rideId,
       p_new_status: status,
       p_driver_lat: opts?.driverLat ?? null,
       p_driver_lng: opts?.driverLng ?? null,
-      p_no_gps_mode: opts?.noGpsMode ?? false,
     });
     if (error) {
       // Surface SQL EXCEPTION messages to the caller (e.g. too_far_for_bypass)
@@ -529,9 +533,9 @@ export const driverService = {
       distance_m?: number;
       target?: string;
       threshold_m?: number;
-      no_gps_validation?: boolean;
-      no_gps_remaining?: number;
       rider_bypass_used?: boolean;
+      offline_trail_used?: boolean;
+      trail_arrived_at?: string;
       new_status?: string;
     };
     // If gated, the caller decides what to do (show "rider confirm?" prompt)

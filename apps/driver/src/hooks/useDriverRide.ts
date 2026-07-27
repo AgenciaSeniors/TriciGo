@@ -918,18 +918,6 @@ export function useDriverRideActions() {
           useDriverRideStore.getState().setIsAdvancing(false);
           return;
         }
-        // Surface no_gps_validation usage to driver
-        if (result?.no_gps_validation) {
-          Toast.show({
-            type: 'info',
-            text1: i18next.t('driver:trip.no_gps_used', { defaultValue: 'Avance sin GPS registrado' }),
-            text2: i18next.t('driver:trip.no_gps_remaining', {
-              defaultValue: `Te quedan ${result.no_gps_remaining ?? 0} usos esta semana.`,
-              remaining: result.no_gps_remaining ?? 0,
-            }),
-            visibilityTime: 4000,
-          });
-        }
         useDriverRideStore.getState().updateActiveTrip({
           ...activeTrip,
           status: nextStatus,
