@@ -27,16 +27,16 @@ import { QuickReplyBar } from '@tricigo/ui/QuickReplyBar';
 import { getQuickRepliesForRole, triggerHaptic } from '@tricigo/utils';
 import { colors } from '@tricigo/theme';
 import NetInfo from '@react-native-community/netinfo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { chatLastReadKey } from '@/hooks/useUnreadChatCount';
 import Toast from 'react-native-toast-message';
-import { blockService, incidentService } from '@tricigo/api';
+import { blockService, incidentService, chatService } from '@tricigo/api';
 
 export default function ChatScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const messages = useChatStore((s) => s.messages);
+  // Realtime presence: does the driver have THIS chat open right now?
+  const driverInChat = useChatStore((s) => s.remotePresent);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,21 +68,17 @@ export default function ChatScreen() {
     return () => unsubscribe();
   }, []);
 
-  // Bug B: persist the "last read" timestamp so the trip screen's
-  // unread badge (useUnreadChatCount) clears. Stamped on mount (covers
-  // messages received before opening) and on unmount (covers messages
-  // that arrived while the rider was reading the conversation).
+  // Opening the chat IS reading it: stamp read_at server-side (00516). That
+  // both clears this rider's unread badge and turns the driver's bubbles
+  // double-checked. Re-runs as messages arrive so a conversation read live
+  // does not leave the last line unread.
+  //
+  // Replaces the old AsyncStorage "last read" timestamp, which was local to
+  // one device and invisible to the other party.
   useEffect(() => {
     if (!rideId) return;
-    const stamp = () => {
-      AsyncStorage.setItem(
-        chatLastReadKey(rideId),
-        new Date().toISOString(),
-      ).catch(() => { /* best-effort */ });
-    };
-    stamp();
-    return stamp;
-  }, [rideId]);
+    chatService.markRead(rideId).catch(() => { /* best-effort */ });
+  }, [rideId, messages.length]);
 
   const quickReplies = getQuickRepliesForRole('rider').map((qr) => ({
     key: qr.key,
@@ -125,17 +121,32 @@ export default function ChatScreen() {
             {item.body}
           </Text>
         </View>
-        <Text
-          variant="caption"
-          color="secondary"
-          className={`mt-1 ${isOwn ? 'text-right' : 'text-left'}`}
-        >
-          {new Date(item.created_at).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'America/Havana',
-          })}
-        </Text>
+        <View className={`flex-row items-center mt-1 ${isOwn ? 'self-end' : 'self-start'}`}>
+          <Text variant="caption" color="secondary">
+            {new Date(item.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Havana',
+            })}
+          </Text>
+          {/* Delivery/read state, own messages only — the rider has no use for
+              a check mark on a line the driver wrote. Single = sent, double =
+              the driver opened the chat (read_at, 00516). Parity with the
+              driver's ChatBubble. */}
+          {isOwn && (
+            <Ionicons
+              name={item.read_at ? 'checkmark-done' : 'checkmark'}
+              size={13}
+              color={item.read_at ? colors.primary[500] : colors.neutral[400]}
+              style={{ marginLeft: 4 }}
+              accessibilityLabel={
+                item.read_at
+                  ? t('chat.message_read', { defaultValue: 'Leído' })
+                  : t('chat.message_sent', { defaultValue: 'Enviado' })
+              }
+            />
+          )}
+        </View>
       </View>
     );
   };
@@ -267,17 +278,27 @@ export default function ChatScreen() {
           />
         </View>
 
-        {/* Offline banner — UX: the old copy promised auto-delivery on
-             reconnect ("se enviarán cuando vuelvas a estar en línea") but
-             the chat service doesn't actually queue offline sends — it
-             fails immediately with a _failed flag on the optimistic
-             message. Be honest: tell the rider the connection is gone
-             and to retry manually, so they don't assume a typed message
-             is safely buffered. */}
+        {/* Presence — shown only while the driver actually has this chat open.
+             Says what Realtime presence can prove and nothing more; absent, it
+             renders nothing rather than guessing. */}
+        {driverInChat && (
+          <View className="px-4 py-1 bg-green-50 dark:bg-green-900/20">
+            <Text variant="caption" className="text-center text-green-700 dark:text-green-400">
+              {t('chat.in_chat', { defaultValue: 'El conductor está en el chat' })}
+            </Text>
+          </View>
+        )}
+
+        {/* Offline banner. The previous copy told the rider to retry manually,
+             on the belief that nothing was buffered — but BUG-243 added an
+             auto-draining queue to this very screen's hook, and its own toast
+             already promises "se enviará cuando vuelva la conexión". The banner
+             and the toast contradicted each other two lines apart. The queue is
+             real, so the banner now says so. */}
         {isOffline && (
           <View className="bg-red-500 px-4 py-2">
             <Text variant="caption" color="inverse" className="text-center">
-              {t('chat.offline_banner', { defaultValue: 'Sin conexión. Intentá enviar de nuevo cuando se restablezca.' })}
+              {t('chat.offline_banner', { defaultValue: 'Sin conexión. Tus mensajes se enviarán solos al reconectar.' })}
             </Text>
           </View>
         )}

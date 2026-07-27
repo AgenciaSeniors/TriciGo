@@ -5,28 +5,17 @@ import { chatService } from '@tricigo/api';
 
 const POLL_INTERVAL_MS = 12_000;
 
-/** localStorage key for "last time the rider opened this chat" (parity con móvil). */
-export const chatLastReadKey = (rideId: string) => `chat_last_read_${rideId}`;
-
 /**
- * Persist the last-read timestamp for a ride's chat. Call when the chat opens
- * and closes so the tracking-screen unread badge clears (parity con el sellado
- * de last-read del chat móvil).
- */
-export function stampChatRead(rideId: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(chatLastReadKey(rideId), new Date().toISOString());
-  } catch {
-    /* private mode / quota — best-effort */
-  }
-}
-
-/**
- * Lightweight unread-message counter for the tracking screen (parity con
- * `useUnreadChatCount` móvil). "Unread" = messages from the other party
- * (`sender_id !== userId`) newer than the persisted `chat_last_read_<id>`
- * timestamp the chat page stamps on open/close. Polls every 12s while mounted.
+ * Unread-message counter for the tracking screen (parity with mobile).
+ *
+ * "Unread" means `read_at IS NULL` on the server (00516). It used to mean
+ * "newer than the chat_last_read_<id> timestamp in this browser's
+ * localStorage", which was per-browser, lost with a cleared cache, and bore no
+ * relation to the check mark the other party was shown. One fact drives both
+ * now — and the same fact drives all three surfaces.
+ *
+ * Cost: one count/head query every 12s, no rows over the wire. The previous
+ * version downloaded the whole thread just to produce a number.
  */
 export function useUnreadChatCount(
   rideId: string | null | undefined,
@@ -38,18 +27,12 @@ export function useUnreadChatCount(
 
   const recompute = useCallback(async () => {
     const id = rideIdRef.current;
-    if (!id || !userId || typeof window === 'undefined') {
+    if (!id || !userId) {
       setCount(0);
       return;
     }
     try {
-      const raw = localStorage.getItem(chatLastReadKey(id));
-      const messages = await chatService.getMessages(id);
-      const lastRead = raw ? new Date(raw).getTime() : 0;
-      const unread = messages.filter(
-        (m) => m.sender_id !== userId && new Date(m.created_at).getTime() > lastRead,
-      ).length;
-      setCount(unread);
+      setCount(await chatService.getUnreadCount(id, userId));
     } catch {
       /* best-effort — keep the last known count */
     }
@@ -65,11 +48,13 @@ export function useUnreadChatCount(
     return () => clearInterval(interval);
   }, [rideId, userId, recompute]);
 
-  /** Zero the badge + persist the read timestamp — call on chat open. */
+  /** Zero the badge and stamp read_at server-side — call on chat open. */
   const markRead = useCallback(() => {
     const id = rideIdRef.current;
     setCount(0);
-    if (id) stampChatRead(id);
+    if (id) {
+      chatService.markRead(id).catch(() => { /* best-effort */ });
+    }
   }, []);
 
   return { count, markRead };

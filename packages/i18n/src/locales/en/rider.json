@@ -465,6 +465,9 @@
   },
 
   "chat": {
+    "in_chat": "The driver is in the chat",
+    "message_read": "Read",
+    "message_sent": "Sent",
     "title": "Chat",
     "placeholder": "Type a message...",
     "send": "Send",

@@ -1,4 +1,9 @@
 {
+  "chat": {
+    "in_chat": "The driver is in the chat",
+    "message_read": "Read",
+    "message_sent": "Sent"
+  },
   "app_name": "TriciGo",
   "loading": "Loading...",
   "error": "An error occurred",

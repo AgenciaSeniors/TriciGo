@@ -5,9 +5,14 @@ interface ChatState {
   messages: ChatMessage[];
   isLoading: boolean;
   remoteTyping: boolean;
+  /** Does the driver currently have this chat open? Fed by Realtime presence.
+   *  Narrower than "is online" — that is all presence can honestly report, so
+   *  it is all the UI may claim. */
+  remotePresent: boolean;
   setMessages: (messages: ChatMessage[]) => void;
   addMessage: (message: ChatMessage) => void;
   setRemoteTyping: (typing: boolean) => void;
+  setRemotePresent: (present: boolean) => void;
   reset: () => void;
 }
 
@@ -17,6 +22,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoading: false,
   remoteTyping: false,
+  remotePresent: false,
   setMessages: (messages) =>
     set({ messages: messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages, isLoading: false }),
   addMessage: (message) => {
@@ -29,5 +35,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
   setRemoteTyping: (remoteTyping) => set({ remoteTyping }),
-  reset: () => set({ messages: [], isLoading: false, remoteTyping: false }),
+  setRemotePresent: (remotePresent) => set({ remotePresent }),
+  reset: () => set({ messages: [], isLoading: false, remoteTyping: false, remotePresent: false }),
 }));

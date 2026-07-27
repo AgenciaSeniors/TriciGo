@@ -465,6 +465,9 @@
   },
 
   "chat": {
+    "in_chat": "El conductor está en el chat",
+    "message_read": "Leído",
+    "message_sent": "Enviado",
     "title": "Chat",
     "placeholder": "Escribe un mensaje...",
     "send": "Enviar",

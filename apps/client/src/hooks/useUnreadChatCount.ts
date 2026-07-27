@@ -1,26 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { chatService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 
 const POLL_INTERVAL_MS = 12_000;
 
-/** AsyncStorage key for the "last time the rider opened this chat". */
-export const chatLastReadKey = (rideId: string) => `chat_last_read_${rideId}`;
-
 /**
- * Lightweight unread-message counter for the active-trip screen (Bug B).
+ * Unread-message counter for the active-trip screen (Bug B).
  *
- * The chat screen's own realtime/poll only runs while THAT screen is
- * mounted. This hook gives the rider an unread badge on TripActionBar
- * while they're looking at the map. "Unread" = messages from the driver
- * (sender_id !== self) with created_at after the `chat_last_read_<id>`
- * timestamp the chat screen persists on open/close.
+ * The chat screen's own realtime/poll only runs while THAT screen is mounted.
+ * This hook gives the rider an unread badge on TripActionBar while they are
+ * looking at the map.
  *
- * Cost: 1 request / 12s — trivial next to the 1 Hz GPS poll.
+ * "Unread" now means `read_at IS NULL` on the server (00516). It used to mean
+ * "newer than the chat_last_read_<rideId> timestamp this device happens to hold
+ * in AsyncStorage", which was wrong three ways: it did not survive a reinstall,
+ * two devices signed into the same account disagreed, and it bore no relation
+ * to the check mark the other party was shown. One fact drives both now.
  *
- * Returns `markRead()` so the caller can zero the badge instantly when
- * the rider opens the chat (instead of waiting up to 12s for the poll).
+ * Cost: one count/head query every 12s — no rows cross the wire. The previous
+ * version fetched the whole thread just to produce a number.
+ *
+ * Returns `markRead()` so the caller can zero the badge the moment the rider
+ * opens the chat, instead of waiting up to 12s for the next poll.
  */
 export function useUnreadChatCount(
   rideId: string | null,
@@ -37,19 +38,9 @@ export function useUnreadChatCount(
       return;
     }
     try {
-      const [raw, messages] = await Promise.all([
-        AsyncStorage.getItem(chatLastReadKey(id)),
-        chatService.getMessages(id),
-      ]);
-      const lastRead = raw ? new Date(raw).getTime() : 0;
-      const unread = messages.filter(
-        (m) =>
-          m.sender_id !== userId &&
-          new Date(m.created_at).getTime() > lastRead,
-      ).length;
-      setCount(unread);
+      setCount(await chatService.getUnreadCount(id, userId));
     } catch {
-      /* best-effort — keep the last known count */
+      /* best-effort — keep the last known count rather than flashing zero */
     }
   }, [userId]);
 
@@ -64,15 +55,12 @@ export function useUnreadChatCount(
     return () => clearInterval(interval);
   }, [rideId, userId, recompute]);
 
-  /** Zero the badge + persist the read timestamp — call on chat open. */
+  /** Zero the badge and stamp read_at server-side — call on chat open. */
   const markRead = useCallback(() => {
     const id = rideIdRef.current;
     setCount(0);
     if (id) {
-      AsyncStorage.setItem(
-        chatLastReadKey(id),
-        new Date().toISOString(),
-      ).catch(() => { /* best-effort */ });
+      chatService.markRead(id).catch(() => { /* best-effort */ });
     }
   }, []);
 
