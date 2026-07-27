@@ -42,13 +42,37 @@ const RULES: AutomationRule[] = [
   },
 ];
 
+/**
+ * Is this automation rule on?
+ *
+ * Deliberately accepts BOTH the boolean and the string, mirroring
+ * `supabase/functions/auto-admin/index.ts:37` — the code that actually
+ * decides whether the rule fires. These keys are seeded as jsonb strings
+ * (`'"false"'`, migration 00061) but written back as raw strings and read
+ * through `JSON.parse`, so the same key can legitimately arrive here as
+ * `true` or `'true'` depending on how it was last written.
+ *
+ * The screen previously compared `configs[key] === 'true'` against the
+ * PARSED value, which is a boolean — so a rule that was ON rendered as OFF,
+ * and the toggle recomputed the same wrong value and re-wrote 'true',
+ * making it impossible to switch a rule off from a freshly loaded page
+ * while toasting "Guardado". The server disagreed and kept running it.
+ */
+function isOn(value: unknown): boolean {
+  return value === true || value === 'true';
+}
+
 export default function AutomationPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   // ADM-002: platform_config writes are super_admin-only (mig 00292).
   // Mirror the RLS in the UI so regular admins don't get silent no-ops.
   const { isSuperAdmin, loading: superAdminLoading } = useIsSuperAdmin();
-  const [configs, setConfigs] = useState<Record<string, string>>({});
+  // `unknown`, not `string`: the loader below runs `JSON.parse` on each
+  // value, so a jsonb string like "true" arrives here as a BOOLEAN. Typing
+  // this as `Record<string, string>` was the lie that let `=== 'true'`
+  // compile while never being true.
+  const [configs, setConfigs] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
@@ -99,7 +123,7 @@ export default function AutomationPage() {
   }
 
   function toggleEnabled(key: string) {
-    const current = configs[key] === 'true';
+    const current = isOn(configs[key]);
     saveConfig(key, current ? 'false' : 'true');
   }
 
@@ -146,8 +170,8 @@ export default function AutomationPage() {
 
       <div className="space-y-4">
         {RULES.map((rule) => {
-          const enabled = configs[rule.enabledKey] === 'true';
-          const thresholdVal = configs[rule.thresholdKey] ?? '';
+          const enabled = isOn(configs[rule.enabledKey]);
+          const thresholdVal = String(configs[rule.thresholdKey] ?? '');
 
           return (
             <div
