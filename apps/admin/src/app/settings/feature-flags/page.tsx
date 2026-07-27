@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
@@ -25,22 +25,22 @@ export default function FeatureFlagsPage() {
   const [newDesc, setNewDesc] = useState('');
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function fetch() {
-      try {
-        const data = await adminService.getFeatureFlags();
-        if (!cancelled) setFlags(data);
-      } catch (err) {
-        // Error handled by UI
-        setError(getErrorMessage(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  // Extracted so the error banner's "Reintentar" can actually retry. It was
+  // wired to `setError(null)` — the fetch lived inside the effect, so there
+  // was nothing to call and the button only hid the error.
+  const fetchFlags = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setFlags(await adminService.getFeatureFlags());
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
-    fetch();
-    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => { fetchFlags(); }, [fetchFlags]);
 
   async function handleToggle(flag: FeatureFlag) {
     if (!isSuperAdmin) {
@@ -95,7 +95,7 @@ export default function FeatureFlagsPage() {
       {error && (
         <AdminErrorBanner
           message={error}
-          onRetry={() => { setError(null); }}
+          onRetry={fetchFlags}
           onDismiss={() => setError(null)}
         />
       )}

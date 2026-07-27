@@ -237,7 +237,10 @@ export default function PricingPage() {
       await adminService.updatePricingRule(rule.id, { is_active: !rule.is_active });
       setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, is_active: !r.is_active } : r));
     } catch (err) {
-      // Error handled by UI
+      // The comment here used to read "Error handled by UI" — no UI handled it.
+      // Every other handler on this screen toasts; only this one stayed quiet,
+      // so a rejected fare rule looked like a dead button.
+      showToast('error', getErrorMessage(err));
     }
   }
 

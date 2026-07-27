@@ -14,10 +14,25 @@ type City = {
   slug: string;
   is_active: boolean;
   timezone: string;
-  bounds: unknown;
+  // The table stores the bounding box as four columns (00067); there is no
+  // `bounds` column. The screen used to read `city.bounds`, which `select('*')`
+  // never returns, so the Límites cell said "sin configurar" for every city —
+  // all 15 of which do have bounds set.
+  bounds_ne_lat: number | null;
+  bounds_ne_lng: number | null;
+  bounds_sw_lat: number | null;
+  bounds_sw_lng: number | null;
   created_at: string;
   rides_count?: number;
 };
+
+/** A city has a usable bounding box only when all four corners are set. */
+function hasBounds(city: City): boolean {
+  return (
+    city.bounds_ne_lat !== null && city.bounds_ne_lng !== null &&
+    city.bounds_sw_lat !== null && city.bounds_sw_lng !== null
+  );
+}
 
 export default function CitiesPage() {
   const { t } = useTranslation('admin');
@@ -90,7 +105,10 @@ export default function CitiesPage() {
       if (error) throw error;
       setCities((prev) => prev.map((c) => c.id === city.id ? { ...c, is_active: !c.is_active } : c));
     } catch (err) {
-      // Error handled by UI
+      // The comment here used to read "Error handled by UI" — no UI handled
+      // it. The badge stayed put and nothing was said, so a failed toggle was
+      // indistinguishable from a click that never registered.
+      showToast('error', getErrorMessage(err));
     }
   }
 
@@ -188,7 +206,7 @@ export default function CitiesPage() {
                   </td>
                   <td className="px-4 py-3 text-ink-muted">{city.rides_count ?? 0}</td>
                   <td className="px-4 py-3 text-ink-subtle text-xs">
-                    {city.bounds ? t('cities.bounds_configured') : t('cities.bounds_none')}
+                    {hasBounds(city) ? t('cities.bounds_configured') : t('cities.bounds_none')}
                   </td>
                   <td className="px-4 py-3">
                     <button

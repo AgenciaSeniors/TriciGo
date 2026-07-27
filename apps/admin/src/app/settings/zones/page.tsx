@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { useTranslation } from '@tricigo/i18n';
@@ -33,22 +33,23 @@ export default function ZonesPage() {
   const [editForm, setEditForm] = useState<{ name: string }>({ name: '' });
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function fetch() {
-      try {
-        const data = await adminService.getZones();
-        if (!cancelled) setZones(data);
-      } catch (err) {
-        // Error handled by UI
-        setError(getErrorMessage(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  // Extracted so the error banner's "Reintentar" can actually retry. It was
+  // wired to `setError(null)` — the fetch lived inside the effect, so there
+  // was nothing to call and the button only hid the error, behaving
+  // identically to the × beside it.
+  const fetchZones = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setZones(await adminService.getZones());
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
-    fetch();
-    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => { fetchZones(); }, [fetchZones]);
 
   function startEdit(zone: ZoneRow) {
     setEditingId(zone.id);
@@ -76,7 +77,8 @@ export default function ZonesPage() {
       await adminService.updateZone(zone.id, { is_active: !zone.is_active });
       setZones((prev) => prev.map((z) => z.id === zone.id ? { ...z, is_active: !z.is_active } : z));
     } catch (err) {
-      // Error handled by UI
+      // The comment here used to read "Error handled by UI" — no UI handled it.
+      showToast('error', getErrorMessage(err));
     }
   }
 
@@ -88,7 +90,7 @@ export default function ZonesPage() {
       {error && (
         <AdminErrorBanner
           message={error}
-          onRetry={() => { setError(null); }}
+          onRetry={fetchZones}
           onDismiss={() => setError(null)}
         />
       )}
