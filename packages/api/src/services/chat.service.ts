@@ -8,8 +8,31 @@ import { realtimeStatusLogger } from './_realtime-status';
 import { validate, sendMessageSchema } from '../schemas';
 
 export const chatService = {
-  async getMessages(rideId: string): Promise<ChatMessage[]> {
+  /**
+   * Messages of a ride, oldest first.
+   *
+   * `limit` caps it to the most recent N (still returned oldest-first, so the
+   * caller renders them in order). The chat screen polls this every 8s and the
+   * unread badge used to as well; pulling an unbounded thread on a timer is
+   * fine at two messages and wasteful at two hundred.
+   */
+  async getMessages(rideId: string, limit?: number): Promise<ChatMessage[]> {
     const supabase = getSupabaseClient();
+
+    if (limit != null) {
+      // Newest-first + limit, then flip: taking the LAST N needs the sort
+      // reversed, otherwise a limit would return the oldest N and the chat
+      // would appear frozen in the past.
+      const { data, error } = await supabase
+        .from('ride_messages')
+        .select('*')
+        .eq('ride_id', rideId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return ((data ?? []) as ChatMessage[]).reverse();
+    }
+
     const { data, error } = await supabase
       .from('ride_messages')
       .select('*')
@@ -17,6 +40,51 @@ export const chatService = {
       .order('created_at', { ascending: true });
     if (error) throw error;
     return (data ?? []) as ChatMessage[];
+  },
+
+  /**
+   * How many messages in this ride were sent TO me and are still unread.
+   *
+   * A `count`/`head` query — no rows cross the wire. The badge used to fetch
+   * the whole thread every 12s just to compute a number.
+   */
+  async getUnreadCount(rideId: string, myUserId: string): Promise<number> {
+    const supabase = getSupabaseClient();
+    const { count, error } = await supabase
+      .from('ride_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('ride_id', rideId)
+      .neq('sender_id', myUserId)
+      .is('read_at', null);
+    if (error) throw error;
+    return count ?? 0;
+  },
+
+  /**
+   * Mark every message this user RECEIVED in this ride as read (00516).
+   *
+   * Goes through the `mark_ride_messages_read` RPC because ride_messages has
+   * no UPDATE policy on purpose — a sent message is immutable, and opening
+   * UPDATE for a timestamp would also open `body`. The RPC performs one fixed
+   * UPDATE and nothing else.
+   *
+   * Returns how many were marked. Tolerates the RPC being absent (a build that
+   * ships ahead of the migration): the chat simply behaves as it did before,
+   * with nothing ever showing as read.
+   */
+  async markRead(rideId: string): Promise<number> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('mark_ride_messages_read', {
+      p_ride_id: rideId,
+    });
+    if (error) {
+      // 42883 = undefined_function — migration 00516 not applied yet.
+      if (error.code === '42883' || /function.*does not exist/i.test(error.message)) {
+        return 0;
+      }
+      throw error;
+    }
+    return typeof data === 'number' ? data : 0;
   },
 
   async sendMessage(
