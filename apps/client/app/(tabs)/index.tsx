@@ -4418,8 +4418,10 @@ function ReviewingView() {
                   color={promoResult.valid ? 'accent' : 'error'}
                   className={promoResult.valid ? 'mt-2 text-green-600' : 'mt-2'}
                 >
+                  {/* discountAmount comes back in CUP from validate_promo_code —
+                      formatTRC labelled it "TRC" (TriciCoin), a different unit. */}
                   {promoResult.valid
-                    ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatTRC(promoResult.discountAmount)} aplicado`, amount: formatTRC(promoResult.discountAmount) })
+                    ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatCUP(promoResult.discountAmount)} aplicado`, amount: formatCUP(promoResult.discountAmount) })
                     : promoResult.error ?? t('ride.promo_invalid')}
                 </Text>
               )}

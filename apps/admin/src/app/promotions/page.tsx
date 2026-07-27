@@ -25,6 +25,7 @@ type FormState = {
   image_url: string;
   notify_on_publish: boolean;
   first_ride_only: boolean;
+  is_public: boolean;
 };
 
 const emptyForm: FormState = {
@@ -41,6 +42,7 @@ const emptyForm: FormState = {
   image_url: '',
   notify_on_publish: true,
   first_ride_only: false,
+  is_public: true,
 };
 
 const PAGE_SIZE = 20;
@@ -119,6 +121,9 @@ export default function PromotionsAdminPage() {
   // (handleNotify) handles re-sends and also stamps notified_at, so the
   // two paths can't double-fire.
   const maybeNotifyOnPublish = async (p: Promotion) => {
+    // A private code (influencer / partner) must never be broadcast — the
+    // whole point is that only the people the influencer reaches have it.
+    if (p.is_public === false) return;
     if (!p.is_active || !p.notify_on_publish || p.notified_at) return;
     try {
       const { targeted } = await notificationService.broadcastToActiveUsers({
@@ -139,9 +144,58 @@ export default function PromotionsAdminPage() {
     }
   };
 
-  const handleSave = async () => {
+  /**
+   * Reject the input combinations that silently produced a dead code.
+   * `max_uses: 0` is the nastiest one: the promo saves fine, shows as
+   * "Activa", and every redemption fails with `max_uses` because
+   * validate_promo_code checks `current_uses >= max_uses` → 0 >= 0.
+   */
+  const validateForm = (): string | null => {
     if (!form.code.trim()) {
-      showToast('error', t('promotions.error_code_required', { defaultValue: 'El código es obligatorio' }));
+      return t('promotions.error_code_required', { defaultValue: 'El código es obligatorio' });
+    }
+    if (form.type === 'fixed_discount') {
+      if (!Number.isFinite(form.discount_fixed_cup) || form.discount_fixed_cup <= 0) {
+        return t('promotions.error_amount_range', {
+          defaultValue: 'El monto del descuento debe ser mayor a 0 CUP',
+        });
+      }
+    } else if (
+      !Number.isFinite(form.discount_percent) ||
+      form.discount_percent <= 0 ||
+      form.discount_percent > 100
+    ) {
+      return t('promotions.error_percent_range', {
+        defaultValue: 'El descuento debe estar entre 1 % y 100 %',
+      });
+    }
+    if (form.max_uses.trim()) {
+      const n = Number(form.max_uses);
+      if (!Number.isFinite(n) || n < 1) {
+        return t('promotions.error_max_uses_range', {
+          defaultValue: 'Los usos máximos deben ser 1 o más (dejalo vacío para ilimitado)',
+        });
+      }
+    }
+    const from = inputToIso(form.valid_from);
+    const until = inputToIso(form.valid_until);
+    if (from && until && new Date(until) <= new Date(from)) {
+      return t('promotions.error_window', {
+        defaultValue: 'La fecha "vigente hasta" debe ser posterior a "vigente desde"',
+      });
+    }
+    if (until && new Date(until) <= new Date() && form.is_active) {
+      return t('promotions.error_window_past', {
+        defaultValue: 'La fecha "vigente hasta" ya pasó — el código nacería vencido',
+      });
+    }
+    return null;
+  };
+
+  const handleSave = async () => {
+    const invalid = validateForm();
+    if (invalid) {
+      showToast('error', invalid);
       return;
     }
     try {
@@ -162,24 +216,16 @@ export default function PromotionsAdminPage() {
         title_es: form.title_es.trim() || null,
         body_es: form.body_es.trim() || null,
         image_url: form.image_url.trim() || null,
-        notify_on_publish: form.notify_on_publish,
+        // A private code is never broadcast, so the publish push is forced off.
+        notify_on_publish: form.is_public ? form.notify_on_publish : false,
         first_ride_only: form.first_ride_only,
+        is_public: form.is_public,
       };
-      // Tolerate mig 00482 not applied yet (canonical column-missing retry):
-      // the promo just loses the first-ride flag until the column exists.
-      const saveWithTolerance = async (fn: (payload: typeof base) => Promise<unknown>) => {
-        try {
-          return await fn(base);
-        } catch (err) {
-          if (/first_ride_only|schema cache|column/i.test(getErrorMessage(err))) {
-            const { first_ride_only: _f, ...withoutFlag } = base;
-            return await fn(withoutFlag as typeof base);
-          }
-          throw err;
-        }
-      };
+      // The column-missing retry for `first_ride_only` (00482) / `is_public`
+      // (00519) lives in promotionService — it strips those columns and
+      // retries so the promo still saves before the migration lands.
       if (editingId) {
-        await saveWithTolerance((payload) => promotionService.update(editingId, payload));
+        await promotionService.update(editingId, base);
         showToast('success', t('promotions.toast_updated', { defaultValue: 'Promoción actualizada' }));
         const prev = items.find((i) => i.id === editingId);
         await maybeNotifyOnPublish({
@@ -189,16 +235,28 @@ export default function PromotionsAdminPage() {
           notified_at: prev?.notified_at ?? null,
         });
       } else {
-        const created = (await saveWithTolerance((payload) =>
-          promotionService.create({ ...payload, notified_at: null }),
-        )) as Promotion;
+        const created = await promotionService.create({ ...base, notified_at: null });
         showToast('success', t('promotions.toast_created', { defaultValue: 'Promoción creada' }));
         await maybeNotifyOnPublish(created);
       }
       resetForm();
       await loadItems();
     } catch (err) {
-      showToast('error', getErrorMessage(err));
+      // `promotions_code_key` UNIQUE(code) → the raw Postgres text
+      // ("duplicate key value violates unique constraint …") was shown to the
+      // admin verbatim. Say what actually happened.
+      const raw = getErrorMessage(err);
+      const isDupe =
+        (err as { code?: string } | null)?.code === '23505' ||
+        /duplicate key|promotions_code_key|unique constraint/i.test(raw);
+      showToast(
+        'error',
+        isDupe
+          ? t('promotions.error_code_taken', {
+              defaultValue: 'Ya existe una promoción con ese código. Elegí otro.',
+            })
+          : raw,
+      );
     }
   };
 
@@ -217,6 +275,8 @@ export default function PromotionsAdminPage() {
       image_url: p.image_url ?? '',
       notify_on_publish: p.notify_on_publish,
       first_ride_only: p.first_ride_only ?? false,
+      // Pre-00519 rows have no column → they are public marketing codes.
+      is_public: p.is_public ?? true,
     });
     setEditingId(p.id);
     setShowForm(true);
@@ -247,6 +307,13 @@ export default function PromotionsAdminPage() {
   };
 
   const handleNotify = async (p: Promotion) => {
+    if (p.is_public === false) {
+      showToast('error', t('promotions.notify_private_blocked', {
+        defaultValue: 'Es un código privado: no se difunde por push. Marcalo como público si querés anunciarlo.',
+      }));
+      setNotifyTarget(null);
+      return;
+    }
     setNotifying(true);
     try {
       const { targeted } = await notificationService.broadcastToActiveUsers({
@@ -316,7 +383,14 @@ export default function PromotionsAdminPage() {
         header: t('promotions.col_code', { defaultValue: 'Código' }),
         cell: (p) => (
           <span className="flex min-w-0 flex-col">
-            <span className="truncate font-mono font-medium text-ink">{p.code}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-mono font-medium text-ink">{p.code}</span>
+              {p.is_public === false && (
+                <span className="shrink-0 rounded-full bg-surface-sunken px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-ink-muted">
+                  {t('promotions.badge_private', { defaultValue: 'Privado' })}
+                </span>
+              )}
+            </span>
             {p.title_es && <span className="truncate text-[11px] text-ink-muted">{p.title_es}</span>}
           </span>
         ),
@@ -549,15 +623,38 @@ export default function PromotionsAdminPage() {
                 {t('promotions.first_ride_only_help', { defaultValue: 'Solo válido para usuarios sin viajes completados (requiere mig 00482)' })}
               </label>
             </Field>
-            <Field label={t('promotions.field_notify_on_publish', { defaultValue: 'Notificar al publicar' })}>
+            <Field label={t('promotions.field_visibility', { defaultValue: 'Visibilidad' })}>
               <label className="inline-flex items-center gap-2 text-[13px] text-ink">
                 <input
                   type="checkbox"
-                  checked={form.notify_on_publish}
-                  onChange={(e) => setForm({ ...form, notify_on_publish: e.target.checked })}
+                  checked={!form.is_public}
+                  onChange={(e) => setForm({ ...form, is_public: !e.target.checked })}
                   className="h-4 w-4 rounded border-line"
                 />
-                {t('promotions.notify_on_publish_help', { defaultValue: 'Envía un push a todos al activarla (una sola vez)' })}
+                {t('promotions.private_help', { defaultValue: 'Código privado (influencer / partner)' })}
+              </label>
+              <p className="mt-1 text-[11px] text-ink-muted">
+                {form.is_public
+                  ? t('promotions.public_hint', {
+                      defaultValue: 'Público: aparece en el carrusel PROMOS del inicio de todos los usuarios.',
+                    })
+                  : t('promotions.private_hint', {
+                      defaultValue: 'Privado: no aparece en ningún listado ni push. Solo lo canjea quien lo reciba del influencer.',
+                    })}
+              </p>
+            </Field>
+            <Field label={t('promotions.field_notify_on_publish', { defaultValue: 'Notificar al publicar' })}>
+              <label className={`inline-flex items-center gap-2 text-[13px] ${form.is_public ? 'text-ink' : 'text-ink-subtle'}`}>
+                <input
+                  type="checkbox"
+                  checked={form.is_public && form.notify_on_publish}
+                  disabled={!form.is_public}
+                  onChange={(e) => setForm({ ...form, notify_on_publish: e.target.checked })}
+                  className="h-4 w-4 rounded border-line disabled:opacity-50"
+                />
+                {form.is_public
+                  ? t('promotions.notify_on_publish_help', { defaultValue: 'Envía un push a todos al activarla (una sola vez)' })
+                  : t('promotions.notify_disabled_private', { defaultValue: 'No disponible para códigos privados' })}
               </label>
             </Field>
           </div>
