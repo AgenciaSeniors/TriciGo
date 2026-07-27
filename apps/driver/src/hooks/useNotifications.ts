@@ -14,11 +14,19 @@ const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 // mapped here — offers are core to being a working driver, so the
 // only way to silence them is the master toggle (which is
 // effectively going offline). See PR follow-up doc.
+// MUST stay a superset of `FILTERABLE_CATEGORY_TO_PREF` in
+// `supabase/functions/send-push/index.ts`. That map decides what the server
+// refuses to send; this one is the last line of defence for anything already
+// on the device — which is precisely what matters while the two sides briefly
+// disagree (offline toggle, a push in flight when the preference changed).
+// A category the server can filter but this map omits is silently presented.
 const PREF_KEYS: Record<string, string> = {
   // Ride lifecycle
   ride: '@tricigo/notif_rides',
+  ride_matching: '@tricigo/notif_rides',
   proximity: '@tricigo/notif_rides',
   scheduled_ride: '@tricigo/notif_rides',
+  ride_updates: '@tricigo/notif_rides', // legacy category, still emitted
   // Chat
   chat: '@tricigo/notif_chat',
   // Wallet / payments (driver earnings)
@@ -26,11 +34,14 @@ const PREF_KEYS: Record<string, string> = {
   payment: '@tricigo/notif_wallet',
   wallet_recharge: '@tricigo/notif_wallet',
   wallet_recharge_refund: '@tricigo/notif_wallet',
+  wallet_credit: '@tricigo/notif_wallet',
+  wallet_debit: '@tricigo/notif_wallet',
   // Marketing / content (admin novedades, blog, promos)
   promo: '@tricigo/notif_promos',
   announcement: '@tricigo/notif_promos',
   blog: '@tricigo/notif_promos',
   news: '@tricigo/notif_promos',
+  campaign: '@tricigo/notif_promos',
 };
 
 Notifications.setNotificationHandler({

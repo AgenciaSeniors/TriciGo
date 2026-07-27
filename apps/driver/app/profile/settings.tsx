@@ -32,7 +32,7 @@
  *
  * Microcopy unification stays out of scope; PR-B3 owns it.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Pressable, Switch, Alert, useColorScheme, Platform, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -59,12 +59,31 @@ import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-ov
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
+/**
+ * Each category toggle, with BOTH the on-device key that suppresses a
+ * foreground notification and the `notification_preferences` column that
+ * stops the server from sending it at all.
+ *
+ * The server column was missing here until now. The driver app only ever
+ * wrote AsyncStorage, so `notification_preferences` had no row for a
+ * driver-only account — and `send-push` (which filters on that table since
+ * #865) treats a missing row as "never opted out" and delivers. A driver who
+ * turned Chat off still got the push whenever the app was backgrounded or
+ * killed, which is the only case that matters. The client and the web wrote
+ * the table all along; the driver was the odd one out.
+ */
 const NOTIF_CATEGORIES = [
-  { key: '@tricigo/notif_rides', icon: 'car-outline' as const, labelKey: 'profile.notif_trip_requests' },
-  { key: '@tricigo/notif_chat', icon: 'chatbubble-outline' as const, labelKey: 'profile.notif_chat' },
-  { key: '@tricigo/notif_wallet', icon: 'wallet-outline' as const, labelKey: 'profile.notif_wallet' },
-  { key: '@tricigo/notif_promos', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
-];
+  { key: '@tricigo/notif_rides', serverPref: 'ride_updates', icon: 'car-outline' as const, labelKey: 'profile.notif_trip_requests' },
+  { key: '@tricigo/notif_chat', serverPref: 'chat_messages', icon: 'chatbubble-outline' as const, labelKey: 'profile.notif_chat' },
+  { key: '@tricigo/notif_wallet', serverPref: 'payment_updates', icon: 'wallet-outline' as const, labelKey: 'profile.notif_wallet' },
+  { key: '@tricigo/notif_promos', serverPref: 'promotions', icon: 'gift-outline' as const, labelKey: 'profile.notif_promos' },
+] as const;
+
+type ServerPrefColumn = (typeof NOTIF_CATEGORIES)[number]['serverPref'];
+
+const SERVER_PREF_BY_LOCAL_KEY: Record<string, ServerPrefColumn> = Object.fromEntries(
+  NOTIF_CATEGORIES.map((c) => [c.key, c.serverPref]),
+);
 
 const LANG_LABELS: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' };
 
@@ -95,6 +114,9 @@ export default function DriverSettingsScreen() {
   const userId = useAuthStore((s) => s.user?.id);
 
   // Existing state
+  // Bumped on every category toggle; a load that started before the bump
+  // discards its result instead of overwriting the user's choice.
+  const prefsGenerationRef = useRef(0);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, boolean>>({});
   const [smsEnabled, setSmsEnabled] = useState(false);
@@ -133,17 +155,41 @@ export default function DriverSettingsScreen() {
       if (val !== null) setNotificationsEnabled(val === 'true');
     }).catch(() => {});
 
+    const generation = prefsGenerationRef.current;
+
+    // Paint from the on-device values first — they're local and immediate.
     Promise.all(
       NOTIF_CATEGORIES.map(async (cat) => {
         const val = await AsyncStorage.getItem(cat.key).catch(() => null);
         return [cat.key, val !== 'false'] as const;
       }),
     ).then((results) => {
+      if (prefsGenerationRef.current !== generation) return;
       setCategoryPrefs(Object.fromEntries(results));
     });
 
     if (userId) {
       notificationService.getSmsPreference(userId).then(setSmsEnabled).catch(() => {});
+
+      // Also the source of truth for the server-side filter. Calling this is
+      // what CREATES the row (the RPC is an upsert); `updatePreferences` is a
+      // plain UPDATE and would fail on a driver who never had one.
+      notificationService.getPreferences(userId).then((prefs) => {
+        if (!prefs) return;
+        if (prefsGenerationRef.current !== generation) return;
+        const fromServer = Object.fromEntries(
+          NOTIF_CATEGORIES.map((cat) => [cat.key, prefs[cat.serverPref] !== false]),
+        );
+        setCategoryPrefs(fromServer);
+        // Mirror down: the notification handler only reads AsyncStorage.
+        Promise.all(
+          NOTIF_CATEGORIES.map((cat) =>
+            AsyncStorage.setItem(cat.key, String(prefs[cat.serverPref] !== false)).catch(() => {}),
+          ),
+        );
+      }).catch(() => {
+        // Offline: the device values above stay in force.
+      });
     }
   }, [userId]);
 
@@ -223,9 +269,27 @@ export default function DriverSettingsScreen() {
   };
 
   const handleCategoryToggle = useCallback(async (key: string, enabled: boolean) => {
+    // Invalidate any load in flight — its data predates this choice.
+    prefsGenerationRef.current += 1;
     setCategoryPrefs((prev) => ({ ...prev, [key]: enabled }));
+
+    // On-device first: this is what suppresses a foreground notification.
     await AsyncStorage.setItem(key, String(enabled)).catch(() => {});
-  }, []);
+
+    // Then the server, so the push is not sent at all when the app is
+    // backgrounded or killed — the case the local filter cannot cover.
+    const serverPref = SERVER_PREF_BY_LOCAL_KEY[key];
+    if (!userId || !serverPref) return;
+    try {
+      await notificationService.updatePreferences(userId, { [serverPref]: enabled });
+    } catch (err) {
+      // Keep the two sides in agreement rather than leaving the device
+      // suppressing something the server still sends.
+      setCategoryPrefs((prev) => ({ ...prev, [key]: !enabled }));
+      await AsyncStorage.setItem(key, String(!enabled)).catch(() => {});
+      logger.warn('[DriverSettings] Failed to save notification preference', { error: String(err) });
+    }
+  }, [userId]);
 
   /**
    * Persist a matching preference and keep the store in sync, so the
@@ -237,7 +301,13 @@ export default function DriverSettingsScreen() {
     updates: { max_distance_km?: number | null; accepts_long_trips?: boolean | null },
     revert: () => void,
   ) => {
-    if (!driverProfileId) return;
+    if (!driverProfileId) {
+      // The caller already changed what is on screen. Without this the row
+      // would show the new value and never save it — a control that lies,
+      // which is the exact thing this screen was cleaned up to stop doing.
+      revert();
+      return;
+    }
     setPrefsSaving(true);
     try {
       const next = await driverService.updateMatchPreferences(driverProfileId, updates);

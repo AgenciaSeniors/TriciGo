@@ -88,11 +88,19 @@ export async function readDeviceNotifPrefs(): Promise<Record<ServerNotifPref, bo
 // 'wallet_recharge' would bypass the user's "wallet" preference
 // because PREF_KEYS['wallet_recharge'] would be undefined and the
 // handler defaults to shouldShowAlert: true.
+// MUST stay a superset of `FILTERABLE_CATEGORY_TO_PREF` in
+// `supabase/functions/send-push/index.ts`. That map decides what the server
+// refuses to send; this one is the last line of defence for anything already
+// on the device — which is precisely what matters while the two sides briefly
+// disagree (offline toggle, a push in flight when the preference changed).
+// A category the server can filter but this map omits is silently presented.
 const PREF_KEYS: Record<string, string> = {
   // Ride lifecycle
   ride: LOCAL_NOTIF_KEYS.rides,
   ride_matching: LOCAL_NOTIF_KEYS.rides,
   proximity: LOCAL_NOTIF_KEYS.rides,
+  scheduled_ride: LOCAL_NOTIF_KEYS.rides,
+  ride_updates: LOCAL_NOTIF_KEYS.rides, // legacy category, still emitted
   // Chat
   chat: LOCAL_NOTIF_KEYS.chat,
   // Wallet / payments
@@ -100,11 +108,14 @@ const PREF_KEYS: Record<string, string> = {
   payment: LOCAL_NOTIF_KEYS.wallet,
   wallet_recharge: LOCAL_NOTIF_KEYS.wallet,
   wallet_recharge_refund: LOCAL_NOTIF_KEYS.wallet,
+  wallet_credit: LOCAL_NOTIF_KEYS.wallet,
+  wallet_debit: LOCAL_NOTIF_KEYS.wallet,
   // Marketing / content (admin novedades, blog, promos)
   promo: LOCAL_NOTIF_KEYS.promos,
   announcement: LOCAL_NOTIF_KEYS.promos,
   blog: LOCAL_NOTIF_KEYS.promos,
   news: LOCAL_NOTIF_KEYS.promos,
+  campaign: LOCAL_NOTIF_KEYS.promos,
 };
 
 // THE notification handler for this app — there must be exactly one.
