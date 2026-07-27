@@ -101,7 +101,17 @@ export default function WalletScreen() {
   const [anchorUsdCents, setAnchorUsdCents] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [page, setPage] = useState(1);
+  // A ref, not state, and deliberately so. This value is never read during
+  // render — only inside `fetchData` — but as state it put `page` in that
+  // callback's dependency list, which made paging self-cancelling:
+  // handleLoadMore → fetchData(false) → setPage(prev + 1) → `page` changes →
+  // `fetchData` gets a new identity → the focus effect below (keyed on
+  // `fetchData`) re-fires while the screen is still focused → fetchData(true)
+  // → setTransactions(firstPage). Every appended page was discarded the
+  // instant it arrived and the list snapped back to the newest 20 rows, so
+  // older movements were unreachable. Four live accounts already hold more
+  // than 20 entries. A ref carries the cursor without re-triggering anything.
+  const pageRef = useRef(1);
   const [hasMore, setHasMore] = useState(true);
 
   // RECARGA V2 PARITY: map payment_intent_id → receipt metadata so we
@@ -115,7 +125,7 @@ export default function WalletScreen() {
   const fetchData = useCallback(async (reset = false) => {
     if (!userId) return;
     try {
-      const p = reset ? 0 : page;
+      const p = reset ? 0 : pageRef.current;
       // 00300: single-wallet driver model → tricicoin es la única fuente.
       // 00444: also read the USD anchor to show the protected dollar value.
       const [summaryData, rateData, balanceData] = await Promise.all([
@@ -134,7 +144,7 @@ export default function WalletScreen() {
 
       if (reset) {
         setTransactions(txData);
-        setPage(1);
+        pageRef.current = 1;
       } else {
         // Dedup by id when appending: a focus-refetch or page overlap can
         // re-deliver rows already in state, which would collide on the
@@ -143,7 +153,7 @@ export default function WalletScreen() {
           const seen = new Set(prev.map((tx) => tx.id));
           return [...prev, ...txData.filter((tx) => !seen.has(tx.id))];
         });
-        setPage((prev) => prev + 1);
+        pageRef.current += 1;
       }
       setHasMore(txData.length === PAGE_SIZE);
 
@@ -176,7 +186,7 @@ export default function WalletScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId, page, t]);
+  }, [userId, t]);
 
   useEffect(() => {
     fetchData(true);
