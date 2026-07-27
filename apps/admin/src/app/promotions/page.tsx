@@ -620,7 +620,12 @@ export default function PromotionsAdminPage() {
                   onChange={(e) => setForm({ ...form, first_ride_only: e.target.checked })}
                   className="h-4 w-4 rounded border-line"
                 />
-                {t('promotions.first_ride_only_help', { defaultValue: 'Solo válido para usuarios sin viajes completados (requiere mig 00482)' })}
+                {/* The old copy ended in "(requiere mig 00482)" — an internal note
+                    that leaked into the panel. 00482 has been live for a while
+                    (column + validate_promo_code + the rides trigger, all three
+                    verified in prod), so the caveat only read as "this might not
+                    work". Say what the flag does instead. */}
+                {t('promotions.first_ride_only_help', { defaultValue: 'Solo lo pueden usar personas que todavía no completaron ningún viaje' })}
               </label>
             </Field>
             <Field label={t('promotions.field_visibility', { defaultValue: 'Visibilidad' })}>
