@@ -295,6 +295,10 @@
     "actions_section": "Acciones"
   },
   "rides": {
+    "chat_section": "Conversación",
+    "chat_empty": "Pasajero y conductor no intercambiaron mensajes en este viaje.",
+    "chat_unknown_sender": "Desconocido",
+    "chat_read_at": "leído",
     "title": "Gestión de viajes",
     "active": "Activos",
     "completed": "Completados",

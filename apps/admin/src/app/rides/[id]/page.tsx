@@ -7,7 +7,7 @@ import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import type { Ride, RidePricingSnapshot, RideTransition } from '@tricigo/types';
-import type { DeliveryDetails } from '@tricigo/api';
+import type { DeliveryDetails, AdminRideMessage } from '@tricigo/api';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -65,6 +65,7 @@ type RideDetail = {
   driverInfo: { name: string; phone: string } | null;
   customerInfo: { name: string; phone: string } | null;
   delivery: DeliveryDetails | null;
+  messages: AdminRideMessage[];
 };
 
 export default function RideDetailPage() {
@@ -138,7 +139,7 @@ export default function RideDetailPage() {
     );
   }
 
-  const { ride, transitions, pricing, driverInfo, customerInfo, delivery } = detail;
+  const { ride, transitions, pricing, driverInfo, customerInfo, delivery, messages } = detail;
   const fare = ride.final_fare_cup ?? ride.estimated_fare_cup;
 
   // A cargo ride is stored with the chosen vehicle's slug, so ride_mode is the
@@ -372,6 +373,59 @@ export default function RideDetailPage() {
           )}
         </div>
       )}
+
+      {/* Ride chat.
+           Rendered as a transcript, not as chat bubbles: the admin is reading
+           evidence for a dispute, not holding a conversation. A single
+           chronological column with an explicit speaker label on every line is
+           faster to scan, unambiguous about who said what, and survives being
+           copied into a support ticket — none of which alternating bubbles
+           give you. */}
+      <div className="bg-surface-elevated rounded-xl shadow-sm border border-line p-6 mb-8">
+        <h2 className="text-lg font-bold mb-4">
+          {t('rides.chat_section', { defaultValue: 'Conversación' })}
+        </h2>
+
+        {messages.length === 0 ? (
+          <p className="text-sm text-ink-muted">
+            {t('rides.chat_empty', {
+              defaultValue: 'Pasajero y conductor no intercambiaron mensajes en este viaje.',
+            })}
+          </p>
+        ) : (
+          <ol className="space-y-3">
+            {messages.map((m) => {
+              const speaker =
+                m.senderRole === 'customer'
+                  ? customerInfo?.name || t('rides.label_customer')
+                  : m.senderRole === 'driver'
+                    ? driverInfo?.name || t('rides.label_driver')
+                    : t('rides.chat_unknown_sender', { defaultValue: 'Desconocido' });
+              return (
+                <li key={m.id} className="border-l-2 border-line pl-3">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-sm font-medium">{speaker}</span>
+                    <span className="text-xs text-ink-subtle tabular-nums">
+                      {formatAdminDate(m.created_at)}
+                    </span>
+                    {/* read_at only exists once migration 00516 lands. Before
+                        that it is null for every row, so rather than show
+                        "sin leer" on a whole history that simply predates the
+                        column — which would read as a finding — the unread
+                        state is only ever shown as its absence. */}
+                    {m.read_at && (
+                      <span className="text-xs text-green-700">
+                        {t('rides.chat_read_at', { defaultValue: 'leído' })} {formatAdminDate(m.read_at)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm mt-0.5 whitespace-pre-wrap break-words">{m.body}</p>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </div>
 
       {/* Pricing snapshot */}
       {pricing && (
