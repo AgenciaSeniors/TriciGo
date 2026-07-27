@@ -50,9 +50,15 @@ const STATUS_COLORS: Record<string, string> = {
   driver_en_route: '#3B82F6',
   arrived_at_pickup: '#8B5CF6', // purple
   in_progress: '#22C55E',   // green
+  arrived_at_destination: '#14B8A6', // teal — last leg, distinct from both
 };
 
-const ACTIVE_STATUSES = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress'];
+/* `arrived_at_destination` was missing here, and this list is what the poll
+   below queries status by status — so a trip vanished from the live map the
+   moment the driver reached the destination and only the driver marker stayed,
+   which the code at getDriverState() already counts as on-a-trip. The map
+   contradicted itself. It is an active state; it belongs. */
+const ACTIVE_STATUSES = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'];
 
 function parseLocation(loc: unknown): { lat: number; lng: number } | null {
   if (!loc) return null;
@@ -206,6 +212,10 @@ export default function LiveMapPage() {
     driver_en_route: t('dashboard.status_driver_en_route', { defaultValue: 'En camino' }),
     arrived_at_pickup: t('dashboard.status_arrived_at_pickup', { defaultValue: 'En punto' }),
     in_progress: t('dashboard.status_in_progress', { defaultValue: 'En progreso' }),
+    // Both call sites below fall back to `?? ride.status`, so omitting this one
+    // put a raw enum on the live map — and unlike the detail page's timeline,
+    // here it names a ride that is still in flight.
+    arrived_at_destination: t('dashboard.status_arrived_at_destination', { defaultValue: 'En destino' }),
   };
 
   // ---- Derived (drivers) ----

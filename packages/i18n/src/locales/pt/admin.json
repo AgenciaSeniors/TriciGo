@@ -161,6 +161,7 @@
     "status_driver_en_route": "A caminho",
     "status_arrived_at_pickup": "No ponto",
     "status_in_progress": "Em andamento",
+    "status_arrived_at_destination": "No destino",
     "status_completed": "Concluído",
     "status_canceled": "Cancelado",
     "status_disputed": "Em disputa",
@@ -324,6 +325,7 @@
     "status_driver_en_route": "A caminho",
     "status_arrived_at_pickup": "No ponto",
     "status_in_progress": "Em andamento",
+    "status_arrived_at_destination": "No destino",
     "status_completed": "Concluído",
     "status_canceled": "Cancelado",
     "status_disputed": "Em disputa",
@@ -1831,6 +1833,7 @@
       "driver_en_route": "A caminho",
       "arrived_at_pickup": "No ponto de embarque",
       "in_progress": "Em andamento",
+      "arrived_at_destination": "No destino",
       "completed": "Concluido",
       "canceled": "Cancelado",
       "disputed": "Em disputa"

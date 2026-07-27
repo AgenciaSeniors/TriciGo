@@ -6,7 +6,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
-import type { Ride, RidePricingSnapshot, RideTransition } from '@tricigo/types';
+import type { Ride, RidePricingSnapshot, RideStatus, RideTransition } from '@tricigo/types';
 import type { DeliveryDetails, AdminRideMessage } from '@tricigo/api';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
@@ -19,23 +19,33 @@ const CANCELABLE_STATUSES = [
   'arrived_at_pickup', 'in_progress', 'arrived_at_destination',
 ];
 
-const STATUS_BADGE: Record<string, string> = {
+/* Typed `Record<RideStatus, …>`, not `Record<string, …>`. Both maps below sat
+   at `string` and silently went one key short of the enum; the only signal was
+   a raw `arrived_at_destination` showing up in the UI. Keyed by RideStatus,
+   the next state added to the union fails the build instead. */
+const STATUS_BADGE: Record<RideStatus, string> = {
   searching: 'bg-yellow-100 text-yellow-700',
   accepted: 'bg-blue-100 text-blue-700',
   driver_en_route: 'bg-blue-100 text-blue-700',
   arrived_at_pickup: 'bg-blue-100 text-blue-700',
   in_progress: 'bg-blue-100 text-blue-700',
+  arrived_at_destination: 'bg-blue-100 text-blue-700',
   completed: 'bg-green-100 text-green-700',
   canceled: 'bg-red-100 text-red-700',
   disputed: 'bg-orange-100 text-orange-700',
 };
 
-const STATUS_LABEL_KEY: Record<string, string> = {
+const STATUS_LABEL_KEY: Record<RideStatus, string> = {
   searching: 'rides.status_searching',
   accepted: 'rides.status_accepted',
   driver_en_route: 'rides.status_driver_en_route',
   arrived_at_pickup: 'rides.status_arrived_at_pickup',
   in_progress: 'rides.status_in_progress',
+  // Real, first-class state (it appears in CANCELABLE_STATUSES above and the
+  // rider app has translated it for months) that both maps here forgot. Every
+  // ride that reached it printed the raw `arrived_at_destination` enum into the
+  // admin's status timeline — 3 of 3 in prod when this was found.
+  arrived_at_destination: 'rides.status_arrived_at_destination',
   completed: 'rides.status_completed',
   canceled: 'rides.status_canceled',
   disputed: 'rides.status_disputed',
@@ -395,16 +405,29 @@ export default function RideDetailPage() {
         ) : (
           <ol className="space-y-3">
             {messages.map((m) => {
-              const speaker =
-                m.senderRole === 'customer'
-                  ? customerInfo?.name || t('rides.label_customer')
-                  : m.senderRole === 'driver'
-                    ? driverInfo?.name || t('rides.label_driver')
-                    : t('rides.chat_unknown_sender', { defaultValue: 'Desconocido' });
+              /* Name AND role. The name alone is unambiguous about the person
+                 but not about their side of the trip, which is the thing a
+                 dispute turns on — "the driver said he was arriving". Without
+                 the role you have to scroll back to the Personas card and map
+                 name→role by hand, on every line. When the name is missing the
+                 role stands in for it, so it is never printed twice. */
+              const isCustomer = m.senderRole === 'customer';
+              const isDriver = m.senderRole === 'driver';
+              const roleLabel = isCustomer
+                ? t('rides.label_customer')
+                : isDriver
+                  ? t('rides.label_driver')
+                  : t('rides.chat_unknown_sender', { defaultValue: 'Desconocido' });
+              const name = isCustomer
+                ? customerInfo?.name
+                : isDriver
+                  ? driverInfo?.name
+                  : undefined;
               return (
                 <li key={m.id} className="border-l-2 border-line pl-3">
                   <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{speaker}</span>
+                    <span className="text-sm font-medium">{name || roleLabel}</span>
+                    {name && <span className="text-xs text-ink-muted">· {roleLabel}</span>}
                     <span className="text-xs text-ink-subtle tabular-nums">
                       {formatAdminDate(m.created_at)}
                     </span>

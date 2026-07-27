@@ -161,6 +161,7 @@
     "status_driver_en_route": "En route",
     "status_arrived_at_pickup": "At pickup",
     "status_in_progress": "In progress",
+    "status_arrived_at_destination": "At destination",
     "status_completed": "Completed",
     "status_canceled": "Canceled",
     "status_disputed": "Disputed",
@@ -324,6 +325,7 @@
     "status_driver_en_route": "En route",
     "status_arrived_at_pickup": "At pickup",
     "status_in_progress": "In progress",
+    "status_arrived_at_destination": "At destination",
     "status_completed": "Completed",
     "status_canceled": "Canceled",
     "status_disputed": "Disputed",
@@ -1831,6 +1833,7 @@
       "driver_en_route": "On the way",
       "arrived_at_pickup": "At pickup",
       "in_progress": "In progress",
+      "arrived_at_destination": "At destination",
       "completed": "Completed",
       "canceled": "Canceled",
       "disputed": "Disputed"
