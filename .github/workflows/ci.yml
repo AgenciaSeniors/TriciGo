@@ -61,6 +61,16 @@ jobs:
       - name: Type check Edge Functions (runtime-fatal only)
         run: pnpm check:ef-types
 
+      # Guardrail: translation parity + duplicate keys. This script already
+      # existed and passed, but nothing ever ran it, so 34 duplicate keys
+      # accumulated across driver.json and rider.json in all three locales
+      # without a single red build. JSON.parse keeps the last of two same-named
+      # keys, so the shadowed entry stays in the file looking live — editing it
+      # does nothing, which is how "Finalizar" and "Finalizar viaje" both ended
+      # up in trip.action_finish.
+      - name: Check i18n (parity + duplicate keys)
+        run: pnpm check:i18n
+
       - name: Type check
         run: pnpm check-types
 

@@ -46,10 +46,94 @@ function load(locale, file) {
   return JSON.parse(readFileSync(join(LOCALES_DIR, locale, file), 'utf8'));
 }
 
+// ── Duplicate keys ───────────────────────────────────────────────────────────
+// JSON.parse silently keeps the LAST of two same-named keys, so a duplicate is
+// invisible to every check above — and to the reviewer reading the diff. The
+// shadowed entry still looks live in the file, which is the trap: editing it
+// changes nothing at all.
+//
+// This is not hypothetical. 34 duplicates had accumulated across driver.json
+// and rider.json in all three locales, and the pairs had drifted apart:
+// ride.cancel_confirm held BOTH the question ("¿Seguro que deseas cancelar el
+// viaje?") and the button label ("Sí, cancelar"); trip.action_finish held both
+// "Finalizar" and "Finalizar viaje"; five strings had a typographic ellipsis in
+// the dead copy and "..." in the live one. Somebody polished each of those and
+// the polish never shipped.
+//
+// Needs its own parser precisely because JSON.parse cannot express the
+// question: by the time you hold the object, the evidence is gone.
+function findDuplicateKeys(text) {
+  let i = 0;
+  const dups = [];
+  const lineOf = (idx) => text.slice(0, idx).split('\n').length;
+  const ws = () => { while (i < text.length && /\s/.test(text[i])) i++; };
+  function str() {
+    i++;
+    let s = '';
+    while (i < text.length) {
+      const c = text[i];
+      if (c === '\\') { s += text[i + 1]; i += 2; continue; }
+      if (c === '"') { i++; return s; }
+      s += c; i++;
+    }
+    throw new Error('unterminated string');
+  }
+  function value(path) {
+    ws();
+    const c = text[i];
+    if (c === '{') return object(path);
+    if (c === '[') return array(path);
+    if (c === '"') return str();
+    while (i < text.length && !/[,\]}\s]/.test(text[i])) i++;
+  }
+  function object(path) {
+    i++; ws();
+    const seen = new Map();
+    if (text[i] === '}') { i++; return; }
+    for (;;) {
+      ws();
+      const at = i;
+      const key = str();
+      const full = path ? `${path}.${key}` : key;
+      if (seen.has(key)) dups.push({ path: full, first: seen.get(key), second: lineOf(at) });
+      else seen.set(key, lineOf(at));
+      ws(); i++; // ':'
+      value(full);
+      ws();
+      if (text[i] === ',') { i++; continue; }
+      if (text[i] === '}') { i++; break; }
+      throw new Error(`unexpected ${JSON.stringify(text[i])} at offset ${i}`);
+    }
+  }
+  function array(path) {
+    i++; ws();
+    if (text[i] === ']') { i++; return; }
+    let n = 0;
+    for (;;) {
+      value(`${path}[${n++}]`); ws();
+      if (text[i] === ',') { i++; continue; }
+      if (text[i] === ']') { i++; break; }
+      throw new Error(`unexpected ${JSON.stringify(text[i])} at offset ${i}`);
+    }
+  }
+  value('');
+  return dups;
+}
+
 const files = readdirSync(join(LOCALES_DIR, SOURCE)).filter((f) => f.endsWith('.json'));
 
 const missing = [];
 const stale = [];
+const duplicates = [];
+
+for (const locale of [SOURCE, ...TARGETS]) {
+  for (const file of readdirSync(join(LOCALES_DIR, locale)).filter((f) => f.endsWith('.json'))) {
+    const text = readFileSync(join(LOCALES_DIR, locale, file), 'utf8');
+    for (const d of findDuplicateKeys(text)) {
+      duplicates.push(`${locale}/${file}  ${d.path}  (lines ${d.first} and ${d.second})`);
+    }
+  }
+}
 
 for (const file of files) {
   const sourceKeys = new Set(flatten(load(SOURCE, file)));
@@ -137,9 +221,20 @@ if (missing.length > 0) {
   );
 }
 
-if (missing.length > 0 || contractBreaks.length > 0) process.exit(1);
+if (duplicates.length > 0) {
+  console.error(`\n✖ ${duplicates.length} duplicate key(s) in the locale files:\n`);
+  for (const d of duplicates) console.error(`  ${d}`);
+  console.error(
+    '\nJSON.parse keeps the LAST one, so the earlier entry is dead weight that still\n' +
+      'looks live — edit it and nothing happens. Keep one entry per key: put the value\n' +
+      'you want on the first occurrence and delete the rest.\n',
+  );
+}
+
+if (missing.length > 0 || contractBreaks.length > 0 || duplicates.length > 0) process.exit(1);
 
 console.log(
   `✓ i18n parity: ${files.length} namespace(s) × ${TARGETS.length} locale(s), no missing translations` +
-    '\n✓ quick-reply presets: every entry in QUICK_REPLIES has a locale entry for each role that sees it',
+    '\n✓ quick-reply presets: every entry in QUICK_REPLIES has a locale entry for each role that sees it' +
+    '\n✓ no duplicate keys shadowing each other',
 );
