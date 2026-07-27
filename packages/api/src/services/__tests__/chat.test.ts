@@ -143,4 +143,89 @@ describe('chatService', () => {
       expect(result).toEqual(mockSubscription);
     });
   });
+
+  // ------------------------------------------------------------------
+  // Read receipts (00516)
+  // ------------------------------------------------------------------
+  describe('getMessages with a limit', () => {
+    it('takes the MOST RECENT n and hands them back oldest-first', async () => {
+      // The rows come back newest-first from the query; the caller renders in
+      // order, so the service flips them. Getting this backwards would pin the
+      // chat to its oldest messages and look frozen.
+      const newestFirst = [
+        { id: 'm3', created_at: '2025-01-01T10:02:00Z' },
+        { id: 'm2', created_at: '2025-01-01T10:01:00Z' },
+      ];
+      const mockLimit = vi.fn().mockResolvedValue({ data: newestFirst, error: null });
+      const mockOrder = vi.fn(() => ({ limit: mockLimit }));
+      const mockEq = vi.fn(() => ({ order: mockOrder }));
+      mockFrom.mockReturnValueOnce({ select: vi.fn(() => ({ eq: mockEq })) });
+
+      const result = await chatService.getMessages('ride-1', 2);
+
+      expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false });
+      expect(mockLimit).toHaveBeenCalledWith(2);
+      expect(result.map((m) => m.id)).toEqual(['m2', 'm3']);
+    });
+  });
+
+  describe('getUnreadCount', () => {
+    it('counts without transferring rows', async () => {
+      const mockIs = vi.fn().mockResolvedValue({ count: 3, error: null });
+      const mockNeq = vi.fn(() => ({ is: mockIs }));
+      const mockEq = vi.fn(() => ({ neq: mockNeq }));
+      const mockSelect = vi.fn(() => ({ eq: mockEq }));
+      mockFrom.mockReturnValueOnce({ select: mockSelect });
+
+      const n = await chatService.getUnreadCount('ride-1', UUID.USER_1);
+
+      expect(mockSelect).toHaveBeenCalledWith('id', { count: 'exact', head: true });
+      expect(mockNeq).toHaveBeenCalledWith('sender_id', UUID.USER_1);
+      expect(mockIs).toHaveBeenCalledWith('read_at', null);
+      expect(n).toBe(3);
+    });
+
+    it('reports zero when the count comes back null', async () => {
+      const mockIs = vi.fn().mockResolvedValue({ count: null, error: null });
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn(() => ({ eq: vi.fn(() => ({ neq: vi.fn(() => ({ is: mockIs })) })) })),
+      });
+      expect(await chatService.getUnreadCount('ride-1', UUID.USER_1)).toBe(0);
+    });
+  });
+
+  describe('markRead', () => {
+    it('goes through the RPC — the table has no UPDATE policy on purpose', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 2, error: null });
+
+      const n = await chatService.markRead('ride-1');
+
+      expect(mockRpc).toHaveBeenCalledWith('mark_ride_messages_read', { p_ride_id: 'ride-1' });
+      expect(mockFrom).not.toHaveBeenCalled();
+      expect(n).toBe(2);
+    });
+
+    // A build can ship ahead of migration 00516. When it does the chat must
+    // keep working, just with nothing ever marked read.
+    it('degrades quietly when the RPC is absent (42883)', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42883', message: 'boom' } });
+      expect(await chatService.markRead('ride-1')).toBe(0);
+    });
+
+    it('degrades on the message alone, without the code', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: undefined, message: 'function mark_ride_messages_read does not exist' },
+      });
+      expect(await chatService.markRead('ride-1')).toBe(0);
+    });
+
+    it('propagates a real failure instead of swallowing it', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: '57014', message: 'statement timeout' },
+      });
+      await expect(chatService.markRead('ride-1')).rejects.toMatchObject({ code: '57014' });
+    });
+  });
 });
