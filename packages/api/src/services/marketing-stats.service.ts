@@ -29,9 +29,13 @@ export interface PromoCodePerformance {
   completed: number;
   /** Distinct customers on completed rides. */
   unique_users: number;
-  /** Total discount granted on completed rides (CUP). */
+  /**
+   * Promo discount granted on completed rides (CUP). Excludes the
+   * shared-ride discount, which also lives in `rides.discount_amount_cup`
+   * but is not a promo cost (mig 00347).
+   */
   discount_given_cup: number;
-  /** Gross fare of those completed rides (CUP). */
+  /** Amount actually charged on those completed rides, i.e. AFTER the discount (CUP). */
   revenue_cup: number;
 }
 
@@ -63,8 +67,31 @@ interface RidePromoRow {
   promo_code_id: string | null;
   status: string;
   discount_amount_cup: number | null;
+  shared_ride_discount_cup: number | null;
   final_fare_cup: number | null;
   customer_id: string | null;
+}
+
+/**
+ * PostgREST caps an unbounded `select()` at 1000 rows and returns them
+ * without a word — the promo/referral totals would silently plateau once a
+ * campaign crossed that mark and read as "we stopped growing". Page through
+ * with `.range()` until a short page comes back.
+ */
+const PAGE = 1000;
+const MAX_PAGES = 50; // 50k rows — a runaway-loop backstop, not a real ceiling.
+
+async function fetchAllRows<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await build(page * PAGE, (page + 1) * PAGE - 1);
+    if (error || !Array.isArray(data)) break;
+    out.push(...(data as T[]));
+    if (data.length < PAGE) break;
+  }
+  return out;
 }
 
 interface ReferralRow {
@@ -82,24 +109,27 @@ export const marketingStatsService = {
   async getPromoCodePerformance(): Promise<PromoCodePerformance[]> {
     try {
       const supabase = getSupabaseClient();
-      const [promoRes, ridesRes] = await Promise.all([
+      const [promoRes, rides] = await Promise.all([
         supabase
           .from('promotions')
           .select(
             'id,code,type,discount_percent,discount_fixed_cup,is_active,valid_from,valid_until,current_uses',
           )
           .order('created_at', { ascending: false }),
-        supabase
-          .from('rides')
-          .select('promo_code_id,status,discount_amount_cup,final_fare_cup,customer_id')
-          .not('promo_code_id', 'is', null),
+        fetchAllRows<RidePromoRow>((from, to) =>
+          supabase
+            .from('rides')
+            .select(
+              'promo_code_id,status,discount_amount_cup,shared_ride_discount_cup,final_fare_cup,customer_id',
+            )
+            .not('promo_code_id', 'is', null)
+            .order('created_at', { ascending: true })
+            .range(from, to),
+        ),
       ]);
 
       if (promoRes.error || !Array.isArray(promoRes.data)) return [];
       const promos = promoRes.data as PromoRow[];
-      const rides = (ridesRes.error || !Array.isArray(ridesRes.data)
-        ? []
-        : ridesRes.data) as RidePromoRow[];
 
       type Agg = { completed: number; discount: number; revenue: number; users: Set<string> };
       const byPromo = new Map<string, Agg>();
@@ -111,7 +141,12 @@ export const marketingStatsService = {
           byPromo.set(r.promo_code_id, agg);
         }
         agg.completed += 1;
-        agg.discount += r.discount_amount_cup ?? 0;
+        // discount_amount_cup = promo + shared-ride (mig 00347). Only the
+        // promo part is a campaign cost.
+        agg.discount += Math.max(
+          (r.discount_amount_cup ?? 0) - (r.shared_ride_discount_cup ?? 0),
+          0,
+        );
         agg.revenue += r.final_fare_cup ?? 0;
         if (r.customer_id) agg.users.add(r.customer_id);
       }
@@ -146,11 +181,14 @@ export const marketingStatsService = {
   async getReferralCodePerformance(): Promise<ReferralCodePerformance[]> {
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('referrals')
-        .select('referrer_id,code,status,bonus_amount');
-      if (error || !Array.isArray(data)) return [];
-      const rows = data as ReferralRow[];
+      const rows = await fetchAllRows<ReferralRow>((from, to) =>
+        supabase
+          .from('referrals')
+          .select('referrer_id,code,status,bonus_amount')
+          .order('created_at', { ascending: true })
+          .range(from, to),
+      );
+      if (rows.length === 0) return [];
 
       const byReferrer = new Map<string, ReferralCodePerformance>();
       for (const r of rows) {
