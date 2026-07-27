@@ -101,6 +101,8 @@
   },
 
   "trip": {
+    "queued_offline": "Guardado sin conexión",
+    "queued_offline_sub": "Se enviará solo cuando vuelva la señal. Puedes continuar.",
     "camera_error": "Error al abrir la cámara",
     "camera_permission_denied": "Se necesita permiso de cámara",
     "confirm_delivery": "Confirmar entrega",
