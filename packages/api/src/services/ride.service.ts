@@ -510,17 +510,27 @@ export const rideService = {
     }
 
     // P-CRIT-1/P-HIGH-4 (migration 00320): el trigger BEFORE INSERT en
-    // `rides` (`tg_rides_validate_promo_discount`) ahora hace el dedupe
-    // per-user + claim atómico del slot. Post-migración:
-    //   * INSERT en promotion_uses falla con código 23505 (UNIQUE) —
-    //     silently ignored porque el trigger ya lo insertó.
-    //   * `increment_promo_uses` es un no-op (kept para compat backward).
-    //   * NO rollback on catch — eso borraría el row del trigger y dejaría
-    //     a current_uses incrementado sin marker → drift.
-    // Pre-migración (deploy gap): el código sigue funcionando como antes.
-    if (validParams.promo_code_id && data) {
+    // `rides` (`tg_rides_validate_promo_discount`) hace el dedupe per-user
+    // + el claim atómico del slot, así que el row de `promotion_uses` ya
+    // existe cuando el trigger ACEPTA la promo. Este insert queda solo
+    // como red de seguridad pre-migración y choca con el UNIQUE (23505),
+    // que se ignora.
+    //
+    // CRÍTICO — gatear por la promo que quedó EN EL RIDE, no por la que
+    // mandó el cliente. Cuando el trigger RECHAZA la promo (max_uses
+    // agotado, valid_until vencido, first_ride_only, o el admin la
+    // desactivó entre validar y confirmar) devuelve la fila con
+    // `promo_code_id = NULL` y borra su propio `promotion_uses`. Insertar
+    // igual acá creaba un canje FANTASMA: el usuario quedaba marcado como
+    // que ya usó el código, SIN haber recibido descuento, y sin forma de
+    // recuperarlo (`tg_rides_rollback_promo_on_cancel` sale temprano
+    // cuando `promo_code_id IS NULL`, así que ni cancelando se libera).
+    // Verificado en prod con RLS real (rol `authenticated`, txn rolleada):
+    // ride.promo_code_id=null + promotion_uses=1 fila + current_uses=0.
+    const persistedPromoId = (data as Ride | null)?.promo_code_id ?? null;
+    if (persistedPromoId) {
       const { error: puErr } = await supabase.from('promotion_uses').insert({
-        promotion_id: validParams.promo_code_id,
+        promotion_id: persistedPromoId,
         user_id: user.id,
         ride_id: (data as Ride).id,
       });
@@ -531,12 +541,13 @@ export const rideService = {
           error: puErr.message,
         });
       }
-      const { error: incErr } = await supabase.rpc('increment_promo_uses', {
-        p_promo_id: validParams.promo_code_id,
+    } else if (validParams.promo_code_id) {
+      // El servidor descartó la promo. No se cobra el canje; solo se deja
+      // traza para poder diagnosticar por qué el rider no vio su descuento.
+      logger.warn('promo_rejected_by_server', {
+        rideId: (data as Ride | null)?.id,
+        promoCodeId: validParams.promo_code_id,
       });
-      if (incErr) {
-        logger.warn('increment_promo_uses_failed', { error: incErr.message });
-      }
     }
 
     // Insert waypoints if provided

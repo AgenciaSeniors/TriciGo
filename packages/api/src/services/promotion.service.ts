@@ -22,15 +22,44 @@ export interface Promotion {
   notified_at: string | null;
   /** 00482: redeemable only by customers with zero completed rides. */
   first_ride_only: boolean;
+  /**
+   * 00519: false = private code (influencer / partner). Excluded from
+   * `get_active_promotions` (home feed) and from the publish broadcast.
+   * Still fully redeemable by whoever was given the code.
+   */
+  is_public: boolean;
   created_by: string | null;
   created_at: string;
 }
 
-// current_uses / created_at / created_by are server/DB-owned.
+// current_uses / created_at are server/DB-owned. `created_by` IS accepted on
+// create — the service stamps it from the session (it used to be left NULL,
+// so no admin-created promo had an author on record).
 export type CreatePromotionInput = Omit<
   Promotion,
   'id' | 'current_uses' | 'created_at' | 'created_by'
 >;
+
+/**
+ * Columns added by migrations that may not be applied yet. On a
+ * `column … does not exist` / schema-cache error we retry without them
+ * (canonical column-missing retry) so the admin can still save.
+ */
+const TOLERATED_COLUMNS = ['is_public', 'first_ride_only'] as const;
+
+function isMissingColumnError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String((err as { message?: string })?.message ?? '');
+  return (
+    /schema cache/i.test(msg) ||
+    TOLERATED_COLUMNS.some((c) => new RegExp(`column .*${c}|${c}.* does not exist`, 'i').test(msg))
+  );
+}
+
+function stripTolerated<T extends Record<string, unknown>>(payload: T): T {
+  const out = { ...payload };
+  for (const c of TOLERATED_COLUMNS) delete out[c];
+  return out;
+}
 
 /** Marketing-safe subset returned by the SECURITY DEFINER RPC
  *  `get_active_promotions` (mig 00476). The promotions table itself is
@@ -78,21 +107,32 @@ export const promotionService = {
 
   async create(payload: CreatePromotionInput): Promise<Promotion> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('promotions')
-      .insert(payload)
-      .select()
-      .single();
+    // Stamp the author. `created_by` was never sent, so every promo created
+    // from the admin panel landed with a NULL author and no audit trail of
+    // who published a given influencer code.
+    const { data: auth } = await supabase.auth.getUser();
+    const body: Record<string, unknown> = { ...payload, created_by: auth?.user?.id ?? null };
+
+    const insert = (b: Record<string, unknown>) =>
+      supabase.from('promotions').insert(b).select().single();
+
+    let { data, error } = await insert(body);
+    if (error && isMissingColumnError(error)) {
+      ({ data, error } = await insert(stripTolerated(body)));
+    }
     if (error) throw error;
     return data as Promotion;
   },
 
   async update(id: string, updates: Partial<Promotion>): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('promotions')
-      .update(updates)
-      .eq('id', id);
+    const patch = (u: Record<string, unknown>) =>
+      supabase.from('promotions').update(u).eq('id', id);
+
+    let { error } = await patch(updates as Record<string, unknown>);
+    if (error && isMissingColumnError(error)) {
+      ({ error } = await patch(stripTolerated(updates as Record<string, unknown>)));
+    }
     if (error) throw error;
   },
 

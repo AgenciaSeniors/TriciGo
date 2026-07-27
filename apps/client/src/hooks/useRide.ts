@@ -405,8 +405,36 @@ export function useRideActions() {
   }, [draft, setFareEstimate, setFlowStep, setFareEstimating, setError]);
 
   const validatePromo = useCallback(async () => {
-    const { promoCode, fareEstimate: fe } = useRideStore.getState();
+    const state = useRideStore.getState();
+    const { promoCode, fareEstimate: fe, allFareEstimates, draft: d } = state;
     if (!promoCode.trim() || !user || validatingPromo) return;
+
+    // The fare the user is LOOKING AT, not the primary estimate. SelectingView
+    // renders `allFareEstimates[serviceType]`, so validating against
+    // `fareEstimate` computed the percentage off a different service's fare
+    // and previewed a discount the server would never apply.
+    // Mensajería is priced by the chosen VEHICLE, same rule as
+    // ride.store.setServiceType (BUG-213).
+    const effSlug =
+      d.serviceType === 'mensajeria' && d.delivery.deliveryVehicleType
+        ? deliveryVehicleToSlug(d.delivery.deliveryVehicleType)
+        : d.serviceType;
+    const fareAmount =
+      allFareEstimates?.[effSlug]?.estimated_fare_cup ?? fe?.estimated_fare_cup ?? 0;
+
+    // With no estimate the RPC returns `valid: true, discount_amount: 0`
+    // (fare × pct = 0) and the UI cheerfully announced "¡Descuento de 0
+    // aplicado!". Ask for a destination first instead.
+    if (fareAmount <= 0) {
+      setPromoResult({
+        valid: false,
+        discountAmount: 0,
+        error: i18next.t('rider:ride.promo_needs_estimate', {
+          defaultValue: 'Elegí destino y servicio para aplicar el código',
+        }),
+      });
+      return;
+    }
 
     setValidatingPromo(true);
     validatingPromoRef.current = true;
@@ -414,7 +442,7 @@ export function useRideActions() {
       const result = await rideService.validatePromoCode({
         code: promoCode.trim(),
         userId: user.id,
-        fareAmount: fe?.estimated_fare_cup ?? 0,
+        fareAmount,
       });
       // The service returns the RAW error key ('already_used', 'first_ride_only',
       // …) — untranslated it rendered literally in ReviewingView. Map to copy.

@@ -835,8 +835,15 @@ describe('rideService.createRide', () => {
     ]);
   });
 
-  it('records promo usage when promo_code_id provided', async () => {
-    const rideData = { id: 'ride-3', customer_id: 'user-1', status: 'searching' };
+  it('records promo usage when the SERVER kept the promo on the ride', async () => {
+    // The gate is `data.promo_code_id` (what the BEFORE INSERT trigger left on
+    // the row), never the id the client sent — see the rejection test below.
+    const rideData = {
+      id: 'ride-3',
+      customer_id: 'user-1',
+      status: 'searching',
+      promo_code_id: UUID.PROMO_1,
+    };
     const mockPromoInsert = vi.fn().mockResolvedValue({ error: null });
 
     let callCount = 0;
@@ -873,7 +880,60 @@ describe('rideService.createRide', () => {
     expect(mockPromoInsert).toHaveBeenCalledWith(
       expect.objectContaining({ promotion_id: UUID.PROMO_1, user_id: 'user-1', ride_id: 'ride-3' }),
     );
-    expect(mockRpc).toHaveBeenCalledWith('increment_promo_uses', { p_promo_id: UUID.PROMO_1 });
+    // `increment_promo_uses` is `SELECT 1` in prod (verified) — the trigger
+    // owns `current_uses`. The dead call was removed.
+    expect(mockRpc).not.toHaveBeenCalledWith('increment_promo_uses', expect.anything());
+  });
+
+  it('does NOT burn the redemption when the server rejected the promo', async () => {
+    // Regression: the service used to insert into promotion_uses gated on the
+    // id the CLIENT sent. When the BEFORE INSERT trigger rejects the promo
+    // (max_uses exhausted, expired, first_ride_only, or the admin deactivated
+    // it between validate and confirm) it returns the row with
+    // promo_code_id = NULL and deletes its own promotion_uses row. Inserting
+    // anyway created a PHANTOM redemption: the customer was marked as having
+    // used the code, got no discount, and could never redeem it again —
+    // tg_rides_rollback_promo_on_cancel returns early on a NULL promo, so not
+    // even cancelling released it. Verified in prod under real RLS.
+    const rideData = {
+      id: 'ride-5',
+      customer_id: 'user-1',
+      status: 'searching',
+      promo_code_id: null, // ← trigger dropped it
+    };
+    const mockPromoInsert = vi.fn().mockResolvedValue({ error: null });
+
+    let callCount = 0;
+    mockFrom.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: rideData, error: null }),
+            }),
+          }),
+        };
+      }
+      return { insert: mockPromoInsert };
+    });
+
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    await rideService.createRide({
+      service_type: 'triciclo_basico',
+      payment_method: 'cash',
+      pickup_latitude: 23.1352,
+      pickup_longitude: -82.3599,
+      pickup_address: 'Capitolio',
+      dropoff_latitude: 23.1375,
+      dropoff_longitude: -82.3964,
+      dropoff_address: 'Hotel Nacional',
+      promo_code_id: UUID.PROMO_1,
+      discount_amount_cup: 500,
+    });
+
+    expect(mockPromoInsert).not.toHaveBeenCalled();
   });
 
   it('tolerates UNIQUE 23505 from promotion_uses insert post-migration 00320', async () => {
@@ -881,7 +941,12 @@ describe('rideService.createRide', () => {
     // promotion_uses row atomically. The service-layer insert then hits
     // the UNIQUE(promotion_id, user_id) constraint with code 23505 — we
     // must swallow this silently (not retry, not rollback).
-    const rideData = { id: 'ride-4', customer_id: 'user-1', status: 'searching' };
+    const rideData = {
+      id: 'ride-4',
+      customer_id: 'user-1',
+      status: 'searching',
+      promo_code_id: UUID.PROMO_1,
+    };
     const mockPromoInsert = vi.fn().mockResolvedValue({
       error: { code: '23505', message: 'duplicate key value violates unique constraint' },
     });
