@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
@@ -24,28 +24,29 @@ export default function ServiceTypesPage() {
   const [editForm, setEditForm] = useState<Partial<ServiceTypeConfig>>({});
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function fetch() {
-      try {
-        const data = await adminService.getServiceTypeConfigs();
-        // Hide 'mensajeria'. Its row still exists and must stay active — the
-        // clients query the slug — but its fares are dead: a delivery is
-        // priced as the vehicle the rider picks (#419), so nothing is ever
-        // charged with these numbers. Showing them invited two mistakes:
-        // reading them as the delivery price, and toggling the row inactive,
-        // which breaks the web estimate that expects the slug to resolve.
-        if (!cancelled) setConfigs(data.filter((c) => c.slug !== 'mensajeria'));
-      } catch (err) {
-        // Error handled by UI
-        setError(getErrorMessage(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  // Extracted so the error banner's "Reintentar" can actually retry. It was
+  // wired to `setError(null)` — the fetch lived inside the effect, so there
+  // was nothing to call and the button only hid the error.
+  const fetchConfigs = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await adminService.getServiceTypeConfigs();
+      // Hide 'mensajeria'. Its row still exists and must stay active — the
+      // clients query the slug — but its fares are dead: a delivery is priced
+      // as the vehicle the rider picks (#419), so nothing is ever charged
+      // with these numbers. Showing them invited two mistakes: reading them
+      // as the delivery price, and toggling the row inactive, which breaks
+      // the web estimate that expects the slug to resolve.
+      setConfigs(data.filter((c) => c.slug !== 'mensajeria'));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
-    fetch();
-    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => { fetchConfigs(); }, [fetchConfigs]);
 
   function startEdit(config: ServiceTypeConfig) {
     setEditingId(config.id);
@@ -75,8 +76,11 @@ export default function ServiceTypesPage() {
     setSaving(true);
     try {
       await adminService.updateServiceTypeConfig(editingId, editForm);
-      const data = await adminService.getServiceTypeConfigs();
-      setConfigs(data);
+      // Refetch through the shared loader so the 'mensajeria' filter is
+      // applied. This used to call the service directly and assign the raw
+      // list, so the deliberately-hidden row reappeared after any save —
+      // exactly the situation the comment in fetchConfigs warns about.
+      await fetchConfigs();
       setEditingId(null);
     } catch (err) {
       // Error handled by UI
@@ -91,7 +95,8 @@ export default function ServiceTypesPage() {
       await adminService.updateServiceTypeConfig(config.id, { is_active: !config.is_active });
       setConfigs((prev) => prev.map((c) => c.id === config.id ? { ...c, is_active: !c.is_active } : c));
     } catch (err) {
-      // Error handled by UI
+      // The comment here used to read "Error handled by UI" — no UI handled it.
+      showToast('error', getErrorMessage(err));
     }
   }
 
@@ -122,7 +127,7 @@ export default function ServiceTypesPage() {
       {error && (
         <AdminErrorBanner
           message={error}
-          onRetry={() => { setError(null); }}
+          onRetry={fetchConfigs}
           onDismiss={() => setError(null)}
         />
       )}

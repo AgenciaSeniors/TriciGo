@@ -36,7 +36,13 @@ export default function SettingsPage() {
     { href: '/settings/service-types', title: t('settings_hub.section_service_types_title', { defaultValue: 'Tipos de servicio' }), description: t('settings_hub.section_service_types_desc', { defaultValue: 'Triciclo, moto, auto, mensajería y sus reglas' }), icon: Car, group: 'catalogo' },
     { href: '/settings/cities', title: t('settings_hub.section_cities_title', { defaultValue: 'Ciudades activas' }), description: t('settings_hub.section_cities_desc', { defaultValue: 'En qué municipios opera TriciGo' }), icon: Building2, group: 'geografia' },
     { href: '/settings/zones', title: t('settings_hub.section_zones_title', { defaultValue: 'Zonas operativas' }), description: t('settings_hub.section_zones_desc', { defaultValue: 'Delimitaciones dentro de cada ciudad' }), icon: Map, group: 'geografia' },
-    { href: '/settings/live-map', title: t('settings_hub.section_live_map_title', { defaultValue: 'Mapa en vivo' }), description: t('settings_hub.section_live_map_desc', { defaultValue: 'Visualización operativa en tiempo real' }), icon: MapPin, group: 'geografia' },
+    // Points at the real map. `/settings/live-map` was a second, mapbox-gl
+    // copy whose token (`NEXT_PUBLIC_MAPBOX_TOKEN`) the admin deploy workflow
+    // never passed, so it rendered an empty box in every deployed build —
+    // while `/live-map` (react-leaflet, no token) works and is already in the
+    // sidebar. Removed rather than resuscitated: #642 consolidated the maps
+    // there, and that copy was the leftover.
+    { href: '/live-map', title: t('settings_hub.section_live_map_title', { defaultValue: 'Mapa en vivo' }), description: t('settings_hub.section_live_map_desc', { defaultValue: 'Visualización operativa en tiempo real' }), icon: MapPin, group: 'geografia' },
     { href: '/settings/pricing', title: t('settings_hub.section_pricing_title', { defaultValue: 'Reglas de tarifa' }), description: t('settings_hub.section_pricing_desc', { defaultValue: 'Base, por km, por minuto, mínimos y cargos' }), icon: DollarSign, group: 'dinero' },
     { href: '/settings/exchange-rate', title: t('settings_hub.section_exchange_title', { defaultValue: 'Tasa de cambio' }), description: t('settings_hub.section_exchange_desc', { defaultValue: 'CUP ↔ TriciCoin y reglas de conversión' }), icon: ArrowLeftRight, group: 'dinero' },
     { href: '/promotions', title: t('settings_hub.section_promotions_title', { defaultValue: 'Promociones' }), description: t('settings_hub.section_promotions_desc', { defaultValue: 'Códigos de descuento y cupones' }), icon: Gift, group: 'dinero' },
