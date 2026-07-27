@@ -72,12 +72,24 @@ BEGIN
     RETURN;
   END IF;
 
+  -- Each replacement is asserted INDIVIDUALLY below, not collectively.
+  -- Checking only "did anything change" is not enough: Postgres accepts a
+  -- plpgsql function that references an undeclared variable — verified on
+  -- this database, `CREATE` succeeds and the error only surfaces when the
+  -- function is called. So a patch where two of three anchors matched would
+  -- install a send_gift that looks fine and fails the next time somebody
+  -- sends a gift. Every anchor is therefore checked on its own, and a miss
+  -- aborts before the DROP.
+
   -- 1) Trailing parameter, defaulted so old callers still resolve.
   v_new := replace(
     v_src,
     'p_from_wallet wallet_account_type DEFAULT NULL::wallet_account_type)',
     'p_from_wallet wallet_account_type DEFAULT NULL::wallet_account_type, p_idempotency_key text DEFAULT NULL::text)'
   );
+  IF position('p_idempotency_key text DEFAULT NULL::text)' IN v_new) = 0 THEN
+    RAISE EXCEPTION '00518: signature anchor did not match — send_gift changed, aborting';
+  END IF;
 
   -- 2) Key-based replay check, ahead of the existing time-window one. When
   --    a key is supplied this answers definitively and the heuristic below
@@ -97,6 +109,9 @@ BEGIN
     '  END IF;' || E'\n' || E'\n' ||
     '  SELECT id INTO v_dup'
   );
+  IF position('lt.idempotency_key = p_idempotency_key' IN v_new) = 0 THEN
+    RAISE EXCEPTION '00518: replay-check anchor did not match — send_gift changed, aborting';
+  END IF;
 
   -- 3) Persist the caller's key so the check above can find it next time.
   --    Without a key this stays the random per-call value it always was.
@@ -105,13 +120,25 @@ BEGIN
     '''gift:'' || gen_random_uuid()::TEXT',
     'COALESCE(p_idempotency_key, ''gift:'' || gen_random_uuid()::TEXT)'
   );
-
-  IF v_new = v_src THEN
-    RAISE EXCEPTION '00518: no anchor matched — send_gift body changed, patch aborted';
+  IF position('COALESCE(p_idempotency_key, ''gift:''' IN v_new) = 0 THEN
+    RAISE EXCEPTION '00518: ledger-key anchor did not match — send_gift changed, aborting';
   END IF;
 
   DROP FUNCTION public.send_gift(uuid, uuid, integer, text, wallet_account_type);
   EXECUTE v_new;
+
+  -- Belt and braces: confirm what actually landed. `CREATE` cannot be
+  -- trusted to have rejected a malformed body (see above), so assert the
+  -- installed function really carries the new parameter. Raising here rolls
+  -- the whole migration back, leaving the original send_gift in place.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE proname = 'send_gift'
+      AND pronamespace = 'public'::regnamespace
+      AND pg_get_function_arguments(oid) LIKE '%p_idempotency_key%'
+  ) THEN
+    RAISE EXCEPTION '00518: send_gift was not installed with p_idempotency_key';
+  END IF;
 
   RAISE NOTICE '00518: send_gift now accepts p_idempotency_key';
 END $patch$;
