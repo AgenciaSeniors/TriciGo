@@ -7,7 +7,8 @@
     "dev": "expo start",
     "build": "tsc --noEmit",
     "lint": "eslint . --config ../../tools/lint-rules.config.mjs",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
