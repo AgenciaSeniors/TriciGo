@@ -4,8 +4,15 @@ import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import DriverOverlay from '../../modules/driver-overlay';
 import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus } from '@tricigo/api';
-import { triggerHaptic, playSound, logger, mapLogger } from '@tricigo/utils';
+import { triggerHaptic, playSound, logger, mapLogger, isNetworkError } from '@tricigo/utils';
 import { stopBgLocationTracking } from '@/services/locationBackgroundTask';
+import {
+  initStatusTransitionBuffer,
+  bufferTransition,
+  flushTransitions,
+} from '@/services/statusTransitionBuffer';
+import type { BufferedTransition, FlushVerdict } from '@/services/statusTransitionBuffer';
+import NetInfo from '@react-native-community/netinfo';
 import { useDriverStore } from '@/stores/driver.store';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -408,6 +415,51 @@ export function useDriverRideActions() {
     };
   }, []);
 
+  // Replay status taps that were queued while the driver had no coverage.
+  // Mirrors the GPS buffer's strategy (locationBuffer, BUG-273 v2): NetInfo
+  // only fires on a connectivity STATE change, and on Cuban networks the
+  // connection often stays nominally "online" while individual POSTs fail, so
+  // a periodic retry is what actually drains the queue.
+  useEffect(() => {
+    initStatusTransitionBuffer().catch(() => {});
+
+    const send = async (t: BufferedTransition): Promise<FlushVerdict> => {
+      try {
+        await driverService.updateRideStatus(t.rideId, t.status as RideStatus, {
+          driverLat: t.driverLat ?? undefined,
+          driverLng: t.driverLng ?? undefined,
+        });
+        return 'applied';
+      } catch (err) {
+        if (isNetworkError(err)) return 'retry';
+        // The server made a decision — the trip moved on, or it rejected the
+        // transition outright. Either way replaying it again would spin, and a
+        // toast now would be about something the driver did minutes ago.
+        logger.warn('[DriverRide] queued transition rejected on replay', {
+          rideId: t.rideId,
+          status: t.status,
+          error: String((err as { message?: string })?.message ?? err),
+        });
+        return 'permanent_failure';
+      }
+    };
+
+    const tryFlush = () => {
+      flushTransitions(send).catch(() => { /* best effort */ });
+    };
+
+    const netUnsubscribe = NetInfo.addEventListener((state) => {
+      if (state.isConnected) tryFlush();
+    });
+    const interval = setInterval(tryFlush, 15_000);
+    tryFlush();
+
+    return () => {
+      netUnsubscribe();
+      clearInterval(interval);
+    };
+  }, []);
+
   const completingRef = useRef(false);
 
   const acceptingRef = useRef(false);
@@ -608,6 +660,13 @@ export function useDriverRideActions() {
 
     // Immediate visual feedback — loading spinner on button
     useDriverRideStore.getState().setIsAdvancing(true);
+
+    // Captured outside the try so the catch can queue the *tap's* coordinates
+    // rather than wherever the driver has drifted to by the time the network
+    // comes back. That difference is the whole bug: reaching the dropoff with
+    // no data and driving away used to be unrecoverable.
+    let tapLat: number | null = null;
+    let tapLng: number | null = null;
 
     try {
       if (nextStatus === 'completed') {
@@ -836,9 +895,11 @@ export function useDriverRideActions() {
         const needsGeoCheck = nextStatus === 'arrived_at_pickup' || nextStatus === 'arrived_at_destination';
         const driverLat = useLocationStore.getState().latitude;
         const driverLng = useLocationStore.getState().longitude;
+        tapLat = needsGeoCheck ? driverLat ?? null : null;
+        tapLng = needsGeoCheck ? driverLng ?? null : null;
         const result = await driverService.updateRideStatus(activeTrip.id, nextStatus, {
-          driverLat: needsGeoCheck ? driverLat ?? undefined : undefined,
-          driverLng: needsGeoCheck ? driverLng ?? undefined : undefined,
+          driverLat: tapLat ?? undefined,
+          driverLng: tapLng ?? undefined,
         });
         // If gated by proximity, the backend stored gps_override_requested_at
         // and is awaiting rider confirmation. Show driver a waiting state.
@@ -918,6 +979,36 @@ export function useDriverRideActions() {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error('[DriverRide] advanceStatus failed', { error: errMsg, nextStatus });
+
+      // Coverage dropped mid-tap: queue the transition with the coordinates the
+      // driver had at that moment and let the UI move on, so they can keep
+      // working and finish the trip. Replayed by the flush effect below.
+      //
+      // Completion is excluded on purpose — it moves money through
+      // complete_ride_and_pay, which has its own retry plus the BUG-263
+      // idempotency recovery. Queueing a payment for blind replay is a
+      // different risk profile than queueing a status change.
+      if (nextStatus !== 'completed' && isNetworkError(err)) {
+        await bufferTransition({
+          rideId: activeTrip.id,
+          status: nextStatus,
+          driverLat: tapLat,
+          driverLng: tapLng,
+          timestamp: Date.now(),
+        });
+        useDriverRideStore.getState().updateActiveTrip({ ...activeTrip, status: nextStatus });
+        triggerHaptic('success');
+        Toast.show({
+          type: 'info',
+          text1: i18next.t('driver:trip.queued_offline', { defaultValue: 'Guardado sin conexión' }),
+          text2: i18next.t('driver:trip.queued_offline_sub', {
+            defaultValue: 'Se enviará solo cuando vuelva la señal. Puedes continuar.',
+          }),
+          visibilityTime: 4000,
+        });
+        return;
+      }
+
       Toast.show({
         type: 'error',
         text1: i18next.t('driver:trip.status_update_failed'),

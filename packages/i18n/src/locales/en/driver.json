@@ -101,6 +101,8 @@
   },
 
   "trip": {
+    "queued_offline": "Saved offline",
+    "queued_offline_sub": "It will be sent automatically when the signal returns. You can continue.",
     "camera_error": "Couldn't open the camera",
     "camera_permission_denied": "Camera permission is required",
     "confirm_delivery": "Confirm delivery",

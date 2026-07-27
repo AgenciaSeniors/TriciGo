@@ -38,6 +38,7 @@ export {
   makeSentryBeforeSend,
 } from './sentryNoise';
 export type { MinimalSentryEvent, MinimalSentryHint } from './sentryNoise';
+export { isNetworkError } from './networkError';
 export { useDebouncePress } from './useDebouncePress';
 // BUG-marker-position-lag: smooth coordinate interpolation for Uber-style
 // marker animation between discrete GPS samples. Used by RideMapView
