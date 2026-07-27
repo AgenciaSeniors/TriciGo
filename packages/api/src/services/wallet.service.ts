@@ -247,7 +247,16 @@ export const walletService = {
    * omitted the server falls back to the sender's role wallet. The `send_gift`
    * RPC enforces caller identity, positive amount, active/non-frozen sender,
    * sufficient balance, and atomicity.
-   * @returns the new wallet_transfers id
+   * Pass `idempotencyKey` (00518) and REUSE THE SAME VALUE when retrying a
+   * failed send. This call has no abort signal, so a stalled request surfaces
+   * an error only after the fetch default — tens of seconds — by which time
+   * the RPC may already have committed. Retrying with the same key replays
+   * the original transfer instead of debiting twice; retrying without one
+   * falls back to the server's 10-second (from, to, amount) heuristic, which
+   * a slow timeout outruns. Generate a fresh key for a genuinely new gift,
+   * so two deliberate identical sends are not collapsed into one.
+   *
+   * @returns the wallet_transfers id — the original one on an idempotent replay
    */
   async sendGift(
     fromUserId: string,
@@ -255,10 +264,12 @@ export const walletService = {
     amount: number,
     note?: string,
     fromWallet?: 'customer_cash' | 'tricicoin',
+    idempotencyKey?: string,
   ): Promise<string> {
     const valid = validate(sendGiftSchema, { fromUserId, toUserId, amount, note, fromWallet });
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('send_gift', {
+
+    const baseArgs = {
       p_from_user_id: valid.fromUserId,
       p_to_user_id: valid.toUserId,
       p_amount: valid.amount,
@@ -266,7 +277,27 @@ export const walletService = {
       // Only sent when the caller specifies the source wallet (app context).
       // Omitted otherwise so the server uses the role-based fallback.
       ...(valid.fromWallet ? { p_from_wallet: valid.fromWallet } : {}),
+    };
+
+    let { data, error } = await supabase.rpc('send_gift', {
+      ...baseArgs,
+      ...(idempotencyKey ? { p_idempotency_key: idempotencyKey } : {}),
     });
+
+    // PostgREST resolves a function by the exact set of argument NAMES, so
+    // against a database without 00518 the extra key does not get ignored —
+    // it makes `send_gift` unresolvable and fails the whole call (PGRST202).
+    // Retrying without it keeps gifting alive while the migration is
+    // pending, at the cost of falling back to the server's 10-second
+    // heuristic. Deliberate: an ordering gap should degrade the protection,
+    // never remove the feature. Drop this once 00518 is applied everywhere.
+    if (error && idempotencyKey && /PGRST202|could not find|does not exist|schema cache/i.test(
+      `${(error as { code?: string }).code ?? ''} ${error.message ?? ''}`,
+    )) {
+      logger.warn('send_gift_idempotency_unsupported', { hint: 'apply migration 00518' });
+      ({ data, error } = await supabase.rpc('send_gift', baseArgs));
+    }
+
     if (error) throw error;
     logger.info('gift_sent', { from: valid.fromUserId, to: valid.toUserId, amount: valid.amount });
     return data as string;

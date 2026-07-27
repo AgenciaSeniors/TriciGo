@@ -173,3 +173,37 @@ export function walletTxnIcon(view: Pick<WalletTxnView, 'kind' | 'direction'>): 
       return 'swap-horizontal';
   }
 }
+
+// ──────────────────────────────────────────────
+// Gift idempotency (00518)
+// ──────────────────────────────────────────────
+
+/**
+ * Fresh idempotency key for ONE gift attempt.
+ *
+ * Hold the returned value for as long as the attempt lasts and pass the SAME
+ * one when retrying: `walletService.sendGift` has no abort signal, so a
+ * stalled request only errors after the fetch default — tens of seconds —
+ * and the RPC may well have committed already. Replaying with the same key
+ * returns the original transfer instead of debiting a second time.
+ *
+ * Generate a NEW key whenever the recipient, amount or note changes. Reusing
+ * a key across edited inputs would replay the earlier gift and silently
+ * ignore the correction — a retry that sends the wrong amount is worse than
+ * the double debit this exists to prevent.
+ *
+ * Mirrors the uuid approach already used by the device-id helpers: prefer
+ * `crypto.randomUUID`, fall back to RFC 4122 v4 by hand, because Hermes does
+ * not ship `randomUUID` and the repo carries no uuid dependency.
+ */
+export function newGiftIdempotencyKey(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  const uuid = c?.randomUUID
+    ? c.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+        const r = (Math.random() * 16) | 0;
+        const v = ch === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+  return `gift:${uuid}`;
+}

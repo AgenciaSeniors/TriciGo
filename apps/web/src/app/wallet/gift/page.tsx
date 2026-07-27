@@ -8,11 +8,11 @@
  * native-only — web uses the code text + copy/share (same fallback the
  * client uses on web).
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { walletService, referralService } from '@tricigo/api';
-import { formatTRC, getErrorMessage } from '@tricigo/utils';
+import { formatTRC, getErrorMessage, newGiftIdempotencyKey } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../../providers';
@@ -101,12 +101,31 @@ export default function GiftPage() {
   const numericAmount = parseInt(amount, 10);
   const amountValid = Number.isFinite(numericAmount) && numericAmount > 0 && numericAmount <= balance;
 
+  // One key per attempt (00518). It survives a retry — this send has no
+  // timeout, so an error can surface long after the RPC already committed,
+  // and replaying with the same key returns the original transfer instead of
+  // debiting twice. It is discarded whenever the recipient, amount or note
+  // changes, because replaying a key after an edit would resend the OLD gift
+  // and silently drop the correction.
+  const idempotencyKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    idempotencyKeyRef.current = null;
+  }, [recipient?.id, amount, note]);
+
   async function handleSend() {
     if (!user?.id || !recipient || !amountValid) return;
+    if (!idempotencyKeyRef.current) idempotencyKeyRef.current = newGiftIdempotencyKey();
     setSubmitting(true);
     try {
       // Web "Regalar" is the passenger surface → gift from customer_cash.
-      await walletService.sendGift(user.id, recipient.id, numericAmount, note.trim() || undefined, 'customer_cash');
+      await walletService.sendGift(
+        user.id,
+        recipient.id,
+        numericAmount,
+        note.trim() || undefined,
+        'customer_cash',
+        idempotencyKeyRef.current,
+      );
       setFeedback({ kind: 'success', text: t('gift.success_msg', { defaultValue: `Le enviaste ${formatTRC(numericAmount)} a ${recipient.full_name}` }) });
       setRecipient(null);
       setAmount('');
