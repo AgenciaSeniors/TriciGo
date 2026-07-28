@@ -158,6 +158,7 @@ function NativeDriverHomeScreen() {
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const incomingRequests = useDriverRideStore((s) => s.incomingRequests);
   const removeRequest = useDriverRideStore((s) => s.removeRequest);
+  const dismissRequest = useDriverRideStore((s) => s.dismissRequest);
   const [toggling, setToggling] = useState(false);
   const [isIneligible, setIsIneligible] = useState(false);
   const [isOnBreak, setIsOnBreak] = useState(false);
@@ -965,7 +966,9 @@ function NativeDriverHomeScreen() {
   }, [profile, isOnBreak, togglingBreak, activeTrip]);
 
   const handleAccept = useCallback((rideId: string) => acceptRide(rideId), [acceptRide]);
-  const handleReject = useCallback((rideId: string) => removeRequest(rideId), [removeRequest]);
+  // Explicit refusal: remember it, so the 30s poll cannot hand the same
+  // offer straight back with a fresh notification.
+  const handleReject = useCallback((rideId: string) => dismissRequest(rideId), [dismissRequest]);
 
   // Navigation mode (Uber-driver style): heading-up rotation, 3D tilt,
   // zoom-out lock, auto-center on driver. Re-engages every time a new

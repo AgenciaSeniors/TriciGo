@@ -3304,11 +3304,31 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     }
   }, [draft.serviceType]);
 
-  // Load saved locations from customer profile
+  // Load saved locations + ride preferences from the customer profile.
+  //
+  // The preferences half was missing, and that made the whole
+  // /profile/ride-preferences screen decorative on mobile. It saves to
+  // `customer_profiles.ride_preferences` correctly AND mirrors into the ride
+  // store — but only the store copy ever reaches a ride (`useRide` sends
+  // `rider_preferences` from the draft), and that store field is in-memory,
+  // initialised to `{}` with no persistence, and wiped again by
+  // `resetDraft()`. So the driver received your quiet-mode / temperature /
+  // conversation / luggage choices only on rides booked in the same session
+  // in which you happened to visit that screen. Cold start: nothing. The
+  // column was read in exactly one place in the whole client — that screen,
+  // reading back its own value.
+  //
+  // The web already seeds from the profile before booking
+  // (apps/web/src/app/book/page.tsx). Seeding here, in the fetch that was
+  // already happening, makes the saved preference mean what it says.
   useEffect(() => {
     if (!user?.id) return;
     customerService.ensureProfile(user.id).then((cp) => {
       setSavedLocations(cp.saved_locations ?? []);
+      const saved = cp.ride_preferences;
+      if (saved && Object.keys(saved).length > 0) {
+        useRideStore.getState().setRidePreferences(saved);
+      }
     }).catch(() => {});
   }, [user?.id]);
 

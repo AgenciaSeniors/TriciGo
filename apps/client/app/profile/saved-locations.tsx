@@ -168,6 +168,15 @@ export default function SavedLocationsScreen() {
   const handleMapClick = useCallback((lat: number, lng: number, address: string) => {
     setSelectedAddress({ address, location: { latitude: lat, longitude: lng } });
     setMapSelectMode(false);
+    // Reopen the form with the point that was just picked. Without this the
+    // web path was a dead end: "Elegir en el mapa" closed the sheet, and the
+    // only ways back in — "Agregar ubicación" and the empty-state action —
+    // both run handleOpenSheet(), whose no-index branch calls
+    // setSelectedAddress(null) and throws the point away (the edit branch
+    // overwrites it with the row's own address). So on web the picked
+    // location could never actually be saved. The native path already does
+    // this in ConfirmLocationScreen.onConfirm.
+    setSheetVisible(true);
   }, []);
 
   if (error) return <ErrorState title="Error" description={error} onRetry={() => { setError(null); loadLocations(); }} />;

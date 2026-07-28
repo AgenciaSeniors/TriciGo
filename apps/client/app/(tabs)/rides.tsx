@@ -510,19 +510,21 @@ function NativeRidesScreen() {
           dateTo: filters.dateTo,
         });
         if (!cancelled) {
-          // Separate scheduled (future) rides from history
+          // Scheduled rides are fetched separately (below) — they cannot come
+          // out of this list. `getRideHistoryFiltered` restricts status to
+          // ['completed','canceled'] by default, while a pending scheduled
+          // ride is 'searching', so the old filter over `data` could never
+          // match and the "VIAJES PROGRAMADOS" section was permanently empty
+          // — along with the Pressable inside it, which was unreachable.
+          // `getScheduledRides` exists for exactly this and was used only by
+          // the web. Same split the web does in apps/web/src/app/rides/page.tsx.
           const now = new Date();
-          const scheduled = data.filter(
-            (r: Ride) => r.is_scheduled && r.scheduled_at && new Date(r.scheduled_at) > now && r.status === 'searching',
-          );
           const history = data.filter(
             (r: Ride) => !(r.is_scheduled && r.scheduled_at && new Date(r.scheduled_at) > now && r.status === 'searching'),
           );
           if (page === 0) {
-            setScheduledRides(scheduled);
             setRides(history);
           } else {
-            setScheduledRides((prev) => [...prev, ...scheduled]);
             setRides((prev) => [...prev, ...history]);
           }
         }
@@ -537,6 +539,18 @@ function NativeRidesScreen() {
     fetchRides();
     return () => { cancelled = true; };
   }, [userId, page, filters]);
+
+  // Scheduled rides come from their own query — page 0 owns the list, mirroring
+  // apps/web/src/app/rides/page.tsx. Failure leaves the section empty rather
+  // than breaking the history below it.
+  useEffect(() => {
+    if (!userId || page !== 0) return;
+    let cancelled = false;
+    rideService.getScheduledRides(userId)
+      .then((rows) => { if (!cancelled) setScheduledRides(rows); })
+      .catch(() => { if (!cancelled) setScheduledRides([]); });
+    return () => { cancelled = true; };
+  }, [userId, page]);
 
   const handleFilterChange = useCallback((newFilters: HistoryFilterState) => {
     triggerSelection();
