@@ -158,6 +158,9 @@ function NativeTripsScreen() {
   const refetchTrips = useCallback(() => {
     if (!driverProfileId) return;
     setPage(0);
+    // Clear the previous failure, otherwise a successful refetch still leaves
+    // the error banner up and the flow is one-way.
+    setError(null);
     setLoading(true);
     driverService.getTripHistoryFiltered({
       driverId: driverProfileId,
@@ -529,10 +532,16 @@ function NativeTripsScreen() {
               <ErrorState
                 title={t('trips_history.error_title', { defaultValue: 'Error al cargar viajes' })}
                 description={error}
-                onRetry={() => {
-                  setError(null);
-                  setPage(0);
-                }}
+                // `setPage(0)` was the whole retry, but `page` is already 0 on
+                // an initial-load failure, so React bailed out and the effect
+                // never re-ran. Nothing refetched: the driver was left with
+                // `error=null, loading=false, trips=[]`, which renders the
+                // empty state — and since the default filter is
+                // `{status:['completed']}` that reads "Sin resultados · No hay
+                // viajes que coincidan con los filtros", blaming their filters
+                // for a network failure. Only leaving the tab and coming back
+                // (useRefreshOnFocus) actually recovered the list.
+                onRetry={refetchTrips}
                 retryLabel={t('common.retry', { defaultValue: 'Reintentar' })}
               />
             </View>

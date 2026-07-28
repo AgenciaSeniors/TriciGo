@@ -7,6 +7,7 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { disputeService } from '@tricigo/api';
+import { getErrorMessage, formatCUP } from '@tricigo/utils';
 import { useAuth } from '@/lib/useAuth';
 import { colors } from '@tricigo/theme';
 import type { RideDispute } from '@tricigo/types';
@@ -34,11 +35,22 @@ export default function DisputeRespondScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
+  // The comment that used to live here said the dispute "is passed from the
+  // previous screen" — it isn't: trip/[id].tsx navigates with the id alone.
+  // `dispute` was declared, never set and never rendered, so the driver wrote
+  // a defence against a claim they could not see: not the reason, not the
+  // amount, not what the rider actually said. The submit was always real;
+  // only the loader was a stub.
   useEffect(() => {
-    // We don't have a getDisputeById, but the dispute data is passed from the previous screen
-    // For now, we'll work with just the disputeId and submit the response
-    setLoading(false);
+    if (!disputeId) { setLoading(false); return; }
+    let cancelled = false;
+    disputeService.getDisputeById(disputeId)
+      .then((d) => { if (!cancelled) setDispute(d); })
+      .catch((err) => { if (!cancelled) setLoadError(getErrorMessage(err)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [disputeId]);
 
   const handleSubmit = async () => {
@@ -88,11 +100,35 @@ export default function DisputeRespondScreen() {
 
         <Text variant="h3" color="primary" className="mb-6">{t('dispute.respond')}</Text>
 
-        {/* Info banner */}
+        {/* What the driver is actually answering. REASON_LABELS was already
+            defined in this file and referenced nowhere — the claim was meant
+            to be shown here all along. */}
         <Card theme="light" variant="filled" padding="md" className="bg-orange-50 mb-6">
           <Text variant="bodySmall" color="primary" className="opacity-80">
             {t('dispute.incoming')}
           </Text>
+          {dispute && (
+            <View className="mt-3">
+              <Text variant="label" color="primary">
+                {REASON_LABELS[dispute.reason] ?? dispute.reason}
+              </Text>
+              {dispute.ride_final_fare_trc != null && (
+                <Text variant="bodySmall" color="primary" className="mt-1">
+                  {formatCUP(dispute.ride_final_fare_trc)}
+                </Text>
+              )}
+              {!!dispute.description && (
+                <Text variant="bodySmall" color="primary" className="mt-2 opacity-80">
+                  {dispute.description}
+                </Text>
+              )}
+            </View>
+          )}
+          {loadError && (
+            <Text variant="bodySmall" color="primary" className="mt-2 opacity-80">
+              {loadError}
+            </Text>
+          )}
         </Card>
 
         {/* Response form */}

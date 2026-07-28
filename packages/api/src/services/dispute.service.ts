@@ -97,6 +97,26 @@ export const disputeService = {
   },
 
   /**
+   * Get a single dispute by its id.
+   *
+   * Added for the driver's respond screen, which navigates with only the
+   * dispute id and until now had a loader whose entire body was
+   * `setLoading(false)` — so the respondent wrote their defence without ever
+   * seeing the claim, the amount, or the rider's message. RLS scopes reads to
+   * the parties on the dispute, same as `getDisputeByRide`.
+   */
+  async getDisputeById(disputeId: string): Promise<RideDispute | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('ride_disputes')
+      .select('*')
+      .eq('id', disputeId)
+      .maybeSingle();
+    if (error) throw error;
+    return data as RideDispute | null;
+  },
+
+  /**
    * Get all disputes for a user (as opener or respondent).
    */
   async getMyDisputes(userId: string): Promise<RideDispute[]> {
