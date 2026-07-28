@@ -3,8 +3,85 @@ import { getErrorMessage } from '../errors';
 
 const NETWORK_ES = 'Sin conexión a internet. Verifica tu red e intenta de nuevo.';
 const SESSION_ES = 'Sesión expirada. Inicia sesión de nuevo.';
+const GENERIC = 'Error inesperado. Intenta de nuevo.';
 
 describe('getErrorMessage', () => {
+  it('returns the generic message for null / undefined', () => {
+    expect(getErrorMessage(null)).toBe(GENERIC);
+    expect(getErrorMessage(undefined)).toBe(GENERIC);
+  });
+
+  it('returns the generic message when the error carries no message at all', () => {
+    expect(getErrorMessage(new Error(''))).toBe(GENERIC);
+    expect(getErrorMessage('')).toBe(GENERIC);
+    expect(getErrorMessage({})).toBe(GENERIC);
+  });
+
+  it('passes short messages through unchanged', () => {
+    expect(getErrorMessage(new Error('customer_has_active_ride'))).toBe('customer_has_active_ride');
+    expect(getErrorMessage('ride_rate_limited')).toBe('ride_rate_limited');
+  });
+
+  it('maps HTTP status codes before reading the message', () => {
+    expect(getErrorMessage({ status: 401, message: 'nope' })).toContain('Sesión expirada');
+    expect(getErrorMessage({ status: 429 })).toContain('Demasiados intentos');
+    expect(getErrorMessage({ status: 503 })).toContain('Error del servidor');
+  });
+
+  // The bug this file was written for: a rider outside Cuba tapped "Solicitar",
+  // Zod rejected all four coordinates, and the resulting 264-char message was
+  // silently discarded — the toast said "Error inesperado" and the real reason
+  // never reached the user (or the logs they could read). Long messages must be
+  // clipped for display, never dropped.
+  it('clips an overlong message instead of discarding it', () => {
+    const long = `Validation error: ${'pickup_latitude: Number must be greater than or equal to 19.5; '.repeat(4)}`;
+    expect(long.length).toBeGreaterThan(200);
+
+    const result = getErrorMessage(new Error(long));
+
+    expect(result).not.toBe(GENERIC);
+    expect(result.startsWith('Validation error: pickup_latitude')).toBe(true);
+    expect(result.length).toBeLessThanOrEqual(200);
+    expect(result.endsWith('…')).toBe(true);
+  });
+
+  it('clips an overlong bare string', () => {
+    const long = 'x'.repeat(500);
+
+    const result = getErrorMessage(long);
+
+    expect(result).not.toBe(GENERIC);
+    expect(result.length).toBeLessThanOrEqual(300);
+    expect(result.endsWith('…')).toBe(true);
+  });
+
+  it('clips an overlong message on a 400 response', () => {
+    const long = `bad request: ${'y'.repeat(400)}`;
+
+    const result = getErrorMessage({ status: 400, message: long });
+
+    expect(result.startsWith('bad request: yyy')).toBe(true);
+    expect(result.length).toBeLessThanOrEqual(200);
+  });
+
+  // useRide/book branch on the text of this message to show the Spanish
+  // "fuera del área de servicio" toast, so it has to survive the round trip
+  // through a ValidationError (an Error subclass carrying statusCode 400).
+  it('preserves the message of a 400-status AppError', () => {
+    const err = Object.assign(new Error('Dropoff location is outside the service area'), {
+      code: 'VALIDATION_ERROR',
+      statusCode: 400,
+    });
+
+    expect(getErrorMessage(err)).toBe('Dropoff location is outside the service area');
+  });
+
+  it('uses the localized generic message when a translator is provided', () => {
+    const t = (key: string) => `t:${key}`;
+    expect(getErrorMessage(null, t)).toBe('t:errors.unexpected');
+    expect(getErrorMessage(new Error(''), t)).toBe('t:errors.unexpected');
+  });
+
   // supabase-js/postgrest-js do NOT reject with a TypeError when the request
   // never reaches the server — they RESOLVE with this plain object. The
   // `err instanceof TypeError` branches therefore never fire for a Supabase

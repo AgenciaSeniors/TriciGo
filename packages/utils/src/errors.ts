@@ -1,4 +1,17 @@
 /**
+ * Shorten a message to fit a toast without losing the reason.
+ *
+ * The length caps below used to DROP anything longer, which turned every
+ * verbose error into "Error inesperado" — no reason on screen and none in the
+ * logs the user can reach. A rider outside Cuba tapping "Solicitar" hit exactly
+ * that: Zod rejected all four coordinates with a 264-char message that was
+ * thrown away. Clip for display; never discard.
+ */
+function clip(message: string, max: number): string {
+  return message.length <= max ? message : `${message.slice(0, max - 1)}…`;
+}
+
+/**
  * Extract a user-friendly error message from any error object.
  * Distinguishes network errors, auth errors, validation errors, and server errors.
  * Handles: Error instances, string errors, objects with message property,
@@ -14,8 +27,8 @@ export function getErrorMessage(err: unknown, t?: (key: string, opts?: Record<st
 
   // Plain string errors
   if (typeof err === 'string') {
-    return err.length > 0 && err.length < 300
-      ? err
+    return err.length > 0
+      ? clip(err, 300)
       : t ? t('errors.unexpected') : 'Error inesperado. Intenta de nuevo.';
   }
 
@@ -42,7 +55,7 @@ export function getErrorMessage(err: unknown, t?: (key: string, opts?: Record<st
     if (status === 400) {
       // Try to extract server message
       const msg = e.message ?? e.error_description ?? e.msg;
-      if (typeof msg === 'string' && msg.length > 0 && msg.length < 200) return msg;
+      if (typeof msg === 'string' && msg.length > 0) return clip(msg, 200);
       return t ? t('errors.invalid_data') : 'Datos inválidos. Revisa la información e intenta de nuevo.';
     }
     if (typeof status === 'number' && status >= 500) {
@@ -79,18 +92,17 @@ export function getErrorMessage(err: unknown, t?: (key: string, opts?: Record<st
       if (e.message.includes('duplicate key') || e.message.includes('already exists')) {
         return t ? t('errors.duplicate_record') : 'Este registro ya existe.';
       }
-      // Return message if it's reasonable length
-      if (e.message.length > 0 && e.message.length < 200) return e.message;
+      if (e.message.length > 0) return clip(e.message, 200);
     }
 
     // Objects with error_description (OAuth-style errors)
-    if (typeof e.error_description === 'string' && e.error_description.length > 0 && e.error_description.length < 200) {
-      return e.error_description;
+    if (typeof e.error_description === 'string' && e.error_description.length > 0) {
+      return clip(e.error_description, 200);
     }
 
     // Objects with error property as string
-    if (typeof e.error === 'string' && e.error.length > 0 && e.error.length < 200) {
-      return e.error;
+    if (typeof e.error === 'string' && e.error.length > 0) {
+      return clip(e.error, 200);
     }
   }
 
@@ -98,7 +110,7 @@ export function getErrorMessage(err: unknown, t?: (key: string, opts?: Record<st
     if (err.message.includes('fetch') || err.message.includes('network')) {
       return t ? t('errors.network_error') : 'Sin conexión a internet. Verifica tu red e intenta de nuevo.';
     }
-    if (err.message.length > 0 && err.message.length < 200) return err.message;
+    if (err.message.length > 0) return clip(err.message, 200);
   }
 
   return t ? t('errors.unexpected') : 'Error inesperado. Intenta de nuevo.';

@@ -421,18 +421,24 @@ export const rideService = {
    * Request a new ride.
    */
   async createRide(params: CreateRideParams): Promise<Ride> {
-    const validParams = validate(createRideSchema, params);
-
-    // Validate coordinates are within Cuba (skipped in demo mode for testing abroad)
+    // Validate coordinates are within Cuba (skipped in demo mode for testing abroad).
+    //
+    // This MUST run before validate(): createRideSchema bounds the coordinates
+    // to the very same box, so with the order reversed Zod always won and these
+    // two branches were unreachable. What the rider got instead was a 264-char
+    // dump of every failing field, which getErrorMessage then discarded — the
+    // toast read "Error inesperado" and named no cause.
     const IS_DEMO = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
     if (!IS_DEMO) {
-      if (!isLocationInCuba(validParams.pickup_latitude, validParams.pickup_longitude)) {
+      if (!isLocationInCuba(params.pickup_latitude, params.pickup_longitude)) {
         throw new ValidationError('Pickup location is outside the service area');
       }
-      if (!isLocationInCuba(validParams.dropoff_latitude, validParams.dropoff_longitude)) {
+      if (!isLocationInCuba(params.dropoff_latitude, params.dropoff_longitude)) {
         throw new ValidationError('Dropoff location is outside the service area');
       }
     }
+
+    const validParams = validate(createRideSchema, params);
 
     const supabase = getSupabaseClient();
 
