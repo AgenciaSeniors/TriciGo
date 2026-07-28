@@ -5,7 +5,7 @@
     "version": "1.4.0",
     "newArchEnabled": false,
     "runtimeVersion": {
-      "policy": "fingerprint"
+      "policy": "appVersion"
     },
     "updates": {
       "enabled": true,
