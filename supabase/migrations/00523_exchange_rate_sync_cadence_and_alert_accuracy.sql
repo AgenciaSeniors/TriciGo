@@ -99,11 +99,21 @@ END $patch$;
 --     from SQL or the Supabase MCP, so following that instruction today dead-ended and
 --     the cause had to be cornered by black-box probing instead. The reason now travels
 --     in the response body, which pg_net already persists — point at that.
+--
+--     NOTE the doubled quotes in ''sync-exchange-rate'' below. Unlike patch 2a, whose
+--     target ends with "|| v_now::text" and therefore lands in EXPRESSION context, this
+--     target sits entirely INSIDE the v_html string literal, so every apostrophe in the
+--     replacement must be escaped or it terminates that literal. The first attempt at
+--     this migration spliced in a bare 'sync-exchange-rate' and CREATE OR REPLACE died
+--     with: syntax error at or near "-" (Postgres reading the hyphens as subtraction).
+--     Harmless -- the whole migration is one transaction and nothing was applied -- but
+--     worth naming: when splicing text into a plpgsql body, first work out which
+--     context the splice point lands in.
 DO $patch$
 DECLARE
   v_src text;
   v_old text := $old$<p><b>Qué revisar:</b> los logs de la Edge Function <code>sync-exchange-rate</code>. $old$;
-  v_new text := $new$<p><b>Qué revisar:</b> el cuerpo de la última respuesta del cron (los logs de la Edge Function no son accesibles desde SQL): <code>SELECT r.status_code, r.content FROM cron_http_calls c JOIN net._http_response r ON r.id = c.request_id WHERE c.jobname = 'sync-exchange-rate' ORDER BY c.called_at DESC LIMIT 5;</code> — trae <code>api_attempts</code> con el código HTTP de cada intento: <b>429</b> = tope de 1 petición/segundo de elTOQUE (se recupera solo en la siguiente corrida), <b>403</b> = desafío de Cloudflare, <b>config_*</b> = configuración nuestra. $new$;
+  v_new text := $new$<p><b>Qué revisar:</b> el cuerpo de la última respuesta del cron (los logs de la Edge Function no son accesibles desde SQL): <code>SELECT r.status_code, r.content FROM cron_http_calls c JOIN net._http_response r ON r.id = c.request_id WHERE c.jobname = ''sync-exchange-rate'' ORDER BY c.called_at DESC LIMIT 5;</code> — trae <code>api_attempts</code> con el código HTTP de cada intento: <b>429</b> = tope de 1 petición/segundo de elTOQUE (se recupera solo en la siguiente corrida), <b>403</b> = desafío de Cloudflare, <b>config_*</b> = configuración nuestra. $new$;
   v_hits int;
 BEGIN
   SELECT pg_get_functiondef('public.check_exchange_rate_freshness()'::regprocedure) INTO v_src;
