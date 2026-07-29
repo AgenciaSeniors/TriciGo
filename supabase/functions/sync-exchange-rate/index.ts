@@ -6,31 +6,75 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function scrapeElToque(): Promise<number | null> {
-  const res = await fetch('https://eltoque.com', {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      Accept: 'text/html', 'Accept-Language': 'es,en;q=0.9',
-    },
-  });
-  if (!res.ok) return null;
+// elToque's trmi endpoint is rate-limited to ONE REQUEST PER SECOND PER SOURCE IP.
+// Verified against production on 2026-07-29: five simultaneous calls every one came
+// back as
+//     HTTP 429   <title>429 Too Many Requests</title> ... <p>1 per 1 second</p>
+// (Flask-Limiter's default rejection page), while the same call issued on its own
+// returned 200 with the rate. Two consequences produced the 20-hour freeze that day:
+//
+//   1. The old ladder backed off 500ms, then 2000ms. 500ms is BELOW the published
+//      limit, so attempt 2 was GUARANTEED to be rejected -- the "retry" spent the very
+//      budget it was contending for instead of buying a second chance.
+//   2. Supabase Edge Functions egress from a SHARED pool of datacenter IPs, so that
+//      1 req/s budget is shared with every other tenant calling the same popular Cuban
+//      rate endpoint. Our own traffic (<=3 requests/hour) cannot exhaust a per-second
+//      budget by itself, so a rejection is normally caused by traffic we do not
+//      control -- and trying harder *within the same second* cannot fix it.
+//
+// Hence: FEWER attempts, spaced ABOVE the limit. Retrying is now a cheap hedge against
+// a single unlucky collision, not the main defence. What actually decorrelates the
+// misses is spreading the *runs* over time -- mig 00523 moves cron 23 from hourly to
+// every 15 minutes, so one unlucky moment costs 15 minutes instead of a whole hour.
+const RATE_LIMIT_SPACING_MS = 1_500;
+const API_ATTEMPTS = 2;
+
+// What each attempt actually returned. Surfaced in the response body (see below) so the
+// reason for a failure is queryable from SQL forever after.
+type AttemptOutcome = number | 'network_error' | 'unparseable';
+
+async function scrapeElToque(): Promise<{ rate: number | null; status: AttemptOutcome }> {
+  // eltoque.com has been behind a Cloudflare managed challenge since 2026-07-28 05:00
+  // (403 "Just a moment..."), which is what removed the safety net under the API. Kept
+  // wired up because the challenge may lift, but it is NOT a working fallback today --
+  // treat the trmi API as the only live source when reasoning about resilience.
+  // Timeout added 2026-07-29: this fetch had none, so a hanging eltoque.com could stall
+  // the whole sync until the platform wall-clock killed it.
+  let res: Response;
+  try {
+    res = await fetch('https://eltoque.com', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'text/html', 'Accept-Language': 'es,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+  } catch (err) {
+    console.error(`[sync-exchange-rate] eltoque.com scrape fetch failed: ${err}`);
+    return { rate: null, status: 'network_error' };
+  }
+  if (!res.ok) {
+    console.error(`[sync-exchange-rate] eltoque.com scrape HTTP ${res.status}`);
+    return { rate: null, status: res.status };
+  }
   const html = await res.text();
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
   if (m) {
     try {
       const data = JSON.parse(m[1]);
       const stats = data?.props?.pageProps?.money?.data?.api?.statistics;
-      if (stats?.USD?.median) { const r = Number(stats.USD.median); if (!isNaN(r) && r > 0) return r; }
-      if (stats?.USD?.avg)    { const r = Number(stats.USD.avg);    if (!isNaN(r) && r > 0) return r; }
+      if (stats?.USD?.median) { const r = Number(stats.USD.median); if (!isNaN(r) && r > 0) return { rate: r, status: res.status }; }
+      if (stats?.USD?.avg)    { const r = Number(stats.USD.avg);    if (!isNaN(r) && r > 0) return { rate: r, status: res.status }; }
     } catch {}
   }
   for (const re of [
     /1\s*USD[^0-9]{0,50}([\d]{2,4}(?:\.[\d]{1,2})?)\s*CUP/i,
     /USD[^0-9]{0,30}([\d]{2,4}(?:\.[\d]{1,2})?)\s*(?:CUP|pesos)/i,
   ]) {
-    const x = html.match(re); if (x) { const r = parseFloat(x[1]); if (!isNaN(r) && r > 50 && r < 10000) return r; }
+    const x = html.match(re); if (x) { const r = parseFloat(x[1]); if (!isNaN(r) && r > 50 && r < 10000) return { rate: r, status: res.status }; }
   }
-  return null;
+  console.error('[sync-exchange-rate] eltoque.com returned 200 but no USD rate could be extracted');
+  return { rate: null, status: 'unparseable' };
 }
 
 // The trmi endpoint returns USD as a bare number today:
@@ -52,7 +96,7 @@ function pickRate(v: unknown): number | null {
   return null;
 }
 
-async function fetchFromAPI(token: string): Promise<number | null> {
+async function fetchFromAPI(token: string, log: AttemptOutcome[]): Promise<number | null> {
   let res: Response;
   try {
     res = await fetch('https://tasas.eltoque.com/v1/trmi', {
@@ -61,43 +105,43 @@ async function fetchFromAPI(token: string): Promise<number | null> {
     });
   } catch (err) {
     // Network error / timeout. Distinct from a non-2xx so the retry loop can log it.
+    log.push('network_error');
     console.error(`[sync-exchange-rate] trmi API fetch failed: ${err}`);
     return null;
   }
   if (!res.ok) {
+    log.push(res.status);
     console.error(`[sync-exchange-rate] trmi API HTTP ${res.status}`);
     return null;
   }
   const d = await res.json().catch(() => null);
   const rate = pickRate(d?.tasas?.USD) ?? pickRate(d?.USD);
   if (rate === null) {
+    log.push('unparseable');
     console.error(`[sync-exchange-rate] trmi API 200 but USD unparseable; keys=${JSON.stringify(Object.keys(d?.tasas ?? d ?? {}))}`);
+    return null;
   }
+  log.push(res.status);
   return rate;
 }
 
-// tasas.eltoque.com sits behind Cloudflare, which intermittently challenges Supabase
-// Edge's datacenter egress: observed 2026-07-19 with three identical calls minutes
-// apart returning 200, 502(all_methods_failed), 200. A single transient miss used to
-// throw away that whole hour's sync, because the scraper fallback is dead (403) and
-// there was no retry. A miss is not dangerous on its own — the freshness window is 24h
-// and this runs hourly, so it takes 24 consecutive failures to block recharges — but
-// retrying is nearly free and keeps the feed from developing holes.
-// Bounded on purpose: 3 attempts, ~2s of added worst-case latency.
-async function fetchFromAPIWithRetry(token: string, attempts = 3): Promise<number | null> {
-  for (let i = 0; i < attempts; i++) {
-    const rate = await fetchFromAPI(token);
+// Flask-Limiter also sends Retry-After on its 429s, but we deliberately do not read it:
+// the published limit is 1 second and our fixed spacing already exceeds it, so honouring
+// the header could only ever ask us to wait LESS than we already do. If elToque ever
+// tightens the limit, raise RATE_LIMIT_SPACING_MS rather than adding header parsing.
+async function fetchFromAPIWithRetry(token: string, log: AttemptOutcome[]): Promise<number | null> {
+  for (let i = 0; i < API_ATTEMPTS; i++) {
+    const rate = await fetchFromAPI(token, log);
     if (rate !== null) {
-      if (i > 0) console.log(`[sync-exchange-rate] trmi API recovered on attempt ${i + 1}/${attempts}`);
+      if (i > 0) console.log(`[sync-exchange-rate] trmi API recovered on attempt ${i + 1}/${API_ATTEMPTS}`);
       return rate;
     }
-    if (i < attempts - 1) {
-      const backoffMs = 500 * (i + 1) ** 2; // 500ms, 2000ms
-      console.warn(`[sync-exchange-rate] trmi attempt ${i + 1}/${attempts} failed; retrying in ${backoffMs}ms`);
-      await new Promise((r) => setTimeout(r, backoffMs));
+    if (i < API_ATTEMPTS - 1) {
+      console.warn(`[sync-exchange-rate] trmi attempt ${i + 1}/${API_ATTEMPTS} failed (${log[log.length - 1]}); retrying in ${RATE_LIMIT_SPACING_MS}ms`);
+      await new Promise((r) => setTimeout(r, RATE_LIMIT_SPACING_MS));
     }
   }
-  console.error(`[sync-exchange-rate] trmi API failed all ${attempts} attempts`);
+  console.error(`[sync-exchange-rate] trmi API failed all ${API_ATTEMPTS} attempts: ${JSON.stringify(log)}`);
   return null;
 }
 
@@ -111,10 +155,11 @@ Deno.serve(async (req) => {
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
+  const apiAttempts: AttemptOutcome[] = [];
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const { data: configs } = await supabase.from('platform_config').select('key, value').in('key', ['eltoque_api_token', 'exchange_rate_auto_update']);
+    const { data: configs, error: configError } = await supabase.from('platform_config').select('key, value').in('key', ['eltoque_api_token', 'exchange_rate_auto_update']);
     const cfg: Record<string, string> = {};
     (configs ?? []).forEach((c: { key: string; value: string }) => { cfg[c.key] = c.value; });
 
@@ -125,23 +170,49 @@ Deno.serve(async (req) => {
 
     let rate: number | null = null;
     let source = '';
-    if (token && token.trim() !== '') { rate = await fetchFromAPIWithRetry(token); if (rate) source = 'eltoque_api'; }
-    if (!rate) { rate = await scrapeElToque(); if (rate) source = 'eltoque_scraping'; }
+    // The config read used to discard its error. On a failure `token` came back empty,
+    // the API branch was skipped entirely, and the run died in the (dead) scraper with a
+    // bare all_methods_failed -- indistinguishable from an upstream rejection. Name the
+    // two config-side reasons explicitly so they can never masquerade as an elToque
+    // outage again.
+    const tokenPresent = token.trim() !== '';
+    if (tokenPresent) { rate = await fetchFromAPIWithRetry(token, apiAttempts); if (rate) source = 'eltoque_api'; }
+
+    let scrapeStatus: AttemptOutcome | 'skipped' = 'skipped';
+    if (!rate) { const s = await scrapeElToque(); scrapeStatus = s.status; rate = s.rate; if (rate) source = 'eltoque_scraping'; }
     if (!rate || isNaN(rate) || rate <= 0) {
       // This branch used to return silently. pg_cron cannot see it either -- job 23 runs
       // SELECT net.http_post(...), which only ENQUEUES and returns a request_id, so
       // cron.job_run_details logged 91 consecutive 'succeeded' runs while every one of
       // them 502'd. With no log line there was nothing to grep or alert on, and the rate
       // sat frozen for 4 days. Make the failure loud.
-      console.error('[sync-exchange-rate] all_methods_failed: trmi API and eltoque.com scrape both returned null');
-      return new Response(JSON.stringify({ ok: false, error: 'all_methods_failed' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      //
+      // Loud was still not ENOUGH: on 2026-07-29 the body said only 'all_methods_failed',
+      // and pinning the cause down took an hour of black-box probing because Edge console
+      // logs are not reachable from SQL or the MCP. The per-attempt status codes now ride
+      // along in the body, which pg_net persists in net._http_response.content -- so
+      //   SELECT c.jobname, r.status_code, r.content
+      //   FROM cron_http_calls c JOIN net._http_response r ON r.id = c.request_id
+      // answers "why did the sync fail?" directly. 429 => rate limited (expected, retry
+      // next run); 403 => Cloudflare challenge; config_* => our own misconfiguration.
+      const reason = !tokenPresent
+        ? (configError ? 'config_read_failed' : 'config_token_missing')
+        : 'all_methods_failed';
+      console.error(`[sync-exchange-rate] ${reason}: api=${JSON.stringify(apiAttempts)} scrape=${scrapeStatus}`);
+      return new Response(JSON.stringify({
+        ok: false,
+        error: reason,
+        api_attempts: apiAttempts,
+        scrape_status: scrapeStatus,
+        config_error: configError?.message ?? null,
+      }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // CRON-02: sanity-bound the fetched rate before writing it as is_current. The
     // NETOPIA recharge path credits round(amount_usd * rate), and the 24h
     // staleness check does NOT catch a wrong but FRESH value — so a malformed-but-
     // positive reading from eltoque (inverted, wrong magnitude, parse glitch) would
-    // mis-credit wallets. Cuban informal USD→CUP sits in the low hundreds (~660
+    // mis-credit wallets. Cuban informal USD→CUP sits in the low hundreds (~675
     // today); reject anything implausible (matches scrapeElToque's own bounds).
     if (rate < 100 || rate > 5000) {
       console.error(`[sync-exchange-rate] rejected out-of-range rate ${rate} from ${source}`);
@@ -165,8 +236,8 @@ Deno.serve(async (req) => {
     // Best-effort — a failure here must not fail the sync.
     await supabase.from('platform_config').upsert({ key: 'exchange_rate_fallback_cup', value: rate }, { onConflict: 'key' });
 
-    return new Response(JSON.stringify({ ok: true, usd_cup_rate: rate, source }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: true, usd_cup_rate: rate, source, api_attempts: apiAttempts }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: false, error: String(err), api_attempts: apiAttempts }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
