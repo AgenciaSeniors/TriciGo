@@ -32,6 +32,12 @@ export interface OnlineFleetDriver {
   current_heading: number | null;
   current_ride_id: string | null;
   current_ride_status: RideStatus | null;
+  /** Enriched client-side by adminService.getOnlineFleet() from the
+      `vehicles` table (NOT returned by the RPC). Null/undefined when the
+      driver has no active vehicle row or the enrichment query failed —
+      the live map falls back to a plain dot marker in that case. */
+  vehicle_type?: VehicleType | null;
+  vehicle_plate?: string | null;
 }
 
 export interface AdminAction {
