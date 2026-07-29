@@ -12,6 +12,20 @@
 
 Fuente única de los filtros: [`packages/utils/src/sentryNoise.ts`](../packages/utils/src/sentryNoise.ts). Los patrones de red benignos (constantes en Cuba: `Network request failed`, fetch abortado, timeouts) y las deprecaciones de Expo **dejan de crear issues**. Está sincronizado con el silenciador de consola de [`setupRuntimeLogging.native.ts`](../packages/utils/src/setupRuntimeLogging.native.ts).
 
+### Navegadores in-app (Instagram/Facebook) — agregado 2026-07-29
+
+Instagram abre el link de la bio en su **propio WKWebView** e **inyecta un script de tracking** en `tricigo.com`. Al salir de la página (`pagehide`) ese script llama a su puente nativo, que ya fue desarmado, y tira:
+
+```
+TypeError: undefined is not an object (evaluating 'window.webkit.messageHandlers')
+  at sendDataToNative      (app:///:1:1142)
+  at sendPageHideMessage   (app:///:1:3712)
+```
+
+Nuestro `window.onerror` lo captura y Sentry lo archiva contra `tricigo-web` (issue real **TRICIGO-WEB-T**, visita con `utm_source=ig&…&fbclid=…` desde un iPhone). **Ninguna línea es nuestra** — `sendDataToNative`, `sendPageHideMessage` y `messageHandlers` tienen 0 apariciones en el repo. La página carga bien; el usuario no ve nada roto.
+
+`denyUrls` **no sirve** acá: el script inyectado es inline, así que sus frames llevan la URL de nuestro propio documento. Filtrar por mensaje (`BENIGN_INAPP_BROWSER_PATTERNS`) es la única palanca.
+
 > ⚠️ Las apps móviles **requieren rebuild de APK** para que el cambio tome efecto en los teléfonos instalados. Web/admin entran con el próximo deploy.
 
 ## Paso 1 — Diagnosticar qué te está notificando
