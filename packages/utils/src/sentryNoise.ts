@@ -61,11 +61,35 @@ export const BENIGN_NETWORK_PATTERNS: RegExp[] = [
   /Connection (?:refused|reset|closed)/i,
 ];
 
+/**
+ * Errors thrown by the JavaScript that in-app browsers inject into our pages.
+ *
+ * Instagram/Facebook open links from the bio in their own WKWebView and inject
+ * a tracking script that talks to the native app through the
+ * `window.webkit.messageHandlers` bridge. On `pagehide` that bridge is already
+ * torn down, so the injected `sendDataToNative`/`sendPageHideMessage` throws.
+ * Our `window.onerror` handler catches it and Sentry files it against
+ * `tricigo-web` even though not a line of it is ours (real issue
+ * TRICIGO-WEB-T, 2026-07-29, from an `utm_source=ig` link-in-bio visit).
+ *
+ * `denyUrls` cannot catch these: the injected script is inline, so its frames
+ * carry our own document URL. Matching the message is the only lever.
+ *
+ * Safe as a broad match: `messageHandlers` appears nowhere in the codebase —
+ * we never touch the WKWebView bridge from web code.
+ */
+export const BENIGN_INAPP_BROWSER_PATTERNS: RegExp[] = [
+  // iOS/Safari: "undefined is not an object (evaluating 'window.webkit.messageHandlers')"
+  // Chromium:   "Cannot read properties of undefined (reading 'messageHandlers')"
+  /messageHandlers/,
+];
+
 /** All patterns to feed into `Sentry.init({ ignoreErrors })`. */
 export const SENTRY_IGNORE_PATTERNS: RegExp[] = [
   ...BENIGN_CONSOLE_PATTERNS,
   ...BENIGN_REJECTION_PATTERNS,
   ...BENIGN_NETWORK_PATTERNS,
+  ...BENIGN_INAPP_BROWSER_PATTERNS,
 ];
 
 /**

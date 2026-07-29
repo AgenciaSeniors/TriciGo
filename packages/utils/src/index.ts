@@ -34,6 +34,7 @@ export {
   BENIGN_CONSOLE_PATTERNS,
   BENIGN_REJECTION_PATTERNS,
   BENIGN_NETWORK_PATTERNS,
+  BENIGN_INAPP_BROWSER_PATTERNS,
   isBenignSentryMessage,
   makeSentryBeforeSend,
 } from './sentryNoise';
