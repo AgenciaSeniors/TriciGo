@@ -16,6 +16,9 @@
 // disappear into its own state color. White maximizes contrast on any
 // tile and in both themes; the state stays prominent in the ring.
 //
+// Size comes from the caller (markerSize.ts) because divIcons are fixed
+// pixels and must be re-tiered per zoom level.
+//
 // This module imports `leaflet` at the top level, which touches `window`
 // — it MUST only be loaded via next/dynamic with ssr:false (page.tsx).
 // ============================================================
@@ -24,9 +27,7 @@ import { useMemo } from 'react';
 import L from 'leaflet';
 import { Marker } from 'react-leaflet';
 import type { VehicleType } from '@tricigo/types';
-
-const BADGE = 38; // px — outer badge (>= 44px would be ideal touch size, but leaflet hit area includes the ring/shadow padding)
-const VEHICLE = 26; // px — vehicle image inside
+import type { MarkerSize } from './markerSize';
 
 /** Files under apps/admin/public/vehicles/. 'auto' is auto_clasico
     (the Cuban almendrón), mirroring the rider map's choice. */
@@ -46,6 +47,8 @@ interface DriverVehicleMarkerProps {
   /** 0-359° clockwise from north; null → no rotation. The marker art
       faces north ("up"), same convention as the rider map. */
   heading: number | null;
+  /** Badge/vehicle/border px for the current zoom (markerSizeForZoom). */
+  size: MarkerSize;
   /** Popup content (react-leaflet <Popup>). */
   children?: React.ReactNode;
 }
@@ -56,39 +59,47 @@ export default function DriverVehicleMarker({
   vehicleType,
   color,
   heading,
+  size,
   children,
 }: DriverVehicleMarkerProps) {
   // Round the heading so GPS jitter doesn't rebuild the icon every tick.
   const roundedHeading = heading == null ? null : Math.round(heading / 15) * 15;
+  const { badge, vehicle, border } = size;
 
   const icon = useMemo(() => {
     const rotate =
       roundedHeading == null ? '' : `transform: rotate(${roundedHeading}deg);`;
+    // The vehicle size MUST be an inline style with !important, NOT the
+    // `width`/`height` HTML attributes. Those attributes are only
+    // presentational hints and lose to ANY author CSS rule — and
+    // leaflet.css ships
+    //   `.leaflet-container .leaflet-marker-pane img { width: auto }`
+    // (plus Tailwind preflight's `img { height: auto }`), which made the
+    // image render at its natural 96px inside a 38px badge and spill all
+    // over the map. Measured, not guessed. Do not "simplify" this back
+    // into width=/height= attributes.
+    const sizing = `width: ${vehicle}px !important; height: ${vehicle}px !important;`;
     return L.divIcon({
       // Empty className kills Leaflet's default white-box divIcon styles.
       className: '',
       html: `
         <div style="
-          width: ${BADGE}px; height: ${BADGE}px;
+          width: ${badge}px; height: ${badge}px;
           border-radius: 50%;
           background: #fff;
-          border: 3px solid ${color};
+          border: ${border}px solid ${color};
           box-shadow: 0 1px 4px rgba(0,0,0,0.4);
           display: flex; align-items: center; justify-content: center;
           box-sizing: border-box;
+          overflow: hidden;
         ">
-          <img
-            src="${VEHICLE_MARKER_SRC[vehicleType]}"
-            alt=""
-            width="${VEHICLE}" height="${VEHICLE}"
-            style="display: block; ${rotate}"
-          />
+          <img src="${VEHICLE_MARKER_SRC[vehicleType]}" alt="" style="display: block; ${sizing} ${rotate}" />
         </div>`,
-      iconSize: [BADGE, BADGE],
-      iconAnchor: [BADGE / 2, BADGE / 2],
-      popupAnchor: [0, -BADGE / 2],
+      iconSize: [badge, badge],
+      iconAnchor: [badge / 2, badge / 2],
+      popupAnchor: [0, -badge / 2],
     });
-  }, [vehicleType, color, roundedHeading]);
+  }, [vehicleType, color, roundedHeading, badge, vehicle, border]);
 
   return (
     <Marker position={[lat, lng]} icon={icon}>
