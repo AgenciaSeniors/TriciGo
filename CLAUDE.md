@@ -2160,6 +2160,27 @@ Dos veces en una sesión la verificación fue **real pero sobre la superficie eq
 
 **Ante un correo de alerta:** el correo ya dice la capa, la clasificación y la acción. Si dice `upstream` → esperar a NETOPIA, no tocar nada. Diagnóstico manual: `journalctl -t tricigo-proxy-health -n 30`; squid access.log con `TCP_TUNNEL/200` + ~25s = NETOPIA colgada (no squid); `SELECT key, value FROM platform_config WHERE key LIKE 'netopia_proxy_health%'`. El deploy de la EF es single-file via MCP `deploy_edge_function` (verify_jwt=false — el watchdog manda SOLO `x-proxy-alert-secret`, sin JWT; si verify_jwt quedara en true, el gateway 401ea los reportes del VPS). El script del VPS se aplica con `scp ops/squid/healthcheck.sh root@187.77.214.236:/etc/squid/healthcheck.sh`.
 
+### Red de búsqueda de conductores — estado canónico (mig 00524, 2026-07-30)
+
+**Contexto:** con ~6 conductores online (todos La Habana), la mitad de los viajes de jun-jul 2026 murió con CERO ofertas. Causas: techo de radio 10 km (escalera 5→7.5→10), límite top-10, filtro heartbeat 3 min, y **una-oferta-por-conductor-por-viaje para siempre** (`UNIQUE(ride_id, driver_profile_id)` + `ON CONFLICT DO NOTHING` — las rondas de retry solo alcanzaban conductores NUEVOS).
+
+**Modelo actual (todo `platform_config`, editable en admin sin deploy):**
+| Key | Default | Semántica |
+|---|---|---|
+| `dispatch_max_radius_m` | 0 | **0 = sin límite de distancia.** >0 restaura tope. Gobierna `dispatch_ride` Y `dispatch_searching_rides_for_driver` (el viejo tope escondido 15/10 km del trigger driver-online también obedece esta key). |
+| `dispatch_offer_limit` | 0 | 0 = oferta a TODOS los elegibles en paralelo. >0 capea (para cuando haya cientos online). |
+| `dispatch_heartbeat_window_s` | 0 | 0 = sin filtro de frescura GPS (revierte conscientemente el endurecimiento R5 #541 — con oferta paralela un fantasma no bloquea a nadie). >0 lo restaura. |
+| `reoffer_cooldown_s` | 120 | Una oferta **expirada** se re-arma (`status→pending`, TTL fresco) en el siguiente retry una vez pasado el cooldown → el conductor distraído vuelve a sonar cada ~2-3 min. **`rejected` JAMÁS se re-ofrece.** El push del re-arm lo dispara `trg_notify_driver_reoffer` (AFTER UPDATE expired→pending, reusa `notify_driver_new_offer()`). El APK renderiza re-arms vía el poll de 30s (el realtime del driver ignora UPDATEs que quedan pending). |
+| `searching_abandon_seconds` | 600 | El pasajero puede backgroundear la app 10 min sin que se cancele la búsqueda (`cleanup_orphan_searching_rides` ya leía la key; antes no existía → default 180). |
+| `reactivation_push_after_s` / `_cooldown_s` / `_enabled` | 60 / 1800 / true | Push a conductores **aprobados+offline** del tipo de vehículo pedido ("Un pasajero está buscando triciclo — Conéctate…"), corre dentro del cron `retry-dispatch-expired-rides` (cada 1 min) vía `notify_offline_drivers_for_searching_rides()`. Cooldown por conductor en la tabla `driver_reactivation_pushes` (RLS sin policies = lock-table). Categoría push `ride_matching` (whitelisteada, pref `ride_updates`, tap = abrir app). SIN filtro geográfico — decisión explícita del usuario con toda la flota en Habana; **deuda consciente:** agregar radio cuando haya oferta multi-provincia. |
+| `offer_ttl_seconds` | 45 | Subido de 30 (más tiempo de reacción con poca oferta). |
+
+**Invariantes que NO cambiaron:** tipo de vehículo estricto (decisión explícita — sin fallback cross-vehículo), precio/paridad snapshot, gate low-rating rider (1ª ronda restringida), gate un-viaje-activo, exclusión `user_blocks`, fleet restriction.
+
+**Cómo verificar sin molestar conductores reales:** todo dentro de `BEGIN; … ROLLBACK;` — `net.http_post` encola en `net.http_request_queue` (transaccional) → el rollback cancela los pushes. INSERT de un ride searching dispara el dispatch síncrono en la misma txn; se asserta `ride_offers` y se rollbackea. Patrón completo en `docs/superpowers/plans/2026-07-30-driver-network-expansion.md` (Task 5).
+
+**Si el matching se comporta raro:** 1) leer las keys (`SELECT key, value FROM platform_config WHERE key LIKE 'dispatch%' OR key LIKE 'reoffer%' OR key LIKE 'reactivation%'`); 2) recordar que `dispatch_ride(p_ride_id, p_radius_m)` **ignora `p_radius_m`** desde 00524 (vestigial, solo compat de firma); 3) los re-arms NO incrementan el contador "offered" (`tg_ride_offer_increment_offered` es INSERT-only).
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
