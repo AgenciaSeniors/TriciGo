@@ -156,6 +156,15 @@ const DRIVER_DOC_LABELS_ES: Record<string, string> = {
   selfie: 'Selfie',
 };
 
+/** driver_id → active vehicle (type + plate) for getOnlineFleet enrichment.
+    Module-level so it survives the 30s poll + realtime refetch churn of the
+    live map; cleared only on page reload. A `null` type is a cached miss
+    (driver without an active vehicle row). */
+const onlineFleetVehicleCache = new Map<
+  string,
+  { type: OnlineFleetDriver['vehicle_type']; plate: string | null }
+>();
+
 export const adminService = {
   /**
    * Get dashboard metrics.
@@ -2210,7 +2219,49 @@ export const adminService = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('admin_get_online_fleet');
     if (error) throw error;
-    return (data ?? []) as OnlineFleetDriver[];
+    const fleet = (data ?? []) as OnlineFleetDriver[];
+
+    // Enrich with vehicle type + plate for the live-map vehicle markers.
+    // The RPC does not return vehicle info; admin RLS can read `vehicles`
+    // directly (same embed the drivers list uses). Cached per driver_id
+    // because fetchFleet re-runs on every realtime driver_profiles UPDATE
+    // (~1/s during active trips) and a vehicle swap is a rare event.
+    // Non-fatal: on any failure the map falls back to plain dot markers.
+    const missing = fleet
+      .map((d) => d.driver_id)
+      .filter((id) => !onlineFleetVehicleCache.has(id));
+    if (missing.length > 0) {
+      try {
+        const { data: vehicles } = await supabase
+          .from('vehicles')
+          .select('driver_id, type, plate_number')
+          .in('driver_id', missing)
+          .eq('is_active', true);
+        for (const v of (vehicles ?? []) as {
+          driver_id: string;
+          type: OnlineFleetDriver['vehicle_type'];
+          plate_number: string;
+        }[]) {
+          onlineFleetVehicleCache.set(v.driver_id, {
+            type: v.type ?? null,
+            plate: v.plate_number ?? null,
+          });
+        }
+        // Drivers with no active vehicle row: cache the miss so we don't
+        // re-query them on every poll.
+        for (const id of missing) {
+          if (!onlineFleetVehicleCache.has(id)) {
+            onlineFleetVehicleCache.set(id, { type: null, plate: null });
+          }
+        }
+      } catch {
+        // Enrichment is cosmetic — never break the fleet layer over it.
+      }
+    }
+    return fleet.map((d) => {
+      const v = onlineFleetVehicleCache.get(d.driver_id);
+      return v ? { ...d, vehicle_type: v.type, vehicle_plate: v.plate } : d;
+    });
   },
 
   async getRidesByDay(daysBack = 30) {

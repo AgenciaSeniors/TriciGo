@@ -6,8 +6,11 @@
 // Single map with two toggleable layers:
 //  - Conductores (drivers): every driver online + approved + located,
 //    color-coded by state (idle / en route / in progress / on break).
-//    Source: admin_get_online_fleet() RPC. Realtime on driver_profiles
-//    UPDATE + 30s polling. Rendered as SOLID dots.
+//    Source: admin_get_online_fleet() RPC (enriched with vehicles.type).
+//    Realtime on driver_profiles UPDATE + 30s polling. Rendered as the
+//    top-down VEHICLE on a white badge whose ring carries the state
+//    color (DriverVehicleMarker), falling back to a solid dot when the
+//    vehicle type is unknown.
 //  - Viajes (rides): active rides by status (searching / accepted /
 //    driver_en_route / arrived_at_pickup / in_progress) at their pickup
 //    location. Source: adminService.getRides() per status, 30s polling.
@@ -22,7 +25,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { adminService, getSupabaseClient } from '@tricigo/api';
-import type { Ride, OnlineFleetDriver } from '@tricigo/types';
+import type { Ride, OnlineFleetDriver, VehicleType } from '@tricigo/types';
 import dynamic from 'next/dynamic';
 
 // Dynamically import Leaflet components (no SSR)
@@ -40,6 +43,12 @@ const CircleMarkerDynamic = dynamic(
 );
 const PopupDynamic = dynamic(
   () => import('react-leaflet').then((m) => m.Popup),
+  { ssr: false },
+);
+// Vehicle-on-badge marker for drivers with a known vehicle type.
+// Imports `leaflet` at module level, hence its own ssr:false chunk.
+const DriverVehicleMarkerDynamic = dynamic(
+  () => import('./DriverVehicleMarker'),
   { ssr: false },
 );
 
@@ -76,15 +85,17 @@ function parseLocation(loc: unknown): { lat: number; lng: number } | null {
 }
 
 // ---- Drivers layer ----
-const STATE_COLORS: Record<string, string> = {
+const DRIVER_STATES = ['idle', 'en_route', 'in_progress', 'on_break'] as const;
+type DriverState = (typeof DRIVER_STATES)[number];
+
+// Record<DriverState, …> (not Record<string, …>) so a future state can't
+// silently render colorless — same lesson as the ride-status map (#880).
+const STATE_COLORS: Record<DriverState, string> = {
   in_progress: '#F97316',   // orange — ride en curso
   en_route: '#EAB308',      // yellow — yendo al pickup o aceptado
   on_break: '#9CA3AF',      // gray — pausa
   idle: '#22C55E',          // green — online sin ride
 };
-
-const DRIVER_STATES = ['idle', 'en_route', 'in_progress', 'on_break'] as const;
-type DriverState = (typeof DRIVER_STATES)[number];
 
 function getDriverState(d: OnlineFleetDriver): DriverState {
   if (d.current_ride_status && (
@@ -234,6 +245,59 @@ export default function LiveMapPage() {
     in_progress: t('live_map.driver_in_progress', { defaultValue: 'En viaje' }),
     on_break: t('live_map.driver_on_break', { defaultValue: 'En pausa' }),
   };
+  const vehicleTypeLabels: Record<VehicleType, string> = {
+    triciclo: t('drivers.type_triciclo', { defaultValue: 'Triciclo' }),
+    moto: t('drivers.type_moto', { defaultValue: 'Moto' }),
+    auto: t('drivers.type_auto', { defaultValue: 'Auto' }),
+    confort: t('drivers.type_confort', { defaultValue: 'Confort' }),
+  };
+
+  // Shared popup for both driver marker kinds (vehicle badge / fallback dot).
+  const renderDriverPopup = (d: OnlineFleetDriver, state: DriverState, color: string) => (
+    <PopupDynamic>
+      <div style={{ fontSize: '0.85rem', minWidth: 200 }}>
+        <strong style={{ fontSize: '0.95rem' }}>{d.full_name}</strong>
+        <div style={{ color: '#666', fontSize: '0.8rem', marginTop: 2 }}>{d.phone}</div>
+        <hr style={{ margin: '8px 0', border: 0, borderTop: '1px solid #eee' }} />
+        <div>
+          <span
+            style={{
+              display: 'inline-block',
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: color,
+              marginRight: 6,
+            }}
+          />
+          <strong>{driverStateLabels[state]}</strong>
+        </div>
+        {d.vehicle_type && (
+          <div style={{ marginTop: 6, color: '#444' }}>
+            {vehicleTypeLabels[d.vehicle_type]}
+            {d.vehicle_plate ? ` · ${d.vehicle_plate}` : ''}
+          </div>
+        )}
+        {d.current_ride_id && (
+          <div style={{ marginTop: 6 }}>
+            Ride: <code style={{ fontSize: '0.75rem' }}>{d.current_ride_id.slice(0, 8)}…</code>
+            <br />
+            <a href={`/rides/${d.current_ride_id}`} style={{ color: 'var(--primary, #FF4D00)', fontSize: '0.8rem' }}>
+              Ver viaje →
+            </a>
+          </div>
+        )}
+        <div style={{ marginTop: 6, fontSize: '0.75rem', color: '#888' }}>
+          Heartbeat {formatRelative(d.last_heartbeat_at)}
+        </div>
+        <div style={{ marginTop: 6 }}>
+          <a href={`/drivers/${d.driver_id}`} style={{ color: 'var(--primary, #FF4D00)', fontSize: '0.8rem' }}>
+            Perfil conductor →
+          </a>
+        </div>
+      </div>
+    </PopupDynamic>
+  );
 
   return (
     <div className="h-[calc(100vh-80px)] flex flex-col">
@@ -336,54 +400,31 @@ export default function LiveMapPage() {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             />
 
-            {/* Drivers — solid dots */}
+            {/* Drivers — vehicle badge (ring = state color), or a plain
+                solid dot when the vehicle type is unknown (no active
+                vehicle row / enrichment failed). */}
             {showDrivers && filteredDrivers.map((d) => {
               const state = getDriverState(d);
               const color = STATE_COLORS[state];
-              return (
+              return d.vehicle_type ? (
+                <DriverVehicleMarkerDynamic
+                  key={`driver-${d.driver_id}`}
+                  lat={d.lat}
+                  lng={d.lng}
+                  vehicleType={d.vehicle_type}
+                  color={color}
+                  heading={d.current_heading}
+                >
+                  {renderDriverPopup(d, state, color)}
+                </DriverVehicleMarkerDynamic>
+              ) : (
                 <CircleMarkerDynamic
                   key={`driver-${d.driver_id}`}
                   center={[d.lat, d.lng]}
                   radius={9}
                   pathOptions={{ color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.95 }}
                 >
-                  <PopupDynamic>
-                    <div style={{ fontSize: '0.85rem', minWidth: 200 }}>
-                      <strong style={{ fontSize: '0.95rem' }}>{d.full_name}</strong>
-                      <div style={{ color: '#666', fontSize: '0.8rem', marginTop: 2 }}>{d.phone}</div>
-                      <hr style={{ margin: '8px 0', border: 0, borderTop: '1px solid #eee' }} />
-                      <div>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            background: color,
-                            marginRight: 6,
-                          }}
-                        />
-                        <strong>{driverStateLabels[state]}</strong>
-                      </div>
-                      {d.current_ride_id && (
-                        <div style={{ marginTop: 6 }}>
-                          Ride: <code style={{ fontSize: '0.75rem' }}>{d.current_ride_id.slice(0, 8)}…</code>
-                          <br />
-                          <a href={`/rides/${d.current_ride_id}`} style={{ color: 'var(--primary, #FF4D00)', fontSize: '0.8rem' }}>
-                            Ver viaje →
-                          </a>
-                        </div>
-                      )}
-                      <div style={{ marginTop: 6, fontSize: '0.75rem', color: '#888' }}>
-                        Heartbeat {formatRelative(d.last_heartbeat_at)}
-                      </div>
-                      <div style={{ marginTop: 6 }}>
-                        <a href={`/drivers/${d.driver_id}`} style={{ color: 'var(--primary, #FF4D00)', fontSize: '0.8rem' }}>
-                          Perfil conductor →
-                        </a>
-                      </div>
-                    </div>
-                  </PopupDynamic>
+                  {renderDriverPopup(d, state, color)}
                 </CircleMarkerDynamic>
               );
             })}
