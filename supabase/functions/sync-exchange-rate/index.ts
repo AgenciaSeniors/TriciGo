@@ -1,5 +1,7 @@
 // BUG-160 + BUG-201 + BUG-199: apikey === env.SUPABASE_SERVICE_ROLE_KEY
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getFreshFx } from '../_shared/fx-freshness.ts';
+import { configFlag, resolveFxSyncFailure, resolveSoftLimitHours } from '../_shared/fx-sync-outcome.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,8 +28,42 @@ const corsHeaders = {
 // a single unlucky collision, not the main defence. What actually decorrelates the
 // misses is spreading the *runs* over time -- mig 00523 moves cron 23 from hourly to
 // every 15 minutes, so one unlucky moment costs 15 minutes instead of a whole hour.
-const RATE_LIMIT_SPACING_MS = 1_500;
-const API_ATTEMPTS = 2;
+//
+// ---------------------------------------------------------------------------------
+// REVISED 2026-07-30, against 24 production runs (6h of the every-15-minutes schedule):
+//
+//     6 x 200 (25%)  -- five of them [200] on the first attempt, one [429, 200]
+//    18 x 502 (75%)  -- every single one [429, 429] + scraper 403
+//
+// The 1.5s retry recovered exactly ONE of 18 failures (5.6%). If the rejection were the
+// momentary 1-req/s collision modelled above, waiting 1.5s -- comfortably past a 1 second
+// window -- should clear it almost every time. It does not. Whatever blocks us stays
+// blocked for considerably longer than a second, so a 1.5s retry is close to worthless:
+// it spends a request and 1.5s of the run's budget to buy ~6%.
+//
+// Two changes follow from that, and BOTH are hypotheses this code now measures rather
+// than assumes (jitter_ms and the attempt spacing ride along in the response body, which
+// pg_net persists, so `SELECT content FROM net._http_response` settles it with data):
+//
+//   1. SPACING widened well past the point where a retry demonstrably does nothing.
+//   2. JITTER before the first attempt. pg_cron fires job 23 at :00 of the minute, and
+//      the response lands 30-200ms later -- every other cron-driven consumer of this
+//      popular Cuban endpoint is doing the same thing at the same instant. A random
+//      offset moves us out of that thundering herd. Cheap, and it cannot make things
+//      worse; whether it makes them better is what jitter_ms is there to tell us.
+//
+// HARD CEILING: cron_http_post passes timeout_milliseconds := 30000 (its default). Past
+// that, pg_net records status_code NULL and the response body is LOST -- taking with it
+// the api_attempts diagnostics that make this function debuggable at all, and tripping
+// the watchdog's timeout branch. Every wait below is therefore fenced by a wall-clock
+// deadline rather than trusted to add up.
+const RATE_LIMIT_SPACING_MS = 5_000;
+const API_ATTEMPTS = 3;
+const JITTER_MAX_MS = 2_500;
+const API_TIMEOUT_MS = 6_000;
+/** Wall-clock ceiling for the whole API phase, leaving room for the scraper + overhead. */
+const API_PHASE_BUDGET_MS = 17_000;
+const SCRAPE_TIMEOUT_MS = 5_000;
 
 // What each attempt actually returned. Surfaced in the response body (see below) so the
 // reason for a failure is queryable from SQL forever after.
@@ -47,7 +83,7 @@ async function scrapeElToque(): Promise<{ rate: number | null; status: AttemptOu
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         Accept: 'text/html', 'Accept-Language': 'es,en;q=0.9',
       },
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(SCRAPE_TIMEOUT_MS),
     });
   } catch (err) {
     console.error(`[sync-exchange-rate] eltoque.com scrape fetch failed: ${err}`);
@@ -101,7 +137,7 @@ async function fetchFromAPI(token: string, log: AttemptOutcome[]): Promise<numbe
   try {
     res = await fetch('https://tasas.eltoque.com/v1/trmi', {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
   } catch (err) {
     // Network error / timeout. Distinct from a non-2xx so the retry loop can log it.
@@ -125,23 +161,42 @@ async function fetchFromAPI(token: string, log: AttemptOutcome[]): Promise<numbe
   return rate;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 // Flask-Limiter also sends Retry-After on its 429s, but we deliberately do not read it:
-// the published limit is 1 second and our fixed spacing already exceeds it, so honouring
-// the header could only ever ask us to wait LESS than we already do. If elToque ever
-// tightens the limit, raise RATE_LIMIT_SPACING_MS rather than adding header parsing.
-async function fetchFromAPIWithRetry(token: string, log: AttemptOutcome[]): Promise<number | null> {
+// the published limit is 1 second while the observed block outlasts several, so the
+// header can only ever ask us to wait LESS than the spacing above. Honouring it would
+// make the ladder worse, not better.
+//
+// The loop stops early rather than overrun `deadline`: an attempt is only started if a
+// full API_TIMEOUT_MS still fits, and a wait is only taken if the attempt it buys fits
+// too. Better to return one attempt short with the diagnostics intact than to be killed
+// by pg_net at 30s and record nothing at all.
+async function fetchFromAPIWithRetry(
+  token: string,
+  log: AttemptOutcome[],
+  deadline: number,
+): Promise<number | null> {
   for (let i = 0; i < API_ATTEMPTS; i++) {
+    if (Date.now() + API_TIMEOUT_MS > deadline) {
+      console.warn(`[sync-exchange-rate] budget exhausted before attempt ${i + 1}/${API_ATTEMPTS}`);
+      break;
+    }
     const rate = await fetchFromAPI(token, log);
     if (rate !== null) {
       if (i > 0) console.log(`[sync-exchange-rate] trmi API recovered on attempt ${i + 1}/${API_ATTEMPTS}`);
       return rate;
     }
-    if (i < API_ATTEMPTS - 1) {
-      console.warn(`[sync-exchange-rate] trmi attempt ${i + 1}/${API_ATTEMPTS} failed (${log[log.length - 1]}); retrying in ${RATE_LIMIT_SPACING_MS}ms`);
-      await new Promise((r) => setTimeout(r, RATE_LIMIT_SPACING_MS));
+    const isLast = i === API_ATTEMPTS - 1;
+    if (isLast) break;
+    if (Date.now() + RATE_LIMIT_SPACING_MS + API_TIMEOUT_MS > deadline) {
+      console.warn(`[sync-exchange-rate] no budget left to retry after attempt ${i + 1}`);
+      break;
     }
+    console.warn(`[sync-exchange-rate] trmi attempt ${i + 1}/${API_ATTEMPTS} failed (${log[log.length - 1]}); retrying in ${RATE_LIMIT_SPACING_MS}ms`);
+    await sleep(RATE_LIMIT_SPACING_MS);
   }
-  console.error(`[sync-exchange-rate] trmi API failed all ${API_ATTEMPTS} attempts: ${JSON.stringify(log)}`);
+  console.error(`[sync-exchange-rate] trmi API failed all attempts: ${JSON.stringify(log)}`);
   return null;
 }
 
@@ -159,14 +214,24 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const { data: configs, error: configError } = await supabase.from('platform_config').select('key, value').in('key', ['eltoque_api_token', 'exchange_rate_auto_update']);
-    const cfg: Record<string, string> = {};
-    (configs ?? []).forEach((c: { key: string; value: string }) => { cfg[c.key] = c.value; });
+    const { data: configs, error: configError } = await supabase.from('platform_config').select('key, value').in('key', ['eltoque_api_token', 'exchange_rate_auto_update', 'fx_stale_alert_hours']);
+    const cfg: Record<string, unknown> = {};
+    (configs ?? []).forEach((c: { key: string; value: unknown }) => { cfg[c.key] = c.value; });
 
-    const token = cfg['eltoque_api_token'] ?? '';
-    if (cfg['exchange_rate_auto_update'] === 'false') {
+    const token = String(cfg['eltoque_api_token'] ?? '');
+    // configFlag, not `=== 'false'`: platform_config.value is jsonb and this key is a
+    // jsonb BOOLEAN in production, so the old string comparison could never match and the
+    // FX kill switch was inoperative. See fx-sync-outcome.ts.
+    if (!configFlag(cfg['exchange_rate_auto_update'], true)) {
       return new Response(JSON.stringify({ ok: true, skipped: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    // Step off the :00 boundary that every cron in the world shares. Taken before the
+    // first attempt so the whole ladder shifts, and reported below so its effect is
+    // measurable instead of assumed.
+    const jitterMs = Math.floor(Math.random() * JITTER_MAX_MS);
+    if (jitterMs > 0) await sleep(jitterMs);
+    const apiDeadline = Date.now() + API_PHASE_BUDGET_MS;
 
     let rate: number | null = null;
     let source = '';
@@ -176,7 +241,7 @@ Deno.serve(async (req) => {
     // two config-side reasons explicitly so they can never masquerade as an elToque
     // outage again.
     const tokenPresent = token.trim() !== '';
-    if (tokenPresent) { rate = await fetchFromAPIWithRetry(token, apiAttempts); if (rate) source = 'eltoque_api'; }
+    if (tokenPresent) { rate = await fetchFromAPIWithRetry(token, apiAttempts, apiDeadline); if (rate) source = 'eltoque_api'; }
 
     let scrapeStatus: AttemptOutcome | 'skipped' = 'skipped';
     if (!rate) { const s = await scrapeElToque(); scrapeStatus = s.status; rate = s.rate; if (rate) source = 'eltoque_scraping'; }
@@ -198,14 +263,41 @@ Deno.serve(async (req) => {
       const reason = !tokenPresent
         ? (configError ? 'config_read_failed' : 'config_token_missing')
         : 'all_methods_failed';
-      console.error(`[sync-exchange-rate] ${reason}: api=${JSON.stringify(apiAttempts)} scrape=${scrapeStatus}`);
-      return new Response(JSON.stringify({
-        ok: false,
+
+      // Is this an incident, or just a run that did not land? The rate we already hold
+      // decides. See fx-sync-outcome.ts for why this is a status-code decision and not a
+      // cron_http_expectations row.
+      const fx = await getFreshFx(supabase);
+      const hasCurrentRate = fx.reason !== 'no_rate' && fx.reason !== 'error';
+      const rateAgeHours = fx.ageHours ?? null;
+      const softLimitHours = resolveSoftLimitHours(cfg['fx_stale_alert_hours'], fx.maxAgeHours);
+      const { httpStatus, degraded } = resolveFxSyncFailure({
+        reason, hasCurrentRate, rateAgeHours, softLimitHours,
+      });
+
+      const body = {
+        ok: degraded,
+        // `degraded` runs did not refresh anything; say so rather than let ok:true imply
+        // a rate was written.
+        refreshed: false,
         error: reason,
         api_attempts: apiAttempts,
         scrape_status: scrapeStatus,
         config_error: configError?.message ?? null,
-      }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        jitter_ms: jitterMs,
+        attempt_spacing_ms: RATE_LIMIT_SPACING_MS,
+        rate_age_h: rateAgeHours === null ? null : Math.round(rateAgeHours * 100) / 100,
+        soft_limit_h: softLimitHours,
+      };
+
+      if (degraded) {
+        // Deliberately not console.error: this is the expected outcome of an upstream
+        // rate-limit while the stored rate is fine, and it happens ~75% of runs today.
+        console.warn(`[sync-exchange-rate] not refreshed (${reason}) but rate is ${body.rate_age_h}h old (< ${softLimitHours}h) -- reporting healthy: api=${JSON.stringify(apiAttempts)} scrape=${scrapeStatus}`);
+      } else {
+        console.error(`[sync-exchange-rate] ${reason}: api=${JSON.stringify(apiAttempts)} scrape=${scrapeStatus} rate_age=${body.rate_age_h}h limit=${softLimitHours}h`);
+      }
+      return new Response(JSON.stringify(body), { status: httpStatus, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // CRON-02: sanity-bound the fetched rate before writing it as is_current. The
@@ -236,7 +328,9 @@ Deno.serve(async (req) => {
     // Best-effort — a failure here must not fail the sync.
     await supabase.from('platform_config').upsert({ key: 'exchange_rate_fallback_cup', value: rate }, { onConflict: 'key' });
 
-    return new Response(JSON.stringify({ ok: true, usd_cup_rate: rate, source, api_attempts: apiAttempts }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // jitter_ms rides along on success too -- comparing its distribution across 200s and
+    // 502s is what will confirm or kill the thundering-herd hypothesis.
+    return new Response(JSON.stringify({ ok: true, refreshed: true, usd_cup_rate: rate, source, api_attempts: apiAttempts, jitter_ms: jitterMs }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({ ok: false, error: String(err), api_attempts: apiAttempts }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
