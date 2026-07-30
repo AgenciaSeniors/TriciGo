@@ -88,3 +88,9 @@ yarn-error.log*
 # Local-only download buckets (e.g. tmp-apk/ from gh run download)
 tmp-apk/
 *.apk
+
+# Scratch files for long commit messages / PR bodies (CLAUDE.md's canonical
+# pattern for avoiding PowerShell heredoc quoting). A `git add -A` swept one of
+# these into a commit on 2026-07-30; ignoring them makes that impossible.
+.commit-msg-temp.txt
+.pr-body-temp.md
