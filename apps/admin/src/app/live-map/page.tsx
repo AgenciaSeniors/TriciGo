@@ -22,11 +22,12 @@
 // Stack: react-leaflet (SSR-disabled). No new dependencies.
 // ============================================================
 
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
 import { adminService, getSupabaseClient } from '@tricigo/api';
 import type { Ride, OnlineFleetDriver, VehicleType } from '@tricigo/types';
 import dynamic from 'next/dynamic';
+import { markerSizeForZoom } from './markerSize';
 
 // Dynamically import Leaflet components (no SSR)
 const MapContainer = dynamic(
@@ -51,6 +52,11 @@ const DriverVehicleMarkerDynamic = dynamic(
   () => import('./DriverVehicleMarker'),
   { ssr: false },
 );
+// Reports the map's zoom up so marker size can follow it (markerSize.ts).
+const MapZoomWatcherDynamic = dynamic(
+  () => import('./MapZoomWatcher'),
+  { ssr: false },
+);
 
 // ---- Rides layer ----
 const STATUS_COLORS: Record<string, string> = {
@@ -68,6 +74,11 @@ const STATUS_COLORS: Record<string, string> = {
    which the code at getDriverState() already counts as on-a-trip. The map
    contradicted itself. It is an active state; it belongs. */
 const ACTIVE_STATUSES = ['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'];
+
+/** Map opens on the whole island. Shared with the marker-size seed so the
+    first paint already uses the right tier (no mount-time size jump). */
+const INITIAL_CENTER: [number, number] = [21.5, -79.5];
+const INITIAL_ZOOM = 7;
 
 function parseLocation(loc: unknown): { lat: number; lng: number } | null {
   if (!loc) return null;
@@ -139,6 +150,15 @@ export default function LiveMapPage() {
   // Layer toggles (both on by default)
   const [showDrivers, setShowDrivers] = useState(true);
   const [showRides, setShowRides] = useState(true);
+
+  // Marker size follows the zoom: divIcons are fixed px, so a street-level
+  // badge is kilometres wide at country zoom. Seeded with the map's initial
+  // zoom below; MapZoomWatcher keeps it current.
+  const [zoom, setZoom] = useState(INITIAL_ZOOM);
+  const markerSize = useMemo(() => markerSizeForZoom(zoom), [zoom]);
+  // Stable identity: MapZoomWatcher seeds on mount via a useEffect keyed
+  // on this callback, so a new function each render would re-fire it.
+  const handleZoomChange = useCallback((z: number) => setZoom(z), []);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -390,8 +410,8 @@ export default function LiveMapPage() {
           </div>
         ) : (
           <MapContainer
-            center={[21.5, -79.5]}
-            zoom={7}
+            center={INITIAL_CENTER}
+            zoom={INITIAL_ZOOM}
             scrollWheelZoom
             style={{ height: '100%', width: '100%' }}
           >
@@ -399,10 +419,11 @@ export default function LiveMapPage() {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             />
+            <MapZoomWatcherDynamic onZoomChange={handleZoomChange} />
 
             {/* Drivers — vehicle badge (ring = state color), or a plain
                 solid dot when the vehicle type is unknown (no active
-                vehicle row / enrichment failed). */}
+                vehicle row / enrichment failed). Both scale with zoom. */}
             {showDrivers && filteredDrivers.map((d) => {
               const state = getDriverState(d);
               const color = STATE_COLORS[state];
@@ -414,6 +435,7 @@ export default function LiveMapPage() {
                   vehicleType={d.vehicle_type}
                   color={color}
                   heading={d.current_heading}
+                  size={markerSize}
                 >
                   {renderDriverPopup(d, state, color)}
                 </DriverVehicleMarkerDynamic>
@@ -421,8 +443,8 @@ export default function LiveMapPage() {
                 <CircleMarkerDynamic
                   key={`driver-${d.driver_id}`}
                   center={[d.lat, d.lng]}
-                  radius={9}
-                  pathOptions={{ color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.95 }}
+                  radius={markerSize.badge / 2}
+                  pathOptions={{ color: '#fff', weight: markerSize.border - 1, fillColor: color, fillOpacity: 0.95 }}
                 >
                   {renderDriverPopup(d, state, color)}
                 </CircleMarkerDynamic>
