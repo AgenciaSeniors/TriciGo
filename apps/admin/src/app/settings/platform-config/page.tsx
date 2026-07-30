@@ -88,6 +88,16 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
 
   // ── Wait charge (cargo por espera; cap server-side, mig 00432 DSP-01) ──
   max_billable_wait_minutes: { type: 'number', helpKey: 'platform_config.max_billable_wait_minutes_help' },
+
+  // ── Driver network expansion (00524) — dispatch reach & reactivation ──
+  dispatch_max_radius_m: { type: 'number', helpKey: 'platform_config.dispatch_max_radius_m_help' },
+  dispatch_offer_limit: { type: 'number', helpKey: 'platform_config.dispatch_offer_limit_help' },
+  dispatch_heartbeat_window_s: { type: 'number', helpKey: 'platform_config.dispatch_heartbeat_window_s_help' },
+  reoffer_cooldown_s: { type: 'number', helpKey: 'platform_config.reoffer_cooldown_s_help' },
+  searching_abandon_seconds: { type: 'number', helpKey: 'platform_config.searching_abandon_seconds_help' },
+  reactivation_push_after_s: { type: 'number', helpKey: 'platform_config.reactivation_push_after_s_help' },
+  reactivation_push_cooldown_s: { type: 'number', helpKey: 'platform_config.reactivation_push_cooldown_s_help' },
+  reactivation_push_enabled: { type: 'text', helpKey: 'platform_config.reactivation_push_enabled_help' },
 };
 
 export default function PlatformConfigPage() {
