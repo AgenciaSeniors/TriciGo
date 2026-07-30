@@ -24,6 +24,7 @@ regardless of distance, and the dormant offline network gets nudged to connect.
 | Stale-GPS online drivers | **Include in offers.** Online drivers whose heartbeat is >3 min old still receive offers (push can wake the app). |
 | Passenger backgrounding tolerance | **~10 minutes** (up from 3) before an untouched searching ride is auto-canceled. |
 | Offer TTL | 30s → **45s** (existing config key, admin-reversible). |
+| Re-offers | **Yes, every ~2 min** (configurable). An offer a driver let EXPIRE re-arms and rings again while the ride keeps searching. Explicitly REJECTED offers are never re-offered. |
 
 ## Approach
 
@@ -43,6 +44,7 @@ New `platform_config` keys (all read at call time, admin-tunable, `ON CONFLICT D
 | `dispatch_max_radius_m` | `0` | `0` = unlimited radius. `>0` restores a hard cap. Applies from round 1; the 5000/7500/10000 escalation ladder is retired (kept only as the parameter floor for backward compat). |
 | `dispatch_offer_limit` | `0` | `0` = offer to ALL eligible drivers. `>0` caps the per-round candidate count (for when supply grows). |
 | `dispatch_heartbeat_window_s` | `0` | `0` = no heartbeat freshness filter. `>0` = only drivers whose `last_heartbeat_at` is within N seconds (restores audit-R5 hardening). |
+| `reoffer_cooldown_s` | `120` | Minimum seconds since an offer EXPIRED before it re-arms for the same driver (re-offer cadence). Rejected offers never re-arm. |
 
 Mechanics:
 
@@ -59,6 +61,17 @@ Mechanics:
 - `dispatch_searching_rides_for_driver` (fires when a driver comes online): the hidden 15 km
   ride-search / 10 km dispatch caps are lifted to the same config. This closes the reactivation
   loop: push → driver opens app → goes online → immediately receives the offer.
+- **Re-offers (discovered during planning, user-approved):** prod has `UNIQUE (ride_id,
+  driver_profile_id)` + `ON CONFLICT DO NOTHING`, so today a driver receives at most ONE offer per
+  ride ever — retry rounds only reach *new* drivers. Fix: the dispatch INSERT becomes `ON CONFLICT
+  DO UPDATE` that re-arms the row (`status='pending'`, fresh `expires_at`) **only when** the
+  existing offer is `'expired'` AND expired at least `reoffer_cooldown_s` ago (default 120).
+  `'rejected'` (explicit decline), `'accepted'` and `'superseded'` rows are never touched. A new
+  trigger `AFTER UPDATE OF status WHEN (OLD.status='expired' AND NEW.status='pending')` reuses
+  `notify_driver_new_offer()` so the re-arm pushes again. Current APKs render re-armed offers via
+  the 30s poll fallback (`getSearchingRides` → `addRequest`); the store honors server
+  `offer_expires_at`, so the 45s TTL needs no app change. `tg_ride_offer_increment_offered` is
+  INSERT-only → re-arms don't inflate the "offered" counter.
 - **Unchanged:** low-rating rider gate (first round restricted), one-active-ride gate,
   vehicle-type matching, `user_blocks` exclusion, fleet restriction, pricing/parity snapshot.
 - Consciously reverts the R5 heartbeat hardening **by config default** — with parallel offers a
@@ -114,9 +127,10 @@ New config keys: `reactivation_push_after_s` (default `60`), `reactivation_push_
 
 ## 4. Admin panel
 
-Add the 7 new rows to `KNOWN_KEYS` in `apps/admin/src/app/settings/platform-config/page.tsx`
-(the 6 brand-new keys + `searching_abandon_seconds`, whose row is also new; number/boolean types)
-+ help texts in es/en/pt `admin.json`. `offer_ttl_seconds` already has metadata. Web deploy only.
+Add the 8 new rows to `KNOWN_KEYS` in `apps/admin/src/app/settings/platform-config/page.tsx`
+(the 7 brand-new keys + `searching_abandon_seconds`, whose row is also new; booleans use
+`type: 'text'` per the page's existing convention) + help texts in es/en/pt `admin.json`.
+`offer_ttl_seconds` already has metadata. Web deploy only.
 
 ## 5. Explicitly out of scope / unchanged
 
@@ -136,15 +150,21 @@ beyond inheriting the same radius/limit config.
 
 ## 7. Verification plan
 
-1. Apply migration → seed a QA ride (canonical scheduled-future pattern targeting no one, then
-   open dispatch) → assert `offers_created` equals the count of ALL online drivers of the type,
-   including the stale-heartbeat one.
-2. Assert reactivation: after 60s+, offline approved drivers of the type have a row in
-   `notifications` (type announcement) + `driver_reactivation_pushes`; a second retry round within
-   the cooldown sends nothing new.
-3. `cleanup_orphan_searching_rides` respects 600s (config read visible in behavior or direct call).
-4. `pnpm check-types` + `@tricigo/api` tests green.
-5. Clean up seeded ride via `admin_cancel_ride` (no reputational events).
+All prod checks run inside `BEGIN; … ROLLBACK;` — `net.http_post` only enqueues into the
+transactional `net.http_request_queue`, so a rollback cancels every push (pattern verified in the
+FX-watchdog work). **Zero real drivers get pinged during verification.**
+
+1. Rolled-back INSERT of a searching ride at Havana coords → the insert trigger runs the new
+   dispatch synchronously → assert `offers_created` = ALL eligible online drivers of the type,
+   including the stale-heartbeat one and drivers >10 km away.
+2. Rolled-back reactivation: INSERT a searching ride with `created_at = now() - 2 min`, call the
+   reactivation function directly → assert rows in `driver_reactivation_pushes` + queued push
+   with `user_ids`; call again → assert cooldown blocks a second push.
+3. Rolled-back re-offer: expire the seeded offers, backdate `expires_at` past the cooldown,
+   re-dispatch → assert the same drivers' offers re-armed to `pending` (and `rejected` ones
+   stayed untouched).
+4. `cleanup_orphan_searching_rides` reads the new 600s value (direct call assertion).
+5. `pnpm check-types` green (admin change).
 
 ## Conscious-debt register
 
