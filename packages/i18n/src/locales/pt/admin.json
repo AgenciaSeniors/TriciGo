@@ -1289,7 +1289,11 @@
     "reactivation_push_cooldown_s": "Anti-spam de reativação (s)",
     "reactivation_push_cooldown_s_help": "Segundos mínimos entre notificações de reativação ao mesmo motorista (anti-spam).",
     "reactivation_push_enabled": "Aviso a motoristas desconectados",
-    "reactivation_push_enabled_help": "true/false — interruptor do aviso a motoristas desconectados quando há viagens buscando motorista."
+    "reactivation_push_enabled_help": "true/false — interruptor do aviso a motoristas desconectados quando há viagens buscando motorista.",
+    "driver_offline_after_minutes": "Tirar de linha após (min)",
+    "driver_offline_after_minutes_help": "Minutos sem sinal do app do motorista antes de tirá-lo de linha automaticamente. O app pulsa a cada 1-2 minutos, então 10 significa cerca de 5-10 sinais perdidos seguidos.",
+    "driver_offline_notice_enabled": "Avisar ao tirar de linha",
+    "driver_offline_notice_enabled_help": "true/false — envia uma notificação ao motorista quando o tiramos de linha por inatividade, para que saiba que parou de receber viagens e possa reconectar."
   },
   "exchange_rate": {
     "title": "Taxa de câmbio",

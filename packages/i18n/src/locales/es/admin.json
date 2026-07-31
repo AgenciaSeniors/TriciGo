@@ -1289,7 +1289,11 @@
     "reactivation_push_cooldown_s": "Anti-spam de reactivación (s)",
     "reactivation_push_cooldown_s_help": "Segundos mínimos entre notificaciones de reactivación al mismo conductor (anti-spam).",
     "reactivation_push_enabled": "Aviso a conductores desconectados",
-    "reactivation_push_enabled_help": "true/false — interruptor del aviso a conductores desconectados cuando hay viajes buscando conductor."
+    "reactivation_push_enabled_help": "true/false — interruptor del aviso a conductores desconectados cuando hay viajes buscando conductor.",
+    "driver_offline_after_minutes": "Sacar de línea tras (min)",
+    "driver_offline_after_minutes_help": "Minutos sin señal de la app del conductor antes de sacarlo de línea automáticamente. La app late cada 1-2 minutos, así que 10 significa unas 5-10 señales perdidas seguidas.",
+    "driver_offline_notice_enabled": "Avisar al sacarlo de línea",
+    "driver_offline_notice_enabled_help": "true/false — envía una notificación al conductor cuando lo sacamos de línea por inactividad, para que sepa que dejó de recibir viajes y pueda volver a conectarse."
   },
   "exchange_rate": {
     "title": "Tasa de cambio",
