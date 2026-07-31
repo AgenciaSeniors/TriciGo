@@ -450,15 +450,21 @@ function IncomingRideCardInner({
           paddingVertical: 12,
           paddingHorizontal: 12,
         }}>
+          {/* Cuban addresses ("X e/ Y y Z, municipio") rarely fit one line.
+              Truncating dropped the municipality — and on longer streets the
+              cross-street pair that actually identifies the corner. Two lines
+              fit the overwhelming majority; the row aligns to the top and the
+              dot is nudged down by (lineHeight 21 − dot 10) / 2 so it sits on
+              the first line instead of floating beside a two-line block. */}
           <View
-            style={{ flexDirection: 'row', alignItems: 'center' }}
+            style={{ flexDirection: 'row', alignItems: 'flex-start' }}
             accessible
             accessibilityLabel={t('a11y.pickup_address', {
               ns: 'common',
               address: ride.pickup_address,
             })}
           >
-            <View style={{ width: 24, alignItems: 'center' }}>
+            <View style={{ width: 24, alignItems: 'center', paddingTop: 5 }}>
               <View style={{
                 width: 10,
                 height: 10,
@@ -473,7 +479,7 @@ function IncomingRideCardInner({
                 flex: 1,
                 marginLeft: 8,
               }}
-              numberOfLines={1}
+              numberOfLines={2}
             >
               {ride.pickup_address}
             </RNText>
@@ -493,14 +499,14 @@ function IncomingRideCardInner({
           </View>
 
           <View
-            style={{ flexDirection: 'row', alignItems: 'center' }}
+            style={{ flexDirection: 'row', alignItems: 'flex-start' }}
             accessible
             accessibilityLabel={t('a11y.dropoff_address', {
               ns: 'common',
               address: ride.dropoff_address,
             })}
           >
-            <View style={{ width: 24, alignItems: 'center' }}>
+            <View style={{ width: 24, alignItems: 'center', paddingTop: 5 }}>
               <View style={{
                 width: 10,
                 height: 10,
@@ -515,7 +521,7 @@ function IncomingRideCardInner({
                 flex: 1,
                 marginLeft: 8,
               }}
-              numberOfLines={1}
+              numberOfLines={2}
             >
               {ride.dropoff_address}
             </RNText>
