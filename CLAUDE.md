@@ -2186,6 +2186,20 @@ Dos veces en una sesión la verificación fue **real pero sobre la superficie eq
 
 **Si el matching se comporta raro:** 1) leer las keys (`SELECT key, value FROM platform_config WHERE key LIKE 'dispatch%' OR key LIKE 'reoffer%' OR key LIKE 'reactivation%'`); 2) recordar que `dispatch_ride(p_ride_id, p_radius_m)` **ignora `p_radius_m`** desde 00524 (vestigial, solo compat de firma); 3) los re-arms NO incrementan el contador "offered" (`tg_ride_offer_increment_offered` es INSERT-only); 4) si un viaje recién creado no le llega a un conductor lejano, es la etapa 1 haciendo su trabajo — se abre a los 45 s.
 
+### Conductores que se caen solos de línea — diagnóstico canónico (2026-07-31)
+
+**El fenómeno, medido:** en 7 días hubo **142 desconexiones FORZADAS vs 56 manuales** — el 72% de las veces que un conductor sale de línea, no lo pidió. Afecta a 15+ conductores (William 16 forzadas/0 manuales, Rey 14/0, Leonardo 9/0) ⇒ sistémico, no un dispositivo. La sesión mediana que muere forzada dura **37 min**. El heartbeat se corta **en seco** (Leonardo: 45 min de latidos cada 60 s → silencio absoluto → cron a los 14.7 min), sin degradación ni reintentos ⇒ **el proceso de la app deja de ejecutarse**; NO es red intermitente (esa deja huecos y recuperaciones).
+
+**La herramienta para investigarlo: `audit_log`.** Guarda cada UPDATE de `driver_profiles` con `old_values`/`new_values`/`changed_by` (~10k filas/día) → reconstruye el historial completo de heartbeats de cualquier conductor. **El discriminador es `changed_by IS NULL` = lo hizo el cron (service-role) ⇒ desconexión FORZADA**; con uuid = el conductor tocó el switch. Sin ese campo no se puede distinguir "se fue" de "se cayó".
+
+**Mecánica.** Heartbeats: `(tabs)/index.tsx` setInterval **120 s** (`.update()` directo) + `useDriverLocation` + el background task (RPC `driver_heartbeat`, throttle 55 s). Corte: cron 10 `auto-offline-stale-drivers` (cada 5 min) → desde 00527 llama a `auto_offline_stale_drivers()`, que además **avisa al conductor por push** (`driver_offline_after_minutes`=10, `driver_offline_notice_enabled`). Antes era un `UPDATE` crudo y **el conductor no se enteraba de nada**.
+
+**Causa raíz PROBABLE (sin confirmar).** El foreground service que mantiene vivo el JS arranca solo si el conductor concedió ubicación **en segundo plano ("Siempre")** — el propio código: "startBgLocationTracking whenever the driver is ONLINE **AND background permission is granted**", y el disclosure ofrece "Más tarde" que lo saltea. En Android 11+ ese permiso **no se concede desde el diálogo del sistema**: hay que entrar a Ajustes a mano, y muy poca gente completa ese 2º paso. **Ya descartado:** manifest y config correctos (`FOREGROUND_SERVICE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`, expo-location con `isAndroidForegroundServiceEnabled`, targetSdk 36) y el fix del foreground service existe desde #791 (2026-07-12) — el código está bien escrito, no falta nada ahí.
+
+**Verificación pendiente (10 segundos, sin código):** preguntarle a un conductor conectado si ve la notificación fija *"Estás en línea. Podés recibir viajes con la app en segundo plano"*. Si NO la ve ⇒ el foreground service no corre ⇒ confirmado. Equivalente: Ajustes → Apps → TriciGo Conductor → Permisos → Ubicación; si dice "solo mientras se usa la app", confirmado. Alternativas que ese dato también descartaría: swipe-kill del usuario (mata el foreground service en la mayoría de OEM) y optimización de batería del fabricante (Xiaomi/Huawei).
+
+**Interacción con el dispatch:** `dispatch_heartbeat_window_s=0` (00524) deja elegible al conductor con la app muerta durante los 10-15 min hasta que el cron lo saca. Medido: 0 de 14 ofertas en 7 días cayeron en esa ventana (volumen bajísimo), pero el riesgo crece con la demanda — si aparece, subir esa key a >0 lo cierra sin migración.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.

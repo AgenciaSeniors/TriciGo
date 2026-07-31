@@ -101,6 +101,10 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   reactivation_push_after_s: { type: 'number', helpKey: 'platform_config.reactivation_push_after_s_help' },
   reactivation_push_cooldown_s: { type: 'number', helpKey: 'platform_config.reactivation_push_cooldown_s_help' },
   reactivation_push_enabled: { type: 'text', helpKey: 'platform_config.reactivation_push_enabled_help' },
+
+  // ── Auto-offline por inactividad (00527) ──
+  driver_offline_after_minutes: { type: 'number', helpKey: 'platform_config.driver_offline_after_minutes_help' },
+  driver_offline_notice_enabled: { type: 'text', helpKey: 'platform_config.driver_offline_notice_enabled_help' },
 };
 
 export default function PlatformConfigPage() {

@@ -1289,7 +1289,11 @@
     "reactivation_push_cooldown_s": "Reactivation anti-spam (s)",
     "reactivation_push_cooldown_s_help": "Minimum seconds between reactivation notifications to the same driver (anti-spam).",
     "reactivation_push_enabled": "Notify offline drivers",
-    "reactivation_push_enabled_help": "true/false — switch for notifying offline drivers when rides are searching for a driver."
+    "reactivation_push_enabled_help": "true/false — switch for notifying offline drivers when rides are searching for a driver.",
+    "driver_offline_after_minutes": "Take offline after (min)",
+    "driver_offline_after_minutes_help": "Minutes without a signal from the driver's app before taking them offline automatically. The app beats every 1-2 minutes, so 10 means roughly 5-10 consecutive missed beats.",
+    "driver_offline_notice_enabled": "Notify when taken offline",
+    "driver_offline_notice_enabled_help": "true/false — sends the driver a notification when we take them offline for inactivity, so they know they stopped receiving rides and can reconnect."
   },
   "exchange_rate": {
     "title": "Exchange Rate",
