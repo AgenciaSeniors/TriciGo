@@ -2487,29 +2487,22 @@ function Verdict({ icon, title, body, tone, onReset }: {
 Run: `pnpm check-types`
 Expected: PASS
 
-- [ ] **Step 3 (LOAD-BEARING): confirm `x-forwarded-for` actually reaches PostgREST**
+- [ ] **Step 3: confirm the rate limiter keys on the business, not on anything the caller sends**
 
-`_coupon_rate_limit_ok` keys its bucket on
-`current_setting('request.headers', true)::json ->> 'x-forwarded-for'`, falling back to the literal
-`'unknown'`. **If that header does not arrive, every shop employee in the country shares one bucket
-of 30 validations per 10 minutes** and the feature dies on its first busy afternoon — silently, with
-a "DEMASIADOS INTENTOS" screen nobody can explain.
+The per-IP version of this control was abandoned after a reviewer demonstrated it was forgeable —
+`X-Forwarded-For` is written by the client, so an attacker could both bypass the budget and pin a
+chosen shop's bucket to deny it service. Identity is now the business's secret token.
 
-This is not a theoretical worry: a survey of production found **zero** existing functions in this
-project that read `request.headers`, so the pattern has never once been exercised here. Verify it,
-do not assume it.
-
-With the migrations applied, call the RPC from a real browser on the `/v` page (not through the
-Supabase MCP, which does not go through PostgREST and will always show the header as absent), then
-read what the limiter actually keyed:
+Nothing here reads a header any more, so there is no header to verify. What is worth confirming once
+the migrations are applied is that the buckets look right:
 
 ```sql
-SELECT key, count, window_start FROM rate_limits
-WHERE key LIKE 'coupon_validate:%' ORDER BY window_start DESC LIMIT 5;
+SELECT key, count FROM rate_limits WHERE key LIKE 'coupon%' ORDER BY key;
 ```
 
-A key ending in a real IP means it works. A key ending `:unknown` means it does not — stop and
-resolve it before shipping, because the fallback is a global bucket.
+Keys must contain a **`partner_place_id` UUID**, and every unresolved token must collapse into the
+single shared `coupon_badtoken:all` bucket. A key containing an IP means something reintroduced the
+old derivation.
 
 - [ ] **Step 4: Verify it renders**
 
