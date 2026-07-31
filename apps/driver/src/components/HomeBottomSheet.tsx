@@ -31,7 +31,6 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { DraggableSheet } from '@tricigo/ui/DraggableSheet';
-import { AddressSearchBar } from '@/components/AddressSearchBar';
 import { Ionicons } from '@expo/vector-icons';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { triggerHaptic } from '@tricigo/utils';
@@ -90,11 +89,6 @@ export interface HomeBottomSheetProps {
   onToggleBreak: () => void;
   onSubmitSelfie: () => void;
   onCancelAutoNav: () => void;
-  onAddressSelect: (loc: {
-    latitude: number;
-    longitude: number;
-    address: string;
-  }) => void;
   onGoToSuggestion: (lat: number, lng: number) => void;
 
   // ── Animations ──
@@ -238,7 +232,6 @@ function SheetContent({
   onToggleBreak,
   onSubmitSelfie,
   onCancelAutoNav,
-  onAddressSelect,
   onGoToSuggestion,
   ctaScaleAnim,
   onCtaPressIn,
@@ -623,16 +616,6 @@ function SheetContent({
         </>
       ) : (
         <>
-          {/* Search bar */}
-          <View style={{ marginTop: 12 }}>
-            <AddressSearchBar
-              onSelect={onAddressSelect}
-              placeholder={t('home.search_placeholder', {
-                defaultValue: 'Buscar dirección o zona…',
-              })}
-            />
-          </View>
-
           {/* Smart suggestion card */}
           {nearestHotspot && (nearestHotspot.liveCount > 0 || nearestHotspot.source === 'popular') && (
             <Pressable
