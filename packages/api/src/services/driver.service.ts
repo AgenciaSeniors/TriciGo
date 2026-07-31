@@ -28,19 +28,7 @@ import { uploadFileFromUri } from './_storage-upload';
 import { notificationService } from './notification.service';
 import { exchangeRateService } from './exchange-rate.service';
 
-/**
- * Transform raw Supabase ride data to proper GeoPoint coordinates.
- * PostGIS returns pickup_location/dropoff_location as WKB hex strings,
- * but the Ride type expects { latitude, longitude } GeoPoint objects.
- * We use the auto-synced pickup_lat/lng and dropoff_lat/lng columns instead.
- */
-function transformRideCoordinates(ride: Record<string, unknown>): Ride {
-  return {
-    ...(ride as unknown as Ride),
-    pickup_location: { latitude: (ride.pickup_lat as number) ?? 0, longitude: (ride.pickup_lng as number) ?? 0 },
-    dropoff_location: { latitude: (ride.dropoff_lat as number) ?? 0, longitude: (ride.dropoff_lng as number) ?? 0 },
-  };
-}
+import { transformRideCoordinates } from './_ride-coordinates';
 
 export const driverService = {
   /**

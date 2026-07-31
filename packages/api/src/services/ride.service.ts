@@ -45,6 +45,7 @@ import {
   fetchMultiStopRoute,
 } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
+import { transformRideCoordinates } from './_ride-coordinates';
 import { exchangeRateService } from './exchange-rate.service';
 import { corporateService } from './corporate.service';
 import { notificationService } from './notification.service';
@@ -1315,10 +1316,14 @@ export const rideService = {
       .gt('expires_at', nowIso)
       .order('offered_at', { ascending: false });
     if (error) throw error;
-    // Flatten: ride_offers → nested rides row
-    type OfferRow = { expires_at: string; rides: Ride };
+    // Flatten: ride_offers → nested rides row.
+    // The nested row is raw from PostgREST, so its geography columns are WKB
+    // hex strings. transformRideCoordinates swaps in the auto-synced lat/lng
+    // pair — without it the offer card's distance-to-pickup is always null
+    // and the "AL RECOGER X KM" line silently disappears.
+    type OfferRow = { expires_at: string; rides: Record<string, unknown> };
     return ((data as unknown as OfferRow[]) ?? []).map((row) => ({
-      ...row.rides,
+      ...transformRideCoordinates(row.rides),
       offer_expires_at: row.expires_at,
     })) as Ride[];
   },
