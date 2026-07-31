@@ -76,3 +76,8 @@ export { cityService } from './services/city.service';
 export { suggestionsService } from './services/suggestions.service';
 export { trackValidationEvent } from './services/validation.service';
 export { blockService } from './services/block.service';
+export {
+  partnerPlaceService,
+  type AdminPartnerPlace,
+  type AdminPartnerPlaceInput,
+} from './services/partner-place.service';

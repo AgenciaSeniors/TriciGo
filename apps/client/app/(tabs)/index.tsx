@@ -50,6 +50,9 @@ import {
   WeatherChip,
 } from '@tricigo/ui';
 import { useWeather } from '@/hooks/useWeather';
+import { PartnerPlacesCarousel } from '@/components/PartnerPlacesCarousel';
+import { PartnerCouponBanner } from '@/components/PartnerCouponBanner';
+import { useTokens } from '@/hooks/useTokens';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
 import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
@@ -1627,6 +1630,10 @@ function WebHomeScreen() {
 function NativeHomeScreen() {
   const { t } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
+  // Needed by the coupon banner in the ride-in-progress branch below. IdleView
+  // derives its own from the same store; this call has to sit above the early
+  // returns because hooks cannot run conditionally.
+  const tokens = useTokens();
 
   // BUG-253 (Capa 3.1): useRideInit moved up to app/_layout.tsx so the
   // watcher stays alive across tab navigations. Removed from here to
@@ -1729,6 +1736,25 @@ function NativeHomeScreen() {
     return (
       <>
         <Screen bg="cuban" padded scroll={enableScroll}>
+          {/* ── Cupón activo ── the SECOND of the banner's two mount points.
+              A passenger who closes the ticket and books another ride has the
+              home replaced by this branch; without a mount here their live
+              coupon becomes unreachable while its two-hour clock runs down.
+              Deliberately OUTSIDE the Animated.View so it does not blink on
+              every flow-step crossfade. Renders null when there is no coupon.
+
+              'searching' matters as much as 'active' here, and is easy to miss:
+              since the staged-radius dispatch in 00525 a passenger can sit in
+              searching for several minutes, and that is dead time in which the
+              clock runs but the coupon cannot be reached.
+
+              'reviewing' and 'completed' are deliberately excluded — the first
+              is a short, focused confirm step where a stray tap would abandon
+              the fare the passenger is reading, and the second already shows
+              the whole ticket. */}
+          {(flowStep === 'active' || flowStep === 'searching') && (
+            <PartnerCouponBanner tokens={tokens} compact />
+          )}
           <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
             {flowStep === 'reviewing' && <ReviewingView />}
             {flowStep === 'searching' && <SearchingView />}
@@ -2259,6 +2285,14 @@ function IdleView() {
           </Pressable>
         )}
 
+        {/* ── Cupón activo ── the FIRST of the banner's two mount points, the
+            other being the ride-in-progress branch of NativeHomeScreen. Sits
+            above the balance and the address search because it is the only
+            thing on this screen with a deadline: two hours from arrival and
+            it is gone. Renders null when there is no live coupon, so it costs
+            the layout nothing the rest of the time. */}
+        <PartnerCouponBanner tokens={tokens} />
+
         {/* ── Balance ── */}
         <BalanceHeroCard
           balanceTc={walletBalance}
@@ -2387,6 +2421,30 @@ function IdleView() {
 
         {/* ── Capitolio divider (Cuban identity marker) ── */}
         <CapitolioDivider mode={mode} height={72} />
+
+        {/* ── Lugares con beneficio ── partner places near the passenger.
+            Sits ABOVE Promos deliberately. This is the surface a partner
+            business is given in exchange for absorbing a free coffee, so
+            burying it as the fourth horizontal card row would make the deal
+            worth little and the "hero card" treatment pointless. It costs
+            TriciGo's own ride promos one position.
+
+            Renders nothing without a fix or without a place in range.
+            `userCenter` is a GeoJSON [longitude, latitude] tuple — the same
+            state that centres the map and feeds useWeather, reused here to
+            avoid a second location subscription. Note the order: [1] is
+            latitude. A swap type-checks cleanly, both members being numbers,
+            so it would fail silently. */}
+        <PartnerPlacesCarousel
+          latitude={userCenter?.[1] ?? null}
+          longitude={userCenter?.[0] ?? null}
+          tokens={tokens}
+          onSelect={(place) => {
+            setDropoff(place.name, { latitude: place.latitude, longitude: place.longitude });
+            resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
+            setFlowStep('selecting');
+          }}
+        />
 
         {/* ── Promos ── horizontal scroll of active promotions */}
         {activePromos.length > 0 && (

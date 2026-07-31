@@ -1205,6 +1205,9 @@
     "toast_resolved": "Incident resolved"
   },
   "platform_config": {
+    "partner_places_discovery_radius_m_help": "Radius in metres within which a passenger sees partner places on the home. 15000 = 15 km. Does not affect coupon issuance — each place has its own radius for that.",
+    "coupon_validate_max_per_window_help": "How many validations ONE business may make per window. The limit is per business, not per IP. Lower it if you suspect abuse; raise it if a busy shop runs short.",
+    "coupon_validate_window_s_help": "Length of the window for the limit above, in seconds. 600 = 10 minutes.",
     "title": "Platform Configuration",
     "subtitle": "Global system parameters",
     "key": "Key",

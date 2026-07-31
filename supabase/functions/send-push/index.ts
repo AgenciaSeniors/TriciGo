@@ -71,6 +71,16 @@ const VALID_CATEGORIES = new Set([
   'blog',
   'news',
   'campaign',
+  // Partner-place arrival coupons (00532 extends notifications_type_check to
+  // match). Two senders: the issuance trigger in 00533 when a ride completes
+  // at a partner business, and the 30-minutes-left reminder cron in 00535.
+  //
+  // ORDER MATTERS ON DEPLOY: 00535 stamps reminded_at optimistically the moment
+  // it dispatches, because pg_net is async and delivery cannot be confirmed
+  // synchronously. So a coupon whose push 400s here is burned permanently — it
+  // never gets a second reminder. This EF must be deployed before any partner
+  // place exists for a ride to complete at.
+  'partner_coupon',
   // Legacy values kept for backward-compat with existing migrations.
   // TODO: consolidate `ride_updates` → `proximity` and remove
   // `wallet_v2_migration` after the one-shot migration RPC is dropped.
@@ -120,6 +130,12 @@ const FILTERABLE_CATEGORY_TO_PREF: Record<string, string> = {
   blog: 'promotions',
   news: 'promotions',
   campaign: 'promotions',
+  // A partner coupon is something the passenger earned by paying for a ride,
+  // which argues for delivering it unconditionally. But it is still a perk from
+  // a business, and someone who switched promotions off has said they do not
+  // want this. Honour that rather than reclassifying it to sneak past the
+  // filter. The coupon itself is not lost — it waits in the app.
+  partner_coupon: 'promotions',
 };
 
 /**
