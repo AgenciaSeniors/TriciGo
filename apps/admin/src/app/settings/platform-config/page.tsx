@@ -90,6 +90,9 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   max_billable_wait_minutes: { type: 'number', helpKey: 'platform_config.max_billable_wait_minutes_help' },
 
   // ── Driver network expansion (00524) — dispatch reach & reactivation ──
+  // Staged radius (00525): stage 1 is the head start for nearby drivers.
+  dispatch_stage1_seconds: { type: 'number', helpKey: 'platform_config.dispatch_stage1_seconds_help' },
+  dispatch_stage1_radius_m: { type: 'number', helpKey: 'platform_config.dispatch_stage1_radius_m_help' },
   dispatch_max_radius_m: { type: 'number', helpKey: 'platform_config.dispatch_max_radius_m_help' },
   dispatch_offer_limit: { type: 'number', helpKey: 'platform_config.dispatch_offer_limit_help' },
   dispatch_heartbeat_window_s: { type: 'number', helpKey: 'platform_config.dispatch_heartbeat_window_s_help' },
