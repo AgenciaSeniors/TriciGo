@@ -1136,14 +1136,37 @@ contents = contents.replace(classHeader, `$1\n${OVERRIDE_SNIPPET}`);
 
 **Lección general:** los config plugins que parchean `MainActivity.kt`/`AppDelegate.swift` por regex **no deben anclar a cuerpos de método** (cambian entre SDKs: block-body ↔ expression-body). Anclar a estructuras estables: el header de la clase + su `{`. Verificar el plugin con un test Node que corra el `.replace` sobre el template del SDK nuevo y assertee que el snippet quedó **dentro** del bloque de la clase (contar llaves, o regex `class ... { ... <snippet> ... }`). Aplicado a cliente + driver (plugins duplicados per-app).
 
-### `Pressable` función-estilo descarta props de layout (`width`/`flex`) — usar estilo-objeto
+### Una función-estilo de `Pressable` PUEDE descartar su bloque de layout — pero NO siempre. Verificar en celu, nunca reescribir en masa
 
-**Bug verificado 2026-06-28 (PR #701).** En la wallet del cliente, una fila de botones `Pressable` con `flex: 1` (y después `width: '50%'`, y hasta `width: <px>`) **colapsaba al ancho de contenido** — los botones no llenaban el ancho aunque su contenedor SÍ era full-width (confirmado pintando contenedor + hijos con `backgroundColor` temporal). `pnpm check-types` pasaba y el bundle era fresco (verificado con Metro `--clear` + un `console.log` de `useWindowDimensions`: `windowWidth=411`, `quickActionHalf=189.7` correctos pero sin aplicarse al render).
+> **Ojo:** hasta 2026-07-31 esta sección afirmaba que los props de layout dentro de una función-estilo de `Pressable` **siempre** se descartan. **Eso es falso** y llevaba a reescribir código sano. Texto corregido abajo con las dos verificaciones en dispositivo real.
 
-**Causa raíz:** los props **de layout** (`width`, `flex`) puestos dentro del **array que devuelve una función-estilo de `Pressable`** —`style={({ pressed }) => [{ width }, pressed && {…}]}`— se **descartan silenciosamente** en esta versión de RN. Los props de **paint** (`opacity`, `transform`) del mismo array SÍ se aplican (por eso el feedback de pulsado andaba pero el ancho no). El `ServiceIconButton` del home no sufre esto porque pone `flex:1` en un **estilo-objeto** (`StyleSheet.create`), no en función.
+**Síntoma (PR #701, 2026-06-28).** En la wallet del cliente, botones `Pressable` con `flex: 1` (y después `width: '50%'`, y hasta `width: <px>`) **colapsaban al ancho de contenido** aunque su contenedor SÍ era full-width. `pnpm check-types` pasaba y el bundle era fresco (Metro `--clear` + `console.log` de `useWindowDimensions`: valores correctos, sin aplicarse al render).
 
-**Fix canónico:**
-- Poner layout (`width`/`flex`) en un **estilo-objeto plano**: `style={{ width }}` o `style={styles.x}`, NUNCA dentro de la función.
+**Segunda aparición (2026-07-31, perfil del conductor).** `renderMenuRow` en `apps/driver/app/(tabs)/profile.tsx` ponía TODO el layout de la fila dentro de `style={({ pressed }) => [{ flexDirection:'row', padding…, borderBottom… }, pressed && {…}]}`. En el celu la fila salía **apilada en vertical** (ícono / label / chevron), sin padding y sin separadores, mientras cada estilo-objeto de los hijos se aplicaba perfecto. Fix: mover la caja a un `View` interno con estilo-objeto y dejar solo el paint en children-as-function.
+
+**NO es una regla universal — medido, no deducido.** En la MISMA app, mismo build y misma sesión, cinco `Pressable` con la **forma idéntica** (`[{layout inline}, pressed && {…}]`) renderizan **perfecto**, incluido uno con `flexDirection:'row'` + paddings:
+
+| Call site | Layout dentro de la función | En celu |
+|---|---|---|
+| `driver/(tabs)/profile.tsx` `renderMenuRow` | `flexDirection`, paddings, `borderBottom*` | **ROTO** |
+| `driver/wallet/recharge.tsx:379` | `flexDirection`, `gap`, paddings, bordes | sano |
+| `driver/wallet/recharge.tsx:491` | `flex: 1`, paddings, bordes | sano |
+| `driver/(tabs)/trips.tsx:255` | márgenes, `borderRadius`, sombra | sano |
+| `driver/(tabs)/wallet.tsx:370` y `:502` | paddings / `width`+`height`+`borderRadius` | sano |
+
+También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`position:absolute` + `width/height`, función que devuelve **objeto**) y `AddressSearchBar` (array con refs de `StyleSheet.create`).
+
+**Descartado como causa** (no volver a investigar por ahí): (a) **no** es dev-vs-release — reproduce igual en un dev client debug; (b) **no** fue un bump de dependencias — `nativewind` es **4.2.2 desde 2026-03-08** y `react-native` 0.83.4 / `expo` ~55.0.14 no se movieron nunca, así que el perfil **estuvo mal desde el rediseño #234**, no "se rompió"; (c) **no** es el interop de NativeWind por lo que se lee en `react-native-css-interop@0.2.2`: `cssInterop(Pressable, {className:"style"})` sin `className` deja `style` intacto (`cleanup()` sale temprano porque Pressable no tiene `nativeStyleToProp`). **El mecanismo real sigue sin explicación.**
+
+**Regla operativa (lo importante):**
+1. Cuando una fila/botón salga apilado o sin padding y el bloque de estilo viva en una función-estilo → aplicá el fix canónico de abajo.
+2. **NO barras el repo reescribiendo todas las call sites con esa forma.** En 2026-07-31 se auditaron 17 puntos en 13 archivos del driver: **7 candidatos de forma idéntica, 0 rotos**. Reescribirlos habría sido churn con riesgo de regresión en pantallas de dinero.
+3. Antes de tocar una call site sospechada, **verificala en celu** con el A/B de abajo.
+
+**A/B decisivo (2 min, cero ambigüedad).** Con el dev client conectado a Metro: `git stash push -- <archivo>` → **reload completo** en el celu (no fast-refresh: los cambios de layout no recalculan en caliente) → mirar → `git stash pop`. Mismo build, mismo celu, misma sesión: lo único que cambia es el código. Si con el código viejo se ve roto y con el nuevo bien, la causalidad está probada. Este método reemplaza a las conjeturas sobre el mecanismo.
+
+**Fix canónico** (y default recomendado para código nuevo — es inmune al problema sea cual sea su mecanismo, y es lo que ya hacen `@tricigo/ui/MenuRow` y `driver/src/components/settings/SettingsRow.tsx`, que renderizan bien):
+- Poner el layout en un **estilo-objeto plano** — `style={{ width }}`, `style={styles.x}`, o un `View` interno que lleve la caja — nunca dentro de la función-estilo.
 - Para el estado `pressed` sin tocar el layout, usar el **children-as-function** de `Pressable` y aplicar el prop de paint a un hijo con estilo-objeto:
   ```tsx
   <Pressable style={{ width }} android_ripple={{ color: 'rgba(255,255,255,0.18)' }}>
