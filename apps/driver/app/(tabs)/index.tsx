@@ -590,11 +590,27 @@ function NativeDriverHomeScreen() {
   // N5 — popular pickup/dropoff clusters (90-day historical aggregate).
   // Toggle gated; off by default to avoid overloading the map for
   // drivers who don't ask for it.
+  //
+  // The FETCH is deliberately NOT gated by the toggle — it doubles as a
+  // probe telling us whether the layer has anything to paint. The
+  // `popular_locations` matview is empty whenever there isn't enough ride
+  // history to cluster (it needs 3+ completed rides within ~100 m of each
+  // other), so the toggle used to be a switch that produced nothing on
+  // screen. Now the button only renders when the probe returns clusters,
+  // and it comes back on its own the moment the aggregate has data again.
   const [popularLocationsEnabled, setPopularLocationsEnabled] = useState(false);
   const popularLocations = usePopularLocations({
     center: mapCenter,
-    enabled: isOnline && popularLocationsEnabled,
+    enabled: isOnline,
   });
+  const hasPopularLocations = popularLocations.length > 0;
+  // What actually reaches the map and the smart-suggestion ranking stays
+  // toggle-gated, so probing in the background changes nothing the driver
+  // sees until they turn the layer on.
+  const visiblePopularLocations = useMemo(
+    () => (popularLocationsEnabled ? popularLocations : []),
+    [popularLocationsEnabled, popularLocations],
+  );
 
   // Phase 3 V4 — simple map mode. When enabled, suppresses the noisier
   // visual layers (surge polygons, demand-hotspot pulses, peer drivers,
@@ -725,7 +741,7 @@ function NativeDriverHomeScreen() {
   const nearestHotspot = useSmartSuggestion({
     driverLocation,
     hotspots: demandHotspots,
-    popularLocations,
+    popularLocations: visiblePopularLocations,
   });
 
   // OMEGA: Online time tracking for earnings per hour.
@@ -1090,7 +1106,7 @@ function NativeDriverHomeScreen() {
           driverHeading={idleHeading}
           nearbyDrivers={vehiclePreview ? previewVehicles : (simpleMapMode ? [] : nearbyDrivers)}
           demandHotspots={simpleMapMode ? [] : demandHotspots}
-          popularLocations={popularLocations}
+          popularLocations={visiblePopularLocations}
           height={SCREEN_HEIGHT}
           darkStyle
           onRecenter={handleRecenter}
@@ -1124,10 +1140,12 @@ function NativeDriverHomeScreen() {
       {/* N5 — popular pickup/dropoff clusters toggle. Floats on the
            right edge just below the header. (The recenter button now
            floats bottom-right above the sheet — see RideMapView's
-           recenterBottom — so it no longer shares this column.) Only
-           visible while online — when offline the map overlay is hidden
-           anyway, so the toggle would be pointless context. */}
-      {isOnline && (
+           recenterBottom — so it no longer shares this column.)
+           Visible only while online AND when the historical aggregate
+           actually has clusters nearby: offline the map overlay is hidden
+           anyway, and with an empty aggregate the toggle would paint
+           nothing — a dead switch that reads as a broken feature. */}
+      {isOnline && hasPopularLocations && (
         <Pressable
           onPress={() => setPopularLocationsEnabled((p) => !p)}
           accessibilityRole="switch"
