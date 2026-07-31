@@ -154,18 +154,26 @@ jobs:
             echo "::error::promote needs group_id — the update group you watched at partial rollout. Deliberately not auto-resolved: widening the WRONG group to the whole fleet is the mistake this guard exists to prevent."
             exit 1
           fi
-          # --group republishes that exact group, so the bytes reaching 100% are
-          # the bytes that were already verified and observed at partial rollout.
+          # `update:edit` raises the rollout percentage ON THE EXISTING group.
+          # That is what widening means, and it is inherently safe: there is no
+          # new bundle, so what reaches 100% is byte-identical to what was
+          # observed at partial rollout.
           #
-          # No --rollout-percentage here, deliberately. EAS validates that flag
-          # as 0-99 and rejects 100 outright:
-          #   "Rollout percentage must be between 0 and 99"
-          # A rollout is by definition partial; "everyone" is the absence of one.
-          # Passing 100 made this step fail every time it ran — verified
-          # 2026-07-31 on run 30660877027, the first real attempt to widen.
-          eas update:republish \
-            --group "$GROUP_IN" \
-            --destination-channel production \
-            --message "${MSG:-promote to 100%}" \
+          # This step used `update:republish` until 2026-07-31 and could never
+          # have worked. Two failures, both on real runs, taught the shape:
+          #
+          #   run 30660877027 — `republish --rollout-percentage 100`
+          #     "Rollout percentage must be between 0 and 99"
+          #     (republish caps at 99; only `update` and `update:edit` take 100)
+          #
+          #   run 30661682055 — `republish` with the flag dropped
+          #     "Cannot publish a new update with this runtime version while a
+          #      rollout is in progress for the same runtime version."
+          #
+          # The second message is the real lesson: republish PUBLISHES A NEW
+          # UPDATE, and EAS refuses that while a rollout is open on the runtime.
+          # Widening an open rollout is an edit, never a publish.
+          eas update:edit "$GROUP_IN" \
+            --rollout-percentage 100 \
             --non-interactive
           echo "::notice::Update group $GROUP_IN is now at 100%."
