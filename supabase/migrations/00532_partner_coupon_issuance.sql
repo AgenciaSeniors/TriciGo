@@ -1,4 +1,4 @@
--- 00530_partner_coupon_issuance.sql
+-- 00532_partner_coupon_issuance.sql
 -- Issues a coupon when a ride completes inside a partner place's radius.
 
 -- Six characters from a 31-symbol alphabet with 0/1/I/L/O removed, because
@@ -77,7 +77,7 @@ BEGIN
 
   -- Note: the radius comes from a column of partner_places, so PostGIS cannot
   -- fold this into an index qual and partner_places_location_gix does not
-  -- serve it. Fine here — the table is small and admin-curated. See 00529.
+  -- serve it. Fine here — the table is small and admin-curated. See 00531.
   FOR v_place IN
     SELECT pp.*
     FROM public.partner_places pp
@@ -207,9 +207,9 @@ CREATE TRIGGER trg_rides_issue_partner_coupons
   EXECUTE FUNCTION public.tg_rides_issue_partner_coupons();
 
 COMMENT ON FUNCTION public._generate_coupon_code() IS
-  '00530 Six-char coupon code over a 31-symbol alphabet (no 0/1/I/L/O), drawn from pgcrypto with rejection sampling so the distribution stays uniform.';
+  '00532 Six-char coupon code over a 31-symbol alphabet (no 0/1/I/L/O), drawn from pgcrypto with rejection sampling so the distribution stays uniform.';
 COMMENT ON FUNCTION public.tg_rides_issue_partner_coupons() IS
-  '00530 Issues one partner coupon per matching place when a PASSENGER ride completes inside its radius (cargo excluded in the trigger WHEN clause). Never blocks the ride.';
+  '00532 Issues one partner coupon per matching place when a PASSENGER ride completes inside its radius (cargo excluded in the trigger WHEN clause). Never blocks the ride.';
 
 -- Without this, _generate_coupon_code is reachable as
 -- POST /rpc/_generate_coupon_code — a free oracle for the exact alphabet and

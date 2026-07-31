@@ -1,4 +1,4 @@
--- 00532_partner_coupon_reminder_cron.sql
+-- 00534_partner_coupon_reminder_cron.sql
 -- One reminder push when ~30 minutes remain on an unredeemed coupon.
 --
 -- Two guards, both required and doing DIFFERENT jobs:
@@ -74,7 +74,7 @@ $$;
 REVOKE ALL ON FUNCTION public.notify_expiring_partner_coupons() FROM PUBLIC, anon, authenticated;
 
 COMMENT ON FUNCTION public.notify_expiring_partner_coupons() IS
-  '00532 One reminder push per unredeemed coupon with ~30 minutes left. The 25-35 min window against the 5-minute cadence gives at-least-once; reminded_at gives at-most-once. Cron-only: never granted to anon or authenticated.';
+  '00534 One reminder push per unredeemed coupon with ~30 minutes left. The 25-35 min window against the 5-minute cadence gives at-least-once; reminded_at gives at-most-once. Cron-only: never granted to anon or authenticated.';
 
 DO $$
 BEGIN

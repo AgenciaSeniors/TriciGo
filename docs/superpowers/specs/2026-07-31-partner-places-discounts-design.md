@@ -105,13 +105,21 @@ letters with `0`, `1`, `I`, `L`, `O` removed, because the code gets read aloud a
 counter. 31^6 ≈ 887 million combinations.
 
 Six characters rather than four **because of the public validation page**: a shorter code invites
-brute-forcing valid codes to mark other people's coupons as used. Combined with per-IP rate
+brute-forcing valid codes to mark other people's coupons as used. Combined with per-business rate
 limiting this closes the hole; two extra characters cost the employee nothing.
 
 Collision handling: `UNIQUE` constraint plus bounded retry on conflict.
 
-The validation RPC normalizes input before lookup — uppercase, strip whitespace, strip dashes,
-strip a leading `TG` — so an employee typing `tg-k7m2qx`, `K7M2QX`, or `k7 m2 qx` all resolve.
+The validation RPC normalizes input before lookup — uppercase, strip whitespace, strip dashes, and
+strip a leading `TG` **only when doing so leaves exactly six characters** — so an employee typing
+`tg-k7m2qx`, `K7M2QX`, or `k7 m2 qx` all resolve.
+
+That length condition is load-bearing, not defensive tidiness. `T` and `G` are both in the code
+alphabet, so a legitimate code can itself begin `TG` — `TG4K9P`. Stripping unconditionally would
+truncate it to four characters, fail the length check, and return `not_found`: roughly **1 coupon in
+961 permanently unredeemable**, with no workaround the passenger could find and no explanation the
+shop could give. The displayed form is eight characters and a bare code is six, so the rule is
+unambiguous.
 
 ### Issuance — trigger on `rides`
 
@@ -389,10 +397,10 @@ absent-RPC path returning empty instead of throwing.
 
 `send-push` 400s on any category outside its curated whitelist. Until `partner_coupon` is in that
 list, every push this feature sends is rejected. Two senders are affected: the arrival push in the
-issuance trigger (00530) and the reminder cron (00532).
+issuance trigger (00532) and the reminder cron (00534).
 
 The arrival push failing is merely a lost notification — the coupon still exists, and the banner
-still shows it. The reminder is worse. 00532 stamps `reminded_at` the moment it dispatches, because
+still shows it. The reminder is worse. 00534 stamps `reminded_at` the moment it dispatches, because
 `pg_net` is asynchronous and delivery cannot be confirmed in the same transaction. That is the right
 call for at-most-once, but it means **a coupon whose reminder 400s is burned permanently** and will
 never get a second one.
@@ -404,7 +412,7 @@ the way raw `net.http_post` would.
 The safe sequence:
 
 1. Deploy `send-push`.
-2. Apply migrations 00529–00533.
+2. Apply migrations 00531–00535.
 3. Create the first partner place in the admin. **Nothing can fire before this** — with no partner
    places, no ride matches and no coupon is ever issued, which is the natural safety margin.
 4. Deploy web (admin page + `/v/<token>`).
@@ -412,7 +420,7 @@ The safe sequence:
 
 ## Migration numbering
 
-Next free number is **00529**, verified against `origin/master` (latest `00528`) **and** all seven
+Next free number is **00531**, verified against `origin/master` (latest `00528`) **and** all seven
 open PRs, none of which add migrations. Re-check immediately before pushing — a parallel session can
 land the number in the meantime.
 

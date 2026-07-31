@@ -1,4 +1,4 @@
--- 00529_partner_places_schema.sql
+-- 00531_partner_places_schema.sql
 -- Partner places: an admin-configured business that gives a perk to any
 -- passenger whose ride ends there. The business absorbs the perk — nothing
 -- in this feature touches wallets or the ledger.
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS public.partner_places (
   -- The business's secret validation link: tricigo.com/v/<validation_token>.
   -- This is the IDENTITY of the validating shop and the rate-limit bucket for
   -- the public endpoints. See the idempotent ALTER below for the shape and the
-  -- reasoning, and 00531 for how it is used.
+  -- reasoning, and 00533 for how it is used.
   validation_token     TEXT NOT NULL UNIQUE DEFAULT encode(extensions.gen_random_bytes(6), 'hex'),
   created_by           UUID REFERENCES public.users(id) ON DELETE SET NULL,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -42,11 +42,11 @@ CREATE TABLE IF NOT EXISTS public.partner_places (
 -- ── validation_token, idempotently ────────────────────────────────────
 -- The CREATE TABLE above only fires on a fresh database. Everything in this
 -- block brings an ALREADY-EXISTING partner_places (QA, or any environment
--- that applied an earlier 00529) to the same shape.
+-- that applied an earlier 00531) to the same shape.
 --
 -- Shape: 12 lowercase hex characters — encode(gen_random_bytes(6), 'hex') —
 -- so 2^48 ≈ 2.8e14 possibilities. Deliberately NOT the coupon alphabet of
--- 00530: that alphabet drops 0/1/I/L/O because a coupon code is read aloud
+-- 00532: that alphabet drops 0/1/I/L/O because a coupon code is read aloud
 -- across a noisy counter, whereas this token lives in a URL an employee
 -- bookmarks and occasionally retypes, where lowercase hex carries no case
 -- ambiguity and survives being copied out of a chat message or off paper.
@@ -74,7 +74,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS partner_places_validation_token_key
 
 -- Serves proximity lookups that pass a SCALAR radius, e.g. the discovery RPC
 -- get_nearby_partner_places. It deliberately does NOT serve the issuance
--- trigger in 00530: that predicate is
+-- trigger in 00532: that predicate is
 --   ST_DWithin(pp.location, <dropoff>, pp.radius_m)
 -- and because the radius is a column of the indexed relation, PostGIS cannot
 -- rewrite it into an index qual. Verified with EXPLAIN on 500 rows and
@@ -125,7 +125,7 @@ CREATE POLICY partner_places_select_auth ON public.partner_places
 -- grant on. Without what follows, any logged-in passenger could simply ask
 -- PostgREST for  /partner_places?select=validation_token  and walk away with
 -- every business's validation link — which would hand them exactly the two
--- capabilities 00531 exists to deny: redeeming coupons at a shop they are not
+-- capabilities 00533 exists to deny: redeeming coupons at a shop they are not
 -- standing in, and exhausting a chosen shop's rate-limit bucket on purpose.
 -- RLS is row-level and cannot withhold a column, so column privileges are the
 -- only mechanism available.
@@ -138,7 +138,7 @@ CREATE POLICY partner_places_select_auth ON public.partner_places
 -- session still read a real token out of the table. The only thing that works
 -- is to drop the table-wide SELECT and hand back the non-secret columns
 -- explicitly. Same shape of trap as `REVOKE ... FROM PUBLIC` on functions
--- (see 00530): the statement succeeds and changes nothing.
+-- (see 00532): the statement succeeds and changes nothing.
 --
 -- anon is not re-granted at all. It has no SELECT policy on this table, so it
 -- could never see a row anyway; leaving it without the grant is one less thing
@@ -159,7 +159,7 @@ GRANT SELECT (
 -- for `authenticated`, admins included, and the admin needs this token to hand
 -- the link to the business. Read it through a SECURITY DEFINER function gated
 -- on is_admin() — the function owner owns the table, so column privileges do
--- not apply to it, which is exactly how 00531's validate/redeem reach it. Do
+-- not apply to it, which is exactly how 00533's validate/redeem reach it. Do
 -- not "fix" a permission-denied error here by granting the column back.
 
 DROP POLICY IF EXISTS partner_places_admin_all ON public.partner_places;
@@ -180,7 +180,7 @@ INSERT INTO public.platform_config (key, value)
 VALUES
   ('partner_places_discovery_radius_m', '15000'),
   -- Budget for the login-free validate/redeem endpoints, per business per
-  -- window (00531 keys the bucket on partner_place_id). Configurable rather
+  -- window (00533 keys the bucket on partner_place_id). Configurable rather
   -- than hard-coded because it is the one security-relevant number that an
   -- incident might need changed in minutes, and a migration is the wrong
   -- instrument for that. A per-business budget can be far more generous than
@@ -204,8 +204,8 @@ ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check
   ]));
 
 COMMENT ON TABLE public.partner_places IS
-  '00529 Admin-configured partner businesses. The business absorbs the perk; no ledger involvement.';
+  '00531 Admin-configured partner businesses. The business absorbs the perk; no ledger involvement.';
 COMMENT ON COLUMN public.partner_places.validation_token IS
-  '00529 SECRET. 12 hex chars identifying this business on tricigo.com/v/<token>. It is both the authorisation to validate coupons and the rate-limit bucket key (00531). Revoked from anon/authenticated at the column level — never expose it through a table SELECT.';
+  '00531 SECRET. 12 hex chars identifying this business on tricigo.com/v/<token>. It is both the authorisation to validate coupons and the rate-limit bucket key (00533). Revoked from anon/authenticated at the column level — never expose it through a table SELECT.';
 COMMENT ON COLUMN public.partner_coupons.redeemed_via IS
-  '00529 business = verified on tricigo.com/v; self = passenger self-reported. Only the first is evidence.';
+  '00531 business = verified on tricigo.com/v; self = passenger self-reported. Only the first is evidence.';

@@ -14,7 +14,7 @@
 
 ## Before you start
 
-**Re-check the migration numbers.** This plan uses **00529–00533**. `origin/master` is at `00528` and no open PR adds migrations, but a parallel session can land those numbers while you work. Run this immediately before your first commit and again before pushing:
+**Re-check the migration numbers.** This plan uses **00531–00535**. `origin/master` is at `00528` and no open PR adds migrations, but a parallel session can land those numbers while you work. Run this immediately before your first commit and again before pushing:
 
 ```bash
 git fetch origin master && git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5
@@ -36,11 +36,11 @@ pnpm install
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/00529_partner_places_schema.sql` | Both tables, indexes, RLS policies, the `platform_config` key, the `notifications.type` CHECK extension |
-| `supabase/migrations/00530_partner_coupon_issuance.sql` | Code generator + the `rides` trigger |
-| `supabase/migrations/00531_partner_coupon_rpcs.sql` | The five RPCs |
-| `supabase/migrations/00532_partner_coupon_reminder_cron.sql` | Reminder function + cron schedule |
-| `supabase/migrations/00533_partner_places_admin_rpcs.sql` | Admin list (with the issued/redeemed counters) + upsert |
+| `supabase/migrations/00531_partner_places_schema.sql` | Both tables, indexes, RLS policies, the `platform_config` key, the `notifications.type` CHECK extension |
+| `supabase/migrations/00532_partner_coupon_issuance.sql` | Code generator + the `rides` trigger |
+| `supabase/migrations/00533_partner_coupon_rpcs.sql` | The five RPCs |
+| `supabase/migrations/00534_partner_coupon_reminder_cron.sql` | Reminder function + cron schedule |
+| `supabase/migrations/00535_partner_places_admin_rpcs.sql` | Admin list (with the issued/redeemed counters) + upsert |
 | `supabase/verify-partner-coupons.sql` | Post-apply verification, run by whoever applies the migrations |
 | `supabase/functions/send-push/index.ts` | Add `partner_coupon` to `VALID_CATEGORIES` and the preference map |
 | `packages/types/src/partner-place.ts` | `PartnerPlace`, `PartnerCoupon`, `CouponValidation` types (own module — `index.ts` there is a pure barrel) |
@@ -64,12 +64,12 @@ pnpm install
 ## Task 1: Schema, RLS and config
 
 **Files:**
-- Create: `supabase/migrations/00529_partner_places_schema.sql`
+- Create: `supabase/migrations/00531_partner_places_schema.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- 00529_partner_places_schema.sql
+-- 00531_partner_places_schema.sql
 -- Partner places: an admin-configured business that gives a perk to any
 -- passenger whose ride ends there. The business absorbs the perk — nothing
 -- in this feature touches wallets or the ledger.
@@ -173,20 +173,20 @@ ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check
   ]));
 
 COMMENT ON TABLE public.partner_places IS
-  '00529 Admin-configured partner businesses. The business absorbs the perk; no ledger involvement.';
+  '00531 Admin-configured partner businesses. The business absorbs the perk; no ledger involvement.';
 COMMENT ON COLUMN public.partner_coupons.redeemed_via IS
-  '00529 business = verified on tricigo.com/v; self = passenger self-reported. Only the first is evidence.';
+  '00531 business = verified on tricigo.com/v; self = passenger self-reported. Only the first is evidence.';
 ```
 
 - [ ] **Step 2: Verify the file parses as SQL**
 
-Run: `node -e "const s=require('fs').readFileSync('supabase/migrations/00529_partner_places_schema.sql','utf8'); if(!/CREATE TABLE IF NOT EXISTS public\.partner_coupons/.test(s)) throw new Error('missing table'); console.log('ok', s.length, 'chars')"`
+Run: `node -e "const s=require('fs').readFileSync('supabase/migrations/00531_partner_places_schema.sql','utf8'); if(!/CREATE TABLE IF NOT EXISTS public\.partner_coupons/.test(s)) throw new Error('missing table'); console.log('ok', s.length, 'chars')"`
 Expected: `ok <n> chars`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00529_partner_places_schema.sql
+git add supabase/migrations/00531_partner_places_schema.sql
 git commit -m "feat(partners): partner_places and partner_coupons schema with RLS"
 ```
 
@@ -195,12 +195,12 @@ git commit -m "feat(partners): partner_places and partner_coupons schema with RL
 ## Task 2: Coupon code generator + issuance trigger
 
 **Files:**
-- Create: `supabase/migrations/00530_partner_coupon_issuance.sql`
+- Create: `supabase/migrations/00532_partner_coupon_issuance.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- 00530_partner_coupon_issuance.sql
+-- 00532_partner_coupon_issuance.sql
 -- Issues a coupon when a ride completes inside a partner place's radius.
 
 -- Six characters from a 31-symbol alphabet with 0/1/I/L/O removed, because
@@ -355,14 +355,14 @@ CREATE TRIGGER trg_rides_issue_partner_coupons
 
 Run:
 ```bash
-node -e "const s=require('fs').readFileSync('supabase/migrations/00530_partner_coupon_issuance.sql','utf8'); for (const p of ['EXCEPTION WHEN OTHERS','gen_random_bytes','ST_DWithin','partner_coupons_ride_place_uniq']) if(!s.includes(p)) throw new Error('missing: '+p); console.log('ok')"
+node -e "const s=require('fs').readFileSync('supabase/migrations/00532_partner_coupon_issuance.sql','utf8'); for (const p of ['EXCEPTION WHEN OTHERS','gen_random_bytes','ST_DWithin','partner_coupons_ride_place_uniq']) if(!s.includes(p)) throw new Error('missing: '+p); console.log('ok')"
 ```
 Expected: `ok`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00530_partner_coupon_issuance.sql
+git add supabase/migrations/00532_partner_coupon_issuance.sql
 git commit -m "feat(partners): issue arrival coupons from a defensive rides trigger"
 ```
 
@@ -371,12 +371,12 @@ git commit -m "feat(partners): issue arrival coupons from a defensive rides trig
 ## Task 3: The five RPCs
 
 **Files:**
-- Create: `supabase/migrations/00531_partner_coupon_rpcs.sql`
+- Create: `supabase/migrations/00533_partner_coupon_rpcs.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- 00531_partner_coupon_rpcs.sql
+-- 00533_partner_coupon_rpcs.sql
 
 -- ── Discovery ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.get_nearby_partner_places(
@@ -656,14 +656,14 @@ GRANT EXECUTE ON FUNCTION public.redeem_partner_coupon(TEXT)  TO anon, authentic
 
 Run:
 ```bash
-node -e "const s=require('fs').readFileSync('supabase/migrations/00531_partner_coupon_rpcs.sql','utf8'); for (const p of ['GRANT EXECUTE ON FUNCTION public.validate_partner_coupon(TEXT) TO anon','redeemed_at IS NULL','RETURN false']) if(!s.includes(p)) throw new Error('missing: '+p); console.log('ok')"
+node -e "const s=require('fs').readFileSync('supabase/migrations/00533_partner_coupon_rpcs.sql','utf8'); for (const p of ['GRANT EXECUTE ON FUNCTION public.validate_partner_coupon(TEXT) TO anon','redeemed_at IS NULL','RETURN false']) if(!s.includes(p)) throw new Error('missing: '+p); console.log('ok')"
 ```
 Expected: `ok`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00531_partner_coupon_rpcs.sql
+git add supabase/migrations/00533_partner_coupon_rpcs.sql
 git commit -m "feat(partners): discovery, listing and public validate/redeem RPCs"
 ```
 
@@ -672,12 +672,12 @@ git commit -m "feat(partners): discovery, listing and public validate/redeem RPC
 ## Task 4: Reminder cron
 
 **Files:**
-- Create: `supabase/migrations/00532_partner_coupon_reminder_cron.sql`
+- Create: `supabase/migrations/00534_partner_coupon_reminder_cron.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- 00532_partner_coupon_reminder_cron.sql
+-- 00534_partner_coupon_reminder_cron.sql
 -- One reminder push when ~30 minutes remain on an unredeemed coupon.
 --
 -- Two guards, both required and doing DIFFERENT jobs:
@@ -770,14 +770,14 @@ SELECT cron.schedule(
 
 Run:
 ```bash
-node -e "const s=require('fs').readFileSync('supabase/migrations/00532_partner_coupon_reminder_cron.sql','utf8'); if(!s.includes('cron_http_post')) throw new Error('must use cron_http_post'); if(/PERFORM net\.http_post/.test(s)) throw new Error('raw net.http_post in a cron path'); console.log('ok')"
+node -e "const s=require('fs').readFileSync('supabase/migrations/00534_partner_coupon_reminder_cron.sql','utf8'); if(!s.includes('cron_http_post')) throw new Error('must use cron_http_post'); if(/PERFORM net\.http_post/.test(s)) throw new Error('raw net.http_post in a cron path'); console.log('ok')"
 ```
 Expected: `ok`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00532_partner_coupon_reminder_cron.sql
+git add supabase/migrations/00534_partner_coupon_reminder_cron.sql
 git commit -m "feat(partners): 30-minute coupon reminder cron via cron_http_post"
 ```
 
@@ -794,7 +794,7 @@ In the `VALID_CATEGORIES` set, immediately after `'campaign',`:
 
 ```ts
   'campaign',
-  // Partner-place arrival coupons (00529). The CHECK constraint on
+  // Partner-place arrival coupons (00531). The CHECK constraint on
   // notifications.type was extended in the same migration.
   'partner_coupon',
 ```
@@ -838,7 +838,7 @@ git commit -m "feat(push): whitelist the partner_coupon category"
 Append to `packages/types/src/index.ts`:
 
 ```ts
-// ── Partner places & arrival coupons (00529) ──────────────────────────
+// ── Partner places & arrival coupons (00531) ──────────────────────────
 export interface PartnerPlace {
   id: string;
   name: string;
@@ -1132,20 +1132,20 @@ git commit -m "feat(partners): partner place service with absent-RPC tolerance"
 > already cost one round here.
 >
 > Adding a column to `partner_places` later means adding it to the explicit `GRANT SELECT (...)`
-> list in 00529, or clients will not see it. That failure direction is the safe one.
+> list in 00531, or clients will not see it. That failure direction is the safe one.
 
 **Files:**
 - Create: `apps/admin/src/app/partners/page.tsx`
 - Modify: `apps/admin/src/components/layout/Sidebar.tsx:127`
 - Modify: `packages/api/src/services/partner-place.service.ts` (admin methods)
-- Create: `supabase/migrations/00533_partner_places_admin_rpcs.sql`
+- Create: `supabase/migrations/00535_partner_places_admin_rpcs.sql`
 
 - [ ] **Step 1: Write the admin RPCs migration**
 
-Create `supabase/migrations/00533_partner_places_admin_rpcs.sql`:
+Create `supabase/migrations/00535_partner_places_admin_rpcs.sql`:
 
 ```sql
--- 00533_partner_places_admin_rpcs.sql
+-- 00535_partner_places_admin_rpcs.sql
 -- Admin CRUD + the issued/redeemed counters that measure the health of a deal.
 
 CREATE OR REPLACE FUNCTION public.admin_list_partner_places()
@@ -1708,7 +1708,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add supabase/migrations/00533_partner_places_admin_rpcs.sql apps/admin/src/app/partners/page.tsx apps/admin/src/components/PartnerPlacePicker.tsx apps/admin/src/components/layout/Sidebar.tsx packages/api/src/services/partner-place.service.ts packages/api/src/index.ts
+git add supabase/migrations/00535_partner_places_admin_rpcs.sql apps/admin/src/app/partners/page.tsx apps/admin/src/components/PartnerPlacePicker.tsx apps/admin/src/components/layout/Sidebar.tsx packages/api/src/services/partner-place.service.ts packages/api/src/index.ts
 git commit -m "feat(admin): partner places CRUD with redemption-rate column"
 ```
 
@@ -2801,14 +2801,14 @@ Expected: no NEW warnings in files this branch touched. `apps/driver/app/(tabs)/
 - [ ] **Step 4: Re-check the migration numbers**
 
 Run: `git fetch origin master && git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5`
-Expected: nothing in the `00529`–`00533` range. If a parallel session took them, renumber the whole block contiguously and re-commit.
+Expected: nothing in the `00531`–`00535` range. If a parallel session took them, renumber the whole block contiguously and re-commit.
 
 - [ ] **Step 5: Write the post-apply verification script**
 
 Create `supabase/verify-partner-coupons.sql` — this is **run by whoever applies the migrations**, not by you:
 
 ```sql
--- Post-apply verification for 00529-00533. Runs entirely inside a
+-- Post-apply verification for 00531-00535. Runs entirely inside a
 -- transaction that is rolled back: net.http_post enqueues into
 -- net.http_request_queue, which IS transactional, so the rollback cancels
 -- every push. Nothing reaches a real passenger.
@@ -2873,7 +2873,7 @@ Expected results when run: `issued_inside_radius` got=1 want=1 · `code_shape` o
 
 ```bash
 git add supabase/verify-partner-coupons.sql
-git commit -m "test(partners): post-apply verification script for 00529-00533"
+git commit -m "test(partners): post-apply verification script for 00531-00535"
 ```
 
 Write the PR body to a temp file and use `--body-file` — PowerShell here-strings break on markdown backticks:
@@ -2883,7 +2883,7 @@ gh pr create --title "feat(partners): partner places with arrival coupons" --bod
 rm .pr-body-temp.md
 ```
 
-The PR body must state: **migrations 00529–00533 are NOT applied to production (MCP guard); every client reader tolerates their absence and the affected sections simply do not render.** Include the cross-app parity answers (client ✓, web ✓, admin ✓, driver — not applicable, the driver has no role in this feature) and the `pnpm check-types` / test output as evidence.
+The PR body must state: **migrations 00531–00535 are NOT applied to production (MCP guard); every client reader tolerates their absence and the affected sections simply do not render.** Include the cross-app parity answers (client ✓, web ✓, admin ✓, driver — not applicable, the driver has no role in this feature) and the `pnpm check-types` / test output as evidence.
 
 ---
 
@@ -2891,6 +2891,6 @@ The PR body must state: **migrations 00529–00533 are NOT applied to production
 
 **Spec coverage.** Every section of the spec maps to a task: schema → 1; issuance trigger and code generator → 2; the five RPCs → 3; reminder cron → 4; push whitelist → 5; types and service → 6; admin surface → 7; discovery → 8; ticket, banner and both home states → 9; business-facing page → 10; web parity → 11; copy and the config knob → 12; testing → 13.
 
-**One addition beyond the spec:** migration `00533` for the admin CRUD RPCs. The spec named five RPCs — all passenger- and business-facing — and never said how the admin reads or writes `partner_places`. RLS alone would let the admin app hit the table through PostgREST, but every other admin surface in this codebase goes through a `SECURITY DEFINER` RPC with an explicit `is_admin()` gate, and the issued/redeemed counters need an aggregate the client cannot express cleanly. Following the house pattern.
+**One addition beyond the spec:** migration `00535` for the admin CRUD RPCs. The spec named five RPCs — all passenger- and business-facing — and never said how the admin reads or writes `partner_places`. RLS alone would let the admin app hit the table through PostgREST, but every other admin surface in this codebase goes through a `SECURITY DEFINER` RPC with an explicit `is_admin()` gate, and the issued/redeemed counters need an aggregate the client cannot express cleanly. Following the house pattern.
 
 **Deliberately not built** (all listed as out of scope in the spec): business reimbursement, a merchant app, a perk badge in address search, customer coupon history, paid carousel placement, photo upload, and any link to `cuba_pois`.
