@@ -383,6 +383,33 @@ absent-RPC path returning empty instead of throwing.
 
 ---
 
+## Deploy order — this one is not cosmetic
+
+**Deploy the `send-push` Edge Function BEFORE applying the migrations.**
+
+`send-push` 400s on any category outside its curated whitelist. Until `partner_coupon` is in that
+list, every push this feature sends is rejected. Two senders are affected: the arrival push in the
+issuance trigger (00530) and the reminder cron (00532).
+
+The arrival push failing is merely a lost notification — the coupon still exists, and the banner
+still shows it. The reminder is worse. 00532 stamps `reminded_at` the moment it dispatches, because
+`pg_net` is asynchronous and delivery cannot be confirmed in the same transaction. That is the right
+call for at-most-once, but it means **a coupon whose reminder 400s is burned permanently** and will
+never get a second one.
+
+One mitigating detail, by construction rather than luck: the reminder goes out through
+`cron_http_post`, so a 400 is visible to the cron watchdog instead of being reported as a success
+the way raw `net.http_post` would.
+
+The safe sequence:
+
+1. Deploy `send-push`.
+2. Apply migrations 00529–00533.
+3. Create the first partner place in the admin. **Nothing can fire before this** — with no partner
+   places, no ride matches and no coupon is ever issued, which is the natural safety margin.
+4. Deploy web (admin page + `/v/<token>`).
+5. Ship the client over the air.
+
 ## Migration numbering
 
 Next free number is **00529**, verified against `origin/master` (latest `00528`) **and** all seven
