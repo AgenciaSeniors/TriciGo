@@ -52,6 +52,7 @@ import { useDriverRideActions } from '@/hooks/useDriverRide';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { useLiveDriverRoute } from '@/hooks/useLiveDriverRoute';
 import { useRiderLocation } from '@/hooks/useRiderLocation';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { useDriverStore } from '@/stores/driver.store';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useDriverETA } from '@/hooks/useDriverETA';
@@ -554,22 +555,41 @@ export function DriverTripView() {
     rating: number;
     phone: string | null;
   } | null>(null);
-  useEffect(() => {
-    if (!activeTrip?.id) return;
-    let cancelled = false;
-    rideService.getRideWithRider(activeTrip.id)
-      .then((data) => {
-        if (cancelled || !data) return;
-        setRiderInfo({
-          name: data.rider_name ?? 'Pasajero',
-          avatarUrl: data.rider_avatar_url ?? null,
-          rating: data.rider_rating ?? 5,
-          phone: data.rider_phone ?? null,
-        });
-      })
-      .catch(() => { /* best-effort: hide the card if the RPC is unavailable */ });
-    return () => { cancelled = true; };
-  }, [activeTrip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // This used to run exactly once per trip id. A single failed request — a
+  // dropped connection at the moment the driver accepts, which is ordinary
+  // here — left riderInfo null for the WHOLE trip: the swallowed catch never
+  // retried, and a status change does not re-run it because the id is what
+  // changed. The driver silently lost the "Llamar al pasajero" button, which
+  // is gated on the phone resolving, with no way back short of restarting.
+  //
+  // Now it can recover: on every status transition (accepted → en route →
+  // arrived → in progress) and, via useRefreshOnFocus, whenever the screen
+  // regains focus or the app returns to the foreground — which is exactly
+  // what happens when the driver comes back from Waze mid-trip.
+  //
+  // A failure never clobbers data we already hold: state is only written on
+  // success. See CLAUDE.md → "Auditoría de frescura de datos (stale-on-mount)".
+  const activeTripId = activeTrip?.id;
+  const activeTripStatus = activeTrip?.status;
+  const loadRiderInfo = useCallback(async () => {
+    if (!activeTripId) return;
+    try {
+      const data = await rideService.getRideWithRider(activeTripId);
+      if (!data) return;
+      setRiderInfo({
+        name: data.rider_name ?? 'Pasajero',
+        avatarUrl: data.rider_avatar_url ?? null,
+        rating: data.rider_rating ?? 5,
+        phone: data.rider_phone ?? null,
+      });
+    } catch {
+      /* keep whatever we already have; focus or the next status change retries */
+    }
+  }, [activeTripId]);
+
+  useEffect(() => { void loadRiderInfo(); }, [loadRiderInfo, activeTripStatus]);
+  useRefreshOnFocus(loadRiderInfo);
 
   // Call the passenger to confirm the pickup. Mirrors the client's
   // RideActiveView.handleCall: direct dial via tel:, gated on the phone
