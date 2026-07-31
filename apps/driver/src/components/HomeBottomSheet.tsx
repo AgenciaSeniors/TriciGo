@@ -105,8 +105,30 @@ export interface HomeBottomSheetProps {
 
 // ─── Snap configuration ───────────────────────────────────────────────────────
 
-const SNAP_POINTS: [string, string, string] = ['18%', '45%', '85%'];
-const DEFAULT_SNAP_INDEX = 1;
+// Two ladders, because the lowest snap means opposite things per state.
+//
+// ONLINE: the driver is working and wants the map. Collapsing to a sliver is
+// useful — everything they need (trip card, offers) arrives as an overlay.
+//
+// OFFLINE: the sheet holds "Conectarme", the ONE control that starts a shift,
+// and it sits below the greeting and any banners. At 18% it scrolls out of
+// sight and the driver is left staring at a blank white panel with a
+// #CBD5E1-on-white grab handle as the only hint that anything is hidden. That
+// is a dead end: no offers, no explanation, and the CTA is not reachable from
+// anywhere else on the screen. Reported from the field 2026-07-31 with a
+// screenshot of exactly that empty panel — the driver had been approved for
+// nine hours and had never once been online.
+//
+// So while offline the ladder starts high enough to always show the CTA. The
+// driver can still pull it up for more, just not down past the thing they came
+// to tap. `primary-action`: the screen's single primary CTA must be reachable
+// in every state the screen can be in.
+const SNAP_POINTS_ONLINE: [string, string, string] = ['18%', '45%', '85%'];
+const SNAP_POINTS_OFFLINE: [string, string, string] = ['45%', '65%', '85%'];
+const DEFAULT_SNAP_INDEX_ONLINE = 1;
+// Offline opens at the floor: it already clears the CTA, and starting higher
+// would bury the map the driver uses to decide whether it is worth going out.
+const DEFAULT_SNAP_INDEX_OFFLINE = 0;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -160,8 +182,13 @@ export function HomeBottomSheet(props: HomeBottomSheetProps) {
 
   return (
     <DraggableSheet
-      snapPoints={SNAP_POINTS}
-      initialIndex={DEFAULT_SNAP_INDEX}
+      // Remount on the online⇄offline flip so the sheet re-snaps to the new
+      // ladder's initial index. Without the key it keeps whatever index the
+      // driver last dragged to, which is how the CTA got buried in the first
+      // place: drag down while online, go offline, and index 0 now means 18%.
+      key={props.isOnline ? 'sheet-online' : 'sheet-offline'}
+      snapPoints={props.isOnline ? SNAP_POINTS_ONLINE : SNAP_POINTS_OFFLINE}
+      initialIndex={props.isOnline ? DEFAULT_SNAP_INDEX_ONLINE : DEFAULT_SNAP_INDEX_OFFLINE}
       theme={isDark ? 'dark' : 'light'}
       scrollable
     >
