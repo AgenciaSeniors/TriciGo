@@ -297,8 +297,19 @@ The flow itself:
 3. **Already used** — red, with the redemption time.
 4. **Expired / unknown** — red, with a one-line explanation.
 
-Built for a cheap phone on a weak connection: large type, no images, minimal payload. Rate-limited
-per IP through the existing `check_rate_limit`.
+Built for a cheap phone on a weak connection: large type, no images. Rate-limited per business
+through the existing `check_rate_limit`.
+
+The page also declares `robots: { index: false, follow: false }`. `robots.ts` only disallows `/api/`
+and `/login`, and **a crawled token is a leaked token** — the entire security model rests on that URL
+staying private.
+
+**Where the payload promise is only half kept, stated honestly:** the page's own content is ~2.7 kB,
+but it inherits the marketing header and footer from the root layout, so a first load is ~303 kB.
+Removing that means restructuring the shared root layout, which touches every page on the site;
+`track/share/[token]` already lives with the same cost. It matters only on the employee's *first*
+open — the page is then cached and bookmarked — so it is accepted rather than fixed, but it should
+not be described as a minimal payload.
 
 ---
 
