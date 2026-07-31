@@ -2118,6 +2118,20 @@ RAISE EXCEPTION USING
 
 **Lección de método (se repitió en esta sesión):** la migración en git **no es** lo que corre en prod. `00233` era la última migración de `update_ride_status_v2` en el repo, pero `00432` había reescrito la función agregando el guard RLC-01. Reescribir desde `00233` habría **borrado ese guard en silencio**. Patrón: transcribir el cuerpo desde `pg_get_functiondef`/`prosrc` vivo, y **probar la fidelidad con hash** — revertir los cambios intencionales sobre el archivo nuevo debe reproducir `md5(prosrc)` y `length(prosrc)` exactos de prod.
 
+### Trampa plpgsql: `make_interval(mins => …)` solo acepta INT — NUMERIC revienta en runtime (00527→00528)
+
+`make_interval(years, months, weeks, days, hours, mins int, secs double precision)`: **solo `secs` es `double precision`; todos los demás campos son `INT`**, y `NUMERIC` NO resuelve implícitamente a `INT`. Como `get_platform_config_numeric()` devuelve `NUMERIC`, esto explota:
+
+```sql
+v_after_min NUMERIC := get_platform_config_numeric('...', 10);
+... now() - make_interval(mins => v_after_min)
+--> ERROR 42883: function make_interval(mins => numeric) does not exist
+```
+
+Las funciones hermanas de 00524-00526 zafan porque usan `make_interval(secs => v_x)` con `v_x INT` (INT→double precision **sí** es implícito). Fix: castear a `::int` al asignar, o usar `secs =>`.
+
+**Lo grave es CUÁNDO falla:** plpgsql **no tipa las queries del cuerpo en CREATE**, así que la función se crea sin una queja y solo revienta al ejecutar esa línea. En 00527 eso dejó el cron 10 de auto-offline roto en prod hasta que se corrió la función. **Que `CREATE`/`apply_migration` devuelva éxito NO es evidencia de que una función plpgsql corra** — misma clase que el `RAISE ... USING MESSAGE` de 00519. Después de aplicar una función nueva, **ejecutarla** (en `BEGIN…ROLLBACK` si tiene efectos) antes de darla por buena.
+
 ### Trampa plpgsql: una variable `RECORD` hace shadowing del alias SQL con el mismo nombre
 
 **Bug real (mig 00507).** Declarar `r RECORD` para un `FOR` loop **y** usar `r` como alias de tabla en una query de la misma función:
