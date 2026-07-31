@@ -57,6 +57,47 @@ function jsonResponse(req: Request, body: unknown, status: number): Response {
   });
 }
 
+// ── Telemetría del embudo de vinculación ──
+// Sin esto el paso no deja rastro en ningún lado: los logs de Edge Function
+// duran 24 h, otp_codes se purga a las pocas horas y sms_deliveries no guarda
+// user_id. Al 2026-07-31 había 45 cuentas retenidas en /verify-phone y era
+// imposible saber por qué (código vencido, número ya usado, o abandono):
+// correlacionar por tiempo contra sms_deliveries no alcanza, porque en una
+// ráfaga de altas el join empareja a cada usuario con el SMS de otro.
+//
+// Reusa log_rpc_attempt → rpc_attempt_log (mismo patrón que cancel_ride /
+// accept_ride_v2), que ya trae EXCEPTION WHEN OTHERS THEN NULL adentro.
+// Best-effort por partida doble: nunca puede tumbar la vinculación.
+//
+// PII: se guarda SOLO el prefijo (5 / 6 / otro), nunca el número — misma
+// política que el resto de la función. El prefijo alcanza para separar un
+// problema de cobertura de D7 (el rango 63/64 de ETECSA entrega peor) de un
+// abandono real.
+function phonePrefix(e164: string): string {
+  if (e164.startsWith('+535')) return '5';
+  if (e164.startsWith('+536')) return '6';
+  return 'otro';
+}
+
+async function logAttempt(
+  admin: ReturnType<typeof createClient>,
+  userId: string | null,
+  outcome: string,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await admin.rpc('log_rpc_attempt', {
+      p_rpc_name: 'link-phone',
+      p_caller_uid: userId,
+      p_target_id: null,
+      p_outcome: outcome,
+      p_metadata: metadata,
+    });
+  } catch (err) {
+    console.error('[link-phone] telemetry insert failed (non-fatal):', err);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: getCorsHeaders(req) });
@@ -85,6 +126,14 @@ Deno.serve(async (req) => {
       console.error('[link-phone] missing SUPABASE_* env');
       return jsonResponse(req, { error: 'misconfigured' }, 500);
     }
+
+    // Se crea acá arriba (antes era después del rate limit) solo para que
+    // logAttempt esté disponible en TODAS las salidas, incluidas las
+    // tempranas. Es un objeto en memoria, no abre conexión: moverlo no
+    // cambia el comportamiento.
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     // ─── 1. Auth: verify the Bearer token belongs to a real user ───
     // (Same pattern as storage-upload — anon client + caller's Authorization.)
@@ -117,11 +166,10 @@ Deno.serve(async (req) => {
     // BUG-186-style per-phone cap, independent of IP rotation:
     // 10 verify attempts per phone per 10 minutes (mirrors verify-otp).
     const rlPhone = await rateLimit(`link-phone:phone:${normalizedPhone}`, 10, 10 * 60 * 1000);
-    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
-
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    if (!rlPhone.allowed) {
+      await logAttempt(admin, user.id, 'rate_limited', { prefix: phonePrefix(normalizedPhone) });
+      return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
+    }
 
     // ─── 3. Validate the code against otp_codes — SAME source as verify-otp ───
     // send-sms-otp (D7) wrote the code there; verify_cuba_otp is the atomic
@@ -138,6 +186,12 @@ Deno.serve(async (req) => {
     const result = rpcResult as { ok: boolean; error?: string; attempts_remaining?: number };
     if (!result?.ok) {
       console.log('[link-phone] code rejected:', result?.error ?? 'invalid');
+      // `reason` distingue código vencido de código equivocado: si domina el
+      // vencido, el problema es la demora de entrega del SMS, no el usuario.
+      await logAttempt(admin, user.id, 'invalid_code', {
+        prefix: phonePrefix(normalizedPhone),
+        reason: result?.error ?? 'invalid',
+      });
       return jsonResponse(
         req,
         { error: 'INVALID_CODE', attempts_remaining: result?.attempts_remaining },
@@ -153,7 +207,7 @@ Deno.serve(async (req) => {
     // the phone (same concern as BUG-195 on find_user_by_phone).
     const { data: clash, error: clashError } = await admin
       .from('users')
-      .select('id')
+      .select('id, created_at')
       .eq('phone', normalizedPhone)
       .neq('id', user.id)
       .eq('is_active', true)
@@ -164,6 +218,19 @@ Deno.serve(async (req) => {
     }
     if (clash && clash.length > 0) {
       console.log('[link-phone] phone already owned by another active user');
+      // `owner_predates_caller` prueba (o descarta) la hipótesis de la cuenta
+      // duplicada: alguien que ya tenía cuenta por OTP entra después con
+      // Google/Apple y al vincular SU PROPIO número se lo rechazamos. Si esto
+      // domina, el arreglo no es de datos sino fusionar identidades.
+      const ownerCreatedAt = (clash[0] as { created_at?: string }).created_at;
+      await logAttempt(admin, user.id, 'phone_taken', {
+        prefix: phonePrefix(normalizedPhone),
+        layer: 'db',
+        owner_predates_caller:
+          ownerCreatedAt && user.created_at
+            ? new Date(ownerCreatedAt) < new Date(user.created_at)
+            : null,
+      });
       return jsonResponse(req, { error: 'PHONE_TAKEN' }, 409);
     }
 
@@ -177,9 +244,18 @@ Deno.serve(async (req) => {
       // holders the is_active filter above skipped (e.g. deactivated rows).
       if (/already|exists|registered/i.test(authUpdateError.message ?? '')) {
         console.log('[link-phone] phone taken at auth layer');
+        // layer 'auth' = lo cazó GoTrue y no el chequeo de arriba, o sea que
+        // el dueño es una cuenta desactivada (que el filtro is_active saltea).
+        await logAttempt(admin, user.id, 'phone_taken', {
+          prefix: phonePrefix(normalizedPhone),
+          layer: 'auth',
+        });
         return jsonResponse(req, { error: 'PHONE_TAKEN' }, 409);
       }
       console.error('[link-phone] auth.admin.updateUserById failed:', authUpdateError);
+      await logAttempt(admin, user.id, 'auth_update_failed', {
+        prefix: phonePrefix(normalizedPhone),
+      });
       return jsonResponse(req, { error: 'Failed to link phone' }, 500);
     }
 
@@ -196,6 +272,12 @@ Deno.serve(async (req) => {
     }
 
     console.log('[link-phone] phone linked for user', user.id);
+    // El éxito también se registra: sin denominador, los fallos no se pueden
+    // leer como tasa.
+    await logAttempt(admin, user.id, 'success', {
+      prefix: phonePrefix(normalizedPhone),
+      mirror_ok: !dbError,
+    });
     return jsonResponse(req, { success: true }, 200);
   } catch (err) {
     console.error('[link-phone] error:', err);

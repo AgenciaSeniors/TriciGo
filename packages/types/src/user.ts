@@ -7,7 +7,14 @@ import type { RidePreferences } from './ride';
 
 export interface User {
   id: string;
-  phone: string;
+  /**
+   * E.164 (+53XXXXXXXX) o `null` cuando la cuenta todavía no vinculó teléfono
+   * — el caso de las altas por Google/Apple/email, que llegan sin número y
+   * quedan retenidas en /verify-phone por el gate de perfil incompleto.
+   * Hasta la migración 00530 esto se representaba con la cadena vacía, que
+   * pasaba los chequeos IS NOT NULL y solo funcionaba por ser falsy en JS.
+   */
+  phone: string | null;
   email: string | null;
   full_name: string;
   role: UserRole;

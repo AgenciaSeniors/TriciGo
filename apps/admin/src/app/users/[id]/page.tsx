@@ -182,7 +182,7 @@ export default function UserDetailPage() {
 
   return (
     <div className="max-w-4xl">
-      <AdminBreadcrumb items={[{ label: 'Usuarios', href: '/users' }, { label: user.full_name || user.phone }]} />
+      <AdminBreadcrumb items={[{ label: 'Usuarios', href: '/users' }, { label: user.full_name || user.email || user.phone || 'Usuario' }]} />
 
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -502,7 +502,7 @@ export default function UserDetailPage() {
       <DeletePendingAccountModal
         open={deleteModalOpen}
         userId={id}
-        userName={user.full_name || user.phone}
+        userName={user.full_name || user.email || user.phone || 'Usuario'}
         onClose={() => setDeleteModalOpen(false)}
         onDeleted={() => { setDeleteModalOpen(false); router.push('/users'); }}
       />
