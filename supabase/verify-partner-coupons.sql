@@ -1,4 +1,4 @@
--- Post-apply verification for migrations 00531-00535 (partner places & arrival coupons).
+-- Post-apply verification for migrations 00532-00536 (partner places & arrival coupons).
 --
 -- Run this AFTER applying those five migrations, as the person who applies them.
 --

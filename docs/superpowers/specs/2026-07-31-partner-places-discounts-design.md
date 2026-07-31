@@ -30,7 +30,7 @@ brings it customers and can prove how many.
 | Data model | **Standalone table, no POI link.** Admin creates one object, not two. |
 | Code verification | **Both:** live countdown (works offline) *and* a code the business validates on a public page. |
 | Who may validate | **Each business gets its own secret link** `tricigo.com/v/<token>`. Rate limiting keys on the business, not the caller's IP — see "Business-facing surface" for why the IP version was abandoned. A coupon validates only at the business that issued it. |
-| Home presentation | **Large hero card in a carousel**, below the service selector. |
+| Home presentation | **Large hero card in a carousel**, immediately after the Capitolio divider and **above Promos**. The mockup this was approved from showed it under the service selector, but that layout does not exist — Servicios sits at the very bottom of the real home, so following the mockup would have buried the row. Placed above Promos on the owner's decision; the cost is that TriciGo's own ride promos drop one position. |
 
 ### Two decisions worth re-reading before implementation
 
@@ -408,10 +408,10 @@ absent-RPC path returning empty instead of throwing.
 
 `send-push` 400s on any category outside its curated whitelist. Until `partner_coupon` is in that
 list, every push this feature sends is rejected. Two senders are affected: the arrival push in the
-issuance trigger (00532) and the reminder cron (00534).
+issuance trigger (00533) and the reminder cron (00535).
 
 The arrival push failing is merely a lost notification — the coupon still exists, and the banner
-still shows it. The reminder is worse. 00534 stamps `reminded_at` the moment it dispatches, because
+still shows it. The reminder is worse. 00535 stamps `reminded_at` the moment it dispatches, because
 `pg_net` is asynchronous and delivery cannot be confirmed in the same transaction. That is the right
 call for at-most-once, but it means **a coupon whose reminder 400s is burned permanently** and will
 never get a second one.
@@ -423,7 +423,7 @@ the way raw `net.http_post` would.
 The safe sequence:
 
 1. Deploy `send-push`.
-2. Apply migrations 00531–00535.
+2. Apply migrations 00532–00536.
 3. Create the first partner place in the admin. **Nothing can fire before this** — with no partner
    places, no ride matches and no coupon is ever issued, which is the natural safety margin.
 4. Deploy web (admin page + `/v/<token>`).
@@ -431,7 +431,7 @@ The safe sequence:
 
 ## Migration numbering
 
-Next free number is **00531**, verified against `origin/master` (latest `00528`) **and** all seven
+Next free number is **00532**, verified against `origin/master` (latest `00528`) **and** all seven
 open PRs, none of which add migrations. Re-check immediately before pushing — a parallel session can
 land the number in the meantime.
 

@@ -1,4 +1,4 @@
--- 00533_partner_coupon_rpcs.sql
+-- 00534_partner_coupon_rpcs.sql
 --
 -- ── What `anon` can reach in this file, and why ───────────────────────
 -- Exactly two functions are granted to anon:
@@ -8,7 +8,7 @@
 -- employee who has no TriciGo account and never will. Everything else here is
 -- authenticated-only or revoked outright.
 --
--- Both take the business's secret validation token (00531) as their FIRST
+-- Both take the business's secret validation token (00532) as their FIRST
 -- argument, because that token — not the caller's IP — is the identity of the
 -- validator. That single decision is what this file is shaped around:
 --
@@ -416,7 +416,7 @@ $$;
 -- ── Grants ────────────────────────────────────────────────────────────
 -- `FROM PUBLIC` alone would be a silent no-op on this project: pg_default_acl
 -- grants EXECUTE explicitly to anon/authenticated/service_role, so the roles
--- have to be named. See the long note in 00532.
+-- have to be named. See the long note in 00533.
 REVOKE ALL ON FUNCTION public.get_nearby_partner_places(DOUBLE PRECISION, DOUBLE PRECISION, INT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.get_my_partner_coupons() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.redeem_own_partner_coupon(UUID) FROM PUBLIC, anon, authenticated;
@@ -439,20 +439,20 @@ GRANT EXECUTE ON FUNCTION public.validate_partner_coupon(TEXT, TEXT) TO anon, au
 GRANT EXECUTE ON FUNCTION public.redeem_partner_coupon(TEXT, TEXT)  TO anon, authenticated;
 
 COMMENT ON FUNCTION public.get_nearby_partner_places(DOUBLE PRECISION, DOUBLE PRECISION, INT) IS
-  '00533 Partner places within partner_places_discovery_radius_m of a point, nearest first, flagging the ones where the caller already holds a live coupon. Returns nothing to an anonymous caller. p_limit is clamped to 1..50.';
+  '00534 Partner places within partner_places_discovery_radius_m of a point, nearest first, flagging the ones where the caller already holds a live coupon. Returns nothing to an anonymous caller. p_limit is clamped to 1..50.';
 COMMENT ON FUNCTION public.get_my_partner_coupons() IS
-  '00533 The calling passenger''s unredeemed, unexpired coupons, soonest to expire first.';
+  '00534 The calling passenger''s unredeemed, unexpired coupons, soonest to expire first.';
 COMMENT ON FUNCTION public._normalize_coupon_code(TEXT) IS
-  '00533 Folds what an employee types into the stored code: upper-cases, drops separators, and strips the TG display prefix only when that leaves exactly six characters (a real code may itself start with TG). Deliberately left world-executable: it is a pure string function whose only secret would be the TG- convention already printed on every coupon.';
+  '00534 Folds what an employee types into the stored code: upper-cases, drops separators, and strips the TG display prefix only when that leaves exactly six characters (a real code may itself start with TG). Deliberately left world-executable: it is a pure string function whose only secret would be the TG- convention already printed on every coupon.';
 COMMENT ON FUNCTION public._coupon_rate_limit_ok(TEXT, TEXT, INT, INT) IS
-  '00533 Budget for the login-free coupon endpoints, keyed on a bucket the CALLER resolves (the partner_place_id) — never on a client-supplied IP header. Defaults read coupon_validate_max_per_window / coupon_validate_window_s. Fails CLOSED, with a WARNING, if the rate limiter is unavailable.';
+  '00534 Budget for the login-free coupon endpoints, keyed on a bucket the CALLER resolves (the partner_place_id) — never on a client-supplied IP header. Defaults read coupon_validate_max_per_window / coupon_validate_window_s. Fails CLOSED, with a WARNING, if the rate limiter is unavailable.';
 COMMENT ON FUNCTION public._resolve_partner_validation_token(TEXT) IS
-  '00533 Maps a tricigo.com/v/<token> secret to its active partner place, or NULL. Internal only.';
+  '00534 Maps a tricigo.com/v/<token> secret to its active partner place, or NULL. Internal only.';
 COMMENT ON FUNCTION public._partner_coupon_verdict(UUID, TEXT) IS
-  '00533 Verdict on one normalised code AT ONE BUSINESS: valid | used | expired | not_found. Internal only — carries no token check and no rate limit.';
+  '00534 Verdict on one normalised code AT ONE BUSINESS: valid | used | expired | not_found. Internal only — carries no token check and no rate limit.';
 COMMENT ON FUNCTION public.validate_partner_coupon(TEXT, TEXT) IS
-  '00533 Public, login-free verdict for the shop counter, authorised by the business''s own validation token: valid | used | expired | not_found | invalid_link | rate_limited. Scoped to the issuing business and rate-limited per business. Never reveals more than first name plus last initial.';
+  '00534 Public, login-free verdict for the shop counter, authorised by the business''s own validation token: valid | used | expired | not_found | invalid_link | rate_limited. Scoped to the issuing business and rate-limited per business. Never reveals more than first name plus last initial.';
 COMMENT ON FUNCTION public.redeem_partner_coupon(TEXT, TEXT) IS
-  '00533 Public, login-free single-use claim by the business, authorised by its own validation token. Atomic: concurrent callers get one redeemed and the rest used. Sets redeemed_via = business. A coupon issued by another business is not_found.';
+  '00534 Public, login-free single-use claim by the business, authorised by its own validation token. Atomic: concurrent callers get one redeemed and the rest used. Sets redeemed_via = business. A coupon issued by another business is not_found.';
 COMMENT ON FUNCTION public.redeem_own_partner_coupon(UUID) IS
-  '00533 The passenger burns their own coupon from the app ("Ya lo usé") when the shop cannot open the page. Sets redeemed_via = self, which is a claim rather than evidence.';
+  '00534 The passenger burns their own coupon from the app ("Ya lo usé") when the shop cannot open the page. Sets redeemed_via = self, which is a claim rather than evidence.';

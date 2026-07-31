@@ -71,11 +71,11 @@ const VALID_CATEGORIES = new Set([
   'blog',
   'news',
   'campaign',
-  // Partner-place arrival coupons (00531 extends notifications_type_check to
-  // match). Two senders: the issuance trigger in 00532 when a ride completes
-  // at a partner business, and the 30-minutes-left reminder cron in 00534.
+  // Partner-place arrival coupons (00532 extends notifications_type_check to
+  // match). Two senders: the issuance trigger in 00533 when a ride completes
+  // at a partner business, and the 30-minutes-left reminder cron in 00535.
   //
-  // ORDER MATTERS ON DEPLOY: 00534 stamps reminded_at optimistically the moment
+  // ORDER MATTERS ON DEPLOY: 00535 stamps reminded_at optimistically the moment
   // it dispatches, because pg_net is async and delivery cannot be confirmed
   // synchronously. So a coupon whose push 400s here is burned permanently — it
   // never gets a second reminder. This EF must be deployed before any partner

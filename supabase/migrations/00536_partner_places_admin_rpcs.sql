@@ -1,10 +1,10 @@
--- 00535_partner_places_admin_rpcs.sql
+-- 00536_partner_places_admin_rpcs.sql
 -- Admin CRUD + the issued/redeemed counters that measure the health of a deal.
 --
--- Why these are SECURITY DEFINER rather than plain table access: 00531 dropped
+-- Why these are SECURITY DEFINER rather than plain table access: 00532 dropped
 -- the table-wide SELECT grant on partner_places and handed back every column
 -- EXCEPT validation_token, because that token IS the authorisation to redeem
--- coupons at a business and the rate-limit bucket key (00533). The admin needs
+-- coupons at a business and the rate-limit bucket key (00534). The admin needs
 -- to read it to hand the link over when a deal is signed. A SECURITY DEFINER
 -- function resolves privileges against its owner, so it reaches the column that
 -- `authenticated` cannot. Do NOT "fix" a permission error on this table by
@@ -138,6 +138,6 @@ GRANT EXECUTE ON FUNCTION public.admin_list_partner_places() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_upsert_partner_place(UUID, TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, INT, INT, INT, BOOLEAN, TIMESTAMPTZ) TO authenticated;
 
 COMMENT ON FUNCTION public.admin_list_partner_places() IS
-  '00535 Admin list. SECURITY DEFINER so it can read partner_places.validation_token, which 00531 revoked from authenticated at the column level. Gated on is_admin().';
+  '00536 Admin list. SECURITY DEFINER so it can read partner_places.validation_token, which 00532 revoked from authenticated at the column level. Gated on is_admin().';
 COMMENT ON FUNCTION public.admin_upsert_partner_place(UUID, TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, INT, INT, INT, BOOLEAN, TIMESTAMPTZ) IS
-  '00535 Admin insert/update. Never touches validation_token: businesses bookmark tricigo.com/v/<token> and rotating it on an edit would break redemption.';
+  '00536 Admin insert/update. Never touches validation_token: businesses bookmark tricigo.com/v/<token> and rotating it on an edit would break redemption.';
