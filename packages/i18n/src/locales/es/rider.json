@@ -75,6 +75,9 @@
   "ride": {
     "request": "Solicitar viaje",
     "searching_driver": "Buscando conductor...",
+    "search_expired_title": "No encontramos conductor",
+    "search_expired_msg": "Nadie tomó tu viaje esta vez. Puedes pedirlo de nuevo.",
+    "canceled_generic_msg": "Tu viaje fue cancelado. Puedes pedir otro cuando quieras.",
     "driver_assigned": "\u00a1Conductor asignado!",
     "driver_arriving": "Tu conductor está en camino",
     "driver_arrived": "Tu conductor llegó",

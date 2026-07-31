@@ -75,6 +75,9 @@
   "ride": {
     "request": "Request ride",
     "searching_driver": "Searching for a driver...",
+    "search_expired_title": "No driver found",
+    "search_expired_msg": "Nobody took your ride this time. You can request it again.",
+    "canceled_generic_msg": "Your ride was canceled. You can request another one any time.",
     "driver_assigned": "Driver assigned!",
     "driver_arriving": "Your driver is on the way",
     "driver_arrived": "Your driver has arrived",
