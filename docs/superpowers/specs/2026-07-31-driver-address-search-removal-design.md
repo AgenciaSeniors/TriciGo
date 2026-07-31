@@ -73,7 +73,13 @@ This is left uncompensated **on purpose**. It has to be judged on a real device,
 3. `git diff --stat` matches the Removed table above and nothing else — seven files, since the last row covers three locale files.
 4. `pnpm-lock.yaml` unchanged after any install (`git checkout HEAD -- pnpm-lock.yaml` if it drifts).
 
-Not verifiable from the sandbox: the rendered result. This is React Native — the browser preview cannot exercise it, and the change only reaches a phone through a **new driver build** (no OTA guarantee). Any claim about how the sheet looks must come from a device screenshot, not from this document.
+Not verifiable from the sandbox: the rendered result. This is React Native — the browser preview cannot exercise it. Any claim about how the sheet looks must come from a device screenshot, not from this document.
+
+**No paid build is required, for QA or for shipping.** The change is JS-only: it deletes a component, a hook, i18n keys and prop wiring, and touches no native module, `app.json` entry or dependency. The runtime fingerprint is unchanged, so the installed binary can run the new bundle.
+
+- **QA:** Metro (`--dev-client`, port 8082) against the installed driver dev client. Copy `apps/driver/.env` into the worktree first — it is gitignored, and without it `EXPO_PUBLIC_MAPBOX_TOKEN` inlines empty and the map crashes on open.
+- **No dev client on hand:** `android-dev-client-driver.yml` builds the APK on the GitHub runner (`expo prebuild` + `./gradlew assembleDebug`). It does not use EAS cloud build, so it consumes no build credits.
+- **Reaching the fleet:** the driver ships OTA — `updates.enabled: true`, `runtimeVersion.policy: "appVersion"` (1.4.0). Publish through the `eas-update.yml` workflow, which supports a staged `rollout-percentage`. Never run `eas update` locally: it inlines an empty env and would break Mapbox for every driver.
 
 ## Rollback
 
