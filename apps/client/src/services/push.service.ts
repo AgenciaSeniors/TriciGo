@@ -20,7 +20,20 @@ import { getSupabaseClient, notificationService } from '@tricigo/api';
 // at the app root. Keep it that way — do not reintroduce a handler here,
 // or the preferences silently stop being enforced again.
 
-export async function registerForPushNotifications(): Promise<string | null> {
+/**
+ * `promptIfNeeded` gates the OS permission dialog and defaults to FALSE.
+ * Android 13+ shows the POST_NOTIFICATIONS dialog exactly once per install:
+ * a denial there is permanent, recoverable only through system Settings.
+ * The root layout calls this on mount with no session of any kind, so the
+ * dialog used to fire the first time the app was ever opened — before the
+ * passenger had signed up or seen a single screen — and three quarters of
+ * them denied it for good. Only a caller that has already explained the
+ * value (the soft-ask sheet, the settings toggle) may pass true; everyone
+ * else registers the token when permission happens to be granted already.
+ */
+export async function registerForPushNotifications(
+  opts?: { promptIfNeeded?: boolean },
+): Promise<string | null> {
   if (!Device.isDevice) {
     console.warn('Push notifications require a physical device');
     return null;
@@ -30,6 +43,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
   let finalStatus = existingStatus;
 
   if (existingStatus !== 'granted') {
+    // Never burn the one-shot OS prompt from an unattended code path.
+    if (!opts?.promptIfNeeded) return null;
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }

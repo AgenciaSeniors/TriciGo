@@ -163,9 +163,20 @@ export type PushRegistrationResult = 'registered' | 'denied' | 'error';
  *
  * Distinguishes 'denied' from 'error' so the caller can tell an
  * actionable OS-permission problem from a transient failure.
+ *
+ * `promptIfNeeded` gates the OS permission dialog and defaults to FALSE.
+ * Android 13+ shows the POST_NOTIFICATIONS dialog exactly once per
+ * install: a denial there is permanent, recoverable only through system
+ * Settings. This used to run unguarded from the root provider, so the
+ * dialog fired seconds after login — before the driver had seen a single
+ * ride offer — and two thirds of them denied it for good. Now only a
+ * caller that has already explained the value (the soft-ask sheet, the
+ * settings toggle) may pass true; everyone else silently registers the
+ * token when permission happens to be granted already.
  */
 export async function registerPushTokenForUser(
   userId: string,
+  opts?: { promptIfNeeded?: boolean },
 ): Promise<PushRegistrationResult> {
   try {
     await ensureAndroidRidesChannel();
@@ -174,6 +185,8 @@ export async function registerPushTokenForUser(
     let finalStatus = existing;
 
     if (existing !== 'granted') {
+      // Never burn the one-shot OS prompt from an unattended code path.
+      if (!opts?.promptIfNeeded) return 'denied';
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }

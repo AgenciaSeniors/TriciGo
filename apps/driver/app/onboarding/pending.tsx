@@ -13,6 +13,7 @@ import { driverService, referralService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
+import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 
 // Central support contact. Update here if ops phone/whatsapp changes.
 const SUPPORT_WHATSAPP = '+5545998622511'; // Support contact (WhatsApp / phone)
@@ -308,6 +309,13 @@ export default function PendingScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* The soft-ask belongs here and not earlier in onboarding: waiting
+          for approval is the first moment a push has an obvious payoff
+          ("we'll tell you the second you're approved"). The (tabs) layout
+          mounts the same sheet for drivers who are already working — a
+          driver stuck in onboarding never reaches that one. */}
+      <NotificationPermissionSheet context="pending" />
     </Screen>
   );
 }

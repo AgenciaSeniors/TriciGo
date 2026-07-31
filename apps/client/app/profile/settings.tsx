@@ -189,7 +189,11 @@ export default function SettingsScreen() {
     // branch above deleted it server-side. Writing AsyncStorage alone
     // left the server with no token — and no way to reach the user —
     // until the next cold start, while the switch showed "on".
-    const result = await registerPushTokenForUser(userId);
+    //
+    // promptIfNeeded: flipping this switch IS the user asking for
+    // notifications, so it is one of the few callers allowed to spend
+    // the one-shot OS prompt.
+    const result = await registerPushTokenForUser(userId, { promptIfNeeded: true });
 
     if (result === 'denied') {
       // The OS permission is off, so nothing we do in-app can deliver a

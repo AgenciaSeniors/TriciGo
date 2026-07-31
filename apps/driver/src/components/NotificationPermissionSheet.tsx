@@ -8,6 +8,8 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { useAuthStore } from '@/stores/auth.store';
+import { registerPushTokenForUser } from '@/hooks/useNotifications';
 
 // Driver copy of the rider soft-ask. Push matters most for the driver: ride
 // offers arrive as pushes when the app is backgrounded. Re-surfaces at most
@@ -21,9 +23,20 @@ const RESHOW_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
  * Friendly bottom sheet explaining why notifications are needed for drivers.
  * Re-surfaces periodically while permission is not granted (capped to once
  * per 7 days) and routes denied users to system Settings.
+ *
+ * This sheet is the ONLY unattended path allowed to trigger the OS
+ * permission dialog — see registerPushTokenForUser's `promptIfNeeded`.
+ * Mount it wherever the driver can understand what they are agreeing to:
+ * `context='pending'` while they wait for approval (the payoff is the
+ * approval notice itself), `context='active'` once they can take rides.
  */
-export function NotificationPermissionSheet() {
+export function NotificationPermissionSheet({
+  context = 'active',
+}: {
+  context?: 'active' | 'pending';
+}) {
   const { t } = useTranslation('common');
+  const userId = useAuthStore((s) => s.user?.id);
   // Rendered inside a transparent RN Modal, which does NOT inherit the app's
   // SafeAreaView — pad the CTAs clear of the home indicator / gesture bar.
   const insets = useSafeAreaInsets();
@@ -69,7 +82,14 @@ export function NotificationPermissionSheet() {
     try {
       const { status } = await Notifications.getPermissionsAsync();
       if (status === 'denied') {
+        // Android never re-prompts after a denial; Settings is the only way back.
         await Linking.openSettings();
+      } else if (userId) {
+        // This tap is the informed consent the OS dialog was missing, so it
+        // may spend the one-shot prompt. Registering here (rather than
+        // leaving it to the next foreground retry) means a driver who says
+        // yes is reachable immediately, not one app-switch later.
+        await registerPushTokenForUser(userId, { promptIfNeeded: true });
       } else {
         await Notifications.requestPermissionsAsync();
       }
@@ -78,7 +98,7 @@ export function NotificationPermissionSheet() {
     }
     await markShown();
     setVisible(false);
-  }, [markShown]);
+  }, [markShown, userId]);
 
   const handleDismiss = useCallback(async () => {
     await markShown();
@@ -126,19 +146,29 @@ export function NotificationPermissionSheet() {
                 defaultValue:
                   'Las notificaciones están desactivadas. Activalas en Ajustes para no perderte las ofertas de viaje, los mensajes del pasajero y tus pagos.',
               })
-            : t('notifications.driver_permission_body', {
-                defaultValue:
-                  'Te avisamos al instante cuando entra una oferta de viaje, cuando el pasajero te escribe y de tus pagos. Sin spam.',
-              })}
+            : context === 'pending'
+              ? t('notifications.driver_permission_body_pending', {
+                  defaultValue:
+                    'Te avisamos apenas revisemos tu cuenta, y después cada vez que entre una oferta de viaje. Sin spam.',
+                })
+              : t('notifications.driver_permission_body', {
+                  defaultValue:
+                    'Te avisamos al instante cuando entra una oferta de viaje, cuando el pasajero te escribe y de tus pagos. Sin spam.',
+                })}
         </Text>
 
         {/* Benefits list */}
         <View className="mb-6 gap-3">
           {[
-            {
-              icon: 'car-outline' as const,
-              text: t('notifications.driver_benefit_offers', { defaultValue: 'Recibir ofertas de viaje al instante' }),
-            },
+            context === 'pending'
+              ? {
+                  icon: 'checkmark-circle-outline' as const,
+                  text: t('notifications.driver_benefit_approval', { defaultValue: 'Aviso apenas aprobemos tu cuenta' }),
+                }
+              : {
+                  icon: 'car-outline' as const,
+                  text: t('notifications.driver_benefit_offers', { defaultValue: 'Recibir ofertas de viaje al instante' }),
+                },
             {
               icon: 'chatbubble-outline' as const,
               text: t('notifications.driver_benefit_chat', { defaultValue: 'Mensajes del pasajero' }),
