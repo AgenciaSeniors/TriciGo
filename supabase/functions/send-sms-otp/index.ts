@@ -102,27 +102,30 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Refund both budgets when a send fails downstream (provider reject /
-    // misconfig / DB error) so a user who never received a code isn't locked
-    // out of retrying. Windows MUST match the rateLimit() calls above/below.
-    const refundOtpBudget = async () => {
-      await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
-      await refundRateLimit(`send-sms-otp:${clientIP}`, IP_WINDOW_MS);
-    };
-
-    // BUG-186: per-phone rate limit. Caps OTP-spam of one victim number
-    // (an attacker rotating IPs). See PHONE_MAX above.
-    const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_MAX, PHONE_WINDOW_MS);
-    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
-
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // ── Google Play review demo account: seed a fixed code, skip real SMS ──
+    // ── Store-review demo account: seed a fixed code, skip real SMS ──
     // Env-gated: resolveDemoOtp returns null unless DEMO_PHONE + DEMO_OTP_CODE
     // are both set and the phone matches, so this path is inert in normal use.
+    //
+    // ORDER IS LOAD-BEARING: this sits ABOVE the per-phone rate limit on
+    // purpose. Do not move it back down.
+    //
+    // The demo accounts used to be subject to PHONE_MAX sends per
+    // PHONE_WINDOW_MS like any other number, so a reviewer — or Firebase Test
+    // Lab, which retries automatically and in parallel — could trip it and get
+    // locked out for ten minutes behind a generic "too many requests". A
+    // blocked reviewer is a rejected submission. Production `rate_limits` shows
+    // windows with 19, 16, 10 and 9 sends against the demo phone, all well past
+    // PHONE_MAX, so this was not hypothetical.
+    //
+    // Exempting them costs nothing: this branch sends no SMS (no provider
+    // spend, no D7 quota) and only rewrites a single row with a FIXED code, for
+    // the two numbers in the DEMO_PHONE allowlist. The per-IP limit above still
+    // applies, so the endpoint keeps a backstop against anyone hammering it.
     const demoCode = resolveDemoOtp(
       normalizedPhone,
       Deno.env.get('DEMO_PHONE'),
@@ -155,6 +158,19 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
     }
+
+    // Refund both budgets when a send fails downstream (provider reject /
+    // misconfig / DB error) so a user who never received a code isn't locked
+    // out of retrying. Windows MUST match the rateLimit() calls above/below.
+    const refundOtpBudget = async () => {
+      await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
+      await refundRateLimit(`send-sms-otp:${clientIP}`, IP_WINDOW_MS);
+    };
+
+    // BUG-186: per-phone rate limit. Caps OTP-spam of one victim number
+    // (an attacker rotating IPs). See PHONE_MAX above.
+    const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_MAX, PHONE_WINDOW_MS);
+    if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
 
     // ── All phones → D7 Networks SMS + otp_codes (sole provider) ──
     if (!Deno.env.get('D7_API_TOKEN')) {
