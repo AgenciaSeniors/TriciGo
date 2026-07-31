@@ -264,45 +264,58 @@ function NativeDriverProfileScreen() {
   ];
 
   // ── Cuban MenuRow (inline custom) ──
+  //
+  // The row's box (direction, padding, separator) lives on a plain inner
+  // `View`, NOT inside a `Pressable` function-style. Rendered on device, the
+  // function-style variant dropped this entire block — icon/label/chevron
+  // stacked vertically, no padding, no separators — while every child style
+  // still applied. Same shape that bit us in PR #701/#704.
+  // `SettingsRow` and `@tricigo/ui/MenuRow` already use this layout-on-a-child
+  // pattern and render correctly; keep it that way here.
   const renderMenuRow = (item: MenuItem, isLast: boolean, keyId: string) => (
     <Pressable
       key={keyId}
       onPress={item.onPress}
-      style={({ pressed }) => [
-        {
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingVertical: 16,
-          paddingHorizontal: 14,
-          borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-          borderBottomColor: palette.line,
-        },
-        pressed && { opacity: 0.65, backgroundColor: palette.bg.elev2 },
-      ]}
       accessibilityRole="button"
       accessibilityLabel={item.label}
     >
-      <View
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 11,
-          backgroundColor: `${item.tint}1A`,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginRight: 14,
-        }}
-      >
-        {item.mciIcon ? (
-          <MaterialCommunityIcons name={item.mciIcon} size={18} color={item.tint} />
-        ) : (
-          <Ionicons name={item.icon} size={18} color={item.tint} />
-        )}
-      </View>
-      <Text numberOfLines={1} style={{ flex: 1, color: palette.ink.primary, fontSize: 15, fontWeight: '500' }}>
-        {item.label}
-      </Text>
-      <Ionicons name="chevron-forward" size={18} color={palette.ink.secondary} />
+      {({ pressed }) => (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 16,
+            paddingHorizontal: 14,
+            borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
+            borderBottomColor: palette.line,
+            // Press feedback is paint-only — never resizes the row.
+            backgroundColor: pressed ? palette.bg.elev2 : 'transparent',
+            opacity: pressed ? 0.65 : 1,
+          }}
+        >
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 11,
+              backgroundColor: `${item.tint}1A`,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 14,
+            }}
+          >
+            {item.mciIcon ? (
+              <MaterialCommunityIcons name={item.mciIcon} size={18} color={item.tint} />
+            ) : (
+              <Ionicons name={item.icon} size={18} color={item.tint} />
+            )}
+          </View>
+          <Text numberOfLines={1} style={{ flex: 1, color: palette.ink.primary, fontSize: 15, fontWeight: '500' }}>
+            {item.label}
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={palette.ink.secondary} />
+        </View>
+      )}
     </Pressable>
   );
 
