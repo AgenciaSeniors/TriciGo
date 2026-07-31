@@ -54,7 +54,8 @@ pnpm install
 | `apps/client/src/components/PartnerCouponBanner.tsx` | Live-coupon banner (both home states) |
 | `apps/client/app/coupon/[id].tsx` | The ticket screen |
 | `apps/client/app/(tabs)/index.tsx` | Mount carousel + banner |
-| `apps/web/src/app/v/page.tsx` | Public validation page |
+| `apps/web/src/app/v/[token]/page.tsx` | Public validation page, one secret link per business |
+| `apps/web/src/app/v/page.tsx` | Bare `/v` — explains that each business has its own link |
 | `apps/web/src/components/HomeDashboard.tsx` | Web parity section |
 | `packages/i18n/src/locales/{es,en,pt}/{rider,admin}.json` | Copy |
 
@@ -873,7 +874,10 @@ export interface PartnerCoupon {
 }
 
 export type CouponValidationStatus =
-  | 'valid' | 'used' | 'expired' | 'not_found' | 'rate_limited' | 'redeemed';
+  | 'valid' | 'used' | 'expired' | 'not_found' | 'rate_limited' | 'redeemed'
+  // The URL's business token did not resolve. Distinct from not_found, which
+  // means the token was good but that business never issued this code.
+  | 'invalid_link';
 
 export interface CouponValidation {
   status: CouponValidationStatus;
@@ -955,14 +959,16 @@ describe('partnerPlaceService', () => {
   describe('validateCode', () => {
     it('passes the raw code through — the RPC normalises it', async () => {
       mockRpc.mockResolvedValueOnce({ data: { status: 'valid' }, error: null });
-      await partnerPlaceService.validateCode('tg-k7m2qx');
-      expect(mockRpc).toHaveBeenCalledWith('validate_partner_coupon', { p_code: 'tg-k7m2qx' });
+      await partnerPlaceService.validateCode('a7f3k2b91c04', 'tg-k7m2qx');
+      expect(mockRpc).toHaveBeenCalledWith('validate_partner_coupon', {
+        p_token: 'a7f3k2b91c04', p_code: 'tg-k7m2qx',
+      });
     });
 
     it('returns the verdict object', async () => {
       const verdict = { status: 'valid', place_name: 'Sylvain', customer: 'Eduardo P.' };
       mockRpc.mockResolvedValueOnce({ data: verdict, error: null });
-      expect(await partnerPlaceService.validateCode('K7M2QX')).toEqual(verdict);
+      expect(await partnerPlaceService.validateCode('a7f3k2b91c04', 'K7M2QX')).toEqual(verdict);
     });
 
     // This one is public and business-facing: an error must surface, not be
@@ -970,21 +976,23 @@ describe('partnerPlaceService', () => {
     it('propagates the RPC error', async () => {
       const err = { message: 'boom', code: 'X' };
       mockRpc.mockResolvedValueOnce({ data: null, error: err });
-      await expect(partnerPlaceService.validateCode('K7M2QX')).rejects.toEqual(err);
+      await expect(partnerPlaceService.validateCode('a7f3k2b91c04', 'K7M2QX')).rejects.toEqual(err);
     });
   });
 
   describe('redeemCode', () => {
     it('calls redeem_partner_coupon', async () => {
       mockRpc.mockResolvedValueOnce({ data: { status: 'redeemed' }, error: null });
-      expect(await partnerPlaceService.redeemCode('K7M2QX')).toEqual({ status: 'redeemed' });
-      expect(mockRpc).toHaveBeenCalledWith('redeem_partner_coupon', { p_code: 'K7M2QX' });
+      expect(await partnerPlaceService.redeemCode('a7f3k2b91c04', 'K7M2QX')).toEqual({ status: 'redeemed' });
+      expect(mockRpc).toHaveBeenCalledWith('redeem_partner_coupon', {
+        p_token: 'a7f3k2b91c04', p_code: 'K7M2QX',
+      });
     });
 
     it('propagates the RPC error', async () => {
       const err = { message: 'boom', code: 'X' };
       mockRpc.mockResolvedValueOnce({ data: null, error: err });
-      await expect(partnerPlaceService.redeemCode('K7M2QX')).rejects.toEqual(err);
+      await expect(partnerPlaceService.redeemCode('a7f3k2b91c04', 'K7M2QX')).rejects.toEqual(err);
     });
   });
 
@@ -1048,16 +1056,16 @@ export const partnerPlaceService = {
     return (data ?? []) as PartnerCoupon[];
   },
 
-  async validateCode(code: string): Promise<CouponValidation> {
+  async validateCode(token: string, code: string): Promise<CouponValidation> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('validate_partner_coupon', { p_code: code });
+    const { data, error } = await supabase.rpc('validate_partner_coupon', { p_token: token, p_code: code });
     if (error) throw error;
     return data as CouponValidation;
   },
 
-  async redeemCode(code: string): Promise<CouponValidation> {
+  async redeemCode(token: string, code: string): Promise<CouponValidation> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('redeem_partner_coupon', { p_code: code });
+    const { data, error } = await supabase.rpc('redeem_partner_coupon', { p_token: token, p_code: code });
     if (error) throw error;
     return data as CouponValidation;
   },
@@ -1121,6 +1129,7 @@ RETURNS TABLE (
   latitude DOUBLE PRECISION, longitude DOUBLE PRECISION,
   radius_m INT, coupon_ttl_minutes INT, cooldown_days INT,
   is_active BOOLEAN, valid_until TIMESTAMPTZ, phone TEXT, hours TEXT,
+  validation_token TEXT,
   created_at TIMESTAMPTZ,
   issued_count BIGINT, redeemed_count BIGINT, redeemed_by_business_count BIGINT
 )
@@ -1139,7 +1148,8 @@ BEGIN
          pp.photo_url, pp.benefit_title, pp.benefit_description, pp.terms,
          ST_Y(pp.location::geometry), ST_X(pp.location::geometry),
          pp.radius_m, pp.coupon_ttl_minutes, pp.cooldown_days,
-         pp.is_active, pp.valid_until, pp.phone, pp.hours, pp.created_at,
+         pp.is_active, pp.valid_until, pp.phone, pp.hours,
+         pp.validation_token, pp.created_at,
          COALESCE(c.issued, 0), COALESCE(c.redeemed, 0), COALESCE(c.by_business, 0)
   FROM public.partner_places pp
   LEFT JOIN LATERAL (
@@ -1284,6 +1294,8 @@ export interface AdminPartnerPlace {
   valid_until: string | null;
   phone: string | null;
   hours: string | null;
+  /** The business's secret validation link segment: tricigo.com/v/<token>. */
+  validation_token: string;
   created_at: string;
   issued_count: number;
   redeemed_count: number;
@@ -1456,6 +1468,25 @@ export default function PartnersPage() {
           {p.is_active ? 'Activo' : 'Inactivo'}
         </span>
       ) },
+    // The secret link you hand the business when the deal is signed. It is the
+    // identity the rate limiter counts against and the reason a bakery's coupon
+    // cannot be redeemed at a café — so it has to be easy to copy and hard to
+    // mistype. Click-to-copy, never a plain <a>: opening it here would burn a
+    // validation attempt against that business's own budget.
+    { id: 'link', header: 'Enlace del negocio', width: '230px',
+      cell: (p) => {
+        const url = `https://tricigo.com/v/${p.validation_token}`;
+        return (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); void navigator.clipboard.writeText(url); }}
+            className="font-mono text-xs text-ink-subtle hover:text-ink"
+            title="Copiar el enlace"
+          >
+            /v/{p.validation_token}
+          </button>
+        );
+      } },
     { id: 'created_at', header: 'Creado', hideBelow: 'lg',
       cell: (p) => formatAdminDate(p.created_at) },
   ];
@@ -2196,16 +2227,26 @@ git commit -m "feat(client): coupon ticket screen and banner in both home states
 ## Task 10: Public validation page
 
 **Files:**
-- Create: `apps/web/src/app/v/page.tsx`
+- Create: `apps/web/src/app/v/[token]/page.tsx`
+- Create: `apps/web/src/app/v/page.tsx` (bare-URL explainer)
+
+The route carries the business's secret token: `tricigo.com/v/a7f3k2b91c04`. That token, not the
+caller's IP, is the identity the rate limiter counts against — see the spec's "Business-facing
+surface" for why the IP version was abandoned. Read it with `useParams()`.
+
+Also create a plain `apps/web/src/app/v/page.tsx` for someone who trims the URL: a short Spanish
+note saying each business has its own link and to ask TriciGo for it. No input, no lookup — a bare
+`/v` has no business identity and must not become a way to probe codes.
 
 - [ ] **Step 1: Write the page**
 
-Create `apps/web/src/app/v/page.tsx`:
+Create `apps/web/src/app/v/[token]/page.tsx`:
 
 ```tsx
 'use client';
 
 import { useState } from 'react';
+import { useParams } from 'next/navigation';
 import { partnerPlaceService } from '@tricigo/api';
 import type { CouponValidation } from '@tricigo/types';
 
@@ -2217,6 +2258,10 @@ import type { CouponValidation } from '@tricigo/types';
  * minimal payload.
  */
 export default function ValidatePage() {
+  // The business's secret link. Everything on this page is scoped to it: the
+  // rate-limit bucket, and which coupons can be validated at all.
+  const params = useParams<{ token: string }>();
+  const token = String(params?.token ?? '');
   const [code, setCode] = useState('');
   const [result, setResult] = useState<CouponValidation | null>(null);
   const [busy, setBusy] = useState(false);
@@ -2225,7 +2270,7 @@ export default function ValidatePage() {
   const check = async () => {
     setBusy(true); setFailed(false);
     try {
-      setResult(await partnerPlaceService.validateCode(code));
+      setResult(await partnerPlaceService.validateCode(token, code));
     } catch {
       // Never fall through to a green screen: the shop would give away a
       // coffee because the network hiccuped.
@@ -2238,7 +2283,7 @@ export default function ValidatePage() {
   const confirm = async () => {
     setBusy(true); setFailed(false);
     try {
-      setResult(await partnerPlaceService.redeemCode(code));
+      setResult(await partnerPlaceService.redeemCode(token, code));
     } catch {
       setFailed(true);
     } finally {
@@ -2361,6 +2406,10 @@ export default function ValidatePage() {
       {result?.status === 'rate_limited' && (
         <Verdict icon="🐢" title="DEMASIADOS INTENTOS" tone="bad" onReset={reset}
           body="Espera unos minutos antes de volver a intentar." />
+      )}
+      {result?.status === 'invalid_link' && (
+        <Verdict icon="🔗" title="ENLACE NO VÁLIDO" tone="bad" onReset={reset}
+          body="Este enlace no corresponde a ningún negocio activo. Pídele a TriciGo el enlace de tu negocio." />
       )}
     </main>
   );

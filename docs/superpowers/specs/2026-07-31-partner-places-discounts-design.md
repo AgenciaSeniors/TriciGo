@@ -29,6 +29,7 @@ brings it customers and can prove how many.
 | Re-entry to a live coupon | **Home banner in both home states** (idle and ride-in-progress) plus the two pushes. No dedicated screen. |
 | Data model | **Standalone table, no POI link.** Admin creates one object, not two. |
 | Code verification | **Both:** live countdown (works offline) *and* a code the business validates on a public page. |
+| Who may validate | **Each business gets its own secret link** `tricigo.com/v/<token>`. Rate limiting keys on the business, not the caller's IP — see "Business-facing surface" for why the IP version was abandoned. A coupon validates only at the business that issued it. |
 | Home presentation | **Large hero card in a carousel**, below the service selector. |
 
 ### Two decisions worth re-reading before implementation
@@ -168,8 +169,8 @@ directly. This is the hard rule in CLAUDE.md: a cron calling an Edge Function th
 |---|---|---|
 | `get_nearby_partner_places(lat, lng, limit)` | authenticated | Active places within the discovery radius, ordered by distance, with `distance_m` and whether the caller already holds an active coupon |
 | `get_my_partner_coupons()` | authenticated | The caller's active coupons (`auth.uid()` only) |
-| `validate_partner_coupon(code)` | **anon** | Rate-limited. Returns status + business + benefit + customer first name & initial + arrival time |
-| `redeem_partner_coupon(code)` | **anon** | Rate-limited. Atomic claim, sets `redeemed_via = 'business'` |
+| `validate_partner_coupon(token, code)` | **anon** | Rate-limited per business. Returns status + business + benefit + customer first name & initial + arrival time |
+| `redeem_partner_coupon(token, code)` | **anon** | Rate-limited per business. Atomic claim, sets `redeemed_via = 'business'` |
 | `redeem_own_partner_coupon(coupon_id)` | authenticated | The "Ya lo usé" fallback, sets `redeemed_via = 'self'` |
 
 Both redemption paths use `UPDATE … WHERE redeemed_at IS NULL RETURNING` — the same atomic-claim
@@ -245,7 +246,42 @@ no QR library. Installed apps get it via EAS Update without a store release.
 
 ## Business-facing surface
 
-A public, unauthenticated route at `tricigo.com/v`:
+A public, unauthenticated route at **`tricigo.com/v/<token>`** — each partner business gets its own
+secret link, handed over when the deal is signed.
+
+### Why a per-business link, and not just an IP rate limit
+
+The first design rate-limited the public endpoints per IP, derived from `X-Forwarded-For`. A code
+reviewer demonstrated on a QA branch that this is worthless, and worse than nothing:
+
+- **It reads the leftmost element of the header, which the client writes.** Supabase's edge appends
+  the real IP to the *right*. Three anonymous requests carrying two forged headers produced three
+  separate buckets.
+- **It hands an attacker a targeted denial of service.** Sending `X-Forwarded-For: <a chosen
+  bakery's IP>` thirty times locks that shop out of validating coupons, and `check_rate_limit`
+  increments unconditionally, so holding it there costs almost nothing.
+- **It lets an anonymous caller mint unbounded rows** in `rate_limits`, keyed by arbitrary text.
+
+And the mirror failure, specific to this market: **Cuban mobile data is near-universally CGNAT**, so
+several partner businesses share one public egress IP and would exhaust a shared bucket honestly.
+The same mechanism was simultaneously too weak against a forger and too strong against real shops.
+
+The token fixes all of it by changing *what counts as identity*: a secret the business holds rather
+than a header the caller asserts. It also buys a correctness win that was missing entirely —
+**a coupon now only validates at the business that issued it**. Under the first design a bakery's
+coupon would have redeemed at a café.
+
+Shape: 12 lowercase hex characters (`encode(gen_random_bytes(6),'hex')`, ≈2.8×10¹⁴). Hex rather than
+the coupon alphabet because this string lives in a URL an employee bookmarks and retypes, where case
+ambiguity is the enemy. Generated automatically on insert; surfaced in the admin for copying.
+
+Rate limiting keys on the **resolved `partner_place_id`** — a UUID, so cardinality is bounded by the
+partner count and nothing a caller sends can affect it. Tokens that do not resolve share a single
+bucket and return `invalid_link` with no other detail. Budget and window are `platform_config` keys
+(`coupon_validate_max_per_window`, `coupon_validate_window_s`), not literals, so they can be tightened
+during an incident without shipping a migration.
+
+The flow itself:
 
 1. **Input** — one field, six characters, one button.
 2. **Valid** — green verdict plus business, benefit, customer first name & initial, and arrival time
@@ -294,7 +330,17 @@ translating it would be pretend work.
 - `partner_places`: `SELECT` for authenticated; write for admin only.
 - `partner_coupons`: a customer sees **only their own** (`user_id = auth.uid()`); admin sees all;
   no client-side `INSERT` — issuance happens exclusively inside the `SECURITY DEFINER` trigger.
-- Anon RPCs are `SECURITY DEFINER` with per-IP rate limiting and a minimal return shape.
+- Anon RPCs are `SECURITY DEFINER`, rate-limited **per partner business** (never per IP — an IP is
+  whatever the caller says it is), and return a minimal shape.
+- `REVOKE ... FROM PUBLIC` **alone does nothing in this project**: `pg_default_acl` grants EXECUTE
+  explicitly to `anon`, `authenticated` and `service_role` on every new function in `public`, so
+  there is no PUBLIC grant to remove. Always `REVOKE ... FROM PUBLIC, anon, authenticated`, then
+  GRANT back only what is needed. The effective ACL also depends on *which role applies the
+  migration* — `postgres` and `supabase_admin` have different defaults — so the fuller form is the
+  only one correct under both.
+- The two `pc.user_id = auth.uid()` predicates in the reader RPCs are the data-isolation boundary.
+  Both functions are `SECURITY DEFINER`, so RLS is bypassed and those lines are the only thing
+  separating one passenger's coupons from everybody else's. They are commented as such in the SQL.
 - Any view created ships with `security_invoker = true` (Postgres defaults to definer, which
   bypasses the caller's RLS).
 - Authorization gates use explicit `COALESCE` — a three-valued gate without it fails **open**.
