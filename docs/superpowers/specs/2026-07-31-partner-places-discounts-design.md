@@ -25,6 +25,8 @@ brings it customers and can prove how many.
 | Frequency limit | **None.** `cooldown_days` ships as a knob defaulted to `0` (unlimited) so a business can later ask for a cap without a code change. |
 | Coupon lifetime | **2 hours** from arrival. |
 | Clock start | **At arrival**, plus a reminder push at 30 minutes remaining. |
+| Duplicate coupons | **Not issued** while a live unredeemed coupon for the same place exists. Deduplication, not a frequency cap. |
+| Re-entry to a live coupon | **Home banner in both home states** (idle and ride-in-progress) plus the two pushes. No dedicated screen. |
 | Data model | **Standalone table, no POI link.** Admin creates one object, not two. |
 | Code verification | **Both:** live countdown (works offline) *and* a code the business validates on a public page. |
 | Home presentation | **Large hero card in a carousel**, below the service selector. |
@@ -127,9 +129,14 @@ The trigger body:
    `is_active` and `valid_until`.
 2. Skip a place when `cooldown_days > 0` and this customer already has a coupon for it inside the
    window. `cooldown_days = 0` skips this check entirely.
-3. Insert the coupon with a generated code and `expires_at = now() + coupon_ttl_minutes`.
+3. Skip a place when this customer **already holds a live, unredeemed coupon** for it
+   (`redeemed_at IS NULL AND expires_at > now()`). This is deduplication, not a frequency limit:
+   once that coupon is redeemed or expires, the next qualifying ride issues a fresh one. Without it,
+   a passenger riding twice to the same bakery inside two hours ends up holding two valid codes for
+   one free coffee — which is precisely what the business does not want to see at the counter.
+4. Insert the coupon with a generated code and `expires_at = now() + coupon_ttl_minutes`.
    `ON CONFLICT (ride_id, partner_place_id) DO NOTHING` makes re-entry harmless.
-4. Fire the arrival push via `net.http_post`, the shape every push-sending trigger already uses
+5. Fire the arrival push via `net.http_post`, the shape every push-sending trigger already uses
    (`trg_notify_driver_new_offer`). Raw `net.http_post` is correct **inside a trigger**; the rule
    against it applies to crons — see below.
 
@@ -145,8 +152,10 @@ who stops half a block short still earns the passenger the perk, which is the fa
 
 A `pg_cron` job **running every 5 minutes** calls a SQL function that selects unredeemed, unexpired
 coupons with 25–35 minutes remaining and `reminded_at IS NULL`, sends one push each, and stamps
-`reminded_at`. The ten-minute window against a five-minute cadence guarantees every coupon is seen
-at least once without ever being seen twice; `reminded_at` is the belt to that suspenders.
+`reminded_at`. The two guards do different jobs and both are required: the ten-minute window against
+a five-minute cadence guarantees every coupon is caught **at least once** (no coupon slips between
+ticks), while `reminded_at` guarantees **at most once** (a coupon caught by two consecutive ticks is
+only pushed on the first). Neither alone is sufficient.
 
 Each push **must** be dispatched through `public.cron_http_post(...)`, never `net.http_post`
 directly. This is the hard rule in CLAUDE.md: a cron calling an Edge Function through raw
@@ -192,6 +201,31 @@ load-bearing, not decoration: a passenger who pocketed the phone has no other si
 **Use.** While a coupon is live, a banner sits at the top of the home with the countdown running;
 more than one active coupon renders as a list. Tapping opens the full ticket — code, countdown,
 terms, business address and phone, and a line telling the employee where to validate.
+`useRefreshOnFocus` keeps the countdown and the list honest — a screen that fetches once on mount
+would freeze, which is the stale-on-mount class CLAUDE.md marks as a permanent audit dimension.
+
+**The ticket is an ordinary screen, not a trap.** It closes, it reopens as many times as wanted, and
+booking another ride does nothing to the coupon — they are independent. Nothing the passenger does
+in the app consumes a coupon except redeeming it.
+
+**The banner renders in BOTH home states.** This is the one detail that makes the banner sufficient
+on its own. The obvious implementation — putting it in the idle home — breaks exactly where it
+matters: a passenger who closes the ticket and books another ride gets the home replaced by the
+tracking view, and the banner goes with it. So the banner is also drawn **above the ride-tracking
+card**, in a compact variant, whenever a coupon is live.
+
+Two re-entry paths total:
+
+| Path | Works when |
+|---|---|
+| Home banner, both states (idle and ride-in-progress) | Whenever the passenger is on Inicio. |
+| The two pushes (arrival, and 30 minutes remaining), deep-linking to the ticket | Always, including with the app closed — but only if notifications are permitted. |
+
+**Accepted cost, stated plainly:** a passenger sitting on another tab — Billetera, Mis viajes,
+Perfil — sees nothing and must return to Inicio. A dedicated "Mis cupones" menu entry would cover
+that, and was deliberately rejected in favour of maintaining one surface instead of two. With push
+permission granted this gap is nearly invisible; without it, the coupon depends on the passenger
+returning to Inicio unprompted.
 
 **Close.** The business validates at `tricigo.com/v` and confirms. The passenger's "Ya lo usé"
 button stays as the offline fallback and records `redeemed_via = 'self'`.
@@ -201,7 +235,7 @@ the clock, not the app.
 
 **Web parity** (mandatory per CLAUDE.md): the same section inside
 `apps/web/src/components/HomeDashboard.tsx`, which already carries the last-ride, promos and
-announcements sections, plus the coupon view.
+announcements sections, plus the coupon view and the same banner treatment.
 
 **Ships over the air.** `apps/client/app.json` has `updates.enabled: true` with
 `runtimeVersion.policy: appVersion`, and nothing in this feature needs a native module — no camera,
@@ -293,6 +327,8 @@ disturbing real drivers (`net.http_post` enqueues transactionally, so a rollback
 - An inactive place, or one past `valid_until`, issues none.
 - With `cooldown_days > 0`, a second ride inside the window issues none; `cooldown_days = 0` always
   issues.
+- A second ride to the same place while a live unredeemed coupon exists issues none; after that
+  coupon is redeemed or expires, a further ride issues one again.
 - Redemption is atomic: a second `redeem_partner_coupon` on the same code returns "already used".
 - An expired coupon validates as expired, not valid.
 
@@ -315,6 +351,9 @@ land the number in the meantime.
 - A merchant app or merchant accounts. The validation page is public and stateless by design.
 - A "has a perk" badge inside address-search results.
 - Coupon history for the customer (expired/past coupons). Active coupons only.
+- A dedicated "Mis cupones" screen or menu entry. Considered and rejected: the home banner rendered
+  in both states covers the same gap with one surface instead of two. Revisit if telemetry shows
+  coupons expiring unredeemed at a meaningful rate.
 - Paid or manual placement in the carousel. Distance ordering only.
 - Photo upload. Admin pastes a URL, as with announcements today.
 - Linking a partner place to a `cuba_pois` row. Additive later if the search badge is ever wanted.
