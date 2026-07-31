@@ -321,7 +321,7 @@ BEGIN
       body := jsonb_build_object(
         'user_id',  NEW.customer_id::text,
         'title',    'Llegaste a ' || v_place.name,
-        'body',     v_place.benefit_title || '. Mostrá tu cupón antes de las '
+        'body',     v_place.benefit_title || '. Muestra tu cupón antes de las '
                     || to_char(v_expires AT TIME ZONE 'America/Havana', 'HH24:MI') || '.',
         'category', 'partner_coupon',
         'data', jsonb_build_object(
@@ -718,7 +718,7 @@ BEGIN
       body    := jsonb_build_object(
         'user_id',  v_row.user_id::text,
         'title',    'Te queda media hora',
-        'body',     '¿Seguís en ' || v_row.place_name || '? Tu '
+        'body',     '¿Sigues en ' || v_row.place_name || '? Tu '
                     || lower(v_row.benefit_title) || ' vence a las '
                     || to_char(v_row.expires_at AT TIME ZONE 'America/Havana', 'HH24:MI') || '.',
         'category', 'partner_coupon',
@@ -1165,7 +1165,7 @@ BEGIN
   END IF;
   IF p_lat IS NULL OR p_lng IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
-      MESSAGE = 'Marcá el lugar en el mapa antes de guardar.', DETAIL = 'missing_coordinates';
+      MESSAGE = 'Marca el lugar en el mapa antes de guardar.', DETAIL = 'missing_coordinates';
   END IF;
 
   v_loc := ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography;
@@ -1779,7 +1779,7 @@ export function PartnerPlacesCarousel({ latitude, longitude, tokens, onSelect }:
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 }}>
                       <Ionicons name="ticket" size={13} color={tokens.accent.orange} />
                       <Text style={{ fontFamily: 'Inter', fontSize: 11, color: tokens.accent.orange }}>
-                        {t('home.partner_has_coupon', { defaultValue: 'Ya tenés un cupón activo acá' })}
+                        {t('home.partner_has_coupon', { defaultValue: 'Ya tienes un cupón activo aquí' })}
                       </Text>
                     </View>
                   )}
@@ -2259,7 +2259,7 @@ export default function ValidatePage() {
       {!result && (
         <>
           <p style={{ fontSize: 14, color: '#6B7F8F', margin: '18px 0 12px', lineHeight: 1.45 }}>
-            Escribí el código que te muestra el cliente en su teléfono.
+            Escribe el código que te muestra el cliente en su teléfono.
           </p>
           <input
             value={code}
@@ -2290,7 +2290,7 @@ export default function ValidatePage() {
           </button>
           {failed && (
             <p style={{ marginTop: 14, fontSize: 13, color: '#B3261E', textAlign: 'center' }}>
-              No se pudo conectar. Revisá la señal y probá de nuevo.
+              No se pudo conectar. Revisa la señal e intenta de nuevo.
             </p>
           )}
         </>
@@ -2301,7 +2301,7 @@ export default function ValidatePage() {
           <div style={{ ...box, background: '#E8F6EC', border: '1px solid #9FD8B0' }}>
             <div style={{ fontSize: 40 }}>✅</div>
             <div style={{ fontWeight: 800, fontSize: 19, color: '#1B7A3D', marginTop: 6 }}>CUPÓN VÁLIDO</div>
-            <div style={{ fontSize: 13, color: '#6B7F8F', marginTop: 5 }}>Entregá el beneficio y confirmá abajo.</div>
+            <div style={{ fontSize: 13, color: '#6B7F8F', marginTop: 5 }}>Entrega el beneficio y confirma abajo.</div>
           </div>
           <dl style={{ marginTop: 16, fontSize: 13 }}>
             <Row k="NEGOCIO" v={result.place_name ?? '—'} />
@@ -2333,7 +2333,7 @@ export default function ValidatePage() {
       )}
 
       {result?.status === 'redeemed' && (
-        <Verdict icon="🎉" title="CANJEADO" tone="ok" body="Listo. Entregá el beneficio al cliente." onReset={reset} />
+        <Verdict icon="🎉" title="CANJEADO" tone="ok" body="Listo. Entrega el beneficio al cliente." onReset={reset} />
       )}
       {result?.status === 'used' && (
         <Verdict icon="🚫" title="YA FUE USADO" tone="bad" onReset={reset}
@@ -2345,11 +2345,11 @@ export default function ValidatePage() {
       )}
       {result?.status === 'not_found' && (
         <Verdict icon="❌" title="CÓDIGO NO VÁLIDO" tone="bad" onReset={reset}
-          body="Revisá que esté bien escrito. Son 6 caracteres." />
+          body="Revisa que esté bien escrito. Son 6 caracteres." />
       )}
       {result?.status === 'rate_limited' && (
         <Verdict icon="🐢" title="DEMASIADOS INTENTOS" tone="bad" onReset={reset}
-          body="Esperá unos minutos antes de volver a probar." />
+          body="Espera unos minutos antes de volver a intentar." />
       )}
     </main>
   );
@@ -2571,7 +2571,7 @@ git commit -m "feat(web): partner places and live coupons on the rider dashboard
 ```json
   "home": {
     "partner_places_label": "LUGARES CON BENEFICIO",
-    "partner_has_coupon": "Ya tenés un cupón activo acá",
+    "partner_has_coupon": "Ya tienes un cupón activo aquí",
     "dashboard_coupons": "Tus cupones",
     "dashboard_partner_places": "Lugares con beneficio"
   },

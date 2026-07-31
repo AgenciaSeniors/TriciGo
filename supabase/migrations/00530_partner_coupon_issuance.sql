@@ -120,7 +120,7 @@ BEGIN
       body := jsonb_build_object(
         'user_id',  NEW.customer_id::text,
         'title',    'Llegaste a ' || v_place.name,
-        'body',     v_place.benefit_title || '. Mostrá tu cupón antes de las '
+        'body',     v_place.benefit_title || '. Muestra tu cupón antes de las '
                     || to_char(v_expires AT TIME ZONE 'America/Havana', 'HH24:MI') || '.',
         'category', 'partner_coupon',
         'data', jsonb_build_object(
