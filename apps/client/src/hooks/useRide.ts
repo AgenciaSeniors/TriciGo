@@ -13,6 +13,7 @@ import { invalidatePredictionCache } from '@/services/predictionCache';
 import { scheduleLocalNotification } from '@/services/push.service';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
+import { shouldSendSearchHeartbeat } from '@/hooks/searchHeartbeat';
 const SEARCH_TIMEOUT_MS = RIDE_CONFIG.SEARCH_TIMEOUT_MS;
 
 /**
@@ -159,10 +160,41 @@ export function useRideInit() {
     //   Layer 3 — Pre-render check on store mutation: any time the store
     //             mutation function runs and activeRide age > 30s without
     //             a recent DB confirmation, force a re-fetch.
+    //
+    // This watcher also carries the persistent-search HEARTBEAT (see below).
+    let lastBeatAt = 0;
+
     const checkAndClearStale = async (): Promise<void> => {
       if (!mounted || !user?.id) return;
       const { activeRide: pinned, flowStep: fs } = useRideStore.getState();
       if (!pinned || fs === 'idle' || fs === 'completed') return;
+
+      // Persistent-search heartbeat. `cleanup_orphan_searching_rides` cancels
+      // any ride whose `searching_seen_at` went stale, so with no beat EVERY
+      // ride that no driver accepts is killed at `searching_abandon_seconds`
+      // (600s) while the rider is still watching the search screen — and the
+      // next tap on "Cancelar" then hits `ride_already_closed`.
+      //
+      // The beat used to live in the 3s polling loop that confirmRide starts,
+      // but that interval is owned by ReviewingView/SelectingView, and the
+      // `setFlowStep('searching')` inside confirmRide unmounts them — their
+      // cleanup cleared the interval before its first tick, so the beat never
+      // fired even once. Prod bore that out: across 114 rides, not one real
+      // ride ever had `searching_seen_at > created_at` (the only 3 rows that
+      // do are seeded demo data, with day-long offsets). The web app never
+      // had the bug — it beats from its own hook, useSearchingRide.
+      //
+      // It belongs here because useRideInit is mounted once in
+      // app/_layout.tsx and outlives every view swap. Backgrounding the app
+      // still suspends these timers, so a genuinely abandoned search is still
+      // reaped — which is the point of the feature.
+      if (shouldSendSearchHeartbeat(fs, lastBeatAt, Date.now())) {
+        lastBeatAt = Date.now();
+        // Fire-and-forget: touchSearchingRide swallows its own errors, and a
+        // missed beat is harmless (the next one is 30s away).
+        void rideService.touchSearchingRide(pinned.id);
+      }
+
       try {
         const fresh = await rideService.getActiveRide(user.id);
         if (!fresh) {
