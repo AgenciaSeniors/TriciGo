@@ -43,7 +43,7 @@ pnpm install
 | `supabase/migrations/00533_partner_places_admin_rpcs.sql` | Admin list (with the issued/redeemed counters) + upsert |
 | `supabase/verify-partner-coupons.sql` | Post-apply verification, run by whoever applies the migrations |
 | `supabase/functions/send-push/index.ts` | Add `partner_coupon` to `VALID_CATEGORIES` and the preference map |
-| `packages/types/src/index.ts` | `PartnerPlace`, `PartnerCoupon`, `CouponValidation` types |
+| `packages/types/src/partner-place.ts` | `PartnerPlace`, `PartnerCoupon`, `CouponValidation` types (own module — `index.ts` there is a pure barrel) |
 | `packages/api/src/services/partner-place.service.ts` | All RPC wrappers, one place |
 | `packages/api/src/services/__tests__/partner-place.test.ts` | Service-layer tests |
 | `packages/api/src/index.ts` | Export the service + types |
@@ -877,7 +877,14 @@ export type CouponValidationStatus =
   | 'valid' | 'used' | 'expired' | 'not_found' | 'rate_limited' | 'redeemed'
   // The URL's business token did not resolve. Distinct from not_found, which
   // means the token was good but that business never issued this code.
-  | 'invalid_link';
+  | 'invalid_link'
+  // The two below come only from redeem_own_partner_coupon — the "Ya lo usé"
+  // fallback the passenger taps when the shop cannot open the validation page.
+  // Neither is an error: 'unavailable' is the ordinary answer to a double-tap
+  // or to tapping after the coupon expired or was already redeemed at the
+  // counter, and it is the one the ticket screen most needs to distinguish.
+  | 'unavailable'
+  | 'unauthenticated';
 
 export interface CouponValidation {
   status: CouponValidationStatus;
