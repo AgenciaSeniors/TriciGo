@@ -3,6 +3,19 @@
     "generic": "Something went wrong. Please try again."
   },
 
+  "location_permission": {
+    "title": "We need your location",
+    "body": "Without location we cannot tell which rides are near you, so you will not be able to go online or receive offers.",
+    "body_denied": "Location is turned off for TriciGo, and your phone will not ask again. Turn it on in Settings so you can go online and receive rides.",
+    "benefit_offers": "Get the closest ride offers",
+    "benefit_rider": "Let the rider watch you arrive",
+    "benefit_always": "Pick \"Allow all the time\" so you stay online when the app is minimized",
+    "allow_button": "Allow location",
+    "open_settings_button": "Open Settings",
+    "skip_button": "Not now",
+    "dismiss_a11y": "Close"
+  },
+
   "home": {
     "go_online": "Go online",
     "go_offline": "Go offline",

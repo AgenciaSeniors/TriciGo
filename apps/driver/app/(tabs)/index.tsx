@@ -40,6 +40,7 @@ import {
 import { IncomingRideCard } from '@/components/IncomingRideCard';
 import { DriverTripView, useActiveTripMapData } from '@/components/DriverTripView';
 import { HomeBottomSheet } from '@/components/HomeBottomSheet';
+import { LocationPermissionSheet } from '@/components/LocationPermissionSheet';
 import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import { useOverlayBubble } from '@/hooks/useOverlayBubble';
 import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
@@ -159,6 +160,9 @@ function NativeDriverHomeScreen() {
   const incomingRequests = useDriverRideStore((s) => s.incomingRequests);
   const removeRequest = useDriverRideStore((s) => s.removeRequest);
   const [toggling, setToggling] = useState(false);
+  // Blocking location-permission sheet: shown instead of a dead-end toast when
+  // the driver taps "Conectarme" without location permission.
+  const [showLocationSheet, setShowLocationSheet] = useState(false);
   const [isIneligible, setIsIneligible] = useState(false);
   const [isOnBreak, setIsOnBreak] = useState(false);
   const [togglingBreak, setTogglingBreak] = useState(false);
@@ -834,7 +838,13 @@ function NativeDriverHomeScreen() {
         status = res.status;
       }
       if (status !== 'granted') {
-        Toast.show({ type: 'error', text1: t('home.location_required') });
+        // A toast was a dead end here: Android never re-prompts after a
+        // denial, so the driver could tap this button forever and nothing
+        // would happen. Eight approved drivers had never been online once
+        // for exactly this reason (prod, 2026-07-31). The sheet explains the
+        // cost and deep-links to Settings, then resumes this toggle when the
+        // permission comes back.
+        setShowLocationSheet(true);
         logger.warn('[GPS] Permission denied, blocking online');
         return;
       }
@@ -1361,6 +1371,13 @@ function NativeDriverHomeScreen() {
         ctaScaleAnim={ctaScaleAnim}
         onCtaPressIn={onCtaPressIn}
         onCtaPressOut={onCtaPressOut}
+      />
+
+      {/* Blocking location permission — resumes the toggle once granted */}
+      <LocationPermissionSheet
+        visible={showLocationSheet}
+        onClose={() => setShowLocationSheet(false)}
+        onGranted={handleToggleOnline}
       />
 
       {/* ── Layer 4: Incoming ride modal overlay ── */}

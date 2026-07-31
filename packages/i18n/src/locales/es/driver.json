@@ -3,6 +3,19 @@
     "generic": "Ocurrió un error. Inténtalo de nuevo."
   },
 
+  "location_permission": {
+    "title": "Necesitamos tu ubicación",
+    "body": "Sin ubicación no podemos saber qué viajes te quedan cerca, así que no vas a poder conectarte ni recibir ofertas.",
+    "body_denied": "La ubicación está desactivada para TriciGo, y tu teléfono ya no vuelve a preguntarte. Activala en Ajustes para poder conectarte y recibir viajes.",
+    "benefit_offers": "Recibir las ofertas de viaje más cercanas",
+    "benefit_rider": "Que el pasajero te vea llegar",
+    "benefit_always": "Elegí \"Permitir todo el tiempo\" para no caerte al minimizar la app",
+    "allow_button": "Permitir ubicación",
+    "open_settings_button": "Abrir Ajustes",
+    "skip_button": "Ahora no",
+    "dismiss_a11y": "Cerrar"
+  },
+
   "home": {
     "go_online": "Conectarme",
     "go_offline": "Desconectar",
