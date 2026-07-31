@@ -223,7 +223,12 @@ export default function CouponScreen() {
             fontFamily: 'Inter', fontSize: 11, color: tokens.ink.subtle,
             marginTop: 12, textAlign: 'center', lineHeight: 16,
           }}>
-            {t('coupon.validate_hint', { defaultValue: 'El negocio puede validarlo en tricigo.com/v' })}
+            {/* Deliberately does NOT print a URL. Since validation moved to a
+                per-business secret link (tricigo.com/v/<token>), the shop uses
+                its own bookmarked address — and bare tricigo.com/v is now just
+                an explainer with no code field, so sending an employee there
+                would be a dead end. */}
+            {t('coupon.validate_hint', { defaultValue: 'El negocio puede validarlo en su enlace de TriciGo' })}
           </Text>
         </View>
       </View>

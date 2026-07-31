@@ -13,7 +13,25 @@
     "weight": "Estimated weight (kg)"
   },
 
+  "coupon": {
+    "title": "Your coupon",
+    "show_code": "SHOW THIS CODE",
+    "validate_hint": "The business can validate it at its TriciGo link",
+    "mark_used": "I used it",
+    "marked_used": "Coupon marked as used",
+    "mark_failed": "Could not mark the coupon",
+    "mark_failed_hint": "Your coupon is still active. Show it at the shop.",
+    "already_gone": "This coupon is no longer available",
+    "already_gone_hint": "It may already have been used or expired.",
+    "session_expired": "Your session expired",
+    "session_expired_hint": "Sign in again to mark it.",
+    "expired_title": "This coupon is no longer available",
+    "expired_body": "Your next ride there earns you a new one.",
+    "call": "Call"
+  },
   "home": {
+    "partner_places_label": "PLACES WITH A PERK",
+    "partner_has_coupon": "You already have an active coupon here",
     "greeting": "Hey, {{name}}!",
     "where_to": "Where to?",
     "search_destination": "Search destination",

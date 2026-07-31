@@ -16,6 +16,23 @@ type KnownKey = {
   options?: { label: string; value: string }[];
 };
 const KNOWN_KEYS: Record<string, KnownKey> = {
+  // ── Lugares aliados (00531) ──
+  partner_places_discovery_radius_m: {
+    type: 'number',
+    helpKey: 'platform_config.partner_places_discovery_radius_m_help',
+  },
+  // The one security-relevant number in the feature. It governs the budget on
+  // the public validation endpoints, so it lives here rather than as a literal
+  // in SQL — during an incident it has to be tightenable without shipping a
+  // migration and waiting for a human to apply it.
+  coupon_validate_max_per_window: {
+    type: 'number',
+    helpKey: 'platform_config.coupon_validate_max_per_window_help',
+  },
+  coupon_validate_window_s: {
+    type: 'number',
+    helpKey: 'platform_config.coupon_validate_window_s_help',
+  },
   // ── Payment provider registry ── (which provider /recargar + web /wallet use)
   active_payment_provider: {
     type: 'select',
