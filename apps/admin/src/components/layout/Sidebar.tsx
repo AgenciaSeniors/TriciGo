@@ -125,6 +125,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/announcements', labelKey: 'sidebar.announcements', defaultLabel: 'Anuncios home', icon: Sparkles },
       { href: '/notifications', labelKey: 'sidebar.notifications', defaultLabel: 'Avisos push', icon: Bell },
       { href: '/pois', labelKey: 'sidebar.pois', defaultLabel: 'POIs', icon: MapPin },
+      { href: '/partners', labelKey: 'sidebar.partners', defaultLabel: 'Lugares aliados', icon: Gift },
     ],
   },
   {
