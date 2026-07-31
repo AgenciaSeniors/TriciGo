@@ -326,7 +326,7 @@ export default function PersonalInfoScreen() {
       // a tall form. This toast tells them WHY it didn't advance.
       Toast.show({
         type: 'error',
-        text1: t('onboarding.validation_summary_title', { defaultValue: 'Revisá los campos' }),
+        text1: t('onboarding.validation_summary_title', { defaultValue: 'Revisa los campos' }),
         text2: t('onboarding.validation_summary_sub', { defaultValue: 'Faltan datos o hay errores marcados en rojo.' }),
         visibilityTime: 3000,
       });
@@ -405,7 +405,7 @@ export default function PersonalInfoScreen() {
       Toast.show({
         type: 'success',
         text1: tc('auth.resend_success_title', { defaultValue: 'Código reenviado' }),
-        text2: tc('auth.resend_success_body', { defaultValue: 'Revisá los mensajes del teléfono.' }),
+        text2: tc('auth.resend_success_body', { defaultValue: 'Revisa los mensajes del teléfono.' }),
         visibilityTime: 2500,
       });
     } catch (err) {

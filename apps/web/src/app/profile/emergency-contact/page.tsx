@@ -64,7 +64,7 @@ export default function EmergencyContactPage() {
         }
       } catch { /* trusted_contacts optional */ }
     } catch {
-      setError('No se pudo cargar tu información. Intentá de nuevo.');
+      setError('No se pudo cargar tu información. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -76,8 +76,8 @@ export default function EmergencyContactPage() {
 
   async function handleSave() {
     if (!profile || !userId) return;
-    if (name.trim().length < 2) { setError('Ingresá el nombre del contacto.'); return; }
-    if (!isValidCubanPhone(phone.trim())) { setError('Ingresá un número de teléfono cubano válido.'); return; }
+    if (name.trim().length < 2) { setError('Ingresa el nombre del contacto.'); return; }
+    if (!isValidCubanPhone(phone.trim())) { setError('Ingresa un número de teléfono cubano válido.'); return; }
     setSaving(true);
     setError(null);
     try {
@@ -149,7 +149,7 @@ export default function EmergencyContactPage() {
       </div>
 
       <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: '0 0 1.5rem', lineHeight: 1.5 }}>
-        Esta persona recibirá un SMS automático si activás el SOS durante un viaje.
+        Esta persona recibirá un SMS automático si activas el SOS durante un viaje.
       </p>
 
       {loading ? (

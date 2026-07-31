@@ -130,7 +130,7 @@ export default function AnnouncementsAdminPage() {
     // would render the mobile client's 404 (+not-found). Block it at the source.
     if (!isValidAnnouncementCta(form.cta_url)) {
       showToast('error', t('announcements.error_cta_url_invalid', {
-        defaultValue: 'Destino del botón no válido. Elegí uno de la lista o usá una URL externa (https://, tel:, mailto:).',
+        defaultValue: 'Destino del botón no válido. Elige uno de la lista o usa una URL externa (https://, tel:, mailto:).',
       }));
       return;
     }
@@ -409,7 +409,7 @@ export default function AnnouncementsAdminPage() {
                 value={form.cta_url}
                 onChange={(e) => setForm({ ...form, cta_url: e.target.value })}
                 list="cta-url-options"
-                placeholder={t('announcements.placeholder_cta_url', { defaultValue: 'Elegí un destino o pegá una URL https://…' })}
+                placeholder={t('announcements.placeholder_cta_url', { defaultValue: 'Elige un destino o pega una URL https://…' })}
                 className={inputCls}
                 aria-invalid={!isValidAnnouncementCta(form.cta_url)}
               />
@@ -423,7 +423,7 @@ export default function AnnouncementsAdminPage() {
               {!isValidAnnouncementCta(form.cta_url) && (
                 <span className="font-mono text-[10px] text-red-500">
                   {t('announcements.cta_url_invalid', {
-                    defaultValue: 'Ruta no válida en la app. Elegí un destino de la lista o usá una URL externa (https://, tel:, mailto:).',
+                    defaultValue: 'Ruta no válida en la app. Elige un destino de la lista o usa una URL externa (https://, tel:, mailto:).',
                   })}
                 </span>
               )}
@@ -503,7 +503,7 @@ export default function AnnouncementsAdminPage() {
         empty={{
           icon: Megaphone,
           title: t('announcements.empty_title', { defaultValue: 'Sin anuncios' }),
-          body: t('announcements.empty_body', { defaultValue: 'Creá el primero para destacarlo en el home del cliente.' }),
+          body: t('announcements.empty_body', { defaultValue: 'Crea el primero para destacarlo en el home del cliente.' }),
           action: {
             label: t('announcements.new', { defaultValue: 'Nuevo anuncio' }),
             onClick: () => {

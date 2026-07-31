@@ -129,7 +129,7 @@ export default function HomeClient() {
               <div className="hero__phone-frame">
                 <Image
                   src="/images/screenshots/02-home.png"
-                  alt="TriciGo - App de transporte. Pedí triciclos, motos y autos."
+                  alt="TriciGo - App de transporte. Pide triciclos, motos y autos."
                   width={390}
                   height={793}
                   priority
@@ -202,49 +202,49 @@ export default function HomeClient() {
         </div>
       </section>
 
-      {/* ── Todo lo que podés hacer (bento) ── */}
+      {/* ── Todo lo que puedes hacer (bento) ── */}
       <section className="section">
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
             <span className="bento-eyebrow">La app</span>
-            <h2 className="section-title">Todo lo que podés hacer</h2>
+            <h2 className="section-title">Todo lo que puedes hacer</h2>
             <p className="section-subtitle">
-              TriciGo es más que pedir un viaje: programá, compartí, sumá paradas y viajá a tu manera.
+              TriciGo es más que pedir un viaje: programa, comparte, suma paradas y viaja a tu manera.
             </p>
           </div>
 
           <div className="bento">
-            {/* Programá — primary, tall */}
+            {/* Programa — primary, tall */}
             <div className="bento-tile bento-tile--primary bento-2 bento-tall">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
               </div>
-              <h3 style={{ fontSize: '1.35rem' }}>Programá tus viajes</h3>
-              <p>Reservá un viaje para más tarde, o dejá programados tus viajes de siempre —al trabajo, a la escuela— para que se repitan solos.</p>
+              <h3 style={{ fontSize: '1.35rem' }}>Programa tus viajes</h3>
+              <p>Reserva un viaje para más tarde, o deja programados tus viajes de siempre —al trabajo, a la escuela— para que se repitan solos.</p>
             </div>
 
-            {/* Agregá paradas */}
+            {/* Agrega paradas */}
             <div className="bento-tile">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><line x1="12" y1="7" x2="12" y2="13" /><line x1="9" y1="10" x2="15" y2="10" />
                 </svg>
               </div>
-              <h3>Agregá paradas</h3>
+              <h3>Agrega paradas</h3>
               <p>¿Surgió una parada? Sumala en pleno viaje y el precio se ajusta solo.</p>
             </div>
 
-            {/* Chateá con tu conductor */}
+            {/* Chatea con tu conductor */}
             <div className="bento-tile">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
               </div>
-              <h3>Chateá con tu conductor</h3>
-              <p>Coordiná la recogida con mensajes dentro de la app.</p>
+              <h3>Chatea con tu conductor</h3>
+              <p>Coordina la recogida con mensajes dentro de la app.</p>
             </div>
 
             {/* Direcciones guardadas — glow */}
@@ -255,7 +255,7 @@ export default function HomeClient() {
                 </svg>
               </div>
               <h3>Direcciones guardadas</h3>
-              <p>Guardá casa y trabajo y pedí en dos toques. Tu historial, siempre a mano.</p>
+              <p>Guarda casa y trabajo y pide en dos toques. Tu historial, siempre a mano.</p>
             </div>
 
             {/* Tu viaje a tu medida */}
@@ -269,7 +269,7 @@ export default function HomeClient() {
               <p>Modo silencio, espacio para equipaje y opciones de accesibilidad (silla de ruedas y más).</p>
             </div>
 
-            {/* Compartí y dividí — full-width row */}
+            {/* Comparte y divide — full-width row */}
             <div className="bento-tile bento-tile--row bento-4">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -277,8 +277,8 @@ export default function HomeClient() {
                 </svg>
               </div>
               <div>
-                <h3>Compartí y dividí</h3>
-                <p>En triciclo, compartí los asientos libres y pagás menos. ¿Viajan juntos? Dividí la cuenta con quien va con vos, sin cuentas a mano.</p>
+                <h3>Comparte y divide</h3>
+                <p>En triciclo, comparte los asientos libres y pagas menos. ¿Viajan juntos? Divide la cuenta con quien va contigo, sin cuentas a mano.</p>
               </div>
             </div>
           </div>
@@ -290,9 +290,9 @@ export default function HomeClient() {
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
             <span className="bento-eyebrow">Seguridad</span>
-            <h2 className="section-title">Viajá tranquilo, siempre</h2>
+            <h2 className="section-title">Viaja tranquilo, siempre</h2>
             <p className="section-subtitle">
-              Tu seguridad va con vos en cada viaje: conductores verificados, seguimiento en vivo
+              Tu seguridad va contigo en cada viaje: conductores verificados, seguimiento en vivo
               y un botón de emergencia a un toque.
             </p>
           </div>
@@ -328,10 +328,10 @@ export default function HomeClient() {
                 </svg>
               </div>
               <h3>Seguimiento en vivo</h3>
-              <p>Mirá tu viaje en el mapa en tiempo real, de la recogida al destino.</p>
+              <p>Mira tu viaje en el mapa en tiempo real, de la recogida al destino.</p>
             </div>
 
-            {/* Compartí tu viaje — full-width row */}
+            {/* Comparte tu viaje — full-width row */}
             <div className="bento-tile bento-tile--row bento-4">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -339,8 +339,8 @@ export default function HomeClient() {
                 </svg>
               </div>
               <div>
-                <h3>Compartí tu viaje</h3>
-                <p>Compartí tu ubicación en vivo con tu familia y sumá contactos de confianza que pueden seguir tu recorrido hasta que llegás.</p>
+                <h3>Comparte tu viaje</h3>
+                <p>Comparte tu ubicación en vivo con tu familia y suma contactos de confianza que pueden seguir tu recorrido hasta que llegas.</p>
               </div>
             </div>
           </div>
@@ -352,10 +352,10 @@ export default function HomeClient() {
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
             <span className="bento-eyebrow">TriciCoin</span>
-            <h2 className="section-title">Pagá sin efectivo</h2>
+            <h2 className="section-title">Paga sin efectivo</h2>
             <p className="section-subtitle">
-              TriciCoin es el saldo de la app. Cargás, pagás tus viajes en segundos y hasta le
-              regalás saldo a quien quieras.
+              TriciCoin es el saldo de la app. Cargas, pagas tus viajes en segundos y hasta le
+              regalas saldo a quien quieras.
             </p>
           </div>
 
@@ -371,33 +371,33 @@ export default function HomeClient() {
               />
               <div className="bento-stat">1 TriciCoin<br />= 1 peso</div>
               <p style={{ marginTop: '0.75rem' }}>
-                Sin conversiones raras: un TriciCoin vale exactamente un peso. Lo que cargás es lo que vale.
+                Sin conversiones raras: un TriciCoin vale exactamente un peso. Lo que cargas es lo que vale.
               </p>
             </div>
 
-            {/* Cargá */}
+            {/* Carga */}
             <div className="bento-tile">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
                 </svg>
               </div>
-              <h3>Cargá tu billetera</h3>
-              <p>Sumá saldo y tenés tus créditos listos para viajar.</p>
+              <h3>Carga tu billetera</h3>
+              <p>Suma saldo y tienes tus créditos listos para viajar.</p>
             </div>
 
-            {/* Pagá */}
+            {/* Paga */}
             <div className="bento-tile">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                 </svg>
               </div>
-              <h3>Pagá en segundos</h3>
+              <h3>Paga en segundos</h3>
               <p>Sin buscar cambio: el viaje se descuenta solo del saldo.</p>
             </div>
 
-            {/* Regalá — wide */}
+            {/* Regala — wide */}
             <div className="bento-tile bento-tile--row bento-2">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -405,7 +405,7 @@ export default function HomeClient() {
                 </svg>
               </div>
               <div>
-                <h3>Regalá saldo</h3>
+                <h3>Regala saldo</h3>
                 <p>Mandale TriciCoin a un familiar o a un amigo para sus próximos viajes, al instante.</p>
               </div>
             </div>
@@ -413,7 +413,7 @@ export default function HomeClient() {
         </div>
       </section>
 
-      {/* ── Invitá y ganá (referidos) ── */}
+      {/* ── Invita y gana (referidos) ── */}
       <section className="section section--gray">
         <div className="container">
           <div className="bento">
@@ -424,9 +424,9 @@ export default function HomeClient() {
                 </svg>
               </div>
               <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: '1.4rem' }}>Invitá y ganá</h3>
+                <h3 style={{ fontSize: '1.4rem' }}>Invita y gana</h3>
                 <p>
-                  Compartí tu código de invitación. Cuando tu amigo se registra y hace su primer viaje,
+                  Comparte tu código de invitación. Cuando tu amigo se registra y hace su primer viaje,
                   los dos ganan saldo TriciCoin para moverse. Tu código está en la app, en la sección de referidos.
                 </p>
                 <div style={{ marginTop: '1.1rem' }}>
@@ -447,7 +447,7 @@ export default function HomeClient() {
             <span className="bento-eyebrow">Para empresas</span>
             <h2 className="section-title">Movilidad para tu empresa</h2>
             <p className="section-subtitle">
-              Mové a tu personal o a tus clientes por toda la ciudad, con todo facturado y bajo control.
+              Mueve a tu personal o a tus clientes por toda la ciudad, con todo facturado y bajo control.
             </p>
           </div>
 
@@ -460,7 +460,7 @@ export default function HomeClient() {
                 </svg>
               </div>
               <h3 style={{ fontSize: '1.4rem' }}>Cuenta corporativa, sin mensualidad</h3>
-              <p>Pagás solo los viajes que tu empresa consume. Una factura mensual, todo el equipo en una sola cuenta.</p>
+              <p>Pagas solo los viajes que tu empresa consume. Una factura mensual, todo el equipo en una sola cuenta.</p>
               <div className="bento-spacer" />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '1.25rem' }}>
                 <Link href="/empresas" className="bento-btn bento-btn--white">Conocer TriciGo Empresas</Link>
@@ -498,7 +498,7 @@ export default function HomeClient() {
                 </svg>
               </div>
               <h3>Facturas en PDF</h3>
-              <p>Descargá cada mes el desglose por empleado y servicio.</p>
+              <p>Descarga cada mes el desglose por empleado y servicio.</p>
             </div>
 
             {/* Flota */}
@@ -509,7 +509,7 @@ export default function HomeClient() {
                 </svg>
               </div>
               <h3>Flota exclusiva (opcional)</h3>
-              <p>Si tenés conductores propios, los viajes van solo a ellos.</p>
+              <p>Si tienes conductores propios, los viajes van solo a ellos.</p>
             </div>
           </div>
         </div>
@@ -520,10 +520,10 @@ export default function HomeClient() {
         <div className="container">
           <div style={{ textAlign: 'center', maxWidth: 620, margin: '0 auto' }}>
             <span className="bento-eyebrow">Para conductores</span>
-            <h2 className="section-title">¿Tenés moto, triciclo o auto?</h2>
+            <h2 className="section-title">¿Tienes moto, triciclo o auto?</h2>
             <p className="section-subtitle">
-              Convertí tu vehículo en una fuente de ingreso. Manejás cuando querés, cobrás en pesos
-              y aceptás solo los viajes que te convienen.
+              Convierte tu vehículo en una fuente de ingreso. Manejas cuando quieres, cobras en pesos
+              y aceptas solo los viajes que te convienen.
             </p>
           </div>
 
@@ -535,8 +535,8 @@ export default function HomeClient() {
                   <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                 </svg>
               </div>
-              <h3 style={{ fontSize: '1.4rem' }}>Generá ingresos con tu vehículo</h3>
-              <p>Precio claro y sin regateo en la calle. Vos elegís cuándo manejás y cuánto.</p>
+              <h3 style={{ fontSize: '1.4rem' }}>Genera ingresos con tu vehículo</h3>
+              <p>Precio claro y sin regateo en la calle. Tú eliges cuándo manejas y cuánto.</p>
               <div className="bento-spacer" />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '1.25rem' }}>
                 <a
@@ -544,7 +544,7 @@ export default function HomeClient() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bento-btn bento-btn--white"
-                  aria-label="Descargá TriciGo Conductor en Google Play"
+                  aria-label="Descarga TriciGo Conductor en Google Play"
                 >
                   <GooglePlayIcon /> Google Play
                 </a>
@@ -553,12 +553,12 @@ export default function HomeClient() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bento-btn bento-btn--white"
-                  aria-label="Descargá TriciGo Conductor en App Store"
+                  aria-label="Descarga TriciGo Conductor en App Store"
                 >
                   <AppStoreIcon /> App Store
                 </a>
                 <a href="/conductores" className="bento-btn bento-btn--ghost">
-                  Mirá cómo empezar
+                  Mira cómo empezar
                 </a>
               </div>
             </div>
@@ -584,17 +584,17 @@ export default function HomeClient() {
                 </svg>
               </div>
               <h3>A tu ritmo</h3>
-              <p>Manejás cuando querés, sin horarios fijos.</p>
+              <p>Manejas cuando quieres, sin horarios fijos.</p>
             </div>
 
-            {/* Benefit — cobrás en pesos */}
+            {/* Benefit — cobras en pesos */}
             <div className="bento-tile">
               <div className="bento-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                 </svg>
               </div>
-              <h3>Cobrás en pesos</h3>
+              <h3>Cobras en pesos</h3>
               <p>En efectivo o TriciCoin, según prefieras.</p>
             </div>
           </div>

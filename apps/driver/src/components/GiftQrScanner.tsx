@@ -90,7 +90,7 @@ export function GiftQrScanner({ visible, onClose, onScanned }: GiftQrScannerProp
           {permission?.granted ? <View style={styles.frame} /> : null}
           {permission?.granted ? (
             <Text variant="bodySmall" style={styles.hint}>
-              {t('gift.scan_hint', { defaultValue: 'Apuntá al código QR del amigo' })}
+              {t('gift.scan_hint', { defaultValue: 'Apunta al código QR del amigo' })}
             </Text>
           ) : null}
         </View>

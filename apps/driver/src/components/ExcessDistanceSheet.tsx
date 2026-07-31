@@ -135,7 +135,7 @@ export function ExcessDistanceSheet({
       {selectedReason === 'other' && (
         <View className="mb-4">
           <Input
-            placeholder={t('excess.other_placeholder', { defaultValue: 'Describí brevemente qué pasó…' })}
+            placeholder={t('excess.other_placeholder', { defaultValue: 'Describe brevemente qué pasó…' })}
             value={otherText}
             onChangeText={setOtherText}
             multiline

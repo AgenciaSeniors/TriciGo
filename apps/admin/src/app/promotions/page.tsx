@@ -173,7 +173,7 @@ export default function PromotionsAdminPage() {
       const n = Number(form.max_uses);
       if (!Number.isFinite(n) || n < 1) {
         return t('promotions.error_max_uses_range', {
-          defaultValue: 'Los usos máximos deben ser 1 o más (dejalo vacío para ilimitado)',
+          defaultValue: 'Los usos máximos deben ser 1 o más (déjalo vacío para ilimitado)',
         });
       }
     }
@@ -253,7 +253,7 @@ export default function PromotionsAdminPage() {
         'error',
         isDupe
           ? t('promotions.error_code_taken', {
-              defaultValue: 'Ya existe una promoción con ese código. Elegí otro.',
+              defaultValue: 'Ya existe una promoción con ese código. Elige otro.',
             })
           : raw,
       );
@@ -309,7 +309,7 @@ export default function PromotionsAdminPage() {
   const handleNotify = async (p: Promotion) => {
     if (p.is_public === false) {
       showToast('error', t('promotions.notify_private_blocked', {
-        defaultValue: 'Es un código privado: no se difunde por push. Marcalo como público si querés anunciarlo.',
+        defaultValue: 'Es un código privado: no se difunde por push. Márcalo como público si quieres anunciarlo.',
       }));
       setNotifyTarget(null);
       return;
@@ -470,7 +470,7 @@ export default function PromotionsAdminPage() {
             {t('promotions.title', { defaultValue: 'Promociones' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('promotions.page_description', { defaultValue: 'Códigos de descuento y bonos. Activá una para avisar a todos por push.' })}
+            {t('promotions.page_description', { defaultValue: 'Códigos de descuento y bonos. Activa una para avisar a todos por push.' })}
           </p>
         </div>
         {!showForm && (
@@ -589,7 +589,7 @@ export default function PromotionsAdminPage() {
                 rows={2}
                 value={form.body_es}
                 onChange={(e) => setForm({ ...form, body_es: e.target.value })}
-                placeholder={t('promotions.placeholder_push_body', { defaultValue: 'Usá el código BIENVENIDA20 antes del domingo.' })}
+                placeholder={t('promotions.placeholder_push_body', { defaultValue: 'Usa el código BIENVENIDA20 antes del domingo.' })}
                 className={textareaCls}
               />
             </Field>
@@ -691,7 +691,7 @@ export default function PromotionsAdminPage() {
         empty={{
           icon: Ticket,
           title: t('promotions.empty_title', { defaultValue: 'Sin promociones' }),
-          body: t('promotions.empty_body', { defaultValue: 'Creá la primera para ofrecer un descuento y avisar a todos.' }),
+          body: t('promotions.empty_body', { defaultValue: 'Crea la primera para ofrecer un descuento y avisar a todos.' }),
           action: {
             label: t('promotions.new', { defaultValue: 'Nueva promoción' }),
             onClick: () => {

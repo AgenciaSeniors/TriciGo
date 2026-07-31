@@ -67,7 +67,7 @@ export function LiveDistanceHint({
           {/* PR-C: shorter copy — the original sentence had two
               instructions stacked; the row already lives in a small
               banner where brevity reads better. */}
-          {t('trip.gps_unavailable', { defaultValue: 'Sin GPS · Reiniciá la ubicación' })}
+          {t('trip.gps_unavailable', { defaultValue: 'Sin GPS · Reinicia la ubicación' })}
         </Text>
       </View>
     );

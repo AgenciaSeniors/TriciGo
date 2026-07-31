@@ -195,7 +195,7 @@ export default function RideDetailPage() {
       }
     } catch {
       if (win) win.close();
-      alert('No se pudo generar el recibo. Probá de nuevo en un momento.');
+      alert('No se pudo generar el recibo. Prueba de nuevo en un momento.');
     } finally {
       setDownloadingReceipt(false);
     }

@@ -120,7 +120,7 @@ export default function VerifyPhoneScreen() {
       Toast.show({
         type: 'success',
         text1: t('auth.resend_success_title', { defaultValue: 'Código reenviado' }),
-        text2: t('auth.resend_success_body', { defaultValue: 'Revisá los mensajes del teléfono.' }),
+        text2: t('auth.resend_success_body', { defaultValue: 'Revisa los mensajes del teléfono.' }),
         visibilityTime: 2500,
       });
     } catch {

@@ -22,32 +22,32 @@
 
 const NETOPIA_ERROR_MAP: Record<string, string> = {
   'Invalid CVV':
-    'El código de seguridad (CVV) no fue validado por tu banco. Tu tarjeta NO fue cobrada — verificá el CVV y reintentá.',
+    'El código de seguridad (CVV) no fue validado por tu banco. Tu tarjeta NO fue cobrada — verifica el CVV y reintenta.',
   'Insufficient funds':
     'Saldo insuficiente en tu tarjeta. Tu tarjeta NO fue cobrada.',
   'Card declined':
-    'Tu banco rechazó la transacción. Tu tarjeta NO fue cobrada — contactá a tu banco si el rechazo es inesperado.',
+    'Tu banco rechazó la transacción. Tu tarjeta NO fue cobrada — contacta a tu banco si el rechazo es inesperado.',
   'Expired card':
     'Tu tarjeta está vencida. Tu tarjeta NO fue cobrada.',
   '3DS authentication failed':
-    'La verificación 3D-Secure (OTP) falló. Tu tarjeta NO fue cobrada — reintentá con el código correcto.',
+    'La verificación 3D-Secure (OTP) falló. Tu tarjeta NO fue cobrada — reintenta con el código correcto.',
   // Seen in prod (provider_error_code 17).
   'Invalid card number':
-    'El número de tarjeta no es válido. Tu tarjeta NO fue cobrada — verificá los datos y reintentá.',
+    'El número de tarjeta no es válido. Tu tarjeta NO fue cobrada — verifica los datos y reintenta.',
   'Do not honor':
-    'Tu banco no autorizó la transacción. Tu tarjeta NO fue cobrada — contactá a tu banco o probá otra tarjeta.',
+    'Tu banco no autorizó la transacción. Tu tarjeta NO fue cobrada — contacta a tu banco o prueba otra tarjeta.',
   'Transaction declined':
-    'Tu banco rechazó la transacción. Tu tarjeta NO fue cobrada — probá otra tarjeta o contactá a tu banco.',
+    'Tu banco rechazó la transacción. Tu tarjeta NO fue cobrada — prueba otra tarjeta o contacta a tu banco.',
   'Restricted card':
-    'Tu tarjeta tiene restricciones para este pago. Tu tarjeta NO fue cobrada — probá otra tarjeta.',
+    'Tu tarjeta tiene restricciones para este pago. Tu tarjeta NO fue cobrada — prueba otra tarjeta.',
   'Exceeds withdrawal limit':
-    'Superaste el límite de tu tarjeta. Tu tarjeta NO fue cobrada — probá un monto menor u otra tarjeta.',
+    'Superaste el límite de tu tarjeta. Tu tarjeta NO fue cobrada — prueba un monto menor u otra tarjeta.',
   'Limit exceeded':
-    'Superaste el límite de tu tarjeta. Tu tarjeta NO fue cobrada — probá un monto menor u otra tarjeta.',
+    'Superaste el límite de tu tarjeta. Tu tarjeta NO fue cobrada — prueba un monto menor u otra tarjeta.',
   'Authentication timeout':
-    'La verificación 3D-Secure expiró. Tu tarjeta NO fue cobrada — reintentá y confirmá el código a tiempo.',
+    'La verificación 3D-Secure expiró. Tu tarjeta NO fue cobrada — reintenta y confirma el código a tiempo.',
   'Incorrect cardholder name':
-    'El nombre del titular no coincide con la tarjeta. Tu tarjeta NO fue cobrada — verificá los datos.',
+    'El nombre del titular no coincide con la tarjeta. Tu tarjeta NO fue cobrada — verifica los datos.',
 };
 
 /**
@@ -64,7 +64,7 @@ const NETOPIA_ERROR_MAP: Record<string, string> = {
  */
 export function translateNetopiaError(raw: string | null | undefined): string {
   if (!raw || !raw.trim()) {
-    return 'El procesador rechazó el pago. Tu tarjeta NO fue cobrada — reintentá o usá otra tarjeta.';
+    return 'El procesador rechazó el pago. Tu tarjeta NO fue cobrada — reintenta o usa otra tarjeta.';
   }
   return NETOPIA_ERROR_MAP[raw] ?? `${raw}. Tu tarjeta NO fue cobrada.`;
 }

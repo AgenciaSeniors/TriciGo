@@ -700,7 +700,7 @@ export default function BookPage() {
     // and ask them to re-confirm at the fresh price.
     const estimatedAt = fareEstimatedAtRef.current;
     if (!estimatedAt || Date.now() - estimatedAt > RIDE_CONFIG.FARE_ESTIMATE_TTL_MS) {
-      setError(t('book.estimate_expired', { defaultValue: 'El precio expiró por inactividad. Actualizamos la tarifa — revisá y confirmá de nuevo.' }));
+      setError(t('book.estimate_expired', { defaultValue: 'El precio expiró por inactividad. Actualizamos la tarifa — revisa y confirma de nuevo.' }));
       handleEstimateAll();
       return;
     }

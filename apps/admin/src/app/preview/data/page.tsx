@@ -270,7 +270,7 @@ export default function DataPreviewPage() {
         empty={{
           icon: Search,
           title: 'Sin viajes que coincidan',
-          body: 'Probá cambiar de pestaña o ajustar la búsqueda.',
+          body: 'Prueba cambiar de pestaña o ajustar la búsqueda.',
         }}
         rowHref={(r) => `/rides/${r.id}`}
         sort={sort}
@@ -308,7 +308,7 @@ export default function DataPreviewPage() {
         <DataEmptyState
           icon={MapPin}
           tone="primary"
-          title="Todavía no hay nada por acá"
+          title="Todavía no hay nada por aquí"
           body="Cuando haya actividad, la vas a ver en esta sección en tiempo real."
           action={{ label: 'Ir al mapa', href: '/live-map' }}
         />

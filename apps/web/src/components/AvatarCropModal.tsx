@@ -292,7 +292,7 @@ export function AvatarCropModal({ imageUrl, visible, onCancel, onConfirm }: Avat
         padding: '0 1rem',
         fontSize: '0.875rem',
       }}>
-        {t('profile.crop_hint', { defaultValue: 'Arrastrá la imagen y usá el zoom para centrar tu cara en el círculo.' })}
+        {t('profile.crop_hint', { defaultValue: 'Arrastra la imagen y usa el zoom para centrar tu cara en el círculo.' })}
       </p>
     </div>
   );

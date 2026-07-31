@@ -115,7 +115,7 @@ function CancelRideSheetInner({
 
       {/* Reason picker (structured — migration 00486) */}
       <Text variant="caption" color="secondary" className="mb-2">
-        {t('ride.cancel_reason_label', { defaultValue: '¿Por qué cancelás?' })}
+        {t('ride.cancel_reason_label', { defaultValue: '¿Por qué cancelas?' })}
       </Text>
       <View className="mb-4">
         {PASSENGER_CANCELLATION_REASONS.map((code) => {

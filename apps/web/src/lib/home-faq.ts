@@ -11,23 +11,23 @@ export interface HomeFaq {
 export const HOME_FAQS: HomeFaq[] = [
   {
     q: '¿Cómo funciona TriciGo?',
-    a: 'Descargá la app, ingresá tu destino, elegí entre triciclo, moto o auto, y confirmá tu viaje. Un conductor cercano te recoge y seguís el recorrido en el mapa en vivo.',
+    a: 'Descarga la app, ingresa tu destino, elige entre triciclo, moto o auto, y confirma tu viaje. Un conductor cercano te recoge y sigues el recorrido en el mapa en vivo.',
   },
   {
     q: '¿En qué ciudades opera TriciGo?',
-    a: 'TriciGo se despliega ciudad por ciudad. Abrí la app o mirá la página de cobertura para ver las zonas con servicio disponible en cada momento.',
+    a: 'TriciGo se despliega ciudad por ciudad. Abre la app o mira la página de cobertura para ver las zonas con servicio disponible en cada momento.',
   },
   {
     q: '¿Cuánto cuesta un viaje?',
-    a: 'Siempre ves el precio estimado antes de confirmar, así sabés cuánto vas a pagar y nadie te clava. El monto depende de la distancia, el tipo de vehículo y la demanda.',
+    a: 'Siempre ves el precio estimado antes de confirmar, así sabes cuánto vas a pagar y nadie te clava. El monto depende de la distancia, el tipo de vehículo y la demanda.',
   },
   {
     q: '¿Necesito tarjeta de crédito para viajar?',
-    a: 'No. Podés pagar tus viajes en efectivo, sin tarjeta. Si preferís pagar sin efectivo, cargás saldo TriciCoin desde la app (esa recarga sí se hace con tarjeta) y el viaje se descuenta solo.',
+    a: 'No. Puedes pagar tus viajes en efectivo, sin tarjeta. Si prefieres pagar sin efectivo, cargas saldo TriciCoin desde la app (esa recarga sí se hace con tarjeta) y el viaje se descuenta solo.',
   },
   {
     q: '¿Cómo pago mi viaje?',
-    a: 'En efectivo, con saldo TriciCoin o de forma mixta. Un TriciCoin equivale a un peso, así que lo que cargás es lo que vale.',
+    a: 'En efectivo, con saldo TriciCoin o de forma mixta. Un TriciCoin equivale a un peso, así que lo que cargas es lo que vale.',
   },
   {
     q: '¿Es seguro viajar con TriciGo?',
@@ -35,10 +35,10 @@ export const HOME_FAQS: HomeFaq[] = [
   },
   {
     q: '¿Puedo programar un viaje para más tarde?',
-    a: 'Sí. Podés reservar un viaje para una hora posterior y hasta dejar programados tus viajes de siempre (por ejemplo, al trabajo o a la escuela) para que se repitan.',
+    a: 'Sí. Puedes reservar un viaje para una hora posterior y hasta dejar programados tus viajes de siempre (por ejemplo, al trabajo o a la escuela) para que se repitan.',
   },
   {
     q: '¿Puedo enviar paquetes con TriciGo?',
-    a: 'Sí. Con el servicio de mensajería enviás paquetes, documentos o encargos de un punto a otro de la ciudad, con foto de entrega y un código de confirmación para quien recibe.',
+    a: 'Sí. Con el servicio de mensajería envías paquetes, documentos o encargos de un punto a otro de la ciudad, con foto de entrega y un código de confirmación para quien recibe.',
   },
 ];

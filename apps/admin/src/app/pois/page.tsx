@@ -539,7 +539,7 @@ export default function PoisAdminPage() {
       <AdminConfirmModal
         open={deactivateTarget !== null}
         title="Desactivar POI"
-        message={`¿Confirmás desactivar "${deactivateTarget?.name}"? Dejará de aparecer en búsquedas hasta que lo reactives.`}
+        message={`¿Confirmas desactivar "${deactivateTarget?.name}"? Dejará de aparecer en búsquedas hasta que lo reactives.`}
         confirmLabel="Desactivar"
         variant="danger"
         onConfirm={() => deactivateTarget && handleDeactivate(deactivateTarget)}
@@ -550,7 +550,7 @@ export default function PoisAdminPage() {
       <AdminConfirmModal
         open={unlockTarget !== null}
         title="Desbloquear POI"
-        message={`Si desbloqueás "${unlockTarget?.name}", el próximo sync mensual podrá sobrescribir tus ediciones con los datos de OSM/Overture/Foursquare. ¿Confirmás?`}
+        message={`Si desbloqueas "${unlockTarget?.name}", el próximo sync mensual podrá sobrescribir tus ediciones con los datos de OSM/Overture/Foursquare. ¿Confirmas?`}
         confirmLabel="Desbloquear"
         variant="warning"
         onConfirm={() => unlockTarget && handleUnlock(unlockTarget)}

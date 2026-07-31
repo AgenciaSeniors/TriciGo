@@ -259,7 +259,7 @@ export default function EmpresasRegistroPage() {
         admin revisa cada solicitud en menos de 24 horas habiles. Si tenes
         dudas antes,{' '}
         <Link href="/contact" style={{ color: 'var(--primary)' }}>
-          contactanos
+          contáctanos
         </Link>
         .
       </p>

@@ -98,13 +98,13 @@ const DEFAULT_I18N: Required<Omit<SubmitPoiSheetProps['i18n'] & object, 'nearbyE
     count > 0
       ? `⚠ Hay ${count} lugar${count > 1 ? 'es' : ''} cercano${count > 1 ? 's' : ''} ya registrado${count > 1 ? 's' : ''}. ¿Es uno de ellos?`
       : '',
-  error_unauthenticated: 'Necesitás iniciar sesión.',
+  error_unauthenticated: 'Necesitas iniciar sesión.',
   error_invalid_name: 'El nombre es requerido.',
-  error_invalid_category: 'Elegí una categoría.',
+  error_invalid_category: 'Elige una categoría.',
   error_outside_cuba: 'Solo aceptamos lugares en Cuba.',
-  error_rate_limit_hour: 'Esperá un rato — ya enviaste varios. Volvé en una hora.',
-  error_rate_limit_day: 'Llegaste al máximo diario. Volvé mañana.',
-  error_unknown: 'Algo salió mal. Probá de nuevo.',
+  error_rate_limit_hour: 'Espera un rato — ya enviaste varios. Vuelve en una hora.',
+  error_rate_limit_day: 'Llegaste al máximo diario. Vuelve mañana.',
+  error_unknown: 'Algo salió mal. Prueba de nuevo.',
   success: '¡Gracias! Tu sugerencia está siendo revisada.',
 };
 

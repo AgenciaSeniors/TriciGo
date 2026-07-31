@@ -97,7 +97,7 @@ export function ProvinceSwitch() {
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
               Cuba · 16 provincias
             </p>
-            <p className="mt-0.5 text-[11px] text-ink-muted">Filtrá el panel por alcance geográfico.</p>
+            <p className="mt-0.5 text-[11px] text-ink-muted">Filtra el panel por alcance geográfico.</p>
           </div>
           <ul className="max-h-[50vh] overflow-y-auto py-1">
             {SCOPES.map((s) => {

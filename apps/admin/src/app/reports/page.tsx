@@ -292,7 +292,7 @@ export default function ReportsPage() {
             {t('reports.title', { defaultValue: 'Reportes operativos' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('reports.page_description', { defaultValue: 'Panorama analítico del servicio. Seleccioná el período para ver tendencias.' })}
+            {t('reports.page_description', { defaultValue: 'Panorama analítico del servicio. Selecciona el período para ver tendencias.' })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

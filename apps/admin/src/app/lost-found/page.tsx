@@ -230,7 +230,7 @@ export default function LostFoundPage() {
             {t('lost_found.title', { defaultValue: 'Objetos perdidos' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('lost_found.page_description', { defaultValue: 'Reportes de pertenencias olvidadas a bordo. Seguí el rastro hasta que vuelvan al dueño.' })}
+            {t('lost_found.page_description', { defaultValue: 'Reportes de pertenencias olvidadas a bordo. Sigue el rastro hasta que vuelvan al dueño.' })}
           </p>
         </div>
       </div>
@@ -272,8 +272,8 @@ export default function LostFoundPage() {
             <div className="flex min-h-[480px] items-center justify-center p-6">
               <DataEmptyState
                 icon={PackageSearch}
-                title={t('lost_found.pick_title', { defaultValue: 'Elegí un reporte' })}
-                body={t('lost_found.pick_body', { defaultValue: 'Seleccioná un objeto en la bandeja para ver los detalles y tomar acción.' })}
+                title={t('lost_found.pick_title', { defaultValue: 'Elige un reporte' })}
+                body={t('lost_found.pick_body', { defaultValue: 'Selecciona un objeto en la bandeja para ver los detalles y tomar acción.' })}
               />
             </div>
           )}

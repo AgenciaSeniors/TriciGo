@@ -33,10 +33,10 @@ export async function ensurePickerPermission(
   const body =
     source === 'camera'
       ? t('permissions.camera_body', {
-          defaultValue: 'Activá el acceso a la cámara en Ajustes para tomar tu foto.',
+          defaultValue: 'Activa el acceso a la cámara en Ajustes para tomar tu foto.',
         })
       : t('permissions.gallery_body', {
-          defaultValue: 'Activá el acceso a tus fotos en Ajustes para elegir una imagen.',
+          defaultValue: 'Activa el acceso a tus fotos en Ajustes para elegir una imagen.',
         });
 
   Alert.alert(

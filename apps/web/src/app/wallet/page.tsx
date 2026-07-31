@@ -620,7 +620,7 @@ export default function WalletPage() {
           {rechargeStep === 'amount' && (
             <>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem' }}>
-                {t('wallet.recharge_desc', { defaultValue: 'Comprá créditos de viaje con tarjeta de crédito o débito. Te vamos a llevar al sitio seguro del procesador para que completes el pago.' })}
+                {t('wallet.recharge_desc', { defaultValue: 'Compra créditos de viaje con tarjeta de crédito o débito. Te vamos a llevar al sitio seguro del procesador para que completes el pago.' })}
               </p>
 
               {/* Quick amounts (USD) */}

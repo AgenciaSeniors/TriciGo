@@ -577,7 +577,7 @@ export default function RechargeScreen() {
 
         <Text variant="caption" color="tertiary" className="mt-3 text-center">
           {t('wallet.recharge_inapp_hint', {
-            defaultValue: 'Pagás de forma segura sin salir de la app.',
+            defaultValue: 'Pagas de forma segura sin salir de la app.',
           })}
         </Text>
       </ScrollView>

@@ -189,7 +189,7 @@ export default function ContentPage() {
           {t('content.title', { defaultValue: 'Páginas legales y FAQ' })}
         </h1>
         <p className="mt-0.5 text-[12.5px] text-ink-muted">
-          {t('content.page_description', { defaultValue: 'Textos oficiales que ven pasajeros y conductores en la app. Editá en español e inglés.' })}
+          {t('content.page_description', { defaultValue: 'Textos oficiales que ven pasajeros y conductores en la app. Edita en español e inglés.' })}
         </p>
       </div>
 
@@ -220,7 +220,7 @@ export default function ContentPage() {
           <DataEmptyState
             icon={FileText}
             title={t('content.empty_title', { defaultValue: 'Sin contenido registrado' })}
-            body={t('content.empty_body', { defaultValue: 'Todavía no hay entradas CMS. Creá los primeros textos legales.' })}
+            body={t('content.empty_body', { defaultValue: 'Todavía no hay entradas CMS. Crea los primeros textos legales.' })}
           />
         </div>
       )}

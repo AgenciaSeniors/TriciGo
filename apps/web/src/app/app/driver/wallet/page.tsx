@@ -142,7 +142,7 @@ export default function DriverAppWalletBridge() {
               color: 'var(--text-primary)',
             }}
           >
-            Volvé a la app para ver tu recarga
+            Vuelve a la app para ver tu recarga
           </h1>
           <p
             style={{
@@ -152,7 +152,7 @@ export default function DriverAppWalletBridge() {
               margin: 0,
             }}
           >
-            Procesamos tu pago. Tocá <strong style={{ color: 'var(--text-primary)' }}>Abrir en TriciGo Conductor</strong> para volver a la app y ver el resultado.
+            Procesamos tu pago. Toca <strong style={{ color: 'var(--text-primary)' }}>Abrir en TriciGo Conductor</strong> para volver a la app y ver el resultado.
           </p>
         </div>
 
@@ -185,7 +185,7 @@ export default function DriverAppWalletBridge() {
             lineHeight: 1.4,
           }}
         >
-          Si la app no se abrió automáticamente, tocá el botón de arriba o abrila manualmente — el saldo ya está acreditado en tu cuenta.
+          Si la app no se abrió automáticamente, toca el botón de arriba o ábrela manualmente — el saldo ya está acreditado en tu cuenta.
         </p>
       </div>
     </main>

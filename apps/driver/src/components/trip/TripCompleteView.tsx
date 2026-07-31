@@ -17,7 +17,7 @@
  *   - "Tarifa total" / "Comisión" labels: `text.secondary`.
  *   - Commission deduction value: `state.danger`.
  *   - Net earnings value: `accent[500]` to match the IncomingRideCard
- *     hero color so "Ganás" reads consistently across screens.
+ *     hero color so "Ganas" reads consistently across screens.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Platform } from 'react-native';
@@ -197,7 +197,7 @@ export function TripCompleteView() {
           defaultValue: 'No se pudo generar el recibo',
         }),
         text2: t('trip.receipt_error_subtitle', {
-          defaultValue: 'Probá de nuevo en un momento.',
+          defaultValue: 'Prueba de nuevo en un momento.',
         }),
       });
     } finally {
@@ -334,10 +334,10 @@ export function TripCompleteView() {
               </Text>
             </View>
           )}
-          {/* BUG-fare-driver-hero-gross: removido el bloque "Te llevás / Cobras
+          {/* BUG-fare-driver-hero-gross: removido el bloque "Te llevas / Cobras
              en efectivo" + separator anterior. El hero arriba ya muestra el
              GROSS (lo cobrado al cliente) y el breakdown muestra la comisión.
-             Mostrar también el NET acá era redundante y confundía. */}
+             Mostrar también el NET aquí era redundante y confundía. */}
           <Text
             variant="caption"
             style={{ color: midnightEmber.map.text.tertiary, marginTop: 4 }}

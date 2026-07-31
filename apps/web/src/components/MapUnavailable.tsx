@@ -30,7 +30,7 @@ export function MapUnavailable({ message }: { message?: string }) {
         Mapa no disponible
       </span>
       <span style={{ fontSize: 12 }}>
-        {message ?? 'Falta la configuración del mapa. Intentá de nuevo más tarde.'}
+        {message ?? 'Falta la configuración del mapa. Intenta de nuevo más tarde.'}
       </span>
     </div>
   );

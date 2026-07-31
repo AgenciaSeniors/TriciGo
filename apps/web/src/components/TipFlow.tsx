@@ -123,7 +123,7 @@ export function TipFlow({ rideId, userId, fareCup, onTipSubmitted }: TipFlowProp
       }}
     >
       <p style={{ margin: '0 0 0.15rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'center' }}>
-        {t('ride.tip_title', { defaultValue: '¿Querés dejar propina?' })}
+        {t('ride.tip_title', { defaultValue: '¿Quieres dejar propina?' })}
       </p>
       <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', color: 'var(--text-tertiary, var(--text-secondary))', textAlign: 'center' }}>
         {t('ride.tip_subtitle', { defaultValue: 'El 100% va para tu conductor' })}

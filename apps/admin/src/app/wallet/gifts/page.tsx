@@ -251,7 +251,7 @@ export default function GiftsPage() {
             {t('gifts.title', { defaultValue: 'Regalos' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('gifts.page_description', { defaultValue: 'Transferencias de saldo entre usuarios (closed-loop). Podés enviar un regalo manual o revertir uno fraudulento.' })}
+            {t('gifts.page_description', { defaultValue: 'Transferencias de saldo entre usuarios (closed-loop). Puedes enviar un regalo manual o revertir uno fraudulento.' })}
           </p>
         </div>
         <button
@@ -302,7 +302,7 @@ export default function GiftsPage() {
         empty={{
           icon: Gift,
           title: t('gifts.empty_title', { defaultValue: 'Sin regalos' }),
-          body: t('gifts.empty_body', { defaultValue: 'Todavía nadie envió un regalo. Cuando suceda, vas a verlo acá.' }),
+          body: t('gifts.empty_body', { defaultValue: 'Todavía nadie envió un regalo. Cuando suceda, vas a verlo aquí.' }),
         }}
         sort={sort}
         onSortChange={setSort}

@@ -158,7 +158,7 @@ export function LocationPermissionSheet({
             {
               icon: 'time-outline' as const,
               text: t('location_permission.benefit_always', {
-                defaultValue: 'Elegí "Permitir todo el tiempo" para no caerte al minimizar la app',
+                defaultValue: 'Elige "Permitir todo el tiempo" para no caerte al minimizar la app',
               }),
             },
           ].map((item) => (

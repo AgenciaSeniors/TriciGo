@@ -137,7 +137,7 @@ export default function BlockedUsersScreen() {
             <EmptyState
               icon="ban-outline"
               title={t('block.no_blocked', { defaultValue: 'No bloqueaste a nadie' })}
-              description={t('block.no_blocked_desc', { defaultValue: 'Las personas que bloquees aparecerán acá.' })}
+              description={t('block.no_blocked_desc', { defaultValue: 'Las personas que bloquees aparecerán aquí.' })}
             />
           )}
         </View>

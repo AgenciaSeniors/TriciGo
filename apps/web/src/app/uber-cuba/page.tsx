@@ -103,12 +103,12 @@ export default function UberCubaPage() {
 
       {/* Internal links */}
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.7, marginTop: '2rem' }}>
-        Conocé los servicios de TriciGo —{' '}
+        Conoce los servicios de TriciGo —{' '}
         <Link href="/triciclo" style={{ color: 'var(--primary)', fontWeight: 600 }}>triciclo</Link>,{' '}
         <Link href="/moto" style={{ color: 'var(--primary)', fontWeight: 600 }}>moto</Link>,{' '}
         <Link href="/auto" style={{ color: 'var(--primary)', fontWeight: 600 }}>auto</Link> y{' '}
         <Link href="/mensajeria" style={{ color: 'var(--primary)', fontWeight: 600 }}>mensajería</Link>
-        {' '}— o mirá la{' '}
+        {' '}— o mira la{' '}
         <Link href="/transporte" style={{ color: 'var(--primary)', fontWeight: 600 }}>cobertura por provincia</Link>
         {' '}y la guía de{' '}
         <Link href="/blog/transporte-cuba-turistas" style={{ color: 'var(--primary)', fontWeight: 600 }}>transporte en Cuba para turistas</Link>.
@@ -120,7 +120,7 @@ export default function UberCubaPage() {
           No hay Uber, pero sí TriciGo
         </h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', fontSize: '0.95rem' }}>
-          Descargá la app cubana de transporte y consultá la disponibilidad en tu zona.
+          Descarga la app cubana de transporte y consulta la disponibilidad en tu zona.
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           <a href="https://play.google.com/store/apps/details?id=app.tricigo.client" target="_blank" rel="noopener noreferrer"

@@ -57,7 +57,7 @@ export default function DriverSafetyCenterScreen() {
     Alert.alert(
       t('safety.sos_title', { defaultValue: 'SOS — Llamar a emergencias' }),
       t('safety.sos_body', {
-        defaultValue: 'Vas a llamar al 106 y avisar a tus contactos de confianza por SMS. ¿Confirmás?',
+        defaultValue: 'Vas a llamar al 106 y avisar a tus contactos de confianza por SMS. ¿Confirmas?',
       }),
       [
         { text: t('safety.sos_cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
@@ -111,7 +111,7 @@ export default function DriverSafetyCenterScreen() {
                 Toast.show({
                   type: 'info',
                   text1: t('safety.sos_no_contacts', {
-                    defaultValue: 'No tenés contactos de confianza configurados',
+                    defaultValue: 'No tienes contactos de confianza configurados',
                   }),
                   text2: t('safety.sos_no_contacts_hint', {
                     defaultValue: 'Agregalos en Perfil → Contactos de confianza',

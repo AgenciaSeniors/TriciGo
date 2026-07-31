@@ -366,7 +366,7 @@ export function useNetopiaCheckout() {
     if (!loading && !error) {
       Alert.alert(
         'Cancelar el pago',
-        'Si salís ahora, la recarga no se completará.',
+        'Si sales ahora, la recarga no se completará.',
         [
           { text: 'Seguir pagando', style: 'cancel' },
           { text: 'Cancelar pago', style: 'destructive', onPress: () => settle('closed') },
@@ -511,8 +511,8 @@ export function useNetopiaCheckout() {
                 </Text>
                 <Text style={styles.overlaySub}>
                   {errorKind === 'offline'
-                    ? 'Revisá tu conexión a internet e intentá de nuevo.'
-                    : 'El servicio de pago no respondió. Reintentá o abrí en el navegador.'}
+                    ? 'Revisa tu conexión a internet e intenta de nuevo.'
+                    : 'El servicio de pago no respondió. Reintenta o abre en el navegador.'}
                 </Text>
                 <TouchableOpacity
                   style={styles.primaryBtn}

@@ -172,7 +172,7 @@ export default function ChatScreen() {
               Toast.show({ type: 'success', text1: t('chat.blocked_ok', { defaultValue: 'Conductor bloqueado' }) });
               router.back();
             } catch {
-              Toast.show({ type: 'error', text1: t('chat.action_failed', { defaultValue: 'No se pudo completar. Probá de nuevo.' }) });
+              Toast.show({ type: 'error', text1: t('chat.action_failed', { defaultValue: 'No se pudo completar. Prueba de nuevo.' }) });
             }
           },
         },
@@ -202,7 +202,7 @@ export default function ChatScreen() {
               triggerHaptic('success');
               Toast.show({ type: 'success', text1: t('chat.report_ok', { defaultValue: 'Reporte enviado' }) });
             } catch {
-              Toast.show({ type: 'error', text1: t('chat.action_failed', { defaultValue: 'No se pudo completar. Probá de nuevo.' }) });
+              Toast.show({ type: 'error', text1: t('chat.action_failed', { defaultValue: 'No se pudo completar. Prueba de nuevo.' }) });
             }
           },
         },
@@ -345,10 +345,10 @@ export default function ChatScreen() {
                 <Ionicons name="chatbubble-ellipses-outline" size={28} color="#FF4D00" />
               </View>
               <Text variant="h4" color="primary" className="text-center mb-1">
-                {t('chat.no_messages_title', { defaultValue: 'Empezá la conversación' })}
+                {t('chat.no_messages_title', { defaultValue: 'Empieza la conversación' })}
               </Text>
               <Text variant="caption" color="tertiary" className="text-center">
-                {t('chat.no_messages_hint', { defaultValue: 'Tocá una respuesta rápida o escribí abajo' })}
+                {t('chat.no_messages_hint', { defaultValue: 'Toca una respuesta rápida o escribe abajo' })}
               </Text>
             </View>
           }

@@ -252,7 +252,7 @@ export default function LoginScreen() {
                   Toast.show({
                     type: 'info',
                     text1: t('auth.phone_too_short_title', { defaultValue: 'Teléfono incompleto' }),
-                    text2: t('auth.phone_too_short_body', { defaultValue: 'Ingresá el número completo para recibir el código.' }),
+                    text2: t('auth.phone_too_short_body', { defaultValue: 'Ingresa el número completo para recibir el código.' }),
                     visibilityTime: 2500,
                   });
                   return;
@@ -308,7 +308,7 @@ export default function LoginScreen() {
                     Toast.show({
                       type: 'error',
                       text1: t('auth.social_login_failed_title', { defaultValue: 'No se pudo iniciar sesión' }),
-                      text2: t('auth.social_login_failed_body', { defaultValue: 'Probá de nuevo o usá tu número de teléfono.' }),
+                      text2: t('auth.social_login_failed_body', { defaultValue: 'Prueba de nuevo o usa tu número de teléfono.' }),
                       visibilityTime: 3000,
                     });
                   }
@@ -357,7 +357,7 @@ export default function LoginScreen() {
                     Toast.show({
                       type: 'error',
                       text1: t('auth.social_login_failed_title', { defaultValue: 'No se pudo iniciar sesión' }),
-                      text2: t('auth.social_login_failed_body', { defaultValue: 'Probá de nuevo o usá tu número de teléfono.' }),
+                      text2: t('auth.social_login_failed_body', { defaultValue: 'Prueba de nuevo o usa tu número de teléfono.' }),
                       visibilityTime: 3000,
                     });
                   }

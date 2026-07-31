@@ -95,7 +95,7 @@ export default function VerifyOTPScreen() {
         // Tapping Verify again resumes at phase 2 (no OTP re-burn), and the
         // stored session also logs the user in on a cold restart — so they
         // are never permanently stranded.
-        setError(t('auth.profile_fetch_retry', { defaultValue: 'Conexión inestable. Tocá "Verificar" otra vez.' }));
+        setError(t('auth.profile_fetch_retry', { defaultValue: 'Conexión inestable. Toca "Verificar" otra vez.' }));
       } else {
         // Distinguish "expired" from "wrong digits" via the EF's stable reason
         // code (set by authService.verifyOTP) — a generic "algo salió mal" left
@@ -103,11 +103,11 @@ export default function VerifyOTPScreen() {
         const reason = (err as { code?: string } | null)?.code;
         setError(
           reason === 'expired'
-            ? t('auth.otp_expired', { defaultValue: 'El código expiró. Pedí uno nuevo.' })
+            ? t('auth.otp_expired', { defaultValue: 'El código expiró. Pide uno nuevo.' })
             : reason === 'invalid'
-              ? t('auth.otp_incorrect', { defaultValue: 'Código incorrecto. Revisá los dígitos.' })
+              ? t('auth.otp_incorrect', { defaultValue: 'Código incorrecto. Revisa los dígitos.' })
               : reason === 'too_many_attempts'
-                ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pedí un código nuevo.' })
+                ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pide un código nuevo.' })
                 : t('errors.generic'),
         );
       }
@@ -127,7 +127,7 @@ export default function VerifyOTPScreen() {
       Toast.show({
         type: 'success',
         text1: t('auth.resend_success_title', { defaultValue: 'Código reenviado' }),
-        text2: t('auth.resend_success_body', { defaultValue: 'Revisá los mensajes del teléfono.' }),
+        text2: t('auth.resend_success_body', { defaultValue: 'Revisa los mensajes del teléfono.' }),
         visibilityTime: 2500,
       });
     } catch (err) {
@@ -138,7 +138,7 @@ export default function VerifyOTPScreen() {
         Toast.show({
           type: 'error',
           text1: t('auth.otp_rate_limited_title', { defaultValue: 'Demasiados códigos' }),
-          text2: t('auth.otp_rate_limited_body', { defaultValue: 'Esperá unos minutos antes de pedir otro código.' }),
+          text2: t('auth.otp_rate_limited_body', { defaultValue: 'Espera unos minutos antes de pedir otro código.' }),
           visibilityTime: 3000,
         });
       } else {

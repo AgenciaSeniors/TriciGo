@@ -248,7 +248,7 @@ export default function QuestsPage() {
             {t('quests.title', { defaultValue: 'Misiones' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('quests.page_description', { defaultValue: 'Desafíos con recompensa para conductores. Ganá retención con metas claras.' })}
+            {t('quests.page_description', { defaultValue: 'Desafíos con recompensa para conductores. Gana retención con metas claras.' })}
           </p>
         </div>
         <button
@@ -406,7 +406,7 @@ export default function QuestsPage() {
         empty={{
           icon: Trophy,
           title: t('quests.empty_title', { defaultValue: 'Sin misiones' }),
-          body: t('quests.empty_body', { defaultValue: 'Creá la primera para motivar a los conductores con recompensas.' }),
+          body: t('quests.empty_body', { defaultValue: 'Crea la primera para motivar a los conductores con recompensas.' }),
           action: { label: t('quests.new_quest', { defaultValue: 'Nueva misión' }), onClick: () => setShowCreate(true) },
         }}
         sort={sort}

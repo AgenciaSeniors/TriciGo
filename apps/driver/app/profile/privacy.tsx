@@ -111,7 +111,7 @@ export default function PrivacyScreen() {
         <View className="flex-1 items-center justify-center px-6">
           <Ionicons name="cloud-offline-outline" size={48} color={midnightEmber.screen.text.tertiary} />
           <Text variant="body" color="tertiary" className="mt-4 mb-4 text-center">
-            {t('common.load_error', { defaultValue: 'No se pudo cargar el contenido. Verificá tu conexión.' })}
+            {t('common.load_error', { defaultValue: 'No se pudo cargar el contenido. Verifica tu conexión.' })}
           </Text>
           <Pressable
             onPress={() => void loadCms()}

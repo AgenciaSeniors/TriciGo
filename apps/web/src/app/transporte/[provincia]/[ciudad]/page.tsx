@@ -174,9 +174,9 @@ export default async function CityPage({
         ¿Cómo funciona?
       </h2>
       <ol style={{ paddingLeft: '1.25rem', margin: 0, color: 'var(--text-secondary)', lineHeight: 1.7, fontSize: '0.95rem' }}>
-        <li style={{ marginBottom: '0.5rem' }}><strong>Elegí tu destino</strong> — ingresá la recogida y el destino y verás el precio estimado al instante.</li>
-        <li style={{ marginBottom: '0.5rem' }}><strong>Seleccioná el vehículo</strong> — triciclo, moto o auto, según tu necesidad y presupuesto.</li>
-        <li><strong>Viajá seguro</strong> — seguí el viaje en el mapa, compartí tu ubicación y pagá en efectivo o con TriciCoin.</li>
+        <li style={{ marginBottom: '0.5rem' }}><strong>Elige tu destino</strong> — ingresa la recogida y el destino y verás el precio estimado al instante.</li>
+        <li style={{ marginBottom: '0.5rem' }}><strong>Selecciona el vehículo</strong> — triciclo, moto o auto, según tu necesidad y presupuesto.</li>
+        <li><strong>Viaja seguro</strong> — sigue el viaje en el mapa, comparte tu ubicación y paga en efectivo o con TriciCoin.</li>
       </ol>
 
       {/* FAQ */}
@@ -192,16 +192,16 @@ export default async function CityPage({
 
       {/* Internal links: province + guides */}
       <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: '2.5rem 0 1rem', color: 'var(--text-primary)' }}>
-        Seguí leyendo
+        Sigue leyendo
       </h2>
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.7 }}>
-        Mirá todo el{' '}
+        Mira todo el{' '}
         <Link href={`/transporte/${city.provinceSlug}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
           transporte en {city.provinceName}
         </Link>
         {blogLinks.map((b, i) => (
           <span key={b.href}>
-            {i === 0 ? ', o leé sobre ' : ' y '}
+            {i === 0 ? ', o lee sobre ' : ' y '}
             <Link href={b.href} style={{ color: 'var(--primary)', fontWeight: 600 }}>{b.label}</Link>
           </span>
         ))}
@@ -211,10 +211,10 @@ export default async function CityPage({
       {/* CTA */}
       <div style={{ marginTop: '2.75rem', padding: '2rem', background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--border-light)', textAlign: 'center' }}>
         <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
-          Pedí tu viaje en {city.cityName}
+          Pide tu viaje en {city.cityName}
         </h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.25rem', fontSize: '0.95rem' }}>
-          Descargá TriciGo y solicitá tu primer viaje en minutos.
+          Descarga TriciGo y solicita tu primer viaje en minutos.
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           <a href="https://play.google.com/store/apps/details?id=app.tricigo.client" target="_blank" rel="noopener noreferrer"
