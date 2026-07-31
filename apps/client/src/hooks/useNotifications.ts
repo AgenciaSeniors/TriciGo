@@ -227,12 +227,17 @@ export type PushRegistrationResult = 'registered' | 'denied' | 'error';
  */
 export async function registerPushTokenForUser(
   userId: string,
+  opts?: { promptIfNeeded?: boolean },
 ): Promise<PushRegistrationResult> {
   try {
     const { status: existing } = await Notifications.getPermissionsAsync();
     let finalStatus = existing;
 
     if (existing !== 'granted') {
+      // Never burn the one-shot OS prompt from an unattended code path —
+      // Android 13+ asks once per install and a denial is permanent. See
+      // registerForPushNotifications in services/push.service.ts.
+      if (!opts?.promptIfNeeded) return 'denied';
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }

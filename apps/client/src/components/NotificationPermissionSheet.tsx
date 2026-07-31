@@ -8,6 +8,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { registerForPushNotifications } from '@/services/push.service';
 
 // Timestamp (ms) of the last time we surfaced the soft-ask. We re-surface at
 // most once per RESHOW_INTERVAL_MS while notifications are NOT granted, so a
@@ -77,7 +78,13 @@ export function NotificationPermissionSheet() {
       if (status === 'denied') {
         await Linking.openSettings();
       } else {
-        await Notifications.requestPermissionsAsync();
+        // This tap is the informed consent the OS dialog was missing, so it
+        // may spend the one-shot prompt. Going through the service (rather
+        // than requestPermissionsAsync alone) also mints and stores the
+        // token and creates the Android channel in the same breath, so a
+        // user who says yes is reachable immediately — not one cold start
+        // later, silent in the meantime because the channel was missing.
+        await registerForPushNotifications({ promptIfNeeded: true });
       }
     } catch {
       // User may deny / Settings may fail to open — that's fine

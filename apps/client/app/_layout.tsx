@@ -150,7 +150,12 @@ function RootNavigator() {
   // Process offline queue when connectivity is restored
   useOfflineSync();
 
-  // Register for push notifications on mount
+  // Register for push notifications on mount. Deliberately WITHOUT
+  // promptIfNeeded: this runs before there is a session of any kind, so
+  // asking here meant the OS dialog fired the very first time the app was
+  // opened — no signup, no context — and Android 13+ only ever asks once.
+  // It now mints the token when permission is already granted and stays
+  // silent otherwise; the soft-ask sheet on the home tab does the asking.
   useEffect(() => {
     registerForPushNotifications();
   }, []);
