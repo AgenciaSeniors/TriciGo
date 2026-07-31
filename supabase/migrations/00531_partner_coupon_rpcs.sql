@@ -1,4 +1,36 @@
 -- 00531_partner_coupon_rpcs.sql
+--
+-- ── What `anon` can reach in this file, and why ───────────────────────
+-- Exactly two functions are granted to anon:
+--   validate_partner_coupon(p_token, p_code)
+--   redeem_partner_coupon(p_token, p_code)
+-- They are login-free on purpose: the person at the counter is a bakery
+-- employee who has no TriciGo account and never will. Everything else here is
+-- authenticated-only or revoked outright.
+--
+-- Both take the business's secret validation token (00529) as their FIRST
+-- argument, because that token — not the caller's IP — is the identity of the
+-- validator. That single decision is what this file is shaped around:
+--
+--   * Rate limiting keys on the RESOLVED partner_place_id (a UUID). Bounded
+--     cardinality, not client-controllable, and one bucket per business, so
+--     the many partner businesses sharing a single CGNAT egress IP — which in
+--     Cuba is very nearly all of them — no longer share a budget.
+--   * A coupon only validates AT THE BUSINESS THAT ISSUED IT. A bakery's
+--     coupon presented at a cafe is `not_found`, indistinguishable from a code
+--     that never existed.
+--   * Brute-forcing a coupon code requires knowing a business token first.
+--   * Tokens that do not resolve all share ONE bucket, so guessing at tokens
+--     cannot inflate rate_limits cardinality.
+--
+-- This REPLACES a per-IP limiter that keyed on the leftmost element of
+-- X-Forwarded-For. That element is supplied by the client — Supabase's edge
+-- APPENDS the real address on the right — so it was bypassable by varying the
+-- header (three requests with two forged headers produced three separate
+-- buckets), it let an attacker lock a specific shop out by forging that shop's
+-- IP 30 times, and every forged value minted a rate_limits row keyed on
+-- arbitrary caller-controlled TEXT. The derivation is deleted rather than kept
+-- as a fallback: it was the vulnerability, and a fallback would restore it.
 
 -- ── Discovery ─────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.get_nearby_partner_places(
@@ -38,6 +70,9 @@ BEGIN
          EXISTS (
            SELECT 1 FROM public.partner_coupons pc
            WHERE pc.partner_place_id = pp.id
+             -- THIS LINE IS THE DATA-ISOLATION BOUNDARY. The function is
+             -- SECURITY DEFINER, so RLS is bypassed and nothing else stops one
+             -- passenger from being told about another's coupons.
              AND pc.user_id = auth.uid()
              AND pc.redeemed_at IS NULL
              AND pc.expires_at > now()
@@ -47,7 +82,9 @@ BEGIN
     AND (pp.valid_until IS NULL OR pp.valid_until > now())
     AND ST_DWithin(pp.location, v_origin, v_radius)
   ORDER BY ST_Distance(pp.location, v_origin)
-  LIMIT GREATEST(COALESCE(p_limit, 10), 1);
+  -- Floor AND ceiling: p_limit arrives from the client, and without the LEAST
+  -- a single call could ask for the whole table.
+  LIMIT LEAST(GREATEST(COALESCE(p_limit, 10), 1), 50);
 END;
 $$;
 
@@ -74,6 +111,9 @@ BEGIN
          pc.issued_at, pc.expires_at
   FROM public.partner_coupons pc
   JOIN public.partner_places pp ON pp.id = pc.partner_place_id
+  -- THIS LINE IS THE DATA-ISOLATION BOUNDARY. The function is SECURITY
+  -- DEFINER, so RLS is bypassed; this predicate is the only thing separating
+  -- one passenger's coupon codes from every other passenger's.
   WHERE pc.user_id = auth.uid()
     AND pc.redeemed_at IS NULL
     AND pc.expires_at > now()
@@ -87,6 +127,7 @@ CREATE OR REPLACE FUNCTION public._normalize_coupon_code(p_raw TEXT)
 RETURNS TEXT
 LANGUAGE sql
 IMMUTABLE
+SET search_path = public, extensions, pg_catalog
 AS $$
   WITH stripped AS (
     SELECT regexp_replace(upper(COALESCE(p_raw, '')), '[^A-Z0-9]', '', 'g') AS s
@@ -105,8 +146,24 @@ AS $$
   FROM stripped;
 $$;
 
+-- ── Drop the superseded single-argument signatures ────────────────────
+-- CREATE OR REPLACE cannot change a function's argument list — it would
+-- silently create an OVERLOAD and leave the old, IP-keyed, unscoped versions
+-- sitting there still granted to anon. They have to be dropped by name.
+-- Dropping a function drops its grants with it.
+DROP FUNCTION IF EXISTS public.validate_partner_coupon(TEXT);
+DROP FUNCTION IF EXISTS public.redeem_partner_coupon(TEXT);
+DROP FUNCTION IF EXISTS public._coupon_rate_limit_ok(TEXT);
+
 -- ── Rate-limit helper for the public endpoints ────────────────────────
-CREATE OR REPLACE FUNCTION public._coupon_rate_limit_ok(p_scope TEXT)
+-- Takes the bucket key already resolved by the caller. There is deliberately
+-- no IP derivation anywhere in this file.
+CREATE OR REPLACE FUNCTION public._coupon_rate_limit_ok(
+  p_scope    TEXT,
+  p_bucket   TEXT,
+  p_max      INT DEFAULT NULL,
+  p_window_s INT DEFAULT NULL
+)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 VOLATILE
@@ -114,51 +171,87 @@ SECURITY DEFINER
 SET search_path = public, extensions, pg_catalog
 AS $$
 DECLARE
-  v_ip      TEXT;
+  v_max     INT;
+  v_window  INT;
   v_allowed BOOLEAN;
 BEGIN
-  v_ip := COALESCE(
-    NULLIF(split_part(current_setting('request.headers', true)::json ->> 'x-forwarded-for', ',', 1), ''),
-    'unknown'
-  );
+  -- NULL overrides fall back to config, so the budget can be retuned during an
+  -- incident without a migration. Callers pass an explicit value only where a
+  -- different, tighter budget is intended (the shared bad-token bucket).
+  v_max    := COALESCE(p_max,
+                public.get_platform_config_numeric('coupon_validate_max_per_window', 60)::INT);
+  v_window := COALESCE(p_window_s,
+                public.get_platform_config_numeric('coupon_validate_window_s', 600)::INT);
+
   SELECT allowed INTO v_allowed
-  FROM public.check_rate_limit(p_scope || ':' || v_ip, 30, 600);
+  FROM public.check_rate_limit(p_scope || ':' || p_bucket, v_max, v_window);
+
   RETURN COALESCE(v_allowed, false);
 EXCEPTION WHEN OTHERS THEN
-  -- Rate limiter unavailable. Fail CLOSED on a public write endpoint.
+  -- Fail CLOSED on a public write endpoint. But SAY SO: without this warning a
+  -- broken limiter is indistinguishable from ordinary throttling, and every
+  -- validation on the platform silently returning rate_limited looks exactly
+  -- like a busy Saturday. This codebase has twice been burned by a defensive
+  -- handler that swallowed the diagnosis along with the error.
+  RAISE WARNING '[_coupon_rate_limit_ok] scope=% bucket=%: % % — failing CLOSED, coupon validation is now refusing every request',
+    p_scope, p_bucket, SQLSTATE, SQLERRM;
   RETURN false;
 END;
 $$;
 
--- ── Validation (public, no login) ─────────────────────────────────────
-CREATE OR REPLACE FUNCTION public.validate_partner_coupon(p_code TEXT)
-RETURNS JSONB
+-- ── Token → business ──────────────────────────────────────────────────
+-- Resolves the secret in tricigo.com/v/<token> to the business it belongs to,
+-- or NULL. An inactive or expired partnership stops resolving, which retires
+-- its link without touching any coupon.
+CREATE OR REPLACE FUNCTION public._resolve_partner_validation_token(p_token TEXT)
+RETURNS UUID
 LANGUAGE plpgsql
-VOLATILE
+STABLE
 SECURITY DEFINER
 SET search_path = public, extensions, pg_catalog
 AS $$
 DECLARE
-  v_code TEXT;
-  v_row  RECORD;
+  v_place_id UUID;
 BEGIN
-  IF NOT public._coupon_rate_limit_ok('coupon_validate') THEN
-    RETURN jsonb_build_object('status', 'rate_limited');
-  END IF;
+  SELECT pp.id INTO v_place_id
+  FROM public.partner_places pp
+  WHERE pp.validation_token = lower(btrim(COALESCE(p_token, '')))
+    AND pp.is_active
+    AND (pp.valid_until IS NULL OR pp.valid_until > now());
 
-  v_code := public._normalize_coupon_code(p_code);
-  IF length(v_code) <> 6 THEN
-    RETURN jsonb_build_object('status', 'not_found');
-  END IF;
+  RETURN v_place_id;
+END;
+$$;
 
-  SELECT pc.id, pc.expires_at, pc.redeemed_at, pc.issued_at,
+-- ── The verdict on one code at one business ───────────────────────────
+-- Shared by validate and by redeem's fallthrough. Charges no rate limit: both
+-- callers have already paid for this request, and the fallthrough must not pay
+-- twice (see redeem_partner_coupon).
+CREATE OR REPLACE FUNCTION public._partner_coupon_verdict(
+  p_place_id UUID,
+  p_code     TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_catalog
+AS $$
+DECLARE
+  v_row RECORD;
+BEGIN
+  SELECT pc.expires_at, pc.redeemed_at, pc.issued_at,
          pp.name AS place_name, pp.benefit_title, pp.terms,
          u.full_name
   INTO v_row
   FROM public.partner_coupons pc
   JOIN public.partner_places pp ON pp.id = pc.partner_place_id
   JOIN public.users u           ON u.id  = pc.user_id
-  WHERE pc.code = v_code;
+  WHERE pc.code = p_code
+    -- Scoping. A live coupon belonging to a DIFFERENT business is not_found
+    -- here, exactly like a code that never existed — the shop learns nothing
+    -- about coupons it did not issue, and cannot burn them.
+    AND pc.partner_place_id = p_place_id;
 
   IF NOT FOUND THEN
     -- No hint about which codes exist.
@@ -192,8 +285,11 @@ BEGIN
 END;
 $$;
 
--- ── Redemption by the business (public, no login) ─────────────────────
-CREATE OR REPLACE FUNCTION public.redeem_partner_coupon(p_code TEXT)
+-- ── Validation (public, no login) ─────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.validate_partner_coupon(
+  p_token TEXT,
+  p_code  TEXT
+)
 RETURNS JSONB
 LANGUAGE plpgsql
 VOLATILE
@@ -201,10 +297,62 @@ SECURITY DEFINER
 SET search_path = public, extensions, pg_catalog
 AS $$
 DECLARE
-  v_code TEXT;
-  v_id   UUID;
+  v_place_id UUID;
+  v_code     TEXT;
 BEGIN
-  IF NOT public._coupon_rate_limit_ok('coupon_redeem') THEN
+  v_place_id := public._resolve_partner_validation_token(p_token);
+
+  IF v_place_id IS NULL THEN
+    -- ONE shared bucket for every unresolvable token, on a tight budget.
+    -- Shared so that guessing at tokens cannot mint a rate_limits row per
+    -- guess; tight because nobody reaches this path in normal use — a shop
+    -- opens its own bookmark. The verdict is identical for every invalid
+    -- token, so nothing here reveals which tokens exist.
+    IF NOT public._coupon_rate_limit_ok('coupon_badtoken', 'all', 20) THEN
+      RETURN jsonb_build_object('status', 'rate_limited');
+    END IF;
+    RETURN jsonb_build_object('status', 'invalid_link');
+  END IF;
+
+  IF NOT public._coupon_rate_limit_ok('coupon_validate', v_place_id::TEXT) THEN
+    RETURN jsonb_build_object('status', 'rate_limited');
+  END IF;
+
+  v_code := public._normalize_coupon_code(p_code);
+  IF length(v_code) <> 6 THEN
+    RETURN jsonb_build_object('status', 'not_found');
+  END IF;
+
+  RETURN public._partner_coupon_verdict(v_place_id, v_code);
+END;
+$$;
+
+-- ── Redemption by the business (public, no login) ─────────────────────
+CREATE OR REPLACE FUNCTION public.redeem_partner_coupon(
+  p_token TEXT,
+  p_code  TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public, extensions, pg_catalog
+AS $$
+DECLARE
+  v_place_id UUID;
+  v_code     TEXT;
+  v_id       UUID;
+BEGIN
+  v_place_id := public._resolve_partner_validation_token(p_token);
+
+  IF v_place_id IS NULL THEN
+    IF NOT public._coupon_rate_limit_ok('coupon_badtoken', 'all', 20) THEN
+      RETURN jsonb_build_object('status', 'rate_limited');
+    END IF;
+    RETURN jsonb_build_object('status', 'invalid_link');
+  END IF;
+
+  IF NOT public._coupon_rate_limit_ok('coupon_redeem', v_place_id::TEXT) THEN
     RETURN jsonb_build_object('status', 'rate_limited');
   END IF;
 
@@ -215,9 +363,11 @@ BEGIN
 
   -- Atomic claim, same shape as the NETOPIA webhook. Two employees hitting
   -- the same code concurrently: one wins, the other is told it is used.
+  -- Scoped to this business, so a shop cannot burn a coupon it did not issue.
   UPDATE public.partner_coupons
   SET redeemed_at = now(), redeemed_via = 'business'
   WHERE code = v_code
+    AND partner_place_id = v_place_id
     AND redeemed_at IS NULL
     AND expires_at > now()
   RETURNING id INTO v_id;
@@ -226,8 +376,13 @@ BEGIN
     RETURN jsonb_build_object('status', 'redeemed');
   END IF;
 
-  -- Lost the race, already used, expired, or never existed. Re-read to say which.
-  RETURN public.validate_partner_coupon(p_code);
+  -- Lost the race, already used, expired, issued elsewhere, or never existed.
+  -- Re-read to say which, REUSING the place already resolved above and
+  -- charging no second budget. Previously this called validate_partner_coupon,
+  -- which re-entered the *validate* scope: a shop that had spent its validate
+  -- budget was told an expired coupon was rate_limited — a wrong verdict at
+  -- the counter, not merely an extra cost.
+  RETURN public._partner_coupon_verdict(v_place_id, v_code);
 END;
 $$;
 
@@ -259,31 +414,45 @@ END;
 $$;
 
 -- ── Grants ────────────────────────────────────────────────────────────
+-- `FROM PUBLIC` alone would be a silent no-op on this project: pg_default_acl
+-- grants EXECUTE explicitly to anon/authenticated/service_role, so the roles
+-- have to be named. See the long note in 00530.
 REVOKE ALL ON FUNCTION public.get_nearby_partner_places(DOUBLE PRECISION, DOUBLE PRECISION, INT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.get_my_partner_coupons() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.redeem_own_partner_coupon(UUID) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.validate_partner_coupon(TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.redeem_partner_coupon(TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public._coupon_rate_limit_ok(TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.validate_partner_coupon(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.redeem_partner_coupon(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public._coupon_rate_limit_ok(TEXT, TEXT, INT, INT) FROM PUBLIC, anon, authenticated;
+-- Not callable directly: it would be an oracle telling anyone whether a given
+-- token is live, and the id it returns is the key to another shop's coupons.
+REVOKE ALL ON FUNCTION public._resolve_partner_validation_token(TEXT) FROM PUBLIC, anon, authenticated;
+-- Not callable directly: it is the verdict WITHOUT the token check or the rate
+-- limit, i.e. precisely the unscoped endpoint this migration removes.
+REVOKE ALL ON FUNCTION public._partner_coupon_verdict(UUID, TEXT) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.get_nearby_partner_places(DOUBLE PRECISION, DOUBLE PRECISION, INT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_my_partner_coupons() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.redeem_own_partner_coupon(UUID) TO authenticated;
 -- Deliberately anon: the shop employee has no TriciGo account and never will.
-GRANT EXECUTE ON FUNCTION public.validate_partner_coupon(TEXT) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.redeem_partner_coupon(TEXT)  TO anon, authenticated;
+-- Reachable only with that shop's secret token, and scoped to that shop.
+GRANT EXECUTE ON FUNCTION public.validate_partner_coupon(TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.redeem_partner_coupon(TEXT, TEXT)  TO anon, authenticated;
 
 COMMENT ON FUNCTION public.get_nearby_partner_places(DOUBLE PRECISION, DOUBLE PRECISION, INT) IS
-  '00531 Partner places within partner_places_discovery_radius_m of a point, nearest first, flagging the ones where the caller already holds a live coupon. Returns nothing to an anonymous caller.';
+  '00531 Partner places within partner_places_discovery_radius_m of a point, nearest first, flagging the ones where the caller already holds a live coupon. Returns nothing to an anonymous caller. p_limit is clamped to 1..50.';
 COMMENT ON FUNCTION public.get_my_partner_coupons() IS
   '00531 The calling passenger''s unredeemed, unexpired coupons, soonest to expire first.';
 COMMENT ON FUNCTION public._normalize_coupon_code(TEXT) IS
-  '00531 Folds what an employee types into the stored code: upper-cases, drops separators, and strips the TG display prefix only when that leaves exactly six characters (a real code may itself start with TG).';
-COMMENT ON FUNCTION public._coupon_rate_limit_ok(TEXT) IS
-  '00531 Per-IP budget for the login-free coupon endpoints, 30 per 10 minutes per scope. Fails CLOSED if the rate limiter is unavailable.';
-COMMENT ON FUNCTION public.validate_partner_coupon(TEXT) IS
-  '00531 Public, login-free verdict on a coupon code for the shop counter: valid | used | expired | not_found | rate_limited. Never reveals more than first name plus last initial.';
-COMMENT ON FUNCTION public.redeem_partner_coupon(TEXT) IS
-  '00531 Public, login-free single-use claim by the business. Atomic: concurrent callers get one redeemed and the rest used. Sets redeemed_via = business.';
+  '00531 Folds what an employee types into the stored code: upper-cases, drops separators, and strips the TG display prefix only when that leaves exactly six characters (a real code may itself start with TG). Deliberately left world-executable: it is a pure string function whose only secret would be the TG- convention already printed on every coupon.';
+COMMENT ON FUNCTION public._coupon_rate_limit_ok(TEXT, TEXT, INT, INT) IS
+  '00531 Budget for the login-free coupon endpoints, keyed on a bucket the CALLER resolves (the partner_place_id) — never on a client-supplied IP header. Defaults read coupon_validate_max_per_window / coupon_validate_window_s. Fails CLOSED, with a WARNING, if the rate limiter is unavailable.';
+COMMENT ON FUNCTION public._resolve_partner_validation_token(TEXT) IS
+  '00531 Maps a tricigo.com/v/<token> secret to its active partner place, or NULL. Internal only.';
+COMMENT ON FUNCTION public._partner_coupon_verdict(UUID, TEXT) IS
+  '00531 Verdict on one normalised code AT ONE BUSINESS: valid | used | expired | not_found. Internal only — carries no token check and no rate limit.';
+COMMENT ON FUNCTION public.validate_partner_coupon(TEXT, TEXT) IS
+  '00531 Public, login-free verdict for the shop counter, authorised by the business''s own validation token: valid | used | expired | not_found | invalid_link | rate_limited. Scoped to the issuing business and rate-limited per business. Never reveals more than first name plus last initial.';
+COMMENT ON FUNCTION public.redeem_partner_coupon(TEXT, TEXT) IS
+  '00531 Public, login-free single-use claim by the business, authorised by its own validation token. Atomic: concurrent callers get one redeemed and the rest used. Sets redeemed_via = business. A coupon issued by another business is not_found.';
 COMMENT ON FUNCTION public.redeem_own_partner_coupon(UUID) IS
   '00531 The passenger burns their own coupon from the app ("Ya lo usé") when the shop cannot open the page. Sets redeemed_via = self, which is a claim rather than evidence.';
