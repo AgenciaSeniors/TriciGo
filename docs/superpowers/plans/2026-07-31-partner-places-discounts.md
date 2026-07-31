@@ -1108,6 +1108,25 @@ git commit -m "feat(partners): partner place service with absent-RPC tolerance"
 
 ## Task 7: Admin page
 
+> **`validation_token` is deliberately unreadable from the table, and that is not a bug to fix.**
+> `partner_places` no longer carries a table-wide SELECT grant for `authenticated`; the non-secret
+> columns are granted individually and the token is not among them. Without that, any logged-in
+> passenger could `GET /partner_places?select=validation_token` and harvest every business's secret
+> link, which would defeat the whole point of having one.
+>
+> The admin still sees it, because `admin_list_partner_places` is `SECURITY DEFINER` and gated on
+> `is_admin()` — privileges are checked against the function owner, not the caller. Verified on the
+> QA branch: a direct read as `authenticated` fails with `42501 permission denied`, while the same
+> column read through a `SECURITY DEFINER` function returns the real token.
+>
+> So: if you hit a permission error while building this page, the fix is to route the read through
+> the RPC. **Do not** `GRANT SELECT (validation_token)` — and note that `REVOKE SELECT (column)`
+> would not undo it, because column privileges are additive with a table-level grant. That trap
+> already cost one round here.
+>
+> Adding a column to `partner_places` later means adding it to the explicit `GRANT SELECT (...)`
+> list in 00529, or clients will not see it. That failure direction is the safe one.
+
 **Files:**
 - Create: `apps/admin/src/app/partners/page.tsx`
 - Modify: `apps/admin/src/components/layout/Sidebar.tsx:127`
