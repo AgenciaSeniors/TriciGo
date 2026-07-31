@@ -1273,7 +1273,7 @@
     "dispatch_stage1_seconds": "Ventaja para los cercanos (s)",
     "dispatch_stage1_seconds_help": "Segundos iniciales en que el viaje se ofrece SOLO a conductores cercanos, antes de abrirse a todos. 0 = sin etapas (se abre desde el primer segundo). Conviene que sea igual a la duración de la oferta.",
     "dispatch_stage1_radius_m": "Radio de los cercanos (m)",
-    "dispatch_stage1_radius_m_help": "Radio en metros que se usa durante la ventaja inicial. En La Habana se viaja a ~3 min por km: 5000 m ≈ 15 minutos de espera para el pasajero.",
+    "dispatch_stage1_radius_m_help": "Radio en metros que se usa durante la ventaja inicial. En La Habana se viaja a ~3 min por km: 8000 m ≈ 24 minutos de espera para el pasajero.",
     "dispatch_max_radius_m": "Radio máximo de búsqueda (m)",
     "dispatch_max_radius_m_help": "Radio máximo de búsqueda de conductores en metros, una vez pasada la ventaja inicial. 0 = sin límite (la oferta llega a todos los conductores elegibles sin importar la distancia).",
     "dispatch_offer_limit": "Conductores por oferta",

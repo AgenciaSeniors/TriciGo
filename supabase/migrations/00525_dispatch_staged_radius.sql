@@ -14,7 +14,7 @@
 --
 -- WHAT. The radius now depends on the ride's AGE, not on the caller:
 --   * first `dispatch_stage1_seconds` (45s, one full offer round): only
---     drivers within `dispatch_stage1_radius_m` (5 km ≈ 15 min) — the nearby
+--     drivers within `dispatch_stage1_radius_m` (8 km ≈ 24 min) — the nearby
 --     driver gets a genuine first shot;
 --   * after that: `dispatch_max_radius_m` (0 = unlimited, the 00524 default).
 -- Set either stage-1 key to 0 to disable staging and restore 00524 behavior.
@@ -36,7 +36,7 @@
 -- ============================================================
 INSERT INTO platform_config (key, value) VALUES
   ('dispatch_stage1_seconds',  '45'::jsonb),
-  ('dispatch_stage1_radius_m', '5000'::jsonb)
+  ('dispatch_stage1_radius_m', '8000'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================
@@ -57,9 +57,9 @@ DECLARE
   v_target text := 'v_eff_radius := GREATEST(0, get_platform_config_numeric(''dispatch_max_radius_m'', 0))::int;';
   v_new    text := 'v_eff_radius := CASE'
     || ' WHEN get_platform_config_numeric(''dispatch_stage1_seconds'', 45) > 0'
-    || '  AND get_platform_config_numeric(''dispatch_stage1_radius_m'', 5000) > 0'
+    || '  AND get_platform_config_numeric(''dispatch_stage1_radius_m'', 8000) > 0'
     || '  AND v_ride.created_at > now() - make_interval(secs => get_platform_config_numeric(''dispatch_stage1_seconds'', 45))'
-    || ' THEN GREATEST(0, get_platform_config_numeric(''dispatch_stage1_radius_m'', 5000))::int'
+    || ' THEN GREATEST(0, get_platform_config_numeric(''dispatch_stage1_radius_m'', 8000))::int'
     || ' ELSE GREATEST(0, get_platform_config_numeric(''dispatch_max_radius_m'', 0))::int'
     || ' END;';
 BEGIN

@@ -1273,7 +1273,7 @@
     "dispatch_stage1_seconds": "Nearby head start (s)",
     "dispatch_stage1_seconds_help": "Opening seconds during which the ride is offered ONLY to nearby drivers, before it opens to everyone. 0 = no staging (open from the first second). Best kept equal to the offer duration.",
     "dispatch_stage1_radius_m": "Nearby radius (m)",
-    "dispatch_stage1_radius_m_help": "Radius in meters used during the head start. Havana travel runs at ~3 min per km: 5000 m means roughly a 15-minute wait for the rider.",
+    "dispatch_stage1_radius_m_help": "Radius in meters used during the head start. Havana travel runs at ~3 min per km: 8000 m means roughly a 24-minute wait for the rider.",
     "dispatch_max_radius_m": "Max search radius (m)",
     "dispatch_max_radius_m_help": "Maximum driver search radius in meters once the head start is over. 0 = unlimited (the offer reaches every eligible driver regardless of distance).",
     "dispatch_offer_limit": "Drivers per offer round",
