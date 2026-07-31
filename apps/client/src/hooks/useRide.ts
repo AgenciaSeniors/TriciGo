@@ -2,19 +2,18 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { AppState } from 'react-native';
 
 import i18next from 'i18next';
-import * as Notifications from 'expo-notifications';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rideService, deliveryService, walletService, corporateService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, playSound, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance } from '@tricigo/utils';
+import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
-import { invalidatePredictionCache } from '@/services/predictionCache';
-import { scheduleLocalNotification } from '@/services/push.service';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { shouldSendSearchHeartbeat } from '@/hooks/searchHeartbeat';
+import { fireRideStatusEffects, muteCancelAnnouncementFor } from '@/hooks/rideStatusEffects';
 const SEARCH_TIMEOUT_MS = RIDE_CONFIG.SEARCH_TIMEOUT_MS;
+
 
 /**
  * Initialize ride state on app mount.
@@ -208,6 +207,9 @@ export function useRideInit() {
           if (final?.status === 'completed') {
             // eslint-disable-next-line no-console
             console.log('[Watcher] ride completed — routing to rating', { ride_id: pinned.id });
+            // Fire while pinned.status is still the PREVIOUS status — the
+            // store update below overwrites it.
+            if (pinned.status !== 'completed') fireRideStatusEffects(pinned.status, final);
             useRideStore.getState().updateRideFromRealtime(final);
             useRideStore.getState().setRideWithDriver(final);
             return;
@@ -219,6 +221,13 @@ export function useRideInit() {
             ride_id: pinned.id,
             final_status: final?.status ?? 'not_found',
           });
+          // Say WHY the trip disappeared. Wiping the screen in silence is what
+          // made a server-side cancellation look like the app losing the trip;
+          // the rider was left to discover it by tapping "Cancelar" and getting
+          // `ride_already_closed` back.
+          if (final?.status === 'canceled' && pinned.status !== 'canceled') {
+            fireRideStatusEffects(pinned.status, final);
+          }
           useRideStore.getState().setFlowStep('idle');
           useRideStore.getState().setActiveRide(null);
           useRideStore.getState().setRideWithDriver(null);
@@ -252,6 +261,15 @@ export function useRideInit() {
             || (fresh as { estimated_duration_s?: number | null }).estimated_duration_s !==
               (pinned as { estimated_duration_s?: number | null }).estimated_duration_s;
 
+          // Payment can flip pending→paid without touching status (the driver
+          // confirms cash, or a wallet debit settles). Without this the
+          // confirmation toast never fires.
+          const prevPaymentStatus =
+            (pinned as { payment_status?: string | null }).payment_status ?? null;
+          const newPaymentStatus =
+            (fresh as { payment_status?: string | null }).payment_status ?? null;
+          const paymentStatusChanged = prevPaymentStatus !== newPaymentStatus;
+
           if (
             fresh.status !== pinned.status
             || fresh.driver_id !== pinned.driver_id
@@ -259,6 +277,7 @@ export function useRideInit() {
             || gpsConfChanged
             || driverGpsStatusChanged
             || estimatedChanged
+            || paymentStatusChanged
           ) {
             // eslint-disable-next-line no-console
             console.log('[Watcher] ride changed', {
@@ -268,8 +287,28 @@ export function useRideInit() {
               gps_conf_changed: gpsConfChanged,
               driver_gps_status_changed: driverGpsStatusChanged,
               estimated_changed: estimatedChanged,
+              payment_status_changed: paymentStatusChanged,
             });
+
+            // Capture the previous status BEFORE the store update overwrites it.
+            const prevStatus = pinned.status;
             useRideStore.getState().updateRideFromRealtime(fresh);
+
+            // The rider's in-app feedback for this leg of the trip. Terminal
+            // statuses (completed / canceled) never reach here — getActiveRide
+            // filters them out — they are handled in the `!fresh` branch above.
+            if (fresh.status !== prevStatus) {
+              fireRideStatusEffects(prevStatus, fresh);
+            }
+
+            if (prevPaymentStatus === 'pending' && newPaymentStatus === 'paid') {
+              triggerHaptic('success');
+              Toast.show({
+                type: 'success',
+                text1: i18next.t('rider:payment.confirmed', { defaultValue: 'Pago confirmado' }),
+              });
+              trackEvent('ride_payment_confirmed', { ride_id: fresh.id });
+            }
           }
         } else {
           // The pinned id no longer matches the active ride — clear
@@ -317,8 +356,11 @@ export function useRideActions() {
   // the full RealtimeChannel surface.
   const channelRef = useRef<{ unsubscribe: () => void } | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // BUG-217: polling fallback timer (every 5s while flowStep='searching')
-  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // NOTE: there is deliberately no polling timer here any more. The ride
+  // status poll, the search heartbeat and the rider's in-app feedback all
+  // live in useRideInit's watcher, which is mounted once in app/_layout.tsx.
+  // A timer created here would be owned by ReviewingView/SelectingView and
+  // killed on their unmount — which is exactly how the old one died.
   const searchRetryCountRef = useRef(0);
   const searchStartTimeRef = useRef(0);
 
@@ -326,7 +368,6 @@ export function useRideActions() {
     draft,
     setFareEstimate,
     setActiveRide,
-    setRideWithDriver,
     setFlowStep,
     setLoading,
     setFareEstimating,
@@ -343,7 +384,6 @@ export function useRideActions() {
     return () => {
       channelRef.current?.unsubscribe();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
   }, []);
 
@@ -829,321 +869,6 @@ export function useRideActions() {
         app: 'client',
       });
 
-      // BUG-217 / BUG-220 / BUG-277: polling fallback. With realtime DISABLED
-      // (BUG-277), polling is now the ONLY mechanism that delivers ride
-      // status updates to the customer. We poll every 3s while ANY local
-      // ride is pinned in store — covers searching→accepted, the entire
-      // accepted→completed lifecycle, and canceled-by-driver / completed-by-
-      // driver transitions that would otherwise leave the client stuck on
-      // a phantom active ride.
-      //
-      // Side effects that the old realtime callback fired (haptics, sounds,
-      // toasts, push notifications, analytics) are now triggered here on
-      // status transitions detected via prevStatusRef.
-      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-      let prevPolledStatus: string | null = null;
-      let prevPolledPaymentStatus: string | null = null;
-      pollingTimerRef.current = setInterval(async () => {
-        try {
-          const { flowStep, activeRide: pinnedRide } = useRideStore.getState();
-          if (!pinnedRide || flowStep === 'idle' || flowStep === 'completed') return;
-          // Persistent search: heartbeat so the server keeps the search
-          // alive — cleanup_orphan_searching_rides only cancels rides whose
-          // heartbeat went stale. Fire-and-forget (touchSearchingRide
-          // swallows all errors internally).
-          if (flowStep === 'searching') {
-            void rideService.touchSearchingRide(pinnedRide.id);
-          }
-          const fresh = await rideService.getActiveRide(user!.id);
-          if (!fresh) {
-            // getActiveRide filters out canceled/completed. If it returns
-            // null while we have a pinned ride, that ride is no longer
-            // active server-side. Clear the stale local state so the
-            // customer can request a new ride.
-            // eslint-disable-next-line no-console
-            console.log('[Polling] no active ride server-side — clearing stale', { ride_id: pinnedRide.id });
-            useRideStore.getState().setFlowStep('idle');
-            useRideStore.getState().setActiveRide(null);
-            useRideStore.getState().setRideWithDriver(null);
-            return;
-          }
-          if (fresh.id !== pinnedRide.id) return;
-
-          const newStatus = fresh.status;
-          const newPaymentStatus = (fresh as { payment_status?: string }).payment_status ?? null;
-          const transitioned = prevPolledStatus !== null && prevPolledStatus !== newStatus;
-          const paymentJustConfirmed =
-            prevPolledPaymentStatus === 'pending' && newPaymentStatus === 'paid';
-
-          // eslint-disable-next-line no-console
-          console.log('[Polling] ride state', {
-            ride_id: fresh.id,
-            status: newStatus,
-            prev: prevPolledStatus,
-            driver_id: fresh.driver_id,
-          });
-          useRideStore.getState().updateRideFromRealtime(fresh);
-
-          // Fire side effects on status transitions (was in subscribeToRide
-          // callback before BUG-277). Only fire when prev is non-null and
-          // different — first poll establishes baseline.
-          if (transitioned) {
-            if (newStatus === 'accepted') {
-              triggerHaptic('success');
-              playSound('ride_accepted');
-              Toast.show({ type: 'success', text1: i18next.t('ride.driver_assigned', { ns: 'rider' }) });
-              scheduleLocalNotification(
-                i18next.t('ride.driver_assigned', { ns: 'rider' }),
-                i18next.t('ride.driver_assigned_body', { ns: 'rider' }),
-              );
-              // Load driver info on accept
-              if (fresh.driver_id) {
-                rideService.getRideWithDriver(fresh.id).then((rwd) => {
-                  if (rwd) useRideStore.getState().setRideWithDriver(rwd);
-                }).catch(() => {});
-              }
-            }
-            if (newStatus === 'driver_en_route' && prevPolledStatus === 'accepted') {
-              triggerHaptic('light');
-            }
-            if (newStatus === 'arrived_at_pickup') {
-              triggerHaptic('success');
-              setTimeout(() => triggerHaptic('medium'), 300);
-              setTimeout(() => triggerHaptic('light'), 600);
-              playSound('driver_arrived');
-              scheduleLocalNotification(
-                i18next.t('ride.driver_arrived_banner', { ns: 'rider' }),
-                '',
-              );
-            }
-            if (newStatus === 'in_progress' && prevPolledStatus === 'arrived_at_pickup') {
-              triggerHaptic('medium');
-              playSound('ride_accepted');
-              scheduleLocalNotification(
-                i18next.t('ride.trip_started_notif', { ns: 'rider' }),
-                i18next.t('ride.trip_started_body', { ns: 'rider' }),
-              );
-            }
-            if (newStatus === 'arrived_at_destination') {
-              triggerHaptic('success');
-              playSound('destination_arrived');
-              scheduleLocalNotification(
-                i18next.t('ride.arrived_at_destination_title', { ns: 'rider' }),
-                i18next.t('ride.arrived_at_destination_body', { ns: 'rider' }),
-              );
-            }
-            if (newStatus === 'completed') {
-              triggerHaptic('success');
-              playSound('trip_completed');
-              trackEvent('ride_completed', { ride_id: fresh.id, service_type: fresh.service_type });
-              scheduleLocalNotification(
-                i18next.t('ride.trip_completed_notif', { ns: 'rider' }),
-                '',
-              );
-              invalidatePredictionCache().catch(() => {});
-
-              const fare = fresh.final_fare_cup ?? fresh.final_fare_trc;
-              if (fare && fare > 0) {
-                const methodKey = `ride.payment_method_${fresh.payment_method ?? 'cash'}`;
-                Toast.show({
-                  type: 'success',
-                  text1: i18next.t('ride.payment_confirmed_title', { ns: 'rider' }),
-                  text2: i18next.t('ride.payment_confirmed_body', {
-                    ns: 'rider',
-                    amount: fare,
-                    method: i18next.t(methodKey, { ns: 'rider', defaultValue: fresh.payment_method ?? 'cash' }),
-                  }),
-                  visibilityTime: 5000,
-                });
-              }
-            }
-            if (newStatus === 'canceled') {
-              triggerHaptic('error');
-              if (prevPolledStatus === 'in_progress') {
-                Toast.show({
-                  type: 'error',
-                  text1: i18next.t('rider:ride.trip_interrupted_title', { defaultValue: 'Viaje interrumpido' }),
-                  text2: i18next.t('rider:ride.trip_interrupted_msg', { defaultValue: 'El viaje fue interrumpido. Contacta a soporte si necesitas ayuda.' }),
-                });
-              } else {
-                Toast.show({
-                  type: 'error',
-                  text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
-                  text2: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
-                });
-              }
-              scheduleLocalNotification(
-                i18next.t('ride.driver_canceled_notif', { ns: 'rider' }),
-                '',
-              );
-            }
-          }
-          if (paymentJustConfirmed) {
-            triggerHaptic('success');
-            Toast.show({
-              type: 'success',
-              text1: i18next.t('rider:payment.confirmed', { defaultValue: 'Pago confirmado' }),
-            });
-            trackEvent('ride_payment_confirmed', { ride_id: fresh.id });
-          }
-
-          prevPolledStatus = newStatus;
-          prevPolledPaymentStatus = newPaymentStatus;
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.warn('[Polling] failed', String(e));
-        }
-      }, 3000);
-
-      // Subscribe to ride updates
-      channelRef.current?.unsubscribe();
-      // BUG-075: Wrap subscription in try-catch to prevent leaked null reference on error
-      try {
-      channelRef.current = rideService.subscribeToRide(ride.id, async (updated) => {
-        try {
-        // Capture previous state BEFORE updating store
-        const prevRide = useRideStore.getState().activeRide;
-
-        const store = useRideStore.getState();
-        store.updateRideFromRealtime(updated);
-
-        // Haptic + sound feedback on key status changes
-        if (updated.status === 'accepted') {
-          triggerHaptic('success');
-          playSound('ride_accepted');
-          Toast.show({ type: 'success', text1: i18next.t('ride.driver_assigned', { ns: 'rider' }) });
-          scheduleLocalNotification(
-            i18next.t('ride.driver_assigned', { ns: 'rider' }),
-            i18next.t('ride.driver_assigned_body', { ns: 'rider' }),
-          );
-        }
-        if (updated.status === 'driver_en_route' && prevRide?.status === 'accepted') {
-          triggerHaptic('light');
-        }
-        if (updated.status === 'arrived_at_pickup') {
-          triggerHaptic('success');
-          setTimeout(() => triggerHaptic('medium'), 300);
-          setTimeout(() => triggerHaptic('light'), 600);
-          playSound('driver_arrived');
-          scheduleLocalNotification(
-            i18next.t('ride.driver_arrived_banner', { ns: 'rider' }),
-            '',
-          );
-        }
-        if (updated.status === 'in_progress' && prevRide?.status === 'arrived_at_pickup') {
-          triggerHaptic('medium');
-          playSound('ride_accepted');
-          scheduleLocalNotification(
-            i18next.t('ride.trip_started_notif', { ns: 'rider' }),
-            i18next.t('ride.trip_started_body', { ns: 'rider' }),
-          );
-        }
-        if (updated.status === 'arrived_at_destination') {
-          triggerHaptic('success');
-          playSound('destination_arrived');
-          scheduleLocalNotification(
-            i18next.t('ride.arrived_at_destination_title', { ns: 'rider' }),
-            i18next.t('ride.arrived_at_destination_body', { ns: 'rider' }),
-          );
-        }
-        if (updated.status === 'completed') {
-          triggerHaptic('success');
-          playSound('trip_completed');
-          trackEvent('ride_completed', { ride_id: updated.id, service_type: updated.service_type });
-          scheduleLocalNotification(
-            i18next.t('ride.trip_completed_notif', { ns: 'rider' }),
-            '',
-          );
-          // Invalidate prediction cache so next load recalculates with new ride
-          invalidatePredictionCache().catch(() => {});
-
-          // Payment confirmation toast
-          const fare = updated.final_fare_cup ?? updated.final_fare_trc;
-          if (fare && fare > 0) {
-            const methodKey = `ride.payment_method_${updated.payment_method ?? 'cash'}`;
-            Toast.show({
-              type: 'success',
-              text1: i18next.t('ride.payment_confirmed_title', { ns: 'rider' }),
-              text2: i18next.t('ride.payment_confirmed_body', {
-                ns: 'rider',
-                amount: fare,
-                method: i18next.t(methodKey, { ns: 'rider', defaultValue: updated.payment_method ?? 'cash' }),
-              }),
-              visibilityTime: 5000,
-            });
-          }
-
-          // Schedule rating reminder 5 min after completion
-          Notifications.scheduleNotificationAsync({
-            content: {
-              title: i18next.t('ride.rate_reminder_title', { ns: 'rider' }),
-              body: i18next.t('ride.rate_reminder_body', { ns: 'rider' }),
-              data: { type: 'ride', ride_id: updated.id, action: 'rate' },
-              // Omit sound (null isn't accepted) — same silent behavior.
-            },
-            trigger: { seconds: 300, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
-          }).then((reminderId) => {
-            useRideStore.getState().setRatingReminderId(reminderId);
-          }).catch(() => {});
-
-          // "Arrived safely" SMS to auto-share trusted contacts is sent
-          // server-side by trg_notify_trusted_contacts_complete (mig 00473).
-          // The old client-side path always 401'd (send-sms is service-role-only).
-        }
-
-        // Payment confirmed via Realtime
-        if (
-          prevRide?.payment_status === 'pending' &&
-          (updated as any).payment_status === 'paid'
-        ) {
-          triggerHaptic('success');
-          Toast.show({
-            type: 'success',
-            text1: i18next.t('rider:payment.confirmed', { defaultValue: 'Pago confirmado' }),
-          });
-          trackEvent('ride_payment_confirmed', { ride_id: updated.id });
-        }
-
-        // Bug 10 + Bug 27: Show contextual alert when ride is cancelled
-        if (updated.status === 'canceled' && prevRide?.status !== 'canceled') {
-          triggerHaptic('error');
-          if (prevRide?.status === 'in_progress') {
-            // Bug 27: Different message when cancellation happens mid-trip
-            Toast.show({
-              type: 'error',
-              text1: i18next.t('rider:ride.trip_interrupted_title', { defaultValue: 'Viaje interrumpido' }),
-              text2: i18next.t('rider:ride.trip_interrupted_msg', { defaultValue: 'El viaje fue interrumpido. Contacta a soporte si necesitas ayuda.' }),
-            });
-          } else {
-            Toast.show({
-              type: 'error',
-              text1: i18next.t('rider:ride.driver_canceled_title', { defaultValue: 'Viaje cancelado' }),
-              text2: i18next.t('rider:ride.driver_canceled_msg', { defaultValue: 'El conductor canceló el viaje. Puedes buscar otro conductor.' }),
-            });
-          }
-          scheduleLocalNotification(
-            i18next.t('ride.driver_canceled_notif', { ns: 'rider' }),
-            '',
-          );
-        }
-
-        // When driver accepts, load driver info
-        if (updated.status === 'accepted' && updated.driver_id) {
-          try {
-            const rwd = await rideService.getRideWithDriver(updated.id);
-            if (rwd) useRideStore.getState().setRideWithDriver(rwd);
-          } catch {
-            // Will retry on next update
-          }
-        }
-        } catch (cbErr) {
-          logger.error('Realtime callback error', { error: String(cbErr), rideId: updated.id });
-        }
-      });
-      } catch (subErr) {
-        logger.error('Failed to subscribe to ride updates', { error: String(subErr), rideId: ride.id });
-      }
-
       // Search timeout — retry with "expanding search" before cancelling
       searchRetryCountRef.current = 0;
       searchStartTimeRef.current = Date.now();
@@ -1263,7 +988,7 @@ export function useRideActions() {
       isSubmittingRef.current = false;
       pendingRequestIdRef.current = null;
     }
-  }, [setActiveRide, setFlowStep, setLoading, setError, setRideWithDriver, user?.id]);
+  }, [setActiveRide, setFlowStep, setLoading, setError, user?.id]);
 
   const cancelRide = useCallback(async (reason?: string) => {
     // QA 2026-05-13: ride got auto-canceled at insert — trace the caller.
@@ -1273,6 +998,11 @@ export function useRideActions() {
     if (!activeRide) return;
 
     setLoading(true);
+    // Mute the watcher's "your trip was canceled" announcement for the next
+    // few seconds — the rider asked for this one, and cancelRide reports the
+    // outcome itself below. The watcher polls every 3s and would otherwise
+    // race us to the news.
+    muteCancelAnnouncementFor(15_000);
     try {
       const result = await rideService.cancelRide(activeRide.id, user?.id, reason);
       channelRef.current?.unsubscribe();
