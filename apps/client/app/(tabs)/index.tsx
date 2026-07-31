@@ -1741,8 +1741,20 @@ function NativeHomeScreen() {
               home replaced by this branch; without a mount here their live
               coupon becomes unreachable while its two-hour clock runs down.
               Deliberately OUTSIDE the Animated.View so it does not blink on
-              every flow-step crossfade. Renders null when there is no coupon. */}
-          {flowStep === 'active' && <PartnerCouponBanner tokens={tokens} compact />}
+              every flow-step crossfade. Renders null when there is no coupon.
+
+              'searching' matters as much as 'active' here, and is easy to miss:
+              since the staged-radius dispatch in 00525 a passenger can sit in
+              searching for several minutes, and that is dead time in which the
+              clock runs but the coupon cannot be reached.
+
+              'reviewing' and 'completed' are deliberately excluded — the first
+              is a short, focused confirm step where a stray tap would abandon
+              the fare the passenger is reading, and the second already shows
+              the whole ticket. */}
+          {(flowStep === 'active' || flowStep === 'searching') && (
+            <PartnerCouponBanner tokens={tokens} compact />
+          )}
           <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
             {flowStep === 'reviewing' && <ReviewingView />}
             {flowStep === 'searching' && <SearchingView />}
