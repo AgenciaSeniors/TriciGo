@@ -119,7 +119,7 @@ export default function EditProfilePage() {
       const msg = err instanceof Error ? err.message : '';
       setToastIsSuccess(false);
       setToast(msg || t('profile.avatar_upload_failed', {
-        defaultValue: 'No se pudo subir la foto. Intentá con una imagen más pequeña.',
+        defaultValue: 'No se pudo subir la foto. Intenta con una imagen más pequeña.',
       }));
     } finally {
       setUploadingAvatar(false);

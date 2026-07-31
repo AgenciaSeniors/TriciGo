@@ -196,7 +196,7 @@ export default function DisputesPage() {
       // Refetch so the dispute drops out of the "Abiertas" tab now that it
       // moved to under_review.
       await fetchDisputes();
-      showToast('success', t('disputes.toast_assigned', { defaultValue: 'Asignada a vos' }));
+      showToast('success', t('disputes.toast_assigned', { defaultValue: 'Asignada a ti' }));
     } catch (err) {
       showToast('error', getErrorMessage(err));
     }
@@ -329,7 +329,7 @@ export default function DisputesPage() {
             {t('disputes.title', { defaultValue: 'Disputas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('disputes.page_description', { defaultValue: 'Reclamos de pasajeros y conductores. Escuchá ambas versiones antes de decidir.' })}
+            {t('disputes.page_description', { defaultValue: 'Reclamos de pasajeros y conductores. Escucha ambas versiones antes de decidir.' })}
           </p>
         </div>
       </div>
@@ -362,8 +362,8 @@ export default function DisputesPage() {
             <div className="flex min-h-[480px] items-center justify-center p-6">
               <DataEmptyState
                 icon={Scale}
-                title={t('disputes.pick_title', { defaultValue: 'Elegí una disputa' })}
-                body={t('disputes.pick_body', { defaultValue: 'Seleccioná un reclamo en la bandeja para ver los detalles y resolverlo.' })}
+                title={t('disputes.pick_title', { defaultValue: 'Elige una disputa' })}
+                body={t('disputes.pick_body', { defaultValue: 'Selecciona un reclamo en la bandeja para ver los detalles y resolverlo.' })}
               />
             </div>
           ) : (

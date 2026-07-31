@@ -26,11 +26,11 @@ const montserrat = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: 'TriciGo — Pedí tu viaje | Triciclos, motos y autos',
+    default: 'TriciGo — Pide tu viaje | Triciclos, motos y autos',
     template: '%s | TriciGo',
   },
   description:
-    'Pedí un viaje con TriciGo. Triciclos, motos y autos disponibles 24/7. Pago con saldo digital o efectivo. Descarga gratis.',
+    'Pide un viaje con TriciGo. Triciclos, motos y autos disponibles 24/7. Pago con saldo digital o efectivo. Descarga gratis.',
   keywords: ['taxi app', 'transporte', 'triciclo taxi', 'pedir taxi', 'TriciGo', 'ride hailing', 'pedicab', 'movilidad urbana'],
   manifest: '/manifest.json',
   icons: {
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
     locale: 'es',
     url: 'https://tricigo.com',
     siteName: 'TriciGo',
-    title: 'TriciGo — Pedí tu viaje',
+    title: 'TriciGo — Pide tu viaje',
     description:
       'Solicita un viaje con TriciGo. Triciclos, motos y autos al mejor precio.',
     // og:image is provided by the file-based app/opengraph-image.tsx (dynamic,
@@ -54,7 +54,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'TriciGo — Pedí tu viaje',
+    title: 'TriciGo — Pide tu viaje',
     description:
       'Solicita un viaje con TriciGo. Rápido, seguro y al mejor precio.',
     // twitter:image also comes from app/opengraph-image.tsx (Next reuses it for Twitter).
@@ -149,7 +149,7 @@ const appJsonLd = {
   installUrl: 'https://play.google.com/store/apps/details?id=app.tricigo.client',
   downloadUrl: 'https://play.google.com/store/apps/details?id=app.tricigo.client',
   description:
-    'Pedí triciclos, motos y autos con TriciGo. Mirá el precio antes de viajar, en las ciudades donde estamos.',
+    'Pide triciclos, motos y autos con TriciGo. Mira el precio antes de viajar, en las ciudades donde estamos.',
   publisher: { '@type': 'Organization', name: 'TriciGo', url: 'https://tricigo.com' },
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'CUP' },
 };

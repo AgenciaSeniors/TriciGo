@@ -190,7 +190,7 @@ export default function CancellationReviewDetailPage() {
           </div>
         </div>
         <p className="mt-4 text-xs text-ink-subtle">
-          {t('cancellations.signals_hint', { defaultValue: 'Un motivo válido (avería/seguridad) no penaliza, pero un par que lo repite mucho igual puede ser colusión — decidí a criterio.' })}
+          {t('cancellations.signals_hint', { defaultValue: 'Un motivo válido (avería/seguridad) no penaliza, pero un par que lo repite mucho igual puede ser colusión — decide a criterio.' })}
         </p>
       </div>
 

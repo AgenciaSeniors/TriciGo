@@ -163,7 +163,7 @@ export default function WalletPage() {
         message: t('wallet_admin.approve_recharge_msg', {
           amount: formatTriciCoin(r.amount),
           user: r.user_name || '—',
-          defaultValue: '¿Confirmás acreditar {{amount}} a {{user}}? Esta acción acredita el saldo al usuario.',
+          defaultValue: '¿Confirmas acreditar {{amount}} a {{user}}? Esta acción acredita el saldo al usuario.',
         }),
         action: async () => {
           setConfirmModal((prev) => ({ ...prev, open: false }));

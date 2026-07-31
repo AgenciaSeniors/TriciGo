@@ -365,7 +365,7 @@ export default function ReviewsPage() {
             {t('reviews.title', { defaultValue: 'Reseñas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('reviews.page_description', { defaultValue: 'Opiniones de pasajeros y conductores. Moderá lo que se muestra y destacá lo mejor.' })}
+            {t('reviews.page_description', { defaultValue: 'Opiniones de pasajeros y conductores. Modera lo que se muestra y destaca lo mejor.' })}
           </p>
         </div>
       </div>
@@ -449,7 +449,7 @@ export default function ReviewsPage() {
         empty={{
           icon: StarOff,
           title: t('reviews.empty_title', { defaultValue: 'Sin reseñas aún' }),
-          body: t('reviews.empty_body', { defaultValue: 'Cuando lleguen las primeras opiniones, van a aparecer acá.' }),
+          body: t('reviews.empty_body', { defaultValue: 'Cuando lleguen las primeras opiniones, van a aparecer aquí.' }),
         }}
         sort={sort}
         onSortChange={setSort}

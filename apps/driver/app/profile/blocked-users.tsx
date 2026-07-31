@@ -136,7 +136,7 @@ export default function BlockedUsersScreen() {
                   {t('block.no_blocked', { defaultValue: 'No bloqueaste a nadie' })}
                 </Text>
                 <Text style={{ color: palette.ink.subtle, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
-                  {t('block.no_blocked_desc', { defaultValue: 'Las personas que bloquees aparecerán acá.' })}
+                  {t('block.no_blocked_desc', { defaultValue: 'Las personas que bloquees aparecerán aquí.' })}
                 </Text>
               </View>
             )}

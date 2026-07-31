@@ -186,7 +186,7 @@ export function ConfirmLocationScreen({
         Alert.alert(
           t('ride.location_off_title', { defaultValue: 'Ubicación desactivada' }),
           t('ride.location_off_body', {
-            defaultValue: 'Activá el permiso de ubicación para centrar el mapa en dónde estás.',
+            defaultValue: 'Activa el permiso de ubicación para centrar el mapa en dónde estás.',
           }),
         );
         return;

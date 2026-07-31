@@ -192,7 +192,7 @@ export default function LoginPage() {
         // resend disabled for the server cooldown and a clear explanation.
         setStep('otp');
         setResendTimer(err.retryAfterSec);
-        setError(t('auth.otp_rate_limited_body', { defaultValue: 'Demasiados códigos. Esperá unos minutos antes de pedir otro.' }));
+        setError(t('auth.otp_rate_limited_body', { defaultValue: 'Demasiados códigos. Espera unos minutos antes de pedir otro.' }));
       } else {
         setError(t('auth.send_otp_failed'));
       }
@@ -219,9 +219,9 @@ export default function LoginPage() {
       const reason = (err as { code?: string } | null)?.code;
       setError(
         reason === 'expired'
-          ? t('auth.otp_expired', { defaultValue: 'El código expiró. Pedí uno nuevo.' })
+          ? t('auth.otp_expired', { defaultValue: 'El código expiró. Pide uno nuevo.' })
           : reason === 'too_many_attempts'
-            ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pedí un código nuevo.' })
+            ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pide un código nuevo.' })
             : t('auth.invalid_otp'),
       );
       console.error(err);
@@ -242,7 +242,7 @@ export default function LoginPage() {
     } catch (err) {
       if (isRateLimitError(err)) {
         setResendTimer(err.retryAfterSec);
-        setError(t('auth.otp_rate_limited_body', { defaultValue: 'Demasiados códigos. Esperá unos minutos antes de pedir otro.' }));
+        setError(t('auth.otp_rate_limited_body', { defaultValue: 'Demasiados códigos. Espera unos minutos antes de pedir otro.' }));
       } else {
         setError(t('auth.send_otp_failed'));
       }
@@ -490,7 +490,7 @@ export default function LoginPage() {
             </button>
             {resendConfirm && (
               <p style={{ color: 'var(--success, #16a34a)', fontSize: '0.8rem', textAlign: 'center', margin: 0 }}>
-                {t('auth.resend_success_body', { defaultValue: 'Código reenviado. Revisá tus mensajes.' })}
+                {t('auth.resend_success_body', { defaultValue: 'Código reenviado. Revisa tus mensajes.' })}
               </p>
             )}
             <button

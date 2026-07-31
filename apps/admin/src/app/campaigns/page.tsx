@@ -247,7 +247,7 @@ export default function CampaignsPage() {
     if (!formName.trim()) errors.name = required;
     if (!formTitle.trim()) errors.title = required;
     if (!formBody.trim()) errors.body = required;
-    if (formSegment === 'by_city' && !formCityId) errors.city = t('campaigns.choose_city_error', { defaultValue: 'Elegí una ciudad' });
+    if (formSegment === 'by_city' && !formCityId) errors.city = t('campaigns.choose_city_error', { defaultValue: 'Elige una ciudad' });
     if (!formSendNow && formSchedule) {
       const d = new Date(formSchedule);
       if (d <= new Date()) errors.schedule = t('campaigns.future_error', { defaultValue: 'Tiene que ser en el futuro' });
@@ -466,7 +466,7 @@ export default function CampaignsPage() {
             {t('campaigns.title', { defaultValue: 'Campañas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('campaigns.page_description', { defaultValue: 'Mensajes push y email a segmentos específicos de usuarios. Programá o enviá al toque.' })}
+            {t('campaigns.page_description', { defaultValue: 'Mensajes push y email a segmentos específicos de usuarios. Programa o envía al toque.' })}
           </p>
         </div>
         <button
@@ -531,7 +531,7 @@ export default function CampaignsPage() {
                   }}
                   className={inputCls(!!formErrors.city)}
                 >
-                  <option value="">{t('campaigns.placeholder_city', { defaultValue: 'Elegí una ciudad' })}</option>
+                  <option value="">{t('campaigns.placeholder_city', { defaultValue: 'Elige una ciudad' })}</option>
                   {cities.map((city) => (
                     <option key={city.id} value={city.id}>{city.name}</option>
                   ))}
@@ -660,7 +660,7 @@ export default function CampaignsPage() {
         empty={{
           icon: Megaphone,
           title: t('campaigns.empty_title', { defaultValue: 'Sin campañas' }),
-          body: t('campaigns.empty_body', { defaultValue: 'Creá la primera para llegar a un grupo específico de usuarios.' }),
+          body: t('campaigns.empty_body', { defaultValue: 'Crea la primera para llegar a un grupo específico de usuarios.' }),
           action: { label: t('campaigns.new_campaign', { defaultValue: 'Nueva campaña' }), onClick: () => setShowForm(true) },
         }}
         sort={sort}

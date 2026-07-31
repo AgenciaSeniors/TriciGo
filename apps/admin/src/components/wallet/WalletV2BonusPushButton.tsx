@@ -74,7 +74,7 @@ export function WalletV2BonusPushButton() {
         title="Enviar push del bono migración"
         message={
           targetCount != null
-            ? `Se enviará una notificación a ${targetCount} usuario${targetCount === 1 ? '' : 's'} que recibieron el bono del 5% durante la migración Wallet v2. Esta acción NO es idempotente: si la ejecutás otra vez, los usuarios reciben el push otra vez.`
+            ? `Se enviará una notificación a ${targetCount} usuario${targetCount === 1 ? '' : 's'} que recibieron el bono del 5% durante la migración Wallet v2. Esta acción NO es idempotente: si la ejecutas otra vez, los usuarios reciben el push otra vez.`
             : 'Cargando…'
         }
         confirmLabel={sending ? 'Enviando…' : `Enviar a ${targetCount ?? '…'}`}

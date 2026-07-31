@@ -89,7 +89,7 @@ export default function ReferralsPage() {
       open: true,
       title: t('referrals.reward_title', { defaultValue: 'Premiar referido' }),
       message: t('referrals.reward_confirm', {
-        defaultValue: `¿Confirmás premiar a este referido con ${formatCUP(ref.bonus_amount)}?`,
+        defaultValue: `¿Confirmas premiar a este referido con ${formatCUP(ref.bonus_amount)}?`,
       }).replace('{amount}', formatCUP(ref.bonus_amount)),
       action: async () => {
         setConfirmModal((prev) => ({ ...prev, open: false }));
@@ -233,7 +233,7 @@ export default function ReferralsPage() {
         empty={{
           icon: Gift,
           title: t('referrals.empty_title', { defaultValue: 'Sin referidos' }),
-          body: t('referrals.empty_body', { defaultValue: 'Nadie invitó gente todavía. Cuando suceda, vas a ver la actividad acá.' }),
+          body: t('referrals.empty_body', { defaultValue: 'Nadie invitó gente todavía. Cuando suceda, vas a ver la actividad aquí.' }),
         }}
         sort={sort}
         onSortChange={setSort}

@@ -147,7 +147,7 @@ export default async function BlogPostPage({
       {related.length > 0 && (
         <section style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid var(--border-light)' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '1rem', color: 'var(--text-primary)' }}>
-            Seguí leyendo
+            Sigue leyendo
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
             {related.map((r) => (

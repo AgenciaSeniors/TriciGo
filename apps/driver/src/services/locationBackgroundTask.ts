@@ -170,7 +170,7 @@ function updateOptionsForMode(mode: BgTaskMode) {
     notificationBody:
       mode === 'ride'
         ? 'Compartiendo tu ubicación con el pasajero durante el viaje activo.'
-        : 'Estás en línea. Podés recibir viajes con la app en segundo plano.',
+        : 'Estás en línea. Puedes recibir viajes con la app en segundo plano.',
     notificationColor: '#111111',
   };
   if (mode === 'ride') {

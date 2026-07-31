@@ -136,7 +136,7 @@ export default function RidePreferencesScreen() {
         <ErrorState
           title={t('errors.generic_title', { defaultValue: 'Error' })}
           description={t('errors.preferences_load_failed', {
-            defaultValue: 'No pudimos cargar tus preferencias. Revisá tu conexión e intentá de nuevo.',
+            defaultValue: 'No pudimos cargar tus preferencias. Revisa tu conexión e intenta de nuevo.',
           })}
           onRetry={loadProfile}
         />

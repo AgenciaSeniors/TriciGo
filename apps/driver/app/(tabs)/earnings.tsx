@@ -415,7 +415,7 @@ function NativeEarningsScreen() {
                           : t('earnings.no_earnings_month_title', { defaultValue: 'Aún sin ganancias este mes' })
                     }
                     description={t('earnings.no_earnings_cta_description', {
-                      defaultValue: 'Conectate para empezar a recibir ofertas. Tus ganancias aparecen acá al completar el primer viaje.',
+                      defaultValue: 'Conéctate para empezar a recibir ofertas. Tus ganancias aparecen aquí al completar el primer viaje.',
                     })}
                     action={{
                       label: t('earnings.go_online_cta', { defaultValue: 'Ir a Inicio' }),

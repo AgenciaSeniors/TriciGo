@@ -132,7 +132,7 @@ export default function HelpScreen() {
       triggerHaptic('warning');
       Toast.show({
         type: 'info',
-        text1: t('profile.help_subject_required', { defaultValue: 'Ingresá un asunto para tu ticket' }),
+        text1: t('profile.help_subject_required', { defaultValue: 'Ingresa un asunto para tu ticket' }),
       });
       return;
     }

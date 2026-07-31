@@ -231,7 +231,7 @@ export function useDriverLocationTracking(
             const accepted = await new Promise<boolean>((resolve) => {
               Alert.alert(
                 'Mantenerte en línea en segundo plano',
-                'TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras estás en línea, para que sigas recibiendo viajes y el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, tu estado "en línea" se suspende y el pasajero pierde tu posición cuando salís de la app.',
+                'TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras estás en línea, para que sigas recibiendo viajes y el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, tu estado "en línea" se suspende y el pasajero pierde tu posición cuando sales de la app.',
                 [
                   {
                     text: 'Más tarde',
@@ -263,7 +263,7 @@ export function useDriverLocationTracking(
                 // the driver unaware.
                 Alert.alert(
                   'Ubicación en segundo plano desactivada',
-                  'Sin el permiso "Siempre", tu estado "en línea" se suspende y dejás de recibir viajes cuando minimizás la app o apagás la pantalla. Activalo en Ajustes para seguir recibiendo viajes en segundo plano.',
+                  'Sin el permiso "Siempre", tu estado "en línea" se suspende y dejas de recibir viajes cuando minimizas la app o apagas la pantalla. Actívalo en Ajustes para seguir recibiendo viajes en segundo plano.',
                   [
                     { text: 'Más tarde', style: 'cancel' },
                     { text: 'Abrir Ajustes', onPress: () => { Linking.openSettings().catch(() => {}); } },

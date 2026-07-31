@@ -450,7 +450,7 @@ export default function TrackRidePage() {
       }
     } catch {
       if (win) win.close();
-      alert(t('track.receipt_error', { defaultValue: 'No se pudo generar el recibo. Probá de nuevo en un momento.' }));
+      alert(t('track.receipt_error', { defaultValue: 'No se pudo generar el recibo. Prueba de nuevo en un momento.' }));
     } finally {
       setDownloadingReceipt(false);
     }
@@ -932,14 +932,14 @@ export default function TrackRidePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                 <span style={{ color: 'var(--primary, #FF4D00)', flexShrink: 0 }}><IconNavigate /></span>
                 <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700 }}>
-                  {t('track.gps_check_title', { defaultValue: '¿Tu conductor está acá?' })}
+                  {t('track.gps_check_title', { defaultValue: '¿Tu conductor está aquí?' })}
                 </span>
               </div>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0 0 0.75rem' }}>
                 {t('track.gps_check_body', {
                   driverName: ride.driver_name ?? 'Tu conductor',
                   distance: ride.gps_check_distance_m ?? '?',
-                  defaultValue: `${ride.driver_name ?? 'Tu conductor'} dice que llegó (${ride.gps_check_distance_m ?? '?'}m según su GPS). Confirmá si lo ves cerca.`,
+                  defaultValue: `${ride.driver_name ?? 'Tu conductor'} dice que llegó (${ride.gps_check_distance_m ?? '?'}m según su GPS). Confirma si lo ves cerca.`,
                 })}
               </p>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1585,7 +1585,7 @@ export default function TrackRidePage() {
                   onClick={async () => {
                     if (!userId) return;
                     if (!confirm(t('track.sos_confirm', {
-                      defaultValue: 'Vas a llamar a emergencias y avisar a tus contactos de confianza por SMS. ¿Confirmás?',
+                      defaultValue: 'Vas a llamar a emergencias y avisar a tus contactos de confianza por SMS. ¿Confirmas?',
                     }))) return;
                     // Best-effort: run report + broadcast in parallel,
                     // ignore failures, ALWAYS open tel:106 last so the
@@ -1643,7 +1643,7 @@ export default function TrackRidePage() {
                         } else {
                           showSosToast(
                             t('track.sos_contacts_not_reached', {
-                              defaultValue: 'No pudimos avisar a tus contactos. Llamá al 106.',
+                              defaultValue: 'No pudimos avisar a tus contactos. Llama al 106.',
                             }),
                             '#dc2626',
                           );
@@ -1655,7 +1655,7 @@ export default function TrackRidePage() {
                       if (typeof window !== 'undefined') {
                         const toast = document.createElement('div');
                         toast.textContent = t('track.sos_contacts_not_reached', {
-                          defaultValue: 'No pudimos avisar a tus contactos. Llamá al 106.',
+                          defaultValue: 'No pudimos avisar a tus contactos. Llama al 106.',
                         });
                         Object.assign(toast.style, {
                           position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)',

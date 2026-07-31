@@ -113,7 +113,7 @@ export function GpsConsentBanner({
                 Toast.show({
                   type: 'info',
                   text1: t('trip.gps_notify_rider_sent', { defaultValue: 'Le avisamos al pasajero' }),
-                  text2: t('trip.gps_notify_rider_hint', { defaultValue: 'Esperá su respuesta para continuar' }),
+                  text2: t('trip.gps_notify_rider_hint', { defaultValue: 'Espera su respuesta para continuar' }),
                 });
               } catch {
                 Toast.show({ type: 'error', text1: t('trip.gps_notify_rider_failed', { defaultValue: 'No se pudo notificar' }) });

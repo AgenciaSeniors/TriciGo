@@ -349,7 +349,7 @@ export function RideCompleteView() {
       Toast.show({
         type: 'error',
         text1: t('ride.receipt_error', { defaultValue: 'No se pudo generar el recibo' }),
-        text2: t('ride.receipt_error_subtitle', { defaultValue: 'Probá de nuevo en un momento.' }),
+        text2: t('ride.receipt_error_subtitle', { defaultValue: 'Prueba de nuevo en un momento.' }),
       });
     } finally {
       setDownloadingReceipt(false);
@@ -855,7 +855,7 @@ export function RideCompleteView() {
                 triggerHaptic('warning');
                 Toast.show({
                   type: 'info',
-                  text1: t('ride.rating_required_title', { defaultValue: 'Elegí una calificación' }),
+                  text1: t('ride.rating_required_title', { defaultValue: 'Elige una calificación' }),
                   text2: t('ride.rating_required_body', { defaultValue: 'Tu comentario necesita estrellas para enviarse.' }),
                   visibilityTime: 2800,
                 });

@@ -502,7 +502,7 @@ export function useRideActions() {
         valid: false,
         discountAmount: 0,
         error: i18next.t('rider:ride.promo_needs_estimate', {
-          defaultValue: 'Elegí destino y servicio para aplicar el código',
+          defaultValue: 'Elige destino y servicio para aplicar el código',
         }),
       });
       return;
@@ -841,7 +841,7 @@ export function useRideActions() {
             // be live with no package info — tell the rider to check & cancel it.
             text2: cancelOk
               ? i18next.t('rider:ride.delivery_details_failed_msg', { defaultValue: 'No se pudieron guardar los detalles del envío. Intenta de nuevo.' })
-              : i18next.t('rider:ride.delivery_orphan_check_rides', { defaultValue: 'No se pudo guardar el envío ni cancelar el viaje. Revisá "Mis viajes" y cancelá el viaje si sigue activo.' }),
+              : i18next.t('rider:ride.delivery_orphan_check_rides', { defaultValue: 'No se pudo guardar el envío ni cancelar el viaje. Revisa "Mis viajes" y cancela el viaje si sigue activo.' }),
           });
           setLoading(false);
           return;
@@ -968,9 +968,9 @@ export function useRideActions() {
         setFlowStep('selecting');
         Toast.show({
           type: 'info',
-          text1: i18next.t('rider:ride.rate_limited_title', { defaultValue: 'Esperá un momento' }),
+          text1: i18next.t('rider:ride.rate_limited_title', { defaultValue: 'Espera un momento' }),
           text2: i18next.t('rider:ride.rate_limited_msg', {
-            defaultValue: 'Estás pidiendo viajes muy seguido. Probá de nuevo en unos segundos.',
+            defaultValue: 'Estás pidiendo viajes muy seguido. Prueba de nuevo en unos segundos.',
           }),
           visibilityTime: 5000,
         });

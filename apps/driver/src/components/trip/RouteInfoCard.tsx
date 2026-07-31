@@ -275,7 +275,7 @@ export function RouteInfoCard({
             opacity: 0.85,
           }}
         >
-          {t('trip.tap_to_expand', { defaultValue: 'Tocá para ver direcciones completas' })}
+          {t('trip.tap_to_expand', { defaultValue: 'Toca para ver direcciones completas' })}
         </Text>
       </View>
     </Pressable>

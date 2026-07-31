@@ -214,7 +214,7 @@ export function AdjustWalletModal({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={t('admin_ops.reason_placeholder', {
-              defaultValue: 'Explicá por qué se hace este ajuste…',
+              defaultValue: 'Explica por qué se hace este ajuste…',
             })}
             rows={3}
             disabled={loading}

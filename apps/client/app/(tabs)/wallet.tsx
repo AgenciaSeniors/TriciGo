@@ -508,9 +508,9 @@ function WebWalletScreen() {
               <EmptyState
                 icon="receipt-outline"
                 title={t('wallet.no_transactions', { defaultValue: 'Sin transacciones' })}
-                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Pedí un viaje para ver tus movimientos acá.' })}
+                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Pide un viaje para ver tus movimientos aquí.' })}
                 action={{
-                  label: t('wallet.request_ride_cta', { defaultValue: 'Pedí tu primer viaje' }),
+                  label: t('wallet.request_ride_cta', { defaultValue: 'Pide tu primer viaje' }),
                   onPress: () => router.push('/(tabs)'),
                 }}
               />
@@ -1010,7 +1010,7 @@ function NativeWalletScreen() {
                     defaultValue: 'Comprobante listo',
                   }),
                   text2: t('wallet.tap_to_view_receipt', {
-                    defaultValue: 'Tocá para ver el PDF',
+                    defaultValue: 'Toca para ver el PDF',
                   }),
                   onPress: () => openReceiptNative(found.pdf_storage_path!, found.receipt_no),
                   visibilityTime: 8000,
@@ -1623,7 +1623,7 @@ function NativeWalletScreen() {
               <EmptyState
                 icon="wallet-outline"
                 title={t('wallet.no_transactions')}
-                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Comprá créditos de viaje o pedí un viaje para ver movimientos acá.' })}
+                description={t('wallet.no_transactions_first_desc', { defaultValue: 'Compra créditos de viaje o pide un viaje para ver movimientos aquí.' })}
                 action={{
                   label: t('wallet.recharge_cta', { defaultValue: 'Recargar saldo' }),
                   onPress: () => { triggerHaptic('light'); setRechargeSheetVisible(true); },
@@ -1687,14 +1687,14 @@ function NativeWalletScreen() {
               <View className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 mb-3">
                 <Text variant="bodySmall" className="font-semibold" style={{ color: colors.brand.orange }}>
                   {t('wallet.recharge_preview_charge', {
-                    defaultValue: 'Pagás ${{charge}} USD (incluye ${{fee}} de comisión)',
+                    defaultValue: 'Pagas ${{charge}} USD (incluye ${{fee}} de comisión)',
                     charge: charge.toFixed(2),
                     fee: fee.toFixed(2),
                   })}
                 </Text>
                 <Text variant="caption" color="secondary" style={{ marginTop: 4 }}>
                   {t('wallet.recharge_preview_credit', {
-                    defaultValue: 'Acreditás {{cup}} TriciCoin (≈ {{cup}} CUP al cambio de hoy: {{rate}} CUP/USD)',
+                    defaultValue: 'Acreditas {{cup}} TriciCoin (≈ {{cup}} CUP al cambio de hoy: {{rate}} CUP/USD)',
                     cup: cupCredited.toLocaleString(),
                     rate: Math.round(exchangeRate).toLocaleString(),
                   })}
@@ -1718,7 +1718,7 @@ function NativeWalletScreen() {
           <View className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 mb-3">
             <Text variant="caption" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
               {t('wallet.recharge_inapp_hint', {
-                defaultValue: 'Pagás con tarjeta de forma segura sin salir de la app.',
+                defaultValue: 'Pagas con tarjeta de forma segura sin salir de la app.',
               })}
             </Text>
           </View>

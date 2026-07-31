@@ -304,13 +304,13 @@ export default function UsersPage() {
             ? {
                 icon: UserX,
                 title: t('users.empty_filtered_title', { defaultValue: 'Sin usuarios que coincidan' }),
-                body: t('users.empty_filtered_body', { defaultValue: 'Probá limpiar los filtros o cambiar la pestaña.' }),
+                body: t('users.empty_filtered_body', { defaultValue: 'Prueba limpiar los filtros o cambiar la pestaña.' }),
                 action: { label: t('users.empty_filtered_action', { defaultValue: 'Limpiar filtros' }), onClick: clearFilters },
               }
             : {
                 icon: Users,
                 title: t('users.empty_zero_title', { defaultValue: 'Sin usuarios aún' }),
-                body: t('users.empty_zero_body', { defaultValue: 'Cuando alguien se registre, va a aparecer acá.' }),
+                body: t('users.empty_zero_body', { defaultValue: 'Cuando alguien se registre, va a aparecer aquí.' }),
               }
         }
         rowHref={(u) => `/users/${u.id}`}

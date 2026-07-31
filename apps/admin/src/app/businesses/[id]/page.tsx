@@ -282,7 +282,7 @@ export default function BusinessDetailPage() {
             <h3 className="text-sm font-medium text-ink-muted mb-1">{t('businesses.variable_commission', { defaultValue: 'Comisión variable' })}</h3>
             <p className="text-xs text-ink-muted max-w-md">
               Default plataforma: <span className="font-medium text-ink">15%</span>. Reduce solo para acuerdos especiales —
-              el pasajero paga menos pero el conductor cobra lo mismo. Dejá vacío para usar el default.
+              el pasajero paga menos pero el conductor cobra lo mismo. Deja vacío para usar el default.
             </p>
           </div>
           <div className="flex items-center gap-2">

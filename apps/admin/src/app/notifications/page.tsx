@@ -139,7 +139,7 @@ export default function NotificationsPage() {
     const required = t('notifications.required', { defaultValue: 'Requerido' });
     if (!title.trim()) errors.title = required;
     if (!body.trim()) errors.body = required;
-    if (targetType === 'user' && !targetUserId) errors.target = t('notifications.choose_user_error', { defaultValue: 'Elegí un usuario' });
+    if (targetType === 'user' && !targetUserId) errors.target = t('notifications.choose_user_error', { defaultValue: 'Elige un usuario' });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -284,7 +284,7 @@ export default function NotificationsPage() {
           {t('notifications.title', { defaultValue: 'Notificaciones' })}
         </h1>
         <p className="mt-0.5 text-[12.5px] text-ink-muted">
-          {t('notifications.page_description', { defaultValue: 'Mandá avisos a toda Cuba, a un segmento de usuarios o a una persona puntual.' })}
+          {t('notifications.page_description', { defaultValue: 'Manda avisos a toda Cuba, a un segmento de usuarios o a una persona puntual.' })}
         </p>
       </div>
 

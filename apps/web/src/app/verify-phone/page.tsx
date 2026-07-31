@@ -85,7 +85,7 @@ export default function VerifyPhonePage() {
       const c = (err as { code?: string } | null)?.code;
       setError(
         c === 'PHONE_TAKEN'
-          ? t('auth.phone_taken_existing_account', { defaultValue: 'Este número ya tiene una cuenta TriciGo. Cerrá sesión e iniciá con tu teléfono.' })
+          ? t('auth.phone_taken_existing_account', { defaultValue: 'Este número ya tiene una cuenta TriciGo. Cierra sesión e inicia con tu teléfono.' })
           : c === 'INVALID_CODE'
             ? t('auth.invalid_otp', { defaultValue: 'Código inválido' })
             : t('errors.generic', { defaultValue: 'Algo salió mal. Intenta de nuevo.' }),

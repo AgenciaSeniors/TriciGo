@@ -202,8 +202,8 @@ export default function AuditPage() {
             ? t('audit.empty_filtered_title', { defaultValue: 'Sin acciones en ese rango' })
             : t('audit.empty_zero_title', { defaultValue: 'Nada que auditar aún' }),
           body: activeFilterCount > 0
-            ? t('audit.empty_filtered_body', { defaultValue: 'Probá con otras fechas o limpiá el filtro.' })
-            : t('audit.empty_zero_body', { defaultValue: 'Cuando el equipo haga cambios, los vas a ver acá.' }),
+            ? t('audit.empty_filtered_body', { defaultValue: 'Prueba con otras fechas o limpia el filtro.' })
+            : t('audit.empty_zero_body', { defaultValue: 'Cuando el equipo haga cambios, los vas a ver aquí.' }),
         }}
         sort={sort}
         onSortChange={setSort}

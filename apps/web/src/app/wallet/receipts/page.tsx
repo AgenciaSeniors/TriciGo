@@ -103,7 +103,7 @@ export default function ReceiptsPage() {
 
   const handleDownload = useCallback(async (row: ReceiptRow) => {
     if (!row.pdf_storage_path) {
-      setDownloadError(t('receipts.error_not_ready', { defaultValue: 'El PDF aún no está disponible. Esperá unos segundos y volvé a intentar.' }));
+      setDownloadError(t('receipts.error_not_ready', { defaultValue: 'El PDF aún no está disponible. Espera unos segundos y vuelve a intentar.' }));
       return;
     }
     setDownloadingId(row.id);
@@ -185,7 +185,7 @@ export default function ReceiptsPage() {
           <WebEmptyState
             icon="📄"
             title={t('receipts.empty_title', { defaultValue: 'Sin comprobantes todavía' })}
-            description={t('receipts.empty_description', { defaultValue: 'Cuando hagas una recarga vas a poder descargar el PDF acá.' })}
+            description={t('receipts.empty_description', { defaultValue: 'Cuando hagas una recarga vas a poder descargar el PDF aquí.' })}
             action={{ label: t('receipts.go_recharge', { defaultValue: 'Ir a recargar' }), href: '/wallet' }}
           />
         )}

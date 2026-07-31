@@ -414,7 +414,7 @@ export default function RidesPage() {
             ? {
                 icon: Search,
                 title: t('rides.empty_filtered_title', { defaultValue: 'Sin viajes que coincidan' }),
-                body: t('rides.empty_filtered_body', { defaultValue: 'Probá limpiar los filtros o elegir otra pestaña.' }),
+                body: t('rides.empty_filtered_body', { defaultValue: 'Prueba limpiar los filtros o elegir otra pestaña.' }),
                 action: {
                   label: t('rides.empty_filtered_action', { defaultValue: 'Limpiar filtros' }),
                   onClick: clearFilters,
@@ -423,7 +423,7 @@ export default function RidesPage() {
             : {
                 icon: Route,
                 title: t('rides.empty_zero_title', { defaultValue: 'Cuba duerme tranquila' }),
-                body: t('rides.empty_zero_body', { defaultValue: 'Aún no hay viajes registrados. Cuando lleguen, los verás acá en tiempo real.' }),
+                body: t('rides.empty_zero_body', { defaultValue: 'Aún no hay viajes registrados. Cuando lleguen, los verás aquí en tiempo real.' }),
               }
         }
         rowHref={(r) => `/rides/${r.id}`}

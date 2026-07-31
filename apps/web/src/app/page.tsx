@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   // `absolute` sets the exact <title> (bypasses the root "%s | TriciGo" template).
   title: { absolute: 'TriciGo — App de transporte: triciclo, moto y auto' },
   description:
-    'Pedí un triciclo, moto o auto con TriciGo. Mirá el precio antes de viajar, en las ciudades donde estamos. Descarga gratis.',
+    'Pide un triciclo, moto o auto con TriciGo. Mira el precio antes de viajar, en las ciudades donde estamos. Descarga gratis.',
   alternates: {
     canonical: 'https://tricigo.com',
   },

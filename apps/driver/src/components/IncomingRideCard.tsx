@@ -360,7 +360,7 @@ function IncomingRideCardInner({
 
         {/* ── HERO: total fare label + número + surge inline ──
              The headline is the gross fare, so the label must say so.
-             It used to read "GANÁS" over the net figure; leaving that
+             It used to read "GANAS" over the net figure; leaving that
              wording on a gross number would overstate what the driver
              keeps. Reuses trip.total_fare (already in es/en/pt), which
              text.meta upper-cases on its own. */}

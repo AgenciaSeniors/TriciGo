@@ -63,7 +63,7 @@ export default function AccountDeletePage() {
       setDeleting(false);
       setDeleteError(
         t('account_delete.delete_error', {
-          defaultValue: 'No pudimos eliminar la cuenta. Intentá de nuevo o escribinos a soporte.',
+          defaultValue: 'No pudimos eliminar la cuenta. Intenta de nuevo o escríbenos a soporte.',
         }),
       );
     }
@@ -86,7 +86,7 @@ export default function AccountDeletePage() {
       <p style={{ color: 'var(--text-tertiary)', marginBottom: '2rem' }}>
         {t('account_delete.subtitle', {
           defaultValue:
-            'Tenés derecho a solicitar la eliminación de tu cuenta y de los datos personales asociados en cualquier momento.',
+            'Tienes derecho a solicitar la eliminación de tu cuenta y de los datos personales asociados en cualquier momento.',
         })}
       </p>
 
@@ -107,7 +107,7 @@ export default function AccountDeletePage() {
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
             {t('account_delete.now_body', {
               defaultValue:
-                'Estás con la sesión abierta, así que podés eliminarla desde acá. La acción es inmediata e irreversible.',
+                'Estás con la sesión abierta, así que puedes eliminarla desde aquí. La acción es inmediata e irreversible.',
             })}
           </p>
           <label
@@ -115,7 +115,7 @@ export default function AccountDeletePage() {
             style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.9375rem' }}
           >
             {t('account_delete.now_confirm_label', {
-              defaultValue: 'Para confirmar, escribí ELIMINAR:',
+              defaultValue: 'Para confirmar, escribe ELIMINAR:',
             })}
           </label>
           <input
@@ -171,7 +171,7 @@ export default function AccountDeletePage() {
         <p style={{ color: 'var(--text-secondary)' }}>
           {t('account_delete.in_app_body', {
             defaultValue:
-              'Si tenés la app TriciGo instalada, abrila e ingresá a Perfil → Configuración → Zona de peligro → "Eliminar cuenta". El borrado es inmediato e irreversible.',
+              'Si tienes la app TriciGo instalada, ábrela e ingresa a Perfil → Configuración → Zona de peligro → "Eliminar cuenta". El borrado es inmediato e irreversible.',
           })}
         </p>
       </section>
@@ -179,13 +179,13 @@ export default function AccountDeletePage() {
       <section style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>
           {t('account_delete.mail_title', {
-            defaultValue: 'Si no tenés la app o no podés acceder',
+            defaultValue: 'Si no tienes la app o no puedes acceder',
           })}
         </h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
           {t('account_delete.mail_body_help', {
             defaultValue:
-              'Escribinos a soporte con tu teléfono registrado y nombre completo. Verificamos tu identidad y procesamos la eliminación dentro de 5 días hábiles.',
+              'Escríbenos a soporte con tu teléfono registrado y nombre completo. Verificamos tu identidad y procesamos la eliminación dentro de 5 días hábiles.',
           })}
         </p>
         <a
@@ -212,7 +212,7 @@ export default function AccountDeletePage() {
           {t('account_delete.what_deletes_title', { defaultValue: 'Qué se elimina' })}
         </h2>
         <ul style={{ color: 'var(--text-secondary)', paddingLeft: '1.5rem' }}>
-          <li>{t('account_delete.what_deletes_1', { defaultValue: 'Tu cuenta y sesiones activas (no podés volver a iniciar sesión con el mismo número).' })}</li>
+          <li>{t('account_delete.what_deletes_1', { defaultValue: 'Tu cuenta y sesiones activas (no puedes volver a iniciar sesión con el mismo número).' })}</li>
           <li>{t('account_delete.what_deletes_2', { defaultValue: 'Tu perfil: nombre, email, foto, idioma preferido.' })}</li>
           <li>{t('account_delete.what_deletes_3', { defaultValue: 'Saldo TriciCoin (no es reembolsable salvo solicitud previa por escrito).' })}</li>
           <li>{t('account_delete.what_deletes_4', { defaultValue: 'Contactos de confianza, notificaciones, preferencias.' })}</li>
@@ -231,7 +231,7 @@ export default function AccountDeletePage() {
           })}
         </p>
         <ul style={{ color: 'var(--text-secondary)', paddingLeft: '1.5rem' }}>
-          <li>{t('account_delete.what_keeps_1', { defaultValue: 'Historial de viajes con identificador anónimo (no es posible vincularlos a vos).' })}</li>
+          <li>{t('account_delete.what_keeps_1', { defaultValue: 'Historial de viajes con identificador anónimo (no es posible vincularlos a ti).' })}</li>
           <li>{t('account_delete.what_keeps_2', { defaultValue: 'Transacciones financieras (recargas, pagos, comisiones) anonimizadas.' })}</li>
           <li>{t('account_delete.what_keeps_3', { defaultValue: 'Calificaciones y reseñas dadas o recibidas, con identidad reemplazada por "Usuario eliminado".' })}</li>
         </ul>

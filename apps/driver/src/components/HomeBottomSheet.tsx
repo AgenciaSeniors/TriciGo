@@ -329,17 +329,17 @@ function SheetContent({
             fatigueLevel === 'firm'
               ? t('home.fatigue_firm_title', {
                   hours: sessionHours.toFixed(1),
-                  defaultValue: '{{hours}}h seguidas — pará por seguridad',
+                  defaultValue: '{{hours}}h seguidas — para por seguridad',
                 })
               : t('home.fatigue_soft_title', {
                   hours: sessionHours.toFixed(1),
-                  defaultValue: 'Llevás {{hours}}h manejando — considerá un descanso',
+                  defaultValue: 'Llevas {{hours}}h manejando — considera un descanso',
                 })
           }
           subtitle={
             fatigueLevel === 'firm'
               ? t('home.fatigue_firm_subtitle', {
-                  defaultValue: 'Manejar fatigado es peligroso para vos y los pasajeros',
+                  defaultValue: 'Manejar fatigado es peligroso para ti y los pasajeros',
                 })
               : t('home.fatigue_soft_subtitle', {
                   defaultValue: 'Un descanso de 15 min mejora reflejos y humor con los riders',
@@ -464,7 +464,7 @@ function SheetContent({
         pulseAnim={!isOnBreak ? statusDotPulse : undefined}
         label={
           isOnBreak
-            ? t('home.break_status', { defaultValue: 'En descanso · No recibís solicitudes' })
+            ? t('home.break_status', { defaultValue: 'En descanso · No recibes solicitudes' })
             : t('home.idle_status', { defaultValue: 'En línea · Buscando viajes' })
         }
         palette={palette}

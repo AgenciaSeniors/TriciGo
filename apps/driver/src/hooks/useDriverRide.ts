@@ -275,8 +275,8 @@ export function useDriverRideInit() {
               }),
               text2: i18next.t('driver:trip.rider_confirmed_arrival_sub', {
                 defaultValue: target === 'pickup'
-                  ? 'Tocá "Llegué" de nuevo para avanzar'
-                  : 'Tocá "Llegué al destino" para completar',
+                  ? 'Toca "Llegué" de nuevo para avanzar'
+                  : 'Toca "Llegué al destino" para completar',
                 target,
               }),
               visibilityTime: 6000,
@@ -547,7 +547,7 @@ export function useDriverRideActions() {
         },
         offer_not_found_or_expired: {
           title: i18next.t('driver:common.offer_expired', { defaultValue: 'La oferta expiró' }),
-          subtitle: i18next.t('driver:common.offer_expired_sub', { defaultValue: 'Esperá la próxima oferta.' }),
+          subtitle: i18next.t('driver:common.offer_expired_sub', { defaultValue: 'Espera la próxima oferta.' }),
           type: 'info',
         },
         ride_not_found: {
@@ -564,11 +564,11 @@ export function useDriverRideActions() {
         // actionable copy beats the misleading "connection lost".
         driver_stale_heartbeat: {
           title: i18next.t('driver:common.driver_stale_heartbeat', { defaultValue: 'Reconectando…' }),
-          subtitle: i18next.t('driver:common.driver_stale_heartbeat_sub', { defaultValue: 'Tu conexión se reactivó. Tocá aceptar de nuevo.' }),
+          subtitle: i18next.t('driver:common.driver_stale_heartbeat_sub', { defaultValue: 'Tu conexión se reactivó. Toca aceptar de nuevo.' }),
           type: 'info',
         },
         driver_has_active_ride: {
-          title: i18next.t('driver:common.driver_has_active_ride', { defaultValue: 'Ya tenés un viaje activo' }),
+          title: i18next.t('driver:common.driver_has_active_ride', { defaultValue: 'Ya tienes un viaje activo' }),
           type: 'error',
         },
         driver_not_found: {
@@ -577,7 +577,7 @@ export function useDriverRideActions() {
         },
         service_config_missing: {
           title: i18next.t('driver:common.service_config_missing', { defaultValue: 'Servicio temporalmente no disponible' }),
-          subtitle: i18next.t('driver:common.service_config_missing_sub', { defaultValue: 'Intentá con otra oferta en unos segundos.' }),
+          subtitle: i18next.t('driver:common.service_config_missing_sub', { defaultValue: 'Intenta con otra oferta en unos segundos.' }),
           type: 'error',
         },
         unauthorized: {
@@ -593,7 +593,7 @@ export function useDriverRideActions() {
             defaultValue: 'Saldo insuficiente para aceptar',
           }),
           subtitle: i18next.t('driver:common.insufficient_balance_sub', {
-            defaultValue: 'Recargá tu billetera antes de aceptar este viaje.',
+            defaultValue: 'Recarga tu billetera antes de aceptar este viaje.',
           }),
           type: 'error',
         },
@@ -606,7 +606,7 @@ export function useDriverRideActions() {
             defaultValue: 'Este viaje es de una flota',
           }),
           subtitle: i18next.t('driver:common.not_in_fleet_sub', {
-            defaultValue: 'No pertenecés a la flota corporativa que paga este viaje.',
+            defaultValue: 'No perteneces a la flota corporativa que paga este viaje.',
           }),
           type: 'info',
         },
@@ -622,7 +622,7 @@ export function useDriverRideActions() {
         const req = payload?.required_trc;
         if (typeof bal === 'number' && typeof req === 'number') {
           entry.subtitle = i18next.t('driver:common.insufficient_balance_detail', {
-            defaultValue: 'Necesitás {{req}} TRC. Tu saldo actual: {{bal}} TRC.',
+            defaultValue: 'Necesitas {{req}} TRC. Tu saldo actual: {{bal}} TRC.',
             req,
             bal,
           });
@@ -946,7 +946,7 @@ export function useDriverRideActions() {
           Toast.show({
             type: 'info',
             text1: i18next.t('driver:trip.arrived_pickup_title', { defaultValue: 'Llegaste al pasajero' }),
-            text2: i18next.t('driver:trip.arrived_pickup_sub', { defaultValue: 'Esperá al pasajero y tocá "Iniciar viaje"' }),
+            text2: i18next.t('driver:trip.arrived_pickup_sub', { defaultValue: 'Espera al pasajero y toca "Iniciar viaje"' }),
             visibilityTime: 2500,
           });
         } else if (nextStatus === 'in_progress') {
@@ -959,7 +959,7 @@ export function useDriverRideActions() {
           Toast.show({
             type: 'info',
             text1: i18next.t('driver:trip.at_dest_title', { defaultValue: 'Llegaste al destino' }),
-            text2: i18next.t('driver:trip.at_dest_sub', { defaultValue: 'Tocá "Finalizar viaje" para cobrar' }),
+            text2: i18next.t('driver:trip.at_dest_sub', { defaultValue: 'Toca "Finalizar viaje" para cobrar' }),
             visibilityTime: 2500,
           });
         }

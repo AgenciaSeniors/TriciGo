@@ -295,7 +295,7 @@ export default function CodePerformancePage() {
             empty={{
               icon: Ticket,
               title: t('code_performance.empty_promos_title', { defaultValue: 'Sin códigos promo' }),
-              body: t('code_performance.empty_promos_body', { defaultValue: 'Creá una promoción para que un influencer la difunda y medí su rendimiento acá.' }),
+              body: t('code_performance.empty_promos_body', { defaultValue: 'Crea una promoción para que un influencer la difunda y mide su rendimiento aquí.' }),
               action: { label: t('code_performance.go_promotions', { defaultValue: 'Ir a Promociones' }), href: '/promotions' },
             }}
             sort={promoSort}
@@ -321,7 +321,7 @@ export default function CodePerformancePage() {
             empty={{
               icon: Gift,
               title: t('code_performance.empty_referral_title', { defaultValue: 'Sin referidos todavía' }),
-              body: t('code_performance.empty_referral_body', { defaultValue: 'Cuando un influencer comparta su código y alguien se registre con él, vas a ver su desempeño acá.' }),
+              body: t('code_performance.empty_referral_body', { defaultValue: 'Cuando un influencer comparta su código y alguien se registre con él, vas a ver su desempeño aquí.' }),
             }}
             sort={refSort}
             onSortChange={setRefSort}

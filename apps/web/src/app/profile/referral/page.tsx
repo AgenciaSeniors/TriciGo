@@ -135,7 +135,7 @@ export default function ReferralPage() {
         await navigator.share({
           title: t('web.referral_share_title', { defaultValue: 'TriciGo — invitación' }),
           text: t('web.referral_share_text', {
-            defaultValue: 'Usá mi código {{code}} y descargá TriciGo: ',
+            defaultValue: 'Usa mi código {{code}} y descarga TriciGo: ',
             code: myCode,
           }),
           url: shareLink,
@@ -182,7 +182,7 @@ export default function ReferralPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
         <p style={{ color: 'var(--text-secondary)' }}>
-          {t('web.referral_login_required', { defaultValue: 'Iniciá sesión para ver tu código de referido' })}
+          {t('web.referral_login_required', { defaultValue: 'Inicia sesión para ver tu código de referido' })}
         </p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
           {t('web.login', { defaultValue: 'Iniciar sesión' })}
@@ -221,11 +221,11 @@ export default function ReferralPage() {
           </svg>
         </div>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 0.5rem' }}>
-          {t('web.referral_banner_title', { defaultValue: 'Invitá amigos y ganá TriciCoins' })}
+          {t('web.referral_banner_title', { defaultValue: 'Invita amigos y gana TriciCoins' })}
         </h2>
         <p style={{ fontSize: '0.9rem', opacity: 0.95, margin: 0, lineHeight: 1.5 }}>
           {t('web.referral_banner_desc', {
-            defaultValue: 'Compartí tu código. Cuando tu amigo complete su primer viaje, recibís {{bonus}} CUP en TriciCoins.',
+            defaultValue: 'Comparte tu código. Cuando tu amigo complete su primer viaje, recibes {{bonus}} CUP en TriciCoins.',
             bonus: bonusCup,
           })}
         </p>
@@ -354,7 +354,7 @@ export default function ReferralPage() {
       {!hasBeenReferred ? (
         <section style={{ marginBottom: '2rem' }}>
           <h2 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-            {t('web.referral_apply_title', { defaultValue: '¿Te invitaron? Aplicá un código' })}
+            {t('web.referral_apply_title', { defaultValue: '¿Te invitaron? Aplica un código' })}
           </h2>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <input
@@ -508,10 +508,10 @@ export default function ReferralPage() {
           {t('web.referral_how_title', { defaultValue: 'Cómo funciona' })}
         </h2>
         {[
-          { num: '1', text: t('web.referral_step_1', { defaultValue: 'Compartí tu código o enlace con un amigo.' }) },
+          { num: '1', text: t('web.referral_step_1', { defaultValue: 'Comparte tu código o enlace con un amigo.' }) },
           { num: '2', text: t('web.referral_step_2', { defaultValue: 'Tu amigo se registra usando tu código y completa su primer viaje.' }) },
           { num: '3', text: t('web.referral_step_3', {
-            defaultValue: 'Recibís {{bonus}} CUP en TriciCoins, acreditados directamente a tus créditos de viaje.',
+            defaultValue: 'Recibes {{bonus}} CUP en TriciCoins, acreditados directamente a tus créditos de viaje.',
             bonus: bonusCup,
           }) },
         ].map((step, i, arr) => (

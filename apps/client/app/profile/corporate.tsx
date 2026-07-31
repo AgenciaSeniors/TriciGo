@@ -381,7 +381,7 @@ export default function CorporateProfileScreen() {
       } else {
         Alert.alert(
           t('corporate.recharge_pending_title', { defaultValue: 'Verificando' }),
-          t('corporate.recharge_pending_msg', { defaultValue: 'El pago sigue en proceso. Volvé en unos minutos a revisar el saldo.' }),
+          t('corporate.recharge_pending_msg', { defaultValue: 'El pago sigue en proceso. Vuelve en unos minutos a revisar el saldo.' }),
         );
       }
     } catch (err) {

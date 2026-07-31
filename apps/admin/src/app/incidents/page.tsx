@@ -211,7 +211,7 @@ export default function IncidentsPage() {
             ? {
                 icon: ShieldCheck,
                 title: t('incidents.empty_resolved_title', { defaultValue: 'Sin incidentes resueltos' }),
-                body: t('incidents.empty_resolved_body', { defaultValue: 'Cuando se cierre alguno, va a aparecer acá.' }),
+                body: t('incidents.empty_resolved_body', { defaultValue: 'Cuando se cierre alguno, va a aparecer aquí.' }),
               }
             : {
                 icon: ShieldCheck,

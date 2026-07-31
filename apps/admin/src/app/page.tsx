@@ -343,7 +343,7 @@ export default function DashboardPage() {
               icon={MapPin}
               tone="default"
               title="Cuba duerme tranquila"
-              body="Aún no hay viajes hoy. Cuando lleguen, los verás acá en tiempo real."
+              body="Aún no hay viajes hoy. Cuando lleguen, los verás aquí en tiempo real."
             />
           ) : (
             <div className="divide-y divide-line">

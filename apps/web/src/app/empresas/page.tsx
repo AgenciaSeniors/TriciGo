@@ -294,7 +294,7 @@ export default function EmpresasPage() {
           ¿Puedo tener mi propia flota de conductores?
         </h3>
         <p>
-          Si tu empresa quiere convertirse en operador de flota, contactanos a{' '}
+          Si tu empresa quiere convertirse en operador de flota, contáctanos a{' '}
           <Link href="/contact" style={{ color: 'var(--primary)' }}>
             soporte
           </Link>{' '}

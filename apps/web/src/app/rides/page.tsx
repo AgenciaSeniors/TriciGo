@@ -155,7 +155,7 @@ export default function RidesPage() {
       console.error('Failed to load rides:', err);
       // Surface the failure (parity con el ErrorState + retry del rides móvil)
       // en vez de mostrar un "sin viajes" engañoso.
-      if (!append) setError(t('rides.error_loading', { defaultValue: 'No se pudieron cargar tus viajes. Revisá tu conexión e intentá de nuevo.' }));
+      if (!append) setError(t('rides.error_loading', { defaultValue: 'No se pudieron cargar tus viajes. Revisa tu conexión e intenta de nuevo.' }));
     } finally {
       setLoading(false);
       setLoadingMore(false);

@@ -137,7 +137,7 @@ export function NotificationPermissionSheet({
         </View>
 
         <Text variant="h4" className="text-center mb-2">
-          {t('notifications.driver_permission_title', { defaultValue: 'Activá las notificaciones' })}
+          {t('notifications.driver_permission_title', { defaultValue: 'Activa las notificaciones' })}
         </Text>
 
         <Text variant="body" color="secondary" className="text-center mb-6 leading-6">

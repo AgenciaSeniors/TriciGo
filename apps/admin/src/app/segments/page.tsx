@@ -364,7 +364,7 @@ export default function SegmentsPage() {
           {t('segments.title', { defaultValue: 'Segmentos' })}
         </h1>
         <p className="mt-0.5 text-[12.5px] text-ink-muted">
-          {t('segments.page_description', { defaultValue: 'Cortes de usuarios por comportamiento. Explorá cada cohorte para entenderla mejor.' })}
+          {t('segments.page_description', { defaultValue: 'Cortes de usuarios por comportamiento. Explora cada cohorte para entenderla mejor.' })}
         </p>
       </div>
 
@@ -400,7 +400,7 @@ export default function SegmentsPage() {
                   aria-label={t('segments.choose_city_aria', { defaultValue: 'Seleccionar ciudad' })}
                   className="h-9 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink focus:border-primary-500 focus:outline-none"
                 >
-                  <option value="">{t('segments.choose_city_placeholder', { defaultValue: 'Elegí una ciudad' })}</option>
+                  <option value="">{t('segments.choose_city_placeholder', { defaultValue: 'Elige una ciudad' })}</option>
                   {cities.map((city) => (
                     <option key={city.id} value={city.id}>
                       {city.name}
@@ -462,8 +462,8 @@ export default function SegmentsPage() {
 
       {!activeSegment && (
         <SectionCard
-          eyebrow={t('segments.start_eyebrow', { defaultValue: 'Empezá por acá' })}
-          title={t('segments.start_title', { defaultValue: 'Elegí un segmento arriba' })}
+          eyebrow={t('segments.start_eyebrow', { defaultValue: 'Empieza por aquí' })}
+          title={t('segments.start_title', { defaultValue: 'Elige un segmento arriba' })}
           description={t('segments.start_description', { defaultValue: 'Cada tarjeta abre la lista detallada de quiénes lo componen.' })}
         >
           <div className="flex items-center gap-3 text-[12.5px] text-ink-muted">

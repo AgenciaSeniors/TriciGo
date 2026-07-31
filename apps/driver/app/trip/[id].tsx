@@ -229,7 +229,7 @@ export default function TripDetailScreen() {
               -{formatCUP(commissionAmount)} {t('trip.tc_equivalent', { tc: commissionAmount, defaultValue: '(= {{tc}} TC)' })}
             </Text>
           </View>
-          {/* BUG-fare-driver-hero-gross: removido el bloque "Te llevás / Cobras
+          {/* BUG-fare-driver-hero-gross: removido el bloque "Te llevas / Cobras
              en efectivo" + separator. El header de precio arriba ya muestra GROSS;
              el breakdown muestra la comisión; el net se entiende del cálculo. */}
           <Text variant="caption" color="primary" className="opacity-40 mt-1">

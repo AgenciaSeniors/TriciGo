@@ -1193,7 +1193,7 @@ export function DriverTripView() {
               {t('trip.cancel_title', { defaultValue: 'Cancelar viaje' })}
             </Text>
             <Text variant="caption" style={{ color: midnightEmber.map.text.secondary, marginBottom: 16 }}>
-              {t('trip.cancel_reason_label', { defaultValue: '¿Por qué cancelás el viaje?' })}
+              {t('trip.cancel_reason_label', { defaultValue: '¿Por qué cancelas el viaje?' })}
             </Text>
             {DRIVER_CANCELLATION_REASONS.map((code) => (
               <Pressable

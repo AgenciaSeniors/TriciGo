@@ -430,7 +430,7 @@ export default function BlogAdminPage() {
         empty={{
           icon: Newspaper,
           title: t('blog.empty_title', { defaultValue: 'Sin posts' }),
-          body: t('blog.empty_body', { defaultValue: 'Creá el primero para que la bitácora cuente la historia de TriciGo.' }),
+          body: t('blog.empty_body', { defaultValue: 'Crea el primero para que la bitácora cuente la historia de TriciGo.' }),
           action: {
             label: t('blog.new_post', { defaultValue: 'Nuevo post' }),
             onClick: () => {

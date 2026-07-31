@@ -3,11 +3,11 @@
  *
  * Replaces the previous 3 × 2 grid of equal-weight stat cards with a
  * single hero amount + a collapsible "Más métricas" drawer. The hero
- * matches the IncomingRideCard's "Ganás" hero family so the driver
+ * matches the IncomingRideCard's "Ganas" hero family so the driver
  * sees a consistent earnings voice across the app.
  *
  * Layout:
- *   - Hero card: caption (`TE LLEVÁS`) + heroLg amount + meta line
+ *   - Hero card: caption (`TE LLEVAS`) + heroLg amount + meta line
  *     (trend arrow · {n} viajes · {x}/h promedio).
  *   - Rating card (always visible) — has its own navigate-to-reviews
  *     affordance so it stays prominent.
@@ -99,7 +99,7 @@ export function EarningsStatsCards({
             textTransform: 'uppercase',
           }}
         >
-          {t('earnings.net_today', { defaultValue: 'Te llevás' })}
+          {t('earnings.net_today', { defaultValue: 'Te llevas' })}
         </Text>
         <Text
           style={{

@@ -143,7 +143,7 @@ export default function BusinessesPage() {
         empty={{
           icon: Building2,
           title: t('businesses.empty_title', { defaultValue: 'Sin empresas aliadas' }),
-          body: t('businesses.empty_body', { defaultValue: 'Cuando se sume una cuenta corporativa, va a aparecer acá.' }),
+          body: t('businesses.empty_body', { defaultValue: 'Cuando se sume una cuenta corporativa, va a aparecer aquí.' }),
         }}
         rowHref={(a) => `/businesses/${a.id}`}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: accounts.length === PAGE_SIZE }}

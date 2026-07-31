@@ -240,7 +240,7 @@ export default function SupportPage() {
             {t('support.title', { defaultValue: 'Soporte' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('support.page_description', { defaultValue: 'Conversaciones con pasajeros y conductores. Respondé rápido, resolvé mejor.' })}
+            {t('support.page_description', { defaultValue: 'Conversaciones con pasajeros y conductores. Responde rápido, resuelve mejor.' })}
           </p>
         </div>
       </div>
@@ -274,8 +274,8 @@ export default function SupportPage() {
             <div className="flex min-h-[480px] items-center justify-center p-6">
               <DataEmptyState
                 icon={Headphones}
-                title={t('support.pick_title', { defaultValue: 'Elegí un ticket' })}
-                body={t('support.pick_body', { defaultValue: 'Seleccioná uno en la bandeja para ver la conversación y responder.' })}
+                title={t('support.pick_title', { defaultValue: 'Elige un ticket' })}
+                body={t('support.pick_body', { defaultValue: 'Selecciona uno en la bandeja para ver la conversación y responder.' })}
               />
             </div>
           ) : (
@@ -359,7 +359,7 @@ export default function SupportPage() {
                       void handleReply();
                     }
                   }}
-                  placeholder={t('support.reply_placeholder', { defaultValue: 'Escribí tu respuesta y apretá Enter…' })}
+                  placeholder={t('support.reply_placeholder', { defaultValue: 'Escribe tu respuesta y aprieta Enter…' })}
                   aria-label={t('support.reply_aria', { defaultValue: 'Respuesta' })}
                   className="h-10 flex-1 rounded-full border border-line bg-surface px-4 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
                 />

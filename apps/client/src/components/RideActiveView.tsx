@@ -665,7 +665,7 @@ export function RideActiveView() {
         Toast.show({
           type: 'success',
           text1: t('ride.share_success_title', { defaultValue: 'Viaje compartido' }),
-          text2: t('ride.share_success_body', { defaultValue: 'Podés dejar de compartir desde este viaje.' }),
+          text2: t('ride.share_success_body', { defaultValue: 'Puedes dejar de compartir desde este viaje.' }),
           visibilityTime: 2500,
         });
       }
@@ -837,7 +837,7 @@ export function RideActiveView() {
                   Toast.show({
                     type: 'error',
                     text1: t('ride.sos_contacts_not_reached', {
-                      defaultValue: 'No pudimos avisar a tus contactos. Llamá al 106.',
+                      defaultValue: 'No pudimos avisar a tus contactos. Llama al 106.',
                     }),
                   });
                 }
@@ -848,7 +848,7 @@ export function RideActiveView() {
                 Toast.show({
                   type: 'error',
                   text1: t('ride.sos_contacts_not_reached', {
-                    defaultValue: 'No pudimos avisar a tus contactos. Llamá al 106.',
+                    defaultValue: 'No pudimos avisar a tus contactos. Llama al 106.',
                   }),
                 });
               });
@@ -975,7 +975,7 @@ export function RideActiveView() {
           </Text>
           <Text variant="caption" color="tertiary" className="mb-3">
             {t('ride.driver_no_gps_options', {
-              defaultValue: 'Podés continuar igual y coordinar por chat/llamada, o cancelar el viaje sin cargo.',
+              defaultValue: 'Puedes continuar igual y coordinar por chat/llamada, o cancelar el viaje sin cargo.',
             })}
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -989,7 +989,7 @@ export function RideActiveView() {
                   Toast.show({
                     type: 'success',
                     text1: t('ride.driver_no_gps_continued', { defaultValue: 'Confirmado' }),
-                    text2: t('ride.driver_no_gps_continued_hint', { defaultValue: 'Coordiná con el conductor por chat' }),
+                    text2: t('ride.driver_no_gps_continued_hint', { defaultValue: 'Coordina con el conductor por chat' }),
                   });
                 } catch (err) {
                   Toast.show({ type: 'error', text1: t('ride.driver_no_gps_failed', { defaultValue: 'No se pudo confirmar' }) });
@@ -1036,12 +1036,12 @@ export function RideActiveView() {
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
             <Ionicons name="navigate-circle" size={20} color="#FF4D00" />
             <Text variant="body" style={{ fontWeight: '700', marginLeft: 8 }}>
-              {t('ride.gps_check_title', { defaultValue: '¿Tu conductor está acá?' })}
+              {t('ride.gps_check_title', { defaultValue: '¿Tu conductor está aquí?' })}
             </Text>
           </View>
           <Text variant="caption" color="secondary" className="mb-3">
             {t('ride.gps_check_body', {
-              defaultValue: `${rideWithDriver?.driver_name ?? 'Tu conductor'} dice que llegó (${(activeRide as any).gps_check_distance_m ?? '?'}m según su GPS). Confirmá si lo ves cerca.`,
+              defaultValue: `${rideWithDriver?.driver_name ?? 'Tu conductor'} dice que llegó (${(activeRide as any).gps_check_distance_m ?? '?'}m según su GPS). Confirma si lo ves cerca.`,
               driverName: rideWithDriver?.driver_name ?? 'Tu conductor',
               distance: (activeRide as any).gps_check_distance_m ?? '?',
             })}

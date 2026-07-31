@@ -12,12 +12,12 @@ const SITE = 'https://tricigo.com';
 export const metadata: Metadata = {
   title: 'Transporte con TriciGo — Cobertura por provincia',
   description:
-    'Pedí triciclos, motos y autos con TriciGo en múltiples ciudades. Elegí tu zona y conocé el servicio de movilidad bajo demanda disponible.',
+    'Pide triciclos, motos y autos con TriciGo en múltiples ciudades. Elige tu zona y conoce el servicio de movilidad bajo demanda disponible.',
   alternates: { canonical: `${SITE}/transporte` },
   openGraph: {
     title: 'Transporte con TriciGo — Cobertura por provincia',
     description:
-      'Triciclos, motos y autos bajo demanda en tu zona. Elegí tu provincia o ciudad.',
+      'Triciclos, motos y autos bajo demanda en tu zona. Elige tu provincia o ciudad.',
     url: `${SITE}/transporte`,
   },
 };
@@ -48,13 +48,13 @@ export default function TransporteHubPage() {
         Transporte con TriciGo
       </h1>
       <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.6, marginBottom: '2.5rem' }}>
-        TriciGo es la app de movilidad urbana: pedí un triciclo, una moto o un auto, o un
-        servicio de mensajería, y seguí tu viaje en tiempo real con precio claro antes de confirmar.
-        Elegí tu provincia para ver cómo funciona el servicio bajo demanda en tu zona.
+        TriciGo es la app de movilidad urbana: pide un triciclo, una moto o un auto, o un
+        servicio de mensajería, y sigue tu viaje en tiempo real con precio claro antes de confirmar.
+        Elige tu provincia para ver cómo funciona el servicio bajo demanda en tu zona.
       </p>
 
       <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>
-        Elegí tu provincia
+        Elige tu provincia
       </h2>
       <div
         style={{

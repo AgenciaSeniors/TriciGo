@@ -391,6 +391,6 @@ export const DataTableFallbacks = {
   noResults: {
     icon: Search,
     title: 'Sin resultados',
-    body: 'Probá ajustar los filtros o limpiar la búsqueda.',
+    body: 'Prueba ajustar los filtros o limpiar la búsqueda.',
   },
 };

@@ -95,13 +95,13 @@ export default function TrustedContactsPage() {
     // before insert (the emergency-contact sibling already does this — without it
     // the web let you save an unreachable contact the SOS broadcast can't text).
     if (!isValidCubanPhone(newPhone.trim())) {
-      setError(t('web.invalid_phone', { defaultValue: 'Ingresá un número de teléfono cubano válido.' }));
+      setError(t('web.invalid_phone', { defaultValue: 'Ingresa un número de teléfono cubano válido.' }));
       return;
     }
     // Email is optional; when provided it must be valid (trip updates go to
     // email instead of SMS). Empty = SMS fallback.
     if (newEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
-      setError(t('web.invalid_email', { defaultValue: 'Ingresá un correo válido.' }));
+      setError(t('web.invalid_email', { defaultValue: 'Ingresa un correo válido.' }));
       return;
     }
     setAdding(true);

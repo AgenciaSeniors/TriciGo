@@ -138,7 +138,7 @@ export default function CompleteProfilePage() {
             onClick={async () => { await signOut(); router.replace('/login'); }}
             style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: '0.8rem', cursor: 'pointer', marginTop: '0.25rem' }}
           >
-            {t('auth.not_you_sign_out', { defaultValue: '¿No sos vos? Cerrar sesión' })}
+            {t('auth.not_you_sign_out', { defaultValue: '¿No eres tú? Cerrar sesión' })}
           </button>
         </div>
       </div>

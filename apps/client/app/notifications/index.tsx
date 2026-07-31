@@ -277,7 +277,7 @@ export default function NotificationsScreen() {
           <EmptyState
             icon="checkmark-done-circle-outline"
             title={t('notifications.all_caught_up_title', { defaultValue: 'Todo al día' })}
-            description={t('notifications.all_caught_up_desc', { defaultValue: 'No tenés notificaciones sin leer.' })}
+            description={t('notifications.all_caught_up_desc', { defaultValue: 'No tienes notificaciones sin leer.' })}
             action={{
               label: t('notifications.show_all', { defaultValue: 'Ver todas' }),
               onPress: () => { triggerHaptic('light'); setFilter('all'); },

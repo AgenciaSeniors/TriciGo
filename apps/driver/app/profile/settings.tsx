@@ -322,7 +322,7 @@ export default function DriverSettingsScreen() {
       logger.warn('[DriverSettings] Failed to save matching preferences', { error: String(err) });
       Alert.alert(
         t('common.error', { defaultValue: 'Error' }),
-        t('profile.prefs_save_failed', { defaultValue: 'No se pudo guardar. Intentá de nuevo.' }),
+        t('profile.prefs_save_failed', { defaultValue: 'No se pudo guardar. Intenta de nuevo.' }),
       );
     } finally {
       setPrefsSaving(false);
@@ -393,7 +393,7 @@ export default function DriverSettingsScreen() {
         t('profile.delete_account_title', { defaultValue: 'Eliminar cuenta' }),
         t('profile.delete_account_confirm', {
           defaultValue:
-            'Escribí ELIMINAR para confirmar. La acción es inmediata e irreversible: se borrarán tu cuenta, perfil y documentos KYC. El historial de viajes se anonimiza (no se borra) por requisitos de auditoría AML.',
+            'Escribe ELIMINAR para confirmar. La acción es inmediata e irreversible: se borrarán tu cuenta, perfil y documentos KYC. El historial de viajes se anonimiza (no se borra) por requisitos de auditoría AML.',
         }),
         [
           { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
@@ -575,7 +575,7 @@ export default function DriverSettingsScreen() {
               icon="resize-outline"
               label={t('profile.max_distance', { defaultValue: 'Distancia máxima' })}
               subtitle={t('profile.max_distance_desc', {
-                defaultValue: 'Solo recibís viajes con recogida dentro de esta distancia',
+                defaultValue: 'Solo recibes viajes con recogida dentro de esta distancia',
               })}
               value={
                 maxDistanceKm === null
@@ -593,7 +593,7 @@ export default function DriverSettingsScreen() {
               icon="trail-sign-outline"
               title={t('profile.accepts_long_trips', { defaultValue: 'Aceptar viajes largos' })}
               subtitle={t('profile.accepts_long_trips_desc', {
-                defaultValue: 'Si lo apagás, no vas a recibir viajes de larga distancia',
+                defaultValue: 'Si lo apagas, no vas a recibir viajes de larga distancia',
               })}
               right={
                 <Switch

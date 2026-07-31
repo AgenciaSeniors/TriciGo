@@ -780,7 +780,7 @@ export default function DriverDetailPage() {
                         {!docVerified && rejectingDocId === doc.id && (
                           <div className="mt-2 space-y-2 rounded-md border border-red-200 bg-red-50/50 p-2">
                             <p className="text-[10px] font-semibold text-red-700 uppercase tracking-wider">
-                              {t('verification.reject_pick_reasons', { defaultValue: 'Elegí los motivos' })}
+                              {t('verification.reject_pick_reasons', { defaultValue: 'Elige los motivos' })}
                             </p>
                             <div className="flex flex-wrap gap-1">
                               {(DOC_REJECTION_PRESETS[docType] ?? []).map((preset) => {

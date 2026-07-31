@@ -1139,7 +1139,7 @@ function WebHomeScreen() {
                    ride and the history-driven dropdown takes over. */}
               {(savedLocations?.length ?? 0) === 0 && (recentAddresses?.length ?? 0) === 0 && (
                 <p style={{ fontSize: 11, color: c.textFaint, marginTop: -4, marginBottom: 0, paddingLeft: 2 }}>
-                  💡 Escribí una calle, esquina o lugar conocido — verás sugerencias al tipear.
+                  💡 Escribe una calle, esquina o lugar conocido — verás sugerencias al tipear.
                 </p>
               )}
             </div>
@@ -2280,7 +2280,7 @@ function IdleView() {
           >
             <Ionicons name="location-outline" size={18} color={tokens.accent.warm} />
             <Text style={{ flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13, color: tokens.ink.primary }}>
-              {t('home.location_denied_title', { defaultValue: 'Activá tu ubicación para encontrar viajes' })}
+              {t('home.location_denied_title', { defaultValue: 'Activa tu ubicación para encontrar viajes' })}
             </Text>
           </Pressable>
         )}
@@ -3103,7 +3103,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     if (blocked.length === 0) return null;
     if (blocked.length === deliveryVehicleOptions.length) {
       return t('delivery.no_vehicle_fits', {
-        defaultValue: 'Ningún vehículo puede llevar este paquete. Revisá el peso o la categoría.',
+        defaultValue: 'Ningún vehículo puede llevar este paquete. Revisa el peso o la categoría.',
       });
     }
     const first = blocked[0]!;
@@ -3908,7 +3908,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                     <Text variant="caption" color="tertiary">
                       {draft.shareRide && shareFreeSeats > 0
                         ? t('ride.share_ride_active', { defaultValue: '{{seats}} asientos libres · −{{pct}}%', seats: shareFreeSeats, pct: shareFreeSeats * SHARE_PCT })
-                        : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagás menos' })}
+                        : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagas menos' })}
                     </Text>
                   </View>
                   <Switch
@@ -3920,7 +3920,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                 </Pressable>
                 {draft.shareRide && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingHorizontal: 4 }}>
-                    <Text variant="caption" color="secondary">{t('ride.share_ride_seats_q', { defaultValue: '¿Cuántos van con vos?' })}</Text>
+                    <Text variant="caption" color="secondary">{t('ride.share_ride_seats_q', { defaultValue: '¿Cuántos van contigo?' })}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                       <Pressable onPress={() => { triggerHaptic('light'); setPassengerCount(Math.max(1, (draft.passengerCount || 1) - 1)); }} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.neutral[200], alignItems: 'center', justifyContent: 'center' }}>
                         <Text style={{ fontWeight: '700', color: colors.neutral[700] }}>−</Text>
@@ -4427,7 +4427,7 @@ function ReviewingView() {
                 <Text variant="caption" color="secondary">
                   {draft.shareRide && shareFreeSeats > 0
                     ? t('ride.share_ride_active', { defaultValue: '{{seats}} asientos libres · −{{pct}}%', seats: shareFreeSeats, pct: shareFreeSeats * 7 })
-                    : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagás menos' })}
+                    : t('ride.share_ride_desc', { defaultValue: 'El chofer puede recoger gente en los asientos libres y pagas menos' })}
                 </Text>
               </View>
               <Switch
@@ -4981,7 +4981,7 @@ function SearchingView() {
                anxiety spikes but timeout hasn't fired. */}
           {elapsedSeconds >= 45 && elapsedSeconds < 90 && (offerStats?.pending_count ?? 0) === 0 && (
             <Text variant="caption" color="tertiary" className="mb-4 text-center">
-              {t('home.still_searching_hint', { defaultValue: 'Seguimos buscando — podés cancelar si necesitás.' })}
+              {t('home.still_searching_hint', { defaultValue: 'Seguimos buscando — puedes cancelar si necesitas.' })}
             </Text>
           )}
 

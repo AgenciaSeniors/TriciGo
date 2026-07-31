@@ -63,7 +63,7 @@ export function RiderInfoCard({
       accessibilityRole="button"
       accessibilityLabel={t('trip.rider_card_a11y', {
         name: riderName,
-        defaultValue: `Pasajero ${riderName}. Tocá para abrir el chat.`,
+        defaultValue: `Pasajero ${riderName}. Toca para abrir el chat.`,
       })}
     >
       <Avatar uri={riderAvatarUrl} size={44} name={riderName} />

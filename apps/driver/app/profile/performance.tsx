@@ -281,7 +281,7 @@ export default function PerformanceScreen() {
                 </RNText>
                 <RNText style={styles.alertBody}>
                   {t('performance.alert_cancellation_body', {
-                    defaultValue: 'Cancelaciones repetidas afectan tu match score y tus ofertas. Si pasó algo puntual, ignorá este aviso.',
+                    defaultValue: 'Cancelaciones repetidas afectan tu match score y tus ofertas. Si pasó algo puntual, ignora este aviso.',
                   })}
                 </RNText>
               </View>
@@ -379,7 +379,7 @@ export default function PerformanceScreen() {
           <Card variant="outlined" padding="md" style={{ marginTop: 16 }}>
             <RNText style={[styles.alertBody, { textAlign: 'center' }]}>
               {t('performance.trend_unavailable', {
-                defaultValue: 'Tendencia diaria no disponible aún. Volvé en unos días.',
+                defaultValue: 'Tendencia diaria no disponible aún. Vuelve en unos días.',
               })}
             </RNText>
           </Card>

@@ -253,7 +253,7 @@ function WebRidesScreen() {
                   fontWeight: 600, cursor: 'pointer',
                 }}
               >
-                Pedí tu primer viaje
+                Pide tu primer viaje
               </button>
             ) : (
               <button
@@ -922,7 +922,7 @@ function NativeRidesScreen() {
                   title={t('rides_history.no_rides_title', { defaultValue: 'Aún no has hecho viajes' })}
                   description={t('rides_history.no_rides_description', { defaultValue: 'Cuando completes tu primer viaje aparecerá aquí con todos los detalles.' })}
                   action={{
-                    label: t('rides_history.request_cta', { defaultValue: 'Pedí tu primer viaje' }),
+                    label: t('rides_history.request_cta', { defaultValue: 'Pide tu primer viaje' }),
                     onPress: () => router.push('/(tabs)'),
                   }}
                 />
