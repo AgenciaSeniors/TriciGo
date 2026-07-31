@@ -1035,10 +1035,6 @@ function NativeDriverHomeScreen() {
     setFollowMode(true);
   }, [driverLocation]);
 
-  const handleAddressSelect = useCallback(({ latitude, longitude }: { latitude: number; longitude: number; address: string }) => {
-    mapRef.current?.flyTo(latitude, longitude, 15);
-  }, []);
-
   const renderRequest = useCallback(
     ({ item }: { item: Ride }) => (
       <IncomingRideCard
@@ -1378,7 +1374,6 @@ function NativeDriverHomeScreen() {
         onToggleBreak={handleToggleBreak}
         onSubmitSelfie={submitSelfie}
         onCancelAutoNav={cancelAutoNav}
-        onAddressSelect={handleAddressSelect}
         onGoToSuggestion={(lat, lng) => {
           trackValidationEvent('driver_suggestion_followed', {
             distance_km: nearestHotspot?.distance,
