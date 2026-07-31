@@ -407,6 +407,25 @@ function IncomingRideCardInner({
           )}
         </View>
 
+        {/* Gross fare + platform cut, under the headline net figure.
+            On cash rides the driver has to collect this exact amount from
+            the passenger, so it is operational information rather than a
+            footnote — the card used to show only what they keep, never what
+            to charge. Wording is borrowed from the trip-completion screen
+            (trip.total_fare / trip.platform_commission) so the same trip
+            reads the same before and after. Hidden when there is no
+            commission — launch promos set commission_rate to 0, and then
+            both numbers would be the same. */}
+        {fare > netEarnings && (
+          <RNText style={{
+            ...midnightEmber.text.dataSm,
+            color: midnightEmber.map.text.secondary,
+            marginBottom: 12,
+          }}>
+            {`${t('trip.total_fare')} $${fare.toLocaleString()}  ·  ${t('trip.platform_commission')} $${(fare - netEarnings).toLocaleString()}`}
+          </RNText>
+        )}
+
         {/* ── META LINE: trip stats + rating en una sola tira ── */}
         <RNText style={{
           ...midnightEmber.text.meta,
