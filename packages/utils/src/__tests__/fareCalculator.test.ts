@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, assert } from 'vitest';
 import {
   calculateBaseFare,
   applySurge,
@@ -230,7 +230,9 @@ describe('matchPricingRule', () => {
 
   it('falls through to catch-all rule', () => {
     // Remove first two rules
-    const catchAll = [rules[2]];
+    const catchAllRule = rules[2];
+    assert(catchAllRule);
+    const catchAll = [catchAllRule];
     const result = matchPricingRule(catchAll, '14:00', 3); // Wednesday 14:00
     expect(result?.id).toBe('rule-always');
   });

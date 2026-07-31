@@ -1,5 +1,17 @@
 import { z } from 'zod';
 import { normalizeCubanPhone } from '@tricigo/utils';
+import type { DisputeReason, TicketCategory } from '@tricigo/types';
+
+/**
+ * Compile-time guard for the enums below that mirror a union from
+ * @tricigo/types. `getSupabaseClient()` is untyped and these tables store the
+ * column as free TEXT, so a Zod enum that drifts from its union is caught by
+ * nothing at all — it just rejects real user input at runtime. Pairing
+ * `satisfies readonly T[]` (rejects a value that is NOT in the union) with
+ * `AssertNever<Exclude<T, ...>>` (fails to compile when a union member is
+ * MISSING from the list) pins both directions.
+ */
+type AssertNever<T extends never> = T;
 
 // Base validators
 export const uuidSchema = z.string().uuid('ID inválido');
@@ -124,10 +136,39 @@ export const submitReviewSchema = z.object({
 }).refine(d => d.reviewer_id !== d.reviewee_id, 'No puedes calificarte a ti mismo');
 
 // Dispute schema
+//
+// These MUST stay in lockstep with the `DisputeReason` union in
+// @tricigo/types: `disputeService.createDispute` declares its `reason`
+// parameter as `DisputeReason` but validates it with this schema at runtime,
+// and every reason picker (client, web) is built from that same union. The
+// enum here used to be an older taxonomy — ['payment','safety','quality',
+// 'route','pricing','other'] — whose only overlap with DisputeReason was
+// 'other', so 9 of the 10 reasons a user could pick were rejected by
+// `validate()` before the insert ever ran. `ride_disputes.reason` is free TEXT
+// (no CHECK constraint), so nothing downstream caught the mismatch.
+//
+// See AssertNever at the top of this file for how the two-way guard works.
+const DISPUTE_REASONS = [
+  'wrong_fare',
+  'wrong_route',
+  'driver_behavior',
+  'vehicle_condition',
+  'safety_issue',
+  'unauthorized_charge',
+  'service_not_rendered',
+  'excessive_wait',
+  'lost_item',
+  'other',
+] as const satisfies readonly DisputeReason[];
+
+type _DisputeReasonParity = AssertNever<
+  Exclude<DisputeReason, (typeof DISPUTE_REASONS)[number]>
+>;
+
 export const createDisputeSchema = z.object({
   ride_id: uuidSchema,
   opened_by: uuidSchema,
-  reason: z.enum(['payment', 'safety', 'quality', 'route', 'pricing', 'other']),
+  reason: z.enum(DISPUTE_REASONS),
   description: z.string().min(10).max(2000),
   evidence_urls: z.array(z.string().url()).max(5).optional(),
 });
@@ -147,10 +188,35 @@ export const registerPushTokenSchema = z.object({
 });
 
 // Support ticket schema
+//
+// Same drift as the dispute reasons above: this enum used to be
+// ['payment','safety','driver','technical','other'], whose only overlap with
+// the `TicketCategory` union was 'other' — while the three creation UIs
+// (client, driver, web help screens) and the admin label map are all built
+// from TicketCategory, and `support_tickets.category` is free TEXT with no
+// CHECK constraint. It never broke a user because `supportService.createTicket`
+// inserts WITHOUT calling `validate()`, so the schema has no consumer today;
+// wiring it up against the stale enum would have rejected every category
+// except 'other'. See AssertNever at the top of this file.
+const TICKET_CATEGORIES = [
+  'ride_issue',
+  'payment_issue',
+  'driver_complaint',
+  'passenger_complaint',
+  'account_issue',
+  'app_bug',
+  'feature_request',
+  'other',
+] as const satisfies readonly TicketCategory[];
+
+type _TicketCategoryParity = AssertNever<
+  Exclude<TicketCategory, (typeof TICKET_CATEGORIES)[number]>
+>;
+
 export const createTicketSchema = z.object({
   user_id: uuidSchema,
   ride_id: uuidSchema.optional(),
-  category: z.enum(['payment', 'safety', 'driver', 'technical', 'other']),
+  category: z.enum(TICKET_CATEGORIES),
   subject: z.string().min(1).max(500),
   description: z.string().max(5000).optional(),
 });

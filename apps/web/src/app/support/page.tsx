@@ -221,6 +221,11 @@ export default function SupportPage() {
               onChange={(e) => setSubject(e.target.value)}
               placeholder={t('support.subject_placeholder', { defaultValue: 'Describe brevemente tu problema' })}
               required
+              // Matches the mobile help screens (100) and stays under the
+              // createTicketSchema ceiling (500), which createTicket now
+              // enforces — the input must never be able to build a payload
+              // the service will reject.
+              maxLength={100}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -242,6 +247,10 @@ export default function SupportPage() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t('support.description_placeholder', { defaultValue: 'Detalla tu problema con toda la información posible' })}
               required
+              // createTicketSchema caps description at 5000; without this a
+              // pasted wall of text would be rejected by validate() instead of
+              // simply not fitting.
+              maxLength={5000}
               rows={4}
               style={{
                 width: '100%',

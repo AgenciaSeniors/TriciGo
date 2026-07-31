@@ -1,11 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 
 // Mock the Supabase client
 const mockSingle = vi.fn();
 const mockMaybeSingle = vi.fn();
 const mockLimit = vi.fn(() => ({ maybeSingle: mockMaybeSingle }));
-const mockOrder = vi.fn(() => ({ limit: mockLimit }));
-const mockEq = vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle })), eq: mockEq, order: mockOrder }));
+
+// A Supabase builder step is polymorphic: depending on the call site it either
+// continues the chain or IS the terminal step that resolves to { data, error }
+// (getMyLostItems awaits .order(); addAdminNotes awaits .eq()). The return
+// types are declared as that union because inferring them from the first
+// implementation locked each mock to the chain shape alone, so a test could not
+// stub the terminal payload its own call site produces.
+type QueryResult = { data?: unknown; error: unknown };
+type OrderReturn = { limit: typeof mockLimit } | QueryResult;
+type EqReturn = { select: Mock; eq: Mock; order: Mock } | QueryResult;
+
+const mockOrder = vi.fn<() => OrderReturn>(() => ({ limit: mockLimit }));
+const mockEq: Mock<() => EqReturn> = vi.fn(() => ({
+  select: vi.fn(() => ({ single: mockSingle })),
+  eq: mockEq,
+  order: mockOrder,
+}));
 const mockOr = vi.fn(() => ({ order: mockOrder }));
 const mockSelect = vi.fn(() => ({ eq: mockEq, or: mockOr, order: mockOrder }));
 const mockInsert = vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle })) }));

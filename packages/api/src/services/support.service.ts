@@ -11,12 +11,19 @@ import type {
   TicketStatus,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { validate, createTicketSchema } from '../schemas';
 
 export const supportService = {
   // ==================== TICKETS ====================
 
   /**
    * Create a new support ticket.
+   *
+   * Validates against `createTicketSchema` first: `support_tickets.category`
+   * is free TEXT with no CHECK constraint and `getSupabaseClient()` is
+   * untyped, so nothing else stops a category outside the `TicketCategory`
+   * union (or a malformed id) from being written verbatim and then rendering
+   * as unknown in the admin filters and label map.
    */
   async createTicket(params: {
     user_id: string;
@@ -25,15 +32,16 @@ export const supportService = {
     subject: string;
     description?: string;
   }): Promise<SupportTicket> {
+    const validParams = validate(createTicketSchema, params);
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('support_tickets')
       .insert({
-        user_id: params.user_id,
-        ride_id: params.ride_id ?? null,
-        category: params.category,
-        subject: params.subject,
-        description: params.description ?? null,
+        user_id: validParams.user_id,
+        ride_id: validParams.ride_id ?? null,
+        category: validParams.category,
+        subject: validParams.subject,
+        description: validParams.description ?? null,
       })
       .select()
       .single();

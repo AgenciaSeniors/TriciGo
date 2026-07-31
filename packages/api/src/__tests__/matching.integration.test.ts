@@ -4,7 +4,7 @@
 // with mocked Supabase client.
 // ============================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 
 // ─── Supabase Mock ───────────────────────────────────────────
 const mockSingle = vi.fn();
@@ -93,7 +93,9 @@ describe('Matching Service Integration', () => {
         p_is_delivery: false,
       });
       // First driver should have highest composite score
-      expect(result[0].composite_score).toBeGreaterThan(result[1].composite_score);
+      const [first, second] = result;
+      assert(first && second);
+      expect(first.composite_score).toBeGreaterThan(second.composite_score);
     });
 
     it('should return empty array when no drivers available', async () => {
@@ -161,7 +163,9 @@ describe('Matching Service Integration', () => {
       });
 
       expect(result).toHaveLength(1);
-      expect(result[0].driver_id).toBe('d-001');
+      const [only] = result;
+      assert(only);
+      expect(only.driver_id).toBe('d-001');
     });
   });
 
@@ -199,11 +203,16 @@ describe('Matching Service Integration', () => {
     it('should pass null details when not provided', async () => {
       mockRpc.mockResolvedValueOnce({ data: 60.0, error: null });
 
-      await matchingService.updateDriverScore('d-001', 'ride_cancelled');
+      // 'cancel_by_driver' is the real event type: it is one of the arms of the
+      // CASE in update_driver_score (migration 00412, delta -5.0). The previous
+      // 'ride_cancelled' does not exist in the RPC — it would fall into the
+      // ELSE branch (delta 0), return early and never write a
+      // driver_score_events row, so this test asserted a no-op.
+      await matchingService.updateDriverScore('d-001', 'cancel_by_driver');
 
       expect(mockRpc).toHaveBeenCalledWith('update_driver_score', {
         p_driver_id: 'd-001',
-        p_event_type: 'ride_cancelled',
+        p_event_type: 'cancel_by_driver',
         p_details: null,
       });
     });

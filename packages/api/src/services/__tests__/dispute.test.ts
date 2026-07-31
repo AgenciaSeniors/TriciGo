@@ -12,11 +12,14 @@ vi.mock('../../client', () => ({
 
 import { disputeService } from '../dispute.service';
 
+// 'wrong_fare' is the DisputeReason the apps actually send for a fare
+// complaint (see the reason pickers in client/web/driver/admin). The previous
+// 'pricing' is not a member of the union and reached no UI or RPC.
 const MOCK_DISPUTE = {
   id: UUID.DISPUTE_1,
   ride_id: UUID.RIDE_1,
   opened_by: UUID.USER_1,
-  reason: 'pricing',
+  reason: 'wrong_fare',
   description: 'Fare was higher than estimated',
   evidence_urls: [],
   status: 'open',
@@ -93,7 +96,7 @@ describe('disputeService.createDispute', () => {
     const result = await disputeService.createDispute({
       ride_id: UUID.RIDE_1,
       opened_by: UUID.USER_1,
-      reason: 'pricing',
+      reason: 'wrong_fare',
       description: 'Fare was higher than estimated',
     });
 
@@ -112,7 +115,7 @@ describe('disputeService.createDispute', () => {
       disputeService.createDispute({
         ride_id: UUID.RIDE_1,
         opened_by: UUID.USER_1,
-        reason: 'pricing',
+        reason: 'wrong_fare',
         description: 'Fare issue test',
       }),
     ).rejects.toEqual(err);

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, assert } from 'vitest';
 import { generateWalletCSV } from '../historyExport';
 
 describe('generateWalletCSV', () => {
@@ -64,7 +64,9 @@ describe('generateWalletCSV', () => {
   });
 
   it('English locale uses English labels', () => {
-    const csvEn = generateWalletCSV([txns[0]], 'me', 'en');
+    const firstTxn = txns[0];
+    assert(firstTxn);
+    const csvEn = generateWalletCSV([firstTxn], 'me', 'en');
     expect(csvEn.split('\n')[1]).toContain('Gift received');
   });
 
