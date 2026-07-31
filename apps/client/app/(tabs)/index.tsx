@@ -50,6 +50,7 @@ import {
   WeatherChip,
 } from '@tricigo/ui';
 import { useWeather } from '@/hooks/useWeather';
+import { PartnerPlacesCarousel } from '@/components/PartnerPlacesCarousel';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
 import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
@@ -2493,6 +2494,22 @@ function IdleView() {
             </ScrollView>
           </View>
         )}
+
+        {/* ── Lugares con beneficio ── partner places near the passenger.
+            Renders nothing without a fix or without a place in range.
+            `userCenter` is a GeoJSON [longitude, latitude] tuple — same
+            state that centres the map and feeds useWeather above. Reusing
+            it avoids a second location subscription. */}
+        <PartnerPlacesCarousel
+          latitude={userCenter?.[1] ?? null}
+          longitude={userCenter?.[0] ?? null}
+          tokens={tokens}
+          onSelect={(place) => {
+            setDropoff(place.name, { latitude: place.latitude, longitude: place.longitude });
+            resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
+            setFlowStep('selecting');
+          }}
+        />
 
         {/* ── Campañas (announcements) ── curated content cards from admin */}
         {announcements.length > 0 && (
