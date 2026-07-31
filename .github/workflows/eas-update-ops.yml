@@ -156,10 +156,16 @@ jobs:
           fi
           # --group republishes that exact group, so the bytes reaching 100% are
           # the bytes that were already verified and observed at partial rollout.
+          #
+          # No --rollout-percentage here, deliberately. EAS validates that flag
+          # as 0-99 and rejects 100 outright:
+          #   "Rollout percentage must be between 0 and 99"
+          # A rollout is by definition partial; "everyone" is the absence of one.
+          # Passing 100 made this step fail every time it ran — verified
+          # 2026-07-31 on run 30660877027, the first real attempt to widen.
           eas update:republish \
             --group "$GROUP_IN" \
             --destination-channel production \
-            --rollout-percentage 100 \
             --message "${MSG:-promote to 100%}" \
             --non-interactive
           echo "::notice::Update group $GROUP_IN is now at 100%."
