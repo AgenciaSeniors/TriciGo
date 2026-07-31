@@ -34,6 +34,18 @@ CREATE TABLE IF NOT EXISTS public.partner_places (
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Serves proximity lookups that pass a SCALAR radius, e.g. the discovery RPC
+-- get_nearby_partner_places. It deliberately does NOT serve the issuance
+-- trigger in 00530: that predicate is
+--   ST_DWithin(pp.location, <dropoff>, pp.radius_m)
+-- and because the radius is a column of the indexed relation, PostGIS cannot
+-- rewrite it into an index qual. Verified with EXPLAIN on 500 rows and
+-- enable_seqscan=off: a constant radius gives "Index Scan ... Index Cond:
+-- location && _st_expand(...)", the column-valued radius still gives
+-- "Seq Scan ... Filter: st_dwithin(location, ..., (radius_m)::float8)".
+-- That is acceptable — partner_places is small and admin-curated — but do not
+-- read a slow ride completion as a missing index, and do not "optimize" the
+-- trigger on the assumption that this index applies to it.
 CREATE INDEX IF NOT EXISTS partner_places_location_gix
   ON public.partner_places USING GIST (location);
 CREATE INDEX IF NOT EXISTS partner_places_active_idx
