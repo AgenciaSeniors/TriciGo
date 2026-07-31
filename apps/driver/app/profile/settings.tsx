@@ -249,7 +249,11 @@ export default function DriverSettingsScreen() {
     // branch above deleted it server-side. Writing AsyncStorage alone
     // left the server with no token — so no ride offers at all — until
     // the next cold start, while the switch showed "on".
-    const result = await registerPushTokenForUser(userId);
+    //
+    // promptIfNeeded: flipping this switch IS the driver asking for
+    // notifications, so it is one of the few callers allowed to spend
+    // the one-shot OS prompt.
+    const result = await registerPushTokenForUser(userId, { promptIfNeeded: true });
 
     if (result === 'denied') {
       // The OS permission is off, so no offer can reach this driver.
