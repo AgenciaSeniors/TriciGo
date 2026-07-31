@@ -2389,6 +2389,30 @@ function IdleView() {
         {/* ── Capitolio divider (Cuban identity marker) ── */}
         <CapitolioDivider mode={mode} height={72} />
 
+        {/* ── Lugares con beneficio ── partner places near the passenger.
+            Sits ABOVE Promos deliberately. This is the surface a partner
+            business is given in exchange for absorbing a free coffee, so
+            burying it as the fourth horizontal card row would make the deal
+            worth little and the "hero card" treatment pointless. It costs
+            TriciGo's own ride promos one position.
+
+            Renders nothing without a fix or without a place in range.
+            `userCenter` is a GeoJSON [longitude, latitude] tuple — the same
+            state that centres the map and feeds useWeather, reused here to
+            avoid a second location subscription. Note the order: [1] is
+            latitude. A swap type-checks cleanly, both members being numbers,
+            so it would fail silently. */}
+        <PartnerPlacesCarousel
+          latitude={userCenter?.[1] ?? null}
+          longitude={userCenter?.[0] ?? null}
+          tokens={tokens}
+          onSelect={(place) => {
+            setDropoff(place.name, { latitude: place.latitude, longitude: place.longitude });
+            resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
+            setFlowStep('selecting');
+          }}
+        />
+
         {/* ── Promos ── horizontal scroll of active promotions */}
         {activePromos.length > 0 && (
           <View style={{ marginTop: 24 }}>
@@ -2494,22 +2518,6 @@ function IdleView() {
             </ScrollView>
           </View>
         )}
-
-        {/* ── Lugares con beneficio ── partner places near the passenger.
-            Renders nothing without a fix or without a place in range.
-            `userCenter` is a GeoJSON [longitude, latitude] tuple — same
-            state that centres the map and feeds useWeather above. Reusing
-            it avoids a second location subscription. */}
-        <PartnerPlacesCarousel
-          latitude={userCenter?.[1] ?? null}
-          longitude={userCenter?.[0] ?? null}
-          tokens={tokens}
-          onSelect={(place) => {
-            setDropoff(place.name, { latitude: place.latitude, longitude: place.longitude });
-            resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
-            setFlowStep('selecting');
-          }}
-        />
 
         {/* ── Campañas (announcements) ── curated content cards from admin */}
         {announcements.length > 0 && (
