@@ -358,13 +358,18 @@ function IncomingRideCardInner({
           }} />
         </View>
 
-        {/* ── HERO: GANÁS label + número + surge inline ── */}
+        {/* ── HERO: total fare label + número + surge inline ──
+             The headline is the gross fare, so the label must say so.
+             It used to read "GANÁS" over the net figure; leaving that
+             wording on a gross number would overstate what the driver
+             keeps. Reuses trip.total_fare (already in es/en/pt), which
+             text.meta upper-cases on its own. */}
         <RNText style={{
           ...midnightEmber.text.meta,
           color: midnightEmber.map.text.tertiary,
           marginBottom: 4,
         }}>
-          {t('home.net_earnings_label', { defaultValue: 'GANÁS' })}
+          {t('trip.total_fare')}
         </RNText>
         <View style={{
           flexDirection: 'row',
@@ -373,17 +378,13 @@ function IncomingRideCardInner({
           marginBottom: 10,
         }}
           accessible
-          accessibilityLabel={t('a11y.net_earnings', {
-            ns: 'common',
-            amount: formatCUP(netEarnings),
-            defaultValue: 'Ganás {{amount}}',
-          })}
+          accessibilityLabel={`${t('trip.total_fare')}: ${formatCUP(fare)}`}
         >
           <RNText style={{
             ...midnightEmber.text.hero,
             color: midnightEmber.accent.warm,
           }}>
-            ${netEarnings.toLocaleString()}
+            ${fare.toLocaleString()}
           </RNText>
           {surgePercent > 0 && (
             <View style={{
@@ -406,25 +407,6 @@ function IncomingRideCardInner({
             </View>
           )}
         </View>
-
-        {/* Gross fare + platform cut, under the headline net figure.
-            On cash rides the driver has to collect this exact amount from
-            the passenger, so it is operational information rather than a
-            footnote — the card used to show only what they keep, never what
-            to charge. Wording is borrowed from the trip-completion screen
-            (trip.total_fare / trip.platform_commission) so the same trip
-            reads the same before and after. Hidden when there is no
-            commission — launch promos set commission_rate to 0, and then
-            both numbers would be the same. */}
-        {fare > netEarnings && (
-          <RNText style={{
-            ...midnightEmber.text.dataSm,
-            color: midnightEmber.map.text.secondary,
-            marginBottom: 12,
-          }}>
-            {`${t('trip.total_fare')} $${fare.toLocaleString()}  ·  ${t('trip.platform_commission')} $${(fare - netEarnings).toLocaleString()}`}
-          </RNText>
-        )}
 
         {/* ── META LINE: trip stats + rating en una sola tira ── */}
         <RNText style={{
