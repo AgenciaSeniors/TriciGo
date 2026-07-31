@@ -625,12 +625,12 @@ END;
 $$;
 
 -- ── Grants ────────────────────────────────────────────────────────────
-REVOKE ALL ON FUNCTION public.get_nearby_partner_places(DOUBLE PRECISION, DOUBLE PRECISION, INT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_my_partner_coupons() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.redeem_own_partner_coupon(UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.validate_partner_coupon(TEXT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.redeem_partner_coupon(TEXT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public._coupon_rate_limit_ok(TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_nearby_partner_places(DOUBLE PRECISION, DOUBLE PRECISION, INT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_my_partner_coupons() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.redeem_own_partner_coupon(UUID) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.validate_partner_coupon(TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.redeem_partner_coupon(TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public._coupon_rate_limit_ok(TEXT) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.get_nearby_partner_places(DOUBLE PRECISION, DOUBLE PRECISION, INT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_my_partner_coupons() TO authenticated;
@@ -738,7 +738,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.notify_expiring_partner_coupons() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.notify_expiring_partner_coupons() FROM PUBLIC, anon, authenticated;
 
 DO $$
 BEGIN
@@ -1201,8 +1201,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.admin_list_partner_places() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.admin_upsert_partner_place(UUID, TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, INT, INT, INT, BOOLEAN, TIMESTAMPTZ) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_list_partner_places() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.admin_upsert_partner_place(UUID, TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, INT, INT, INT, BOOLEAN, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_list_partner_places() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_upsert_partner_place(UUID, TEXT, TEXT, DOUBLE PRECISION, DOUBLE PRECISION, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, INT, INT, INT, BOOLEAN, TIMESTAMPTZ) TO authenticated;
 ```
