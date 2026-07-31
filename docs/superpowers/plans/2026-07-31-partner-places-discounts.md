@@ -465,10 +465,21 @@ RETURNS TEXT
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT regexp_replace(
-           regexp_replace(upper(COALESCE(p_raw, '')), '[^A-Z0-9]', '', 'g'),
-           '^TG', '', ''
-         );
+  WITH stripped AS (
+    SELECT regexp_replace(upper(COALESCE(p_raw, '')), '[^A-Z0-9]', '', 'g') AS s
+  )
+  SELECT CASE
+           -- Strip the display prefix ONLY when doing so leaves exactly six
+           -- characters. Both 'T' and 'G' are in the code alphabet, so a
+           -- legitimate code can itself begin "TG" (e.g. TG4K9P). Stripping
+           -- unconditionally would truncate it to four characters and make
+           -- roughly 1 in 961 coupons permanently unredeemable — a failure
+           -- the passenger could never work around and the shop could never
+           -- explain.
+           WHEN length(s) = 8 AND s LIKE 'TG%' THEN substr(s, 3)
+           ELSE s
+         END
+  FROM stripped;
 $$;
 
 -- ── Rate-limit helper for the public endpoints ────────────────────────
