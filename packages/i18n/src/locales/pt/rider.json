@@ -57,6 +57,9 @@
   "ride": {
     "request": "Solicitar viagem",
     "searching_driver": "Buscando motorista...",
+    "search_expired_title": "Nenhum motorista encontrado",
+    "search_expired_msg": "Ninguém aceitou sua viagem desta vez. Você pode pedir novamente.",
+    "canceled_generic_msg": "Sua viagem foi cancelada. Você pode pedir outra quando quiser.",
     "driver_assigned": "Motorista atribuído!",
     "driver_arriving": "Seu motorista está a caminho",
     "driver_arrived": "Seu motorista chegou",
