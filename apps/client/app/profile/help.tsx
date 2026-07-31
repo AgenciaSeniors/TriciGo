@@ -362,6 +362,9 @@ export default function HelpScreen() {
             onChangeText={setDescription}
             multiline
             numberOfLines={4}
+            // createTicketSchema caps description at 5000 and createTicket now
+            // enforces it, so the field must not accept more than it can send.
+            maxLength={5000}
             style={{ minHeight: 100 }}
           />
 

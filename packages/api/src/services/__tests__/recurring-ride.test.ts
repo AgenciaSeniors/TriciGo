@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 
 // Mock the Supabase client
 const mockFrom = vi.fn();
@@ -85,7 +85,12 @@ describe('recurringRideService', () => {
       // Insert
       const mockSingle = vi.fn().mockResolvedValue({ data: MOCK_RECURRING, error: null });
       const mockInsertSelect = vi.fn(() => ({ single: mockSingle }));
-      const mockInsert = vi.fn(() => ({ select: mockInsertSelect }));
+      // Declared with the payload parameter the service actually passes:
+      // as a zero-arg mock its `mock.calls` entries typed as an empty tuple,
+      // so the regression guard below could not read the insert payload.
+      const mockInsert = vi.fn((_payload: Record<string, unknown>) => ({
+        select: mockInsertSelect,
+      }));
 
       mockFrom.mockReturnValueOnce({ insert: mockInsert });
 
@@ -111,7 +116,9 @@ describe('recurringRideService', () => {
       // Regression guard: the insert must use the real lat/lng numeric
       // columns, NEVER pickup_location/dropoff_location/timezone (those
       // columns don't exist on recurring_rides → PGRST204).
-      const payload = mockInsert.mock.calls[0][0];
+      const insertCall = mockInsert.mock.calls[0];
+      assert(insertCall);
+      const payload = insertCall[0];
       expect(payload).toMatchObject({
         customer_id: 'u-1',
         pickup_latitude: 23.11,

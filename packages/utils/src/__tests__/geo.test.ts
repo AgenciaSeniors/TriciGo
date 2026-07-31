@@ -572,7 +572,10 @@ describe('fetchRoute fallback order (PR C)', () => {
   });
 
   it('returns null when both Mapbox and OSRM fail', async () => {
-    const fetchSpy = vi.fn(async () => new Response('upstream down', { status: 503 }));
+    // Declared with the url parameter the code actually passes: as a zero-arg
+    // mock, `mock.calls` entries typed as an empty tuple and the assertion
+    // below could not read the requested URL.
+    const fetchSpy = vi.fn(async (_url: unknown) => new Response('upstream down', { status: 503 }));
     vi.stubGlobal('fetch', fetchSpy);
 
     const result = await fetchRoute({ lat: 23.13, lng: -82.36 }, { lat: 23.14, lng: -82.35 });
@@ -985,7 +988,10 @@ describe('searchAddressGoogle — session token forwarding', () => {
   }
 
   it('passes session_token in the EF body when supplied', async () => {
-    const invokeSpy = vi.fn(async () => ({ data: { data: [] }, error: null }));
+    const invokeSpy = vi.fn(async (_name: string, _opts: { body?: unknown }) => ({
+      data: { data: [] },
+      error: null,
+    }));
     const supabase = mkSupabase(invokeSpy);
     await searchAddressGoogle('hotel boutique', supabase, null, undefined, 10, 'tok-abc-123');
     expect(invokeSpy).toHaveBeenCalledOnce();
@@ -995,7 +1001,10 @@ describe('searchAddressGoogle — session token forwarding', () => {
   });
 
   it('omits session_token (sends undefined) when caller does not supply one', async () => {
-    const invokeSpy = vi.fn(async () => ({ data: { data: [] }, error: null }));
+    const invokeSpy = vi.fn(async (_name: string, _opts: { body?: unknown }) => ({
+      data: { data: [] },
+      error: null,
+    }));
     const supabase = mkSupabase(invokeSpy);
     await searchAddressGoogle('hotel boutique', supabase);
     const [, opts] = invokeSpy.mock.calls[0]!;
@@ -1128,7 +1137,10 @@ describe('searchAddressUnified', () => {
   });
 
   it('forwards the sessionToken to searchAddressGoogle (EF body session_token)', async () => {
-    const invokeSpy = vi.fn(async () => ({ data: { data: [] }, error: null }));
+    const invokeSpy = vi.fn(async (_name: string, _opts: { body?: unknown }) => ({
+      data: { data: [] },
+      error: null,
+    }));
     const supabase = mkSupabase(invokeSpy);
     mockMapboxResponse([]); // Mapbox empty so we don't care about its branch
     await searchAddressUnified('hotel', supabase, null, undefined, 10, 'tok-unified-456');
@@ -1158,7 +1170,9 @@ describe('search RPC proximity (Bug 1a — never fall back to Havana center)', (
   });
 
   function stubRpc() {
-    const spy = vi.fn(async () => new Response('[]', { status: 200 }));
+    // Declared with the (url, init) parameters the RPC call passes, so bodyOf
+    // below can read the request body off `mock.calls`.
+    const spy = vi.fn(async (_url: unknown, _init: RequestInit) => new Response('[]', { status: 200 }));
     globalThis.fetch = spy as unknown as typeof fetch;
     return spy;
   }

@@ -10,8 +10,19 @@ const mockStorage = { from: mockStorageFrom };
 // Stub realtime broadcast chain used by updateLocation's best-effort broadcast.
 const mockChannelSend = vi.fn(() => Promise.resolve({ error: null }));
 const mockChannelBuilder = vi.fn(() => ({ send: mockChannelSend }));
-// Stub functions.invoke used by uploadSelfieCheck's fire-and-forget verify-selfie call.
-const mockFunctionsInvoke = vi.fn(() => Promise.resolve({ data: null, error: null }));
+// Stub functions.invoke used by the storage-upload calls and by
+// uploadSelfieCheck's fire-and-forget verify-selfie call.
+// The signature is declared explicitly: inferring it from the default
+// implementation pinned `data` and `error` to the literal type `null`, so no
+// test could stub a success payload ({ path }) or an EF failure
+// ({ message, code }) without a type error.
+type InvokeResult = {
+  data: unknown;
+  error: { message: string; code?: string } | null;
+};
+const mockFunctionsInvoke = vi.fn<
+  (name: string, opts?: { body?: unknown }) => Promise<InvokeResult>
+>(async () => ({ data: null, error: null }));
 const mockSupabase = {
   from: mockFrom,
   rpc: mockRpc,

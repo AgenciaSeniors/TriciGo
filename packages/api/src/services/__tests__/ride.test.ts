@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 import { maskPhone } from '@tricigo/utils';
 import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
@@ -427,9 +427,11 @@ describe('rideService.getSplitsForRide', () => {
     expect(selectMock).toHaveBeenCalledWith('*');
     expect(mockRpc).toHaveBeenCalledWith('get_public_display_names', { p_user_ids: ['u-2', 'u-3'] });
     expect(result).toHaveLength(2);
-    expect(result[0].user_name).toBe('Alice');
-    expect(result[1].user_name).toBe('Bob');
-    expect(result[1].user_avatar_url).toBe('https://x/a.png');
+    const [alice, bob] = result;
+    assert(alice && bob);
+    expect(alice.user_name).toBe('Alice');
+    expect(bob.user_name).toBe('Bob');
+    expect(bob.user_avatar_url).toBe('https://x/a.png');
   });
 
   it('still returns the splits when the names RPC is missing (migration tolerance)', async () => {
@@ -447,7 +449,9 @@ describe('rideService.getSplitsForRide', () => {
 
     const result = await rideService.getSplitsForRide('r-1');
     expect(result).toHaveLength(1);
-    expect(result[0].user_name).toBeUndefined();
+    const [onlySplit] = result;
+    assert(onlySplit);
+    expect(onlySplit.user_name).toBeUndefined();
   });
 
   it('returns empty array when no splits exist (no RPC call)', async () => {
@@ -481,8 +485,10 @@ describe('rideService.getRideWaypoints', () => {
 
     const result = await rideService.getRideWaypoints('r-1');
     expect(result).toHaveLength(2);
-    expect(result[0].sort_order).toBe(1);
-    expect(result[1].sort_order).toBe(2);
+    const [firstWaypoint, secondWaypoint] = result;
+    assert(firstWaypoint && secondWaypoint);
+    expect(firstWaypoint.sort_order).toBe(1);
+    expect(secondWaypoint.sort_order).toBe(2);
     expect(mockRpc).toHaveBeenCalledWith('get_ride_waypoints_with_coords', { p_ride_id: 'r-1' });
   });
 
@@ -1184,6 +1190,7 @@ describe('rideService.previewCancellationImpact', () => {
     });
 
     const result = await rideService.previewCancellationImpact('ride-1', 'safety');
+    assert(result);
     expect(result.rating_penalized).toBe(false);
     expect(mockRpc).toHaveBeenCalledWith('preview_cancellation_rating_impact', { p_ride_id: 'ride-1', p_reason: 'safety' });
   });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 
 // uploadFileFromUri routes the upload through the `storage-upload` Edge Function
 // (service-role) via `functions.invoke`, NOT a direct `supabase.storage.upload()`
@@ -30,7 +30,9 @@ describe('uploadFileFromUri', () => {
     expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
       body: expect.any(FormData),
     });
-    const body = mockFunctionsInvoke.mock.calls[0][1].body as FormData;
+    const call = mockFunctionsInvoke.mock.calls[0];
+    assert(call);
+    const body = call[1].body as FormData;
     expect(body.get('bucket')).toBe('driver-documents');
     expect(body.get('path')).toBe('path/to/file.jpg');
     expect(body.get('upsert')).toBe('true');
@@ -42,7 +44,9 @@ describe('uploadFileFromUri', () => {
       fileName: 'p.png',
     });
 
-    const body = mockFunctionsInvoke.mock.calls[0][1].body as FormData;
+    const call = mockFunctionsInvoke.mock.calls[0];
+    assert(call);
+    const body = call[1].body as FormData;
     expect(body.get('bucket')).toBe('dispute-evidence');
     expect(body.get('upsert')).toBe('false');
     expect(body.get('contentType')).toBeNull();

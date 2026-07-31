@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 
 // Mock the Supabase client
 const mockUpsert = vi.fn();
@@ -511,7 +511,9 @@ describe('notificationService', () => {
       expect(mockSelectFn).toHaveBeenCalledWith('*');
       expect(mockEqUser).toHaveBeenCalledWith('user_id', 'user-1');
       expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('n-1');
+      const [firstNotif] = result;
+      assert(firstNotif);
+      expect(firstNotif.id).toBe('n-1');
     });
 
     it('filters by unread when unreadOnly is true', async () => {

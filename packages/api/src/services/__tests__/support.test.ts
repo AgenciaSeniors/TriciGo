@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { TicketCategory } from '@tricigo/types';
+import { UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
 const mockFrom = vi.fn();
@@ -18,11 +20,14 @@ describe('supportService', () => {
 
   // ==================== createTicket ====================
   describe('createTicket', () => {
+    // 'payment_issue' is the real TicketCategory for a billing complaint (it is
+    // what the client/driver/web help screens offer). The previous 'billing'
+    // belonged to no taxonomy at all and only compiled because of an `as any`.
     it('inserts ticket and returns it', async () => {
       const mockTicket = {
         id: 't-1',
-        user_id: 'u-1',
-        category: 'billing',
+        user_id: UUID.USER_1,
+        category: 'payment_issue',
         subject: 'Charge issue',
       };
       const mockSingle = vi.fn().mockResolvedValue({ data: mockTicket, error: null });
@@ -32,17 +37,17 @@ describe('supportService', () => {
       mockFrom.mockReturnValueOnce({ insert: mockInsert });
 
       const result = await supportService.createTicket({
-        user_id: 'u-1',
-        category: 'billing' as any,
+        user_id: UUID.USER_1,
+        category: 'payment_issue',
         subject: 'Charge issue',
         description: 'I was overcharged',
       });
 
       expect(mockFrom).toHaveBeenCalledWith('support_tickets');
       expect(mockInsert).toHaveBeenCalledWith({
-        user_id: 'u-1',
+        user_id: UUID.USER_1,
         ride_id: null,
-        category: 'billing',
+        category: 'payment_issue',
         subject: 'Charge issue',
         description: 'I was overcharged',
       });
@@ -59,11 +64,44 @@ describe('supportService', () => {
 
       await expect(
         supportService.createTicket({
-          user_id: 'u-1',
-          category: 'billing' as any,
+          user_id: UUID.USER_1,
+          category: 'payment_issue',
           subject: 'Charge issue',
         }),
       ).rejects.toEqual(err);
+    });
+
+    // createTicket validates with createTicketSchema before touching the DB.
+    // `support_tickets.category` is free TEXT with no CHECK constraint, so
+    // without this gate a category outside the TicketCategory union would be
+    // stored verbatim and every consumer (admin label map, filters) would show
+    // it as unknown. The cast is deliberate: the point is an invalid value.
+    it('rejects a category outside the TicketCategory union before inserting', async () => {
+      const mockInsert = vi.fn();
+      mockFrom.mockReturnValue({ insert: mockInsert });
+
+      await expect(
+        supportService.createTicket({
+          user_id: UUID.USER_1,
+          category: 'billing' as unknown as TicketCategory,
+          subject: 'Charge issue',
+        }),
+      ).rejects.toThrow(/Validation error/);
+      expect(mockInsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed user_id before inserting', async () => {
+      const mockInsert = vi.fn();
+      mockFrom.mockReturnValue({ insert: mockInsert });
+
+      await expect(
+        supportService.createTicket({
+          user_id: 'u-1',
+          category: 'payment_issue',
+          subject: 'Charge issue',
+        }),
+      ).rejects.toThrow(/Validation error/);
+      expect(mockInsert).not.toHaveBeenCalled();
     });
   });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 
 // Mock the Supabase client (rpc + auth.getUser for admin methods)
 const mockFrom = vi.fn();
@@ -53,7 +53,9 @@ describe('walletService gifts', () => {
     it('omits p_from_wallet when the caller does not specify it', async () => {
       mockRpc.mockResolvedValueOnce({ data: 'gift-tx-x', error: null });
       await walletService.sendGift(FROM, TO, 100);
-      expect(mockRpc.mock.calls[0][1]).not.toHaveProperty('p_from_wallet');
+      const call = mockRpc.mock.calls[0];
+      assert(call);
+      expect(call[1]).not.toHaveProperty('p_from_wallet');
     });
 
     it('rejects self-gift before hitting the RPC (Zod refine)', async () => {

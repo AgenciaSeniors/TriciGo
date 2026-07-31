@@ -4,7 +4,7 @@
 // with mocked Supabase client.
 // ============================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 
 // ─── Supabase Mock ───────────────────────────────────────────
 const mockGetUser = vi.fn();
@@ -261,8 +261,10 @@ describe('Ride Service Integration', () => {
       const result = await rideService.getRideWaypoints('ride-001');
 
       expect(result).toHaveLength(2);
-      expect(result[0].address).toBe('Stop 1');
-      expect(result[1].address).toBe('Stop 2');
+      const [firstStop, secondStop] = result;
+      assert(firstStop && secondStop);
+      expect(firstStop.address).toBe('Stop 1');
+      expect(secondStop.address).toBe('Stop 2');
     });
   });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 import { UUID, createMockQueryChain } from './helpers/mockSupabase';
 
 // uploadDeliveryPhoto routes through the dedicated `upload-delivery-photo` Edge
@@ -37,14 +37,18 @@ describe('deliveryService.uploadDeliveryPhoto', () => {
     expect(mockFunctionsInvoke).toHaveBeenCalledWith('upload-delivery-photo', {
       body: expect.any(FormData),
     });
-    const body = mockFunctionsInvoke.mock.calls[0][1].body as FormData;
+    const call = mockFunctionsInvoke.mock.calls[0];
+    assert(call);
+    const body = call[1].body as FormData;
     expect(body.get('ride_id')).toBe(RIDE);
     expect(body.get('phase')).toBe('delivery');
   });
 
   it('passes the pickup phase through', async () => {
     await deliveryService.uploadDeliveryPhoto(RIDE, LOCAL_URI, 'pickup');
-    const body = mockFunctionsInvoke.mock.calls[0][1].body as FormData;
+    const call = mockFunctionsInvoke.mock.calls[0];
+    assert(call);
+    const body = call[1].body as FormData;
     expect(body.get('phase')).toBe('pickup');
   });
 

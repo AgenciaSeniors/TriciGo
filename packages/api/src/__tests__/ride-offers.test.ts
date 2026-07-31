@@ -11,7 +11,7 @@
 // accept without knowing how far they must drive empty.
 // ============================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 
 // ─── Supabase Mock ───────────────────────────────────────────
 const mockGetUser = vi.fn();
@@ -106,6 +106,7 @@ describe('getSearchingRides', () => {
     tableChains = { ride_offers: chainable({ data: [offerRow()], error: null }) };
 
     const [offer] = await rideService.getSearchingRides();
+    assert(offer);
 
     expect(offer.pickup_location).toEqual({ latitude: 23.1357, longitude: -82.3666 });
   });
@@ -114,6 +115,7 @@ describe('getSearchingRides', () => {
     tableChains = { ride_offers: chainable({ data: [offerRow()], error: null }) };
 
     const [offer] = await rideService.getSearchingRides();
+    assert(offer);
 
     expect(offer.dropoff_location).toEqual({ latitude: 23.1201, longitude: -82.4012 });
   });
@@ -122,6 +124,7 @@ describe('getSearchingRides', () => {
     tableChains = { ride_offers: chainable({ data: [offerRow()], error: null }) };
 
     const [offer] = await rideService.getSearchingRides();
+    assert(offer);
 
     expect(offer.offer_expires_at).toBe('2026-07-31T12:01:00.000Z');
   });
@@ -135,6 +138,7 @@ describe('getSearchingRides', () => {
     };
 
     const [offer] = await rideService.getSearchingRides();
+    assert(offer);
 
     expect(offer.pickup_location).toEqual({ latitude: 0, longitude: 0 });
   });
