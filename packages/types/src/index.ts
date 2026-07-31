@@ -25,3 +25,4 @@ export * from './notification';
 export * from './lost-item';
 export * from './recurring-ride';
 export * from './block';
+export * from './partner-place';
