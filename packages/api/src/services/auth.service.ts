@@ -7,8 +7,6 @@ import type { User } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { uploadFileFromUri } from './_storage-upload';
 
-declare const __DEV__: boolean | undefined;
-
 /**
  * Thrown when an OTP endpoint returns HTTP 429 (rate limited). Carries the
  * server-provided cooldown so the UI can keep the resend button disabled for
@@ -65,11 +63,11 @@ export const authService = {
    */
   async sendOTP(phone: string) {
     const supabase = getSupabaseClient();
-    // Dev bypass: ONLY in React Native __DEV__ mode (never process.env which can leak to production)
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.log('[DEV] OTP bypass active — use code 000000');
-      return;
-    }
+    // No __DEV__ bypass here — see verifyOTP for why the old one was removed.
+    // Demo/review logins are handled SERVER-side by send-sms-otp (resolveDemoOtp,
+    // gated on DEMO_PHONE + DEMO_OTP_CODE): it seeds a fixed code without sending
+    // an SMS. That is the path production already uses, so dev builds now behave
+    // identically instead of diverging.
 
     // Send OTP via Edge Function (Twilio SMS)
     const { data, error } = await supabase.functions.invoke('send-sms-otp', {
@@ -91,16 +89,15 @@ export const authService = {
    */
   async verifyOTP(phone: string, token: string) {
     const supabase = getSupabaseClient();
-    // Dev bypass: ONLY in React Native __DEV__ mode
-    if (typeof __DEV__ !== 'undefined' && __DEV__ && token === '000000') {
-      const devEmail = `dev_${phone.replace(/\+/g, '')}@tricigo.test`;
-      const { data: pwData, error: pwError } = await supabase.auth.signInWithPassword({
-        email: devEmail,
-        password: 'dev000000',
-      });
-      if (!pwError && pwData.session) return pwData;
-      console.log('[DEV] Password login failed, trying real OTP...');
-    }
+    // No __DEV__ bypass here (removed 2026-07-31 — dead since it was written in
+    // c76d1853, 2026-03-20). It signed in as dev_<phone>@tricigo.test with a fixed
+    // password, but NOTHING in this repo has ever created those users — 0 exist in
+    // prod and no seed/script/migration makes them — so it always fell through.
+    // Meanwhile sendOTP's twin bypass had already returned early without seeding a
+    // code, so the fallback had nothing to validate: the two halves cancelled out
+    // and a dev build could not log in AT ALL. It stayed invisible for months only
+    // because dev clients persist their session and rarely reach the login screen.
+    // Mirrors verifyPhoneLink below, which deliberately never had a bypass.
 
     // Verify OTP via Edge Function (validates against otp_codes table, creates session)
     const { data, error } = await supabase.functions.invoke('verify-otp', {
