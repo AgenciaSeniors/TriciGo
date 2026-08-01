@@ -72,6 +72,13 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   weather_surge_multiplier: { type: 'number', helpKey: 'platform_config.weather_surge_multiplier_help' },
   weather_cold_threshold_c: { type: 'number', helpKey: 'platform_config.weather_cold_threshold_c_help' },
   weather_cold_multiplier: { type: 'number', helpKey: 'platform_config.weather_cold_multiplier_help' },
+  // ── Stuck-ride watchdog (00538, Paso 4 incidente b428022b) ──
+  stuck_ride_watchdog_enabled: { type: 'text', helpKey: 'platform_config.stuck_ride_watchdog_enabled_help' },
+  stuck_ride_alert_email: { type: 'text', helpKey: 'platform_config.stuck_ride_alert_email_help' },
+  stuck_ride_stationary_min_s: { type: 'number', helpKey: 'platform_config.stuck_ride_stationary_min_s_help' },
+  stuck_ride_stationary_radius_m: { type: 'number', helpKey: 'platform_config.stuck_ride_stationary_radius_m_help' },
+  stuck_ride_chat_window_s: { type: 'number', helpKey: 'platform_config.stuck_ride_chat_window_s_help' },
+
   // ── Shared ride (Compartir viaje) ──
   shared_ride_discount_per_seat_pct: { type: 'number', helpKey: 'platform_config.shared_ride_discount_per_seat_pct_help' },
 

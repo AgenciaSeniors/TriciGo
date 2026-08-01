@@ -24,6 +24,7 @@ import { SectionCard } from '@/components/dashboard/SectionCard';
 import { ActivityRow } from '@/components/dashboard/ActivityRow';
 import { PulseMap } from '@/components/dashboard/PulseMap';
 import { SosAlertBanner } from '@/components/dashboard/SosAlertBanner';
+import { StuckRideBanner } from '@/components/dashboard/StuckRideBanner';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -191,6 +192,7 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-5 md:gap-6">
       <SosAlertBanner />
+      <StuckRideBanner />
       <DashboardHero name={email} />
 
       {/* Hero KPI + secondary KPIs */}
