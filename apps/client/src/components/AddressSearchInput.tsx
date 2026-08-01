@@ -53,7 +53,11 @@ function SkeletonRows() {
 interface AddressSearchInputProps {
   placeholder?: string;
   selectedAddress?: string | null;
-  onSelect: (address: string, location: GeoPoint) => void;
+  /** 00537: `meta.confirmPin` marks a selection whose coordinates came from an
+   *  external geocoder resolving a street address (not a named POI) — the
+   *  wrong-pin failure mode of incident b428022b. The caller should ask the
+   *  user to confirm the pin on the map before booking to that point. */
+  onSelect: (address: string, location: GeoPoint, meta?: { confirmPin?: boolean }) => void;
   /** User's saved locations from customer profile */
   savedLocations?: SavedLocation[];
   /** Recently used addresses from AsyncStorage */
@@ -378,7 +382,13 @@ function AddressSearchInputInner({
     // Session ends on selection — drop the Google Places session token so
     // the next search starts a fresh billable session.
     sessionTokenRef.current = null;
-    onSelect(result.address, { latitude: result.latitude, longitude: result.longitude });
+    // 00537: same low-confidence flag as handleSelectMerged (external geocoded
+    // street address, not a named POI) — see onSelect meta.confirmPin.
+    onSelect(
+      result.address,
+      { latitude: result.latitude, longitude: result.longitude },
+      { confirmPin: !!result._src && !result.displayName },
+    );
     // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox lookup
     // when the selection came from Google/Mapbox unified search. Never blocks UX.
     if (result._src) {
@@ -479,6 +489,7 @@ function AddressSearchInputInner({
     source?: string;
     icon?: string;
     distanceKm?: number | null;
+    external?: boolean;
   }) => {
     triggerSelection();
     trackEvent('address_searched', { query: query.trim() });
@@ -492,7 +503,12 @@ function AddressSearchInputInner({
     const initial = item.displayName && item.address && item.displayName !== item.address
       ? `${item.displayName}, ${item.address}`
       : item.address;
-    onSelect(initial, { latitude: item.latitude, longitude: item.longitude });
+    // 00537 (incident b428022b): a street ADDRESS resolved by an external
+    // geocoder (Google/Mapbox) can pin far from the real place — the incident
+    // pin was 1,650 m off. Named POIs (displayName) are searched by name and
+    // pin reliably; saved/recent/prediction coords were already ridden to.
+    const confirmPin = !!item.external && !item.displayName;
+    onSelect(initial, { latitude: item.latitude, longitude: item.longitude }, { confirmPin });
     // Background: enrich with Cuban cross-street format via reverseGeocode.
     // reverseGeocode already prepends the nearest POI when it finds one,
     // so this naturally upgrades a "Calle 23" pick to "Hotel Bruzón, Calle 23
@@ -561,6 +577,11 @@ function AddressSearchInputInner({
         source: r.displayName ? 'poi' : 'api',                  // ← POI vs street
         icon: r.displayName ? ('business-outline' as const) : ('location-outline' as const),
         emoji: searchResultEmoji({ tricigoCategory: r.tricigoCategory, category: r.category, place_name: r.displayName ?? r.address, address: r.address }),
+        // 00537: external-geocoder marker survives the merge so selection can
+        // flag low-confidence pins (see onSelect meta.confirmPin). Local
+        // street_intersections / cuba_pois rows have no _src — their
+        // coordinates are curated, not geocoded.
+        external: !!r._src,
       }));
 
     const all = [...matchedPreds, ...matchedSvd, ...matchedRec, ...matchedApi];

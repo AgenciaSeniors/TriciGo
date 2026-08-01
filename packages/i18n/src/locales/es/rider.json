@@ -89,6 +89,7 @@
     "payment_method": "Método de pago",
     "pickup": "Recogida",
     "dropoff": "Destino",
+    "confirm_pin_prompt": "¿El destino es aquí? Ajústalo si no",
     "eta": "Tiempo estimado",
     "distance": "Distancia",
     "cancel_ride": "Cancelar viaje",
