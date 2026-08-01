@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 const ROUTE_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { reverseGeocode, reverseGeocodeStructured, haversineDistance, MAP_STYLE_LIGHT } from '@tricigo/utils';
+import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT } from '@tricigo/utils';
 import type { GeoPoint, StructuredAddress } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
@@ -260,7 +260,21 @@ export function ConfirmLocationScreen({
     } catch { /* keep current display / fallback */ }
     // User may have tapped back while the geocode was in flight.
     if (!mountedRef.current) return;
-    onConfirm(finalAddress || 'Ubicación seleccionada en el mapa', center);
+    // Incident cd09ba9f: on slow networks the geocode misses the 3 s cap and
+    // the old fallback ('Ubicación seleccionada en el mapa') reached the
+    // driver's offer card, which is useless for deciding. The label must
+    // always SAY something: nearest local preset ("Cerca de Vedado" — pure
+    // local math, no network) before falling back to raw coordinates. Both
+    // fallback forms are sentinels the server-side backstop (00539) upgrades
+    // with real intersection data at ride creation.
+    const coordsRe = /^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/;
+    if (!finalAddress || coordsRe.test(finalAddress)) {
+      const preset = findNearestPreset(center, 5000);
+      finalAddress = preset
+        ? `Cerca de ${preset.label}`
+        : `${center.latitude.toFixed(5)}, ${center.longitude.toFixed(5)}`;
+    }
+    onConfirm(finalAddress, center);
   };
 
   const isPickup = mode === 'pickup';

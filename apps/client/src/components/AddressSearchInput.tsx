@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -442,9 +442,17 @@ function AddressSearchInputInner({
       setResults([]);
       setIsExpanded(false);
       sessionTokenRef.current = null;
+      // Incident cd09ba9f: when reverse geocode finds nothing (data gap or
+      // timeout), raw coordinates reached the driver's offer card. Fall back
+      // to the nearest local preset ("Cerca de Vedado" — no network) first;
+      // both fallback forms are sentinels the server backstop (00539)
+      // upgrades with real intersection data at ride creation.
+      const gpsPoint = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      const nearPreset = address ? null : findNearestPreset(gpsPoint, 5000);
       onSelect(
-        address ?? `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
-        { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+        address
+          ?? (nearPreset ? `Cerca de ${nearPreset.label}` : `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`),
+        gpsPoint,
       );
     } catch {
       setGeocodeError(t('home.geocode_error', { defaultValue: 'No se pudo obtener la dirección. Intenta escribirla manualmente.' }));
