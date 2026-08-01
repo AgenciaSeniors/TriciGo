@@ -7,6 +7,7 @@ import {
   initLocationBuffer,
   bufferLocation,
   flushBuffer,
+  newClientEventId,
 } from '@/services/locationBuffer';
 import type { BufferedLocation } from '@/services/locationBuffer';
 import {
@@ -141,6 +142,9 @@ export function useDriverLocationTracking(
           speed: b.speed ?? undefined,
           accuracy: b.accuracy,
           recorded_at: new Date(b.timestamp).toISOString(),
+          // 00537: id minted at capture; entries persisted by older builds
+          // may not have one — mint at flush so the row still carries an id.
+          client_event_id: b.clientEventId ?? newClientEventId(),
         })),
       );
     };
@@ -537,6 +541,7 @@ export function useDriverLocationTracking(
                       timestamp: Date.now(),
                       rideId: activeRideId,
                       driverId: driverId!,
+                      clientEventId: newClientEventId(),
                     });
                   }
                 });
@@ -559,6 +564,7 @@ export function useDriverLocationTracking(
                 timestamp: Date.now(),
                 rideId: activeRideId,
                 driverId: driverId!,
+                clientEventId: newClientEventId(),
               });
             }
           },

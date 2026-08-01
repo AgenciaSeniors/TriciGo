@@ -9,15 +9,26 @@ export const locationService = {
     longitude: number;
     heading?: number;
     speed?: number;
+    accuracy?: number | null;
+    /** Timestamp of the GPS fix itself. Without it the row gets the server
+     *  insert time, which is what produced the mixed-clock duplicates that
+     *  compute_ride_trail_distance_m has to filter out (incident b428022b). */
+    recorded_at?: string;
+    /** 00537: per-fix UUID minted at capture; UNIQUE (ride_id, client_event_id)
+     *  makes replays (task re-delivery, retry-after-timeout) idempotent. */
+    client_event_id?: string;
   }): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase.from('ride_location_events').insert({
+    const { error } = await supabase.from('ride_location_events').upsert({
       ride_id: params.ride_id,
       driver_id: params.driver_id,
       location: `POINT(${params.longitude} ${params.latitude})`,
       heading: params.heading ?? null,
       speed: params.speed ?? null,
-    });
+      accuracy: params.accuracy ?? null,
+      ...(params.recorded_at ? { recorded_at: params.recorded_at } : {}),
+      ...(params.client_event_id ? { client_event_id: params.client_event_id } : {}),
+    }, { onConflict: 'ride_id,recorded_at', ignoreDuplicates: true });
     if (error) throw error;
   },
 
@@ -61,6 +72,8 @@ export const locationService = {
       speed?: number;
       accuracy?: number | null;
       recorded_at: string;
+      /** 00537: per-fix UUID minted at capture (see recordRideLocation). */
+      client_event_id?: string;
     }>,
   ): Promise<void> {
     if (events.length === 0) return;
@@ -81,6 +94,10 @@ export const locationService = {
       speed: e.speed ?? null,
       accuracy: e.accuracy ?? null,
       recorded_at: e.recorded_at,
+      // 00537: keep (ride_id, recorded_at) as the upsert conflict target
+      // (matches idx_ride_location_dedup, which would otherwise 23505 the
+      // whole batch); client_event_id rides along for audit + server dedup.
+      client_event_id: e.client_event_id ?? null,
     }));
     const { error } = await supabase.from('ride_location_events').upsert(rows, { onConflict: 'ride_id,recorded_at', ignoreDuplicates: true });
     if (error) throw error;

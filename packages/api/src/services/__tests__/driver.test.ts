@@ -639,6 +639,61 @@ describe('driverService', () => {
         driverService.updateRideStatus('r-1', 'completed' as any),
       ).rejects.toThrow('Use completeRide() for ride completion');
     });
+
+    // 00537: the RPC signals machine-readable outcomes in DETAIL; the service
+    // must surface them as typed AppError codes so the far-pin modal can
+    // branch without string-matching the Spanish message.
+    it('maps DETAIL too_far_for_bypass to AppError code TOO_FAR_FOR_BYPASS', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: {
+          message: 'Estás a 1650 m del destino. Acércate más para confirmar.',
+          details: 'too_far_for_bypass',
+        },
+      });
+
+      await expect(
+        driverService.updateRideStatus('r-1', 'arrived_at_destination' as any, {
+          driverLat: 23.127, driverLng: -82.3929,
+        }),
+      ).rejects.toMatchObject({ code: 'TOO_FAR_FOR_BYPASS' });
+    });
+
+    it('sends p_confirm_far only when confirmFar is true', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { success: true, far_from_pin_override: true },
+        error: null,
+      });
+      const followUpChain = createMockQueryChain();
+      followUpChain.single.mockResolvedValue({
+        data: { customer_id: 'u-1', ride_mode: 'passenger' },
+        error: null,
+      });
+      mockFrom.mockReturnValueOnce(followUpChain);
+
+      await driverService.updateRideStatus('r-1', 'arrived_at_destination' as any, {
+        driverLat: 23.127, driverLng: -82.3929, confirmFar: true,
+      });
+      expect(mockRpc).toHaveBeenCalledWith('update_ride_status_v2', expect.objectContaining({
+        p_confirm_far: true,
+      }));
+
+      // Without confirmFar the param must be ABSENT (older backend signatures
+      // keep resolving the 5-arg overload).
+      mockRpc.mockResolvedValueOnce({ data: { success: true }, error: null });
+      const followUpChain2 = createMockQueryChain();
+      followUpChain2.single.mockResolvedValue({
+        data: { customer_id: 'u-1', ride_mode: 'passenger' },
+        error: null,
+      });
+      mockFrom.mockReturnValueOnce(followUpChain2);
+
+      await driverService.updateRideStatus('r-1', 'arrived_at_destination' as any, {
+        driverLat: 23.127, driverLng: -82.3929,
+      });
+      const lastCall = mockRpc.mock.calls[mockRpc.mock.calls.length - 1]!;
+      expect(lastCall[1]).not.toHaveProperty('p_confirm_far');
+    });
   });
 
   // ==================== completeRide ====================

@@ -11,6 +11,10 @@ interface DriverRideState {
   activeTrip: Ride | null;
   isAdvancing: boolean;
   isDriverCanceling: boolean;
+  /** 00537 far-pin override: set when arrived_at_destination was rejected with
+   *  too_far_for_bypass (>500 m from a possibly mis-geocoded dropoff pin).
+   *  DriverTripView renders the "¿El pasajero ya llegó?" modal from this. */
+  farPinPrompt: { distanceM: number | null } | null;
 
   addRequest: (ride: Ride) => void;
   removeRequest: (rideId: string) => void;
@@ -20,6 +24,7 @@ interface DriverRideState {
   updateActiveTrip: (trip: Ride) => void;
   setIsAdvancing: (v: boolean) => void;
   setDriverCanceling: (v: boolean) => void;
+  setFarPinPrompt: (v: { distanceM: number | null } | null) => void;
   reset: () => void;
 }
 
@@ -28,6 +33,7 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   activeTrip: null,
   isAdvancing: false,
   isDriverCanceling: false,
+  farPinPrompt: null,
 
   addRequest: (ride) =>
     set((s) => {
@@ -76,6 +82,8 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
 
   setDriverCanceling: (v) => set({ isDriverCanceling: v }),
 
+  setFarPinPrompt: (v) => set({ farPinPrompt: v }),
+
   setActiveTrip: (activeTrip) => set({ activeTrip }),
 
   updateActiveTrip: (trip) => {
@@ -123,5 +131,5 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
     set({ activeTrip: trip });
   },
 
-  reset: () => set({ incomingRequests: [], activeTrip: null, isAdvancing: false, isDriverCanceling: false }),
+  reset: () => set({ incomingRequests: [], activeTrip: null, isAdvancing: false, isDriverCanceling: false, farPinPrompt: null }),
 }));

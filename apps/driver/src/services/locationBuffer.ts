@@ -21,6 +21,26 @@ export interface BufferedLocation {
   timestamp: number;
   rideId: string | null;
   driverId: string;
+  /** 00537: per-fix UUID minted at capture time. Travels with the sample so
+   *  a replayed flush inserts the SAME id and the server-side UNIQUE
+   *  (ride_id, client_event_id) makes it idempotent. Optional because
+   *  entries persisted by older builds don't have it. */
+  clientEventId?: string;
+}
+
+/** RFC 4122 v4 — fallback for runtimes without crypto.randomUUID. */
+function uuidv4(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/** 00537: mint the per-fix id at the moment of capture (see clientEventId). */
+export function newClientEventId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return c?.randomUUID ? c.randomUUID() : uuidv4();
 }
 
 let buffer: BufferedLocation[] = [];

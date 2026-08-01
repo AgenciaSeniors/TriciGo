@@ -21,10 +21,10 @@ describe('locationService', () => {
   // recordRideLocation
   // ------------------------------------------------------------------
   describe('recordRideLocation', () => {
-    it('inserts a location event with correct POINT format', async () => {
-      const mockInsert = vi.fn().mockResolvedValue({ error: null });
+    it('upserts a location event with correct POINT format and replay-safe conflict target', async () => {
+      const mockUpsert = vi.fn().mockResolvedValue({ error: null });
 
-      mockFrom.mockReturnValueOnce({ insert: mockInsert });
+      mockFrom.mockReturnValueOnce({ upsert: mockUpsert });
 
       await locationService.recordRideLocation({
         ride_id: 'ride-1',
@@ -36,21 +36,50 @@ describe('locationService', () => {
       });
 
       expect(mockFrom).toHaveBeenCalledWith('ride_location_events');
-      expect(mockInsert).toHaveBeenCalledWith({
+      expect(mockUpsert).toHaveBeenCalledWith(
+        {
+          ride_id: 'ride-1',
+          driver_id: 'driver-1',
+          location: 'POINT(-99.1332 19.4326)',
+          heading: 90,
+          speed: 30,
+          accuracy: null,
+        },
+        { onConflict: 'ride_id,recorded_at', ignoreDuplicates: true },
+      );
+    });
+
+    it('00537: passes fix timestamp, accuracy and client_event_id when provided', async () => {
+      const mockUpsert = vi.fn().mockResolvedValue({ error: null });
+
+      mockFrom.mockReturnValueOnce({ upsert: mockUpsert });
+
+      await locationService.recordRideLocation({
         ride_id: 'ride-1',
         driver_id: 'driver-1',
-        location: 'POINT(-99.1332 19.4326)',
-        heading: 90,
-        speed: 30,
+        latitude: 19.4326,
+        longitude: -99.1332,
+        accuracy: 3.5,
+        recorded_at: '2026-08-01T12:00:00.000Z',
+        client_event_id: 'evt-uuid-1',
       });
+
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accuracy: 3.5,
+          recorded_at: '2026-08-01T12:00:00.000Z',
+          client_event_id: 'evt-uuid-1',
+        }),
+        { onConflict: 'ride_id,recorded_at', ignoreDuplicates: true },
+      );
     });
 
     it('throws on supabase error', async () => {
-      const mockInsert = vi.fn().mockResolvedValue({
+      const mockUpsert = vi.fn().mockResolvedValue({
         error: { message: 'Insert failed', code: '23505' },
       });
 
-      mockFrom.mockReturnValueOnce({ insert: mockInsert });
+      mockFrom.mockReturnValueOnce({ upsert: mockUpsert });
 
       await expect(
         locationService.recordRideLocation({

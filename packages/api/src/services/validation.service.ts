@@ -44,3 +44,29 @@ export async function trackValidationEvent(
     // Silently fail — validation events are non-critical
   }
 }
+
+/**
+ * 00537: log a ride validation event through the SECURITY DEFINER RPC.
+ * Used for events the direct-insert path can't cover from the client —
+ * e.g. the far-pin flow ('complete_blocked_distance',
+ * 'far_pin_override_canceled'), where the server-side RAISE EXCEPTION
+ * rolls back and swallows its own telemetry. Fire-and-forget: never
+ * throws, tolerates the RPC being absent (fresh envs pre-00537).
+ */
+export async function logRideValidationEvent(
+  rideId: string,
+  eventType: 'complete_blocked_distance' | 'far_pin_override_canceled',
+  properties: Record<string, unknown> = {},
+): Promise<void> {
+  trackEvent(eventType, { ...properties, ride_id: rideId });
+  try {
+    const supabase = getSupabaseClient();
+    await supabase.rpc('log_ride_validation_event', {
+      p_ride_id: rideId,
+      p_event_type: eventType,
+      p_properties: properties,
+    });
+  } catch {
+    // Silently fail — telemetry must never block the trip flow
+  }
+}
