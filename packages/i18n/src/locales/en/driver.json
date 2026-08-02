@@ -30,6 +30,9 @@
     "no_rides_available": "No requests at the moment",
     "accept_failed": "Another driver already accepted this ride",
     "ineligible_banner": "Your account is suspended due to a negative balance. Recharge your trip credits to accept rides.",
+    "notifications_blocked_title": "You won't be notified about rides",
+    "notifications_blocked_subtitle": "TriciGo notifications are turned off on your phone.",
+    "notifications_blocked_action": "Open Settings",
     "ineligible_recharge": "Recharge trip credits",
     "demand_heatmap": "Demand zones",
     "high_demand_area": "High demand area",
@@ -104,7 +107,9 @@
     "greeting": "Hello, {{name}}",
     "greeting_generic": "Welcome!",
     "connect_to_earn": "Go online to start earning",
-    "on_break_label": "On break — not receiving requests"
+    "on_break_label": "On break — not receiving requests",
+    "heartbeat_lost_title": "We lost the connection to the server",
+    "heartbeat_lost_body": "You may stop receiving rides. Check your connection."
   },
 
   "trip": {

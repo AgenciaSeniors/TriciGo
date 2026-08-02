@@ -78,7 +78,7 @@ import type {
 } from '@tricigo/types';
 import type { DriverStatus } from '@tricigo/types';
 import type { UserLevel } from '@tricigo/types';
-import { havanaDayRangeUtc } from '@tricigo/utils';
+import { havanaDayRangeUtc, logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import type { DeliveryDetails } from './delivery.service';
 
@@ -485,20 +485,34 @@ export const adminService = {
   ): Promise<void> {
     const supabase = getSupabaseClient();
 
-    // 00491: a driver cannot be approved without a registered active vehicle.
+    // 00495: a driver cannot be approved without a registered active vehicle.
     // Onboarding persists the vehicle only at the final review Submit, so an
     // admin could otherwise approve from the documents alone and leave an
     // "approved" driver with no vehicle (shown as a car on the map). The DB
     // trigger enforces this authoritatively; this pre-check surfaces a clean
     // error to the admin UI instead of the raw trigger exception.
-    const { data: activeVehicle } = await supabase
+    //
+    // Only throw when the query SUCCEEDED and returned no row — same fix as
+    // driverService.setOnlineStatus: ignoring `error` turned any transient
+    // failure of this SELECT into a bogus "this driver has no vehicle" for a
+    // driver who has one. Falling through is safe here (safer than on the
+    // online path, in fact): the trigger's approval guard is deliberately
+    // placed ABOVE the is_admin() bypass (00495:39-45), so it gates admin
+    // callers too and raises the same error code.
+    const { data: activeVehicle, error: vehicleErr } = await supabase
       .from('vehicles')
       .select('id')
       .eq('driver_id', driverId)
       .eq('is_active', true)
       .limit(1)
       .maybeSingle();
-    if (!activeVehicle) {
+    if (vehicleErr) {
+      logger.warn('[approveDriver] vehicle pre-check failed; deferring to DB trigger', {
+        driverId,
+        code: vehicleErr.code,
+        message: vehicleErr.message,
+      });
+    } else if (!activeVehicle) {
       throw new Error('driver_has_no_active_vehicle');
     }
 

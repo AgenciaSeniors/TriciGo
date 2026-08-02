@@ -9,6 +9,7 @@ import {
   Dimensions,
   StyleSheet,
   Platform,
+  Linking,
   Text as RNText,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,6 +54,7 @@ import { useNearbyDrivers } from '@/hooks/useNearbyDrivers';
 import { useTestVehicles } from '@/hooks/useTestVehicles';
 import { useSmartSuggestion } from '@/hooks/useSmartSuggestion';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
+import { useNotificationsBlocked } from '@/hooks/useNotificationsBlocked';
 import { RideMapView } from '@/components/RideMapView';
 import type { RideMapViewRef } from '@/components/RideMapView';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
@@ -83,6 +85,12 @@ function mapOwnVehicleType(raw?: string | null): OwnVehicleType | undefined {
 // instantly on next launch and — crucially — offline, instead of falling back
 // to the neutral dot whenever that one fetch fails on a flaky network.
 const OWN_VEHICLE_TYPE_CACHE_KEY = (driverId: string) => `driver_own_vehicle_type_v1:${driverId}`;
+
+// Consecutive failed heartbeats before we tell the driver. Beats are 2 min
+// apart, so 3 ≈ 6 min — enough to ride out a single flaky-4G blip, early
+// enough to react before the auto-offline cron pulls them at 10 min
+// (`driver_offline_after_minutes`).
+const HEARTBEAT_WARN_AFTER = 3;
 
 // BUG-218: dedicated wrapper for the active-trip map render.
 // `useActiveTripMapData()` is a hook (calls `useDriverRideStore`,
@@ -304,16 +312,61 @@ function NativeDriverHomeScreen() {
   useEffect(() => {
     if (!isOnline || !profile?.id) return;
     const sendHeartbeat = async () => {
+      // supabase-js does NOT reject on a PostgREST error, and postgrest-js
+      // catches transport failures and RESOLVES with an error object too — so
+      // the `catch` below is effectively unreachable and the failure counter
+      // never incremented. Inspect the result explicitly instead.
+      //
+      // `.select('id')` also separates "wrote the row" from "matched nothing":
+      // under a degraded (anon) session the dp_update_own policy filters the
+      // row out and PostgREST answers 204 with NO error, so the heartbeat can
+      // fail forever while reporting success — and the cron then takes the
+      // driver offline in ~10 min with no idea why.
+      let failed: 'error' | 'zero_rows' | null = null;
+      let failureDetail: string | undefined;
       try {
         const supabase = getSupabaseClient();
-        await supabase.from('driver_profiles')
+        const { data, error } = await supabase.from('driver_profiles')
           .update({ last_heartbeat_at: new Date().toISOString() })
-          .eq('id', profile.id);
+          .eq('id', profile.id)
+          .select('id');
+        if (error) {
+          failed = 'error';
+          failureDetail = getErrorMessage(error);
+        } else if (!data || data.length === 0) {
+          failed = 'zero_rows';
+        }
+      } catch (err) {
+        failed = 'error';
+        failureDetail = getErrorMessage(err);
+      }
+
+      if (!failed) {
         heartbeatFailCountRef.current = 0;
         logger.info('[Heartbeat] Sent', { driver_id: profile.id });
-      } catch (err) {
-        heartbeatFailCountRef.current += 1;
-        logger.warn('[Heartbeat] Failed', { driver_id: profile.id, error: getErrorMessage(err), consecutive_failures: heartbeatFailCountRef.current });
+        return;
+      }
+
+      heartbeatFailCountRef.current += 1;
+      logger.warn('[Heartbeat] Failed', {
+        driver_id: profile.id,
+        reason: failed,
+        error: failureDetail,
+        consecutive_failures: heartbeatFailCountRef.current,
+      });
+      // Warn ONCE on crossing the threshold (=== not >=), so a sustained
+      // outage doesn't re-toast every 2 min. The counter resets on the first
+      // success. At 2 min per beat this fires ~6 min in — before the
+      // auto-offline cron pulls them at 10.
+      if (heartbeatFailCountRef.current === HEARTBEAT_WARN_AFTER) {
+        Toast.show({
+          type: 'error',
+          text1: t('home.heartbeat_lost_title', { defaultValue: 'Perdimos conexión con el servidor' }),
+          text2: t('home.heartbeat_lost_body', {
+            defaultValue: 'Puede que dejes de recibir viajes. Revisa tu conexión.',
+          }),
+          visibilityTime: 6000,
+        });
       }
     };
     sendHeartbeat();
@@ -542,6 +595,11 @@ function NativeDriverHomeScreen() {
 
   // Selfie verification check
   const { needsCheck, isProcessing, loading: selfieLoading, submitSelfie, check: selfieCheck } = useSelfieCheck();
+
+  // Notification permission — with it off, NO ride offer can reach this driver.
+  // Drives the top banner; re-checks on foreground so it clears itself when the
+  // driver comes back from system Settings.
+  const notificationsBlocked = useNotificationsBlocked();
 
   const { acceptRide } = useDriverRideActions();
 
@@ -1362,6 +1420,7 @@ function NativeDriverHomeScreen() {
         needsSelfieCheck={needsCheck || isProcessing}
         isSelfieProcessing={isProcessing}
         selfieLoading={selfieLoading}
+        notificationsBlocked={notificationsBlocked}
         todayEarnings={todayEarnings}
         yesterdayEarnings={yesterdayEarnings}
         userName={user?.full_name?.split(' ')[0] ?? user?.full_name}
@@ -1380,6 +1439,12 @@ function NativeDriverHomeScreen() {
             live_count: nearestHotspot?.liveCount,
           });
           openNavigation(lat, lng);
+        }}
+        onOpenNotificationSettings={() => {
+          // Android never re-prompts after a denial — system Settings is the
+          // only way back. The banner clears itself on the next foreground
+          // (useNotificationsBlocked re-checks on AppState 'active').
+          Linking.openSettings().catch(() => { /* no Settings intent */ });
         }}
         ctaScaleAnim={ctaScaleAnim}
         onCtaPressIn={onCtaPressIn}

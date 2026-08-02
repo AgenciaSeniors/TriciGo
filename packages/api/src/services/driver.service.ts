@@ -313,18 +313,61 @@ export const driverService = {
   ): Promise<void> {
     const supabase = getSupabaseClient();
 
-    // 00491: going online requires a registered active vehicle. The DB trigger
+    // 00495: going online requires a registered active vehicle. The DB trigger
     // enforces this authoritatively; this pre-check surfaces a clean error
     // instead of the raw trigger exception (and avoids a wasted round-trip).
+    //
+    // Only throw when the query SUCCEEDED and returned no row. Previously we
+    // ignored `error` and treated any null `data` as "no vehicle", so a
+    // transient failure of this SELECT (flaky network, a one-off
+    // RLS/PostgREST error, a 401 on an expired access token) misfired as
+    // "register your vehicle" even for drivers who have one. On failure, fall
+    // through and let the authoritative DB trigger decide — it raises the same
+    // error code (`driver_has_no_active_vehicle_for_online`) for a genuinely
+    // vehicle-less driver, so the friendly message is preserved either way.
+    //
+    // Caveat: the trigger's online guard sits BELOW its `is_admin()` early
+    // return (00495:47 vs :65), so for a user who is BOTH admin and driver
+    // this pre-check is the only online-vehicle gate. No such user exists in
+    // prod today; if that changes, move the guard above the bypass to match
+    // how the approval guard is already placed.
     if (isOnline) {
-      const { data: activeVehicle } = await supabase
+      const { data: activeVehicle, error: vehicleErr } = await supabase
         .from('vehicles')
         .select('id')
         .eq('driver_id', driverId)
         .eq('is_active', true)
         .limit(1)
         .maybeSingle();
-      if (!activeVehicle) {
+      if (vehicleErr) {
+        // Deliberately non-fatal — but log it, otherwise the next recurrence
+        // of this bug is undiagnosable from the app.
+        logger.warn('[setOnlineStatus] vehicle pre-check failed; deferring to DB trigger', {
+          driverId,
+          code: vehicleErr.code,
+          message: vehicleErr.message,
+        });
+      } else if (!activeVehicle) {
+        // Zero rows is ambiguous. The `vehicles` RLS policy (v_select) matches
+        // on auth.uid(); when the session is gone entirely, supabase-js falls
+        // back to the publishable key (role `anon`), the policy filters the row
+        // out, and PostgREST answers 200 with an EMPTY result and NO error. That
+        // is an auth problem, not a missing vehicle — reporting it as "register
+        // your vehicle" is exactly the false positive this fix exists to remove.
+        let hasSession = true;
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          hasSession = Boolean(sessionData?.session);
+        } catch {
+          // Can't tell — assume authenticated and report the vehicle error.
+          hasSession = true;
+        }
+        if (!hasSession) {
+          logger.warn('[setOnlineStatus] vehicle pre-check returned no rows with no session', {
+            driverId,
+          });
+          throw new Error('session_expired');
+        }
         throw new Error('driver_has_no_active_vehicle_for_online');
       }
     }
@@ -333,11 +376,22 @@ export const driverService = {
     if (location) {
       updates.current_location = `POINT(${location.longitude} ${location.latitude})`;
     }
-    const { error } = await supabase
+    // `.select('id')` so we can tell "wrote the row" from "matched nothing".
+    // The dp_update_own RLS policy is `user_id = auth.uid() OR is_admin()`; if
+    // the session degrades to role `anon`, this UPDATE matches ZERO rows and
+    // PostgREST answers 204 with NO error. Without this check the call resolves,
+    // the app paints "Estás en línea", and the driver sits there offline in the
+    // DB receiving no offers at all — a silent failure that costs them money.
+    const { data: updated, error } = await supabase
       .from('driver_profiles')
       .update(updates)
-      .eq('id', driverId);
+      .eq('id', driverId)
+      .select('id');
     if (error) throw error;
+    if (!updated || updated.length === 0) {
+      logger.warn('[setOnlineStatus] update affected zero rows', { driverId, isOnline });
+      throw new Error('session_expired');
+    }
   },
 
   /**

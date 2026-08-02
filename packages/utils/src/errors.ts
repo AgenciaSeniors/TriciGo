@@ -49,8 +49,30 @@ export function getErrorMessage(err: unknown, t?: (key: string, opts?: Record<st
       return t ? t('errors.server_error') : 'Error del servidor. Intenta más tarde.';
     }
 
+    // Transport failure. supabase-js/postgrest-js do NOT reject with a
+    // TypeError when the request never reaches the server: they RESOLVE with a
+    // plain object { message: 'TypeError: Network request failed', details,
+    // hint, code: '', status: 0 }. The `err instanceof TypeError` branches
+    // above therefore never fire for a Supabase call, and this object would
+    // otherwise fall through to the generic `return e.message` below and show
+    // a raw English string to the user.
+    if (
+      status === 0 ||
+      (e.code === '' &&
+        typeof e.message === 'string' &&
+        /Network request failed|Failed to fetch|FetchError/.test(e.message))
+    ) {
+      return t ? t('errors.network_error') : 'Sin conexión a internet. Verifica tu red e intenta de nuevo.';
+    }
+
     // Supabase error format
     if (typeof e.message === 'string') {
+      // Sentinel thrown by services that detect a missing local session (see
+      // driverService.setOnlineStatus). Mapped here so the raw sentinel never
+      // reaches the UI.
+      if (e.message === 'session_expired') {
+        return t ? t('errors.session_expired') : 'Sesión expirada. Inicia sesión de nuevo.';
+      }
       if (e.message.includes('JWT expired') || e.message.includes('token is expired')) {
         return t ? t('errors.session_expired') : 'Sesión expirada. Inicia sesión de nuevo.';
       }

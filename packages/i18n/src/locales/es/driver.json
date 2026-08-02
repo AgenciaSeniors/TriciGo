@@ -30,6 +30,9 @@
     "no_rides_available": "No hay solicitudes en este momento",
     "accept_failed": "Otro conductor aceptó este viaje",
     "ineligible_banner": "Tu cuenta está suspendida por saldo negativo. Recarga tus créditos de viaje para poder aceptar viajes.",
+    "notifications_blocked_title": "No vas a recibir avisos de viaje",
+    "notifications_blocked_subtitle": "Las notificaciones de TriciGo están desactivadas en tu teléfono.",
+    "notifications_blocked_action": "Abrir Ajustes",
     "ineligible_recharge": "Recargar créditos de viaje",
     "demand_heatmap": "Zonas de demanda",
     "high_demand_area": "Zona de alta demanda",
@@ -104,7 +107,9 @@
     "greeting": "Hola, {{name}}",
     "greeting_generic": "¡Bienvenido!",
     "connect_to_earn": "Conéctate para empezar a ganar",
-    "on_break_label": "En descanso — no recibes solicitudes"
+    "on_break_label": "En descanso — no recibes solicitudes",
+    "heartbeat_lost_title": "Perdimos conexión con el servidor",
+    "heartbeat_lost_body": "Puede que dejes de recibir viajes. Revisa tu conexión."
   },
 
   "trip": {

@@ -306,11 +306,35 @@ describe('adminService', () => {
       });
     });
 
-    it('throws driver_has_no_active_vehicle when the driver has no active vehicle (00491)', async () => {
+    it('throws driver_has_no_active_vehicle when the driver has no active vehicle (00495)', async () => {
       const vehicleChain = createMockQueryChain({ data: null, error: null }); // no vehicle
       mockFrom.mockReturnValueOnce(vehicleChain);
 
       await expect(adminService.approveDriver('d-1', 'admin-1')).rejects.toThrow(/driver_has_no_active_vehicle/);
+    });
+
+    // Same regression as driverService.setOnlineStatus: ignoring the query
+    // error turned a transient failure into a bogus "this driver has no
+    // vehicle". The 00495 approval guard sits ABOVE the is_admin() bypass, so
+    // falling through to the trigger is safe for admin callers too.
+    it('falls through to the update when the vehicle pre-check query FAILS', async () => {
+      const vehicleChain = createMockQueryChain({
+        data: null,
+        error: { message: 'TypeError: Network request failed', code: '' },
+      });
+      const updateChain = createMockQueryChain({ data: null, error: null });
+      const insertChain = createMockQueryChain({ data: null, error: null });
+      mockFrom
+        .mockReturnValueOnce(vehicleChain)
+        .mockReturnValueOnce(updateChain)
+        .mockReturnValueOnce(insertChain);
+
+      await adminService.approveDriver('d-1', 'admin-1');
+
+      expect(mockFrom).toHaveBeenNthCalledWith(2, 'driver_profiles');
+      expect(updateChain.update).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'approved',
+      }));
     });
 
     it('throws if update fails', async () => {
