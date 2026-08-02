@@ -23,12 +23,19 @@ type InvokeResult = {
 const mockFunctionsInvoke = vi.fn<
   (name: string, opts?: { body?: unknown }) => Promise<InvokeResult>
 >(async () => ({ data: null, error: null }));
+// setOnlineStatus disambiguates "no vehicle" from "no session" by reading the
+// local session (the vehicles RLS policy keys on auth.uid(), so an anon
+// fallback returns zero rows with NO error). Default: an authenticated driver.
+const mockGetSession = vi.fn<() => Promise<{ data: { session: unknown | null } }>>(
+  async () => ({ data: { session: { user: { id: 'u-1' } } } }),
+);
 const mockSupabase = {
   from: mockFrom,
   rpc: mockRpc,
   storage: mockStorage,
   channel: mockChannelBuilder,
   functions: { invoke: mockFunctionsInvoke },
+  auth: { getSession: mockGetSession },
 };
 
 vi.mock('../../client', () => ({
@@ -438,12 +445,77 @@ describe('driverService', () => {
       expect(chain.eq).toHaveBeenCalledWith('id', 'd-1');
     });
 
-    it('throws driver_has_no_active_vehicle_for_online when the driver has no active vehicle (00491)', async () => {
+    it('throws driver_has_no_active_vehicle_for_online when the driver has no active vehicle (00495)', async () => {
       const vehicleChain = createMockQueryChain({ data: null, error: null }); // no vehicle
       mockFrom.mockReturnValueOnce(vehicleChain);
 
       await expect(
         driverService.setOnlineStatus('d-1', true, { latitude: 4.6, longitude: -74.08 }),
+      ).rejects.toThrow(/driver_has_no_active_vehicle_for_online/);
+    });
+
+    // Regression: the pre-check used to ignore the query error and treat any
+    // null `data` as "no vehicle", so a flaky connection told drivers WITH a
+    // vehicle to "register your vehicle". It must now fall through to the
+    // UPDATE and let the authoritative 00495 trigger decide.
+    it('falls through to the update when the vehicle pre-check query FAILS (does not misfire "no vehicle")', async () => {
+      const vehicleChain = createMockQueryChain({
+        data: null,
+        error: { message: 'TypeError: Network request failed', code: '' },
+      });
+      const chain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
+
+      await driverService.setOnlineStatus('d-1', true, { latitude: 4.6, longitude: -74.08 });
+
+      expect(mockFrom).toHaveBeenCalledWith('driver_profiles');
+      expect(chain.update).toHaveBeenCalledWith({
+        is_online: true,
+        current_location: 'POINT(-74.08 4.6)',
+      });
+    });
+
+    it('still surfaces the trigger error when the pre-check failed and the driver really has no vehicle', async () => {
+      const vehicleChain = createMockQueryChain({
+        data: null,
+        error: { message: 'JWT expired', code: 'PGRST301' },
+      });
+      const chain = createMockQueryChain({
+        data: null,
+        error: {
+          message:
+            'driver_has_no_active_vehicle_for_online: register an active vehicle before going online (driver d-1)',
+          code: 'P0001',
+        },
+      });
+      mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
+
+      await expect(
+        driverService.setOnlineStatus('d-1', true),
+      ).rejects.toThrow(/driver_has_no_active_vehicle/);
+    });
+
+    // The `vehicles` RLS policy keys on auth.uid(); with the session gone,
+    // supabase-js falls back to the publishable key (role anon) and PostgREST
+    // answers 200 with ZERO rows and NO error. That is an auth problem, not a
+    // missing vehicle.
+    it('throws session_expired (not "no vehicle") when the pre-check returns no rows and there is no session', async () => {
+      const vehicleChain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(vehicleChain);
+      mockGetSession.mockResolvedValueOnce({ data: { session: null } });
+
+      await expect(
+        driverService.setOnlineStatus('d-1', true),
+      ).rejects.toThrow(/session_expired/);
+    });
+
+    it('reports the vehicle error when the session lookup itself throws', async () => {
+      const vehicleChain = createMockQueryChain({ data: null, error: null });
+      mockFrom.mockReturnValueOnce(vehicleChain);
+      mockGetSession.mockRejectedValueOnce(new Error('storage unavailable'));
+
+      await expect(
+        driverService.setOnlineStatus('d-1', true),
       ).rejects.toThrow(/driver_has_no_active_vehicle_for_online/);
     });
 
