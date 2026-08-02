@@ -796,6 +796,43 @@ describe('rideService.createRide', () => {
     ).rejects.toThrow('Not authenticated');
   });
 
+  // The out-of-area guard used to sit AFTER validate(), and createRideSchema
+  // encodes the same Cuba bounding box — so the guard could never run and the
+  // rider got a 264-char Zod dump instead, which getErrorMessage then discarded
+  // as "Error inesperado". Reported by a tester outside Cuba: every "Solicitar"
+  // tap failed with no reason on screen.
+  it('reports out-of-area coordinates instead of a raw schema dump', async () => {
+    await expect(
+      rideService.createRide({
+        service_type: 'triciclo_basico',
+        payment_method: 'cash',
+        pickup_latitude: -34.6037, // Buenos Aires
+        pickup_longitude: -58.3816,
+        pickup_address: 'Obelisco',
+        dropoff_latitude: -34.5589,
+        dropoff_longitude: -58.4567,
+        dropoff_address: 'Palermo',
+        estimated_fare_cup: 5000,
+      }),
+    ).rejects.toThrow(/outside the service area/);
+  });
+
+  it('names the dropoff when only the dropoff is out of area', async () => {
+    await expect(
+      rideService.createRide({
+        service_type: 'triciclo_basico',
+        payment_method: 'cash',
+        pickup_latitude: 23.1352,
+        pickup_longitude: -82.3599,
+        pickup_address: 'Capitolio',
+        dropoff_latitude: 25.7617, // Miami — shares Cuba's longitude range
+        dropoff_longitude: -80.1918,
+        dropoff_address: 'Miami',
+        estimated_fare_cup: 5000,
+      }),
+    ).rejects.toThrow(/Dropoff location is outside the service area/);
+  });
+
   it('creates ride with waypoints', async () => {
     const rideData = {
       id: 'ride-2',

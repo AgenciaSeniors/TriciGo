@@ -974,6 +974,23 @@ export function useRideActions() {
           }),
           visibilityTime: 5000,
         });
+      } else if (errMsg.includes('outside the service area')) {
+        // TriciGo only serves Cuba, and createRide throws this in English.
+        // Stay on 'selecting' so the rider can move the pin without losing
+        // the rest of their draft. Mirrors apps/web book/page.tsx:906.
+        setFlowStep('selecting');
+        Toast.show({
+          type: 'error',
+          text1: i18next.t('rider:ride.out_of_area_title', { defaultValue: 'Fuera del área de servicio' }),
+          text2: errMsg.startsWith('Dropoff')
+            ? i18next.t('rider:ride.out_of_area_dropoff_msg', {
+                defaultValue: 'El destino está fuera de Cuba. TriciGo solo opera dentro del país.',
+              })
+            : i18next.t('rider:ride.out_of_area_pickup_msg', {
+                defaultValue: 'El punto de recogida está fuera de Cuba. TriciGo solo opera dentro del país.',
+              }),
+          visibilityTime: 6000,
+        });
       } else {
         setError(errMsg);
         setFlowStep('selecting');
