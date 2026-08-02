@@ -167,6 +167,7 @@ function NativeDriverHomeScreen() {
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const incomingRequests = useDriverRideStore((s) => s.incomingRequests);
   const removeRequest = useDriverRideStore((s) => s.removeRequest);
+  const dismissRequest = useDriverRideStore((s) => s.dismissRequest);
   const [toggling, setToggling] = useState(false);
   // Blocking location-permission sheet: shown instead of a dead-end toast when
   // the driver taps "Conectarme" without location permission.
@@ -542,19 +543,34 @@ function NativeDriverHomeScreen() {
     }
   }, [activeTrip?.id, activeTrip?.status]);
 
-  // Check financial eligibility
-  useEffect(() => {
+  // Check financial eligibility.
+  //
+  // The 60s poll below only runs while ONLINE — and an ineligible driver can
+  // never GET online, because `isIneligible` is exactly what disables the
+  // CONECTARSE button. So for the one driver who needs this to refresh, it
+  // never did: they read "recarga tus créditos", went to the Wallet tab,
+  // recharged, came back, and the button was still grey. Tab screens stay
+  // mounted, so neither dep changes and the effect does not re-run — only a
+  // full app restart cleared it, while `check_driver_eligibility` had already
+  // flipped them back to eligible server-side the moment the balance cleared.
+  //
+  // Refetching on focus closes it, same as `refetchOwnVehicleType` above.
+  const refetchEligibility = useCallback(() => {
     if (!profile?.id) return;
-    const checkEligibility = () => {
-      driverService.getEligibilityStatus(profile.id).then((status) => {
-        setIsIneligible(!status.is_eligible);
-      }).catch((err) => console.warn('[Driver] Failed to check eligibility:', err));
-    };
-    checkEligibility();
+    driverService.getEligibilityStatus(profile.id).then((status) => {
+      setIsIneligible(!status.is_eligible);
+    }).catch((err) => console.warn('[Driver] Failed to check eligibility:', err));
+  }, [profile?.id]);
+
+  useEffect(() => {
+    refetchEligibility();
     if (!isOnline) return;
-    const interval = setInterval(checkEligibility, 60000);
+    const interval = setInterval(refetchEligibility, 60000);
     return () => clearInterval(interval);
-  }, [profile?.id, isOnline]);
+  }, [refetchEligibility, isOnline]);
+
+  // Coming back from the Wallet tab after recharging is the whole point.
+  useRefreshOnFocus(refetchEligibility);
 
   // Fetch unread count + subscribe to realtime notifications
   useEffect(() => {
@@ -1034,7 +1050,9 @@ function NativeDriverHomeScreen() {
   }, [profile, isOnBreak, togglingBreak, activeTrip]);
 
   const handleAccept = useCallback((rideId: string) => acceptRide(rideId), [acceptRide]);
-  const handleReject = useCallback((rideId: string) => removeRequest(rideId), [removeRequest]);
+  // Explicit refusal: remember it, so the 30s poll cannot hand the same
+  // offer straight back with a fresh notification.
+  const handleReject = useCallback((rideId: string) => dismissRequest(rideId), [dismissRequest]);
 
   // Navigation mode (Uber-driver style): heading-up rotation, 3D tilt,
   // zoom-out lock, auto-center on driver. Re-engages every time a new

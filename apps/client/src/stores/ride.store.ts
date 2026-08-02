@@ -495,8 +495,26 @@ export const useRideStore = create<RideState>((set, get) => ({
       fareEstimatedAt: null,
     })),
 
+  // `ridePreferences` survives the reset on purpose. Everything else in the
+  // draft is per-trip (pickup, dropoff, promo, estimates) and should be
+  // cleared; ride preferences are a PROFILE setting that merely happens to
+  // travel inside the draft, and they are seeded from
+  // `customer_profiles.ride_preferences` when the profile loads. Wiping them
+  // here meant closing the booking sheet silently discarded the quiet-mode /
+  // temperature / conversation / luggage choices the rider had saved, so the
+  // driver stopped receiving them mid-session with nothing to indicate it.
   resetDraft: () =>
-    set({ draft: { ...defaultDraft }, fareEstimate: null, fareEstimatedAt: null, allFareEstimates: null, error: null, promoCode: '', promoResult: null, splits: [], prefetchedPickup: null }),
+    set((s) => ({
+      draft: { ...defaultDraft, ridePreferences: s.draft.ridePreferences },
+      fareEstimate: null,
+      fareEstimatedAt: null,
+      allFareEstimates: null,
+      error: null,
+      promoCode: '',
+      promoResult: null,
+      splits: [],
+      prefetchedPickup: null,
+    })),
 
   resetAll: () => {
     const { ratingReminderId } = get();

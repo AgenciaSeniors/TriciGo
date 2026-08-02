@@ -8,6 +8,8 @@ type TimestampedRide = Ride & { _receivedAt: number };
 
 interface DriverRideState {
   incomingRequests: TimestampedRide[];
+  /** Ride ids the driver explicitly refused this session (see dismissRequest). */
+  dismissedRequestIds: string[];
   activeTrip: Ride | null;
   isAdvancing: boolean;
   isDriverCanceling: boolean;
@@ -18,6 +20,8 @@ interface DriverRideState {
 
   addRequest: (ride: Ride) => void;
   removeRequest: (rideId: string) => void;
+  /** Explicit refusal — also remembered so the poll cannot re-add it. */
+  dismissRequest: (rideId: string) => void;
   removeStaleRequests: () => void;
   clearRequests: () => void;
   setActiveTrip: (trip: Ride | null) => void;
@@ -30,6 +34,8 @@ interface DriverRideState {
 
 export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   incomingRequests: [],
+  /** Offers the driver explicitly turned down this session. */
+  dismissedRequestIds: [],
   activeTrip: null,
   isAdvancing: false,
   isDriverCanceling: false,
@@ -39,6 +45,15 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
     set((s) => {
       // Avoid duplicates
       if (s.incomingRequests.some((r) => r.id === ride.id)) return s;
+      // …and don't resurrect one the driver just turned down. `addRequest`
+      // only ever checked the CURRENT list, which "No me sirve" had just
+      // removed from — so the 30s `getSearchingRides` poll re-added the very
+      // offer they declined, reopened the full-screen card, and fired another
+      // "Nueva solicitud de viaje" notification for it. There is no
+      // server-side decline to lean on (ride_offers is REVOKEd from
+      // `authenticated` and no decline RPC exists), so the refusal has to be
+      // remembered here until the offer expires on its own.
+      if (s.dismissedRequestIds.includes(ride.id)) return s;
       // Local notification for new ride request
       Notifications.scheduleNotificationAsync({
         content: {
@@ -53,6 +68,16 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
   removeRequest: (rideId) =>
     set((s) => ({
       incomingRequests: s.incomingRequests.filter((r) => r.id !== rideId),
+    })),
+
+  // Explicit "No me sirve". Kept separate from `removeRequest` (which also
+  // runs for expiry and for accept) so only a deliberate refusal is
+  // remembered. Capped so a long shift cannot grow it without bound; offers
+  // live 30s, so anything past the recent few is already irrelevant.
+  dismissRequest: (rideId) =>
+    set((s) => ({
+      incomingRequests: s.incomingRequests.filter((r) => r.id !== rideId),
+      dismissedRequestIds: [rideId, ...s.dismissedRequestIds.filter((id) => id !== rideId)].slice(0, 50),
     })),
 
   /**

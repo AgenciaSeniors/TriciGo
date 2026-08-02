@@ -35,6 +35,7 @@ import {
   triggerHaptic,
   haversineDistance,
   isCargoRide,
+  logger,
 } from '@tricigo/utils';
 import type { GeoPoint } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
@@ -43,8 +44,10 @@ import {
   deliveryService,
   rideService,
   walletService,
+  trustedContactService,
   getSupabaseClient,
 } from '@tricigo/api';
+import Toast from 'react-native-toast-message';
 import type { DeliveryDetails } from '@tricigo/api';
 import { DRIVER_CANCELLATION_REASONS, type CancellationReasonCode } from '@tricigo/types';
 import { useDriverRideStore } from '@/stores/ride.store';
@@ -668,22 +671,66 @@ export function DriverTripView() {
         ? activeTrip.dropoff_location
         : null;
 
+  // The dialog promises "Se registrará un reporte de emergencia". It used to
+  // fire `createSOSReport` without awaiting it, behind an empty catch — so an
+  // offline or rejected insert vanished while the driver was told the report
+  // existed. Worse, when `driverProfile?.user_id` was missing NO report was
+  // attempted at all and the copy still promised one.
+  //
+  // It also never broadcast to trusted contacts, unlike this driver's own
+  // safety screen (profile/safety.tsx) and the rider's in-trip SOS — the
+  // in-trip button, the one you press while actually in danger, was the
+  // degraded path. `incident_reports_notify_sos` does fan out over SMS on a
+  // successful insert, but only then; broadcasting explicitly also carries
+  // the exact coordinates the trigger cannot know.
+  //
+  // The phone call is primary and now runs no matter what the reporting does.
+  const triggerSOS = () => {
+    const reporterId = driverProfile?.user_id;
+    if (reporterId) {
+      incidentService.createSOSReport({
+        ride_id: activeTrip.id,
+        reported_by: reporterId,
+        against_user_id: activeTrip.customer_id,
+        description: 'SOS activado por conductor durante viaje',
+      }).catch((err) => {
+        logger.error('SOS report failed (driver, in-trip)', { error: String(err) });
+        Toast.show({
+          type: 'error',
+          text1: t('trip.sos_report_failed', {
+            defaultValue: 'No pudimos registrar el reporte. Llamá al 106.',
+          }),
+        });
+      });
+
+      trustedContactService.broadcastEmergency({
+        rideId: activeTrip.id,
+        latitude: driverLocation?.latitude ?? 0,
+        longitude: driverLocation?.longitude ?? 0,
+        riderName: null,
+      }).catch((err) => {
+        logger.error('SOS broadcast failed (driver, in-trip)', { error: String(err) });
+      });
+    } else {
+      // Nothing to attribute the report to. Say so instead of implying it was filed.
+      logger.error('SOS with no driver user_id — report skipped', { ride_id: activeTrip.id });
+      Toast.show({
+        type: 'error',
+        text1: t('trip.sos_report_failed', {
+          defaultValue: 'No pudimos registrar el reporte. Llamá al 106.',
+        }),
+      });
+    }
+
+    Linking.openURL('tel:106');
+  };
+
   const handleSOS = () => {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(
         `${t('trip.sos_title')}\n\n${t('trip.sos_body')}`,
       );
-      if (confirmed) {
-        if (driverProfile?.user_id) {
-          incidentService.createSOSReport({
-            ride_id: activeTrip.id,
-            reported_by: driverProfile.user_id,
-            against_user_id: activeTrip.customer_id,
-            description: 'SOS activado por conductor durante viaje',
-          }).catch(() => {});
-        }
-        Linking.openURL('tel:106');
-      }
+      if (confirmed) triggerSOS();
       return;
     }
     Alert.alert(
@@ -694,17 +741,7 @@ export function DriverTripView() {
         {
           text: t('trip.sos_call_emergency'),
           style: 'destructive',
-          onPress: async () => {
-            if (driverProfile?.user_id) {
-              incidentService.createSOSReport({
-                ride_id: activeTrip.id,
-                reported_by: driverProfile.user_id,
-                against_user_id: activeTrip.customer_id,
-                description: 'SOS activado por conductor durante viaje',
-              }).catch(() => { /* best-effort: SOS report, phone call is primary */ });
-            }
-            Linking.openURL('tel:106');
-          },
+          onPress: triggerSOS,
         },
       ],
     );

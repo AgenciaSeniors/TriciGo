@@ -36,6 +36,7 @@ import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { triggerHaptic } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
+import { router } from 'expo-router';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -313,6 +314,16 @@ function SheetContent({
           variant="danger"
           icon="warning-outline"
           message={t('home.ineligible_banner')}
+          // The message tells the driver to recharge; until now it gave them
+          // no way to get there, on the one screen where they are blocked
+          // from working. The eligibility check refetches on focus, so
+          // returning from the Wallet clears the banner on its own.
+          //
+          // `home.ineligible_recharge` already existed — written and
+          // translated into es/en/pt, and referenced by nothing. The label
+          // for this button was authored; the button was never built.
+          actionLabel={t('home.ineligible_recharge')}
+          onActionPress={() => router.push('/(tabs)/wallet')}
           palette={palette}
         />
       )}

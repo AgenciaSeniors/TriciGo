@@ -113,10 +113,21 @@ export default function EditVehicleScreen() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Load current vehicle data
-  useEffect(() => {
-    if (!driverId) return;
-    driverService.getVehicle(driverId).then((v) => {
+  // Load current vehicle data. Returns the vehicle id (or null).
+  //
+  // This used to swallow a failed getVehicle() and release the loading gate
+  // anyway, leaving the whole form rendered with vehicleId=null. `handleSave`
+  // opens with `if (!vehicleId … ) return`, so the driver could pick a type,
+  // retype make/model/year/colour/plate/capacity, attach all three photos,
+  // press Guardar — and get nothing. No toast, no spinner, no error: the
+  // button was simply dead. On Cuban connections one failed GET was enough.
+  //
+  // Same bug the sibling screen already fixed and documented in
+  // profile/cargo-settings.tsx; this one never got the treatment.
+  const loadVehicle = useCallback(async (): Promise<string | null> => {
+    if (!driverId) return null;
+    try {
+      const v = await driverService.getVehicle(driverId);
       if (v) {
         setVehicleId(v.id);
         setVehicleType(v.type);
@@ -127,9 +138,17 @@ export default function EditVehicleScreen() {
         setPlateNumber(v.plate_number);
         setCapacity(String(v.capacity));
       }
+      return v?.id ?? null;
+    } catch {
+      return null;
+    } finally {
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }
   }, [driverId]);
+
+  useEffect(() => {
+    void loadVehicle();
+  }, [loadVehicle]);
 
   // ── Type selection ────────────────────────────────────────────────────────
   const handleTypeSelect = useCallback((config: typeof VEHICLE_CONFIGS[number]) => {
@@ -246,8 +265,24 @@ export default function EditVehicleScreen() {
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!vehicleId || !driverId || !vehicleType) return;
+    if (!driverId || !vehicleType) return;
     if (!validate()) return;
+
+    // If the vehicle never loaded, retry once here rather than returning in
+    // silence — otherwise the button looks dead. Mirrors cargo-settings.
+    let vId = vehicleId;
+    if (!vId) {
+      vId = await loadVehicle();
+      if (!vId) {
+        Alert.alert(
+          t('profile.vehicle_load_failed_title', { defaultValue: 'No se pudo cargar tu vehículo' }),
+          t('profile.vehicle_load_failed_body', {
+            defaultValue: 'Revisa tu conexión e inténtalo de nuevo. Si acabas de registrarte, espera la aprobación de tu vehículo.',
+          }),
+        );
+        return;
+      }
+    }
 
     setSaving(true);
     try {
@@ -277,7 +312,7 @@ export default function EditVehicleScreen() {
       }
 
       // 2. Update vehicle data
-      await driverService.updateVehicle(vehicleId, {
+      await driverService.updateVehicle(vId, {
         type: vehicleType,
         make: make.trim(),
         model: model.trim(),

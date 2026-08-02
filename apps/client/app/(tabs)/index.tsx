@@ -638,6 +638,13 @@ function WebHomeScreen() {
   // Ride state
   const [serviceType, setServiceType] = useState<ServiceTypeSlug>('triciclo_basico');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'tricicoin' | 'mixed'>('cash');
+  // Share of the fare paid from the wallet when paymentMethod === 'mixed'.
+  // This branch offered "Mixto" but had no ratio at all and never sent one, so
+  // `createRide` fell back to the server default of 0 — the wallet paid
+  // nothing and the rider was charged the whole fare in cash, having chosen a
+  // split. Both sibling surfaces carry this control (native useRide, and
+  // apps/web/book), and both default to 0.5.
+  const [walletRatio, setWalletRatio] = useState(0.5);
 
   /** Format fare price based on current payment method */
   const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
@@ -912,6 +919,11 @@ function WebHomeScreen() {
       const ride = await rideService.createRide({
         service_type: activeSlug,
         payment_method: paymentMethod,
+        // Only meaningful for 'mixed'; the completion RPCs multiply the fare
+        // by COALESCE(wallet_ratio, 0), so omitting it on a mixed ride
+        // charges the whole thing in cash. The other methods ignore it
+        // server-side. Same shape as useRide.confirmRide.
+        wallet_ratio: paymentMethod === 'mixed' ? walletRatio : undefined,
         pickup_latitude: pickup.latitude,
         pickup_longitude: pickup.longitude,
         pickup_address: pickupAddress || 'Origen',
@@ -1035,6 +1047,36 @@ function WebHomeScreen() {
 
   // ── Phase 5: Web active ride view ──
   const flowStep = useRideStore((s) => s.flowStep);
+  const activeRideId = useRideStore((s) => s.activeRide?.id);
+
+  // Keep the search alive server-side.
+  //
+  // `cleanup_orphan_searching_rides` (cron, every minute) cancels any ride
+  // still `searching` whose `searching_seen_at` is older than
+  // `searching_abandon_seconds` (180s by default) — it reads that column as
+  // "is the rider still watching?". The only thing that refreshes it is
+  // `touchSearchingRide`, and on native that call lives inside the polling
+  // loop in `useRideActions`. This screen is the ONLY thing rendered when
+  // Platform.OS === 'web' (see HomeScreen at the bottom of this file), and
+  // the four components that call `useRideActions` — IdleView, SelectingView,
+  // ReviewingView, SearchingView — are all native-only. So nothing ever beat
+  // here, and a ride requested from the web was auto-canceled with
+  // `cancellation_reason = 'searching_abandoned'` about three minutes in,
+  // while the rider sat watching a search that the server had already given
+  // up on.
+  //
+  // Mirrors apps/web/src/hooks/useSearchingRide.ts, including its 10s period
+  // (18x headroom against the 180s threshold). Fire-and-forget:
+  // touchSearchingRide swallows its own errors, and a missed beat only costs
+  // us one of many before the threshold.
+  useEffect(() => {
+    if (flowStep !== 'searching' || !activeRideId) return;
+    rideService.touchSearchingRide(activeRideId).catch(() => {});
+    const heartbeat = setInterval(() => {
+      rideService.touchSearchingRide(activeRideId).catch(() => {});
+    }, 10_000);
+    return () => clearInterval(heartbeat);
+  }, [flowStep, activeRideId]);
 
   // Reset requestSuccess when ride completes or is canceled
   useEffect(() => {
@@ -1407,6 +1449,23 @@ function WebHomeScreen() {
                         );
                       })}
                     </div>
+                    {paymentMethod === 'mixed' && (
+                      <div style={{ marginTop: 10 }}>
+                        <label htmlFor="wallet-ratio" style={{ display: 'block', fontSize: 12, color: c.textMuted, marginBottom: 4 }}>
+                          Pagar {Math.round(walletRatio * 100)}% con saldo, {100 - Math.round(walletRatio * 100)}% en efectivo
+                        </label>
+                        <input
+                          id="wallet-ratio"
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={Math.round(walletRatio * 100)}
+                          onChange={(e) => setWalletRatio(Number(e.target.value) / 100)}
+                          style={{ width: '100%', accentColor: colors.brand.orange }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -3311,11 +3370,31 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     }
   }, [draft.serviceType]);
 
-  // Load saved locations from customer profile
+  // Load saved locations + ride preferences from the customer profile.
+  //
+  // The preferences half was missing, and that made the whole
+  // /profile/ride-preferences screen decorative on mobile. It saves to
+  // `customer_profiles.ride_preferences` correctly AND mirrors into the ride
+  // store — but only the store copy ever reaches a ride (`useRide` sends
+  // `rider_preferences` from the draft), and that store field is in-memory,
+  // initialised to `{}` with no persistence, and wiped again by
+  // `resetDraft()`. So the driver received your quiet-mode / temperature /
+  // conversation / luggage choices only on rides booked in the same session
+  // in which you happened to visit that screen. Cold start: nothing. The
+  // column was read in exactly one place in the whole client — that screen,
+  // reading back its own value.
+  //
+  // The web already seeds from the profile before booking
+  // (apps/web/src/app/book/page.tsx). Seeding here, in the fetch that was
+  // already happening, makes the saved preference mean what it says.
   useEffect(() => {
     if (!user?.id) return;
     customerService.ensureProfile(user.id).then((cp) => {
       setSavedLocations(cp.saved_locations ?? []);
+      const saved = cp.ride_preferences;
+      if (saved && Object.keys(saved).length > 0) {
+        useRideStore.getState().setRidePreferences(saved);
+      }
     }).catch(() => {});
   }, [user?.id]);
 
