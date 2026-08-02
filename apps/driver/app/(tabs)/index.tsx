@@ -1053,6 +1053,11 @@ function NativeDriverHomeScreen() {
   // Explicit refusal: remember it, so the 30s poll cannot hand the same
   // offer straight back with a fresh notification.
   const handleReject = useCallback((rideId: string) => dismissRequest(rideId), [dismissRequest]);
+  // Silent expiry (countdown hit 0, driver never touched the card): drop it
+  // locally only, WITHOUT remembering it — otherwise a distracted driver's
+  // un-acted offer would be suppressed for the session and the server
+  // re-offer/re-arm (migs 00524-00526) could never re-ring them.
+  const handleExpire = useCallback((rideId: string) => removeRequest(rideId), [removeRequest]);
 
   // Navigation mode (Uber-driver style): heading-up rotation, 3D tilt,
   // zoom-out lock, auto-center on driver. Re-engages every time a new
@@ -1117,11 +1122,12 @@ function NativeDriverHomeScreen() {
         ride={item}
         onAccept={handleAccept}
         onReject={handleReject}
+        onExpire={handleExpire}
         driverCustomRateCup={profile?.custom_per_km_rate_cup ?? null}
         serviceConfig={serviceConfigs[item.service_type] ?? null}
       />
     ),
-    [handleAccept, handleReject, profile?.custom_per_km_rate_cup, serviceConfigs],
+    [handleAccept, handleReject, handleExpire, profile?.custom_per_km_rate_cup, serviceConfigs],
   );
 
   // ── Active trip — full-bleed map + DraggableSheet ────────────────────────
@@ -1485,6 +1491,7 @@ function NativeDriverHomeScreen() {
               ride={firstRide}
               onAccept={() => handleAccept(firstRide.id)}
               onReject={() => handleReject(firstRide.id)}
+              onExpire={() => handleExpire(firstRide.id)}
               driverCustomRateCup={profile?.custom_per_km_rate_cup ?? null}
               serviceConfig={serviceConfigs[firstRide.service_type] ?? null}
             />

@@ -68,6 +68,10 @@ interface IncomingRideCardProps {
   ride: Ride;
   onAccept: (rideId: string) => void;
   onReject?: (rideId: string) => void;
+  /** Countdown ran out with no driver action. Kept distinct from onReject so a
+   *  silent expiry is NOT remembered as an explicit refusal (which would stop
+   *  the server re-offer from ever re-ringing this driver). */
+  onExpire?: (rideId: string) => void;
   driverCustomRateCup: number | null;
   serviceConfig: ServiceConfig | null;
   riderName?: string;
@@ -84,6 +88,7 @@ function IncomingRideCardInner({
   ride,
   onAccept,
   onReject,
+  onExpire,
   driverCustomRateCup,
   serviceConfig,
   riderRating,
@@ -262,7 +267,7 @@ function IncomingRideCardInner({
         text1: t('home.offer_expired', { defaultValue: 'Oferta expirada' }),
         visibilityTime: 1500,
       });
-      onReject?.(ride.id);
+      onExpire?.(ride.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft]);
