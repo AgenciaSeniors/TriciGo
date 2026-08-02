@@ -104,7 +104,9 @@
     "greeting": "Olá, {{name}}",
     "greeting_generic": "Bem-vindo!",
     "connect_to_earn": "Fique online para começar a ganhar",
-    "on_break_label": "Em pausa — sem receber solicitações"
+    "on_break_label": "Em pausa — sem receber solicitações",
+    "heartbeat_lost_title": "Perdemos a conexão com o servidor",
+    "heartbeat_lost_body": "Você pode parar de receber viagens. Verifique sua conexão."
   },
 
   "trip": {

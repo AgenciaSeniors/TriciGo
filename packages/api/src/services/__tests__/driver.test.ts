@@ -429,9 +429,10 @@ describe('driverService', () => {
   // ==================== setOnlineStatus ====================
   describe('setOnlineStatus', () => {
     it('updates online status with location', async () => {
-      // 00491: going online first pre-checks an active vehicle.
+      // 00495: going online first pre-checks an active vehicle.
+      // The update now ends in .select('id') and must report an affected row.
       const vehicleChain = createMockQueryChain({ data: { id: 'v-1' }, error: null });
-      const chain = createMockQueryChain({ data: null, error: null });
+      const chain = createMockQueryChain({ data: [{ id: 'd-1' }], error: null });
       mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
 
       await driverService.setOnlineStatus('d-1', true, { latitude: 4.6, longitude: -74.08 });
@@ -463,7 +464,7 @@ describe('driverService', () => {
         data: null,
         error: { message: 'TypeError: Network request failed', code: '' },
       });
-      const chain = createMockQueryChain({ data: null, error: null });
+      const chain = createMockQueryChain({ data: [{ id: 'd-1' }], error: null });
       mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
 
       await driverService.setOnlineStatus('d-1', true, { latitude: 4.6, longitude: -74.08 });
@@ -517,6 +518,38 @@ describe('driverService', () => {
       await expect(
         driverService.setOnlineStatus('d-1', true),
       ).rejects.toThrow(/driver_has_no_active_vehicle_for_online/);
+    });
+
+    // The dp_update_own RLS policy keys on auth.uid(). Under a degraded (anon)
+    // session the UPDATE matches ZERO rows and PostgREST answers 204 with NO
+    // error. Resolving here would leave the app showing "Estás en línea" while
+    // the driver is offline in the DB and receives no offers at all.
+    it('throws session_expired when the update affects zero rows (going online)', async () => {
+      const vehicleChain = createMockQueryChain({ data: { id: 'v-1' }, error: null });
+      const chain = createMockQueryChain({ data: [], error: null }); // RLS filtered it out
+      mockFrom.mockReturnValueOnce(vehicleChain).mockReturnValueOnce(chain);
+
+      await expect(
+        driverService.setOnlineStatus('d-1', true),
+      ).rejects.toThrow(/session_expired/);
+    });
+
+    it('throws session_expired when the update affects zero rows (going offline)', async () => {
+      // No vehicle pre-check on the offline path — the update is the first call.
+      const chain = createMockQueryChain({ data: [], error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await expect(
+        driverService.setOnlineStatus('d-1', false),
+      ).rejects.toThrow(/session_expired/);
+    });
+
+    it('resolves when the update reports an affected row', async () => {
+      const chain = createMockQueryChain({ data: [{ id: 'd-1' }], error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await expect(driverService.setOnlineStatus('d-1', false)).resolves.toBeUndefined();
+      expect(chain.select).toHaveBeenCalledWith('id');
     });
 
     it('throws on supabase error', async () => {

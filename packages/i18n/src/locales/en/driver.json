@@ -104,7 +104,9 @@
     "greeting": "Hello, {{name}}",
     "greeting_generic": "Welcome!",
     "connect_to_earn": "Go online to start earning",
-    "on_break_label": "On break — not receiving requests"
+    "on_break_label": "On break — not receiving requests",
+    "heartbeat_lost_title": "We lost the connection to the server",
+    "heartbeat_lost_body": "You may stop receiving rides. Check your connection."
   },
 
   "trip": {

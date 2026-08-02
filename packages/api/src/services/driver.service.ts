@@ -375,11 +375,22 @@ export const driverService = {
     if (location) {
       updates.current_location = `POINT(${location.longitude} ${location.latitude})`;
     }
-    const { error } = await supabase
+    // `.select('id')` so we can tell "wrote the row" from "matched nothing".
+    // The dp_update_own RLS policy is `user_id = auth.uid() OR is_admin()`; if
+    // the session degrades to role `anon`, this UPDATE matches ZERO rows and
+    // PostgREST answers 204 with NO error. Without this check the call resolves,
+    // the app paints "Estás en línea", and the driver sits there offline in the
+    // DB receiving no offers at all — a silent failure that costs them money.
+    const { data: updated, error } = await supabase
       .from('driver_profiles')
       .update(updates)
-      .eq('id', driverId);
+      .eq('id', driverId)
+      .select('id');
     if (error) throw error;
+    if (!updated || updated.length === 0) {
+      logger.warn('[setOnlineStatus] update affected zero rows', { driverId, isOnline });
+      throw new Error('session_expired');
+    }
   },
 
   /**
