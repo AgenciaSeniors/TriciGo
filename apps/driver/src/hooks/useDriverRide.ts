@@ -169,7 +169,17 @@ export function useDriverRideInit() {
         // a driver returning to foreground can be stale (>3min) and miss/lose
         // offers (find_best_drivers + accept_ride_v2 both gate on heartbeat).
         // Send one beat immediately to heal.
-        if (profile?.id) driverService.sendHeartbeat(profile.id).catch(() => {});
+        //
+        // 00540: gated on the on-shift toggle. Ungated, this fired on EVERY
+        // foreground — including for a driver who had deliberately gone
+        // offline and just opened the app to check earnings. Measured: 31% of
+        // manual disconnections kept producing heartbeats, 22% of them more
+        // than 5 minutes later. That broke the "heartbeat ⇒ on shift"
+        // invariant the server-side auto-restore relies on (the marker in
+        // 00540 already protects against it; this closes the source).
+        if (profile?.id && useDriverStore.getState().profile?.is_online) {
+          driverService.sendHeartbeat(profile.id).catch(() => {});
+        }
       }
     });
 
