@@ -315,15 +315,24 @@ export const driverService = {
     // 00491: going online requires a registered active vehicle. The DB trigger
     // enforces this authoritatively; this pre-check surfaces a clean error
     // instead of the raw trigger exception (and avoids a wasted round-trip).
+    //
+    // Only throw when the query SUCCEEDED and returned no row. Previously we
+    // ignored `error` and treated any null `data` as "no vehicle", so a
+    // transient failure of this SELECT (flaky network, expired session, a
+    // one-off RLS/PostgREST error) misfired as "register your vehicle" even
+    // for drivers who have one. On failure, fall through and let the
+    // authoritative DB trigger decide — it raises the same error code
+    // (`driver_has_no_active_vehicle_for_online`) for a genuinely vehicle-less
+    // driver, so the friendly message is preserved either way.
     if (isOnline) {
-      const { data: activeVehicle } = await supabase
+      const { data: activeVehicle, error: vehicleErr } = await supabase
         .from('vehicles')
         .select('id')
         .eq('driver_id', driverId)
         .eq('is_active', true)
         .limit(1)
         .maybeSingle();
-      if (!activeVehicle) {
+      if (!vehicleErr && !activeVehicle) {
         throw new Error('driver_has_no_active_vehicle_for_online');
       }
     }
