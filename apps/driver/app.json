@@ -2,7 +2,7 @@
   "expo": {
     "name": "TriciGo Conductor",
     "slug": "tricigo-driver",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "newArchEnabled": false,
     "runtimeVersion": {
       "policy": "appVersion"
