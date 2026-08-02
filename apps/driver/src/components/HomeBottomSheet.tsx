@@ -67,6 +67,8 @@ export interface HomeBottomSheetProps {
   needsSelfieCheck: boolean;
   isSelfieProcessing: boolean;
   selfieLoading: boolean;
+  /** OS notification permission is not granted — no ride offer can arrive. */
+  notificationsBlocked: boolean;
 
   // ── Data ──
   todayEarnings: { amount: number; trips: number };
@@ -90,6 +92,8 @@ export interface HomeBottomSheetProps {
   onSubmitSelfie: () => void;
   onCancelAutoNav: () => void;
   onGoToSuggestion: (lat: number, lng: number) => void;
+  /** Deep-link to system Settings — the only way back after an OS denial. */
+  onOpenNotificationSettings: () => void;
 
   // ── Animations ──
   ctaScaleAnim: Animated.Value;
@@ -220,6 +224,7 @@ function SheetContent({
   needsSelfieCheck,
   isSelfieProcessing,
   selfieLoading,
+  notificationsBlocked,
   todayEarnings,
   yesterdayEarnings,
   userName,
@@ -233,6 +238,7 @@ function SheetContent({
   onSubmitSelfie,
   onCancelAutoNav,
   onGoToSuggestion,
+  onOpenNotificationSettings,
   ctaScaleAnim,
   onCtaPressIn,
   onCtaPressOut,
@@ -282,6 +288,26 @@ function SheetContent({
   // ── Banners ──────────────────────────────────────────────────
   const banners = (
     <>
+      {/* First on purpose: with notifications off, no ride offer can reach
+          this driver at all, so every other banner is secondary. Shown while
+          offline too — it is the thing to fix BEFORE starting a shift. */}
+      {notificationsBlocked && (
+        <Banner
+          variant="danger"
+          icon="notifications-off-outline"
+          message={t('home.notifications_blocked_title', {
+            defaultValue: 'No vas a recibir avisos de viaje',
+          })}
+          subtitle={t('home.notifications_blocked_subtitle', {
+            defaultValue: 'Las notificaciones de TriciGo están desactivadas en tu teléfono.',
+          })}
+          actionLabel={t('home.notifications_blocked_action', {
+            defaultValue: 'Abrir Ajustes',
+          })}
+          onActionPress={onOpenNotificationSettings}
+          palette={palette}
+        />
+      )}
       {isIneligible && (
         <Banner
           variant="danger"

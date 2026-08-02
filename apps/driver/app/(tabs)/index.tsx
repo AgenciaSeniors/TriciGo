@@ -9,6 +9,7 @@ import {
   Dimensions,
   StyleSheet,
   Platform,
+  Linking,
   Text as RNText,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,6 +54,7 @@ import { useNearbyDrivers } from '@/hooks/useNearbyDrivers';
 import { useTestVehicles } from '@/hooks/useTestVehicles';
 import { useSmartSuggestion } from '@/hooks/useSmartSuggestion';
 import { useSelfieCheck } from '@/hooks/useSelfieCheck';
+import { useNotificationsBlocked } from '@/hooks/useNotificationsBlocked';
 import { RideMapView } from '@/components/RideMapView';
 import type { RideMapViewRef } from '@/components/RideMapView';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
@@ -593,6 +595,11 @@ function NativeDriverHomeScreen() {
 
   // Selfie verification check
   const { needsCheck, isProcessing, loading: selfieLoading, submitSelfie, check: selfieCheck } = useSelfieCheck();
+
+  // Notification permission — with it off, NO ride offer can reach this driver.
+  // Drives the top banner; re-checks on foreground so it clears itself when the
+  // driver comes back from system Settings.
+  const notificationsBlocked = useNotificationsBlocked();
 
   const { acceptRide } = useDriverRideActions();
 
@@ -1413,6 +1420,7 @@ function NativeDriverHomeScreen() {
         needsSelfieCheck={needsCheck || isProcessing}
         isSelfieProcessing={isProcessing}
         selfieLoading={selfieLoading}
+        notificationsBlocked={notificationsBlocked}
         todayEarnings={todayEarnings}
         yesterdayEarnings={yesterdayEarnings}
         userName={user?.full_name?.split(' ')[0] ?? user?.full_name}
@@ -1431,6 +1439,12 @@ function NativeDriverHomeScreen() {
             live_count: nearestHotspot?.liveCount,
           });
           openNavigation(lat, lng);
+        }}
+        onOpenNotificationSettings={() => {
+          // Android never re-prompts after a denial — system Settings is the
+          // only way back. The banner clears itself on the next foreground
+          // (useNotificationsBlocked re-checks on AppState 'active').
+          Linking.openSettings().catch(() => { /* no Settings intent */ });
         }}
         ctaScaleAnim={ctaScaleAnim}
         onCtaPressIn={onCtaPressIn}
