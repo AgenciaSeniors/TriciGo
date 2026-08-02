@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -53,7 +53,13 @@ function SkeletonRows() {
 interface AddressSearchInputProps {
   placeholder?: string;
   selectedAddress?: string | null;
-  onSelect: (address: string, location: GeoPoint) => void;
+  /** 00537: `meta.confirmPin` marks a selection that resolved a STREET ADDRESS
+   *  (not a named POI) from any search source — external geocoders mis-pin
+   *  Cuban addresses (incident b428022b) and the local street DB is
+   *  OSM-derived, so neither is trusted blindly. The caller should ask the
+   *  user to confirm the pin on the map before booking to that point.
+   *  Saved/recent/prediction selections never set it. */
+  onSelect: (address: string, location: GeoPoint, meta?: { confirmPin?: boolean }) => void;
   /** User's saved locations from customer profile */
   savedLocations?: SavedLocation[];
   /** Recently used addresses from AsyncStorage */
@@ -378,7 +384,13 @@ function AddressSearchInputInner({
     // Session ends on selection — drop the Google Places session token so
     // the next search starts a fresh billable session.
     sessionTokenRef.current = null;
-    onSelect(result.address, { latitude: result.latitude, longitude: result.longitude });
+    // 00537: same rule as handleSelectMerged — any street-address result
+    // (no distinct POI name) confirms the pin; see onSelect meta.confirmPin.
+    onSelect(
+      result.address,
+      { latitude: result.latitude, longitude: result.longitude },
+      { confirmPin: !result.displayName || result.displayName === result.address },
+    );
     // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox lookup
     // when the selection came from Google/Mapbox unified search. Never blocks UX.
     if (result._src) {
@@ -430,9 +442,17 @@ function AddressSearchInputInner({
       setResults([]);
       setIsExpanded(false);
       sessionTokenRef.current = null;
+      // Incident cd09ba9f: when reverse geocode finds nothing (data gap or
+      // timeout), raw coordinates reached the driver's offer card. Fall back
+      // to the nearest local preset ("Cerca de Vedado" — no network) first;
+      // both fallback forms are sentinels the server backstop (00539)
+      // upgrades with real intersection data at ride creation.
+      const gpsPoint = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      const nearPreset = address ? null : findNearestPreset(gpsPoint, 5000);
       onSelect(
-        address ?? `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
-        { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+        address
+          ?? (nearPreset ? `Cerca de ${nearPreset.label}` : `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`),
+        gpsPoint,
       );
     } catch {
       setGeocodeError(t('home.geocode_error', { defaultValue: 'No se pudo obtener la dirección. Intenta escribirla manualmente.' }));
@@ -479,6 +499,7 @@ function AddressSearchInputInner({
     source?: string;
     icon?: string;
     distanceKm?: number | null;
+    streetLike?: boolean;
   }) => {
     triggerSelection();
     trackEvent('address_searched', { query: query.trim() });
@@ -492,7 +513,13 @@ function AddressSearchInputInner({
     const initial = item.displayName && item.address && item.displayName !== item.address
       ? `${item.displayName}, ${item.address}`
       : item.address;
-    onSelect(initial, { latitude: item.latitude, longitude: item.longitude });
+    // 00537 (incident b428022b): every street-address search result asks for
+    // pin confirmation — geocoders mis-pin Cuban addresses and the local
+    // street DB is OSM-derived (see matchedApi mapping). Named POIs and
+    // saved/recent/prediction rows (streetLike undefined) skip: those coords
+    // were searched by name or already ridden to.
+    const confirmPin = !!item.streetLike;
+    onSelect(initial, { latitude: item.latitude, longitude: item.longitude }, { confirmPin });
     // Background: enrich with Cuban cross-street format via reverseGeocode.
     // reverseGeocode already prepends the nearest POI when it finds one,
     // so this naturally upgrades a "Calle 23" pick to "Hotel Bruzón, Calle 23
@@ -561,6 +588,15 @@ function AddressSearchInputInner({
         source: r.displayName ? 'poi' : 'api',                  // ← POI vs street
         icon: r.displayName ? ('business-outline' as const) : ('location-outline' as const),
         emoji: searchResultEmoji({ tricigoCategory: r.tricigoCategory, category: r.category, place_name: r.displayName ?? r.address, address: r.address }),
+        // 00537: street-address results confirm the pin regardless of source.
+        // External geocoders mis-pin Cuban street addresses (incident
+        // b428022b: 1,650 m off), and the local street_intersections data is
+        // OSM-derived — not trusted enough to skip confirmation either
+        // (product decision 2026-08-01). displayName === address covers rows
+        // whose label was overwritten by the cross-street enrichment (which
+        // also swaps in street_intersections coords). Named POIs keep
+        // skipping: they're searched by name and pin reliably.
+        streetLike: !r.displayName || r.displayName === r.address,
       }));
 
     const all = [...matchedPreds, ...matchedSvd, ...matchedRec, ...matchedApi];

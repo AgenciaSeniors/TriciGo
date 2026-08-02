@@ -288,7 +288,7 @@ export function DriverTripView() {
   useResponsive();
   const activeTrip = useDriverRideStore((s) => s.activeTrip);
   const driverProfile = useDriverStore((s) => s.profile);
-  const { advanceStatus, cancelTrip, isAdvancing } = useDriverRideActions();
+  const { advanceStatus, cancelTrip, isAdvancing, farPinPrompt, dismissFarPinPrompt } = useDriverRideActions();
 
   // Fix 4 (display conductor): commission rate live from platform_config
   // (mirrors IncomingRideCard BUG-fare-audit B4). The "accepted" fare block
@@ -1165,6 +1165,73 @@ export function DriverTripView() {
           The post-trip TripCompleteView still shows it as part of the
           earnings breakdown so the surge stays visible where it
           actually matters (the receipt). */}
+
+      {/* 00537 far-pin override (incident b428022b): the dropoff pin can be
+          geocoded far from the real destination. When the server rejects
+          arrived_at_destination with too_far_for_bypass, offer the driver an
+          explicit "the passenger already arrived — finish here" instead of a
+          dead-end error (which once made a driver drive 1.6 km back, empty,
+          to a phantom pin). Confirm retries with p_confirm_far: true. */}
+      <Modal
+        visible={!!farPinPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissFarPinPrompt}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
+          <View
+            style={{
+              backgroundColor: midnightEmber.map.bg.elevated,
+              borderTopLeftRadius: midnightEmber.radius.sheet,
+              borderTopRightRadius: midnightEmber.radius.sheet,
+              paddingHorizontal: 20,
+              paddingTop: 20,
+              paddingBottom: 32,
+            }}
+          >
+            <Text variant="h4" style={{ color: midnightEmber.map.text.primary, marginBottom: 4 }}>
+              {t('trip.far_pin_title', { defaultValue: 'Estás lejos del destino marcado' })}
+            </Text>
+            <Text variant="body" style={{ color: midnightEmber.map.text.secondary, marginBottom: 20 }}>
+              {farPinPrompt?.distanceM != null
+                ? t('trip.far_pin_body_distance', {
+                    defaultValue: 'Estás a {{distance}} m del pin. Si el pasajero ya llegó a su destino real, puedes finalizar aquí. El destino marcado estaba mal ubicado.',
+                    distance: farPinPrompt.distanceM,
+                  })
+                : t('trip.far_pin_body', {
+                    defaultValue: 'Si el pasajero ya llegó a su destino real, puedes finalizar aquí. El destino marcado estaba mal ubicado.',
+                  })}
+            </Text>
+            <Pressable
+              onPress={() => advanceStatus({ confirmFar: true })}
+              disabled={isAdvancing}
+              accessibilityRole="button"
+              accessibilityLabel={t('trip.far_pin_confirm', { defaultValue: 'El pasajero ya llegó — Finalizar aquí' })}
+              style={{
+                alignItems: 'center',
+                paddingVertical: 16,
+                marginBottom: 8,
+                borderRadius: midnightEmber.radius.card,
+                backgroundColor: midnightEmber.accent[500],
+                opacity: isAdvancing ? 0.6 : 1,
+              }}
+            >
+              <Text variant="body" style={{ color: midnightEmber.map.text.onAccent, fontWeight: '700' }}>
+                {t('trip.far_pin_confirm', { defaultValue: 'El pasajero ya llegó — Finalizar aquí' })}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={dismissFarPinPrompt}
+              accessibilityRole="button"
+              style={{ paddingVertical: 14, alignItems: 'center' }}
+            >
+              <Text variant="body" style={{ color: midnightEmber.map.text.secondary, fontWeight: '600' }}>
+                {t('trip.far_pin_cancel', { defaultValue: 'Cancelar' })}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Structured cancellation reason picker (migration 00486). Replaces the
           old 2-string Alert; legit reasons are exempt from the reputation hit. */}

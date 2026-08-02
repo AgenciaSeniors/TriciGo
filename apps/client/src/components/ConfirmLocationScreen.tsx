@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 const ROUTE_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { reverseGeocode, reverseGeocodeStructured, MAP_STYLE_LIGHT } from '@tricigo/utils';
+import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT } from '@tricigo/utils';
 import type { GeoPoint, StructuredAddress } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
@@ -50,6 +50,15 @@ const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
 interface ConfirmLocationScreenProps {
   mode: 'pickup' | 'dropoff';
   initialLocation?: GeoPoint | null;
+  /** 00537 pin confirmation: the address text the user picked in search.
+   *  When the pin is confirmed without moving (< ~20 m from
+   *  initialLocation), this richer label is kept instead of replacing it
+   *  with the reverse geocode of the same spot. */
+  initialAddress?: string | null;
+  /** 00537: render the "¿El destino es aquí? Ajústalo si no" caption —
+   *  used when the screen opens to CONFIRM a geocoded search result
+   *  (incident b428022b) rather than to pick a point from scratch. */
+  confirmPrompt?: boolean;
   onConfirm: (address: string, location: GeoPoint) => void;
   onClose: () => void;
 }
@@ -74,6 +83,8 @@ function toDisplay(
 export function ConfirmLocationScreen({
   mode,
   initialLocation,
+  initialAddress,
+  confirmPrompt,
   onConfirm,
   onClose,
 }: ConfirmLocationScreenProps) {
@@ -224,6 +235,18 @@ export function ConfirmLocationScreen({
     if (confirming) return; // re-entrancy guard (double-tap)
     setConfirming(true);
     const center = centerRef.current;
+    // 00537 pin confirmation: confirming without moving the pin keeps the
+    // address the user PICKED in search ("Calle 3ra e/ 4 y 2, Vedado") —
+    // richer than the reverse geocode of the exact same coordinate. Moving
+    // the pin means the label no longer applies → reverse geocode as usual.
+    if (
+      initialAddress &&
+      initialLocation &&
+      haversineDistance(center, initialLocation) < 20
+    ) {
+      onConfirm(initialAddress, center);
+      return;
+    }
     // Seed from whatever is already on screen (joined back to one string), then
     // prefer a fresh string geocode. reverseGeocode shares the structured cache,
     // so when the bar already resolved this spot it's an instant cache hit.
@@ -237,7 +260,21 @@ export function ConfirmLocationScreen({
     } catch { /* keep current display / fallback */ }
     // User may have tapped back while the geocode was in flight.
     if (!mountedRef.current) return;
-    onConfirm(finalAddress || 'Ubicación seleccionada en el mapa', center);
+    // Incident cd09ba9f: on slow networks the geocode misses the 3 s cap and
+    // the old fallback ('Ubicación seleccionada en el mapa') reached the
+    // driver's offer card, which is useless for deciding. The label must
+    // always SAY something: nearest local preset ("Cerca de Vedado" — pure
+    // local math, no network) before falling back to raw coordinates. Both
+    // fallback forms are sentinels the server-side backstop (00539) upgrades
+    // with real intersection data at ride creation.
+    const coordsRe = /^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/;
+    if (!finalAddress || coordsRe.test(finalAddress)) {
+      const preset = findNearestPreset(center, 5000);
+      finalAddress = preset
+        ? `Cerca de ${preset.label}`
+        : `${center.latitude.toFixed(5)}, ${center.longitude.toFixed(5)}`;
+    }
+    onConfirm(finalAddress, center);
   };
 
   const isPickup = mode === 'pickup';
@@ -443,9 +480,11 @@ export function ConfirmLocationScreen({
 
         <View style={{ flex: 1 }}>
           <Text variant="caption" color="secondary" style={{ marginBottom: 2 }}>
-            {isPickup
-              ? t('ride.pickup', { defaultValue: 'Punto de recogida' })
-              : t('ride.dropoff', { defaultValue: 'Destino' })}
+            {confirmPrompt
+              ? t('ride.confirm_pin_prompt', { defaultValue: '¿El destino es aquí? Ajústalo si no' })
+              : isPickup
+                ? t('ride.pickup', { defaultValue: 'Punto de recogida' })
+                : t('ride.dropoff', { defaultValue: 'Destino' })}
           </Text>
           {isGeocoding ? (
             <Animated.View

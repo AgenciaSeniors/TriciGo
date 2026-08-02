@@ -3,8 +3,8 @@ import { AppState, Platform } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import DriverOverlay from '../../modules/driver-overlay';
-import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus } from '@tricigo/api';
-import { triggerHaptic, playSound, logger, mapLogger, isNetworkError } from '@tricigo/utils';
+import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus, logRideValidationEvent } from '@tricigo/api';
+import { triggerHaptic, playSound, logger, mapLogger, isNetworkError, haversineDistance } from '@tricigo/utils';
 import { stopBgLocationTracking } from '@/services/locationBackgroundTask';
 import {
   initStatusTransitionBuffer,
@@ -169,7 +169,17 @@ export function useDriverRideInit() {
         // a driver returning to foreground can be stale (>3min) and miss/lose
         // offers (find_best_drivers + accept_ride_v2 both gate on heartbeat).
         // Send one beat immediately to heal.
-        if (profile?.id) driverService.sendHeartbeat(profile.id).catch(() => {});
+        //
+        // 00540: gated on the on-shift toggle. Ungated, this fired on EVERY
+        // foreground — including for a driver who had deliberately gone
+        // offline and just opened the app to check earnings. Measured: 31% of
+        // manual disconnections kept producing heartbeats, 22% of them more
+        // than 5 minutes later. That broke the "heartbeat ⇒ on shift"
+        // invariant the server-side auto-restore relies on (the marker in
+        // 00540 already protects against it; this closes the source).
+        if (profile?.id && useDriverStore.getState().profile?.is_online) {
+          driverService.sendHeartbeat(profile.id).catch(() => {});
+        }
       }
     });
 
@@ -647,7 +657,7 @@ export function useDriverRideActions() {
     }
   }, [profile, setActiveTrip, removeRequest]);
 
-  const advanceStatus = useCallback(async () => {
+  const advanceStatus = useCallback(async (advOpts?: { confirmFar?: boolean }) => {
     if (completingRef.current) return; // Prevent double execution
     const { activeTrip } = useDriverRideStore.getState();
     if (!activeTrip || !profile) return;
@@ -872,7 +882,10 @@ export function useDriverRideActions() {
           ...activeTrip,
           status: 'completed',
           final_fare_cup: result.final_fare_cup,
-          actual_distance_m: actualDistanceM,
+          // 00537: the server recomputes the distance from the GPS trail and
+          // returns it — show THAT on the summary, not the locally-derived
+          // value (in prod the local calc used to send the bare estimate).
+          actual_distance_m: result.actual_distance_m ?? result.server_distance_m ?? actualDistanceM,
           actual_duration_s: actualDurationS,
           // BUG-222: surface excess meters so TripCompleteView can show
           // the justification modal when the driver exceeded 1.3× estimate.
@@ -900,7 +913,14 @@ export function useDriverRideActions() {
         const result = await driverService.updateRideStatus(activeTrip.id, nextStatus, {
           driverLat: tapLat ?? undefined,
           driverLng: tapLng ?? undefined,
+          // 00537 far-pin override: only meaningful on arrived_at_destination
+          // (the server rejects it elsewhere by design).
+          confirmFar: advOpts?.confirmFar && nextStatus === 'arrived_at_destination',
         });
+        // 00537: the override went through — close the modal if it was open.
+        if (result?.far_from_pin_override) {
+          useDriverRideStore.getState().setFarPinPrompt(null);
+        }
         // If gated by proximity, the backend stored gps_override_requested_at
         // and is awaiting rider confirmation. Show driver a waiting state.
         if (result?.gated && result.reason === 'pending_rider_confirmation') {
@@ -967,6 +987,36 @@ export function useDriverRideActions() {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error('[DriverRide] advanceStatus failed', { error: errMsg, nextStatus });
+
+      // 00537 (incident b428022b): the dropoff pin can be geocoded far from the
+      // real destination — the driver IS there but the proximity gate rejects
+      // with DETAIL too_far_for_bypass. Instead of a dead-end error toast (which
+      // once made a driver drive 1.6 km back to a phantom pin), offer the
+      // explicit override: "the passenger already arrived — finish here".
+      // Destination only; a pickup too-far keeps the plain server message.
+      if (
+        (err as { code?: string })?.code === 'TOO_FAR_FOR_BYPASS' &&
+        nextStatus === 'arrived_at_destination' &&
+        !advOpts?.confirmFar
+      ) {
+        const dropoff = activeTrip.dropoff_location;
+        const distanceM =
+          tapLat != null && tapLng != null && dropoff
+            ? Math.round(haversineDistance(
+                { latitude: tapLat, longitude: tapLng },
+                dropoff,
+              ))
+            : null;
+        // Telemetry the server can't record (its RAISE rolls back): every
+        // blocked attempt becomes visible in validation_events / admin.
+        logRideValidationEvent(activeTrip.id, 'complete_blocked_distance', {
+          distance_m: distanceM,
+        }).catch(() => { /* fire-and-forget */ });
+        useDriverRideStore.getState().setFarPinPrompt({ distanceM });
+        completingRef.current = false;
+        useDriverRideStore.getState().setIsAdvancing(false);
+        return;
+      }
 
       // Coverage dropped mid-tap: queue the transition with the coordinates the
       // driver had at that moment and let the UI move on, so they can keep
@@ -1057,7 +1107,20 @@ export function useDriverRideActions() {
     useDriverRideStore.getState().setActiveTrip(null);
   }, []);
 
-  const isAdvancing = useDriverRideStore((s) => s.isAdvancing);
+  // 00537: driver dismissed the far-pin override modal without finishing.
+  // Log it (telemetry parity with complete_blocked_distance) and close.
+  const dismissFarPinPrompt = useCallback(() => {
+    const { activeTrip, farPinPrompt } = useDriverRideStore.getState();
+    if (activeTrip && farPinPrompt) {
+      logRideValidationEvent(activeTrip.id, 'far_pin_override_canceled', {
+        distance_m: farPinPrompt.distanceM,
+      }).catch(() => { /* fire-and-forget */ });
+    }
+    useDriverRideStore.getState().setFarPinPrompt(null);
+  }, []);
 
-  return { acceptRide, advanceStatus, cancelTrip, clearCompletedTrip, isAdvancing };
+  const isAdvancing = useDriverRideStore((s) => s.isAdvancing);
+  const farPinPrompt = useDriverRideStore((s) => s.farPinPrompt);
+
+  return { acceptRide, advanceStatus, cancelTrip, clearCompletedTrip, dismissFarPinPrompt, isAdvancing, farPinPrompt };
 }

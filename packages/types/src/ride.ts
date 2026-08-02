@@ -337,6 +337,14 @@ export interface CompleteRideResult {
    *  to collect in cash vs. what came from the rider's wallet. */
   wallet_amount_cup?: number | null;
   cash_amount_cup?: number | null;
+  /** 00537: distance the server settled on (trail-derived when available,
+   *  else the client-reported value). Show THIS on the trip summary. */
+  actual_distance_m?: number | null;
+  /** 00537: distance computed server-side from the ride GPS trail
+   *  (compute_ride_trail_distance_m). NULL when no usable trail. */
+  server_distance_m?: number | null;
+  /** 00537: distance exactly as the app reported it (audit). */
+  reported_distance_m?: number | null;
 }
 
 /** Ride with joined rider info for driver display */

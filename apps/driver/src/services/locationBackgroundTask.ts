@@ -63,7 +63,7 @@ import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import { driverService, locationService } from '@tricigo/api';
-import { bufferLocation, type BufferedLocation } from './locationBuffer';
+import { bufferLocation, newClientEventId, type BufferedLocation } from './locationBuffer';
 import { SECURE_STORE_SERVICE } from '@/lib/secureStoreService';
 
 export const LOCATION_TASK = 'tricigo-driver-location-bg';
@@ -363,12 +363,25 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
   if (!ctx.rideId) return;
   const rideId = ctx.rideId;
 
+  // 00537 (incident b428022b): TaskManager delivers fixes ALSO while the app
+  // is foregrounded, where useDriverLocation's watcher is already appending
+  // the trail via update_driver_position — running both produced duplicated
+  // trail rows with mixed clocks. Single-pipeline rule: the watcher owns the
+  // trail while the app is active; this task owns it in background/headless.
+  // Only skip on an explicit 'active' — 'background'/'inactive'/'unknown'
+  // (headless launch) must keep uploading.
+  if (AppState.currentState === 'active') return;
+
   // Upload each location. recordRideLocation hits the
   // `ride_location_events` table which has RLS allowing the driver to
   // INSERT their own rows. If the upload fails (offline, token
   // expired), buffer for later flush by the foreground hook on next
   // network event.
   for (const loc of locations) {
+    // 00537: mint the idempotency id at capture and carry the REAL fix
+    // timestamp + accuracy. Without recorded_at the row got the server
+    // insert time — the mixed-clock duplicate signature from the incident.
+    const clientEventId = newClientEventId();
     try {
       await locationService.recordRideLocation({
         ride_id: rideId,
@@ -377,6 +390,9 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
         longitude: loc.coords.longitude,
         heading: loc.coords.heading ?? undefined,
         speed: loc.coords.speed ?? undefined,
+        accuracy: loc.coords.accuracy ?? null,
+        recorded_at: new Date(loc.timestamp).toISOString(),
+        client_event_id: clientEventId,
       });
     } catch (uploadErr) {
       const buffered: BufferedLocation = {
@@ -388,6 +404,9 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
         timestamp: loc.timestamp,
         rideId: rideId,
         driverId: ctx.driverId,
+        // Same id as the failed attempt: if the upload actually committed
+        // server-side (timeout-but-committed), the flush replay dedupes.
+        clientEventId,
       };
       bufferLocation(buffered);
       console.warn('[bg-location-task] upload failed, buffered:', uploadErr);

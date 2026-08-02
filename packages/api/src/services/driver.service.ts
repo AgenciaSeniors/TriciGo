@@ -23,6 +23,7 @@ import type {
 } from '@tricigo/types';
 import type { DriverStatus, RideStatus } from '@tricigo/types';
 import { logger } from '@tricigo/utils';
+import { AppError } from '../errors';
 import { getSupabaseClient } from '../client';
 import { uploadFileFromUri } from './_storage-upload';
 import { notificationService } from './notification.service';
@@ -478,7 +479,7 @@ export const driverService = {
   async updateRideStatus(
     rideId: string,
     status: RideStatus,
-    opts?: { driverLat?: number; driverLng?: number },
+    opts?: { driverLat?: number; driverLng?: number; confirmFar?: boolean },
   ): Promise<{
     success: boolean;
     gated?: boolean;
@@ -489,6 +490,7 @@ export const driverService = {
     rider_bypass_used?: boolean;
     offline_trail_used?: boolean;
     trail_arrived_at?: string;
+    far_from_pin_override?: boolean;
   }> {
     if (status === 'completed') {
       throw new Error('Use completeRide() for ride completion');
@@ -504,15 +506,31 @@ export const driverService = {
     // never read it — see migration 00522. The broken-GPS path is the separate
     // rider-consent flow: reportGpsUnavailable -> rider_respond_to_gps_unavailable
     // -> driver_gps_status='rider_consented', which update_ride_status_v2 honours.
+    // p_confirm_far (00537) is only included when true so builds talking to a
+    // backend without the param keep resolving the 5-arg signature.
     const { data, error } = await supabase.rpc('update_ride_status_v2', {
       p_ride_id: rideId,
       p_new_status: status,
       p_driver_lat: opts?.driverLat ?? null,
       p_driver_lng: opts?.driverLng ?? null,
+      ...(opts?.confirmFar ? { p_confirm_far: true } : {}),
     });
     if (error) {
-      // Surface SQL EXCEPTION messages to the caller (e.g. too_far_for_bypass)
-      throw new Error(error.message || JSON.stringify(error));
+      // 00537: the RPC signals machine-readable outcomes in DETAIL (PostgREST
+      // exposes it as error.details): 'too_far_for_bypass' | 'gps_required'.
+      // Throw a typed AppError so the caller can branch on the code (far-pin
+      // override modal) instead of string-matching the Spanish message.
+      const detail = (error as { details?: string }).details;
+      const code =
+        detail === 'too_far_for_bypass' ? 'TOO_FAR_FOR_BYPASS'
+        : detail === 'gps_required' ? 'GPS_REQUIRED'
+        : 'RIDE_STATUS_UPDATE_FAILED';
+      throw new AppError(
+        error.message || JSON.stringify(error),
+        code,
+        400,
+        { detail: detail ?? null },
+      );
     }
     const result = data as {
       success: boolean;
@@ -524,6 +542,7 @@ export const driverService = {
       rider_bypass_used?: boolean;
       offline_trail_used?: boolean;
       trail_arrived_at?: string;
+      far_from_pin_override?: boolean;
       new_status?: string;
     };
     // If gated, the caller decides what to do (show "rider confirm?" prompt)

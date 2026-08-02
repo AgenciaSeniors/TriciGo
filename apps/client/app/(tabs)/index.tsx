@@ -1647,7 +1647,10 @@ function NativeHomeScreen() {
   const setPickup = useRideStore((s) => s.setPickup);
   const setDropoff = useRideStore((s) => s.setDropoff);
   const updateWaypoint = useRideStore((s) => s.updateWaypoint);
-  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | 'waypoint' | null>(null);
+  // 'dropoff-confirm' (00537): same dropoff picker, but opened automatically to
+  // CONFIRM a low-confidence geocoded search result — shows the "¿El destino es
+  // aquí?" prompt and keeps the picked address text if the pin isn't moved.
+  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null>(null);
 
   // BUG-253 (Capa 3.5): if the flow transitions away from 'idle'/'selecting'
   // while a picker overlay is open, force-close it. Without this, the
@@ -1703,8 +1706,13 @@ function NativeHomeScreen() {
       return (
         <View style={{ flex: 1 }}>
           <ConfirmLocationScreen
-            mode={mapPickerMode === 'waypoint' ? 'dropoff' : mapPickerMode}
+            mode={mapPickerMode === 'pickup' ? 'pickup' : 'dropoff'}
             initialLocation={pickerInitialLoc}
+            // 00537 pin confirmation: keep the search-picked address text when
+            // the user confirms without moving the pin, and show the explicit
+            // "¿El destino es aquí?" prompt.
+            initialAddress={mapPickerMode === 'dropoff-confirm' ? draft.dropoff?.address ?? null : null}
+            confirmPrompt={mapPickerMode === 'dropoff-confirm'}
             onConfirm={(address, location) => {
               if (!isValidCoordinate(location.latitude, location.longitude)) { setMapPickerMode(null); return; }
               if (mapPickerMode === 'pickup') {
@@ -2962,7 +2970,7 @@ const VEHICLE_ICONS: Record<string, any> = {
 // The `waypoint` variant is the same one added to searchingField so
 // the waypoint-search map-picker flow can be wired later. Keeps the
 // two types aligned (same setter accepts the same values).
-function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'waypoint' | null) => void }) {
+function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null) => void }) {
   // BUG-282 (revised) — initial map center.
   // Two-stage resolution: (1) AsyncStorage cache for an instant first
   // frame, (2) fresh GPS fix that overrides the cache once it arrives.
@@ -3524,7 +3532,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
               : searchingField === 'waypoint'
                 ? t('ride.add_stop_placeholder', { defaultValue: 'Buscar parada intermedia' })
                 : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
-            onSelect={(address, location) => {
+            onSelect={(address, location, meta) => {
               if (searchingField === 'pickup') {
                 setPickup(address, location);
               } else if (searchingField === 'waypoint') {
@@ -3533,6 +3541,17 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
                 if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
               } else {
                 setDropoff(address, location);
+                // 00537 (incident b428022b): a geocoded street address can pin
+                // far from the real destination (1,650 m in the incident, and
+                // nobody noticed until the driver couldn't finish). For those
+                // low-confidence picks, open the map ON the pin and ask "¿El
+                // destino es aquí?" — confirming keeps the address; panning
+                // fixes the coords before the ride is ever requested.
+                if (meta?.confirmPin) {
+                  setSearchingField(null);
+                  setMapPickerMode('dropoff-confirm');
+                  return;
+                }
               }
               setSearchingField(null);
             }}
