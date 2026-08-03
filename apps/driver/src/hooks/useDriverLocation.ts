@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Alert, Linking, AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import * as Location from 'expo-location';
 import { driverService, locationService, getOnlineStatus } from '@tricigo/api';
 import { smoothHeading, mapLogger } from '@tricigo/utils';
@@ -200,6 +200,40 @@ export function useDriverLocationTracking(
         // service while online keeps the JS runtime alive so heartbeats keep
         // flowing, and the background task refreshes the heartbeat directly.
         //
+        // BUG-FGS-NEVER-STARTED: the "Siempre" permission is an OPTIONAL
+        // enhancement here — it is NOT required to run the foreground
+        // service, and we must never gate the FGS on it.
+        //
+        // Until this fix, `startBgLocationTracking` was called only when
+        // background permission was `granted`. On Android 11+ that permission
+        // cannot be granted from the system prompt — the user has to walk into
+        // Settings by hand — and our own disclosure offered a "Más tarde" exit.
+        // Net effect measured in prod: across 8.942 GPS points / 21 rides /
+        // 8 drivers over 90 days, ZERO came from the background pipeline
+        // (`ride_location_events.client_event_id IS NOT NULL`). The foreground
+        // service had never run for a single driver, so every app died as soon
+        // as it was backgrounded — 142 forced auto-offlines in 7 days, zombie
+        // rides holding passengers hostage, and offline ride completions lost.
+        //
+        // expo-location's native `startLocationUpdatesAsync` (LocationModule.kt,
+        // sdk-55) skips the background-permission check entirely when
+        // `foregroundService` is set:
+        //     if (!shouldUseForegroundService && isMissingBackgroundPermissions())
+        //       throw LocationBackgroundUnauthorizedException()
+        // Android agrees: while a `location` foreground service runs, access
+        // counts as foreground ("Your app retains access when it's placed in
+        // the background"), so ACCESS_BACKGROUND_LOCATION simply does not apply.
+        //
+        // What the FGS *does* require: (1) FINE or COARSE location granted —
+        // already enforced before going online; (2) the app in the foreground
+        // when we call start — see the AppState guard below; (3) the manifest
+        // FOREGROUND_SERVICE + FOREGROUND_SERVICE_LOCATION entries — declared
+        // in app.json.
+        //
+        // We still ASK for "Siempre" because it is the only way to (re)start
+        // the service from the background, e.g. after a headless process
+        // relaunch. Declining it costs that edge case and nothing else.
+        //
         // BUG-Store-Readiness-Driver (W8): Google Play User Data Policy
         // requires a "prominent disclosure" — an in-app explanation
         // shown BEFORE the OS permission prompt — for apps requesting
@@ -219,11 +253,10 @@ export function useDriverLocationTracking(
         // (no disclosure needed if already granted). If not, show an
         // Alert.alert as the disclosure (Alert is OK — Google's policy
         // is about content + ordering, not chrome). User taps "Permitir"
-        // → we trigger the system prompt; "Más tarde" → we skip
-        // background tracking and fall back to foreground-only updates
-        // (the driver may be auto-offlined when they minimize the app, and
-        // the rider may see the marker freeze during a trip, but the app
-        // still works while in the foreground).
+        // → we trigger the system prompt; "Más tarde" → we skip only the
+        // prompt. The foreground service still starts either way, so the
+        // driver stays online in the background and the rider keeps seeing
+        // the marker move.
         {
           const current = await Location.getBackgroundPermissionsAsync().catch(
             () => ({ status: 'undetermined' as const }),
@@ -235,7 +268,7 @@ export function useDriverLocationTracking(
             const accepted = await new Promise<boolean>((resolve) => {
               Alert.alert(
                 'Mantenerte en línea en segundo plano',
-                'TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras estás en línea, para que sigas recibiendo viajes y el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, tu estado "en línea" se suspende y el pasajero pierde tu posición cuando sales de la app.',
+                'TriciGo Conductor usa tu ubicación en segundo plano mientras estás en línea, para que sigas recibiendo viajes y el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Con la opción "Siempre" / "Always" tu conexión también puede restablecerse sola si el sistema cierra la app.',
                 [
                   {
                     text: 'Más tarde',
@@ -258,33 +291,24 @@ export function useDriverLocationTracking(
                 console.log('[Location] Background permission granted after disclosure');
               } else {
                 console.log('[Location] Background permission denied at system prompt');
-                // R-2: the driver tried to grant but the OS ended up denied
-                // (fresh denial, or a prior denial so the system prompt
-                // silently no-ops). The background task won't start → the
-                // rider loses the marker the moment the app is backgrounded
-                // or the screen is off. The OS never re-prompts, so the only
-                // recovery is system Settings — surface it instead of leaving
-                // the driver unaware.
-                Alert.alert(
-                  'Ubicación en segundo plano desactivada',
-                  'Sin el permiso "Siempre", tu estado "en línea" se suspende y dejas de recibir viajes cuando minimizas la app o apagas la pantalla. Actívalo en Ajustes para seguir recibiendo viajes en segundo plano.',
-                  [
-                    { text: 'Más tarde', style: 'cancel' },
-                    { text: 'Abrir Ajustes', onPress: () => { Linking.openSettings().catch(() => {}); } },
-                  ],
-                );
+                // Previously this raised a modal telling the driver their
+                // "en línea" status would be suspended. That was false, and
+                // it is the reason this alert is gone: the foreground service
+                // starts regardless (see the block below), so a denial here
+                // costs only the headless-relaunch edge case. Interrupting a
+                // working shift with a scary modal over an optional
+                // enhancement is pure noise — the same reasoning the overlay
+                // pitch uses ("never blocks going online, don't nag").
               }
             } else {
               console.log('[Location] Driver dismissed background disclosure');
             }
           }
 
-          // FD1: if background permission is granted (either just-granted
-          // above, or pre-existing from a prior ride), start the real
-          // background TaskManager task. It runs inside an Android
-          // foreground service / iOS UIBackgroundModes=location and keeps
-          // the app process alive even when the driver minimizes the app,
-          // switches to another app, or turns the screen off.
+          // FD1: start the real background TaskManager task. It runs inside an
+          // Android foreground service / iOS UIBackgroundModes=location and
+          // keeps the app process alive even when the driver minimizes the
+          // app, switches to another app, or turns the screen off.
           //
           //  - 'online' mode (no active ride): low-frequency; keeps the
           //    heartbeat alive so the driver stays matchable in background.
@@ -298,15 +322,29 @@ export function useDriverLocationTracking(
           //
           // startBgLocationTracking is idempotent within a mode and restarts
           // the task when the mode changes (online ⇄ ride).
-          const finalBgStatus = await Location.getBackgroundPermissionsAsync().catch(
-            () => ({ status: 'undetermined' as const }),
-          );
-          // Guard against a stale start: startTracking awaits several native
-          // round-trips (permissions, disclosure). If the driver toggled OFFLINE
-          // during those awaits, the effect cleanup set `cancelled` and the
-          // wasTrackingRef effect already stopped the FGS — starting it here
-          // would re-launch it for an off-shift driver with nothing to stop it.
-          if (finalBgStatus.status === 'granted' && driverId && !cancelled && isOnlineRef.current) {
+          //
+          // NOTE: this is deliberately NOT gated on background permission —
+          // see the long comment above. `foregroundService` is always set in
+          // updateOptionsForMode, so expo-location skips its background check.
+          // Gating here is what kept the FGS from ever running (0 background
+          // GPS points fleet-wide over 90 days).
+          //
+          // Two guards remain, and both are load-bearing:
+          //  - `!cancelled && isOnlineRef.current`: startTracking awaits several
+          //    native round-trips (permissions, disclosure). If the driver
+          //    toggled OFFLINE during those awaits, the effect cleanup set
+          //    `cancelled` and the wasTrackingRef effect already stopped the
+          //    FGS — starting it here would re-launch it for an off-shift
+          //    driver with nothing to stop it.
+          //  - `AppState === 'active'`: Android refuses to start a location
+          //    foreground service from the background unless
+          //    ACCESS_BACKGROUND_LOCATION is granted
+          //    (ForegroundServiceStartNotAllowedException). Since we no longer
+          //    require that permission, we must only start while visible. The
+          //    AppState listener below re-attempts on the next foreground.
+          const canStartFgs =
+            driverId && !cancelled && isOnlineRef.current && AppState.currentState === 'active';
+          if (canStartFgs) {
             try {
               await startBgLocationTracking({
                 driverId,
@@ -318,8 +356,11 @@ export function useDriverLocationTracking(
                 rideId: activeRideId,
               });
             } catch (bgStartErr) {
+              // Safety net: if this build's expo-location DOES demand the
+              // background permission, or Android rejects the start, we land
+              // here and simply behave like before this fix — the foreground
+              // watchPositionAsync below still runs. No regression is possible.
               console.warn('[Location] Failed to start background task:', bgStartErr);
-              // Fall through — foreground watchPositionAsync below still runs.
             }
           }
         }
