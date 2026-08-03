@@ -214,9 +214,13 @@ export async function startBgLocationTracking(ctx: BgTaskContext): Promise<void>
   // it on every batch, regardless of whether we (re)start below.
   await persistBgTaskContext(ctx);
 
-  // Not running yet → initial start. This only happens when the driver goes
-  // online (a foreground action) or the process was relaunched, so starting
-  // the foreground service here is allowed.
+  // Not running yet → initial start. Both call sites in useDriverLocation
+  // only reach here with AppState === 'active', which is what makes this
+  // legal: without ACCESS_BACKGROUND_LOCATION (which we no longer require —
+  // the foregroundService option exempts us) Android rejects starting a
+  // location foreground service from the background with
+  // ForegroundServiceStartNotAllowedException. If that throws anyway, the
+  // caller catches and the AppState 'active' listener retries later.
   if (!isRunning) {
     await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptionsForMode(ctx.mode));
     startedMode = ctx.mode;
