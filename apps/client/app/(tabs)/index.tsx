@@ -64,7 +64,7 @@ import { PACKAGE_CATEGORIES } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { rideService } from '@tricigo/api/services/ride';
-import { reverseGeocode } from '@tricigo/utils';
+import { reverseGeocode, isPlaceholderAddress } from '@tricigo/utils';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { UpdateAvailableSheet } from '@/components/UpdateAvailableSheet';
 import { OnboardingOverlay } from '@/components/OnboardingOverlay';
@@ -926,10 +926,18 @@ function WebHomeScreen() {
         wallet_ratio: paymentMethod === 'mixed' ? walletRatio : undefined,
         pickup_latitude: pickup.latitude,
         pickup_longitude: pickup.longitude,
-        pickup_address: pickupAddress || 'Origen',
+        // 00544/00546: 'Origen'/'Destino' are UI placeholders, not addresses —
+        // sending them left the driver with an offer he could not judge. Send
+        // coordinates instead; the server backstop resolves them with a wider
+        // radius than the client can.
+        pickup_address: pickupAddress && !isPlaceholderAddress(pickupAddress)
+          ? pickupAddress
+          : `${pickup.latitude.toFixed(5)}, ${pickup.longitude.toFixed(5)}`,
         dropoff_latitude: dropoff.latitude,
         dropoff_longitude: dropoff.longitude,
-        dropoff_address: dropoffAddress || 'Destino',
+        dropoff_address: dropoffAddress && !isPlaceholderAddress(dropoffAddress)
+          ? dropoffAddress
+          : `${dropoff.latitude.toFixed(5)}, ${dropoff.longitude.toFixed(5)}`,
         estimated_fare_cup: freshEstimate.estimated_fare_cup,
         estimated_distance_m: freshEstimate.estimated_distance_m,
         estimated_duration_s: freshEstimate.estimated_duration_s,

@@ -13,6 +13,9 @@ interface AddressResult {
   latitude: number;
   longitude: number;
   place_name: string;
+  /** 00544: cross-street NAME suggestion with no geometry (lat/lng are NaN).
+   *  handleSelect completes the input instead of committing it. */
+  needsResolution?: boolean;
   category?: string;
   /** PR J (2026-05-25): tricigo-vocabulary category (hotel, restaurant,
    *  gas_station, etc.) populated by the providers via
@@ -45,7 +48,8 @@ interface AddressAutocompleteProps {
    *  is empty, like the mobile AddressSearchInput priority tier). */
   predictions?: { address: string; latitude: number; longitude: number }[];
   proximity?: { latitude: number; longitude: number };
-  enrichAddress?: (lat: number, lng: number) => Promise<{ address: string; latitude: number; longitude: number } | null>;
+  /** Label-only cross-street enrichment. Must NOT return coordinates: rows keep their own. */
+  enrichAddress?: (lat: number, lng: number) => Promise<{ address: string } | null>;
 }
 
 function getSavedIcon(label: string): string {
@@ -280,11 +284,18 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         const crossStreets = await suggestCrossStreetsSupabase(cubanParsed.main, proximity);
         if (searchIdRef.current !== thisSearchId) return; // Stale — discard
         if (crossStreets.length > 0) {
+          // TEXT COMPLETIONS, not places: suggest_cross_streets returns street
+          // names with no geometry. needsResolution makes handleSelect complete
+          // the input instead of committing; the NaN coordinates make sure a
+          // path that ignored the flag fails loudly rather than booking a ride
+          // to a plausible-looking wrong point. These used to carry `proximity`
+          // — the rider's own position — which is how a destination silently
+          // became an address ~1.5 km away.
           const suggestions: AddressResult[] = crossStreets.map(cs => {
             const addr = cubanParsed.partial === 'waiting_cross2'
               ? `${cubanParsed.main} e/ ${cubanParsed.cross1} y ${cs}`
               : `${cubanParsed.main} e/ ${cs}`;
-            return { address: addr, latitude: proximity.latitude, longitude: proximity.longitude, place_name: addr };
+            return { address: addr, latitude: NaN, longitude: NaN, place_name: addr, needsResolution: true };
           });
           setResults(suggestions.slice(0, 5));
           setIsOpen(true);
@@ -423,7 +434,10 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
               const hasCrossStreets = enriched.address.includes(' e/ ') || enriched.address.includes(' entre ');
               const originalIsGeneric = isGenericStreetAddress(r.place_name || r.address);
               if (hasCrossStreets && originalIsGeneric) {
-                return { idx, place_name: enriched.address, address: r.address, latitude: enriched.latitude, longitude: enriched.longitude };
+                // Label only — the row keeps its own coordinates. See
+                // enrichWithCrossStreets(): re-resolving the point moved pins
+                // to a fuzzy 5 km midpoint on an unrelated street.
+                return { idx, place_name: enriched.address, address: r.address };
               }
             }
           } catch { /* ignore */ }
@@ -435,9 +449,9 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             const updated = [...prev];
             for (const s of settled) {
               if (s.status === 'fulfilled' && s.value) {
-                const { idx, place_name, address, latitude, longitude } = s.value;
+                const { idx, place_name, address } = s.value;
                 if (updated[idx]) {
-                  updated[idx] = { ...updated[idx], place_name, address, latitude, longitude };
+                  updated[idx] = { ...updated[idx], place_name, address };
                 }
               }
             }
@@ -488,6 +502,19 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
 
   async function handleSelect(result: AddressResult) {
     if (isSelectingRef.current) return;
+
+    // A cross-street suggestion is a TEXT COMPLETION with no geometry. Put it
+    // back in the input and re-search: once it reads "X e/ Y y Z" the complete
+    // Cuban-address path resolves real coordinates. Never commit these.
+    if (result.needsResolution
+        || !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
+      setQuery(result.place_name);
+      setActiveIndex(-1);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => search(result.place_name), SEARCH_DEBOUNCE_MS);
+      return;
+    }
+
     isSelectingRef.current = true;
     setQuery(result.place_name); // Show immediately
     setIsOpen(false);

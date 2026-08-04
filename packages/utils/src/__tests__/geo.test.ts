@@ -10,6 +10,7 @@ import {
   fetchRoute,
   clearRouteCache,
   smoothHeading,
+  isPlaceholderAddress,
   HEADING_SMOOTHING_ALPHA,
   importPoiFromSearch,
   dedupeSearchResults,
@@ -1291,5 +1292,45 @@ describe('joinStructured (Bug 2 — preserves the legacy comma string for existi
   it('locality-only joins without a leading comma', () => {
     const s: StructuredAddress = { street: '', municipality: 'Camajuaní', province: 'Villa Clara', source: 'locality' };
     expect(joinStructured(s)).toBe('Camajuaní, Villa Clara');
+  });
+});
+
+describe('isPlaceholderAddress', () => {
+  // MIRROR of the SQL _ride_address_is_placeholder() (migration 00546). If a
+  // string is added on one side and not the other, a placeholder reaches the
+  // driver's offer card again. Keep both lists in sync.
+  const PLACEHOLDERS = [
+    'Detectando dirección...',
+    'Detecting address...',
+    'Detectando endereço...',
+    'Ubicación seleccionada en el mapa',
+    'Origen',
+    'Destino',
+    'Mi ubicación',
+  ];
+
+  it.each(PLACEHOLDERS)('treats %j as a placeholder', (s) => {
+    expect(isPlaceholderAddress(s)).toBe(true);
+  });
+
+  it('treats empty, whitespace and nullish as placeholders', () => {
+    expect(isPlaceholderAddress('')).toBe(true);
+    expect(isPlaceholderAddress('   ')).toBe(true);
+    expect(isPlaceholderAddress(null)).toBe(true);
+    expect(isPlaceholderAddress(undefined)).toBe(true);
+  });
+
+  it('treats a raw "lat, lng" pair as a placeholder', () => {
+    // The exact shape that reached prod on ride cd09ba9f.
+    expect(isPlaceholderAddress('23.12638, -82.35472')).toBe(true);
+    expect(isPlaceholderAddress('  23.12638,-82.35472  ')).toBe(true);
+  });
+
+  it('accepts real Cuban addresses', () => {
+    expect(isPlaceholderAddress('Callejón de los Protestantes e/ San Antonio Chiquito')).toBe(false);
+    expect(isPlaceholderAddress('Belascoaín (Padre Varela) e/ Manglar, Centro Habana, La Habana')).toBe(false);
+    // A street literally named "Destino" would be a false positive, but the
+    // exact-match check keeps anything longer safe.
+    expect(isPlaceholderAddress('Destino Final e/ 5ta y 7ma')).toBe(false);
   });
 });

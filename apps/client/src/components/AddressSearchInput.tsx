@@ -101,6 +101,8 @@ function AddressSearchInputInner({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const lastQueryRef = useRef<string>('');
+  /** Bumped on every selection and on unmount; see handleSelectMerged. */
+  const selectGenRef = useRef(0);
   // PR C of POI parity — Google Places session token. Generated lazily on
   // the first keystroke and reused for every keystroke + the Place Details
   // lookup until the user selects, clears, or empties the input. Bills the
@@ -199,18 +201,31 @@ function AddressSearchInputInner({
         // ── Cuban address parsing (e.g. "Castillo e/ Fernandina y Pila") ──
         const cubanParsed = parseCubanAddress(text);
 
-        // Partial → suggest cross-streets in real-time
+        // Partial → suggest cross-streets in real-time.
+        //
+        // These rows are TEXT COMPLETIONS, not places: `suggest_cross_streets`
+        // returns street names with no geometry. They carry needsResolution so
+        // handleSelectMerged completes the search box instead of committing a
+        // location; their coordinates are NaN precisely so that any code path
+        // that ignored the flag would fail loudly instead of booking a ride to
+        // a plausible-looking wrong point. (Until 00544 they were filled with
+        // the rider's GPS, or the hardcoded Havana centre when there was no
+        // fix — which is how a destination silently became an address ~1.5 km
+        // away. It reached production; see AddressSearchResult.needsResolution.)
         if (cubanParsed?.partial) {
           const loc = userLocation ?? undefined;
+          const mkSuggestion = (addr: string): AddressSearchResult => ({
+            address: addr,
+            displayName: addr,
+            latitude: NaN,
+            longitude: NaN,
+            needsResolution: true,
+          });
           if (cubanParsed.partial === 'waiting_cross1' && cubanParsed.main) {
             const crossStreets = await suggestCrossStreetsSupabase(cubanParsed.main, loc ? { latitude: loc.latitude, longitude: loc.longitude } : undefined);
             if (lastQueryRef.current !== text) return;
             if (crossStreets.length > 0) {
-              const suggestions: AddressSearchResult[] = crossStreets.map(cs => {
-                const addr = `${cubanParsed.main} e/ ${cs}`;
-                return { address: addr, displayName: addr, latitude: loc?.latitude ?? 23.1136, longitude: loc?.longitude ?? -82.3666 };
-              });
-              setResults(suggestions);
+              setResults(crossStreets.map(cs => mkSuggestion(`${cubanParsed.main} e/ ${cs}`)));
               setIsSearching(false);
               return;
             }
@@ -220,11 +235,7 @@ function AddressSearchInputInner({
             // Filter out the first cross-street already typed
             const filtered = crossStreets.filter(cs => cs.toLowerCase() !== cubanParsed.cross1.toLowerCase());
             if (filtered.length > 0) {
-              const suggestions: AddressSearchResult[] = filtered.map(cs => {
-                const addr = `${cubanParsed.main} e/ ${cubanParsed.cross1} y ${cs}`;
-                return { address: addr, displayName: addr, latitude: loc?.latitude ?? 23.1136, longitude: loc?.longitude ?? -82.3666 };
-              });
-              setResults(suggestions);
+              setResults(filtered.map(cs => mkSuggestion(`${cubanParsed.main} e/ ${cubanParsed.cross1} y ${cs}`)));
               setIsSearching(false);
               return;
             }
@@ -317,16 +328,23 @@ function AddressSearchInputInner({
         // Cache successful results
         setCachedResults(text, searchResults).catch(() => {});
 
-        // Background cross-street enrichment (only for generic streets, not POIs)
+        // Background cross-street enrichment (only for generic streets, not POIs).
+        // LABEL ONLY — the row keeps its own coordinates. enrichWithCrossStreets
+        // used to hand back a re-resolved point that callers wrote over the row
+        // the user was about to tap; that point came from a fuzzy 5 km lookup
+        // and could land on an unrelated street. See its doc comment.
         const currentQuery = text;
         const toEnrich = searchResults.filter(r => r.latitude && r.longitude);
         Promise.allSettled(
-          toEnrich.map(async (r, idx) => {
+          toEnrich.map(async (r) => {
             if (!shouldEnrichResult(r)) return null;
             const enriched = await enrichWithCrossStreets(r.latitude, r.longitude);
             if (enriched && lastQueryRef.current === currentQuery) {
               if (enriched.address.includes(' e/ ') || enriched.address.includes(' entre ')) {
-                return { idx, address: enriched.address, latitude: enriched.latitude, longitude: enriched.longitude };
+                // Match back by identity, not array position: `results` can be
+                // replaced while these promises are in flight, and an index
+                // would then land the enrichment on a different row.
+                return { lat: r.latitude, lng: r.longitude, address: enriched.address };
               }
             }
             return null;
@@ -334,16 +352,18 @@ function AddressSearchInputInner({
         ).then((settled) => {
           if (lastQueryRef.current !== currentQuery) return;
           setResults(prev => {
-            const updated = [...prev];
-            for (const s of settled) {
-              if (s.status === 'fulfilled' && s.value) {
-                const { idx, address, latitude, longitude } = s.value;
-                if (updated[idx]) {
-                  updated[idx] = { ...updated[idx], address, displayName: address, latitude, longitude };
+            let changed = false;
+            const updated = prev.map((row) => {
+              for (const s of settled) {
+                if (s.status === 'fulfilled' && s.value
+                    && s.value.lat === row.latitude && s.value.lng === row.longitude) {
+                  changed = true;
+                  return { ...row, address: s.value.address, displayName: s.value.address };
                 }
               }
-            }
-            return updated;
+              return row;
+            });
+            return changed ? updated : prev;
           });
         });
       } catch {
@@ -369,9 +389,16 @@ function AddressSearchInputInner({
 
   // Cleanup timeout on unmount
   useEffect(() => {
+    // Capture the ref objects (not their .current) so the cleanup mutates the
+    // live values without tripping the ref-in-cleanup lint rule.
+    const selectGen = selectGenRef;
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       abortRef.current?.abort();
+      // Invalidate any in-flight background label upgrade so it can't call
+      // onSelect after this input is gone — that late write is what used to
+      // revert a pin the rider had just corrected on the map.
+      selectGen.current++;
     };
   }, []);
 
@@ -500,8 +527,20 @@ function AddressSearchInputInner({
     icon?: string;
     distanceKm?: number | null;
     streetLike?: boolean;
+    needsResolution?: boolean;
   }) => {
     triggerSelection();
+
+    // A cross-street suggestion is a TEXT COMPLETION with no geometry. Feed it
+    // back into the search box: once the address reads "X e/ Y y Z" the
+    // full-address branch resolves it through find_intersection_point and the
+    // rider picks a row with real coordinates. Never commit these — their
+    // lat/lng are NaN by design.
+    if (item.needsResolution || !Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) {
+      handleTextChange(item.address);
+      return;
+    }
+
     trackEvent('address_searched', { query: query.trim() });
     setQuery('');
     setResults([]);
@@ -519,6 +558,10 @@ function AddressSearchInputInner({
     // saved/recent/prediction rows (streetLike undefined) skip: those coords
     // were searched by name or already ridden to.
     const confirmPin = !!item.streetLike;
+    // Generation guard for the background label upgrade below. Bumped on every
+    // selection and on unmount so a slow reverseGeocode (up to ~6 s, it races
+    // Overpass) can't land after the user already moved on.
+    const selectGen = ++selectGenRef.current;
     onSelect(initial, { latitude: item.latitude, longitude: item.longitude }, { confirmPin });
     // Background: enrich with Cuban cross-street format via reverseGeocode.
     // reverseGeocode already prepends the nearest POI when it finds one,
@@ -527,6 +570,11 @@ function AddressSearchInputInner({
     if (item.latitude && item.longitude) {
       reverseGeocode(item.latitude, item.longitude).then((enriched) => {
         if (!enriched || enriched === initial) return;
+        // 00544: this second onSelect carries NO meta, so it used to overwrite
+        // whatever the pin-confirmation screen had just written — reverting a
+        // pin the rider had corrected by hand back to the original search
+        // coordinates. Drop it if anything happened since.
+        if (selectGen !== selectGenRef.current) return;
         // If the original was a POI name (not a street) and the enriched
         // address doesn't already include it, keep prepending it so the
         // user-visible label always carries the POI name.
@@ -597,6 +645,9 @@ function AddressSearchInputInner({
         // also swaps in street_intersections coords). Named POIs keep
         // skipping: they're searched by name and pin reliably.
         streetLike: !r.displayName || r.displayName === r.address,
+        // Cross-street text completions carry no geometry — see
+        // handleSelectMerged, which completes the query instead of selecting.
+        needsResolution: r.needsResolution,
       }));
 
     const all = [...matchedPreds, ...matchedSvd, ...matchedRec, ...matchedApi];
