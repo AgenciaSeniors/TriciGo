@@ -650,6 +650,22 @@ export interface AddressSearchResult {
    * cached/manual entries — those paths skip the import.
    */
   _src?: SearchBoxResult;
+  /**
+   * 00544: the row is a CROSS-STREET NAME SUGGESTION, not a place. It has no
+   * geometry — `suggest_cross_streets` returns street names only — so
+   * `latitude`/`longitude` are NaN and must never be committed as a pickup or
+   * dropoff. Selecting such a row completes the text in the search box so the
+   * full-address branch can resolve it properly.
+   *
+   * Before this flag existed these rows were filled with the rider's own GPS
+   * position, or the hardcoded Havana centre (23.1136, -82.3666) when there
+   * was no fix. Nothing re-resolved them on select and the background reverse
+   * geocode then relabelled them with the address of that fake point, so a
+   * destination silently became "somewhere near where I'm standing". It
+   * reached production: rides 44149a25 (dropoff) and d137cf8b (pickup) sit
+   * exactly on the hardcoded centre.
+   */
+  needsResolution?: boolean;
 }
 
 /* ─── Nominatim throttle ─── */
@@ -1903,6 +1919,38 @@ const STREET_PREFIXES = /^(calle|avenida|ave?\.?|calzada|callejón|paseo|carrete
  * Returns true if the address looks like a generic street (safe to enrich with cross-streets).
  * Returns false for named POIs (hotels, airports, restaurants) to avoid losing the name.
  */
+/**
+ * Placeholder strings the UI shows while it has no real address yet. They are
+ * NOT addresses and must never be sent as a ride's pickup/dropoff.
+ *
+ * Verified in prod: "Detectando dirección..." was stored as pickup_address on
+ * real rides (b98666c6, 05ed38b0, 30fec440, 9d1cea91, 7e866819) — the driver
+ * got an offer whose origin literally read "Detectando dirección...".
+ *
+ * MIRROR of the SQL `_ride_address_is_placeholder()` (migration 00546), which
+ * is the server-side safety net for APKs already in the field. Keep the two
+ * lists in sync when adding a new fallback string.
+ */
+const PLACEHOLDER_ADDRESSES: ReadonlySet<string> = new Set([
+  // t('home.detecting_address') in es / en / pt
+  'Detectando dirección...',
+  'Detecting address...',
+  'Detectando endereço...',
+  'Ubicación seleccionada en el mapa',
+  'Origen',
+  'Destino',
+  'Mi ubicación',
+]);
+
+/** True when `address` is empty, a raw "lat, lng" pair, or a UI placeholder. */
+export function isPlaceholderAddress(address: string | null | undefined): boolean {
+  if (!address) return true;
+  const trimmed = address.trim();
+  if (trimmed === '') return true;
+  if (/^-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+$/.test(trimmed)) return true;
+  return PLACEHOLDER_ADDRESSES.has(trimmed);
+}
+
 export function isGenericStreetAddress(address: string): boolean {
   const trimmed = address.trim();
   if (STREET_PREFIXES.test(trimmed)) return true;
@@ -1913,14 +1961,29 @@ export function isGenericStreetAddress(address: string): boolean {
 
 /**
  * Fast enrichment: lookup cross-streets from Supabase (~5-10ms) and format as Cuban address.
- * Returns address string AND corrected coordinates (from intersection lookup).
- * Returns null if no cross-streets found (outside coverage, rural area, etc.).
+ * Returns ONLY a label. Returns null if no cross-streets found (outside coverage, rural, etc.).
  * Use this instead of full reverseGeocode() when you only need cross-street enrichment.
+ *
+ * DOES NOT MOVE THE PIN — and must never start to again. Until 00544 this
+ * function re-resolved the intersection through `find_intersection_point` and
+ * returned THOSE coordinates, which callers wrote back over the row the user
+ * was about to tap. That RPC searches a 5 km radius with fuzzy name matching
+ * and returns the MIDPOINT of the two nearest matching rows, so it can hand
+ * back a point that is on no street at all and belongs to streets nobody
+ * asked for. Measured against prod:
+ *
+ *   find_intersection_point('Calle 9','Calle 11', NULL, 23.1136,-82.3666, 5000)
+ *     → 23.1116341,-82.364713  "Calle Fomento y Calle Arango"
+ *
+ * Two completely different streets, returned with no error signal. Meanwhile
+ * the row being "corrected" came from `search_streets`, whose coordinates are
+ * already a REAL intersection of the matched street — strictly better than
+ * anything this lookup could produce. So: enrich the label, keep the point.
  */
 export async function enrichWithCrossStreets(
   lat: number,
   lng: number,
-): Promise<{ address: string; latitude: number; longitude: number } | null> {
+): Promise<{ address: string } | null> {
   const result = await lookupCrossStreetsSupabase(lat, lng);
   if (!result || result.crossStreets.length === 0) return null;
   const { mainStreet, crossStreets, municipality, province } = result;
@@ -1933,21 +1996,8 @@ export async function enrichWithCrossStreets(
   const parts = [streetPart];
   if (municipality) parts.push(municipality);
   if (province && province !== municipality) parts.push(province);
-  const address = parts.join(', ');
 
-  // Resolve exact intersection coordinates from Supabase (~5ms)
-  const intersection = await lookupIntersectionPoint(
-    mainStreet,
-    crossStreets[0] ?? '',
-    crossStreets[1],
-    { latitude: lat, longitude: lng },
-  ).catch(() => null);
-
-  return {
-    address,
-    latitude: intersection?.latitude ?? lat,
-    longitude: intersection?.longitude ?? lng,
-  };
+  return { address: parts.join(', ') };
 }
 
 /**

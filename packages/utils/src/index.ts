@@ -151,4 +151,4 @@ export { CUBAN_CITY_PACKS } from './mapboxOffline';
 export type { SearchBoxResult, TricigoCategory } from './geo';
 export type { CubanParsed } from './geo';
 export { jitterLocation } from './geo';
-export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, searchStreetsSupabase, computeSpecificity, tricigoCategoryEmoji, mapExternalCategoryToTricigo, enrichWithCrossStreets, isGenericStreetAddress, lookupIntersectionPoint, parseCubanAddress, suggestCrossStreetsSupabase } from './geo';
+export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, searchStreetsSupabase, computeSpecificity, tricigoCategoryEmoji, mapExternalCategoryToTricigo, enrichWithCrossStreets, isGenericStreetAddress, isPlaceholderAddress, lookupIntersectionPoint, parseCubanAddress, suggestCrossStreetsSupabase } from './geo';

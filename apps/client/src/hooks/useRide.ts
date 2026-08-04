@@ -5,7 +5,7 @@ import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rideService, deliveryService, walletService, corporateService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance } from '@tricigo/utils';
+import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance, isPlaceholderAddress, reverseGeocode } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { useAuthStore } from '@/stores/auth.store';
@@ -734,16 +734,42 @@ export function useRideActions() {
       // trip would otherwise be created as cargo. Mirrors apps/web book/page.tsx.
       const isDelivery = d.serviceType === 'mensajeria';
 
+      // 00544/00546: never ship a UI placeholder as the ride's address. The
+      // home screen writes "Detectando dirección..." into the draft while the
+      // reverse geocode runs, and a rider who taps request inside that ~1-3 s
+      // window used to send it verbatim — drivers received offers whose origin
+      // read "Detectando dirección...". Try once more here, then fall back to
+      // raw coordinates, which the server-side backstop (00539/00546) resolves
+      // with a wider radius than the client can.
+      const resolveAddress = async (
+        label: string,
+        point: { latitude: number; longitude: number },
+      ): Promise<string> => {
+        if (!isPlaceholderAddress(label)) return label;
+        try {
+          const fresh = await Promise.race([
+            reverseGeocode(point.latitude, point.longitude),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+          ]);
+          if (fresh && !isPlaceholderAddress(fresh)) return fresh;
+        } catch { /* fall through to coordinates */ }
+        return `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
+      };
+      const [pickupAddressFinal, dropoffAddressFinal] = await Promise.all([
+        resolveAddress(d.pickup.address, d.pickup.location),
+        resolveAddress(d.dropoff.address, d.dropoff.location),
+      ]);
+
       const ride = await rideService.createRide({
         service_type: effectiveServiceType,
         ride_mode: isDelivery ? 'cargo' : 'passenger',
         payment_method: d.paymentMethod,
         pickup_latitude: d.pickup.location.latitude,
         pickup_longitude: d.pickup.location.longitude,
-        pickup_address: d.pickup.address,
+        pickup_address: pickupAddressFinal,
         dropoff_latitude: d.dropoff.location.latitude,
         dropoff_longitude: d.dropoff.location.longitude,
-        dropoff_address: d.dropoff.address,
+        dropoff_address: dropoffAddressFinal,
         estimated_fare_cup: selectedFare?.estimated_fare_cup,
         estimated_distance_m: selectedFare?.estimated_distance_m,
         estimated_duration_s: selectedFare?.estimated_duration_s,
