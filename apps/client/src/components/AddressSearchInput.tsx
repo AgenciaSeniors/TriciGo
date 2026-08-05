@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -302,8 +302,23 @@ function AddressSearchInputInner({
         // in-bucket tie-break: a far-province Google hit can no longer sit
         // above a nearby street, while named places keep their edge among
         // equally-close results (the airport-bug guard lives in the score).
-        const dedupedPois = dedupeSearchResults(unifiedResults, poiResults);
-        const primary = [...unifiedResults, ...dedupedPois];
+        //
+        // Coordinate authority is split by row TYPE. dedupeSearchResults keeps
+        // whichever list is `primary`, so seniority == coordinate authority:
+        //  - VENUES: Google stays senior over cuba_pois (airport bug, PR F).
+        //  - STREETS: the local street_intersections row is senior over a
+        //    Google street row. Measured over 40 common Havana street names:
+        //    Google returns the WRONG street for 19 ("Calle 23"→"Calle 230"
+        //    13 km away) and mis-pins most of the rest, while the local row
+        //    is a real surveyed corner. A Google street row that duplicates a
+        //    local street is dropped; unique ones (streets we don't have)
+        //    still surface.
+        const googleVenues = unifiedResults.filter((r) => !isProviderStreetResult(r));
+        const googleStreets = unifiedResults.filter(isProviderStreetResult);
+        const dedupedPois = dedupeSearchResults(googleVenues, poiResults);
+        const primaryVenues = [...googleVenues, ...dedupedPois];
+        const dedupedGoogleStreets = dedupeSearchResults(streetResults, googleStreets);
+        const primary = [...primaryVenues, ...dedupedGoogleStreets];
         const dedupedStreets = dedupeSearchResults(primary, streetResults);
         const ranked = rankSearchResults([...primary, ...dedupedStreets], text, userLocation, frequentZonesRef.current);
 
@@ -614,16 +629,22 @@ function AddressSearchInputInner({
   const mergedResults: MergedResult[] = (() => {
     if (!hasActiveQuery) return [];
 
+    // historyMatchesQuery, not fuzzyMatch: these rows sort ABOVE every search
+    // result and then the list gets cut short, so a loose match here evicts
+    // the row the rider is looking for. fuzzyMatch's fast path is
+    // `address.includes(query)` over the FULL address, and nearly every Cuban
+    // address contains "Calle" — measured, "cal" matched 4 of 5 realistic
+    // recents and took 4 of the 5 visible slots.
     const matchedPreds = predictions
-      .filter((p) => fuzzyMatch(queryLower, p.address))
+      .filter((p) => historyMatchesQuery(queryLower, p.address))
       .map((p) => ({ address: p.address, latitude: p.latitude, longitude: p.longitude, priority: 1, source: 'prediction', icon: 'navigate-outline' as const }));
 
     const matchedSvd = savedLocations
-      .filter((s) => fuzzyMatch(queryLower, s.address) || fuzzyMatch(queryLower, s.label))
+      .filter((s) => historyMatchesQuery(queryLower, s.address) || historyMatchesQuery(queryLower, s.label))
       .map((s) => ({ address: s.address, latitude: s.latitude, longitude: s.longitude, priority: 2, source: 'saved', icon: 'star' as const }));
 
     const matchedRec = recentAddresses
-      .filter((r) => fuzzyMatch(queryLower, r.address))
+      .filter((r) => historyMatchesQuery(queryLower, r.address))
       .map((r) => ({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 3, source: 'recent', icon: 'time-outline' as const }));
 
     const matchedApi = results
@@ -666,7 +687,16 @@ function AddressSearchInputInner({
           { latitude: d.latitude, longitude: d.longitude },
           { latitude: item.latitude, longitude: item.longitude },
         );
-        return dist < 100;
+        if (dist >= 100) return false;
+        // Same sanity gate dedupeSearchResults applies before collapsing on
+        // coordinates alone. Without it, two genuinely different places on the
+        // same block (a hotel and a restaurant 50 m apart) merged into one and
+        // whichever came first in `all` won — so a recent silently swallowed a
+        // co-located search result.
+        // History rows carry no displayName; only search results do.
+        const labelOf = (x: typeof item): string =>
+          ('displayName' in x && x.displayName ? x.displayName : x.address) || '';
+        return tokenOverlapRatio(labelOf(d), labelOf(item)) >= 0.3;
       });
       if (!isDup) deduped.push(item);
     }
@@ -686,10 +716,24 @@ function AddressSearchInputInner({
     // cap of 5 — those are exploratory and a long list is overwhelming.
     const queryWordCount = queryLower.split(/\s+/).filter(w => w.length > 0).length;
     const hasApiOrPoi = deduped.some((d) => d.source === 'api' || d.source === 'poi');
-    const cap = (queryWordCount >= 3 && hasApiOrPoi) ? 8 : 5;
+    const cap = (queryWordCount >= 3 && hasApiOrPoi) ? 8 : 6;
+
+    // Slot budget. The cap-8-for-3-words rule above only widened the list; it
+    // left the underlying problem, which is that priorities 1-3 are sorted
+    // above priority 4 unconditionally and can therefore consume the whole
+    // slice. Cap the history tiers at 2 whenever there are search results, so
+    // at least 4 slots always belong to what the rider is actually typing.
+    // With an empty search (or an empty query, handled above) history keeps
+    // the full list — that is its real use case.
+    const HISTORY_SLOTS = 2;
+    const historyRows = deduped.filter((d) => d.priority < 4);
+    const searchRows = deduped.filter((d) => d.priority === 4);
+    const visible = searchRows.length > 0
+      ? [...historyRows.slice(0, HISTORY_SLOTS), ...searchRows]
+      : historyRows;
 
     // Add distance from user
-    return deduped.slice(0, cap).map((item) => ({
+    return visible.slice(0, cap).map((item) => ({
       ...item,
       distanceKm: userLocation
         ? haversineDistance(userLocation, { latitude: item.latitude, longitude: item.longitude }) / 1000

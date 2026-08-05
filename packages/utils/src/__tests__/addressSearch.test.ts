@@ -8,6 +8,8 @@ import {
   searchResultCap,
   searchResultEmoji,
   shouldEnrichResult,
+  historyMatchesQuery,
+  isProviderStreetResult,
   type ScorableResult,
 } from '../addressSearch';
 
@@ -218,5 +220,130 @@ describe('shouldEnrichResult', () => {
 
   it('does not enrich a bare POI name that has no street prefix', () => {
     expect(shouldEnrichResult({ displayName: 'Capitolio', address: 'Capitolio Nacional' })).toBe(false);
+  });
+});
+
+describe('historyMatchesQuery', () => {
+  // Realistic recents for a Havana rider. Almost every Cuban address
+  // contains "Calle", which is exactly what made the old plain
+  // fuzzyMatch(query, fullAddress) flood the list.
+  const RECENTS = [
+    'Calle 23 e/ L y M, Plaza de la Revolución, La Habana',
+    'Avenida de los Presidentes e/ 25 y 27, Plaza de la Revolución',
+    'Calzada de Infanta e/ Neptuno y San Miguel, Centro Habana',
+    'Calle 10 e/ 3ra y 5ta, Playa, La Habana',
+    'Hotel Nacional de Cuba, Calle O e/ 21 y 23, Vedado',
+  ];
+
+  it('does not let a generic address word match an address that merely contains it', () => {
+    // The old plain fuzzyMatch(query, fullAddress) matched 4 of these 5 on
+    // "cal" — including "Hotel Nacional de Cuba, Calle O …", which contains
+    // "Calle" halfway through. A generic word now only reaches addresses that
+    // literally BEGIN with what was typed, so that one drops out.
+    expect(historyMatchesQuery('cal', 'Hotel Nacional de Cuba, Calle O e/ 21 y 23, Vedado')).toBe(false);
+    expect(historyMatchesQuery('calle', 'Hotel Nacional de Cuba, Calle O e/ 21 y 23, Vedado')).toBe(false);
+    // And it never reaches an address with no "cal" at the front at all.
+    expect(historyMatchesQuery('cal', RECENTS[1]!)).toBe(false);
+
+    // Net effect on the realistic set: fewer rows compete for the slots.
+    expect(RECENTS.filter((r) => historyMatchesQuery('cal', r)).length).toBeLessThan(4);
+  });
+
+  it('still matches when the query carries something distinctive', () => {
+    expect(historyMatchesQuery('calle 23', RECENTS[0]!)).toBe(true);
+    expect(historyMatchesQuery('23', RECENTS[0]!)).toBe(true);
+    expect(historyMatchesQuery('presidentes', RECENTS[1]!)).toBe(true);
+    expect(historyMatchesQuery('infanta', RECENTS[2]!)).toBe(true);
+    expect(historyMatchesQuery('nacional', RECENTS[4]!)).toBe(true);
+  });
+
+  it('matches a generic-only query when the address literally starts with it', () => {
+    // "calle 10" is generic+distinctive, but a bare "calzada" should still
+    // reach an address that begins with it rather than one that merely
+    // mentions it further along.
+    expect(historyMatchesQuery('calzada', 'Calzada de Infanta e/ Neptuno')).toBe(true);
+    expect(historyMatchesQuery('calzada', 'Calle 5 e/ Calzada y A, Vedado')).toBe(false);
+  });
+
+  it('tolerates missing accents and typos on the distinctive part', () => {
+    expect(historyMatchesQuery('revolucion', RECENTS[0]!)).toBe(true);
+    expect(historyMatchesQuery('presidenes', RECENTS[1]!)).toBe(true);
+  });
+
+  it('ignores empty and whitespace queries', () => {
+    expect(historyMatchesQuery('', RECENTS[0]!)).toBe(false);
+    expect(historyMatchesQuery('   ', RECENTS[0]!)).toBe(false);
+  });
+});
+
+describe('slot budget for the mobile dropdown', () => {
+  // Mirrors the merge in AddressSearchInput.mergedResults: history tiers
+  // (priority 1-3) are capped so search results (priority 4) always keep at
+  // least 4 of the visible slots. Kept here because the rule is what the
+  // measurement was about, and the component itself is not unit-testable.
+  const HISTORY_SLOTS = 2;
+  function applyBudget<T extends { priority: number }>(deduped: T[], cap: number): T[] {
+    const history = deduped.filter((d) => d.priority < 4);
+    const search = deduped.filter((d) => d.priority === 4);
+    const visible = search.length > 0 ? [...history.slice(0, HISTORY_SLOTS), ...search] : history;
+    return visible.slice(0, cap);
+  }
+
+  it('leaves at least 4 slots for search results when history floods', () => {
+    const deduped = [
+      ...Array.from({ length: 5 }, (_, i) => ({ priority: 3, id: `recent${i}` })),
+      ...Array.from({ length: 6 }, (_, i) => ({ priority: 4, id: `search${i}` })),
+    ];
+    const visible = applyBudget(deduped, 6);
+    expect(visible.filter((v) => v.priority === 4).length).toBeGreaterThanOrEqual(4);
+    expect(visible.filter((v) => v.priority < 4).length).toBe(HISTORY_SLOTS);
+  });
+
+  it('keeps history first so a frequent destination stays reachable', () => {
+    const deduped = [
+      { priority: 1, id: 'pred' },
+      { priority: 3, id: 'recent' },
+      { priority: 4, id: 'search' },
+    ];
+    expect(applyBudget(deduped, 6).map((v) => v.id)).toEqual(['pred', 'recent', 'search']);
+  });
+
+  it('shows the full history when there are no search results', () => {
+    const deduped = Array.from({ length: 5 }, (_, i) => ({ priority: 3, id: `recent${i}` }));
+    expect(applyBudget(deduped, 6)).toHaveLength(5);
+  });
+});
+
+describe('isProviderStreetResult', () => {
+  // Measured against prod (40 common Havana street names through the Google
+  // EF): Google returns the WRONG street for 19/40 — "Calle 23" → "Calle 230"
+  // 13 km away, "Calle G" → "Calle Gertrudis", "Calle 1" → "Calle 100" — and
+  // mis-pins most of the rest. The local street DB row is a real surveyed
+  // corner, so for STREET rows the local coordinate must win the dedupe.
+  it('flags external street/geocode rows', () => {
+    expect(isProviderStreetResult({ source: 'google', matchedCategory: 'route' })).toBe(true);
+    expect(isProviderStreetResult({ source: 'google', matchedCategory: 'geocode' })).toBe(true);
+    expect(isProviderStreetResult({ source: 'mapbox', matchedCategory: 'street_address' })).toBe(true);
+  });
+
+  it('flags an external row with no distinct name (address-only result)', () => {
+    expect(isProviderStreetResult({ source: 'google', place_name: '', address: 'Padre Varela, La Habana' })).toBe(true);
+    expect(isProviderStreetResult({ source: 'google', place_name: 'Neptuno', address: 'Neptuno' })).toBe(true);
+  });
+
+  it('does NOT flag external venues — Google stays authoritative for POIs', () => {
+    expect(isProviderStreetResult({
+      source: 'google', matchedCategory: 'establishment',
+      place_name: 'Hotel Nacional de Cuba', address: 'Calle O, La Habana',
+    })).toBe(false);
+    expect(isProviderStreetResult({
+      source: 'google', matchedCategory: 'bed_and_breakfast',
+      place_name: 'B&B San Lazaro', address: '556 San Lazaro',
+    })).toBe(false);
+  });
+
+  it('never flags local rows regardless of shape', () => {
+    expect(isProviderStreetResult({ source: 'supabase', matchedCategory: 'route' })).toBe(false);
+    expect(isProviderStreetResult({ source: 'supabase', place_name: '', address: 'Belascoaín' })).toBe(false);
   });
 });

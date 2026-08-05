@@ -3511,7 +3511,15 @@ function normalizeForDedup(s: string | null | undefined): string[] {
     .filter((t) => t.length > 1);
 }
 
-function tokenOverlapRatio(a: string, b: string): number {
+/**
+ * Fraction of distinct word tokens shared by two labels, accent- and
+ * punctuation-insensitive. Exported because the mobile dropdown runs a SECOND
+ * coordinate dedupe of its own (over search results merged with saved/recent/
+ * predicted rows) and needs the same "are these actually the same place?"
+ * sanity gate that `dedupeSearchResults` applies below — without it, two
+ * genuinely different places on the same block collapse into one.
+ */
+export function tokenOverlapRatio(a: string, b: string): number {
   const ta = new Set(normalizeForDedup(a));
   const tb = new Set(normalizeForDedup(b));
   if (ta.size === 0 || tb.size === 0) return 0;
