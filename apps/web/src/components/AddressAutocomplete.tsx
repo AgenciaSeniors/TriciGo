@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, newSessionToken, searchPoisSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, searchResultEmoji, rankSearchResults, searchResultCap, SEARCH_DEBOUNCE_MS } from '@tricigo/utils';
+import { haversineDistance, lookupIntersectionPoint, searchAddressSearchBox, searchAddressUnified, newSessionToken, searchPoisSupabase, searchStreetsSupabase, computeSpecificity, stripAccents, fuzzyMatch, isGenericStreetAddress, parseCubanAddress, suggestCrossStreetsSupabase, importPoiFromSearch, searchResultEmoji, rankSearchResults, searchResultCap, SEARCH_DEBOUNCE_MS, isProviderStreetResult, filterProviderStreetsByLocalAnchor } from '@tricigo/utils';
 import type { SearchBoxResult, CubanParsed } from '@tricigo/utils';
 import { getSupabaseClient } from '@tricigo/api';
 
@@ -329,9 +329,13 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
         q = cubanParsed.main;
       }
 
-      // ─── PATH 3: NORMAL SEARCH — Search Box + Supabase + Nominatim in parallel ───
-      // All 3 sources in parallel (Supabase replaces Overpass — instant, any query)
-      const [searchBoxSettled, supabaseSettled, nominatimSettled] = await Promise.allSettled([
+      // ─── PATH 3: NORMAL SEARCH — Search Box + Supabase POIs + Supabase streets + Nominatim in parallel ───
+      // 4 sources in parallel. searchStreetsSupabase is the local street corner
+      // DB (search_streets RPC) — same authoritative source the mobile client
+      // uses. Without it, when Google mis-shoots a Cuban street ("Calle 23" →
+      // "Calle 230" 13 km away in Nuevo Vedado) we had no local anchor to fall
+      // back on and the wrong pin won the ranking on `specificity`.
+      const [searchBoxSettled, poisSettled, streetsSettled, nominatimSettled] = await Promise.allSettled([
         fetchSearchBox(q, controller.signal),
         searchPoisSupabase(q, proximity ?? null, 10, controller.signal).then(items =>
           items.map(r => ({
@@ -345,19 +349,46 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             specificity: r.specificity,
           }))
         ),
+        searchStreetsSupabase(q, proximity ?? null, 8).then(items =>
+          items.map(r => ({
+            address: r.address,
+            latitude: r.latitude,
+            longitude: r.longitude,
+            place_name: r.place_name || r.address,
+            category: r.category,
+            tricigoCategory: r.tricigoCategory ?? null,
+            source: 'supabase' as const,
+            specificity: r.specificity,
+          }))
+        ),
         searchNominatimEnhanced(q, proximity, controller.signal),
       ]);
       if (searchIdRef.current !== thisSearchId) return;
 
       const searchBoxItems = searchBoxSettled.status === 'fulfilled' ? searchBoxSettled.value : [];
-      const supabaseItems = supabaseSettled.status === 'fulfilled' ? supabaseSettled.value : [];
+      const poiItems       = poisSettled.status === 'fulfilled' ? poisSettled.value : [];
+      const streetItems    = streetsSettled.status === 'fulfilled' ? streetsSettled.value : [];
       const nominatimItems = nominatimSettled.status === 'fulfilled' ? nominatimSettled.value : [];
+
+      // When the local street DB found the query, drop provider (Google/
+      // Mapbox) street-shaped rows that land far from it — the dedupe below
+      // misses Google's exact miss ("Calle 23" → "Calle 230", token overlap
+      // 0.5) so the wrong coordinate slipped through and could win on
+      // `specificity`. See filterProviderStreetsByLocalAnchor for the numbers.
+      const localStreetAnchor = streetItems[0]
+        ? { latitude: streetItems[0].latitude, longitude: streetItems[0].longitude }
+        : null;
+      const searchBoxVenues  = searchBoxItems.filter((r) => !isProviderStreetResult(r));
+      const searchBoxStreets = searchBoxItems.filter(isProviderStreetResult);
+      const trustedSearchBoxStreets = filterProviderStreetsByLocalAnchor(searchBoxStreets, localStreetAnchor);
 
       // ─── SMART DEDUPLICATION ───
       // Combine all results, then deduplicate by name similarity + proximity
       const allItems: AddressResult[] = [
-        ...searchBoxItems.map(r => ({ ...r, source: 'searchbox' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
-        ...supabaseItems.map(r => ({ ...r, source: 'supabase' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
+        ...searchBoxVenues.map(r => ({ ...r, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
+        ...trustedSearchBoxStreets.map(r => ({ ...r, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
+        ...poiItems.map(r => ({ ...r, source: 'supabase' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
+        ...streetItems.map(r => ({ ...r, source: 'supabase' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
         ...nominatimItems.map(r => ({ ...r, source: 'nominatim' as const, specificity: r.specificity ?? computeSpecificity(r.place_name) })),
       ];
 
