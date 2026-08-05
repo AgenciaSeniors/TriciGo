@@ -96,6 +96,16 @@
 --     function carries this from the search_path hardening work and
 --     CREATE OR REPLACE would otherwise drop it.
 --
+-- RUN "VACUUM (ANALYZE) public.street_intersections;" AFTER THIS MIGRATION.
+--   It cannot go inside the migration (VACUUM cannot run in a transaction) but
+--   it matters a lot: a freshly built index has no visibility-map coverage, so
+--   the phase-2 "index-only" scan still fetches from the heap. Measured on the
+--   2-character worst case 'ca' (4,419 candidate names):
+--     before VACUUM  1,922 ms   (7,931 Heap Fetches)
+--     after  VACUUM    309 ms
+--   Typical queries were 137-280 ms either way; the vacuum is what keeps the
+--   short-prefix case interactive.
+--
 -- NOT CONCURRENTLY: the Supabase CLI runs each migration in a transaction and
 --   CREATE INDEX CONCURRENTLY cannot run inside one. The covering index takes
 --   a ShareLock on street_intersections: reads and this RPC keep working,
@@ -191,9 +201,14 @@ CREATE TRIGGER trg_street_search_names_ins
   FOR EACH STATEMENT
   EXECUTE FUNCTION public._street_search_names_sync();
 
+-- Plain AFTER UPDATE, NOT "AFTER UPDATE OF main_street": Postgres rejects a
+-- column list together with a transition table ("transition tables cannot be
+-- specified for triggers with column lists", 0A000). Firing on every update is
+-- cheap anyway — the sync INSERT is ON CONFLICT DO NOTHING, and the only writer
+-- to this table is the offline scripts/populate-cross-streets.mjs.
 DROP TRIGGER IF EXISTS trg_street_search_names_upd ON public.street_intersections;
 CREATE TRIGGER trg_street_search_names_upd
-  AFTER UPDATE OF main_street ON public.street_intersections
+  AFTER UPDATE ON public.street_intersections
   REFERENCING NEW TABLE AS new_rows
   FOR EACH STATEMENT
   EXECUTE FUNCTION public._street_search_names_sync();
