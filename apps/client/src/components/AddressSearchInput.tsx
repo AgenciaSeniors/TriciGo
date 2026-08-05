@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -327,7 +327,17 @@ function AddressSearchInputInner({
         const googleStreets = unifiedResults.filter(isProviderStreetResult);
         const dedupedPois = dedupeSearchResults(googleVenues, poiResults);
         const primaryVenues = [...googleVenues, ...dedupedPois];
-        const dedupedGoogleStreets = dedupeSearchResults(streetResults, googleStreets);
+        // When the local street DB found the query, Google "street" rows that
+        // land far from it are dropped BEFORE dedupe. The name-overlap gate of
+        // dedupeSearchResults (>=0.7) misses Google's exact miss ("Calle 23"
+        // -> "Calle 230", overlap 0.5) so the wrong coordinate slipped through
+        // and could win on `specificity`. Measured against 58 cached Cuban
+        // street queries: Google was worse by >2 km in 30 of them, local in 4.
+        const localStreetAnchor = streetResults[0]
+          ? { latitude: streetResults[0].latitude, longitude: streetResults[0].longitude }
+          : null;
+        const trustedGoogleStreets = filterProviderStreetsByLocalAnchor(googleStreets, localStreetAnchor);
+        const dedupedGoogleStreets = dedupeSearchResults(streetResults, trustedGoogleStreets);
         const primary = [...primaryVenues, ...dedupedGoogleStreets];
         const dedupedStreets = dedupeSearchResults(primary, streetResults);
         const ranked = rankSearchResults([...primary, ...dedupedStreets], text, userLocation, frequentZonesRef.current);

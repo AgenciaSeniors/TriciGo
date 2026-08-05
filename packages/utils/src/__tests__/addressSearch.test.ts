@@ -10,6 +10,8 @@ import {
   shouldEnrichResult,
   historyMatchesQuery,
   isProviderStreetResult,
+  filterProviderStreetsByLocalAnchor,
+  LOCAL_STREET_TRUST_RADIUS_M,
   type ScorableResult,
 } from '../addressSearch';
 
@@ -345,5 +347,43 @@ describe('isProviderStreetResult', () => {
   it('never flags local rows regardless of shape', () => {
     expect(isProviderStreetResult({ source: 'supabase', matchedCategory: 'route' })).toBe(false);
     expect(isProviderStreetResult({ source: 'supabase', place_name: '', address: 'Belascoaín' })).toBe(false);
+  });
+});
+
+describe('filterProviderStreetsByLocalAnchor', () => {
+  // Real coordinates from the prod cache measurement:
+  //   Calle 23  (local, Vedado):    23.1370, -82.3830
+  //   Calle 230 (Google, Nuevo Vedado, its "answer" for "Calle 23"): 23.0902, -82.4852
+  //   ~13 km apart.
+  const localCalle23 = { latitude: 23.1370, longitude: -82.3830 };
+  const googleCalle230 = { latitude: 23.0902, longitude: -82.4852 };
+  // A Google row that agrees with the local anchor (~250 m).
+  const googleAgrees = { latitude: 23.1387, longitude: -82.3812 };
+
+  it('drops external street rows that land far from the local anchor', () => {
+    const kept = filterProviderStreetsByLocalAnchor([googleCalle230], localCalle23);
+    expect(kept).toHaveLength(0);
+  });
+
+  it('keeps external street rows that agree with the local anchor', () => {
+    const kept = filterProviderStreetsByLocalAnchor([googleAgrees], localCalle23);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toBe(googleAgrees);
+  });
+
+  it('passes everything through when the local RPC returned nothing', () => {
+    // A brand-new street the local street DB does not know: Google is the
+    // only signal available, must not be suppressed.
+    const kept = filterProviderStreetsByLocalAnchor([googleCalle230, googleAgrees], null);
+    expect(kept).toEqual([googleCalle230, googleAgrees]);
+  });
+
+  it('empty input returns empty', () => {
+    expect(filterProviderStreetsByLocalAnchor([], localCalle23)).toEqual([]);
+  });
+
+  it('the trust radius is 3 km', () => {
+    // Documents the constant so a future edit is a deliberate choice.
+    expect(LOCAL_STREET_TRUST_RADIUS_M).toBe(3000);
   });
 });

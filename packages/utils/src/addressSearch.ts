@@ -154,6 +154,53 @@ export function isProviderStreetResult(r: {
 }
 
 /**
+ * Radius within which a Google "street" result is considered to be describing
+ * the same street the local RPC already answered. Beyond this the Google row
+ * is dropped rather than left to compete for the top slot. See
+ * `filterProviderStreetsByLocalAnchor` below.
+ */
+export const LOCAL_STREET_TRUST_RADIUS_M = 3000;
+
+/**
+ * Drop external street-shaped results whose coordinate lies far from what the
+ * local street DB found. The dedupe by name-overlap (`dedupeSearchResults`)
+ * misses the specific mis-shoot Google makes on Cuban streets — it fires the
+ * wrong street with a similar-but-not-identical name ("Calle 23" -> "Calle
+ * 230", "Calle L" -> "Calle Lindero", "Calle 1" -> "Calle 100"), so token
+ * overlap of 0.5 slips under the 0.7 dedupe gate and the far coordinate
+ * survives to compete for the top slot on `specificity`.
+ *
+ * Measured against prod cache — 58 real Cuban street queries from a Vedado
+ * rider:
+ *   - Google's 1st result inside 3 km:      11/58 (19%)
+ *   - Local RPC's 1st result inside 3 km:   30/58 (52%)
+ *   - Google beyond 20 km:                  22/58 (38%)
+ *   - Local beyond 20 km:                   10/58 (17%)
+ *   - Google worse by >2 km:                30 cases
+ *   - Local  worse by >2 km:                 4 cases
+ *   - Median distance:                Google 7.0 km, Local 2.9 km
+ *
+ * If the local RPC returned nothing (a genuinely new/unmapped street) the
+ * Google row passes through unchanged — it is then the only signal available.
+ */
+export function filterProviderStreetsByLocalAnchor<T extends {
+  latitude: number;
+  longitude: number;
+}>(
+  providerStreets: ReadonlyArray<T>,
+  localAnchor: { latitude: number; longitude: number } | null,
+): T[] {
+  if (!localAnchor || providerStreets.length === 0) return [...providerStreets];
+  return providerStreets.filter((r) => {
+    const d = haversineDistance(
+      { latitude: r.latitude, longitude: r.longitude },
+      localAnchor,
+    );
+    return d <= LOCAL_STREET_TRUST_RADIUS_M;
+  });
+}
+
+/**
  * Present a Cuban street label "alias first, official in parens".
  * Mirrors the backend `_street_full_display` helper so any raw
  * "Official (Alias)" string that leaks through to the client gets the
