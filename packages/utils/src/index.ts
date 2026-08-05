@@ -87,6 +87,8 @@ export {
   shouldEnrichResult,
   historyMatchesQuery,
   isProviderStreetResult,
+  filterProviderStreetsByLocalAnchor,
+  LOCAL_STREET_TRUST_RADIUS_M,
 } from './addressSearch';
 export type { ScorableResult } from './addressSearch';
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';
