@@ -18,15 +18,33 @@ export interface RecentAddress {
   timestamp: number;
 }
 
+/** A row is usable only if its coordinate is real: not null, not NaN, not ±Infinity. */
+function hasFiniteCoords(r: unknown): r is RecentAddress {
+  return (
+    typeof r === 'object' && r !== null &&
+    Number.isFinite((r as RecentAddress).latitude) &&
+    Number.isFinite((r as RecentAddress).longitude)
+  );
+}
+
 /**
- * Get all recent addresses (most-recent first).
+ * Get all recent addresses (most-recent first). Rows with non-finite
+ * coordinates (NaN / null / Infinity) are silently dropped — a bad row would
+ * either crash the map on render or freeze it at (0, 0). This also self-heals
+ * storage: the sanitised list is written back so the bad row does not persist.
  */
 async function getAll(): Promise<RecentAddress[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const clean = parsed.filter(hasFiniteCoords);
+    if (clean.length !== parsed.length) {
+      // Self-heal: rewrite storage without the poisoned rows.
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(clean)).catch(() => {});
+    }
+    return clean;
   } catch {
     return [];
   }
@@ -44,6 +62,15 @@ async function add(
   latitude: number,
   longitude: number,
 ): Promise<RecentAddress[]> {
+  // Reject non-finite coordinates at the door. Cross-street SUGGESTIONS carry
+  // { latitude: NaN, longitude: NaN, needsResolution: true } on purpose (see
+  // AddressSearchInput), and if one of those slipped into a callsite it would
+  // poison the recents list forever — haversineDistance(_, NaN) = NaN, and
+  // `NaN > 50` is false, so the dedupe would never remove it.
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return getAll();
+  }
+
   const current = await getAll();
 
   // Remove any existing entry within DEDUP_THRESHOLD_M
