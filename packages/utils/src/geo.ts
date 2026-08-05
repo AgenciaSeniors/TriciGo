@@ -3893,7 +3893,11 @@ export async function searchStreetsSupabase(
         process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
         process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY
       )) || '';
-    if (!supabaseUrl || !supabaseKey || query.length < 2) return [];
+    // One character is a legitimate Cuban street query: the single-letter and
+    // single-digit grids of Vedado, Miramar and dozens of repartos are 11% of
+    // every intersection in the country. search_streets (00553) answers those
+    // with exact matching only, so it stays cheap and precise.
+    if (!supabaseUrl || !supabaseKey || query.trim().length < 1) return [];
 
     // Bug 1a: never default to Havana center — a null proximity stays null so
     // the RPC ranks nationally instead of sending an out-of-province rider to
