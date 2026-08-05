@@ -121,6 +121,38 @@ export function shouldEnrichResult(r: { displayName?: string | null; address: st
   return isGenericStreetAddress(r.address);
 }
 
+/** Google Places result types that describe a street/address rather than a venue. */
+const PROVIDER_STREET_CATEGORIES: ReadonlySet<string> = new Set([
+  'route', 'geocode', 'street_address', 'intersection',
+]);
+
+/**
+ * Whether an external (Google/Mapbox) search result is a STREET rather than a
+ * named venue.
+ *
+ * Why it matters: the mobile dropdown dedupes local `street_intersections`
+ * rows AGAINST external rows, so when the two collide the external coordinate
+ * used to survive. Measured against prod with 40 common Havana street names
+ * through the Google EF: Google returns the WRONG street for 19 of 40 —
+ * "Calle 23" → "Calle 230" 13 km away, "Calle G" → "Calle Gertrudis",
+ * "Calle 1" → "Calle 100" — and lands the same-named street >300 m off for
+ * most of the rest. A local street row is a real surveyed corner, so for
+ * street-shaped rows the LOCAL coordinate must win; for named venues Google
+ * stays authoritative (the airport-bug ordering, PR F 2026-05-25).
+ */
+export function isProviderStreetResult(r: {
+  source?: SearchBoxResult['source'] | string;
+  matchedCategory?: string | null;
+  place_name?: string;
+  address?: string;
+}): boolean {
+  const external = r.source === 'google' || r.source === 'searchbox' || r.source === 'mapbox';
+  if (!external) return false;
+  if (r.matchedCategory && PROVIDER_STREET_CATEGORIES.has(r.matchedCategory)) return true;
+  // Address-only rows (no venue name of their own) are street-shaped too.
+  return !r.place_name || r.place_name === r.address;
+}
+
 /**
  * Present a Cuban street label "alias first, official in parens".
  * Mirrors the backend `_street_full_display` helper so any raw

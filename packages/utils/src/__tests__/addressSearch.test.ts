@@ -9,6 +9,7 @@ import {
   searchResultEmoji,
   shouldEnrichResult,
   historyMatchesQuery,
+  isProviderStreetResult,
   type ScorableResult,
 } from '../addressSearch';
 
@@ -310,5 +311,39 @@ describe('slot budget for the mobile dropdown', () => {
   it('shows the full history when there are no search results', () => {
     const deduped = Array.from({ length: 5 }, (_, i) => ({ priority: 3, id: `recent${i}` }));
     expect(applyBudget(deduped, 6)).toHaveLength(5);
+  });
+});
+
+describe('isProviderStreetResult', () => {
+  // Measured against prod (40 common Havana street names through the Google
+  // EF): Google returns the WRONG street for 19/40 — "Calle 23" → "Calle 230"
+  // 13 km away, "Calle G" → "Calle Gertrudis", "Calle 1" → "Calle 100" — and
+  // mis-pins most of the rest. The local street DB row is a real surveyed
+  // corner, so for STREET rows the local coordinate must win the dedupe.
+  it('flags external street/geocode rows', () => {
+    expect(isProviderStreetResult({ source: 'google', matchedCategory: 'route' })).toBe(true);
+    expect(isProviderStreetResult({ source: 'google', matchedCategory: 'geocode' })).toBe(true);
+    expect(isProviderStreetResult({ source: 'mapbox', matchedCategory: 'street_address' })).toBe(true);
+  });
+
+  it('flags an external row with no distinct name (address-only result)', () => {
+    expect(isProviderStreetResult({ source: 'google', place_name: '', address: 'Padre Varela, La Habana' })).toBe(true);
+    expect(isProviderStreetResult({ source: 'google', place_name: 'Neptuno', address: 'Neptuno' })).toBe(true);
+  });
+
+  it('does NOT flag external venues — Google stays authoritative for POIs', () => {
+    expect(isProviderStreetResult({
+      source: 'google', matchedCategory: 'establishment',
+      place_name: 'Hotel Nacional de Cuba', address: 'Calle O, La Habana',
+    })).toBe(false);
+    expect(isProviderStreetResult({
+      source: 'google', matchedCategory: 'bed_and_breakfast',
+      place_name: 'B&B San Lazaro', address: '556 San Lazaro',
+    })).toBe(false);
+  });
+
+  it('never flags local rows regardless of shape', () => {
+    expect(isProviderStreetResult({ source: 'supabase', matchedCategory: 'route' })).toBe(false);
+    expect(isProviderStreetResult({ source: 'supabase', place_name: '', address: 'Belascoaín' })).toBe(false);
   });
 });

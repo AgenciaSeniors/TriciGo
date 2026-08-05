@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -302,8 +302,23 @@ function AddressSearchInputInner({
         // in-bucket tie-break: a far-province Google hit can no longer sit
         // above a nearby street, while named places keep their edge among
         // equally-close results (the airport-bug guard lives in the score).
-        const dedupedPois = dedupeSearchResults(unifiedResults, poiResults);
-        const primary = [...unifiedResults, ...dedupedPois];
+        //
+        // Coordinate authority is split by row TYPE. dedupeSearchResults keeps
+        // whichever list is `primary`, so seniority == coordinate authority:
+        //  - VENUES: Google stays senior over cuba_pois (airport bug, PR F).
+        //  - STREETS: the local street_intersections row is senior over a
+        //    Google street row. Measured over 40 common Havana street names:
+        //    Google returns the WRONG street for 19 ("Calle 23"→"Calle 230"
+        //    13 km away) and mis-pins most of the rest, while the local row
+        //    is a real surveyed corner. A Google street row that duplicates a
+        //    local street is dropped; unique ones (streets we don't have)
+        //    still surface.
+        const googleVenues = unifiedResults.filter((r) => !isProviderStreetResult(r));
+        const googleStreets = unifiedResults.filter(isProviderStreetResult);
+        const dedupedPois = dedupeSearchResults(googleVenues, poiResults);
+        const primaryVenues = [...googleVenues, ...dedupedPois];
+        const dedupedGoogleStreets = dedupeSearchResults(streetResults, googleStreets);
+        const primary = [...primaryVenues, ...dedupedGoogleStreets];
         const dedupedStreets = dedupeSearchResults(primary, streetResults);
         const ranked = rankSearchResults([...primary, ...dedupedStreets], text, userLocation, frequentZonesRef.current);
 
