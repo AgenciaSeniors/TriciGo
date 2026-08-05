@@ -1179,24 +1179,29 @@ También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`
 
 ---
 
-### Search de direcciones — estado canónico (Tier 1.5–1.7 cerrados 2026-05-27 · fuzzy + sugerencias + emoji 2026-06-01)
+### Search de direcciones — estado canónico (Tier 1.5–1.7 · fuzzy 2026-06-01 · campaña de precisión 2026-08-04/05)
 
-> Esta sección documenta el estado actual del search y los patrones aprendidos durante 4 sesiones de trabajo (16 PRs mergeados). Sirve para diagnosticar bugs futuros sin re-descubrir contexto.
+> Esta sección documenta el estado actual del search y los patrones aprendidos durante 5 sesiones de trabajo (26 PRs mergeados). Sirve para diagnosticar bugs futuros sin re-descubrir contexto.
+
+**La lección transversal de toda la campaña de agosto: cada capa tenía un sesgo de normalización distinto (tildes crudas, alias no comparado, prefijo "Calle" inflando el rank, listas de categorías de la era OSM, nombres de 1 carácter tratados como substring), y en todas el mismo síntoma — la calidad del texto le ganaba a la cercanía por un tecnicismo.** Si aparece un bug nuevo de "me devuelve una calle lejana con nombre parecido", buscá el sesgo de normalización antes que el ranking.
 
 #### Estado actual en prod
 
 | Pieza | Versión | Notas |
 |---|---|---|
-| RPC `public.search_streets` | v6 (migración 00333 aplicada) | pg_trgm fuzzy + escape wildcards + proximity buckets (25/100/300 km) + dedup main_street + alias normalization main + cross |
-| Tabla `public.street_intersections` | poblada con 381,951 rows | 16 provincias, 23k calles únicas. La Habana sola 68k rows / 3,509 calles |
+| RPC `public.search_streets` | **v9 (00553)** | unaccent + velocidad (00544) → dedupe por alias (00552) → nombre pelado sin prefijo genérico + **consultas de 1 carácter** (00553). Buckets 25/100/300 km, difusos al fondo |
+| Tabla `public.street_search_names` | 12.476 nombres, **00544** | Diccionario precalculado (`norm_raw`/`norm_disp`/`norm_official`/`norm_bare`/`norm_bare_official`), mantenido por trigger a nivel sentencia. Es lo que hace que el search sea ~200 ms y no 11 s |
+| Tabla `public.street_intersections` | 381.951 rows | 16 provincias. `municipality`/`province` re-derivados de `cuba_admin_areas` en **00545** (antes el 63 % traía barrios de OSM mal asignados) |
 | EF `search-places-google` | version 5 ACTIVE | locationBias 25km + locationRestriction Cuba bbox + bbox margin ±0.2° + cache 30d + daily cap 1000 + session tokens |
-| Helpers SQL | `_street_display_name`, `_street_normalize_key`, `_street_full_display` | Inmutables, reusables. Ver migración 00332/00333 |
-| Cliente — 4 componentes search | Todos con AbortController + cache + empty state + cleanup | rider mobile, rider web, driver mobile, web landing |
-| RPC `get_destination_suggestions` | 00359 (+ 00360 fix) aplicada | Predicciones de destino history-aware; servicio RPC-first con fallback cliente |
-| RPCs de dirección cubana | 00361 unaccent + trgm | `find_intersection_point` / `suggest_cross_streets` tolerantes a acentos y typos; 00363 devuelve dirección canónica |
-| RPC `search_pois_smart` | 00362 trgm | Nombres de POI tolerantes a typos |
-| `cuba_pois.tricigo_category` | 00364 re-cat (DATA) | ~1241 filas `other` → transport/restaurant/religion/shop/park; el resto queda `other` |
-| Resolver `searchResultEmoji` | `packages/utils/src/addressSearch.ts` (PR-F1 #361) | Emoji de categoría en TODO resultado: tricigo cat → calle 🛣️ / esquina 🔀 → categoría cruda → keyword del nombre → 📍 |
+| Helpers SQL | `_street_display_name`, `_street_official_name` (00548), `_street_bare_name` (00553), `_street_full_display`, `_street_normalize_key` | Inmutables, reusables |
+| Cliente — 4 componentes search | AbortController + cache + empty state + cleanup | rider mobile, rider web, web landing. **El driver ya no tiene búsqueda de direcciones** (removida en #905) |
+| RPC `get_destination_suggestions` | 00359 (+ 00360 fix) | Predicciones de destino history-aware; servicio RPC-first con fallback cliente |
+| RPCs de dirección cubana | **00554** | `find_intersection_point` v4 + `suggest_cross_streets` v2: nombres de 1-2 caracteres por palabra completa. Antes buscar la calle "L" matcheaba las 6.883 llamadas "Calle …" y devolvía Calle K |
+| Reverse geocode | 00547 + 00550 | `get_nearest_cross_streets` con umbral 8 m (era 20, perdía callejones); `lookup_nearest_poi_ranked` filtra por `tricigo_category` (la lista OSM excluía el 84,6 % de los lugares, playas incluidas) |
+| RPC `search_pois_smart` | 00362 trgm + 00550 | Nombres tolerantes a typos; river/lake/fountain salen de la lista de exclusión |
+| `cuba_search_keywords` | **00551** | SOLO categorías genéricas — 10 marcas borradas (Coppelia/CADECA/ETECSA/Viazul…) porque el anti-placeholder hundía al lugar exacto buscado |
+| Resolver `searchResultEmoji` | `packages/utils/src/addressSearch.ts` | Emoji de categoría en TODO resultado: tricigo cat → calle 🛣️ / esquina 🔀 → categoría cruda → keyword del nombre → 📍 |
+| Anti-pin-inventado | 00546 + `isPlaceholderAddress` | Las sugerencias de transversal llevan coordenada `NaN` + `needsResolution` a propósito: antes se rellenaban con el GPS del pasajero y una dirección a medio escribir llegaba a viajes reales |
 
 **Verificación rápida de salud del search:**
 
@@ -1350,8 +1355,20 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 | 00362 | `search_pois_smart` trgm | Nombres de POI tolerantes a typos |
 | 00363 | `find_intersection_point` — dirección canónica | Devuelve la forma canónica "X e/ Y y Z" |
 | 00364 | Re-categorizar `other` cuba_pois (DATA) | ~1241 filas → transport/restaurant/religion/shop/park; conservador, idempotente |
+| **Campaña de precisión 2026-08-04/05** (PRs #929–#937) — disparada por "Callejón de los Protestantes → N e/ 9 y 11 a 1,5 km" | | |
+| 00544 | v7 — **unaccent + velocidad** | Diccionario `street_search_names` + índice cubriente. El search comparaba tildes literalmente y tardaba **11,4 s** |
+| 00545 | Backfill `municipality`/`province` desde `cuba_admin_areas` | El 63 % traía nombres de barrio de OSM mal asignados. Correr en tandas: revienta el timeout |
+| 00546 | Backstop anti-placeholder | `_ride_address_is_placeholder` — texto a medio escribir llegaba como dirección de viajes reales |
+| 00547 | `get_nearest_cross_streets` umbral 20 m → **8 m** | Las cuadras cortas (callejones) se perdían y el punto quedaba etiquetado con la calle vecina. Es el síntoma del reporte original |
+| 00548 | v8 — **nombre oficial** de las calles con alias | 10,5 % de las calles usa "Oficial (Alias)"; tecleando el oficial devolvía otra a 18 km |
+| 00549 | `find_intersection_point` v3 — esquinas inexistentes | Rama `exact_corner` con `cross_street_2` + puerta de palabra completa |
+| 00550 | Reverse geocode de lugares por `tricigo_category` | La lista blanca OSM excluía el **84,6 %** de `cuba_pois` — todas las playas. Parado en Playa Guardalavaca la dirección era "Holguín" |
+| 00551 | Sacar 10 marcas de `cuba_search_keywords` | Registradas como categoría, el anti-placeholder hundía al lugar exacto buscado |
+| 00552 | v8.1 — el dedupe por alias se comía el mejor match | Dos calles oficiales que comparten alias. **Lo encontró la verificación con semillas de OTRA provincia** |
+| 00553 | v9 — **prefijo genérico + 1 carácter** | "Calle"/"Avenida" decidían el rank (`23` daba una a 7 km); las calles de 1 letra (11 % de las esquinas) no se podían buscar |
+| 00554 | `find_intersection_point` v4 + `suggest_cross_streets` v2 | Nombres de 1-2 caracteres por palabra completa: `'%l%'` matchea "Calle …" porque *calle* tiene una `l` → buscar "L" devolvía **Calle K** |
 
-**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5`. (Al cierre 2026-06-01 la última es **00367**; próxima libre **00368**. Ojo: 00365/00366 son de *device-registry* y 00367 de *launch-readiness* (restore wallet gate), no de search.)
+**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5` **y también contra los PRs abiertos** (`gh pr view <n> --json files`). Al cierre 2026-08-05 la última es **00554**; próxima libre **00555**.
 
 #### Debugging guide cuando aparezca un bug nuevo de search
 
@@ -1397,6 +1414,18 @@ Si `hit_rate_pct` está consistentemente <40% → el cache no está cumpliendo s
 - TTL hardcoded a 30 días pero queries son únicos
 - Session tokens NO se están reusando del lado del cliente (verificar `sessionTokenRef`)
 
+#### Método para tocar el ranking del search (aprendido a golpes en la campaña de agosto)
+
+1. **Candidata con OTRO nombre en prod, nunca editar la viva.** `search_streets_v9c`, `find_intersection_point_v4c`… Se compara A/B contra la viva con la misma semilla, y la migración final las DROPPEA. Si la candidata necesita columnas nuevas, copiar el diccionario a una tabla desechable (`street_search_names_v9c`) en vez de alterar la real.
+2. **Transcribir desde `pg_get_functiondef` VIVO, no desde la migración de git.** Lo que corre puede ser varias migraciones más nuevo que el último archivo que la menciona. Para cambios de una línea sobre funciones grandes, usar el patch in-place con `DO $patch$` (no puede perder features). Comprobar fidelidad con `md5(prosrc)` y `length(prosrc)`.
+3. **Arreglar la escalera de `match_rank` NO alcanza: hay que tocar el `sim` en el mismo sitio.** Al empatar en rank 0, decide `sim DESC`, y `similarity('23','23')=1.000` vs `similarity('calle 23','23')=0.333` revierte el arreglo entero. Pasó en 00548 y volvió a pasar en 00553.
+4. **Medir con suites de control, no solo con el caso que motivó el cambio.** El mínimo son cuatro: el caso arreglado, tildes, alias-por-oficial, y calles sin nada especial (esta última debe dar **0 filas cambiadas**, no solo "0 empeoran").
+5. **Semillas de otra provincia que las del desarrollo.** El bug de 00552 (172 km de error) solo apareció al re-verificar con semillas frescas; el set original no contenía ningún alias compartido.
+6. **Las muestras chicas mienten.** La métrica de 00547 pasó de "3/3 mejoras" (300 pts) a "3 arregla / 0 rompe / 36 ambas-válidas" (1.200 pts). Y una muestra elegida a mano hizo creer que `find_intersection_point` tenía el bug del prefijo — 117 casos medidos lo desmintieron.
+7. **`EXPLAIN ANALYZE` en estas tablas es ruidoso** (la misma consulta dio 3.331 ms en frío y 385 ms en caliente). Comparar SIEMPRE en caliente, alternado, ≥3 corridas. Un filtro más estricto suele salir **más rápido**, no más lento: recorta el candidato.
+8. **Despojar prefijos genéricos por fila cuesta 2,1 s.** Del lado de los nombres va precalculado en `street_search_names`; del lado de la consulta se hace una sola vez.
+9. **El conector MCP se cae con estas mediciones.** Partirlas en tandas de ~80-100 casos y `SET statement_timeout='5min'`.
+
 #### Deuda explícitamente diferida (no urgente)
 
 - **R2** retry Place Details con backoff 300ms — protege contra 429 transient
@@ -1404,6 +1433,8 @@ Si `hit_rate_pct` está consistentemente <40% → el cache no está cumpliendo s
 - **G2.1** Place Details lazy (solo on-select) — ahorra ~30% costo cuando crezca el tráfico
 - **G2.2** reverse geocoding con Google — mejora calidad de "Use my location"
 - **Rider cosmético** — isFinite check en recents + emoji categoría Google POIs + unify debounce 300ms
+- **Lugares llamados literalmente "Parque" / "Enfermería"** se hunden por `is_generic * 5000` (anti-placeholder). Es por diseño, pero no aparecen ni en el top-5.
+- **Zonas rurales sin malla de calles** devuelven nombre de zona en vez de esquinas. Es hueco de datos, no de código.
 
 Abordar cuando aparezca un síntoma concreto que lo justifique, NO preventivamente.
 
