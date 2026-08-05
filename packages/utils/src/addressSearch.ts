@@ -12,7 +12,7 @@
 // ============================================================
 
 import { haversineDistance, computeSpecificity, tricigoCategoryEmoji, isGenericStreetAddress, type SearchBoxResult } from './geo';
-import { stripAccents } from './fuzzyMatch';
+import { stripAccents, fuzzyMatch } from './fuzzyMatch';
 
 /** Unified typeahead debounce. Replaces the old per-app 200/250/350/500 ms spread. */
 export const SEARCH_DEBOUNCE_MS = 300;
@@ -51,6 +51,71 @@ export function searchResultCap(query: string): number {
  * heuristic alone misclassifies it — the `displayName` check is the reliable
  * POI signal.
  */
+/**
+ * Words that appear in almost every Cuban address and therefore carry no
+ * discriminating power when the rider is typing. Deliberately includes the
+ * street prefixes (mirroring `STREET_PREFIXES` in ./geo), the "e/ … y …"
+ * connectors, and the country/capital that most stored addresses end with.
+ */
+const GENERIC_ADDRESS_WORDS: ReadonlySet<string> = new Set([
+  'calle', 'avenida', 'ave', 'av', 'calzada', 'carretera', 'autopista',
+  'paseo', 'callejon', 'pasaje', 'boulevard', 'blvd', 'camino', 'sendero',
+  'entre', 'esquina', 'esq', 'edificio', 'edif', 'apto', 'apartamento',
+  'la', 'el', 'de', 'del', 'los', 'las', 'y', 'habana', 'cuba',
+]);
+
+/**
+ * Whether a saved/recent/predicted address should be treated as matching what
+ * the rider is typing.
+ *
+ * NOT the same thing as `fuzzyMatch(query, address)`, which is what this
+ * replaced. The mobile dropdown sorts every history row ABOVE every search
+ * result and then cuts the list short, so a loose match here does not merely
+ * add noise — it evicts the row the rider is actually looking for. And
+ * `fuzzyMatch`'s fast path is `target.includes(query)` against the FULL
+ * address, which for Cuban addresses means the word "Calle" alone matches
+ * nearly everything. Measured against five realistic Havana recents:
+ *
+ *   "cal"     → 4 of 5 matched, taking 4 of the 5 visible slots
+ *   "calle"   → 3 of 5
+ *   "calle 2" → 3 of 5
+ *
+ * The rule: the query has to hit something DISTINCTIVE. Generic words are
+ * stripped from it first; if nothing distinctive is left (the rider typed only
+ * "cal" / "calle" / "avenida"), the row counts only when the address literally
+ * BEGINS with what was typed — "Calzada de Infanta" yes, "Calle 5 e/ Calzada
+ * y A" no.
+ */
+export function historyMatchesQuery(query: string, target: string): boolean {
+  const q = stripAccents(query.toLowerCase()).trim();
+  const t = stripAccents(target.toLowerCase()).trim();
+  if (q.length === 0 || t.length === 0) return false;
+
+  // A token counts as generic when it IS a generic word or is still being
+  // typed towards one — the rider types left to right, so "cal" is no more
+  // discriminating than "calle". Without the prefix rule "cal" stays
+  // "distinctive" and matches every address containing "Calle", which is the
+  // exact flood this function exists to stop.
+  const isGenericToken = (w: string): boolean => {
+    if (GENERIC_ADDRESS_WORDS.has(w)) return true;
+    for (const g of GENERIC_ADDRESS_WORDS) if (g.startsWith(w)) return true;
+    return false;
+  };
+
+  const distinctive = q
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 0 && !isGenericToken(w));
+
+  // Nothing but generic words: only a literal leading match counts. Compared
+  // on the accent-stripped forms so "Calzada"/"calzada" behave the same.
+  if (distinctive.length === 0) return t.startsWith(q);
+
+  // Otherwise every distinctive token must be found, so "calle 23" reaches the
+  // Calle 23 recent while "calle" alone reaches none. fuzzyMatch keeps the
+  // accent and single-typo tolerance the rider expects.
+  return distinctive.every((w) => fuzzyMatch(w, t));
+}
+
 export function shouldEnrichResult(r: { displayName?: string | null; address: string }): boolean {
   if (r.displayName) return false;
   return isGenericStreetAddress(r.address);
