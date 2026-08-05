@@ -174,7 +174,7 @@ function AddressSearchInputInner({
     // after — and overwrite — the results for what the user types next.
     abortRef.current?.abort();
 
-    if (text.trim().length < 2) {
+    if (text.trim().length < 1) {
       setResults([]);
       setIsSearching(false);
       setIsOffline(false);
@@ -288,9 +288,19 @@ function AddressSearchInputInner({
         // street can't be hidden just because the query looked category-ish;
         // ranking decides the order. Google ~200-400ms via the EF; the local
         // RPCs ~50-100ms.
+        // A one-character query is a street-grid query and nothing else. The
+        // single-letter/single-digit grids of Vedado, Miramar and dozens of
+        // repartos are 11% of every intersection in Cuba, and search_streets
+        // (00553) answers them with exact matching. Google is skipped on
+        // purpose: it bills a session for a query it cannot resolve, and
+        // search_pois_smart would return pure category noise for "C".
+        const gridOnly = text.trim().length === 1;
+
         const [unifiedResults, poiResults, streetResults] = await Promise.all([
-          searchAddressUnified(text, getSupabaseClient(), userLocation, controller.signal, 10, sessionTokenRef.current ?? undefined),
-          searchPoisSupabase(text, userLocation, 6),
+          gridOnly
+            ? Promise.resolve<SearchBoxResult[]>([])
+            : searchAddressUnified(text, getSupabaseClient(), userLocation, controller.signal, 10, sessionTokenRef.current ?? undefined),
+          gridOnly ? Promise.resolve<SearchBoxResult[]>([]) : searchPoisSupabase(text, userLocation, 6),
           searchStreetsSupabase(text, userLocation, 8),
         ]);
 
