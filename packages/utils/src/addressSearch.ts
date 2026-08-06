@@ -398,7 +398,15 @@ export function searchResultEmoji(result: {
   }
 
   const addr = result.address ?? '';
-  if (result.category === 'street') {
+  // Local rows say `category: 'street'`. External rows carry Google's own type
+  // here (searchAddressUnified maps matchedCategory -> category), and for a
+  // street that type is 'route' | 'geocode' | 'street_address' |
+  // 'intersection' — none of which mean anything to the tables below, so those
+  // rows used to fall through to a bare 📍. Measured: for exactly those four
+  // types mapExternalCategoryToTricigo returns null, so the tricigoCategory
+  // branch above cannot rescue them either. Reuses the same set as
+  // isProviderStreetResult so street-vs-venue is decided identically in both.
+  if (result.category === 'street' || PROVIDER_STREET_CATEGORIES.has(result.category ?? '')) {
     return hasCrossStreet(addr) ? '🔀' : '🛣️';
   }
 

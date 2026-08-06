@@ -350,6 +350,37 @@ describe('isProviderStreetResult', () => {
   });
 });
 
+describe('searchResultEmoji — Google street types read as streets, not as a bare pin', () => {
+  // searchAddressUnified maps Google's matchedCategory into `category`, so a
+  // Google street row arrives with category 'route' | 'geocode' |
+  // 'street_address' | 'intersection'. Measured against the real mapping:
+  // those four are exactly the types where mapExternalCategoryToTricigo
+  // returns null, and none of them match RAW_CATEGORY_EMOJI — so before this
+  // they fell through every branch to 📍.
+  it('gives Google street rows the street emoji', () => {
+    expect(searchResultEmoji({ category: 'route', place_name: 'Calle 230', address: 'C. 230, La Habana' })).toBe('🛣️');
+    expect(searchResultEmoji({ category: 'geocode', place_name: 'Calle 23', address: 'Calle 23, La Habana' })).toBe('🛣️');
+    expect(searchResultEmoji({ category: 'street_address', address: 'San Lázaro 123' })).toBe('🛣️');
+  });
+
+  it('a street row with a Cuban cross-street address still reads 🔀', () => {
+    expect(searchResultEmoji({ category: 'intersection', address: 'Calle 23 e/ L y M' })).toBe('🔀');
+  });
+
+  it('leaves local rows and Google venues exactly as they were', () => {
+    // Local street row — unchanged path.
+    expect(searchResultEmoji({ category: 'street', address: 'Belascoaín' })).toBe('🛣️');
+    // Google venues already resolved via tricigoCategory (lodging -> hotel,
+    // restaurant -> restaurant, park -> park, store -> shop). Verified against
+    // mapExternalCategoryToTricigo; the street branch must not shadow them.
+    expect(searchResultEmoji({ tricigoCategory: 'hotel', category: 'lodging', address: 'x' })).toBe('🏨');
+    expect(searchResultEmoji({ tricigoCategory: 'restaurant', category: 'restaurant', address: 'x' })).toBe('🍽️');
+    // Generic Google types keep falling back to the Spanish name keyword.
+    expect(searchResultEmoji({ category: 'establishment', place_name: 'Museo de la Revolución', address: 'Refugio' })).toBe('🖼️');
+    expect(searchResultEmoji({ category: 'point_of_interest', place_name: 'Zzz', address: 'Zzz' })).toBe('📍');
+  });
+});
+
 describe('filterProviderStreetsByLocalAnchor', () => {
   // Real coordinates from the prod cache measurement:
   //   Calle 23  (local, Vedado):    23.1370, -82.3830
