@@ -12,9 +12,14 @@ import Link from 'next/link';
 import { ArrowRight, OctagonPause } from 'lucide-react';
 import { useStuckRideAlerts } from '@/hooks/useStuckRideAlerts';
 
+// One entry per value of the `reason` CHECK on `stuck_ride_alerts`. A missing
+// key silently degrades to the generic fallback below, which is how
+// 'dead_driver_app' read as "detectado como trabado" for the two months after
+// 00542 introduced it.
 const REASON_LABEL: Record<string, string> = {
   complete_blocked: 'El conductor intentó finalizar y el candado de distancia lo bloqueó (posible pin mal ubicado).',
   stationary_chat: 'Conductor detenido con el viaje abierto y chat activo entre las partes.',
+  dead_driver_app: 'La app del conductor dejó de responder después de recoger. El pasajero puede ir a bordo — requiere revisión humana.',
 };
 
 export function StuckRideBanner() {

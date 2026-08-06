@@ -14,9 +14,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSupabaseClient } from '@tricigo/api';
 
+/**
+ * `reason` mirrors the CHECK constraint on `stuck_ride_alerts` — keep the two
+ * in step. 'dead_driver_app' was added to the database by 00542 but never
+ * here, and the `as StuckRideAlert[]` cast below meant TypeScript never
+ * noticed the union had gone stale.
+ */
 export type StuckRideAlert = {
   ride_id: string;
-  reason: 'complete_blocked' | 'stationary_chat';
+  reason: 'complete_blocked' | 'stationary_chat' | 'dead_driver_app';
   detected_at: string;
 };
 
