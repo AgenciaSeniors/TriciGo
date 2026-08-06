@@ -2203,6 +2203,25 @@ plpgsql resuelve `r.status_code` contra la **variable RECORD sin asignar**, no c
 
 **Regla:** prefijar SIEMPRE las variables plpgsql (`v_*`, `c_*`) y no usar alias SQL de una sola letra que puedan colisionar. Renombrar de los **dos** lados.
 
+### Trampa plpgsql: `COALESCE(<enum>, 'texto')` revienta en runtime (00555 → #945)
+
+`COALESCE(columna_enum, '—')` **no** devuelve texto: Postgres intenta coercionar el literal **al enum** y lanza `22P02 invalid input value for enum <tipo>: "—"`. Hay que castear primero:
+
+```sql
+COALESCE(v_a.ride_status::text, '—')   -- rides.status es el enum ride_status
+```
+
+**Misma clase que las dos trampas de arriba, y el mismo desenlace:** plpgsql no tipa las sentencias del cuerpo al crear la función, así que el `CREATE` pasa en verde y el error solo aparece al ejecutar esa rama; si la función tiene `EXCEPTION WHEN OTHERS` —lo normal en watchdogs y notificadores defensivos— se lo traga y **falla en silencio para siempre**. En 00555 habría dejado muda la alerta de "la app del conductor murió", que es exactamente el modo de falla que esa migración existía para eliminar.
+
+**Cómo detectarlo antes de escribirlo:** al hacer `COALESCE(x, 'literal')` sobre una columna, comprobar el tipo — `data_type='USER-DEFINED'` significa enum y exige `::text`:
+
+```sql
+SELECT column_name, data_type, udt_name FROM information_schema.columns
+WHERE table_name='<tabla>' AND column_name='<col>';
+```
+
+**Lo que lo cazó no fue la revisión de código sino el ensayo rolleado**: crear la función y **ejecutarla** dentro de `BEGIN … ROLLBACK` antes de aplicar. Vale la pena para cualquier función nueva con lógica no trivial — y es seguro incluso cuando manda correos, porque `net.http_post` encola en `net.http_request_queue`, que es transaccional (verificar después con `SELECT count(*) FROM cron_http_calls WHERE called_at > …`, que debe seguir sin la etiqueta nueva).
+
 ### Verificar la superficie correcta (2 incidentes el mismo día, 2026-07-19)
 
 Dos veces en una sesión la verificación fue **real pero sobre la superficie equivocada**, y las dos veces llegó a producción:
