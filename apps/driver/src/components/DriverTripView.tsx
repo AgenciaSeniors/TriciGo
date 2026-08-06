@@ -571,15 +571,38 @@ export function DriverTripView() {
   // regains focus or the app returns to the foreground — which is exactly
   // what happens when the driver comes back from Waze mid-trip.
   //
-  // A failure never clobbers data we already hold: state is only written on
-  // success. See CLAUDE.md → "Auditoría de frescura de datos (stale-on-mount)".
+  // A failure never clobbers data we already hold FOR THIS TRIP: state is only
+  // written on success. See CLAUDE.md → "Auditoría de frescura de datos".
+  //
+  // "For this trip" is load-bearing. Making the fetch retryable dropped the
+  // `cancelled` guard the once-per-id version had, and nothing cleared
+  // riderInfo when the id changed — so "never clobber on failure" turned into
+  // "show the PREVIOUS passenger": accept trip B, its fetch fails, and the card
+  // keeps A's name, rating and `tel:` target, wiring the call button to the
+  // wrong person. A slow response for A landing after the driver moved to B did
+  // the same. Both are worse than the empty card this retry loop replaced.
+  //
+  // So: the id owns the state. Changing trips clears it (empty card, never
+  // someone else's), and a response is only accepted if the id that asked for
+  // it is still the current one.
   const activeTripId = activeTrip?.id;
   const activeTripStatus = activeTrip?.status;
+  const riderInfoTripIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (riderInfoTripIdRef.current !== activeTripId) {
+      riderInfoTripIdRef.current = activeTripId ?? null;
+      setRiderInfo(null);
+    }
+  }, [activeTripId]);
+
   const loadRiderInfo = useCallback(async () => {
     if (!activeTripId) return;
     try {
       const data = await rideService.getRideWithRider(activeTripId);
       if (!data) return;
+      // Discard a response whose trip is no longer on screen.
+      if (riderInfoTripIdRef.current !== activeTripId) return;
       setRiderInfo({
         name: data.rider_name ?? 'Pasajero',
         avatarUrl: data.rider_avatar_url ?? null,

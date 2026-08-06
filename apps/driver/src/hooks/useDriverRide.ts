@@ -5,7 +5,7 @@ import Toast from 'react-native-toast-message';
 import DriverOverlay from '../../modules/driver-overlay';
 import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus, logRideValidationEvent } from '@tricigo/api';
 import { triggerHaptic, playSound, logger, mapLogger, isNetworkError, haversineDistance } from '@tricigo/utils';
-import { stopBgLocationTracking } from '@/services/locationBackgroundTask';
+import { demoteBgLocationToOnline, stopBgLocationTracking } from '@/services/locationBackgroundTask';
 import {
   initStatusTransitionBuffer,
   bufferTransition,
@@ -31,6 +31,39 @@ const NEXT_STATUS: Partial<Record<RideStatus, RideStatus>> = {
   in_progress: 'arrived_at_destination',
   arrived_at_destination: 'completed',
 };
+
+/**
+ * Unbind the background location task from a ride that is over.
+ *
+ * ON SHIFT -> demote. The task keeps running with `rideId: null`, so it stops
+ * uploading against the finished ride (the task body returns at
+ * `if (!ctx.rideId) return;`) but keeps sending the heartbeat — which is the
+ * only one that survives the screen going off, and the whole point of the fix.
+ *
+ * OFF SHIFT / no driver -> stop, which is what this code always did. Reading
+ * the shift flag FRESH from the store (not from the caller's closure) is what
+ * makes this safe to arrive late:
+ *
+ *   - An admin can suspend a driver mid-ride and _layout.tsx deliberately keeps
+ *     them inside (tabs) to finish the trip. That writes is_online=false, the
+ *     edge-triggered stop in useDriverLocation fires ONCE, and a demote landing
+ *     afterwards would re-arm a foreground service for an off-shift driver with
+ *     nothing left to turn it off.
+ *   - completeRide retries 3x with backoff, so it can be ~10s in flight. If the
+ *     driver logs out in that window the teardown runs first and the demote
+ *     lands after it, re-arming the service against a dead driverId.
+ *
+ * Demoting is order-sensitive (it can START a service); stopping is idempotent.
+ * Picking between them on the live shift state keeps the late-arrival safety the
+ * unconditional stop used to give us for free.
+ */
+function unbindBgLocationFromRide(driverId: string | undefined): void {
+  const onShift = useDriverStore.getState().isOnline;
+  const done = driverId && onShift
+    ? demoteBgLocationToOnline(driverId)
+    : stopBgLocationTracking();
+  done.catch(() => { /* best-effort */ });
+}
 
 /**
  * Initialize driver ride state on mount.
@@ -238,7 +271,11 @@ export function useDriverRideInit() {
             }),
             visibilityTime: 5000,
           });
-          stopBgLocationTracking().catch(() => { /* best-effort */ });
+          // The trip is gone; unbind the background task from it. This poll runs
+          // in the background too (the foreground service is what keeps the JS
+          // runtime alive), so this is the one path here that regularly fires
+          // while minimized.
+          unbindBgLocationFromRide(profile?.id);
           useDriverRideStore.getState().reset();
           return;
         }
@@ -853,10 +890,16 @@ export function useDriverRideActions() {
               }),
               visibilityTime: 5000,
             });
-            // F3 — the driver is done with this trip from their side; stop the
+            // F3 — the driver is done with this trip from their side; unbind the
             // background task so it doesn't keep uploading to this ride_id while
             // the completion sits queued for replay.
-            stopBgLocationTracking().catch(() => { /* best-effort */ });
+            //
+            // This branch returns WITHOUT setting the local status to
+            // 'completed' (the trip stays in_progress until the queued
+            // completion replays), so `trackedRideId` in (tabs)/index.tsx does
+            // not change and the tracking effect never re-runs. This call is the
+            // only thing that unbinds here.
+            unbindBgLocationFromRide(profile?.id);
             completingRef.current = false;
             useDriverRideStore.getState().setIsAdvancing(false);
             return;
@@ -867,12 +910,22 @@ export function useDriverRideActions() {
         triggerHaptic('success');
         playSound('trip_completed');
 
-        // F3 — the ride is done; stop the background location task now.
-        // The store KEEPS the completed trip (so TripCompleteView can show
-        // earnings), so `activeRideId` doesn't change and useDriverLocation's
-        // effect cleanup won't fire — without this explicit stop, background
-        // batches would keep uploading locations against the completed ride.
-        stopBgLocationTracking().catch(() => { /* best-effort */ });
+        // F3 — the ride is done; unbind the background location task now, so
+        // background batches stop uploading against the completed ride.
+        //
+        // Why this unbinds instead of stopping: the store KEEPS the completed
+        // trip so TripCompleteView can show the earnings. Until `trackedRideId`
+        // in (tabs)/index.tsx started filtering terminal statuses, that meant
+        // the tracking effect never re-ran and NOTHING restarted the service a
+        // plain stop had killed — a driver who locked the phone on the earnings
+        // screen lost every heartbeat and got auto-offlined ~10 min later.
+        //
+        // That filter now re-runs the effect here, but this call still carries
+        // its own weight: the effect's start is gated on AppState === 'active'
+        // (Android 12+ forbids starting a location foreground service from the
+        // background), so when the app is minimized the effect cannot re-persist
+        // the task context. This can, and does so before deciding to restart.
+        unbindBgLocationFromRide(profile?.id);
 
         // Send receipt email to passenger (non-blocking)
         notificationService.sendRideReceipt(activeTrip.id, activeTrip.customer_id)
@@ -1068,9 +1121,11 @@ export function useDriverRideActions() {
     useDriverRideStore.getState().setDriverCanceling(true);
 
     const clearTrip = () => {
-      // F3 — stop the background location task on cancel so it doesn't keep
-      // uploading to a ride that no longer exists.
-      stopBgLocationTracking().catch(() => { /* best-effort */ });
+      // F3 — unbind the background location task on cancel so it doesn't keep
+      // uploading to a ride that no longer exists. Cancelling a trip does not
+      // end the shift, so an on-shift driver keeps the service and its
+      // heartbeat and stays matchable.
+      unbindBgLocationFromRide(profile?.id);
       channelRef.current?.unsubscribe();
       channelRef.current = null;
       activeChannelIdRef.current = null;
@@ -1098,7 +1153,7 @@ export function useDriverRideActions() {
       useDriverRideStore.getState().setDriverCanceling(false);
       Toast.show({ type: 'error', text1: i18next.t('driver:trip.cancel_failed') });
     }
-  }, [user, reset]);
+  }, [user, reset, profile?.id]);
 
   const clearCompletedTrip = useCallback(() => {
     channelRef.current?.unsubscribe();
