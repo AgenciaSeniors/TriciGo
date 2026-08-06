@@ -120,7 +120,13 @@ BEGIN
       || '<tr><td style="padding:8px;border-bottom:1px solid #eee">'
       || '<a href="https://admin.tricigo.com/rides/' || v_a.ride_id::text || '">#'
       || left(v_a.ride_id::text, 8) || '</a><br>'
-      || '<span style="color:#777;font-size:12px">' || COALESCE(v_a.ride_status, '—') || '</span></td>'
+      -- ::text obligatorio: rides.status es el enum ride_status, y
+      -- COALESCE(<enum>, '—') intenta coercionar el guion AL enum → 22P02
+      -- "invalid input value for enum ride_status". Lo cazó el ensayo rolleado;
+      -- el CREATE pasaba en verde y el EXCEPTION WHEN OTHERS de abajo lo habría
+      -- tragado en silencio, dejando la alerta muda para siempre — justo la
+      -- clase de falla que esta migración existe para eliminar.
+      || '<span style="color:#777;font-size:12px">' || COALESCE(v_a.ride_status::text, '—') || '</span></td>'
       || '<td style="padding:8px;border-bottom:1px solid #eee">'
       || COALESCE(v_a.driver_name, '—') || ' ' || COALESCE(v_a.driver_phone, '')
       || '<br><span style="color:#777;font-size:12px">sin latido hace '
