@@ -1529,7 +1529,21 @@ export const rideService = {
             .eq('id', offer.ride_id)
             .maybeSingle();
           if (error || !ride) return;
-          onInsert({ ...(ride as Ride), offer_expires_at: offer.expires_at } as Ride);
+          // This row is raw from PostgREST, so its geography columns are WKB
+          // hex strings — exactly the case `transformRideCoordinates` exists
+          // for. Without it `ride.pickup_location.latitude` is undefined and
+          // the offer card's "AL RECOGER X KM" line silently disappears, with
+          // the profitability indicator falling back to its default.
+          //
+          // getSearchingRides has always transformed; this path had not. It is
+          // the FAST path — realtime paints the card first, and the 30s poll
+          // cannot repair it because `addRequest` returns early for a ride
+          // already in the list. So the broken card survived the whole offer
+          // window, on the delivery route that serves nearly every offer.
+          onInsert({
+            ...transformRideCoordinates(ride as Record<string, unknown>),
+            offer_expires_at: offer.expires_at,
+          } as Ride);
         },
       )
       .on(

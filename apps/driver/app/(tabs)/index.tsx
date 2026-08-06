@@ -606,8 +606,21 @@ function NativeDriverHomeScreen() {
   // trip too — the driver still wants a one-tap way back into the app.
   useOverlayBubble(isOnline);
 
-  // GPS tracking when online
-  useDriverLocationTracking(profile?.id ?? null, isOnline, activeTrip?.id ?? null);
+  // GPS tracking when online.
+  //
+  // A finished trip is deliberately NOT an active ride here. The store KEEPS
+  // the completed trip so TripCompleteView can render the earnings, so
+  // `activeTrip.id` outlives the ride — and passing it on had two costs:
+  // useDriverLocation's AppState reconcile re-bound the background task to a
+  // ride that was over (resuming location uploads against it), and the
+  // tracking effect never re-ran, so nothing brought the foreground service
+  // back after the trip handlers unbound it. Nulling it here restarts the
+  // service at the 'online' cadence the moment the trip ends.
+  const trackedRideId =
+    activeTrip && activeTrip.status !== 'completed' && activeTrip.status !== 'canceled'
+      ? activeTrip.id
+      : null;
+  useDriverLocationTracking(profile?.id ?? null, isOnline, trackedRideId);
 
   // Selfie verification check
   const { needsCheck, isProcessing, loading: selfieLoading, submitSelfie, check: selfieCheck } = useSelfieCheck();

@@ -2268,6 +2268,18 @@ Dos veces en una sesión la verificación fue **real pero sobre la superficie eq
 
 **Interacción con el dispatch:** `dispatch_heartbeat_window_s=0` (00524) deja elegible al conductor con la app muerta durante los 10-15 min hasta que el cron lo saca. Medido: 0 de 14 ofertas en 7 días cayeron en esa ventana (volumen bajísimo), pero el riesgo crece con la demanda — si aparece, subir esa key a >0 lo cierra sin migración.
 
+### Un no-op se vuelve regresión cuando el fix lo hace real (verificado 2026-08-06, #926 → PR de revisión)
+
+**Clase de bug, no incidente aislado.** #926 des-condicionó el arranque del foreground service del permiso "Siempre", así que por fin corría. Pero `useDriverRide.ts` lo **detenía** desde 4 lugares al terminar/cancelar un viaje (`stopBgLocationTracking`, líneas 241/859/875/1073) con el conductor todavía en línea. Mientras el servicio no arrancaba nunca, esos stops eran inocuos. Al volverse real, cada finalización de viaje mataba el único latido que sobrevive con la pantalla apagada → el cron sacaba al conductor de línea 10 min después. **El fix creó exactamente el síntoma que venía a eliminar**, y por eso la métrica no se movió (2,16 → 2,06 desconexiones forzadas por conductor y por día, sin mejora).
+
+**Regla:** cuando enciendas algo que estaba apagado de hecho, **buscá todos los sitios que lo apagan** (`grep` del `stop*`/`disable*`/`clear*` correspondiente) y revisá si alguno era inocuo solo porque el sistema estaba muerto. Vale para servicios, suscripciones, timers y flags.
+
+**Dos trampas específicas de este caso, ambas reutilizables:**
+1. **Un viaje terminado sigue teniendo `id`.** El store CONSERVA el viaje `completed` para la pantalla de ganancias, así que `activeTrip?.id` no cambia al finalizar → el efecto de `[driverId, isOnline, activeRideId]` **no vuelve a correr** y nada reinicia nada. Si derivás una dependencia de un viaje activo, filtrá los estados terminales (`completed`/`canceled`) — ver `index.tsx` `trackedRideId`.
+2. **Desatar ≠ detener.** Para "que no siga subiendo contra este ride_id" alcanza con `demoteBgLocationToOnline(driverId)` (persiste ctx con `rideId: null`; la tarea sale temprano en `if (!ctx.rideId) return;` **después** del latido). `stopBgLocationTracking()` queda solo para online→offline y desmontaje.
+
+**Métrica de verificación** (línea base ~2,1/conductor/día): `audit_log` con `table_name='driver_profiles'`, `changed_by IS NULL` = lo hizo el cron ⇒ desconexión forzada; con uuid = el conductor tocó el switch.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.

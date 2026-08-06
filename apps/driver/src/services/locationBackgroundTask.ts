@@ -257,8 +257,38 @@ export async function startBgLocationTracking(ctx: BgTaskContext): Promise<void>
 }
 
 /**
- * Stop background location tracking. Called when the ride ends or the
- * driver goes offline.
+ * Drop the ride binding but KEEP the service (and its heartbeat) alive.
+ *
+ * Call this when a trip ends while the driver stays on shift. Stopping the
+ * service there looked harmless for as long as it never actually ran — before
+ * the FGS start was un-gated from ACCESS_BACKGROUND_LOCATION, most drivers had
+ * no service to stop. Once it did run, `stopBgLocationTracking()` on completion
+ * became a guaranteed disconnection: `useDriverLocation`'s tracking effect is
+ * keyed on [driverId, isOnline, activeRideId], and the completed trip is KEPT
+ * in the store so the earnings screen can render it — so activeRideId does not
+ * change, the effect does not re-run, and nothing restarts the service. The
+ * driver pocketed the phone on the earnings screen, JS suspended, both
+ * foreground heartbeat timers froze, and `auto_offline_stale_drivers` pulled
+ * them off line ~10 min later.
+ *
+ * Demoting instead satisfies the reason the stop existed — "don't keep
+ * uploading against a finished ride_id" — because the task body returns early
+ * when ctx has no rideId (see `if (!ctx.rideId) return;` below), right AFTER
+ * the heartbeat. And `startBgLocationTracking` persists the new ctx before it
+ * decides whether to restart, so the upload stops immediately even when the
+ * app is backgrounded and the restart is (correctly) skipped.
+ *
+ * `stopBgLocationTracking` stays for what it says it is for: the driver going
+ * off shift, and teardown.
+ */
+export async function demoteBgLocationToOnline(driverId: string): Promise<void> {
+  await startBgLocationTracking({ driverId, rideId: null, mode: 'online' });
+}
+
+/**
+ * Stop background location tracking. Called when the driver goes offline or
+ * the app tears down — NOT when a ride ends while they stay on shift, which
+ * is what `demoteBgLocationToOnline` is for.
  */
 export async function stopBgLocationTracking(): Promise<void> {
   startedMode = null;

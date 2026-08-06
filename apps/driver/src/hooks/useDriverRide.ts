@@ -5,7 +5,7 @@ import Toast from 'react-native-toast-message';
 import DriverOverlay from '../../modules/driver-overlay';
 import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus, logRideValidationEvent } from '@tricigo/api';
 import { triggerHaptic, playSound, logger, mapLogger, isNetworkError, haversineDistance } from '@tricigo/utils';
-import { stopBgLocationTracking } from '@/services/locationBackgroundTask';
+import { demoteBgLocationToOnline } from '@/services/locationBackgroundTask';
 import {
   initStatusTransitionBuffer,
   bufferTransition,
@@ -238,7 +238,9 @@ export function useDriverRideInit() {
             }),
             visibilityTime: 5000,
           });
-          stopBgLocationTracking().catch(() => { /* best-effort */ });
+          // The trip is gone but the driver is still on shift — demote the
+          // background task instead of stopping it, so the heartbeat survives.
+          if (profile?.id) demoteBgLocationToOnline(profile.id).catch(() => { /* best-effort */ });
           useDriverRideStore.getState().reset();
           return;
         }
@@ -853,10 +855,12 @@ export function useDriverRideActions() {
               }),
               visibilityTime: 5000,
             });
-            // F3 — the driver is done with this trip from their side; stop the
+            // F3 — the driver is done with this trip from their side; unbind the
             // background task so it doesn't keep uploading to this ride_id while
-            // the completion sits queued for replay.
-            stopBgLocationTracking().catch(() => { /* best-effort */ });
+            // the completion sits queued for replay. Demote rather than stop:
+            // they are still on shift and the task's heartbeat is the only one
+            // that survives the screen going off.
+            if (profile?.id) demoteBgLocationToOnline(profile.id).catch(() => { /* best-effort */ });
             completingRef.current = false;
             useDriverRideStore.getState().setIsAdvancing(false);
             return;
@@ -867,12 +871,17 @@ export function useDriverRideActions() {
         triggerHaptic('success');
         playSound('trip_completed');
 
-        // F3 — the ride is done; stop the background location task now.
+        // F3 — the ride is done; unbind the background location task now.
         // The store KEEPS the completed trip (so TripCompleteView can show
         // earnings), so `activeRideId` doesn't change and useDriverLocation's
-        // effect cleanup won't fire — without this explicit stop, background
-        // batches would keep uploading locations against the completed ride.
-        stopBgLocationTracking().catch(() => { /* best-effort */ });
+        // effect cleanup won't fire — without this, background batches would
+        // keep uploading locations against the completed ride.
+        //
+        // That same "activeRideId doesn't change" is why this MUST demote and
+        // not stop: nothing would ever restart the service, and a driver who
+        // locks the phone on the earnings screen loses every heartbeat until
+        // they foreground the app again — auto-offline ~10 min later.
+        if (profile?.id) demoteBgLocationToOnline(profile.id).catch(() => { /* best-effort */ });
 
         // Send receipt email to passenger (non-blocking)
         notificationService.sendRideReceipt(activeTrip.id, activeTrip.customer_id)
@@ -1068,9 +1077,10 @@ export function useDriverRideActions() {
     useDriverRideStore.getState().setDriverCanceling(true);
 
     const clearTrip = () => {
-      // F3 — stop the background location task on cancel so it doesn't keep
-      // uploading to a ride that no longer exists.
-      stopBgLocationTracking().catch(() => { /* best-effort */ });
+      // F3 — unbind the background location task on cancel so it doesn't keep
+      // uploading to a ride that no longer exists. Demote, not stop: cancelling
+      // a trip does not end the shift, and the driver should stay matchable.
+      if (profile?.id) demoteBgLocationToOnline(profile.id).catch(() => { /* best-effort */ });
       channelRef.current?.unsubscribe();
       channelRef.current = null;
       activeChannelIdRef.current = null;
@@ -1098,7 +1108,7 @@ export function useDriverRideActions() {
       useDriverRideStore.getState().setDriverCanceling(false);
       Toast.show({ type: 'error', text1: i18next.t('driver:trip.cancel_failed') });
     }
-  }, [user, reset]);
+  }, [user, reset, profile?.id]);
 
   const clearCompletedTrip = useCallback(() => {
     channelRef.current?.unsubscribe();
