@@ -194,9 +194,15 @@ function updateOptionsForMode(mode: BgTaskMode) {
 /**
  * Start real background location tracking while the driver is online.
  * Idempotent within a mode — safe to call multiple times. When the mode
- * changes (online ⇄ ride) the task is restarted with the new frequency
- * and notification, because startLocationUpdatesAsync ignores option
- * changes on an already-running task.
+ * changes (online ⇄ ride) the task is stopped and restarted so the new
+ * frequency and notification take effect.
+ *
+ * (For the record, the explicit stop is belt-and-braces rather than strictly
+ * required on Android: expo-task-manager routes a re-register of an existing
+ * task to `setOptions` — TaskService.java:112-114 — which LocationTaskConsumer
+ * implements as stop + start + maybeStartForegroundService. It is kept because
+ * it is the behaviour we have shipped and verified, and because the restart is
+ * only ever reached with the app foregrounded anyway.)
  *
  * On iOS, `showsBackgroundLocationIndicator` shows the blue location
  * indicator in the status bar while the app is in background — Apple
@@ -214,13 +220,18 @@ export async function startBgLocationTracking(ctx: BgTaskContext): Promise<void>
   // it on every batch, regardless of whether we (re)start below.
   await persistBgTaskContext(ctx);
 
-  // Not running yet → initial start. Both call sites in useDriverLocation
-  // only reach here with AppState === 'active', which is what makes this
-  // legal: without ACCESS_BACKGROUND_LOCATION (which we no longer require —
-  // the foregroundService option exempts us) Android rejects starting a
-  // location foreground service from the background with
-  // ForegroundServiceStartNotAllowedException. If that throws anyway, the
-  // caller catches and the AppState 'active' listener retries later.
+  // Not running yet → initial start. Without ACCESS_BACKGROUND_LOCATION (which
+  // we no longer require — the foregroundService option exempts us) Android
+  // rejects starting a location foreground service from the background with
+  // ForegroundServiceStartNotAllowedException.
+  //
+  // The two call sites in useDriverLocation only reach here with
+  // AppState === 'active', which is what makes those legal. The demote path is
+  // NOT so constrained: unbindBgLocationFromRide fires from the 5s cancellation
+  // poll, which runs while minimized. When it does, this throws, the caller
+  // swallows it, and the ctx persisted just above still took effect — so the
+  // upload unbinding lands even though the (re)start did not. The AppState
+  // 'active' listener retries later. That is the intended shape, not a leak.
   if (!isRunning) {
     await Location.startLocationUpdatesAsync(LOCATION_TASK, updateOptionsForMode(ctx.mode));
     startedMode = ctx.mode;
@@ -278,8 +289,28 @@ export async function startBgLocationTracking(ctx: BgTaskContext): Promise<void>
  * decides whether to restart, so the upload stops immediately even when the
  * app is backgrounded and the restart is (correctly) skipped.
  *
- * `stopBgLocationTracking` stays for what it says it is for: the driver going
- * off shift, and teardown.
+ * ACCEPTED TRADE-OFF — when the ride ends while the app is BACKGROUNDED (the
+ * passenger cancelling, caught by the 5s poll, which keeps running precisely
+ * because this service keeps the JS runtime alive), the restart is skipped and
+ * the service is left at ride cadence: Accuracy.High, 3s/10m, still showing the
+ * "sharing your location during the active trip" notification. It self-corrects
+ * on the next foreground, via the AppState reconcile in useDriverLocation.
+ *
+ * There is no way around it. expo-location refuses ANY JS-side start carrying a
+ * foregroundService while backgrounded, before it can even reach the setOptions
+ * path — LocationModule.kt:257-259 of expo-location 55.1.8:
+ *
+ *     if (!AppForegroundedSingleton.isForegrounded && options.foregroundService != null)
+ *       throw ForegroundServiceStartNotAllowedException()
+ *
+ * So the real choice is extra battery until the next foreground, or a stopped
+ * service and no heartbeat at all. The heartbeat wins: without it the driver is
+ * taken off line within ~10 minutes and stops earning.
+ *
+ * Callers should route through `unbindBgLocationFromRide` in useDriverRide.ts
+ * rather than calling this directly — demoting can START a service, so it must
+ * not run for an off-shift driver. `stopBgLocationTracking` stays for what it
+ * says it is for: the driver going off shift, and teardown.
  */
 export async function demoteBgLocationToOnline(driverId: string): Promise<void> {
   await startBgLocationTracking({ driverId, rideId: null, mode: 'online' });
