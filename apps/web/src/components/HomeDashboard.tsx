@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { rideService, announcementService, promotionService, partnerPlaceService, type ActivePromotion } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import type { Ride, PartnerPlace, PartnerCoupon } from '@tricigo/types';
+import type { Ride, PartnerPlace } from '@tricigo/types';
 import { announcementCtaWebHref } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 
@@ -55,7 +55,6 @@ export function HomeDashboard({ userId, onRebook, onApplyPromo }: {
   const [promos, setPromos] = useState<ActivePromotion[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [places, setPlaces] = useState<PartnerPlace[]>([]);
-  const [coupons, setCoupons] = useState<PartnerCoupon[]>([]);
 
   useEffect(() => {
     if (!userId) return;
@@ -85,15 +84,12 @@ export function HomeDashboard({ userId, onRebook, onApplyPromo }: {
       .then((a) => { if (!cancelled) setAnnouncements(a); })
       .catch(() => { /* non-critical */ });
 
-    // Live arrival coupons. Both partner readers swallow a missing RPC and
-    // return [], so this is safe before the migrations are applied to prod.
-    partnerPlaceService.getMyCoupons()
-      .then((c) => { if (!cancelled) setCoupons(c); });
-
-    // Nearby partner places. Geolocation only — on denial, error or timeout we
-    // render nothing, the same rule the mobile carousel follows. Showing a
-    // bakery that might be in another province is worse than showing none, and
-    // the coupon is issued on arrival regardless of how the ride was booked.
+    // Nearby partner places. The reader swallows a missing RPC and returns [],
+    // so this is safe before the migrations are applied to prod.
+    //
+    // Geolocation only — on denial, error or timeout we render nothing, the
+    // same rule the mobile carousel follows. Showing a bakery that might be in
+    // another province is worse than showing none.
     //
     // /book already holds a geolocation watch, so the permission prompt has
     // been answered by the time this runs; maximumAge lets us reuse that fix
@@ -126,7 +122,7 @@ export function HomeDashboard({ userId, onRebook, onApplyPromo }: {
 
   // Nothing to show → render nothing (no empty chrome).
   if (!lastRide && promos.length === 0 && announcements.length === 0
-      && places.length === 0 && coupons.length === 0) return null;
+      && places.length === 0) return null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1.75rem' }}>
@@ -164,53 +160,12 @@ export function HomeDashboard({ userId, onRebook, onApplyPromo }: {
         </section>
       )}
 
-      {/* ── Live coupons ──
-          Above promos on purpose: a coupon is already earned and it expires,
-          so it outranks marketing the passenger has not acted on yet. */}
-      {coupons.length > 0 && (
-        <section>
-          <p style={sectionLabel}>{t('home.dashboard_coupons', { defaultValue: 'Tus cupones' })}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            {coupons.map((c) => {
-              const expiry = havanaHhmm(c.expires_at);
-              return (
-                <div
-                  key={c.id}
-                  style={{
-                    border: '1.5px solid rgba(255,77,0,.32)', borderRadius: '0.85rem',
-                    padding: '0.75rem 0.9rem', background: 'var(--bg-card)',
-                  }}
-                >
-                  <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{c.place_name}</strong>
-                  <div style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '0.82rem', marginTop: 2 }}>
-                    {c.benefit_title}
-                  </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: '1.4rem', letterSpacing: '0.18em', marginTop: '0.5rem', color: 'var(--text-primary)' }}>
-                    TG-{c.code}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '0.35rem' }}>
-                    {/* Deliberately does NOT print a URL. Validation lives at a
-                        per-business secret link (tricigo.com/v/<token>), so the
-                        shop uses its own; bare tricigo.com/v is only an
-                        explainer with no code field, and sending an employee
-                        there would be a dead end. Mirrors the mobile ticket. */}
-                    {expiry
-                      ? t('home.dashboard_coupon_expiry', { expiry, defaultValue: `Vence a las ${expiry} · el negocio puede validarlo en su enlace de TriciGo` })
-                      : t('home.dashboard_coupon_hint', { defaultValue: 'El negocio puede validarlo en su enlace de TriciGo' })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
       {/* ── Partner places ──
           Above promos, matching the mobile home where the carousel was moved
           above Promos "where the deal is worth something". */}
       {places.length > 0 && (
         <section>
-          <p style={sectionLabel}>{t('home.dashboard_partner_places', { defaultValue: 'Lugares con beneficio' })}</p>
+          <p style={sectionLabel}>{t('home.dashboard_partner_places', { defaultValue: 'Lugares con descuento' })}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {places.map((p) => (
               <button
@@ -242,14 +197,19 @@ export function HomeDashboard({ userId, onRebook, onApplyPromo }: {
                     borderRadius: 999, padding: '3px 9px', fontSize: '0.62rem', fontWeight: 700,
                     letterSpacing: '0.06em', textTransform: 'uppercase',
                   }}>
-                    {p.benefit_title}
+                    {t('home.partner_discount_badge', {
+                      pct: Math.round(p.discount_percent),
+                      defaultValue: `-${Math.round(p.discount_percent)}% en tu viaje`,
+                    })}
                   </span>
                   <strong style={{ display: 'block', fontSize: '0.95rem', marginTop: '0.45rem', color: 'var(--text-primary)' }}>
                     {p.name}
                   </strong>
-                  <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.4 }}>
-                    {p.benefit_description}
-                  </span>
+                  {p.tagline && (
+                    <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.4 }}>
+                      {p.tagline}
+                    </span>
+                  )}
                   <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '0.35rem' }}>
                     {/* Havana is walkable: "0.0 km" for a shop 80 m away reads
                         as broken, so sub-kilometre distances stay in metres. */}

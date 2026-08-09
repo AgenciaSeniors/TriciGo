@@ -51,7 +51,6 @@ import {
 } from '@tricigo/ui';
 import { useWeather } from '@/hooks/useWeather';
 import { PartnerPlacesCarousel } from '@/components/PartnerPlacesCarousel';
-import { PartnerCouponBanner } from '@/components/PartnerCouponBanner';
 import { useTokens } from '@/hooks/useTokens';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
@@ -1811,25 +1810,6 @@ function NativeHomeScreen() {
     return (
       <>
         <Screen bg="cuban" padded scroll={enableScroll}>
-          {/* ── Cupón activo ── the SECOND of the banner's two mount points.
-              A passenger who closes the ticket and books another ride has the
-              home replaced by this branch; without a mount here their live
-              coupon becomes unreachable while its two-hour clock runs down.
-              Deliberately OUTSIDE the Animated.View so it does not blink on
-              every flow-step crossfade. Renders null when there is no coupon.
-
-              'searching' matters as much as 'active' here, and is easy to miss:
-              since the staged-radius dispatch in 00525 a passenger can sit in
-              searching for several minutes, and that is dead time in which the
-              clock runs but the coupon cannot be reached.
-
-              'reviewing' and 'completed' are deliberately excluded — the first
-              is a short, focused confirm step where a stray tap would abandon
-              the fare the passenger is reading, and the second already shows
-              the whole ticket. */}
-          {(flowStep === 'active' || flowStep === 'searching') && (
-            <PartnerCouponBanner tokens={tokens} compact />
-          )}
           <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
             {flowStep === 'reviewing' && <ReviewingView />}
             {flowStep === 'searching' && <SearchingView />}
@@ -2359,14 +2339,6 @@ function IdleView() {
             </Text>
           </Pressable>
         )}
-
-        {/* ── Cupón activo ── the FIRST of the banner's two mount points, the
-            other being the ride-in-progress branch of NativeHomeScreen. Sits
-            above the balance and the address search because it is the only
-            thing on this screen with a deadline: two hours from arrival and
-            it is gone. Renders null when there is no live coupon, so it costs
-            the layout nothing the rest of the time. */}
-        <PartnerCouponBanner tokens={tokens} />
 
         {/* ── Balance ── */}
         <BalanceHeroCard

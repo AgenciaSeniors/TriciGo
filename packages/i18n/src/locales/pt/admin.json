@@ -1205,9 +1205,7 @@
     "toast_resolved": "Incidente resolvido"
   },
   "platform_config": {
-    "partner_places_discovery_radius_m_help": "Raio em metros dentro do qual o passageiro vê lugares parceiros no início. 15000 = 15 km. Não afeta a emissão do cupom: isso depende do raio de cada lugar.",
-    "coupon_validate_max_per_window_help": "Quantas validações UM negócio pode fazer por janela. O limite é por negócio, não por IP. Diminua se suspeitar de abuso; aumente se um negócio movimentado ficar curto.",
-    "coupon_validate_window_s_help": "Duração da janela do limite acima, em segundos. 600 = 10 minutos.",
+    "partner_places_discovery_radius_m_help": "Raio em metros dentro do qual o passageiro vê lugares parceiros no início. 15000 = 15 km. Não afeta o desconto: isso depende do raio de cada lugar.",
     "title": "Configuração da plataforma",
     "subtitle": "Parâmetros globais do sistema",
     "key": "Chave",
