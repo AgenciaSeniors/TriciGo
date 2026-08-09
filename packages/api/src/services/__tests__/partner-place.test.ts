@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CouponValidation } from '@tricigo/types';
 
 const mockRpc = vi.fn();
 const mockSupabase = { rpc: mockRpc };
@@ -9,9 +8,6 @@ vi.mock('../../client', () => ({
 }));
 
 import { partnerPlaceService } from '../partner-place.service';
-
-const COUPON = '11111111-1111-1111-1111-111111111111';
-const TOKEN = 'a7f3k2b91c04';
 
 describe('partnerPlaceService', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -26,14 +22,14 @@ describe('partnerPlaceService', () => {
     });
 
     it('returns the rows', async () => {
-      const rows = [{ id: 'a', name: 'Sylvain', benefit_title: 'Café gratis' }];
+      const rows = [{ id: 'a', name: 'Sylvain', discount_percent: 20 }];
       mockRpc.mockResolvedValueOnce({ data: rows, error: null });
       expect(await partnerPlaceService.getNearby(1, 2)).toEqual(rows);
     });
 
-    // The migration ships to git before anyone applies it to prod (the MCP
-    // guard blocks production DDL). A missing RPC must degrade to "no section",
-    // never to a crash or an error toast on the passenger's home screen.
+    // The migration is merged before anyone applies it to prod (MCP guard), so
+    // the RPC is legitimately missing for a while. A missing carousel is
+    // invisible; a crashing home screen is not.
     it('returns [] when the RPC does not exist yet', async () => {
       mockRpc.mockResolvedValueOnce({
         data: null,
@@ -46,97 +42,106 @@ describe('partnerPlaceService', () => {
       mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'denied' } });
       expect(await partnerPlaceService.getNearby(1, 2)).toEqual([]);
     });
+  });
 
-    it('returns [] when data is null without an error', async () => {
+  describe('getDiscountForDropoff', () => {
+    it('maps the dropoff and fare to the RPC params', async () => {
+      mockRpc.mockResolvedValueOnce({ data: { found: false }, error: null });
+      await partnerPlaceService.getDiscountForDropoff(23.1136, -82.3666, 2000);
+      expect(mockRpc).toHaveBeenCalledWith('get_partner_discount_for_dropoff', {
+        p_lat: 23.1136, p_lng: -82.3666, p_fare_cup: 2000,
+      });
+    });
+
+    it('returns the discount when the dropoff is at a partner place', async () => {
+      const verdict = {
+        found: true, place_id: 'p1', place_name: 'Sylvain',
+        discount_percent: 10, discount_cup: 200,
+      };
+      mockRpc.mockResolvedValueOnce({ data: verdict, error: null });
+      expect(await partnerPlaceService.getDiscountForDropoff(1, 2, 2000)).toEqual(verdict);
+    });
+
+    // Display-only path. Showing no discount is a small loss; blocking the
+    // fare estimate — and with it the whole booking flow — is not.
+    it('returns found:false when the RPC does not exist yet', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST202', message: 'Could not find the function' },
+      });
+      expect(await partnerPlaceService.getDiscountForDropoff(1, 2, 2000)).toEqual({ found: false });
+    });
+
+    it('returns found:false on any other error rather than throwing', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+      expect(await partnerPlaceService.getDiscountForDropoff(1, 2, 2000)).toEqual({ found: false });
+    });
+
+    // The server is the authority; a null payload must not become `found: true`.
+    it('returns found:false when the RPC answers with nothing', async () => {
       mockRpc.mockResolvedValueOnce({ data: null, error: null });
-      expect(await partnerPlaceService.getNearby(1, 2)).toEqual([]);
+      expect(await partnerPlaceService.getDiscountForDropoff(1, 2, 2000)).toEqual({ found: false });
     });
   });
 
-  describe('getMyCoupons', () => {
+  describe('adminList', () => {
     it('calls the RPC with no arguments', async () => {
       mockRpc.mockResolvedValueOnce({ data: [], error: null });
-      await partnerPlaceService.getMyCoupons();
-      expect(mockRpc).toHaveBeenCalledWith('get_my_partner_coupons', {});
+      await partnerPlaceService.adminList();
+      expect(mockRpc).toHaveBeenCalledWith('admin_list_partner_places', {});
     });
 
-    it('returns [] when the RPC is absent', async () => {
-      mockRpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'nope' } });
-      expect(await partnerPlaceService.getMyCoupons()).toEqual([]);
+    // An admin staring at an empty table has to know the call failed, rather
+    // than believing there are no partner places.
+    it('propagates the RPC error', async () => {
+      const err = { message: 'admin only', code: '42501' };
+      mockRpc.mockResolvedValueOnce({ data: null, error: err });
+      await expect(partnerPlaceService.adminList()).rejects.toEqual(err);
     });
   });
 
-  describe('validateCode', () => {
-    it('passes the business token and the raw code — the RPC normalises the code', async () => {
-      mockRpc.mockResolvedValueOnce({ data: { status: 'valid' }, error: null });
-      await partnerPlaceService.validateCode(TOKEN, 'tg-k7m2qx');
-      expect(mockRpc).toHaveBeenCalledWith('validate_partner_coupon', {
-        p_token: TOKEN, p_code: 'tg-k7m2qx',
+  describe('adminUpsert', () => {
+    it('maps the form to the RPC params, with a percentage and no coupon fields', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'new-id', error: null });
+      const id = await partnerPlaceService.adminUpsert({
+        id: null,
+        name: 'Sylvain',
+        category: 'cafe',
+        latitude: 23.1,
+        longitude: -82.3,
+        discount_percent: 20,
+        tagline: 'Panadería artesanal',
+        radius_m: 120,
+        is_active: true,
+      });
+      expect(id).toBe('new-id');
+      expect(mockRpc).toHaveBeenCalledWith('admin_upsert_partner_place', {
+        p_id: null,
+        p_name: 'Sylvain',
+        p_category: 'cafe',
+        p_lat: 23.1,
+        p_lng: -82.3,
+        p_discount_percent: 20,
+        p_tagline: 'Panadería artesanal',
+        p_photo_url: null,
+        p_address: null,
+        p_municipality: null,
+        p_province: null,
+        p_phone: null,
+        p_hours: null,
+        p_radius_m: 120,
+        p_is_active: true,
+        p_valid_until: null,
       });
     });
 
-    it('returns the verdict object', async () => {
-      const verdict = { status: 'valid', place_name: 'Sylvain', customer: 'Eduardo P.' };
-      mockRpc.mockResolvedValueOnce({ data: verdict, error: null });
-      expect(await partnerPlaceService.validateCode(TOKEN, 'K7M2QX')).toEqual(verdict);
-    });
-
-    // This one is public and business-facing: an error must surface, not be
-    // swallowed into a green screen that makes the shop give away a coffee.
     it('propagates the RPC error', async () => {
-      const err = { message: 'boom', code: 'X' };
+      const err = { message: 'El descuento debe estar entre 1 y 100.', code: 'P0001' };
       mockRpc.mockResolvedValueOnce({ data: null, error: err });
-      await expect(partnerPlaceService.validateCode(TOKEN, 'K7M2QX')).rejects.toEqual(err);
-    });
-  });
-
-  describe('redeemCode', () => {
-    it('calls redeem_partner_coupon with token and code', async () => {
-      mockRpc.mockResolvedValueOnce({ data: { status: 'redeemed' }, error: null });
-      expect(await partnerPlaceService.redeemCode(TOKEN, 'K7M2QX')).toEqual({ status: 'redeemed' });
-      expect(mockRpc).toHaveBeenCalledWith('redeem_partner_coupon', {
-        p_token: TOKEN, p_code: 'K7M2QX',
-      });
-    });
-
-    it('propagates the RPC error', async () => {
-      const err = { message: 'boom', code: 'X' };
-      mockRpc.mockResolvedValueOnce({ data: null, error: err });
-      await expect(partnerPlaceService.redeemCode(TOKEN, 'K7M2QX')).rejects.toEqual(err);
-    });
-  });
-
-  describe('redeemOwn', () => {
-    it('calls redeem_own_partner_coupon with the coupon id', async () => {
-      mockRpc.mockResolvedValueOnce({ data: { status: 'redeemed' }, error: null });
-      await partnerPlaceService.redeemOwn(COUPON);
-      expect(mockRpc).toHaveBeenCalledWith('redeem_own_partner_coupon', { p_coupon_id: COUPON });
-    });
-
-    it('propagates the RPC error', async () => {
-      const err = { message: 'boom', code: 'X' };
-      mockRpc.mockResolvedValueOnce({ data: null, error: err });
-      await expect(partnerPlaceService.redeemOwn(COUPON)).rejects.toEqual(err);
-    });
-
-    // redeem_own_partner_coupon (00531) is the only RPC of the five that can
-    // answer with these two, and both are ordinary outcomes rather than faults:
-    // 'unavailable' is what a passenger gets for double-tapping "Ya lo usé" or
-    // tapping it after the coupon expired, and it must reach the caller intact
-    // so the ticket screen can say which. The explicit CouponValidation
-    // annotation is the point of these two tests as much as the round-trip is:
-    // it makes tsc — not a reviewer's memory — verify that the status union
-    // actually covers what the SQL emits.
-    it('passes an "unavailable" verdict through untouched', async () => {
-      const verdict: CouponValidation = { status: 'unavailable' };
-      mockRpc.mockResolvedValueOnce({ data: verdict, error: null });
-      expect(await partnerPlaceService.redeemOwn(COUPON)).toEqual({ status: 'unavailable' });
-    });
-
-    it('passes an "unauthenticated" verdict through untouched', async () => {
-      const verdict: CouponValidation = { status: 'unauthenticated' };
-      mockRpc.mockResolvedValueOnce({ data: verdict, error: null });
-      expect(await partnerPlaceService.redeemOwn(COUPON)).toEqual({ status: 'unauthenticated' });
+      await expect(partnerPlaceService.adminUpsert({
+        id: null, name: 'x', category: 'cafe', latitude: 1, longitude: 2,
+        discount_percent: 0, radius_m: 80, is_active: true,
+      })).rejects.toEqual(err);
     });
   });
 });

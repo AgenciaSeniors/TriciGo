@@ -15,6 +15,7 @@ import type {
   VehicleType,
   SearchingDriverPresence,
   DriverAcceptedBroadcast,
+  PartnerDiscount,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
 import { logger, deliveryVehicleToSlug } from '@tricigo/utils';
@@ -142,6 +143,12 @@ interface RideState {
   promoCode: string;
   promoResult: PromoResult | null;
 
+  // Partner-place discount for the current destination (00559). Display only —
+  // the charged amount is recomputed server-side from the ride's dropoff, so
+  // nothing here is sent with createRide. Promo and partner do not stack: the
+  // larger of the two wins, which is resolved in the same trigger.
+  partnerDiscount: PartnerDiscount | null;
+
   // Multi-type fare estimates for comparison UI
   allFareEstimates: Partial<Record<ServiceTypeSlug, FareEstimate>> | null;
 
@@ -171,6 +178,7 @@ interface RideState {
   setError: (error: string | null) => void;
   setPromoCode: (code: string) => void;
   setPromoResult: (result: PromoResult | null) => void;
+  setPartnerDiscount: (discount: PartnerDiscount | null) => void;
   setCorporateAccount: (id: string | null) => void;
   setAllFareEstimates: (estimates: Partial<Record<ServiceTypeSlug, FareEstimate>> | null) => void;
   setDeliveryField: (field: keyof DeliveryDraft, value: DeliveryDraft[keyof DeliveryDraft]) => void;
@@ -211,6 +219,8 @@ export const useRideStore = create<RideState>((set, get) => ({
   prefetchedPickup: null,
   promoCode: '',
   promoResult: null,
+
+  partnerDiscount: null,
   allFareEstimates: null,
   splits: [],
   searchingDrivers: [],
@@ -374,6 +384,8 @@ export const useRideStore = create<RideState>((set, get) => ({
         allFareEstimates: null,
         promoCode: '',
         promoResult: null,
+
+        partnerDiscount: null,
         splits: [],
         activeRide: null,
         rideWithDriver: null,
@@ -387,6 +399,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   setError: (error) => set({ error }),
   setPromoCode: (promoCode) => set({ promoCode }),
   setPromoResult: (promoResult) => set({ promoResult }),
+  setPartnerDiscount: (partnerDiscount) => set({ partnerDiscount }),
   setAllFareEstimates: (allFareEstimates) => set({ allFareEstimates }),
   setCorporateAccount: (corporateAccountId) =>
     set((s) => {
@@ -512,6 +525,8 @@ export const useRideStore = create<RideState>((set, get) => ({
       error: null,
       promoCode: '',
       promoResult: null,
+
+      partnerDiscount: null,
       splits: [],
       prefetchedPickup: null,
     })),
@@ -536,6 +551,8 @@ export const useRideStore = create<RideState>((set, get) => ({
       error: null,
       promoCode: '',
       promoResult: null,
+
+      partnerDiscount: null,
       splits: [],
       prefetchedPickup: null,
       searchingDrivers: [],

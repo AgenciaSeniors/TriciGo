@@ -15,7 +15,7 @@ import Toast from 'react-native-toast-message';
 import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
-import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion } from '@tricigo/api';
+import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -51,7 +51,6 @@ import {
 } from '@tricigo/ui';
 import { useWeather } from '@/hooks/useWeather';
 import { PartnerPlacesCarousel } from '@/components/PartnerPlacesCarousel';
-import { PartnerCouponBanner } from '@/components/PartnerCouponBanner';
 import { useTokens } from '@/hooks/useTokens';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentAddresses } from '@/hooks/useRecentAddresses';
@@ -59,7 +58,7 @@ import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
 import { vehicleSelectionImages } from '@/utils/vehicleImages';
 import { SplitInviteCard } from '@/components/SplitInviteCard';
 import { FareSplitSheet } from '@/components/FareSplitSheet';
-import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory } from '@tricigo/types';
+import type { SavedLocation, ServiceTypeSlug, CorporateAccount, PackageCategory, PartnerDiscount } from '@tricigo/types';
 import { PACKAGE_CATEGORIES } from '@tricigo/types';
 import type { PredictedDestination } from '@tricigo/utils';
 import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
@@ -706,6 +705,28 @@ function WebHomeScreen() {
   // Derived
   const selectedEstimate = serviceType === 'mensajeria' ? allEstimates[deliveryVehicle] : allEstimates[serviceType];
   const hasBothLocations = !!(pickup && dropoff);
+
+  // Partner-place discount for this destination (00559). Display only: the
+  // charged amount is recomputed server-side from the ride's dropoff, so
+  // nothing here is sent with createRide.
+  const [partnerDiscount, setPartnerDiscount] = useState<PartnerDiscount | null>(null);
+  useEffect(() => {
+    const fare = selectedEstimate?.estimated_fare_cup ?? 0;
+    if (!dropoff || fare <= 0) { setPartnerDiscount(null); return; }
+    let cancelled = false;
+    // The service degrades to { found: false } on any error, so a missing or
+    // not-yet-applied RPC costs the passenger a discount label, never the page.
+    void partnerPlaceService
+      .getDiscountForDropoff(dropoff.latitude, dropoff.longitude, fare)
+      .then((d) => { if (!cancelled) setPartnerDiscount(d.found ? d : null); });
+    return () => { cancelled = true; };
+  }, [dropoff, selectedEstimate?.estimated_fare_cup]);
+
+  // Promo and partner do NOT stack — the larger wins, exactly as the server
+  // trigger resolves it, so the price on screen is the price charged.
+  const promoDiscountAmount = promoResult?.valid ? (promoResult.discount ?? 0) : 0;
+  const partnerDiscountAmount = partnerDiscount?.discount_cup ?? 0;
+  const webDiscount = Math.max(promoDiscountAmount, partnerDiscountAmount);
 
   // Load route when both locations set
   useEffect(() => {
@@ -1416,13 +1437,13 @@ function WebHomeScreen() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <span style={{ fontSize: 13, color: c.textMuted }}>Tarifa estimada</span>
                     <div style={{ textAlign: 'right' }}>
-                      {promoResult?.valid && promoResult.discount > 0 ? (
+                      {webDiscount > 0 ? (
                         <>
                           <span style={{ fontSize: 15, fontWeight: 600, color: c.textFaint, textDecoration: 'line-through', marginRight: 8 }}>
                             {fmtPrice(selectedEstimate.estimated_fare_cup, selectedEstimate.estimated_fare_trc)}
                           </span>
                           <span style={{ fontSize: 22, fontWeight: 800, color: '#22c55e' }}>
-                            {fmtPrice(Math.max(selectedEstimate.estimated_fare_cup - promoResult.discount, 0))}
+                            {fmtPrice(Math.max(selectedEstimate.estimated_fare_cup - webDiscount, 0))}
                           </span>
                         </>
                       ) : (
@@ -1437,6 +1458,18 @@ function WebHomeScreen() {
                     <span>{Math.round((selectedEstimate.estimated_duration_s || 0) / 60)} min</span>
                     <span style={{ color: c.textFaint }}>~${((selectedEstimate.estimated_fare_cup || 0) / (selectedEstimate.exchange_rate_usd_cup || 300)).toFixed(2)} USD</span>
                   </div>
+                  {/* Say WHY the price dropped. A promo the passenger typed
+                      explains itself; a partner discount appears on its own,
+                      and an unexplained lower number reads as a glitch. Only
+                      shown when it is the discount actually being applied. */}
+                  {partnerDiscountAmount > 0 && partnerDiscountAmount >= promoDiscountAmount && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#22c55e', fontWeight: 600 }}>
+                      {t('home.partner_discount_line', {
+                        place: partnerDiscount?.place_name ?? '',
+                        defaultValue: `Descuento por ir a ${partnerDiscount?.place_name ?? ''}`,
+                      })}
+                    </div>
+                  )}
                   {(selectedEstimate.surge_multiplier || 0) > 1 && (
                     <span style={{ display: 'inline-block', marginTop: 8, color: '#fff', background: colors.brand.orange, fontWeight: 700, padding: '2px 10px', borderRadius: 12, fontSize: 11 }}>
                       {selectedEstimate.surge_multiplier.toFixed(1)}x · mal tiempo
@@ -1602,7 +1635,7 @@ function WebHomeScreen() {
                 ? 'Solicitando...'
                 : selectedEstimate
                   ? `Solicitar ${WEB_SERVICES.find((s) => s.slug === serviceType)?.name || ''} · ${fmtPrice(
-                      promoResult?.valid ? Math.max(selectedEstimate.estimated_fare_cup - (promoResult.discount || 0), 0) : selectedEstimate.estimated_fare_cup,
+                      Math.max(selectedEstimate.estimated_fare_cup - webDiscount, 0),
                       promoResult?.valid ? undefined : selectedEstimate.estimated_fare_trc,
                     )}`
                 : 'Solicitar viaje'}
@@ -1811,25 +1844,6 @@ function NativeHomeScreen() {
     return (
       <>
         <Screen bg="cuban" padded scroll={enableScroll}>
-          {/* ── Cupón activo ── the SECOND of the banner's two mount points.
-              A passenger who closes the ticket and books another ride has the
-              home replaced by this branch; without a mount here their live
-              coupon becomes unreachable while its two-hour clock runs down.
-              Deliberately OUTSIDE the Animated.View so it does not blink on
-              every flow-step crossfade. Renders null when there is no coupon.
-
-              'searching' matters as much as 'active' here, and is easy to miss:
-              since the staged-radius dispatch in 00525 a passenger can sit in
-              searching for several minutes, and that is dead time in which the
-              clock runs but the coupon cannot be reached.
-
-              'reviewing' and 'completed' are deliberately excluded — the first
-              is a short, focused confirm step where a stray tap would abandon
-              the fare the passenger is reading, and the second already shows
-              the whole ticket. */}
-          {(flowStep === 'active' || flowStep === 'searching') && (
-            <PartnerCouponBanner tokens={tokens} compact />
-          )}
           <Animated.View style={{ opacity: flowFadeAnim, flex: 1 }}>
             {flowStep === 'reviewing' && <ReviewingView />}
             {flowStep === 'searching' && <SearchingView />}
@@ -2359,14 +2373,6 @@ function IdleView() {
             </Text>
           </Pressable>
         )}
-
-        {/* ── Cupón activo ── the FIRST of the banner's two mount points, the
-            other being the ride-in-progress branch of NativeHomeScreen. Sits
-            above the balance and the address search because it is the only
-            thing on this screen with a deadline: two hours from arrival and
-            it is gone. Renders null when there is no live coupon, so it costs
-            the layout nothing the rest of the time. */}
-        <PartnerCouponBanner tokens={tokens} />
 
         {/* ── Balance ── */}
         <BalanceHeroCard
@@ -4070,6 +4076,7 @@ function ReviewingView() {
   }, [draft.paymentMethod]);
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const user = useAuthStore((s) => s.user);
+  const partnerDiscount = useRideStore((s) => s.partnerDiscount);
   const [promoExpanded, setPromoExpanded] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const insuranceEnabled = useFeatureFlag('trip_insurance_enabled');
@@ -4128,12 +4135,36 @@ function ReviewingView() {
     requestEstimate();
   }, [setServiceType, requestEstimate]);
 
+  const promoDiscountAmount = promoResult?.valid ? (promoResult.discountAmount ?? 0) : 0;
+  // "Compartir viaje" preview discount (the server trigger 00347 recomputes
+  // it authoritatively at booking — this is display-only). Tricycle capacity
+  // is 4; free seats = 4 − seats the rider occupies (passengerCount). Default
+  // 7% per free seat.
+  const shareFreeSeats =
+    draft.serviceType === 'triciclo_basico' && draft.shareRide
+      ? Math.max(0, 4 - (draft.passengerCount || 1))
+      : 0;
+  const shareDiscount =
+    shareFreeSeats > 0
+      ? Math.floor((fareEstimate?.estimated_fare_cup ?? 0) * shareFreeSeats * 7 / 100)
+      : 0;
+  // Partner place (00559). Promo and partner do NOT stack — the larger wins.
+  // Mirrors exactly what tg_rides_validate_promo_discount computes server-side,
+  // so the price shown here is the price charged.
+  const partnerDiscountAmount = partnerDiscount?.found ? (partnerDiscount.discount_cup ?? 0) : 0;
+  const promoDiscount = Math.max(promoDiscountAmount, partnerDiscountAmount);
+  const discount = promoDiscount + shareDiscount;
+
   // UBER-1.2: Smart confirm label
   const selectedServiceLabel = t(`service_type.${selectedSlug}` as const);
   const confirmLabel = fareEstimate
     ? t('home.request_with_details', {
         service: selectedServiceLabel,
-        fare: formatCUP(fareEstimate.estimated_fare_cup),
+        // The discounted price, not the list price. A button promising the full
+        // fare next to a breakdown that totals less reads as a bug — and with a
+        // partner discount, which applies silently, it would be the only number
+        // the passenger sees before confirming.
+        fare: formatCUP(Math.max(fareEstimate.estimated_fare_cup - discount, 0)),
         eta: Math.ceil((fareEstimate.estimated_duration_s || 0) / 60),
       })
     : t('home.calculating', { defaultValue: 'Calculando...' });
@@ -4166,21 +4197,6 @@ function ReviewingView() {
     }
     return null;
   }
-
-  const promoDiscount = promoResult?.valid ? (promoResult.discountAmount ?? 0) : 0;
-  // "Compartir viaje" preview discount (the server trigger 00347 recomputes
-  // it authoritatively at booking — this is display-only). Tricycle capacity
-  // is 4; free seats = 4 − seats the rider occupies (passengerCount). Default
-  // 7% per free seat.
-  const shareFreeSeats =
-    draft.serviceType === 'triciclo_basico' && draft.shareRide
-      ? Math.max(0, 4 - (draft.passengerCount || 1))
-      : 0;
-  const shareDiscount =
-    shareFreeSeats > 0
-      ? Math.floor((fareEstimate?.estimated_fare_cup ?? 0) * shareFreeSeats * 7 / 100)
-      : 0;
-  const discount = promoDiscount + shareDiscount;
 
   return (
     <View className="pt-4 flex-1">
@@ -4443,7 +4459,20 @@ function ReviewingView() {
               totalTrc={fareEstimate.estimated_fare_trc}
               totalLabel={t('ride.estimated_fare')}
               discountCup={discount} /* Bugfix: prop is discountCup (TRC = CUP 1:1, the component computes TRC internally). `discountTrc` was never accepted by FareBreakdownCardProps so the value was silently dropped — the card rendered without the discount. */
-              discountLabel={discount > 0 ? (shareDiscount > 0 && promoDiscount === 0 ? t('ride.share_discount', { defaultValue: 'Compartir viaje' }) : t('ride.discount', { defaultValue: 'Descuento' })) : undefined}
+              /* Naming the partner place matters: unlike a promo the passenger
+                 typed, this discount appears on its own, and an unlabelled
+                 "Descuento" would read as a glitch rather than as the reason
+                 they chose that destination. */
+              discountLabel={discount > 0
+                ? (partnerDiscountAmount > 0 && partnerDiscountAmount >= promoDiscountAmount
+                    ? t('home.partner_discount_line', {
+                        place: partnerDiscount?.place_name ?? '',
+                        defaultValue: `Descuento por ir a ${partnerDiscount?.place_name ?? ''}`,
+                      })
+                    : shareDiscount > 0 && promoDiscount === 0
+                      ? t('ride.share_discount', { defaultValue: 'Compartir viaje' })
+                      : t('ride.discount', { defaultValue: 'Descuento' }))
+                : undefined}
               minFareApplied={fareEstimate.min_fare_applied}
               minFareNote={fareEstimate.min_fare_applied ? t('ride.min_fare_note', { defaultValue: 'Se aplicó tarifa mínima' }) : undefined}
               fareRangeMinTrc={fareEstimate.fare_range_min_trc}

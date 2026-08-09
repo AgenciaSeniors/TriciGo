@@ -4,7 +4,7 @@ import { AppState } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { rideService, deliveryService, walletService, corporateService } from '@tricigo/api';
+import { rideService, deliveryService, walletService, corporateService, partnerPlaceService } from '@tricigo/api';
 import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance, isPlaceholderAddress, reverseGeocode } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
@@ -373,6 +373,7 @@ export function useRideActions() {
     setFareEstimating,
     setError,
     setPromoResult,
+    setPartnerDiscount,
     resetAll,
   } = useRideStore();
   // Bug 24: Use both useState (for UI re-renders) and a ref (for async access in confirmRide)
@@ -416,6 +417,10 @@ export function useRideActions() {
 
     // Bug 22: Clear stale promo result on re-estimate so it doesn't carry over
     setPromoResult(null);
+    // Same reason, and it matters more here: the partner discount belongs to a
+    // specific destination. Carrying it across a destination change would show
+    // a discount the server will not apply.
+    setPartnerDiscount(null);
 
     setFareEstimating(true);
     setError(null);
@@ -442,6 +447,27 @@ export function useRideActions() {
         waypoints: validWaypoints.length > 0 ? validWaypoints : undefined,
       });
       setFareEstimate(estimate);
+
+      // Partner-place discount for this destination. Display only: the amount
+      // actually charged is recomputed server-side from the ride's dropoff, so
+      // nothing is sent back with createRide and there is nothing to forge.
+      // The service already degrades to { found: false } on any error, which is
+      // why this is not wrapped — a missing discount must never block the
+      // estimate, and with it the whole booking flow.
+      void partnerPlaceService
+        .getDiscountForDropoff(
+          draft.dropoff.location.latitude,
+          draft.dropoff.location.longitude,
+          estimate.estimated_fare_cup,
+        )
+        .then((d) => {
+          // The destination may have changed while this was in flight; only
+          // apply it if the estimate on screen is still the one we priced.
+          if (useRideStore.getState().fareEstimate === estimate) {
+            setPartnerDiscount(d.found ? d : null);
+          }
+        });
+
       // Auto-estimate stays on 'selecting' — inline prices, no ReviewingView transition
 
       // Estimate other service types in background for comparison UI

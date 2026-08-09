@@ -1,24 +1,28 @@
 'use client';
 
 // ============================================================
-// TriciGo Admin — /admin/partners — Partner places (arrival coupons)
+// TriciGo Admin — /admin/partners — Partner places (fare discounts)
 //
-// An admin configures a business with coordinates and a negotiated perk; any
-// ride ending inside its radius issues the passenger a single-use coupon.
-// The business absorbs the perk, so nothing here touches wallets or the
-// ledger. See docs/superpowers/specs/2026-07-31-partner-places-discounts-design.md
+// An admin configures a business with coordinates and a discount percentage;
+// any ride ENDING inside its radius costs the passenger that much less, and
+// they see the reduced price before confirming.
 //
-// Reads go through admin_list_partner_places (00533) rather than the table:
-// 00529 revoked SELECT on partner_places.validation_token from `authenticated`
-// so a logged-in passenger cannot harvest every business's secret link. The
-// SECURITY DEFINER RPC resolves privileges against its owner, which is how the
-// admin still sees the token.
+// TriciGo absorbs the discount out of its own commission — the driver is paid
+// on the full fare. The percentage is capped at the ride's effective commission
+// when applied (00559), so the platform gives up commission but never puts in
+// money of its own. That is why the form does not need to police the number
+// beyond 1–100: a place set to 80% simply behaves as if it were set to the
+// commission.
+//
+// Before 00558 the business absorbed the perk and handed it over as a coupon at
+// the counter. That model, its secret validation link and its redemption
+// counters are gone.
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Gift, Plus, X } from 'lucide-react';
-import { partnerPlaceService, TRICIGO_CATEGORIES } from '@tricigo/api';
+import { partnerPlaceService, walletService, TRICIGO_CATEGORIES } from '@tricigo/api';
 import type { AdminPartnerPlace, AdminPartnerPlaceInput } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { useToast } from '@/components/ui/AdminToast';
@@ -38,9 +42,8 @@ const emptyForm: AdminPartnerPlaceInput = {
   category: 'cafe',
   latitude: 23.1136,     // central Havana
   longitude: -82.3666,
-  benefit_title: '',
-  benefit_description: '',
-  terms: '',
+  discount_percent: 10,
+  tagline: '',
   photo_url: '',
   address: '',
   municipality: '',
@@ -48,8 +51,6 @@ const emptyForm: AdminPartnerPlaceInput = {
   phone: '',
   hours: '',
   radius_m: 80,
-  coupon_ttl_minutes: 120,
-  cooldown_days: 0,      // 0 = unlimited, the shipped default
   is_active: true,
   valid_until: null,
 };
@@ -62,6 +63,9 @@ export default function PartnersPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<AdminPartnerPlaceInput>({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  // Read, never hardcoded: the cap follows platform_config.commission_rate, so
+  // a hardcoded "15%" here would start lying the day that value changes.
+  const [commissionPct, setCommissionPct] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,25 +82,33 @@ export default function PartnersPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    // Best effort: if it fails we just omit the hint, never block the form.
+    walletService.getConfigValue('commission_rate')
+      .then((v) => { const n = Number(v); if (Number.isFinite(n) && n > 0 && n < 1) setCommissionPct(n * 100); })
+      .catch(() => { /* hint is optional */ });
+  }, []);
+
   const openEdit = (p: AdminPartnerPlace) => {
     setForm({
       id: p.id, name: p.name, category: p.category,
       latitude: p.latitude, longitude: p.longitude,
-      benefit_title: p.benefit_title, benefit_description: p.benefit_description,
-      terms: p.terms ?? '', photo_url: p.photo_url ?? '', address: p.address ?? '',
+      discount_percent: p.discount_percent, tagline: p.tagline ?? '',
+      photo_url: p.photo_url ?? '', address: p.address ?? '',
       municipality: p.municipality ?? '', province: p.province ?? '',
       phone: p.phone ?? '', hours: p.hours ?? '',
-      radius_m: p.radius_m, coupon_ttl_minutes: p.coupon_ttl_minutes,
-      cooldown_days: p.cooldown_days, is_active: p.is_active,
+      radius_m: p.radius_m, is_active: p.is_active,
       valid_until: p.valid_until,
     });
     setShowForm(true);
   };
 
   const handleSave = async () => {
-    if (!form.name.trim())                { showToast('error', 'El nombre es obligatorio.'); return; }
-    if (!form.benefit_title.trim())       { showToast('error', 'El título del beneficio es obligatorio.'); return; }
-    if (!form.benefit_description.trim()) { showToast('error', 'La descripción del beneficio es obligatoria.'); return; }
+    if (!form.name.trim()) { showToast('error', 'El nombre es obligatorio.'); return; }
+    if (!(form.discount_percent > 0) || form.discount_percent > 100) {
+      showToast('error', 'El descuento debe estar entre 1 y 100.');
+      return;
+    }
     setSaving(true);
     try {
       await partnerPlaceService.adminUpsert(form);
@@ -111,65 +123,35 @@ export default function PartnersPage() {
     }
   };
 
-  // Click-to-copy, never a plain <a>. Opening the link from here would spend a
-  // validation attempt against that business's own rate-limit budget (00531).
-  const copyLink = async (token: string) => {
-    const url = `https://tricigo.com/v/${token}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast('success', 'Enlace copiado.');
-    } catch {
-      // Clipboard access can be refused outright (insecure context, denied
-      // permission). Say so — a silent no-op reads as a copy that worked.
-      showToast('error', `No pudimos copiar el enlace. Cópialo a mano: ${url}`);
-    }
-  };
-
   const columns: DataColumn<AdminPartnerPlace>[] = [
     { id: 'name', header: 'Lugar', primary: true,
       cell: (p) => <span className="font-medium text-ink">{p.name}</span> },
     { id: 'municipality', header: 'Municipio', hideBelow: 'md',
       cell: (p) => p.municipality ?? <span className="text-ink-subtle">—</span> },
-    { id: 'benefit', header: 'Beneficio',
-      cell: (p) => <span className="font-medium text-orange-600">{p.benefit_title}</span> },
-    // The health of the agreement. 200 issued against 12 redeemed means the
-    // perk interests nobody and the deal needs renegotiating — surface it.
-    { id: 'usage', header: 'Emitidos / canjeados', width: '190px',
-      cell: (p) => {
-        const pct = p.issued_count > 0
-          ? Math.round((p.redeemed_count / p.issued_count) * 100) : 0;
-        return (
-          <span className="tabular-nums">
-            {p.issued_count} / {p.redeemed_count}
-            <span className="ml-2 text-ink-subtle">{p.issued_count > 0 ? `${pct}%` : '—'}</span>
-            {p.redeemed_count > p.redeemed_by_business_count && (
-              <span className="ml-2 text-[10px] text-ink-subtle">
-                ({p.redeemed_by_business_count} verif.)
-              </span>
-            )}
+    { id: 'discount', header: 'Descuento', width: '120px',
+      cell: (p) => (
+        <span className="font-medium tabular-nums text-orange-600">
+          {Math.round(p.discount_percent)}%
+        </span>
+      ) },
+    // What the deal actually costs. Rides tell you whether it draws anyone;
+    // the CUP column tells you what that traffic is being paid for. A place
+    // with many rides and little given up is a good deal; the reverse is one
+    // to renegotiate.
+    { id: 'usage', header: 'Viajes / CUP resignados', width: '200px',
+      cell: (p) => (
+        <span className="tabular-nums">
+          {p.rides_count}
+          <span className="ml-2 text-ink-subtle">
+            {p.rides_count > 0 ? `${p.discount_given_cup.toLocaleString('es-CU')} CUP` : '—'}
           </span>
-        );
-      } },
+        </span>
+      ) },
     { id: 'status', header: 'Estado', width: '110px',
       cell: (p) => (
         <span className={p.is_active ? 'text-emerald-700 dark:text-emerald-400' : 'text-ink-subtle'}>
           {p.is_active ? 'Activo' : 'Inactivo'}
         </span>
-      ) },
-    // The secret link you hand the business when the deal is signed. It is the
-    // identity the rate limiter counts against and the reason a bakery's coupon
-    // cannot be redeemed at a café — so it has to be easy to copy and hard to
-    // mistype.
-    { id: 'link', header: 'Enlace del negocio', width: '230px',
-      cell: (p) => (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); void copyLink(p.validation_token); }}
-          className="font-mono text-xs text-ink-subtle hover:text-ink"
-          title="Copiar el enlace"
-        >
-          /v/{p.validation_token}
-        </button>
       ) },
     { id: 'created_at', header: 'Creado', hideBelow: 'lg',
       cell: (p) => <span className="text-xs text-ink-subtle">{formatAdminDate(p.created_at)}</span> },
@@ -183,7 +165,9 @@ export default function PartnersPage() {
             <Gift className="h-5 w-5 text-orange-500" /> Lugares aliados
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            El negocio absorbe el beneficio. Nada de esto toca billeteras ni saldo.
+            Terminar un viaje aquí le descuenta la tarifa al pasajero. Lo absorbe
+            TriciGo de su comisión{commissionPct !== null ? ` (${commissionPct}%)` : ''}: el
+            conductor cobra igual que siempre y la plataforma nunca pone dinero propio.
           </p>
         </div>
         <button
@@ -205,7 +189,7 @@ export default function PartnersPage() {
         empty={{
           icon: Gift,
           title: 'Sin lugares aliados',
-          body: 'Todavía no hay ninguno. Crea el primero para empezar a emitir cupones al llegar.',
+          body: 'Todavía no hay ninguno. Crea el primero para que los viajes que terminen ahí salgan más baratos.',
         }}
       />
 
@@ -226,7 +210,8 @@ export default function PartnersPage() {
               onChange={(lat, lng) => setForm((f) => ({ ...f, latitude: lat, longitude: lng }))}
             />
             <p className="text-xs text-ink-subtle">
-              Toca el mapa para ubicar el negocio. El círculo es el radio real que dispara el cupón.
+              Toca el mapa para ubicar el negocio. El círculo es el radio real: un viaje
+              que termine dentro se lleva el descuento.
             </p>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -240,22 +225,20 @@ export default function PartnersPage() {
                   {TRICIGO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </label>
-              <label className="text-sm text-ink sm:col-span-2">Título del beneficio (corto — va en la píldora naranja)
-                <input className={INPUT_CLS} placeholder="Café gratis"
-                  value={form.benefit_title}
-                  onChange={(e) => setForm({ ...form, benefit_title: e.target.value })} />
+              <label className="text-sm text-ink">Descuento (%)
+                <input type="number" min={1} max={100} className={INPUT_CLS}
+                  value={form.discount_percent}
+                  onChange={(e) => setForm({ ...form, discount_percent: Number(e.target.value) })} />
+                <span className="mt-1 block text-xs text-ink-subtle">
+                  {commissionPct !== null
+                    ? `Se topea en la comisión del viaje (${commissionPct}%). Poner más no cuesta más: simplemente se aplica el tope.`
+                    : 'Se topea en la comisión del viaje. Poner más no cuesta más: simplemente se aplica el tope.'}
+                </span>
               </label>
-              <label className="text-sm text-ink sm:col-span-2">Descripción del beneficio
-                <input className={INPUT_CLS}
-                  placeholder="Un café con tu compra, solo por llegar en TriciGo"
-                  value={form.benefit_description}
-                  onChange={(e) => setForm({ ...form, benefit_description: e.target.value })} />
-              </label>
-              <label className="text-sm text-ink sm:col-span-2">Letra chica (opcional)
-                <input className={INPUT_CLS}
-                  placeholder="No acumulable, hasta agotar existencias"
-                  value={form.terms ?? ''}
-                  onChange={(e) => setForm({ ...form, terms: e.target.value })} />
+              <label className="text-sm text-ink">Descripción corta (opcional)
+                <input className={INPUT_CLS} placeholder="Panadería artesanal"
+                  value={form.tagline ?? ''}
+                  onChange={(e) => setForm({ ...form, tagline: e.target.value })} />
               </label>
               <label className="text-sm text-ink sm:col-span-2">URL de la foto
                 <input className={INPUT_CLS} value={form.photo_url ?? ''}
@@ -285,14 +268,6 @@ export default function PartnersPage() {
               <label className="text-sm text-ink">Radio (m)
                 <input type="number" className={INPUT_CLS} value={form.radius_m}
                   onChange={(e) => setForm({ ...form, radius_m: Number(e.target.value) })} />
-              </label>
-              <label className="text-sm text-ink">Duración del cupón (min)
-                <input type="number" className={INPUT_CLS} value={form.coupon_ttl_minutes}
-                  onChange={(e) => setForm({ ...form, coupon_ttl_minutes: Number(e.target.value) })} />
-              </label>
-              <label className="text-sm text-ink">Espera entre cupones (días — 0 = sin límite)
-                <input type="number" className={INPUT_CLS} value={form.cooldown_days}
-                  onChange={(e) => setForm({ ...form, cooldown_days: Number(e.target.value) })} />
               </label>
               <label className="text-sm text-ink">Fin del acuerdo (opcional)
                 <input type="date" className={INPUT_CLS}

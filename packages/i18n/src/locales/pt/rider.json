@@ -13,25 +13,10 @@
     "weight": "Peso estimado (kg)"
   },
 
-  "coupon": {
-    "title": "Seu cupom",
-    "show_code": "MOSTRE ESTE CÓDIGO",
-    "validate_hint": "O negócio pode validá-lo no seu link da TriciGo",
-    "mark_used": "Já usei",
-    "marked_used": "Cupom marcado como usado",
-    "mark_failed": "Não foi possível marcar o cupom",
-    "mark_failed_hint": "Seu cupom continua ativo. Mostre-o no local.",
-    "already_gone": "Este cupom não está mais disponível",
-    "already_gone_hint": "Pode já ter sido usado ou ter vencido.",
-    "session_expired": "Sua sessão expirou",
-    "session_expired_hint": "Entre novamente para marcá-lo.",
-    "expired_title": "Este cupom não está mais disponível",
-    "expired_body": "Sua próxima viagem até lá dá um novo.",
-    "call": "Ligar"
-  },
   "home": {
-    "partner_places_label": "LUGARES COM BENEFÍCIO",
-    "partner_has_coupon": "Você já tem um cupom ativo aqui",
+    "partner_places_label": "LUGARES COM DESCONTO",
+    "partner_discount_badge": "-{{pct}}% NA SUA VIAGEM",
+    "partner_discount_line": "Desconto por ir a {{place}}",
     "greeting": "Olá, {{name}}!",
     "where_to": "Para onde?",
     "search_destination": "Buscar destino",

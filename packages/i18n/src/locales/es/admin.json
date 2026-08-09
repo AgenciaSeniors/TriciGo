@@ -1205,9 +1205,7 @@
     "toast_resolved": "Incidente resuelto"
   },
   "platform_config": {
-    "partner_places_discovery_radius_m_help": "Radio en metros dentro del cual el pasajero ve lugares aliados en el inicio. 15000 = 15 km. No afecta la emisión del cupón: eso lo decide el radio propio de cada lugar.",
-    "coupon_validate_max_per_window_help": "Cuántas validaciones puede hacer UN negocio en cada ventana. El límite es por negocio, no por IP. Bajalo si sospechás abuso; subilo si un negocio con mucho movimiento se queda corto.",
-    "coupon_validate_window_s_help": "Duración de la ventana del límite anterior, en segundos. 600 = 10 minutos.",
+    "partner_places_discovery_radius_m_help": "Radio en metros dentro del cual el pasajero ve lugares aliados en el inicio. 15000 = 15 km. No afecta el descuento: eso lo decide el radio propio de cada lugar.",
     "title": "Configuración de plataforma",
     "subtitle": "Parámetros globales del sistema",
     "key": "Clave",

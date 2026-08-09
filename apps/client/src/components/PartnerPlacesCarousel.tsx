@@ -42,7 +42,8 @@ export function PartnerPlacesCarousel({ latitude, longitude, tokens, onSelect }:
 
   useEffect(() => { void load(); }, [load]);
   // Stale-on-mount: tabs stay mounted, so refetch on focus / app foreground.
-  // `has_active_coupon` flips the moment a ride ends inside a partner radius.
+  // An admin can add a place or change its percentage at any time, and a stale
+  // badge here would promise a discount the server will not honour.
   useRefreshOnFocus(load);
 
   if (places.length === 0) return null;
@@ -78,7 +79,7 @@ export function PartnerPlacesCarousel({ latitude, longitude, tokens, onSelect }:
             onPress={() => onSelect(p)}
             android_ripple={{ color: 'rgba(255,255,255,0.18)' }}
             accessibilityRole="button"
-            accessibilityLabel={`${p.name}: ${p.benefit_title}`}
+            accessibilityLabel={`${p.name}: ${Math.round(p.discount_percent)}% de descuento en tu viaje`}
           >
             {({ pressed }) => (
               <View style={{
@@ -106,7 +107,10 @@ export function PartnerPlacesCarousel({ latitude, longitude, tokens, onSelect }:
                       fontFamily: 'JetBrainsMono_600SemiBold', fontSize: 9,
                       letterSpacing: 1.2, color: '#fff',
                     }}>
-                      {p.benefit_title.toUpperCase()}
+                      {t('home.partner_discount_badge', {
+                        pct: Math.round(p.discount_percent),
+                        defaultValue: `-${Math.round(p.discount_percent)}% EN TU VIAJE`,
+                      })}
                     </Text>
                   </View>
 
@@ -115,12 +119,14 @@ export function PartnerPlacesCarousel({ latitude, longitude, tokens, onSelect }:
                   }}>
                     {p.name}
                   </Text>
-                  <Text numberOfLines={2} style={{
-                    fontFamily: 'Inter', fontSize: 12, color: tokens.ink.subtle,
-                    lineHeight: 16, marginTop: 3,
-                  }}>
-                    {p.benefit_description}
-                  </Text>
+                  {!!p.tagline && (
+                    <Text numberOfLines={2} style={{
+                      fontFamily: 'Inter', fontSize: 12, color: tokens.ink.subtle,
+                      lineHeight: 16, marginTop: 3,
+                    }}>
+                      {p.tagline}
+                    </Text>
+                  )}
                   <Text style={{
                     fontFamily: 'JetBrainsMono_400Regular', fontSize: 10,
                     color: tokens.ink.subtle, letterSpacing: 0.5, marginTop: 7,
@@ -130,14 +136,6 @@ export function PartnerPlacesCarousel({ latitude, longitude, tokens, onSelect }:
                     {(p.distance_m / 1000).toFixed(1)} KM
                   </Text>
 
-                  {p.has_active_coupon && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 }}>
-                      <Ionicons name="ticket" size={13} color={tokens.accent.orange} />
-                      <Text style={{ fontFamily: 'Inter', fontSize: 11, color: tokens.accent.orange }}>
-                        {t('home.partner_has_coupon', { defaultValue: 'Ya tienes un cupón activo aquí' })}
-                      </Text>
-                    </View>
-                  )}
                 </View>
               </View>
             )}

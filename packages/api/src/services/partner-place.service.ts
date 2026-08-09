@@ -1,12 +1,11 @@
 import { getSupabaseClient } from '../client';
-import type { PartnerPlace, PartnerCoupon, CouponValidation } from '@tricigo/types';
+import type { PartnerPlace, PartnerDiscount } from '@tricigo/types';
 
 /**
- * A partner place as the admin panel sees it — the public shape plus the two
- * things only an admin may know: the business's secret validation token and
- * how the deal is actually performing.
+ * A partner place as the admin panel sees it: the public shape plus how the
+ * deal is actually performing.
  *
- * Not in `@tricigo/types` on purpose: this is admin-only and arrives from
+ * Not in `@tricigo/types` on purpose — this is admin-only and arrives from
  * `admin_list_partner_places`, never from the passenger-facing RPCs.
  */
 export interface AdminPartnerPlace {
@@ -17,24 +16,20 @@ export interface AdminPartnerPlace {
   municipality: string | null;
   province: string | null;
   photo_url: string | null;
-  benefit_title: string;
-  benefit_description: string;
-  terms: string | null;
+  tagline: string | null;
+  discount_percent: number;
   latitude: number;
   longitude: number;
   radius_m: number;
-  coupon_ttl_minutes: number;
-  cooldown_days: number;
   is_active: boolean;
   valid_until: string | null;
   phone: string | null;
   hours: string | null;
-  /** The business's secret validation link segment: tricigo.com/v/<token>. */
-  validation_token: string;
   created_at: string;
-  issued_count: number;
-  redeemed_count: number;
-  redeemed_by_business_count: number;
+  /** Completed rides that ended at this place. */
+  rides_count: number;
+  /** CUP the platform has given up on this deal. What it costs, in one number. */
+  discount_given_cup: number;
 }
 
 export interface AdminPartnerPlaceInput {
@@ -43,9 +38,8 @@ export interface AdminPartnerPlaceInput {
   category: string;
   latitude: number;
   longitude: number;
-  benefit_title: string;
-  benefit_description: string;
-  terms?: string | null;
+  discount_percent: number;
+  tagline?: string | null;
   photo_url?: string | null;
   address?: string | null;
   municipality?: string | null;
@@ -53,23 +47,21 @@ export interface AdminPartnerPlaceInput {
   phone?: string | null;
   hours?: string | null;
   radius_m: number;
-  coupon_ttl_minutes: number;
-  cooldown_days: number;
   is_active: boolean;
   valid_until?: string | null;
 }
 
 /**
- * Partner places and the arrival coupons they issue.
+ * Partner places and the fare discounts they carry.
  *
- * Read paths (`getNearby`, `getMyCoupons`) swallow errors and return [].
- * That is deliberate: the migrations ship to git before anyone applies them
- * to production, so the RPC is legitimately missing for a while. A missing
- * perk section is invisible; a crashing home screen is not.
+ * Read paths (`getNearby`, `getDiscountForDropoff`) swallow errors and fall
+ * back to "nothing here". That is deliberate: migrations land in git before
+ * anyone applies them to production, so the RPC is legitimately missing for a
+ * while. A missing carousel is invisible; a home screen that crashes — or a
+ * fare estimate that never resolves — is not.
  *
- * Write/verdict paths (`validateCode`, `redeemCode`, `redeemOwn`) throw.
- * The business-facing page must never render a green "VÁLIDO" because a
- * network error was quietly turned into an empty object.
+ * Admin paths throw. An admin staring at an empty table has to know the call
+ * failed rather than believe there are no partner places.
  */
 export const partnerPlaceService = {
   async getNearby(latitude: number, longitude: number, limit = 10): Promise<PartnerPlace[]> {
@@ -83,50 +75,31 @@ export const partnerPlaceService = {
     return (data ?? []) as PartnerPlace[];
   },
 
-  async getMyCoupons(): Promise<PartnerCoupon[]> {
+  /**
+   * What the passenger would save by ending the ride at these coordinates.
+   *
+   * Display only. The charged amount is computed server-side from the ride's
+   * dropoff; this call exists so the price on screen matches it before the
+   * passenger confirms.
+   */
+  async getDiscountForDropoff(
+    latitude: number,
+    longitude: number,
+    fareCup: number,
+  ): Promise<PartnerDiscount> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('get_my_partner_coupons', {});
-    if (error) return [];
-    return (data ?? []) as PartnerCoupon[];
-  },
-
-  /** @param token the business's secret link segment from tricigo.com/v/<token> */
-  async validateCode(token: string, code: string): Promise<CouponValidation> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('validate_partner_coupon', {
-      p_token: token, p_code: code,
+    const { data, error } = await supabase.rpc('get_partner_discount_for_dropoff', {
+      p_lat: latitude,
+      p_lng: longitude,
+      p_fare_cup: fareCup,
     });
-    if (error) throw error;
-    return data as CouponValidation;
-  },
-
-  /** @param token the business's secret link segment from tricigo.com/v/<token> */
-  async redeemCode(token: string, code: string): Promise<CouponValidation> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('redeem_partner_coupon', {
-      p_token: token, p_code: code,
-    });
-    if (error) throw error;
-    return data as CouponValidation;
-  },
-
-  async redeemOwn(couponId: string): Promise<CouponValidation> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.rpc('redeem_own_partner_coupon', {
-      p_coupon_id: couponId,
-    });
-    if (error) throw error;
-    return data as CouponValidation;
+    // A null payload must not read as a discount: the server is the authority
+    // on whether one applies, and silence is not a yes.
+    if (error || !data) return { found: false };
+    return data as PartnerDiscount;
   },
 
   // ── Admin ───────────────────────────────────────────────────────────
-  // These throw: an admin staring at an empty table needs to know the call
-  // failed, not silently believe there are no partner places.
-  //
-  // Both RPCs are SECURITY DEFINER and gated on is_admin(). adminList reaches
-  // validation_token, which 00529 revoked from `authenticated` at the column
-  // level — reading partner_places directly from the client cannot return it,
-  // and that is intentional (see 00533).
   async adminList(): Promise<AdminPartnerPlace[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('admin_list_partner_places', {});
@@ -142,9 +115,8 @@ export const partnerPlaceService = {
       p_category: input.category,
       p_lat: input.latitude,
       p_lng: input.longitude,
-      p_benefit_title: input.benefit_title,
-      p_benefit_description: input.benefit_description,
-      p_terms: input.terms || null,
+      p_discount_percent: input.discount_percent,
+      p_tagline: input.tagline || null,
       p_photo_url: input.photo_url || null,
       p_address: input.address || null,
       p_municipality: input.municipality || null,
@@ -152,8 +124,6 @@ export const partnerPlaceService = {
       p_phone: input.phone || null,
       p_hours: input.hours || null,
       p_radius_m: input.radius_m,
-      p_coupon_ttl_minutes: input.coupon_ttl_minutes,
-      p_cooldown_days: input.cooldown_days,
       p_is_active: input.is_active,
       p_valid_until: input.valid_until || null,
     });
