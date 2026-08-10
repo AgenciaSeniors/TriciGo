@@ -100,6 +100,48 @@ export const partnerPlaceService = {
   },
 
   // ── Admin ───────────────────────────────────────────────────────────
+
+  /**
+   * Upload a partner place photo and return its public URL.
+   *
+   * Goes through the `storage-upload` Edge Function rather than
+   * `supabase.storage.upload()`: since the publishable-key migration the
+   * Storage service rejects the browser session's JWT as `anon`, so a direct
+   * upload fails RLS. The EF authenticates the caller, requires an admin role
+   * for this bucket, and writes with service-role. Same route the web avatar
+   * takes.
+   *
+   * Unlike the read paths this THROWS. An upload that fails quietly would
+   * leave the admin believing they saved a photo that does not exist.
+   *
+   * Replacing a photo leaves the previous object orphaned in the bucket. That
+   * is deliberate and cheap — small images in a public bucket — and not worth
+   * a cleanup job yet.
+   */
+  async uploadPhoto(file: Blob, placeId?: string | null): Promise<string> {
+    const supabase = getSupabaseClient();
+    // A brand-new place has no id yet, so fall back to a random one. The EF
+    // only requires the `places/` prefix and three segments.
+    const id = placeId || crypto.randomUUID();
+    const path = `places/${id}/${Date.now()}.jpg`;
+
+    const fd = new FormData();
+    fd.append('file', file, 'photo.jpg');
+    fd.append('bucket', 'partner-photos');
+    fd.append('path', path);
+    fd.append('upsert', 'true');
+    fd.append('contentType', 'image/jpeg');
+
+    const { data, error } = await supabase.functions.invoke('storage-upload', { body: fd });
+    if (error) throw error;
+    // The EF answers 200 with an { error } body for authz and MIME rejections,
+    // so checking `error` alone would read a 403 as a successful upload.
+    const payloadError = (data as { error?: string } | null)?.error;
+    if (payloadError) throw new Error(String(payloadError));
+
+    return supabase.storage.from('partner-photos').getPublicUrl(path).data.publicUrl;
+  },
+
   async adminList(): Promise<AdminPartnerPlace[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('admin_list_partner_places', {});

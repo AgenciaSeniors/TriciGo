@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockRpc = vi.fn();
-const mockSupabase = { rpc: mockRpc };
+const mockInvoke = vi.fn();
+const mockGetPublicUrl = vi.fn(() => ({ data: { publicUrl: 'https://cdn/partner-photos/x.jpg' } }));
+const mockSupabase = {
+  rpc: mockRpc,
+  functions: { invoke: mockInvoke },
+  storage: { from: vi.fn(() => ({ getPublicUrl: mockGetPublicUrl })) },
+};
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => mockSupabase,
@@ -81,6 +87,51 @@ describe('partnerPlaceService', () => {
     it('returns found:false when the RPC answers with nothing', async () => {
       mockRpc.mockResolvedValueOnce({ data: null, error: null });
       expect(await partnerPlaceService.getDiscountForDropoff(1, 2, 2000)).toEqual({ found: false });
+    });
+  });
+
+  describe('uploadPhoto', () => {
+    const file = new Blob(['x'], { type: 'image/jpeg' });
+
+    it('uploads through the storage-upload Edge Function, under places/', async () => {
+      mockInvoke.mockResolvedValueOnce({ data: {}, error: null });
+      await partnerPlaceService.uploadPhoto(file, 'place-1');
+
+      expect(mockInvoke).toHaveBeenCalledTimes(1);
+      const [fnName, opts] = mockInvoke.mock.calls[0];
+      expect(fnName).toBe('storage-upload');
+      const fd = (opts as { body: FormData }).body;
+      expect(fd.get('bucket')).toBe('partner-photos');
+      expect(fd.get('contentType')).toBe('image/jpeg');
+      // The EF's authz branch requires the places/ prefix and >= 3 segments.
+      expect(String(fd.get('path'))).toMatch(/^places\/place-1\/\d+\.jpg$/);
+    });
+
+    it('returns the public URL of the uploaded object', async () => {
+      mockInvoke.mockResolvedValueOnce({ data: {}, error: null });
+      const url = await partnerPlaceService.uploadPhoto(file, 'place-1');
+      expect(url).toBe('https://cdn/partner-photos/x.jpg');
+    });
+
+    it('generates a path even when the place has no id yet', async () => {
+      mockInvoke.mockResolvedValueOnce({ data: {}, error: null });
+      await partnerPlaceService.uploadPhoto(file, null);
+      expect(String(mockInvoke.mock.calls[0][1].body.get('path'))).toMatch(/^places\/[^/]+\/\d+\.jpg$/);
+    });
+
+    // Unlike the readers, this THROWS. An upload that fails silently leaves the
+    // admin believing they saved a photo that does not exist.
+    it('propagates a transport error', async () => {
+      const err = new Error('network down');
+      mockInvoke.mockResolvedValueOnce({ data: null, error: err });
+      await expect(partnerPlaceService.uploadPhoto(file, 'p')).rejects.toThrow('network down');
+    });
+
+    // The EF answers 200 with an { error } body for authz/MIME rejections, so a
+    // caller that only checks `error` would treat a 403 as a successful upload.
+    it('propagates an error returned inside a 200 body', async () => {
+      mockInvoke.mockResolvedValueOnce({ data: { error: 'forbidden' }, error: null });
+      await expect(partnerPlaceService.uploadPhoto(file, 'p')).rejects.toThrow('forbidden');
     });
   });
 
