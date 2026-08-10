@@ -1,5 +1,20 @@
 # Partner Places & Arrival Coupons Implementation Plan
 
+> ## ⚠️ SUPERSEDED on 2026-08-09 — executed, then undone. Do not run this plan.
+>
+> This plan shipped as PR #914 (migrations 00532–00536). Nine days later the
+> model changed: partner places stopped being **counter coupons the business
+> absorbed** and became a **fare discount the platform absorbs out of its own
+> commission** (PR #949, migrations 00558–00564). Everything below — the
+> coupons table, the code generator, the issuance trigger, the five redemption
+> RPCs, the reminder cron and the public `/v` validation page — has since been
+> deleted.
+>
+> Kept as the record of a design that was really built and really reversed.
+>
+> **The model in production is described in
+> [`../specs/2026-08-09-partner-places-fare-discount.md`](../specs/2026-08-09-partner-places-fare-discount.md).**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Admin configures a partner business with coordinates and a negotiated perk; any ride ending within that place's radius issues the passenger a single-use coupon, redeemable at the counter and verifiable by the business on a public page.
