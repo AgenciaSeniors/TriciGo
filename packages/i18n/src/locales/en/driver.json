@@ -18,6 +18,10 @@
 
   "home": {
     "go_online": "Go online",
+    "whatsapp_group_title": "Drivers WhatsApp group",
+    "whatsapp_group_subtitle": "Join the TriciGo drivers community.",
+    "whatsapp_group_join": "Join the group",
+    "whatsapp_group_dismiss": "Hide",
     "go_offline": "Go offline",
     "online": "Online",
     "offline": "Offline",
@@ -453,6 +457,7 @@
     "operating_license": "Operating license",
     "upload": "Upload document",
     "pending_review": "We're reviewing your application",
+    "whatsapp_group_join": "Join the WhatsApp group",
     "pending_review_description": "We verify your documents in under 24 hours. We'll notify you as soon as you're approved.",
     "approved": "Welcome to the TriciGo team!",
     "rejected": "Application rejected",

@@ -725,6 +725,40 @@ function NativeDriverHomeScreen() {
     });
   }, []);
 
+  // ── Drivers WhatsApp group ────────────────────────────────────
+  // The admin sets `driver_whatsapp_group_url` in platform_config; when it
+  // holds a valid https link (and the driver hasn't dismissed the banner)
+  // the home shows a one-tap invite. Tolerant: an absent/empty key or an
+  // RPC error leaves the banner hidden — no crash, no error toast.
+  const [whatsappGroupUrl, setWhatsappGroupUrl] = useState<string | null>(null);
+  const [whatsappBannerDismissed, setWhatsappBannerDismissed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [raw, dismissed] = await Promise.all([
+          walletService.getConfigValue('driver_whatsapp_group_url'),
+          AsyncStorage.getItem('driver_whatsapp_banner_dismissed'),
+        ]);
+        if (cancelled) return;
+        const url = String(raw ?? '').replace(/^"+|"+$/g, '').trim();
+        setWhatsappGroupUrl(url.startsWith('https://') ? url : null);
+        if (dismissed === '1') setWhatsappBannerDismissed(true);
+      } catch {
+        /* key absent / RPC error → banner stays hidden */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const dismissWhatsappBanner = useCallback(() => {
+    setWhatsappBannerDismissed(true);
+    AsyncStorage.setItem('driver_whatsapp_banner_dismissed', '1').catch(() => {});
+  }, []);
+  const openWhatsappGroup = useCallback(() => {
+    if (!whatsappGroupUrl) return;
+    Linking.openURL(whatsappGroupUrl).catch(() => {});
+  }, [whatsappGroupUrl]);
+
   // Pre-launch QA: synthetic moving vehicles to preview marker rendering.
   // Gated to dev/demo builds — never shown to real drivers in production.
   const vehiclePreviewAvailable =
@@ -1466,6 +1500,7 @@ function NativeDriverHomeScreen() {
         nearestHotspot={nearestHotspot}
         fatigueLevel={fatigueLevel}
         sessionHours={sessionHours}
+        whatsappGroupUrl={whatsappBannerDismissed ? null : whatsappGroupUrl}
         onToggleOnline={handleToggleOnline}
         onToggleBreak={handleToggleBreak}
         onSubmitSelfie={submitSelfie}
@@ -1483,6 +1518,8 @@ function NativeDriverHomeScreen() {
           // (useNotificationsBlocked re-checks on AppState 'active').
           Linking.openSettings().catch(() => { /* no Settings intent */ });
         }}
+        onJoinWhatsapp={openWhatsappGroup}
+        onDismissWhatsapp={dismissWhatsappBanner}
         ctaScaleAnim={ctaScaleAnim}
         onCtaPressIn={onCtaPressIn}
         onCtaPressOut={onCtaPressOut}

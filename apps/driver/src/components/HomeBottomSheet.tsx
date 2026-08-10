@@ -87,6 +87,10 @@ export interface HomeBottomSheetProps {
   fatigueLevel: 'none' | 'soft' | 'firm';
   sessionHours: number;
 
+  // ── Drivers WhatsApp group ──
+  /** Invite link (falsy = feature off / dismissed → banner hidden). */
+  whatsappGroupUrl?: string | null;
+
   // ── Callbacks ──
   onToggleOnline: () => void;
   onToggleBreak: () => void;
@@ -95,6 +99,10 @@ export interface HomeBottomSheetProps {
   onGoToSuggestion: (lat: number, lng: number) => void;
   /** Deep-link to system Settings — the only way back after an OS denial. */
   onOpenNotificationSettings: () => void;
+  /** Open the drivers WhatsApp group invite link. */
+  onJoinWhatsapp?: () => void;
+  /** Dismiss the WhatsApp group banner (persisted by the parent). */
+  onDismissWhatsapp?: () => void;
 
   // ── Animations ──
   ctaScaleAnim: Animated.Value;
@@ -234,12 +242,15 @@ function SheetContent({
   nearestHotspot,
   fatigueLevel,
   sessionHours,
+  whatsappGroupUrl,
   onToggleOnline,
   onToggleBreak,
   onSubmitSelfie,
   onCancelAutoNav,
   onGoToSuggestion,
   onOpenNotificationSettings,
+  onJoinWhatsapp,
+  onDismissWhatsapp,
   ctaScaleAnim,
   onCtaPressIn,
   onCtaPressOut,
@@ -384,6 +395,25 @@ function SheetContent({
           }
           actionLabel={t('home.fatigue_take_break', { defaultValue: 'Tomar descanso' })}
           onActionPress={onToggleBreak}
+          palette={palette}
+        />
+      )}
+      {/* Community, not operational — last on purpose, and dismissible. Only
+          rendered when the admin has configured an invite link. */}
+      {!!whatsappGroupUrl && (
+        <Banner
+          variant="info"
+          icon="logo-whatsapp"
+          message={t('home.whatsapp_group_title', {
+            defaultValue: 'Grupo de WhatsApp de conductores',
+          })}
+          subtitle={t('home.whatsapp_group_subtitle', {
+            defaultValue: 'Únete a la comunidad de conductores de TriciGo.',
+          })}
+          actionLabel={t('home.whatsapp_group_join', { defaultValue: 'Unirme al grupo' })}
+          onActionPress={onJoinWhatsapp}
+          onDismiss={onDismissWhatsapp}
+          dismissLabel={t('home.whatsapp_group_dismiss', { defaultValue: 'Ocultar' })}
           palette={palette}
         />
       )}
@@ -799,6 +829,9 @@ interface BannerProps {
   actionLabel?: string;
   onActionPress?: () => void;
   actionDisabled?: boolean;
+  /** When set, a close (×) button is shown that calls this. */
+  onDismiss?: () => void;
+  dismissLabel?: string;
   palette: Palette;
 }
 
@@ -810,6 +843,8 @@ function Banner({
   actionLabel,
   onActionPress,
   actionDisabled,
+  onDismiss,
+  dismissLabel,
   palette,
 }: BannerProps) {
   const accent =
@@ -864,6 +899,17 @@ function Banner({
           </Pressable>
         )}
       </View>
+      {onDismiss && (
+        <Pressable
+          onPress={onDismiss}
+          hitSlop={14}
+          accessibilityRole="button"
+          accessibilityLabel={dismissLabel ?? 'Cerrar'}
+          style={{ marginTop: 1 }}
+        >
+          <Ionicons name="close" size={16} color={palette.ink.secondary} />
+        </Pressable>
+      )}
     </View>
   );
 }

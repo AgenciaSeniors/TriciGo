@@ -1299,7 +1299,18 @@
     "driver_offline_after_minutes": "Take offline after (min)",
     "driver_offline_after_minutes_help": "Minutes without a signal from the driver's app before taking them offline automatically. The app beats every 1-2 minutes, so 10 means roughly 5-10 consecutive missed beats.",
     "driver_offline_notice_enabled": "Notify when taken offline",
-    "driver_offline_notice_enabled_help": "true/false — sends the driver a notification when we take them offline for inactivity, so they know they stopped receiving rides and can reconnect."
+    "driver_offline_notice_enabled_help": "true/false — sends the driver a notification when we take them offline for inactivity, so they know they stopped receiving rides and can reconnect.",
+    "driver_whatsapp_group_url": "Drivers WhatsApp group",
+    "driver_whatsapp_group_url_help": "Invite link for the drivers WhatsApp group (https://chat.whatsapp.com/...). Leave empty to hide the join option in the driver app.",
+    "whatsapp_invite_title": "Drivers WhatsApp group",
+    "whatsapp_invite_help": "Invite every approved driver to join the group via a push notification.",
+    "whatsapp_invite_no_url": "Set the group link first (driver_whatsapp_group_url, below) before inviting.",
+    "whatsapp_invite_button": "Invite approved drivers",
+    "whatsapp_invite_sending": "Sending…",
+    "whatsapp_invite_confirm": "A push notification will be sent to every approved driver inviting them to the WhatsApp group. Continue?",
+    "whatsapp_invite_sent": "Invitation sent to {{count}} driver(s).",
+    "whatsapp_invite_none": "No approved drivers to invite.",
+    "whatsapp_invite_error": "Could not send the invitation."
   },
   "exchange_rate": {
     "title": "Exchange Rate",

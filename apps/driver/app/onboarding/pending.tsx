@@ -9,7 +9,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
-import { driverService, referralService } from '@tricigo/api';
+import { driverService, referralService, walletService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
@@ -33,6 +33,26 @@ export default function PendingScreen() {
     Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP.replace(/[^0-9]/g, '')}?text=${msg}`)
       .catch(() => Linking.openURL(`tel:${SUPPORT_WHATSAPP}`).catch(() => {}));
   }, [t]);
+
+  // Drivers WhatsApp community group. The admin sets the invite link in
+  // platform_config (driver_whatsapp_group_url); while it waits for approval
+  // is a good moment to let the driver join. Hidden if the key is unset.
+  const [whatsappGroupUrl, setWhatsappGroupUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    walletService.getConfigValue('driver_whatsapp_group_url')
+      .then((raw) => {
+        if (cancelled) return;
+        const url = String(raw ?? '').replace(/^"+|"+$/g, '').trim();
+        setWhatsappGroupUrl(url.startsWith('https://') ? url : null);
+      })
+      .catch(() => { /* key absent / RPC error → button stays hidden */ });
+    return () => { cancelled = true; };
+  }, []);
+  const openWhatsappGroup = useCallback(() => {
+    if (!whatsappGroupUrl) return;
+    Linking.openURL(whatsappGroupUrl).catch(() => {});
+  }, [whatsappGroupUrl]);
 
   // BUG-299: shared logout hook — same logic now used by SwitchAccountFooter
   // in personal-info / vehicle-info / documents / review.
@@ -294,6 +314,16 @@ export default function PendingScreen() {
              contact support, couldn't log out to try a different email,
              nothing. */}
         <View className="w-full mt-10 gap-3">
+          {whatsappGroupUrl && (
+            <Button
+              title={t('onboarding.whatsapp_group_join', { defaultValue: 'Unirme al grupo de WhatsApp' })}
+              variant="primary"
+              size="lg"
+              fullWidth
+              forceDark
+              onPress={openWhatsappGroup}
+            />
+          )}
           <Button
             title={t('onboarding.contact_support', { defaultValue: 'Contactar soporte' })}
             variant="outline"

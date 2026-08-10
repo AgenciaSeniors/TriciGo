@@ -18,6 +18,10 @@
 
   "home": {
     "go_online": "Conectarme",
+    "whatsapp_group_title": "Grupo de WhatsApp de conductores",
+    "whatsapp_group_subtitle": "Únete a la comunidad de conductores de TriciGo.",
+    "whatsapp_group_join": "Unirme al grupo",
+    "whatsapp_group_dismiss": "Ocultar",
     "go_offline": "Desconectar",
     "online": "En línea",
     "offline": "Fuera de línea",
@@ -453,6 +457,7 @@
     "operating_license": "Licencia operativa",
     "upload": "Subir documento",
     "pending_review": "Estamos revisando tu solicitud",
+    "whatsapp_group_join": "Unirme al grupo de WhatsApp",
     "pending_review_description": "Verificamos los documentos en menos de 24 horas. Te avisamos apenas estés aprobado.",
     "approved": "¡Bienvenido al equipo TriciGo!",
     "rejected": "Solicitud rechazada",

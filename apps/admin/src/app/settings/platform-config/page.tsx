@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
+import { notificationService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -129,6 +130,11 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   // ── Auto-offline por inactividad (00527) ──
   driver_offline_after_minutes: { type: 'number', helpKey: 'platform_config.driver_offline_after_minutes_help' },
   driver_offline_notice_enabled: { type: 'text', helpKey: 'platform_config.driver_offline_notice_enabled_help' },
+
+  // ── Comunidad de conductores (grupo de WhatsApp) ──
+  // Invite link (https://chat.whatsapp.com/<code>). Empty = the join UI
+  // stays hidden in the driver app. Editable only by super_admin.
+  driver_whatsapp_group_url: { type: 'text', helpKey: 'platform_config.driver_whatsapp_group_url_help' },
 };
 
 export default function PlatformConfigPage() {
@@ -145,6 +151,13 @@ export default function PlatformConfigPage() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [invitingDrivers, setInvitingDrivers] = useState(false);
+
+  // Current WhatsApp group invite link (saved value, not the in-progress
+  // edit). Strip any jsonb quoting defensively.
+  const whatsappGroupUrl = (
+    configs.find((c) => c.key === 'driver_whatsapp_group_url')?.value ?? ''
+  ).replace(/^"|"$/g, '').trim();
 
   useEffect(() => {
     let cancelled = false;
@@ -190,6 +203,47 @@ export default function PlatformConfigPage() {
     }
   }
 
+  async function handleInviteDrivers() {
+    if (!isSuperAdmin || !whatsappGroupUrl || invitingDrivers) return;
+    const confirmed = window.confirm(
+      t('platform_config.whatsapp_invite_confirm', {
+        defaultValue:
+          'Se enviará una notificación push a todos los conductores aprobados invitándolos al grupo de WhatsApp. ¿Continuar?',
+      }),
+    );
+    if (!confirmed) return;
+
+    setInvitingDrivers(true);
+    try {
+      const userIds = await adminService.getApprovedDriverUserIds();
+      if (userIds.length === 0) {
+        showToast('warning', t('platform_config.whatsapp_invite_none', {
+          defaultValue: 'No hay conductores aprobados para invitar.',
+        }));
+        return;
+      }
+      const res = await notificationService.sendCampaignPush(userIds, {
+        title: t('platform_config.whatsapp_invite_push_title', {
+          defaultValue: 'Grupo de WhatsApp de conductores',
+        }),
+        body: t('platform_config.whatsapp_invite_push_body', {
+          defaultValue:
+            'Únete al grupo oficial de conductores de TriciGo. Abre la app para entrar.',
+        }),
+      });
+      showToast('success', t('platform_config.whatsapp_invite_sent', {
+        count: res.sent,
+        defaultValue: `Invitación enviada a ${res.sent} conductor(es).`,
+      }));
+    } catch {
+      showToast('error', t('platform_config.whatsapp_invite_error', {
+        defaultValue: 'No se pudo enviar la invitación.',
+      }));
+    } finally {
+      setInvitingDrivers(false);
+    }
+  }
+
   function getLabel(key: string): string {
     const translationKey = `platform_config.${key}`;
     const translated = t(translationKey);
@@ -211,6 +265,45 @@ export default function PlatformConfigPage() {
             defaultValue:
               'Solo super_admin puede modificar esta configuración. Tu cuenta puede consultar los valores actuales pero no guardarlos.',
           })}
+        </div>
+      )}
+
+      {!loading && (
+        <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-700" aria-hidden="true">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91C21.95 6.45 17.5 2 12.04 2Zm5.8 14.16c-.24.68-1.4 1.3-1.94 1.35-.5.05-1.13.07-1.82-.11a15.6 15.6 0 0 1-1.65-.61c-2.9-1.25-4.8-4.17-4.94-4.36-.15-.19-1.19-1.58-1.19-3.02 0-1.43.75-2.13 1.02-2.42.27-.29.58-.36.78-.36l.56.01c.18.01.42-.07.66.5.24.58.82 2.01.9 2.16.07.15.12.32.02.51-.1.19-.15.31-.29.48-.15.17-.31.38-.44.51-.15.15-.3.31-.13.6.17.29.76 1.25 1.63 2.02 1.12.99 2.06 1.3 2.35 1.45.29.15.46.12.63-.07.17-.19.72-.84.91-1.13.19-.29.39-.24.66-.15.27.1 1.7.8 1.99.95.29.15.48.22.55.34.07.12.07.68-.17 1.36Z"/></svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-ink">
+                {t('platform_config.whatsapp_invite_title', { defaultValue: 'Grupo de WhatsApp de conductores' })}
+              </p>
+              <p className="text-sm text-ink-muted mt-1">
+                {whatsappGroupUrl
+                  ? t('platform_config.whatsapp_invite_help', {
+                      defaultValue: 'Invita por notificación push a todos los conductores aprobados a unirse al grupo.',
+                    })
+                  : t('platform_config.whatsapp_invite_no_url', {
+                      defaultValue: 'Configura primero el enlace del grupo (driver_whatsapp_group_url, abajo) para poder invitar.',
+                    })}
+              </p>
+              {whatsappGroupUrl && (
+                <a href={whatsappGroupUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-primary-500 hover:underline mt-1 inline-block break-all">
+                  {whatsappGroupUrl}
+                </a>
+              )}
+            </div>
+            <button
+              onClick={handleInviteDrivers}
+              disabled={!isSuperAdmin || !whatsappGroupUrl || invitingDrivers}
+              title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede invitar' }) : undefined}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
+            >
+              {invitingDrivers
+                ? t('platform_config.whatsapp_invite_sending', { defaultValue: 'Enviando…' })
+                : t('platform_config.whatsapp_invite_button', { defaultValue: 'Invitar a conductores aprobados' })}
+            </button>
+          </div>
         </div>
       )}
 

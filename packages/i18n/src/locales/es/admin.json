@@ -1299,7 +1299,18 @@
     "driver_offline_after_minutes": "Sacar de línea tras (min)",
     "driver_offline_after_minutes_help": "Minutos sin señal de la app del conductor antes de sacarlo de línea automáticamente. La app late cada 1-2 minutos, así que 10 significa unas 5-10 señales perdidas seguidas.",
     "driver_offline_notice_enabled": "Avisar al sacarlo de línea",
-    "driver_offline_notice_enabled_help": "true/false — envía una notificación al conductor cuando lo sacamos de línea por inactividad, para que sepa que dejó de recibir viajes y pueda volver a conectarse."
+    "driver_offline_notice_enabled_help": "true/false — envía una notificación al conductor cuando lo sacamos de línea por inactividad, para que sepa que dejó de recibir viajes y pueda volver a conectarse.",
+    "driver_whatsapp_group_url": "Grupo de WhatsApp de conductores",
+    "driver_whatsapp_group_url_help": "Enlace de invitación del grupo de WhatsApp de conductores (https://chat.whatsapp.com/...). Si se deja vacío, la app del conductor oculta la opción de unirse.",
+    "whatsapp_invite_title": "Grupo de WhatsApp de conductores",
+    "whatsapp_invite_help": "Invita por notificación push a todos los conductores aprobados a unirse al grupo.",
+    "whatsapp_invite_no_url": "Configura primero el enlace del grupo (driver_whatsapp_group_url, abajo) para poder invitar.",
+    "whatsapp_invite_button": "Invitar a conductores aprobados",
+    "whatsapp_invite_sending": "Enviando…",
+    "whatsapp_invite_confirm": "Se enviará una notificación push a todos los conductores aprobados invitándolos al grupo de WhatsApp. ¿Continuar?",
+    "whatsapp_invite_sent": "Invitación enviada a {{count}} conductor(es).",
+    "whatsapp_invite_none": "No hay conductores aprobados para invitar.",
+    "whatsapp_invite_error": "No se pudo enviar la invitación."
   },
   "exchange_rate": {
     "title": "Tasa de cambio",

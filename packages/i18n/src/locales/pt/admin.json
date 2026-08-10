@@ -1299,7 +1299,18 @@
     "driver_offline_after_minutes": "Tirar de linha após (min)",
     "driver_offline_after_minutes_help": "Minutos sem sinal do app do motorista antes de tirá-lo de linha automaticamente. O app pulsa a cada 1-2 minutos, então 10 significa cerca de 5-10 sinais perdidos seguidos.",
     "driver_offline_notice_enabled": "Avisar ao tirar de linha",
-    "driver_offline_notice_enabled_help": "true/false — envia uma notificação ao motorista quando o tiramos de linha por inatividade, para que saiba que parou de receber viagens e possa reconectar."
+    "driver_offline_notice_enabled_help": "true/false — envia uma notificação ao motorista quando o tiramos de linha por inatividade, para que saiba que parou de receber viagens e possa reconectar.",
+    "driver_whatsapp_group_url": "Grupo de WhatsApp de motoristas",
+    "driver_whatsapp_group_url_help": "Link de convite do grupo de WhatsApp de motoristas (https://chat.whatsapp.com/...). Se ficar vazio, o app do motorista oculta a opção de entrar.",
+    "whatsapp_invite_title": "Grupo de WhatsApp de motoristas",
+    "whatsapp_invite_help": "Convide todos os motoristas aprovados a entrar no grupo por notificação push.",
+    "whatsapp_invite_no_url": "Configure primeiro o link do grupo (driver_whatsapp_group_url, abaixo) para poder convidar.",
+    "whatsapp_invite_button": "Convidar motoristas aprovados",
+    "whatsapp_invite_sending": "Enviando…",
+    "whatsapp_invite_confirm": "Uma notificação push será enviada a todos os motoristas aprovados convidando-os ao grupo de WhatsApp. Continuar?",
+    "whatsapp_invite_sent": "Convite enviado a {{count}} motorista(s).",
+    "whatsapp_invite_none": "Não há motoristas aprovados para convidar.",
+    "whatsapp_invite_error": "Não foi possível enviar o convite."
   },
   "exchange_rate": {
     "title": "Taxa de câmbio",
