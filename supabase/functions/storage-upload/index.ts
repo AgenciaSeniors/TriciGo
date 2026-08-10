@@ -59,6 +59,12 @@ const ALLOWED_MIME: Record<string, RegExp> = {
   'avatars': /^image\/(jpe?g|png|webp|heic|heif)$/i,
   'driver-documents': /^(image\/(jpe?g|png|webp|heic|heif)|application\/pdf)$/i,
   'dispute-evidence': /^image\/(jpe?g|png|webp|heic|heif|gif)$/i,
+  // Deliberately narrower than the others, and aligned EXACTLY with the
+  // bucket's own allowed_mime_types (00562). Letting heic through here would
+  // pass this check and then fail at the Storage layer, which reads as a
+  // mysterious upload failure rather than an unsupported format. The panel
+  // re-encodes to JPEG before uploading anyway.
+  'partner-photos': /^image\/(jpe?g|png|webp)$/i,
 };
 
 function getCorsHeaders(req: Request): Record<string, string> {
@@ -255,6 +261,15 @@ Deno.serve(async (req: Request) => {
           authorized = isCustomer || isDriver || (await isAdmin());
         }
       }
+    } else if (bucket === 'partner-photos') {
+      // places/{placeId}/{file} — admins only (00562).
+      //
+      // Unlike every other bucket here there is no per-row owner to mirror: a
+      // partner place belongs to the platform, not to a user, so the role IS
+      // the authorization. The `places/` prefix is still required so this
+      // branch can never be widened into a write primitive over the bucket
+      // root by a caller that just passes a bare filename.
+      authorized = segs[0] === 'places' && segs.length >= 3 && (await isAdmin());
     } else {
       // Bucket not in the allowlist — never let this become a general write primitive.
       return jsonResponse(req, { error: 'bucket_not_allowed' }, 403);
