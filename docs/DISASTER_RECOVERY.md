@@ -190,12 +190,22 @@
    - Identificar stack trace común
 
 2. **Hotfix express**:
-   - Si crash es JS-only: deploy OTA update vía EAS:
-     ```bash
-     cd apps/client
-     eas update --channel production --message "Hotfix crash X"
-     ```
-     Users reciben fix sin re-install (segundos).
+   - Si el crash es JS-only: publica un OTA **por el workflow**, nunca desde tu
+     máquina. GitHub → Actions → **"EAS Update (OTA)"** → Run workflow:
+     `app` = client | driver · `message` = "Hotfix crash X" · `rollout_percentage` = 10.
+     Los users reciben el fix sin re-install (segundos).
+
+     > **Nunca `eas update` local.** Bundlea sin leer el `env` de `eas.json`, así
+     > que inlinea un token Mapbox **vacío** y una URL de Supabase vacía, y eso
+     > sale por aire a toda la flota: la app crashea al arrancar (el home del
+     > conductor ES el mapa). El detalle está en el header de
+     > `.github/workflows/eas-update.yml`.
+
+     Para frenar: workflow **"EAS Update — ops"** → `pause` (el freno más rápido,
+     no publica nada) o `rollback`. Si publicaste con un `rollout_percentage`
+     menor a 100, ese rollout queda **abierto** y EAS rechaza el siguiente OTA
+     del mismo app hasta que lo lleves a 100 (`promote`) o lo reviertas
+     (`rollback`).
    - Si crash es nativo: requiere rebuild APK/IPA:
      ```bash
      eas build --profile production --platform all
