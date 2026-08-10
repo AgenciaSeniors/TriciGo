@@ -717,10 +717,17 @@ function WebHomeScreen() {
     // The service degrades to { found: false } on any error, so a missing or
     // not-yet-applied RPC costs the passenger a discount label, never the page.
     void partnerPlaceService
-      .getDiscountForDropoff(dropoff.latitude, dropoff.longitude, fare)
+      .getDiscountForDropoff(
+        dropoff.latitude,
+        dropoff.longitude,
+        fare,
+        // A delivery gets no partner discount (00564); previewing one would
+        // bill more than was shown.
+        serviceType === 'mensajeria' ? 'cargo' : 'passenger',
+      )
       .then((d) => { if (!cancelled) setPartnerDiscount(d.found ? d : null); });
     return () => { cancelled = true; };
-  }, [dropoff, selectedEstimate?.estimated_fare_cup]);
+  }, [dropoff, selectedEstimate?.estimated_fare_cup, serviceType]);
 
   // Promo and partner do NOT stack — the larger wins, exactly as the server
   // trigger resolves it, so the price on screen is the price charged.

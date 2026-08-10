@@ -459,6 +459,10 @@ export function useRideActions() {
           draft.dropoff.location.latitude,
           draft.dropoff.location.longitude,
           estimate.estimated_fare_cup,
+          // Same derivation confirmRide uses for ride_mode (and gated ONLY on
+          // serviceType, per the isDelivery note there). A delivery gets no
+          // partner discount, so previewing one would bill more than shown.
+          draft.serviceType === 'mensajeria' ? 'cargo' : 'passenger',
         )
         .then((d) => {
           // The destination may have changed while this was in flight; only
