@@ -18,13 +18,18 @@
 // dedupes it against live-map's identical URL.
 // ============================================================
 
-import { MapContainer, TileLayer, CircleMarker, Circle, useMapEvents } from 'react-leaflet';
+import { useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Circle, useMapEvents, useMap } from 'react-leaflet';
 
 interface Props {
   latitude: number;
   longitude: number;
   radiusM: number;
   onChange: (lat: number, lng: number) => void;
+  /** Bump to recentre the map on the current coordinates. The parent raises it
+   *  ONLY when the pin arrives from the address search — never on a map click,
+   *  which is what `center` being mount-only already protects. */
+  recenterKey?: number;
 }
 
 function ClickCapture({ onChange }: { onChange: (lat: number, lng: number) => void }) {
@@ -33,11 +38,28 @@ function ClickCapture({ onChange }: { onChange: (lat: number, lng: number) => vo
 }
 
 /**
+ * Recentre on demand. Without this, searching an address in another
+ * municipality moves the pin off-screen: `center` below is read once on mount,
+ * so the map would stay where it was and the admin would see an empty street
+ * with no marker — and no reason to suspect the search worked.
+ */
+function Recenter({ lat, lng, trigger }: { lat: number; lng: number; trigger?: number }) {
+  const map = useMap();
+  const seen = useRef(trigger);
+  useEffect(() => {
+    if (trigger === undefined || trigger === seen.current) return;
+    seen.current = trigger;
+    map.setView([lat, lng], Math.max(map.getZoom(), 16));
+  }, [trigger, lat, lng, map]);
+  return null;
+}
+
+/**
  * Click the map to place the business. The shaded circle is the real match
  * radius — an admin who sets 500 m can see it swallowing the whole block
  * before saving, instead of discovering it through spurious coupons.
  */
-export default function PartnerPlacePicker({ latitude, longitude, radiusM, onChange }: Props) {
+export default function PartnerPlacePicker({ latitude, longitude, radiusM, onChange, recenterKey }: Props) {
   return (
     <div className="h-64 overflow-hidden rounded-lg border border-line">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -55,6 +77,7 @@ export default function PartnerPlacePicker({ latitude, longitude, radiusM, onCha
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         />
         <ClickCapture onChange={onChange} />
+        <Recenter lat={latitude} lng={longitude} trigger={recenterKey} />
         <Circle
           center={[latitude, longitude]}
           radius={radiusM}

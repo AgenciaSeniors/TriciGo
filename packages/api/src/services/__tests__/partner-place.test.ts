@@ -98,9 +98,9 @@ describe('partnerPlaceService', () => {
       await partnerPlaceService.uploadPhoto(file, 'place-1');
 
       expect(mockInvoke).toHaveBeenCalledTimes(1);
-      const [fnName, opts] = mockInvoke.mock.calls[0];
-      expect(fnName).toBe('storage-upload');
-      const fd = (opts as { body: FormData }).body;
+      const call = mockInvoke.mock.calls[0] as [string, { body: FormData }];
+      expect(call[0]).toBe('storage-upload');
+      const fd = call[1].body;
       expect(fd.get('bucket')).toBe('partner-photos');
       expect(fd.get('contentType')).toBe('image/jpeg');
       // The EF's authz branch requires the places/ prefix and >= 3 segments.
@@ -116,7 +116,8 @@ describe('partnerPlaceService', () => {
     it('generates a path even when the place has no id yet', async () => {
       mockInvoke.mockResolvedValueOnce({ data: {}, error: null });
       await partnerPlaceService.uploadPhoto(file, null);
-      expect(String(mockInvoke.mock.calls[0][1].body.get('path'))).toMatch(/^places\/[^/]+\/\d+\.jpg$/);
+      const call = mockInvoke.mock.calls[0] as [string, { body: FormData }];
+      expect(String(call[1].body.get('path'))).toMatch(/^places\/[^/]+\/\d+\.jpg$/);
     });
 
     // Unlike the readers, this THROWS. An upload that fails silently leaves the

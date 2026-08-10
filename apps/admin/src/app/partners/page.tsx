@@ -24,7 +24,9 @@ import dynamic from 'next/dynamic';
 import { Gift, Plus, X } from 'lucide-react';
 import { partnerPlaceService, walletService, TRICIGO_CATEGORIES } from '@tricigo/api';
 import type { AdminPartnerPlace, AdminPartnerPlaceInput } from '@tricigo/api';
-import { getErrorMessage } from '@tricigo/utils';
+import { getErrorMessage, reverseGeocodeStructured } from '@tricigo/utils';
+import AdminAddressSearch from '@/components/AdminAddressSearch';
+import PartnerPhotoInput from '@/components/PartnerPhotoInput';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
@@ -66,6 +68,33 @@ export default function PartnersPage() {
   // Read, never hardcoded: the cap follows platform_config.commission_rate, so
   // a hardcoded "15%" here would start lying the day that value changes.
   const [commissionPct, setCommissionPct] = useState<number | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [recenterKey, setRecenterKey] = useState(0);
+
+  /**
+   * Fill address / municipality / province from wherever the pin landed.
+   *
+   * Best effort by design: it never blocks and never clears. If the reverse
+   * lookup fails the fields stay exactly as they were and remain editable.
+   */
+  const fillFromPin = useCallback(async (lat: number, lng: number) => {
+    try {
+      const s = await reverseGeocodeStructured(lat, lng);
+      if (!s) return;
+      // `street` comes back EMPTY when the pin lands on a known place — the
+      // name is in `poiName` then. Using street alone would blank the address
+      // in the most common case for a partner business, which IS a POI.
+      const line = [s.poiName, s.street].filter(Boolean).join(', ');
+      setForm((f) => ({
+        ...f,
+        address: line || f.address,
+        municipality: s.municipality || f.municipality,
+        province: s.province || f.province,
+      }));
+    } catch {
+      /* the admin can still type it */
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -203,15 +232,37 @@ export default function PartnersPage() {
               </button>
             </div>
 
+            <AdminAddressSearch
+              proximity={{ latitude: form.latitude, longitude: form.longitude }}
+              inputClassName={INPUT_CLS}
+              onSelect={(r) => {
+                setForm((f) => ({
+                  ...f,
+                  latitude: r.latitude,
+                  longitude: r.longitude,
+                  address: r.address || f.address,
+                }));
+                // Only the search recentres the map. A map click must not, or it
+                // would fight the admin's panning.
+                setRecenterKey((k) => k + 1);
+                void fillFromPin(r.latitude, r.longitude);
+              }}
+            />
+
             <PlacePicker
               latitude={form.latitude}
               longitude={form.longitude}
               radiusM={form.radius_m}
-              onChange={(lat, lng) => setForm((f) => ({ ...f, latitude: lat, longitude: lng }))}
+              recenterKey={recenterKey}
+              onChange={(lat, lng) => {
+                setForm((f) => ({ ...f, latitude: lat, longitude: lng }));
+                void fillFromPin(lat, lng);
+              }}
             />
             <p className="text-xs text-ink-subtle">
-              Toca el mapa para ubicar el negocio. El círculo es el radio real: un viaje
-              que termine dentro se lleva el descuento.
+              Busca el negocio arriba, o toca el mapa para ubicarlo a mano — la dirección
+              se completa sola. El círculo es el radio real: un viaje que termine dentro
+              se lleva el descuento.
             </p>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -240,10 +291,15 @@ export default function PartnersPage() {
                   value={form.tagline ?? ''}
                   onChange={(e) => setForm({ ...form, tagline: e.target.value })} />
               </label>
-              <label className="text-sm text-ink sm:col-span-2">URL de la foto
-                <input className={INPUT_CLS} value={form.photo_url ?? ''}
-                  onChange={(e) => setForm({ ...form, photo_url: e.target.value })} />
-              </label>
+              <div className="sm:col-span-2">
+                <PartnerPhotoInput
+                  value={form.photo_url ?? ''}
+                  placeId={form.id}
+                  inputClassName={INPUT_CLS}
+                  onChange={(url) => setForm((f) => ({ ...f, photo_url: url }))}
+                  onUploadingChange={setUploadingPhoto}
+                />
+              </div>
               <label className="text-sm text-ink">Dirección
                 <input className={INPUT_CLS} value={form.address ?? ''}
                   onChange={(e) => setForm({ ...form, address: e.target.value })} />
@@ -285,9 +341,11 @@ export default function PartnersPage() {
               <button onClick={() => setShowForm(false)} className="rounded-lg border border-line px-4 py-2 text-sm text-ink">
                 Cancelar
               </button>
-              <button onClick={handleSave} disabled={saving}
+              {/* Blocked while the photo uploads: saving first would persist an
+                  empty photo_url and the admin would think the photo was lost. */}
+              <button onClick={handleSave} disabled={saving || uploadingPhoto}
                 className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50">
-                {saving ? 'Guardando…' : 'Guardar'}
+                {saving ? 'Guardando…' : uploadingPhoto ? 'Subiendo la foto…' : 'Guardar'}
               </button>
             </div>
           </div>
