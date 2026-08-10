@@ -726,7 +726,7 @@ Marcá esto como TODOs en tu task tracker:
 - [ ] Phased Release iOS activado (default)
 - [ ] Staged Rollout Android manual 1% → 100%
 - [ ] Monitor Sentry + Stripe + PostHog primeras 72 h
-- [ ] Plan de hotfix vía OTA Updates si se detectan bugs (`eas update --branch production`)
+- [ ] Plan de hotfix vía OTA Updates si se detectan bugs (workflow "EAS Update (OTA)" en GitHub Actions — nunca `eas update` local: inlinea env vacío y crashea la app en toda la flota)
 
 ---
 

@@ -160,19 +160,28 @@ jobs:
           # observed at partial rollout.
           #
           # This step used `update:republish` until 2026-07-31 and could never
-          # have worked. Two failures, both on real runs, taught the shape:
+          # have worked. Three failures, all on real runs, taught the shape:
           #
           #   run 30660877027 — `republish --rollout-percentage 100`
           #     "Rollout percentage must be between 0 and 99"
-          #     (republish caps at 99; only `update` and `update:edit` take 100)
           #
           #   run 30661682055 — `republish` with the flag dropped
           #     "Cannot publish a new update with this runtime version while a
           #      rollout is in progress for the same runtime version."
           #
-          # The second message is the real lesson: republish PUBLISHES A NEW
+          #   run 31350684395 — `update --rollout-percentage 100`, from
+          #     eas-update.yml. Same "between 0 and 99". NO publish verb takes
+          #     a literal 100; only `update:edit` does. An earlier version of
+          #     THIS comment asserted `update` did, which is why '100' sat in
+          #     that workflow's dropdown as a choice that could not publish.
+          #     The fix there is to omit the flag entirely when 100 is picked —
+          #     never to change the choice to 99, which would strand 1% of the
+          #     fleet on the old bundle forever.
+          #
+          # The lesson from 30661682055 is the shape: republish PUBLISHES A NEW
           # UPDATE, and EAS refuses that while a rollout is open on the runtime.
-          # Widening an open rollout is an edit, never a publish.
+          # Widening an open rollout is an edit, never a publish — and a 100%
+          # FIRST publish is plain `update` with the flag omitted entirely.
           eas update:edit "$GROUP_IN" \
             --rollout-percentage 100 \
             --non-interactive
