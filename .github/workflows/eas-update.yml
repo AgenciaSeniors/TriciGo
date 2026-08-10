@@ -142,17 +142,39 @@ jobs:
           # binary's embedded bundle. Either way they are unaffected.
           # Widen with .github/workflows/eas-update-ops.yml (promote), which
           # republishes THIS SAME group rather than building a new bundle.
+          #
+          # 100 IS THE SPECIAL CASE, and it is not a typo: EAS rejects
+          # `--rollout-percentage 100` outright —
+          #     ✖ Failed to publish updates
+          #     Rollout percentage must be between 0 and 99
+          # — because in EAS a full rollout means publishing with NO rollout at
+          # all, not a rollout of 100%. So the flag is omitted for 100. Do not
+          # "fix" this by changing the choice to 99: that leaves 1% of the fleet
+          # permanently on the old bundle, which is the opposite of the intent.
+          # (Hit for real on run 31350684395, after the bundle had already been
+          # built and uploaded.)
+          ROLLOUT_FLAG=()
+          if [ "${{ inputs.rollout_percentage }}" != "100" ]; then
+            ROLLOUT_FLAG=(--rollout-percentage "${{ inputs.rollout_percentage }}")
+          fi
+
+          # An ARRAY, not a string: an unquoted "$ROLLOUT_ARGS" would word-split,
+          # and a quoted one would pass an empty argument when it is 100.
           eas update \
             --channel production \
             --message "${{ inputs.message }}" \
-            --rollout-percentage ${{ inputs.rollout_percentage }} \
+            "${ROLLOUT_FLAG[@]}" \
             --input-dir dist \
             --skip-bundler \
             --non-interactive
 
       - name: What to do next
         run: |
-          echo "Published to ${{ inputs.rollout_percentage }}% of the ${{ inputs.app }} fleet."
+          if [ "${{ inputs.rollout_percentage }}" = "100" ]; then
+            echo "Published to the WHOLE ${{ inputs.app }} fleet (no staged rollout)."
+          else
+            echo "Published to ${{ inputs.rollout_percentage }}% of the ${{ inputs.app }} fleet."
+          fi
           echo ""
           echo "WATCH before widening: Sentry for a crash spike, and EAS"
           echo "  eas channel:insights production   (adoption / crashes / unique users)"

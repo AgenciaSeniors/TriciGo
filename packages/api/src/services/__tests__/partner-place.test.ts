@@ -51,11 +51,22 @@ describe('partnerPlaceService', () => {
   });
 
   describe('getDiscountForDropoff', () => {
-    it('maps the dropoff and fare to the RPC params', async () => {
+    it('maps the dropoff and fare to the RPC params, defaulting to a passenger ride', async () => {
       mockRpc.mockResolvedValueOnce({ data: { found: false }, error: null });
       await partnerPlaceService.getDiscountForDropoff(23.1136, -82.3666, 2000);
       expect(mockRpc).toHaveBeenCalledWith('get_partner_discount_for_dropoff', {
-        p_lat: 23.1136, p_lng: -82.3666, p_fare_cup: 2000,
+        p_lat: 23.1136, p_lng: -82.3666, p_fare_cup: 2000, p_ride_mode: 'passenger',
+      });
+    });
+
+    // A delivery gets no partner discount (00564): the person who collects the
+    // parcel is the one standing in the shop, and the one who saves is someone
+    // else. Passing the mode keeps what is SHOWN equal to what is CHARGED.
+    it('passes cargo through so a delivery shows no discount', async () => {
+      mockRpc.mockResolvedValueOnce({ data: { found: false }, error: null });
+      await partnerPlaceService.getDiscountForDropoff(23.1136, -82.3666, 2000, 'cargo');
+      expect(mockRpc).toHaveBeenCalledWith('get_partner_discount_for_dropoff', {
+        p_lat: 23.1136, p_lng: -82.3666, p_fare_cup: 2000, p_ride_mode: 'cargo',
       });
     });
 

@@ -86,12 +86,18 @@ export const partnerPlaceService = {
     latitude: number,
     longitude: number,
     fareCup: number,
+    rideMode: 'passenger' | 'cargo' = 'passenger',
   ): Promise<PartnerDiscount> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc('get_partner_discount_for_dropoff', {
       p_lat: latitude,
       p_lng: longitude,
       p_fare_cup: fareCup,
+      // 00564: a delivery gets no partner discount. Sent so what is SHOWN
+      // matches what the trigger CHARGES — otherwise a delivery would preview a
+      // discount and then bill the full fare, which is the one direction this
+      // feature must never fail in.
+      p_ride_mode: rideMode,
     });
     // A null payload must not read as a discount: the server is the authority
     // on whether one applies, and silence is not a yes.

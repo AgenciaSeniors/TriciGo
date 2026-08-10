@@ -1,7 +1,21 @@
 # Partner Places & Arrival Coupons — Design
 
+> ## ⚠️ SUPERSEDED on 2026-08-09 — do not build from this
+>
+> This describes the **counter-coupon** model: a ride ending at a partner place
+> issued the passenger a single-use coupon, redeemed at the counter, and **the
+> business absorbed the perk**. It was built (PR #914) and then replaced nine
+> days later by a **fare discount the platform absorbs out of its own
+> commission** (PR #949, migrations 00558–00564).
+>
+> Kept, not deleted: it records why the coupon model existed, and the traps
+> found while dismantling it are still worth reading.
+>
+> **The model in production is described in
+> [`2026-08-09-partner-places-fare-discount.md`](./2026-08-09-partner-places-fare-discount.md).**
+
 **Date:** 2026-07-31
-**Status:** Approved by user (question-by-question, then full design)
+**Status:** SUPERSEDED (was: approved by user, question-by-question, then full design)
 
 **Problem:** TriciGo has no way to turn a ride into value for a local business, and no way to give
 a passenger a reason to pick one destination over another. Admin can already create places by hand
