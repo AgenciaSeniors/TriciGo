@@ -8,19 +8,27 @@
 // action — nobody has a bakery's photo sitting on a CDN — and the URL stays as
 // the escape hatch.
 //
-// The file is re-encoded to JPEG and capped at 1600 px before it leaves the
-// browser. A phone photo is 8-12 MB against a 5 MB bucket limit, and a rejected
-// upload reads as "the button is broken" rather than "the file was too big".
-// The carousel renders these at ~340 px wide, so nothing is lost.
+// Picking a file opens the framing window rather than uploading straight away.
+// The published box is 2.66:1, which `cover` reaches by cutting half the height
+// off a 4:3 photo and about three quarters off a portrait one — so WHICH part
+// survives has to be the admin's choice, not the layout's.
+//
+// The cropper returns a JPEG already at the published ratio and at most 1360 px
+// wide, which also settles the old size problem on its own: a phone photo is
+// 8-12 MB against a 5 MB bucket limit, and cropping lands far under it. That is
+// why there is no separate compression step any more.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { partnerPlaceService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
+import PartnerPhotoCropper from './PartnerPhotoCropper';
 
-const MAX_EDGE_PX = 1600;
-const JPEG_QUALITY = 0.85;
+// The carousel card in apps/client. Kept as the two numbers so the preview, the
+// cropper and the app can be checked against each other by reading them.
+const BOX_W = 340;
+const BOX_H = 128;
 
 interface Props {
   /** Current photo URL, uploaded or pasted. */
@@ -33,36 +41,6 @@ interface Props {
   inputClassName?: string;
 }
 
-/** Re-encode to JPEG, longest edge capped. Returns the original on any failure. */
-async function compress(file: File): Promise<Blob> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_EDGE_PX / Math.max(bitmap.width, bitmap.height));
-    const w = Math.round(bitmap.width * scale);
-    const h = Math.round(bitmap.height * scale);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    bitmap.close?.();
-
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY),
-    );
-    // Only take the re-encode if it actually helped: a small PNG screenshot can
-    // come out LARGER as a JPEG, and shipping the bigger one would be silly.
-    return blob && blob.size < file.size ? blob : file;
-  } catch {
-    // createImageBitmap rejects on formats the browser cannot decode (some
-    // HEIC). Let the original through and let the EF's MIME check be the judge —
-    // it returns a precise error the admin can act on.
-    return file;
-  }
-}
-
 export default function PartnerPhotoInput({
   value,
   onChange,
@@ -73,6 +51,9 @@ export default function PartnerPhotoInput({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  /** The picked file, held while the admin frames it. Nothing is uploaded until
+   *  they confirm — cancelling leaves the existing photo untouched. */
+  const [pending, setPending] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
 
@@ -84,14 +65,16 @@ export default function PartnerPhotoInput({
   }, []);
   useEffect(() => () => { if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current); }, []);
 
-  const handleFile = async (file: File) => {
+  /** Called with the already-cropped JPEG, at the published ratio. */
+  const uploadCropped = async (blob: Blob) => {
+    setPending(null);
     setError(null);
     setUploading(true);
     onUploadingChange?.(true);
-    // Optimistic preview so the admin sees the photo while it uploads.
-    setObjectUrl(URL.createObjectURL(file));
+    // Optimistic preview so the admin sees the crop while it uploads.
+    setObjectUrl(URL.createObjectURL(blob));
     try {
-      const url = await partnerPlaceService.uploadPhoto(await compress(file), placeId);
+      const url = await partnerPlaceService.uploadPhoto(blob, placeId);
       onChange(url);
       // Hand the <img> over to the real URL; the local preview has done its job.
       setObjectUrl(null);
@@ -101,8 +84,13 @@ export default function PartnerPhotoInput({
     } finally {
       setUploading(false);
       onUploadingChange?.(false);
-      if (fileRef.current) fileRef.current.value = '';  // allow re-picking the same file
     }
+  };
+
+  const clearFileInput = () => {
+    // Without this, picking the same file again fires no change event — and
+    // after cancelling a crop, re-picking the same photo is the obvious retry.
+    if (fileRef.current) fileRef.current.value = '';
   };
 
   const shown = preview ?? (value || null);
@@ -117,10 +105,21 @@ export default function PartnerPhotoInput({
             {/* Plain <img>, not next/image: the source is an arbitrary host —
                 the storage CDN or whatever URL the admin pasted — and
                 next/image would need a remotePattern for each one. */}
+            {/* 340/128 — the carousel card's ACTUAL box in the passenger app,
+                written as those numbers so it stays traceable to the source.
+                It used to be 4:3 (h-24 w-32), which showed a crop that was
+                never going to be published: an admin could approve a photo
+                here and have a third of it cut off in the app. A preview that
+                disagrees with the real crop is worse than no preview.
+
+                The ratio is severe on purpose — it matches the CAMPAÑAS and
+                NOVEDADES cards (2.36:1 and 2.40:1), which is why the app looks
+                coherent. The way to live with it is to SEE it before choosing
+                the photo, which is exactly what this box now does. */}
             <img
               src={shown}
               alt=""
-              className="h-24 w-32 rounded-lg border border-line object-cover"
+              className="w-56 aspect-[340/128] rounded-lg border border-line object-cover"
             />
             {!uploading && (
               <button
@@ -134,7 +133,7 @@ export default function PartnerPhotoInput({
             )}
           </div>
         ) : (
-          <div className="flex h-24 w-32 items-center justify-center rounded-lg border border-dashed border-line text-ink-subtle">
+          <div className="flex w-56 aspect-[340/128] items-center justify-center rounded-lg border border-dashed border-line text-ink-subtle">
             <ImagePlus className="h-6 w-6" />
           </div>
         )}
@@ -149,11 +148,13 @@ export default function PartnerPhotoInput({
               accept="image/jpeg,image/png,image/webp"
               className="hidden"
               disabled={uploading}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) setPending(f); }}
             />
           </label>
           <p className="mt-1 text-xs text-ink-subtle">
-            JPG, PNG o WebP. Se reduce sola antes de subir.
+            JPG, PNG o WebP. Al elegirla vas a poder encuadrarla: la tarjeta del
+            pasajero es una franja apaisada, así que de una foto vertical se ve
+            poco más de un cuarto — tú decides cuál.
           </p>
         </div>
       </div>
@@ -169,6 +170,16 @@ export default function PartnerPhotoInput({
       </label>
 
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+
+      {pending && (
+        <PartnerPhotoCropper
+          file={pending}
+          aspectW={BOX_W}
+          aspectH={BOX_H}
+          onCancel={() => { setPending(null); clearFileInput(); }}
+          onConfirm={(blob) => { clearFileInput(); void uploadCropped(blob); }}
+        />
+      )}
     </div>
   );
 }
