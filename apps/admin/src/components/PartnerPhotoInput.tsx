@@ -117,10 +117,21 @@ export default function PartnerPhotoInput({
             {/* Plain <img>, not next/image: the source is an arbitrary host —
                 the storage CDN or whatever URL the admin pasted — and
                 next/image would need a remotePattern for each one. */}
+            {/* 340/128 — the carousel card's ACTUAL box in the passenger app,
+                written as those numbers so it stays traceable to the source.
+                It used to be 4:3 (h-24 w-32), which showed a crop that was
+                never going to be published: an admin could approve a photo
+                here and have a third of it cut off in the app. A preview that
+                disagrees with the real crop is worse than no preview.
+
+                The ratio is severe on purpose — it matches the CAMPAÑAS and
+                NOVEDADES cards (2.36:1 and 2.40:1), which is why the app looks
+                coherent. The way to live with it is to SEE it before choosing
+                the photo, which is exactly what this box now does. */}
             <img
               src={shown}
               alt=""
-              className="h-24 w-32 rounded-lg border border-line object-cover"
+              className="w-56 aspect-[340/128] rounded-lg border border-line object-cover"
             />
             {!uploading && (
               <button
@@ -134,7 +145,7 @@ export default function PartnerPhotoInput({
             )}
           </div>
         ) : (
-          <div className="flex h-24 w-32 items-center justify-center rounded-lg border border-dashed border-line text-ink-subtle">
+          <div className="flex w-56 aspect-[340/128] items-center justify-center rounded-lg border border-dashed border-line text-ink-subtle">
             <ImagePlus className="h-6 w-6" />
           </div>
         )}
@@ -153,7 +164,9 @@ export default function PartnerPhotoInput({
             />
           </label>
           <p className="mt-1 text-xs text-ink-subtle">
-            JPG, PNG o WebP. Se reduce sola antes de subir.
+            JPG, PNG o WebP. Se recorta a una franja apaisada, centrada — la vista
+            previa es el recorte exacto. Una foto vertical pierde casi tres cuartas
+            partes: elige una horizontal, con el cartel del negocio al centro.
           </p>
         </div>
       </div>
