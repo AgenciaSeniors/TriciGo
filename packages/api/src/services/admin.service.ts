@@ -214,6 +214,24 @@ export const adminService = {
   },
 
   /**
+   * Return the user_ids of every approved driver. Used to broadcast
+   * invitations (e.g. the WhatsApp drivers group) to the whole approved
+   * fleet. Not paginated — the fleet is small enough to fetch at once.
+   * driver_profiles.user_id references users.id.
+   */
+  async getApprovedDriverUserIds(): Promise<string[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_profiles')
+      .select('user_id')
+      .eq('status', 'approved');
+    if (error) throw error;
+    return (data ?? [])
+      .map((r: { user_id: string | null }) => r.user_id)
+      .filter((id): id is string => !!id);
+  },
+
+  /**
    * Get all drivers awaiting admin review.
    * Matches the same criteria as the pending_verifications count in
    * get_admin_dashboard_metrics (status IN pending_verification, under_review).
