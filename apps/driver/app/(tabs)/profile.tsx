@@ -20,6 +20,7 @@ import {
   Easing,
   StyleSheet,
   useColorScheme,
+  Linking,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -30,7 +31,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { cubanLight, cubanDark, colors } from '@tricigo/theme';
 import type { UserLevel } from '@tricigo/types';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
-import { authService, driverService } from '@tricigo/api';
+import { authService, driverService, walletService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -90,6 +91,22 @@ function NativeDriverProfileScreen() {
       else if (vt.startsWith('triciclo')) setOwnVehicleType('triciclo');
     }).catch(() => { /* unknown type → neutral glyph, never a car */ });
   }, [driverProfile?.id]);
+
+  // Drivers WhatsApp community group — permanent entry (the home banner is
+  // dismissible, so a driver who hid it needs a way back). Reads the invite
+  // link from platform_config; the menu row is hidden while it's unset/empty.
+  const [whatsappGroupUrl, setWhatsappGroupUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    walletService.getConfigValue('driver_whatsapp_group_url')
+      .then((raw) => {
+        if (cancelled) return;
+        const url = String(raw ?? '').replace(/^"+|"+$/g, '').trim();
+        setWhatsappGroupUrl(url.startsWith('https://') ? url : null);
+      })
+      .catch(() => { /* key absent / RPC error → row stays hidden */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Cuban palette
   const colorScheme = useColorScheme();
@@ -257,6 +274,14 @@ function NativeDriverProfileScreen() {
       items: [
         { icon: 'settings-outline', label: t('profile.settings'), onPress: () => router.push('/profile/settings'), tint: palette.ink.secondary },
         { icon: 'help-circle-outline', label: t('profile.help'), onPress: () => router.push('/profile/help'), tint: palette.ink.secondary },
+        ...(whatsappGroupUrl
+          ? [{
+              icon: 'logo-whatsapp',
+              label: t('profile.whatsapp_group', { defaultValue: 'Grupo de WhatsApp' }),
+              onPress: () => { Linking.openURL(whatsappGroupUrl).catch(() => {}); },
+              tint: '#25D366',
+            } as MenuItem]
+          : []),
         { icon: 'newspaper-outline', label: t('profile.blog', { defaultValue: 'Blog' }), onPress: () => router.push('/profile/blog'), tint: '#3B82F6' },
         { icon: 'information-circle-outline', label: t('profile.about_title', { defaultValue: 'Acerca de' }), onPress: () => router.push('/profile/about'), tint: palette.ink.secondary },
       ],
