@@ -727,32 +727,28 @@ function NativeDriverHomeScreen() {
 
   // ── Drivers WhatsApp group ────────────────────────────────────
   // The admin sets `driver_whatsapp_group_url` in platform_config; when it
-  // holds a valid https link (and the driver hasn't dismissed the banner)
-  // the home shows a one-tap invite. Tolerant: an absent/empty key or an
-  // RPC error leaves the banner hidden — no crash, no error toast.
+  // holds a valid https link the home shows a one-tap invite banner.
+  // Dismissal is SESSION-ONLY on purpose (in-memory, NOT persisted): the
+  // driver can hide it for now, but it returns on the next app launch — a
+  // gentle recurring nudge rather than a one-time offer. (A permanent,
+  // non-dismissible entry lives in the profile menu for those who hid it.)
+  // Tolerant: an absent/empty key or an RPC error leaves the banner hidden.
   const [whatsappGroupUrl, setWhatsappGroupUrl] = useState<string | null>(null);
   const [whatsappBannerDismissed, setWhatsappBannerDismissed] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const [raw, dismissed] = await Promise.all([
-          walletService.getConfigValue('driver_whatsapp_group_url'),
-          AsyncStorage.getItem('driver_whatsapp_banner_dismissed'),
-        ]);
+    walletService.getConfigValue('driver_whatsapp_group_url')
+      .then((raw) => {
         if (cancelled) return;
         const url = String(raw ?? '').replace(/^"+|"+$/g, '').trim();
         setWhatsappGroupUrl(url.startsWith('https://') ? url : null);
-        if (dismissed === '1') setWhatsappBannerDismissed(true);
-      } catch {
-        /* key absent / RPC error → banner stays hidden */
-      }
-    })();
+      })
+      .catch(() => { /* key absent / RPC error → banner stays hidden */ });
     return () => { cancelled = true; };
   }, []);
   const dismissWhatsappBanner = useCallback(() => {
+    // Deliberately not persisted — the banner comes back on the next launch.
     setWhatsappBannerDismissed(true);
-    AsyncStorage.setItem('driver_whatsapp_banner_dismissed', '1').catch(() => {});
   }, []);
   const openWhatsappGroup = useCallback(() => {
     if (!whatsappGroupUrl) return;
