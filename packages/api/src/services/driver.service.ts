@@ -31,6 +31,16 @@ import { exchangeRateService } from './exchange-rate.service';
 
 import { transformRideCoordinates } from './_ride-coordinates';
 
+/**
+ * Ceiling for the courtesy round-trips that run BEFORE accept_ride_v2.
+ *
+ * Nothing that is merely nice-to-have may outlive the offer window. Offers
+ * live `offer_ttl_seconds` (60s in prod); a preflight that hangs longer than
+ * this is strictly worse than skipping it, because accept_ride_v2 — the call
+ * that actually takes the ride — never gets to run.
+ */
+export const ACCEPT_PREFLIGHT_TIMEOUT_MS = 3000;
+
 export const driverService = {
   /**
    * Get the driver profile for the current user.
@@ -973,10 +983,34 @@ export const driverService = {
     // Fast coarse pre-filter — only catches drivers admins have flagged
     // as financially ineligible via the 24h-grace mechanism. Missing or
     // transient failures fall through to the RPC (which has the real gate).
-    const { data: eligible, error: eligErr } = await supabase.rpc(
-      'check_accept_ride_eligibility',
-      { p_driver_id: driverId },
-    );
+    //
+    // Time-boxed for the same reason getProfileResilient is: on the networks
+    // these drivers ride, a POST can stall for tens of seconds. This call is
+    // only a courtesy pre-filter, but being un-bounded made it able to hold
+    // the accept past the end of the offer window — the driver's tap died
+    // with the card and no request ever reached the server. A timeout here
+    // falls through to accept_ride_v2, which owns the authoritative gate.
+    let eligible: unknown = null;
+    let eligErr: unknown = null;
+    let eligTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const res = await Promise.race([
+        supabase.rpc('check_accept_ride_eligibility', { p_driver_id: driverId }),
+        new Promise<never>((_, reject) => {
+          eligTimer = setTimeout(
+            () => reject(new Error('check_accept_ride_eligibility timed out')),
+            ACCEPT_PREFLIGHT_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      eligible = res.data;
+      eligErr = res.error;
+    } catch (err) {
+      // Timed out or threw — treat exactly like a transient failure.
+      eligErr = err;
+    } finally {
+      clearTimeout(eligTimer);
+    }
 
     if (!eligErr && eligible === false) {
       throw new Error('No puedes aceptar viajes: tu cuenta tiene un saldo negativo pendiente.');

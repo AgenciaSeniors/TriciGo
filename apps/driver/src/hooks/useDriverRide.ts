@@ -3,7 +3,7 @@ import { AppState, Platform } from 'react-native';
 import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import DriverOverlay from '../../modules/driver-overlay';
-import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus, logRideValidationEvent } from '@tricigo/api';
+import { rideService, driverService, locationService, notificationService, presenceService, executeOrQueue, getOnlineStatus, logRideValidationEvent, ACCEPT_PREFLIGHT_TIMEOUT_MS } from '@tricigo/api';
 import { triggerHaptic, playSound, logger, mapLogger, isNetworkError, haversineDistance } from '@tricigo/utils';
 import { demoteBgLocationToOnline, stopBgLocationTracking } from '@/services/locationBackgroundTask';
 import {
@@ -22,6 +22,80 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 /** Cached vehicle info for broadcast — loaded once per session */
 let cachedVehicle: Vehicle | null = null;
+
+/**
+ * `cancellation_reason` values written by the server's own housekeeping, not
+ * by a person. Sources: 00282 cleanup_stale_active_rides (the four `stale_*`
+ * timeouts) and 00407 cleanup_orphan_searching_rides. Keep in sync if a new
+ * automatic canceller lands — an unknown reason falls back to the neutral
+ * wording, never to blaming the passenger.
+ */
+const AUTO_CANCEL_REASONS = new Set([
+  'stale_pre_pickup_auto_canceled',
+  'stale_arrived_pickup_no_pickup',
+  'stale_in_progress_auto_canceled',
+  'stale_destination_not_completed',
+  'searching_abandoned',
+]);
+
+/**
+ * What to tell the driver when an active trip is no longer his.
+ *
+ * Four distinct things can put us here and only ONE of them is the passenger
+ * cancelling:
+ *  - back to `searching`: release_rides_from_dead_drivers (00542) took the
+ *    ride off him because his heartbeat went silent and handed it to someone
+ *    else. The trip is alive; he just doesn't have it.
+ *  - canceled by a server timeout (see AUTO_CANCEL_REASONS).
+ *  - canceled by a person — the passenger, or an admin.
+ *  - unreadable (RLS already dropped the row, or the fetch failed).
+ */
+function describeLostTrip(
+  status: string | null,
+  reason: string | null,
+): { title: string; body: string } {
+  if (status === 'searching') {
+    return {
+      title: i18next.t('driver:trip.trip_reassigned_title', { defaultValue: 'Perdimos tu conexión' }),
+      body: i18next.t('driver:trip.trip_reassigned_msg', {
+        defaultValue: 'Tu app dejó de reportar y le pasamos el viaje a otro conductor.',
+      }),
+    };
+  }
+  if (status === 'canceled' && reason && AUTO_CANCEL_REASONS.has(reason)) {
+    return {
+      title: i18next.t('driver:trip.trip_auto_canceled_title', { defaultValue: 'Viaje cancelado por tiempo' }),
+      body: i18next.t('driver:trip.trip_auto_canceled_msg', {
+        defaultValue: 'Pasó demasiado tiempo sin avanzar y el sistema lo cerró.',
+      }),
+    };
+  }
+  if (status === 'canceled') {
+    return {
+      title: i18next.t('driver:trip.passenger_canceled_title', { defaultValue: 'Viaje cancelado' }),
+      body: i18next.t('driver:trip.passenger_canceled_msg', {
+        defaultValue: 'El pasajero canceló el viaje.',
+      }),
+    };
+  }
+  return {
+    title: i18next.t('driver:trip.trip_gone_title', { defaultValue: 'El viaje ya no está disponible' }),
+    body: i18next.t('driver:trip.trip_gone_msg', {
+      defaultValue: 'Ya no lo tienes asignado. Vas a seguir recibiendo ofertas.',
+    }),
+  };
+}
+
+/** Reject after `ms` so a stalled socket can't hold a caller forever. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
 
 /** Next status in the ride FSM for driver actions. */
 const NEXT_STATUS: Partial<Record<RideStatus, RideStatus>> = {
@@ -249,9 +323,11 @@ export function useDriverRideInit() {
           // calls reset() itself); don't announce it as a passenger cancel.
           if (useDriverRideStore.getState().isDriverCanceling) return;
           let terminalStatus: string | null = null;
+          let cancelReason: string | null = null;
           try {
             const row = await rideService.getRideWithDriver(localTrip.id);
             terminalStatus = row?.status ?? null;
+            cancelReason = row?.cancellation_reason ?? null;
           } catch { /* best-effort — treat as gone below */ }
           if (!mounted) return;
           if (terminalStatus === 'completed') {
@@ -261,15 +337,23 @@ export function useDriverRideInit() {
             useDriverRideStore.getState().updateActiveTrip({ ...localTrip, status: 'completed' });
             return;
           }
-          // canceled / expired / otherwise gone → clear + tell the driver.
+          // The trip left this driver. WHY it left decides what we say — the
+          // ride leaving the driver's active set is NOT the same event as the
+          // passenger cancelling, and telling him it was the passenger every
+          // time is a lie that reads as "aquí se caen las carreras". The row
+          // carries the answer in status + cancellation_reason; read it.
+          const notice = describeLostTrip(terminalStatus, cancelReason);
           triggerHaptic('warning');
           Toast.show({
             type: 'info',
-            text1: i18next.t('driver:trip.passenger_canceled_title', { defaultValue: 'Viaje cancelado' }),
-            text2: i18next.t('driver:trip.passenger_canceled_msg', {
-              defaultValue: 'El pasajero canceló el viaje.',
-            }),
+            text1: notice.title,
+            text2: notice.body,
             visibilityTime: 5000,
+          });
+          logger.info('[DriverRide] active trip left this driver', {
+            ride_id: localTrip.id,
+            terminal_status: terminalStatus,
+            cancellation_reason: cancelReason,
           });
           // The trip is gone; unbind the background task from it. This poll runs
           // in the background too (the foreground service is what keeps the JS
@@ -526,7 +610,19 @@ export function useDriverRideActions() {
       // #9b: refresh heartbeat right before accepting. Android throttles the
       // JS heartbeat timer in background, so accept_ride_v2's >3min stale gate
       // can reject an otherwise-valid accept. One fresh beat heals that race.
-      await driverService.sendHeartbeat(profile.id).catch(() => {});
+      //
+      // Time-boxed: this beat is a courtesy, and an un-bounded await let it
+      // hold the whole accept hostage. Measured on driver 438528b0
+      // (2026-08-14): connectivity blackouts of 28-99s straddling both of his
+      // offer windows, offers that expired in his hand, and ZERO
+      // accept_ride_v2 attempts logged server-side — the taps never left the
+      // phone. If the beat can't land in time we go straight to the accept;
+      // worst case the stale gate trips and the driver gets the existing
+      // "Reconectando… toca aceptar de nuevo" toast, which is honest.
+      await withTimeout(
+        driverService.sendHeartbeat(profile.id),
+        ACCEPT_PREFLIGHT_TIMEOUT_MS,
+      ).catch(() => {});
 
       // 1. RPC call FIRST — database determines who wins the race
       const ride = await driverService.acceptRideWithEligibility(rideId, profile.id);
