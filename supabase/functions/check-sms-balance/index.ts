@@ -74,6 +74,8 @@ Deno.serve(async () => {
       'sms_balance_usd',
       'sms_balance_at',
       'sms_balance_status',
+      'sms_balance_alerted_at',
+      'sms_balance_realert_hours',
       'business_notification_email',
     ]);
   const rows = (cfgData ?? []) as Array<{ key: string; value: unknown }>;
@@ -155,9 +157,22 @@ Deno.serve(async () => {
     { onConflict: 'key' },
   );
 
-  // ── Alertar SOLO en transición; 'unknown' → 'ok' no molesta a nadie ───────
+  // ── Alertar en transición, y RECORDAR mientras siga bajo ─────────────────
+  // Solo-en-transición dejaba un hueco peligroso: el 2026-08-15 el saldo llevaba días
+  // en 'low' ($10.42, ~4 días de autonomía) y los cuatro chequeos de ese día loguearon
+  // emails_sent:0. El aviso se había mandado una vez, hacía días, y nadie lo tenía
+  // presente — el estado 'low' es justamente el que hay que repetir hasta que se actúe,
+  // porque termina en el apagón del 06-ago (31 h sin SMS). El recordatorio va cada
+  // sms_balance_realert_hours (default 24) y con el cron cada 6 h eso es 1 correo/día.
+  const rawRealert = Number.parseFloat(cfgVal(rows, 'sms_balance_realert_hours') ?? '');
+  const realertHours = Number.isFinite(rawRealert) && rawRealert > 0 ? rawRealert : 24;
+  const lastAlertMs = Date.parse(cfgVal(rows, 'sms_balance_alerted_at') ?? '');
+  const isReminder = status === 'low' && prevStatus === 'low'
+    && (!Number.isFinite(lastAlertMs) || nowMs - lastAlertMs >= realertHours * 3_600_000);
+
   const shouldAlert = (status === 'low' && prevStatus !== 'low')
-    || (status === 'ok' && prevStatus === 'low');
+    || (status === 'ok' && prevStatus === 'low')
+    || isReminder;
 
   let emailsSent = 0;
   if (shouldAlert) {
@@ -173,9 +188,11 @@ Deno.serve(async () => {
           + ` (${burnPerDay!.toFixed(2)} USD/día)</td></tr>`
         : '';
 
-      const subject = status === 'low'
-        ? '[TriciGo] Saldo de SMS bajo — recargá D7 antes de que nadie pueda entrar'
-        : '[TriciGo] Saldo de SMS recuperado';
+      const subject = status !== 'low'
+        ? '[TriciGo] Saldo de SMS recuperado'
+        : isReminder
+          ? `[TriciGo] Saldo de SMS SIGUE bajo ($${balance.toFixed(2)}) — recargá D7`
+          : '[TriciGo] Saldo de SMS bajo — recargá D7 antes de que nadie pueda entrar';
 
       const html = status === 'low'
         ? '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">'
@@ -229,8 +246,18 @@ Deno.serve(async () => {
     }
   }
 
+  // Solo se estampa si algún correo SALIÓ: si send-email falla, el próximo chequeo
+  // reintenta el recordatorio en vez de callarse 24 h por un envío que nadie recibió.
+  if (emailsSent > 0) {
+    await supabase.from('platform_config').upsert(
+      [{ key: 'sms_balance_alerted_at', value: nowIso }],
+      { onConflict: 'key' },
+    );
+  }
+
   console.log('[check-sms-balance]', JSON.stringify({
-    balance, threshold: thresholdUsd, status, prev: prevStatus, days_left: daysLeft, emails_sent: emailsSent,
+    balance, threshold: thresholdUsd, status, prev: prevStatus, days_left: daysLeft,
+    reminder: isReminder, emails_sent: emailsSent,
   }));
 
   return json({
@@ -242,6 +269,7 @@ Deno.serve(async () => {
     burn_per_day: burnPerDay,
     days_left: daysLeft,
     transitioned: status !== prevStatus,
+    reminder: isReminder,
     emails_sent: emailsSent,
   }, 200);
 });
