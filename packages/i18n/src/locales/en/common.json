@@ -31,6 +31,16 @@
   },
 
   "auth": {
+    "sign_in_email": "Sign in with my email",
+    "continue_with_email": "Continue with my email",
+    "email_login_title": "Sign in with your email",
+    "email_login_description": "We send you a link so you can get in without waiting for the SMS code. It works with the email you confirmed in your profile.",
+    "email_input_label": "Email address",
+    "email_invalid": "Enter a valid email",
+    "send_email_link": "Send me the link",
+    "email_link_sent_title": "Check your email",
+    "email_link_sent_body": "If {{email}} is registered, a sign-in link is on its way. It expires in 1 hour and works once.",
+    "email_link_rate_limited": "You requested several links in a row. Wait an hour and try again.",
     "login": "Sign in",
     "tagline": "Your mobility platform in Havana",
     "welcome": "Welcome",

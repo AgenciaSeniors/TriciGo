@@ -249,6 +249,10 @@ export default function EditProfileScreen() {
     }
 
     const phoneChanged = phone.trim() !== (user.phone ?? '');
+    // realEmail() descarta el sintético phone_<n>@tricigo.app, así que estrenar
+    // correo en una cuenta creada por teléfono cuenta como cambio.
+    const emailChanged =
+      email.trim().toLowerCase() !== (realEmail(user.email) ?? '').toLowerCase();
 
     if (phoneChanged) {
       const normalized = normalizeCubanPhone(phone.trim());
@@ -290,6 +294,43 @@ export default function EditProfileScreen() {
         email: email.trim() || null,
       });
       setUser(updated);
+
+      // El correo escrito acá solo llegaba a public.users — cosmético. La cuenta
+      // sigue teniendo el sintético phone_<n>@tricigo.app en auth.users, así que
+      // ese correo NO servía para entrar. Medido 2026-08-16: 63 de 90 conductores
+      // tenían uno guardado así y durante el apagón de SMS del 15-ago (15 h sin
+      // códigos) ninguno pudo usarlo. Ahora, cuando cambia, lo promovemos a
+      // identidad real y el conductor lo confirma por correo.
+      //
+      // Va DESPUÉS del guardado y con su propio catch a propósito: si esto falla,
+      // el perfil ya quedó guardado y no se pierde el trabajo del conductor.
+      if (emailChanged && email.trim()) {
+        try {
+          await authService.addBackupEmail(email.trim());
+          Alert.alert(
+            td('profile.backup_email_sent_title', { defaultValue: 'Confirmá tu correo' }),
+            td('profile.backup_email_sent_body', {
+              email: email.trim(),
+              defaultValue:
+                'Te enviamos un enlace a {{email}}. Confirmalo y vas a poder entrar con tu correo cuando no te lleguen los códigos por SMS.',
+            }),
+          );
+        } catch (err) {
+          const code = (err as { code?: string })?.code;
+          Alert.alert(
+            td('profile.backup_email_failed_title', { defaultValue: 'Correo no confirmado' }),
+            code === 'email_already_taken'
+              ? td('profile.backup_email_taken', {
+                  defaultValue: 'Ese correo ya pertenece a otra cuenta de TriciGo. Probá con otro.',
+                })
+              : td('profile.backup_email_retry', {
+                  defaultValue:
+                    'Guardamos tu perfil, pero no pudimos enviarte el enlace de confirmación. Volvé a intentarlo más tarde.',
+                }),
+          );
+        }
+      }
+
       router.back();
     } catch {
       Alert.alert('Error', t('errors.generic'));

@@ -502,4 +502,96 @@ export const authService = {
     }
     return data;
   },
+
+  /**
+   * Promote the profile email to a REAL auth identity (backup way in).
+   *
+   * Phone-only accounts carry a synthetic `phone_<n>@tricigo.app` in
+   * auth.users, so a correo typed into the profile screen only ever landed in
+   * public.users — cosmetic, useless for signing in. Measured 2026-08-16: 63 of
+   * 90 drivers had a real address stored that way, and during the 15h SMS
+   * outage of 2026-08-15 not one of them could use it.
+   *
+   * The `add-email-with-verification` Edge Function (deployed, and with zero
+   * callers until now) does the real work: writes auth.users.email and sends a
+   * magic link so the address is confirmed before it counts.
+   *
+   * SAFE FOR PHONE LOGIN: replacing the synthetic address does NOT strand the
+   * user, because `lookup_auth_user_by_contact` (used by verify-otp) matches on
+   * phone OR email and *prefers* the phone — and all 350 phone-origin accounts
+   * have a confirmed auth.users.phone.
+   *
+   * Errors surface the EF's stable codes so the UI can explain itself:
+   * `email_already_taken`, `invalid_email`, `unauthorized`.
+   */
+  async addBackupEmail(email: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('add-email-with-verification', {
+      body: { email },
+    });
+
+    if (error) {
+      // supabase-js wraps non-2xx EF responses in a FunctionsHttpError with the
+      // raw Response on `context` — same unwrapping as verifyPhoneLink above.
+      let efCode: string | null = null;
+      const ctx = (error as { context?: Response } | null)?.context;
+      if (ctx) {
+        try {
+          const body = await ctx.clone().json();
+          if (typeof body?.error === 'string') efCode = body.error;
+        } catch {
+          /* body unreadable/consumed — fall through to the raw error */
+        }
+      }
+      if (efCode) {
+        const e = new Error(efCode) as Error & { code: string };
+        e.code = efCode;
+        throw e;
+      }
+      throw error;
+    }
+
+    if (data?.error || data?.success !== true) {
+      const code = typeof data?.error === 'string' ? data.error : 'add_email_failed';
+      const e = new Error(code) as Error & { code: string };
+      e.code = code;
+      throw e;
+    }
+    return data;
+  },
+
+  /**
+   * Ask for a sign-in link by email — the way in when SMS is down.
+   *
+   * Only works for accounts whose email was promoted to a real identity first
+   * (see addBackupEmail). The link lands on `<scheme>://auth/callback`, which
+   * useAuthDeepLink() already handles for the Google flow, so the session is set
+   * by the same path.
+   *
+   * ANTI-ENUMERATION: the Edge Function answers `{success:true}` whether or not
+   * the account exists, so callers MUST NOT treat the response as proof that an
+   * email is registered — show the same "revisá tu correo" either way.
+   *
+   * `app` picks the redirect server-side (driver | client | web); the URL is
+   * never accepted from the client, since a free redirect would leak the tokens
+   * that ride in the link's fragment.
+   */
+  async sendEmailLoginLink(email: string, app: 'driver' | 'client' | 'web') {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('send-login-email-link', {
+      body: { email, app },
+    });
+
+    if (error) {
+      const rl = await asRateLimitError(error);
+      if (rl) throw rl;
+      throw error;
+    }
+    if (data?.error) {
+      const e = new Error(String(data.error)) as Error & { code: string };
+      e.code = String(data.error);
+      throw e;
+    }
+    return data;
+  },
 };

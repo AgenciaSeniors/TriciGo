@@ -31,6 +31,16 @@
   },
 
   "auth": {
+    "sign_in_email": "Entrar con mi correo",
+    "continue_with_email": "Continuar con mi correo",
+    "email_login_title": "Entrar con tu correo",
+    "email_login_description": "Te mandamos un enlace para entrar sin esperar el código por SMS. Funciona con el correo que confirmaste en tu perfil.",
+    "email_input_label": "Correo electrónico",
+    "email_invalid": "Escribí un correo válido",
+    "send_email_link": "Enviarme el enlace",
+    "email_link_sent_title": "Revisá tu correo",
+    "email_link_sent_body": "Si {{email}} está registrado, te llegó un enlace para entrar. Vence en 1 hora y sirve una sola vez.",
+    "email_link_rate_limited": "Pediste varios enlaces seguidos. Esperá una hora e intentá de nuevo.",
     "login": "Iniciar sesión",
     "tagline": "Tu plataforma de movilidad en La Habana",
     "welcome": "Bienvenido",
