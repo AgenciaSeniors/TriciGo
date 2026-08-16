@@ -302,6 +302,40 @@ export default function LoginScreen() {
                 <Ionicons name="logo-google" size={20} color="#4285F4" />
                 <Text variant="body" color="inverse" className="font-medium">{socialLoading ? '...' : t('auth.continue_with_google', { defaultValue: 'Continuar con Google' })}</Text>
               </Pressable>
+              {/* Entrar con el correo: la salida cuando el SMS no llega. El
+                  2026-08-15 la ruta de D7 a ETECSA dejó de entregar 15 h y los
+                  conductores creados por teléfono no tenían ninguna alternativa —
+                  Google no les sirve porque les crearía una cuenta nueva en vez
+                  de recuperar la suya. Requiere haber confirmado el correo en
+                  Perfil → Editar perfil. El layout va en un View interno con
+                  estilo-objeto, no en la función-estilo del Pressable. */}
+              <Pressable
+                disabled={socialLoading || loading}
+                onPress={() => router.push('/(auth)/email-login')}
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.sign_in_email', { defaultValue: 'Entrar con mi correo' })}
+              >
+                {({ pressed }) => (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      minHeight: 52,
+                      borderRadius: 16,
+                      borderWidth: 1,
+                      borderColor: 'rgba(255,255,255,0.12)',
+                      backgroundColor: pressed ? '#252540' : '#1a1a2e',
+                    }}
+                  >
+                    <Ionicons name="mail-outline" size={20} color={colors.brand.orange} />
+                    <Text variant="body" color="inverse" className="font-medium">
+                      {t('auth.continue_with_email', { defaultValue: 'Continuar con mi correo' })}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
               {(appleAvailable || Platform.OS === 'android') && (
               <Pressable
                 className="flex-row items-center justify-center gap-2 rounded-2xl bg-white active:bg-neutral-100 min-h-[52px]"

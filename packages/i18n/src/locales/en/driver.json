@@ -714,6 +714,11 @@
   },
 
   "profile": {
+    "backup_email_sent_title": "Confirm your email",
+    "backup_email_sent_body": "We sent a link to {{email}}. Confirm it and you will be able to sign in with your email whenever the SMS codes do not arrive.",
+    "backup_email_failed_title": "Email not confirmed",
+    "backup_email_taken": "That email already belongs to another TriciGo account. Try a different one.",
+    "backup_email_retry": "Your profile was saved, but we could not send the confirmation link. Please try again later.",
     "accepts_deliveries_desc": "Receive package delivery orders",
     "all_photos_required": "You must upload all 3 verification photos",
     "cargo_disabled_confirm": "Stop accepting deliveries?",

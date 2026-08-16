@@ -31,6 +31,16 @@
   },
 
   "auth": {
+    "sign_in_email": "Entrar com meu e-mail",
+    "continue_with_email": "Continuar com meu e-mail",
+    "email_login_title": "Entrar com seu e-mail",
+    "email_login_description": "Enviamos um link para você entrar sem esperar o código por SMS. Funciona com o e-mail que você confirmou no seu perfil.",
+    "email_input_label": "E-mail",
+    "email_invalid": "Digite um e-mail válido",
+    "send_email_link": "Enviar o link",
+    "email_link_sent_title": "Confira seu e-mail",
+    "email_link_sent_body": "Se {{email}} estiver cadastrado, o link de acesso já foi enviado. Vence em 1 hora e serve uma única vez.",
+    "email_link_rate_limited": "Você pediu vários links seguidos. Espere uma hora e tente de novo.",
     "login": "Entrar",
     "tagline": "Sua plataforma de mobilidade em Havana",
     "welcome": "Bem-vindo",

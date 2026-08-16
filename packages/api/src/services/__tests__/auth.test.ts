@@ -522,4 +522,71 @@ describe('authService', () => {
       await expect(authService.uploadAvatar('user-1', 'file:///tmp/photo.jpg')).rejects.toThrow('Storage full');
     });
   });
+
+  // ==================== addBackupEmail ====================
+  // Promotes the profile email to a real auth identity so the account has a way
+  // in when SMS is down (outage of 2026-08-15: 15 h with no codes delivered).
+  describe('addBackupEmail', () => {
+    it('invokes add-email-with-verification with the email', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { success: true }, error: null });
+
+      await authService.addBackupEmail('damian@example.com');
+
+      expect(mockFunctions.invoke).toHaveBeenCalledWith('add-email-with-verification', {
+        body: { email: 'damian@example.com' },
+      });
+    });
+
+    it('surfaces the EF error code so the UI can explain itself', async () => {
+      mockFunctions.invoke.mockResolvedValue({
+        data: { error: 'email_already_taken' },
+        error: null,
+      });
+
+      await expect(authService.addBackupEmail('taken@example.com')).rejects.toMatchObject({
+        code: 'email_already_taken',
+      });
+    });
+
+    it('rejects when the EF answers without success', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { success: false }, error: null });
+
+      await expect(authService.addBackupEmail('a@b.com')).rejects.toMatchObject({
+        code: 'add_email_failed',
+      });
+    });
+  });
+
+  // ==================== sendEmailLoginLink ====================
+  describe('sendEmailLoginLink', () => {
+    it('passes the app so the redirect is resolved server-side', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { success: true }, error: null });
+
+      await authService.sendEmailLoginLink('damian@example.com', 'driver');
+
+      // The redirect URL must never travel from the client: a free redirect
+      // would leak the tokens carried in the magic link's fragment.
+      expect(mockFunctions.invoke).toHaveBeenCalledWith('send-login-email-link', {
+        body: { email: 'damian@example.com', app: 'driver' },
+      });
+    });
+
+    it('resolves for an unknown address (anti-enumeration contract)', async () => {
+      // The EF answers success whether or not the account exists; the caller
+      // must not be able to tell them apart.
+      mockFunctions.invoke.mockResolvedValue({ data: { success: true }, error: null });
+
+      await expect(
+        authService.sendEmailLoginLink('nobody@example.com', 'driver'),
+      ).resolves.toEqual({ success: true });
+    });
+
+    it('surfaces the rate-limit code', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { error: 'rate_limited' }, error: null });
+
+      await expect(
+        authService.sendEmailLoginLink('damian@example.com', 'driver'),
+      ).rejects.toMatchObject({ code: 'rate_limited' });
+    });
+  });
 });

@@ -430,6 +430,8 @@ deno_version = 2
 # Public webhooks / signup-login / self-authenticating handlers:
 [functions.send-sms-otp]
 verify_jwt = false
+[functions.send-login-email-link]
+verify_jwt = false
 [functions.verify-otp]
 verify_jwt = false
 [functions.verify-whatsapp-otp]
