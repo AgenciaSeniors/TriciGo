@@ -77,6 +77,40 @@ Deno.serve(async (req) => {
   );
 
   const nowIso = new Date().toISOString();
+
+  // ── No degradar un estado final (bug corregido 2026-08-15, mig 00566) ──
+  // D7 puede emitir los DLR fuera de orden: durante el corte de ese día llegó un
+  // 'sent' DESPUÉS del 'delivered' del mismo mensaje. Como el upsert de abajo era
+  // incondicional, el estado final quedaba pisado por el intermedio y la fila decía
+  // 'sent' con delivered_at ya poblado — entregas contadas como no resueltas, que es
+  // justo lo que mide el watchdog de entrega. Solo se avanza en esta escala:
+  //   0 queued/scheduled · 1 sent · 2 un_delivered/expired/failed/rejected · 3 delivered
+  // Un evento que no sube de rango solo refresca last_event_at (deja constancia de que
+  // llegó) sin tocar status ni raw_dlr, que ya guardan el desenlace real.
+  const rank = (s: string): number => {
+    if (s === 'delivered') return 3;
+    if (['un_delivered', 'expired', 'failed', 'rejected'].includes(s)) return 2;
+    if (s === 'sent') return 1;
+    return 0;
+  };
+
+  const { data: existing } = await supabase
+    .from('sms_deliveries')
+    .select('status')
+    .eq('request_id', requestId)
+    .maybeSingle();
+
+  if (existing && rank(String(existing.status)) > rank(status)) {
+    await supabase
+      .from('sms_deliveries')
+      .update({ last_event_at: nowIso })
+      .eq('request_id', requestId);
+    console.log(
+      `[process-sms-dlr] ${requestId} keep=${existing.status} ignored=${status} (out-of-order DLR)`,
+    );
+    return new Response('OK', { status: 200 });
+  }
+
   const upsertRow: Record<string, unknown> = {
     request_id: requestId,
     recipient: String(payload.recipient || ''),
