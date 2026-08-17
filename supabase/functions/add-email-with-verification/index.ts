@@ -2,14 +2,22 @@
 // TriciGo — add-email-with-verification
 //
 // El user logueado agrega/cambia su email. Workflow:
-//   1. EF actualiza auth.users.email + dispara magic link via
-//      auth.admin.generateLink({type: 'magiclink'}).
-//   2. EF manda email custom con nuestro template `email_verification`.
-//   3. Cuando user click, Supabase confirma email_confirmed_at nativo.
-//   4. EF aparte (verify-email-magic-link callback) marca
-//      public.users.email_verified_at.
+//   1. EF actualiza auth.users.email (email_confirm: false) y emite un TOKEN
+//      PROPIO de un solo uso (24h) en email_verification_tokens.
+//   2. EF manda email custom (template `email_verification`) con el link
+//      https://tricigo.com/auth/email-confirmed?token=<t>.
+//   3. La página canjea el token en la EF confirm-email, que estampa
+//      public.users.email_verified_at — el gate de send-login-email-link y
+//      request-password-reset.
 //
-// Aquí solo paso 1+2.
+// REDISEÑO 2026-08-17 (auditoría del PR #960). La versión anterior mandaba un
+// MAGIC LINK de GoTrue como "link de verificación": un link que MINTEA SESIÓN.
+// Con un typo en el correo, el dueño real de esa casilla recibía un enlace que
+// le abría la cuenta del usuario con un click. El token propio solo prueba
+// posesión del buzón — canjearlo no inicia sesión de nada. Además el paso
+// "marcar email_verified_at" de la versión vieja apuntaba a un callback que
+// nunca existió, así que el flag quedaba NULL para siempre y los resets de
+// contraseña (que gatean en él) jamás salían para estos correos.
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
@@ -51,7 +59,11 @@ Deno.serve(async (req) => {
     const rl = await rateLimit(`add-email:${user.id}`, 5, 60 * 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, corsHeaders);
 
-    const { email } = (await req.json()) as { email: string };
+    const { email: rawEmail } = (await req.json()) as { email: string };
+    // Minúsculas SIEMPRE al guardar: send-login-email-link busca en minúsculas,
+    // y un correo guardado como "Damian@Gmail.com" no matchearía nunca (el
+    // conductor no recibiría el enlace, en silencio).
+    const email = (rawEmail ?? '').trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return new Response(JSON.stringify({ error: 'invalid_email' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -60,9 +72,10 @@ Deno.serve(async (req) => {
 
     const supaAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check if email is already taken por otro user
+    // Check if email is already taken por otro user (ilike: filas legacy con
+    // mayúsculas también cuentan como tomadas)
     const { data: existing } = await supaAdmin
-      .from('users').select('id').eq('email', email).maybeSingle();
+      .from('users').select('id').ilike('email', email.replace(/[%_]/g, '\\$&')).maybeSingle();
     if (existing && existing.id !== user.id) {
       return new Response(JSON.stringify({ error: 'email_already_taken' }), {
         status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -82,17 +95,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Generar magic link custom
-    const { data: linkData, error: linkErr } = await supaAdmin.auth.admin.generateLink({
-      type: 'magiclink',
+    // Token propio de un solo uso — NO es un magic link, canjearlo no mintea
+    // sesión. Se guarda solo el sha256; el token viaja únicamente en el correo.
+    const tokenBytes = new Uint8Array(32);
+    crypto.getRandomValues(tokenBytes);
+    const token = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+    const tokenHash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+
+    // Un solo token vivo por usuario: pedir de nuevo invalida el anterior (y de
+    // paso la tabla no acumula — no hace falta cron de limpieza).
+    await supaAdmin.from('email_verification_tokens').delete().eq('user_id', user.id);
+    const { error: tokenErr } = await supaAdmin.from('email_verification_tokens').insert({
+      user_id: user.id,
       email,
-      options: { redirectTo: `${PUBLIC_BASE_URL}/auth/email-confirmed` },
+      token_hash: tokenHash,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     });
-    if (linkErr || !linkData.properties?.action_link) {
-      return new Response(JSON.stringify({ error: 'link_generation_failed', detail: linkErr?.message }), {
+    if (tokenErr) {
+      return new Response(JSON.stringify({ error: 'link_generation_failed', detail: tokenErr.message }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const verificationLink = `${PUBLIC_BASE_URL}/auth/email-confirmed?token=${token}`;
 
     // Get user full_name
     const { data: dbUser } = await supaAdmin
@@ -112,7 +138,7 @@ Deno.serve(async (req) => {
         data: {
           full_name: dbUser?.full_name ?? '',
           email,
-          verification_link: linkData.properties.action_link,
+          verification_link: verificationLink,
         },
       }),
     }).catch(() => {});
