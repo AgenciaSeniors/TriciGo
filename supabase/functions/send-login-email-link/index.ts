@@ -99,15 +99,26 @@ Deno.serve(async (req) => {
     // Solo cuentas cuyo correo es una identidad REAL. Las creadas por teléfono
     // arrastran phone_<n>@tricigo.app: mandarles el enlace ahí no serviría (esa
     // casilla no existe) y delataría que la cuenta existe.
+    // ilike (con % y _ escapados): filas legacy guardadas con mayúsculas
+    // matchean igual — con eq() ese conductor no recibía nada, en silencio.
     const { data: dbUser } = await supaAdmin
       .from('users')
-      .select('id, full_name, email')
-      .eq('email', normalized)
+      .select('id, full_name, email, email_verified_at')
+      .ilike('email', normalized.replace(/[%_]/g, '\\$&'))
       .maybeSingle();
 
     const isSynthetic = normalized.endsWith('@tricigo.app');
 
-    if (dbUser && !isSynthetic) {
+    // GATE DE VERIFICACIÓN (auditoría PR #960): el enlace da acceso a la
+    // cuenta, así que SOLO viaja a correos cuya posesión el dueño ya probó
+    // canjeando el token de confirm-email (users.email_verified_at). Sin este
+    // gate, un typo al escribir el correo en el perfil convertía al dueño real
+    // de esa casilla en alguien que podía pedir acceso a la cuenta ajena.
+    // Se gatea en NUESTRO flag y no en el email_confirmed_at de GoTrue porque
+    // la Estrategia B de verify-otp puede marcar aquel sin click del buzón.
+    // La respuesta no cambia (anti-enumeración): correo no verificado responde
+    // igual que correo inexistente.
+    if (dbUser && dbUser.email_verified_at && !isSynthetic) {
       const { data: linkData, error: linkErr } = await supaAdmin.auth.admin.generateLink({
         type: 'magiclink',
         email: normalized,

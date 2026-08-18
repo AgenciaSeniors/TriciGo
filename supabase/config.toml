@@ -432,6 +432,8 @@ deno_version = 2
 verify_jwt = false
 [functions.send-login-email-link]
 verify_jwt = false
+[functions.confirm-email]
+verify_jwt = false
 [functions.verify-otp]
 verify_jwt = false
 [functions.verify-whatsapp-otp]
