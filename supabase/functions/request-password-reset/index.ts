@@ -13,6 +13,7 @@
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit } from '../_shared/rate-limiter.ts';
+import { qpSafeUrl } from '../_shared/qp-safe-url.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -83,7 +84,9 @@ Deno.serve(async (req) => {
               recipient_email: email,
               data: {
                 full_name: dbUser.full_name ?? '',
-                reset_link: linkData.properties.action_link,
+                // qpSafeUrl: el hashed_token de GoTrue es hex puro → `=XX` se corrompe
+                // en la entrega sin la armadura (QP-eater de Resend/SES, E2E 2026-08-18).
+                reset_link: qpSafeUrl(linkData.properties.action_link),
               },
             }),
           }).catch(() => {});

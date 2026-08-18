@@ -38,6 +38,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit } from '../_shared/rate-limiter.ts';
+import { qpSafeUrl } from '../_shared/qp-safe-url.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 const PUBLIC_BASE_URL = Deno.env.get('PUBLIC_TRACKING_BASE_URL') ?? 'https://tricigo.com';
@@ -126,13 +127,16 @@ Deno.serve(async (req) => {
       });
 
       if (!linkErr && linkData?.properties?.action_link) {
+        // qpSafeUrl: el hashed_token de GoTrue es hex puro → `=f5…` se corrompe
+        // en la entrega sin la armadura (QP-eater de Resend/SES, E2E 2026-08-18).
+        const safeLink = qpSafeUrl(linkData.properties.action_link);
         const nombre = esc(dbUser.full_name ?? '').split(' ')[0];
         const html =
           '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">'
           + `<h2 style="color:#ff6a00;border-bottom:2px solid #ff6a00;padding-bottom:8px">Entrá a TriciGo</h2>`
           + `<p>${nombre ? `Hola ${nombre}. ` : ''}Tocá el botón para entrar a tu cuenta sin esperar el código por SMS.</p>`
           + '<p style="margin:24px 0">'
-          + `<a href="${linkData.properties.action_link}" `
+          + `<a href="${safeLink}" `
           + 'style="background:#ff6a00;color:#fff;padding:14px 28px;border-radius:8px;'
           + 'text-decoration:none;font-weight:600;display:inline-block">Entrar a mi cuenta</a>'
           + '</p>'
