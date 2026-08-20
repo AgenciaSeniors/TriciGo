@@ -7,9 +7,6 @@
 /** Clean, muted base — roads, parks, water only. No shop/restaurant POIs. */
 export const MAP_STYLE_LIGHT = 'mapbox://styles/mapbox/light-v11';
 
-/** Navigation night mode for driver app (already excellent, keep as-is). */
-export const MAP_STYLE_NAV_NIGHT = 'mapbox://styles/mapbox/navigation-night-v1';
-
 // ── Marker Dimensions ────────────────────────────────────────
 // BUG-218: marker sizes rebalanced — pickup/dropoff slightly bigger as fixed
 // targets, driver smaller so the vehicle icon doesn't dominate the map.

@@ -114,7 +114,7 @@ export { isVersionOutdated } from './version';
 export { offlineQueue } from './offlineQueue';
 export { fuzzyMatch, stripAccents } from './fuzzyMatch';
 export { SHARE_BASE_URL, buildShareUrl } from './shareRide';
-export { MAP_STYLE_LIGHT, MAP_STYLE_NAV_NIGHT, MARKER, ROUTE, GLASS, MAP_COLORS } from './mapStyles';
+export { MAP_STYLE_LIGHT, MARKER, ROUTE, GLASS, MAP_COLORS } from './mapStyles';
 // BUG-295: per-vehicle-type rotation offset for misaligned marker assets.
 export { VEHICLE_MARKER_ROTATION_OFFSET_DEG, vehicleMarkerRotationOffset } from './markers';
 // BUG-296: POI category → visual group mapping (9 restrained groups).

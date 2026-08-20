@@ -418,7 +418,7 @@ Fare is re-estimated at request time. If price changed >5% from original estimat
 | `useNearbyVehicles` | `src/hooks/useNearbyVehicles.ts` | Map vehicle markers |
 | `useRoutePolyline` | `src/hooks/useRoutePolyline.ts` | Route line on map |
 | `useDriverPosition` | `src/hooks/useDriverPosition.ts` | Driver location updates |
-| `useAnimatedPosition` | `src/hooks/useAnimatedPosition.ts` | Smooth marker animation |
+| `useAnimatedCoordinate` | `packages/utils/src/animateCoordinate.ts` | Smooth marker animation |
 | `useETA` | `src/hooks/useETA.ts` | ETA calculation |
 | `useCorporateAccounts` | `src/hooks/useCorporateAccounts.ts` | Corporate account selection |
 | `useDeliveryVehicles` | `src/hooks/useDeliveryVehicles.ts` | Delivery vehicle options |
@@ -484,9 +484,13 @@ rideService.subscribeToRide(rideId, (updatedRide) => {
 ```
 
 ### Driver Location Display
-- Realtime updates from `driver_profiles.current_location`
-- `useDriverPosition()` subscribes to changes
-- `useAnimatedPosition()` smooths marker movement
+- 1 Hz polling of `driver_profiles.current_location` via the
+  `get_driver_position` RPC (realtime was removed in BUG-277 — the
+  WebSocket held an OkHttp connection slot and starved the driver's own
+  position uploads)
+- `useDriverPosition()` runs that poll
+- `useAnimatedCoordinate()` / `useAnimatedHeading()` interpolate the marker
+  between samples at ~30 FPS
 - `useETA()` calculates arrival time
 
 ### Ride Sharing
@@ -748,8 +752,8 @@ Translation files: `packages/i18n/src/locales/{es,en,pt}/rider.json`
 | `useRide` | Main ride booking + actions |
 | `useNearbyVehicles` | Nearby drivers for map |
 | `useRoutePolyline` | Route geometry from Mapbox |
-| `useDriverPosition` | Subscribe to driver location |
-| `useAnimatedPosition` | Smooth marker animation |
+| `useDriverPosition` | Poll driver location (1 Hz) |
+| `useAnimatedCoordinate` | Smooth marker animation |
 | `useETA` | ETA calculation |
 | `useConnectivity` | Network status |
 | `useOfflineSync` | Process offline queue |
