@@ -8,6 +8,7 @@ import { StopMarker } from '@tricigo/ui';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import { getMapboxGL, ensureMapboxToken, toLngLat as toCoord } from '@/lib/mapbox';
+import { useAnimatedVehicles } from '@/hooks/useAnimatedVehicles';
 import { WebMapView } from './WebMapView';
 import { mapLogger } from '@tricigo/utils';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
@@ -505,27 +506,42 @@ function RideMapViewInner({
     };
   }, [driverToPickupRoute]);
 
+  // The prop arrives in bursts (15 s in production, 1 s in the demo
+  // preview); this turns those jumps into motion.
+  const vehicleTargets = useMemo(
+    () => (nearbyVehicles ?? []).map((v) => ({
+      id: v.driver_profile_id,
+      latitude: v.latitude,
+      longitude: v.longitude,
+      heading: v.heading ?? 0,
+      vehicleType: v.vehicle_type || 'auto',
+    })),
+    [nearbyVehicles],
+  );
+  const animatedVehicles = useAnimatedVehicles(vehicleTargets);
+
   // Build nearby vehicles GeoJSON FeatureCollection
   const nearbyGeoJSON = useMemo(() => {
-    if (!nearbyVehicles || nearbyVehicles.length === 0) return null;
+    if (animatedVehicles.length === 0) return null;
     return {
       type: 'FeatureCollection' as const,
-      features: nearbyVehicles.map((v) => ({
+      features: animatedVehicles.map((v) => ({
         type: 'Feature' as const,
         geometry: {
           type: 'Point' as const,
           coordinates: [v.longitude, v.latitude],
         },
         properties: {
-          id: v.driver_profile_id,
-          icon: `marker-${v.vehicle_type || 'auto'}`,
+          id: v.id,
+          icon: `marker-${v.vehicleType}`,
           // The SymbolLayer below reads ['get','heading'] for iconRotate.
           // Without this property every nearby vehicle rendered facing north.
-          heading: v.heading ?? 0,
+          heading: v.heading,
+          opacity: v.opacity,
         },
       })),
     };
-  }, [nearbyVehicles]);
+  }, [animatedVehicles]);
 
   // The open callout, resolved against the CURRENT vehicle list on every
   // render: it follows the vehicle as it moves and disappears on its own
@@ -1208,6 +1224,7 @@ function RideMapViewInner({
                 style={{
                   iconImage: ['get', 'icon'],
                   iconSize: 0.55,
+                  iconOpacity: ['get', 'opacity'],
                   iconAllowOverlap: true,
                   iconAnchor: 'center',
                   // Cargo box marker (mensajería) has no front — keep
