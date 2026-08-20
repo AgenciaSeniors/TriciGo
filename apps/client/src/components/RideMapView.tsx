@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
-import { View, Text, Animated, Platform, useColorScheme, Image, TouchableOpacity } from 'react-native';
+import { View, Text, Animated, Platform, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
+import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import { getMapboxGL, ensureMapboxToken, toLngLat as toCoord } from '@/lib/mapbox';
 import { WebMapView } from './WebMapView';
@@ -170,7 +171,9 @@ function RideMapViewInner({
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
   const { t } = useTranslation('rider');
-  const colorScheme = useColorScheme();
+  // The app theme, not the OS one: a rider who forces light or dark in
+  // Settings expects the map to follow that choice like the rest of the UI.
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
 
   // Diagnostic mount log — user reported a ~700px black area where the map
   // should be during the rider `searching` state on iOS. The map renders
@@ -213,7 +216,7 @@ function RideMapViewInner({
     rafId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafId);
   }, [routeCoordinates]);
-  const isDark = colorScheme === 'dark';
+  const isDark = resolvedScheme === 'dark';
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
@@ -748,7 +751,7 @@ function RideMapViewInner({
     <View style={fullscreen ? { flex: 1 } : { height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map')}>
       <MapboxGL.MapView
         style={{ flex: 1 }}
-        styleURL={MAP_STYLE_LIGHT}
+        styleURL={isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT}
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
@@ -939,8 +942,8 @@ function RideMapViewInner({
           >
             <Animated.View
               style={{
-                width: 44,
-                height: 44,
+                width: MARKER.dropoffPin.size,
+                height: MARKER.dropoffPin.size,
                 alignItems: 'center',
                 justifyContent: 'center',
                 transform: [{ scale: dropoffScale }],
@@ -953,7 +956,7 @@ function RideMapViewInner({
             >
               <Image
                 source={require('../../assets/markers/dropoff-pin.png')}
-                style={{ width: 44, height: 44, tintColor: MAP_COLORS.brand }}
+                style={{ width: MARKER.dropoffPin.size, height: MARKER.dropoffPin.size, tintColor: MAP_COLORS.brand }}
                 resizeMode="contain"
                 accessibilityLabel={t('map.dropoff_marker')}
               />
@@ -1134,7 +1137,7 @@ function RideMapViewInner({
             width: 44,
             height: 44,
             borderRadius: 22,
-            backgroundColor: '#ffffff',
+            backgroundColor: isDark ? darkColors.card : '#ffffff',
             alignItems: 'center',
             justifyContent: 'center',
             shadowColor: '#000',

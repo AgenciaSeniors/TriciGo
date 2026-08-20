@@ -7,6 +7,11 @@
 /** Clean, muted base — roads, parks, water only. No shop/restaurant POIs. */
 export const MAP_STYLE_LIGHT = 'mapbox://styles/mapbox/light-v11';
 
+/** Dark counterpart of light-v11: same muted treatment, same layer names,
+ *  so route and marker colors carry over unchanged. Used by the client map
+ *  when the app theme resolves to dark. */
+export const MAP_STYLE_DARK = 'mapbox://styles/mapbox/dark-v11';
+
 /** Navigation night mode. 8461c114 dropped this as dead code and it was —
  *  the driver kept its own copy of the literal, so nothing imported it.
  *  #974 (on master) deleted that copy: the driver's RideMapView and its
@@ -24,9 +29,15 @@ export const MAP_STYLE_NAV_NIGHT = 'mapbox://styles/mapbox/navigation-night-v1';
 // visibility standards. Internal proportions (innerDot, tailH) scaled too
 // so the visual shape stays identical, just bigger. Single source for
 // driver + client + web map.
+//
+// Two dropoff designs coexist on purpose: `dropoff` is the red disc with a
+// tail (driver app + web map), `dropoffPin` is the brand-tinted teardrop
+// asset the client's native map uses. Same destination, different marker —
+// don't collapse them.
 export const MARKER = {
   pickup: { size: 39, innerDot: 12, shadow: '0 3px 12px rgba(34,197,94,0.35)' },
   dropoff: { size: 48, innerDot: 17, tailH: 18, shadow: '0 3px 12px rgba(239,68,68,0.35)' },
+  dropoffPin: { size: 44 },
   driver: { size: 45, ringSize: 60, shadow: '0 4px 16px rgba(59,130,246,0.35)' },
 } as const;
 

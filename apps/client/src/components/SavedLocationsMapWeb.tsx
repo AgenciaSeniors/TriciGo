@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { View, Platform } from 'react-native';
-import { logger, HAVANA_CENTER, reverseGeocode } from '@tricigo/utils';
+import { logger, HAVANA_CENTER, reverseGeocode, MAP_STYLE_LIGHT, MAP_STYLE_DARK } from '@tricigo/utils';
+import { themeStore } from '@/stores/theme.store';
 
 // Only import mapbox-gl on web
 let mapboxgl: typeof import('mapbox-gl') | null = null;
@@ -92,9 +93,15 @@ export default function SavedLocationsMapWeb({ locations, selectMode, onMapClick
     // since the runtime accepts the assignment fine.
     (mapboxgl as any).accessToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 
+    // Was streets-v12, the only map in the app that didn't use the shared
+    // style. Read once here rather than subscribed: the style is fixed at
+    // mount (see the note in WebMapView), so a subscription would only add
+    // a dependency this effect must then ignore.
+    const isDark = themeStore.getState().resolvedScheme === 'dark';
+
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
+      style: isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT,
       center: [HAVANA_CENTER.longitude, HAVANA_CENTER.latitude],
       zoom: 13,
       attributionControl: false,

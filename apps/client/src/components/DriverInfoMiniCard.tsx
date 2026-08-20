@@ -14,12 +14,13 @@
 // ============================================================
 
 import React, { useEffect, useRef } from 'react';
-import { View, Image, Animated, ScrollView, StyleSheet, useColorScheme } from 'react-native';
+import { View, Image, Animated, ScrollView, StyleSheet } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
 import { getInitials, formatRating } from '@tricigo/utils';
 import { colors, darkColors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
 interface DriverInfoMiniCardProps {
@@ -248,8 +249,7 @@ export function DriverInfoMiniCard({
 }: DriverInfoMiniCardProps) {
   const { t } = useTranslation('rider');
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
