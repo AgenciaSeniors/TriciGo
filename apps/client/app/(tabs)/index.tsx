@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService } from '@tricigo/api';
@@ -1765,6 +1765,10 @@ function NativeHomeScreen() {
   // on top of a pinned activeRide ("phantom" symptom).
   useEffect(() => {
     if (flowStep !== 'idle' && flowStep !== 'selecting' && mapPickerMode !== null) {
+      // The seed goes with it. Surviving this path, it would hijack the NEXT
+      // picker of any mode — opening the pickup pin at a point the rider
+      // long-pressed during a previous ride.
+      setPickerSeed(null);
       setMapPickerMode(null);
     }
   }, [flowStep, mapPickerMode]);
@@ -3288,10 +3292,7 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
     distances.sort((a, b) => a.distance - b.distance);
     const nearest = distances[0];
     if (!nearest) return null;
-    // Estimate: 20 km/h average city speed, 1.3x road factor
-    const roadDistanceM = nearest.distance * 1.3;
-    const etaMinutes = Math.max(1, Math.round((roadDistanceM / 1000) / 20 * 60));
-    return etaMinutes;
+    return estimateVehicleEtaMinutes(nearest.distance);
   }, [draft.pickup?.location, nearbyVehicles]);
 
   // ETA per vehicle type (min ETA from nearby vehicles of that type)
@@ -3300,7 +3301,8 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
     const result: Record<string, number> = {};
     for (const v of nearbyVehicles) {
       const dist = haversineDistance(draft.pickup!.location, { latitude: v.latitude, longitude: v.longitude });
-      const etaMin = Math.max(1, Math.round((dist * 1.3 / 1000) / 20 * 60));
+      const etaMin = estimateVehicleEtaMinutes(dist);
+      if (etaMin === null) continue;
       // Narrow through a local so `result[...]` doesn't resolve to
       // `number | undefined` under noUncheckedIndexedAccess.
       const existing = result[v.vehicle_type];

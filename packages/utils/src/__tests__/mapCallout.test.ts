@@ -1,29 +1,45 @@
 import { describe, it, expect } from 'vitest';
-import { formatVehicleEta, formatVehicleDistance } from '../mapCallout';
+import {
+  estimateVehicleEtaMinutes,
+  formatVehicleEtaMinutes,
+  formatVehicleDistance,
+} from '../mapCallout';
 
-describe('formatVehicleEta', () => {
-  it('rounds up to whole minutes so nobody is promised less than the wait', () => {
-    expect(formatVehicleEta(61)).toBe('2 min');
-    expect(formatVehicleEta(120)).toBe('2 min');
+describe('estimateVehicleEtaMinutes', () => {
+  it('turns straight-line metres into a city-traffic minute estimate', () => {
+    // 1 km straight line → 1.3 km of road → ~4 min at 20 km/h
+    expect(estimateVehicleEtaMinutes(1000)).toBe(4);
+    expect(estimateVehicleEtaMinutes(2000)).toBe(8);
   });
 
-  it('never says "0 min" — under a minute is still a minute away', () => {
-    expect(formatVehicleEta(5)).toBe('1 min');
-    expect(formatVehicleEta(0)).toBe(null);
+  it('never returns zero — a vehicle on your corner still has to reach you', () => {
+    expect(estimateVehicleEtaMinutes(10)).toBe(1);
+    expect(estimateVehicleEtaMinutes(0)).toBe(1);
   });
 
-  it('returns null when there is no estimate rather than inventing one', () => {
-    expect(formatVehicleEta(null)).toBe(null);
-    expect(formatVehicleEta(undefined)).toBe(null);
-    expect(formatVehicleEta(NaN)).toBe(null);
+  it('returns null for a distance it cannot trust', () => {
+    expect(estimateVehicleEtaMinutes(null)).toBe(null);
+    expect(estimateVehicleEtaMinutes(undefined)).toBe(null);
+    expect(estimateVehicleEtaMinutes(NaN)).toBe(null);
+    expect(estimateVehicleEtaMinutes(-5)).toBe(null);
+  });
+});
+
+describe('formatVehicleEtaMinutes', () => {
+  it('labels whole minutes', () => {
+    expect(formatVehicleEtaMinutes(3)).toBe('3 min');
+    expect(formatVehicleEtaMinutes(1)).toBe('1 min');
   });
 
   it('caps absurd values instead of rendering a wall of digits', () => {
-    expect(formatVehicleEta(60 * 60 * 3)).toBe('60+ min');
+    expect(formatVehicleEtaMinutes(180)).toBe('60+ min');
   });
 
-  it('rejects negatives from clock skew', () => {
-    expect(formatVehicleEta(-30)).toBe(null);
+  it('returns null rather than inventing a number', () => {
+    expect(formatVehicleEtaMinutes(null)).toBe(null);
+    expect(formatVehicleEtaMinutes(undefined)).toBe(null);
+    expect(formatVehicleEtaMinutes(NaN)).toBe(null);
+    expect(formatVehicleEtaMinutes(0)).toBe(null);
   });
 });
 
