@@ -21,6 +21,7 @@
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { qpSafeUrl } from '../_shared/qp-safe-url.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -118,7 +119,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const verificationLink = `${PUBLIC_BASE_URL}/auth/email-confirmed?token=${token}`;
+    // qpSafeUrl: sin la armadura, el `=` seguido del token hex se corrompe en
+    // la entrega (QP-eater de Resend/SES, E2E 2026-08-18) y el enlace llega roto.
+    const verificationLink = qpSafeUrl(`${PUBLIC_BASE_URL}/auth/email-confirmed?token=${token}`);
 
     // Get user full_name
     const { data: dbUser } = await supaAdmin
