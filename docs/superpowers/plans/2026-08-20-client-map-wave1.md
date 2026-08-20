@@ -135,7 +135,7 @@ export { formatVehicleEta, formatVehicleDistance } from './mapCallout';
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @tricigo/utils test -- mapCallout`
-Expected: PASS, 9 tests
+Expected: PASS, 8 tests
 
 - [ ] **Step 5: Commit**
 
@@ -550,7 +550,7 @@ Expected: `Tasks: 10 successful, 10 total`
 - [ ] **Step 2: Tests**
 
 Run: `pnpm --filter client test` → `Tests  35 passed`
-Run: `pnpm --filter @tricigo/utils test` → 634 passed (625 existing + 9 new)
+Run: `pnpm --filter @tricigo/utils test` → 633 passed (625 existing + 8 new)
 
 - [ ] **Step 3: Lint — no new warnings**
 
