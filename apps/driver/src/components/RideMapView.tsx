@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_STYLE_NAV_NIGHT, MAP_COLORS, MARKER, ROUTE, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate } from '@tricigo/utils';
 import type { NearbyVehicle, DemandHotspot, PopularLocation } from '@tricigo/types';
 import { StopMarker } from '@tricigo/ui';
 import { HotspotPulseMarker } from './HotspotPulseMarker';
@@ -154,7 +154,9 @@ const NON_ROTATING_MARKERS = new Set<string>(['mensajeria']);
 // so the fallback when GPS is unavailable is always La Habana.
 const HAVANA_CENTER: [number, number] = [-82.3666, 23.1136];
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-const STYLE_DARK_NAV = 'mapbox://styles/mapbox/navigation-night-v1';
+// Both from @tricigo/utils so `useDynamicOfflineMap` downloads packs for the
+// style this actually renders. A local literal here is what let the two drift.
+const STYLE_DARK_NAV = MAP_STYLE_NAV_NIGHT;
 const STYLE_STREETS = MAP_STYLE_LIGHT;
 
 /** Compute bounding box from [lng, lat] coordinates */

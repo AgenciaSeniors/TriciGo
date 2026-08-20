@@ -14,10 +14,11 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { nearbyService, getOnlineStatus } from '@tricigo/api';
 import {
-  MAP_STYLE_LIGHT,
-  estimateTileCount,
+  MAP_STYLE_NAV_NIGHT,
+  estimatePackTileCount,
   planEviction,
   shouldReresolve,
+  packNeedsRefresh,
   OFFLINE_PACK_MIN_ZOOM,
   OFFLINE_PACK_MAX_ZOOM,
   OFFLINE_MAX_TILES,
@@ -28,6 +29,24 @@ import { useLocationStore } from '@/stores/location.store';
 
 const META_KEY = '@tricigo/offline-pack-meta';
 const POLL_MS = 30_000;
+
+/**
+ * The style these packs must hold: the one the driver's map actually draws.
+ * `ActiveTripMap` and the idle home map both pass `darkStyle`, so both render
+ * navigation-night-v1 — and those are the two screens a driver sits on with no
+ * signal. (The only light-v11 map left is the 180px thumbnail in trip history,
+ * a screen about trips that already ended.)
+ *
+ * Nothing carries over between the two styles. Mapbox serves a style's
+ * `composite` from one endpoint named after its tileset list, and light-v11's
+ * list carries mapbox-bathymetry-v2 where navigation-night-v1's does not:
+ *   /v4/mapbox-streets-v8,mapbox-terrain-v2,mapbox-bathymetry-v2/{z}/{x}/{y}
+ *   /v4/mapbox-streets-v8,mapbox-terrain-v2/{z}/{x}/{y}
+ * Different URL, different cache key — a light-v11 pack serves this map zero
+ * tiles, however much of mapbox-streets-v8 it happens to contain. (Glyphs are
+ * the one shared resource: same font URLs, same six stacks.)
+ */
+const DRIVER_MAP_STYLE = MAP_STYLE_NAV_NIGHT;
 
 let MapboxGL: any;
 try {
@@ -63,13 +82,27 @@ async function ensurePack(region: {
 
   const existing = await MapboxGL.offlineManager.getPack(region.cellKey).catch(() => null);
   if (existing) {
-    meta[region.cellKey] = { tiles: meta[region.cellKey]?.tiles ?? 0, lastUsedAt: now };
-    await saveMeta(meta);
-    return;
+    if (!packNeedsRefresh(meta[region.cellKey], DRIVER_MAP_STYLE)) {
+      meta[region.cellKey] = {
+        tiles: meta[region.cellKey]?.tiles ?? 0,
+        lastUsedAt: now,
+        styleURL: DRIVER_MAP_STYLE,
+      };
+      await saveMeta(meta);
+      return;
+    }
+    // Downloaded for a different style: these tiles are the wrong data.
+    // Falling through re-downloads them for the style in use now. This is
+    // also what clears the light-v11 packs already sitting on drivers'
+    // phones, which no screen they use could read.
+    console.log('[OfflineMap] style changed — refreshing pack', region.cellKey);
+    await MapboxGL.offlineManager.deletePack(region.cellKey).catch(() => {});
+    delete meta[region.cellKey];
   }
 
-  const tiles = estimateTileCount(
+  const tiles = estimatePackTileCount(
     { ne: region.ne, sw: region.sw },
+    DRIVER_MAP_STYLE,
     OFFLINE_PACK_MIN_ZOOM,
     OFFLINE_PACK_MAX_ZOOM,
   );
@@ -77,12 +110,12 @@ async function ensurePack(region: {
   console.log('[OfflineMap] createPack', region.cellKey, `~${tiles} tiles (z${OFFLINE_PACK_MIN_ZOOM}-${OFFLINE_PACK_MAX_ZOOM})`);
   await MapboxGL.offlineManager.createPack({
     name: region.cellKey,
-    styleURL: MAP_STYLE_LIGHT,
+    styleURL: DRIVER_MAP_STYLE,
     bounds: [region.ne, region.sw],
     minZoom: OFFLINE_PACK_MIN_ZOOM,
     maxZoom: OFFLINE_PACK_MAX_ZOOM,
   });
-  meta[region.cellKey] = { tiles, lastUsedAt: now };
+  meta[region.cellKey] = { tiles, lastUsedAt: now, styleURL: DRIVER_MAP_STYLE };
 
   // Stay under Mapbox's per-device tile ceiling. Never evict the cell we
   // just downloaded (it's where the driver is right now).
