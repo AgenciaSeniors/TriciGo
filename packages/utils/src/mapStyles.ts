@@ -7,6 +7,14 @@
 /** Clean, muted base — roads, parks, water only. No shop/restaurant POIs. */
 export const MAP_STYLE_LIGHT = 'mapbox://styles/mapbox/light-v11';
 
+/** Navigation night mode. 8461c114 dropped this as dead code and it was —
+ *  the driver kept its own copy of the literal, so nothing imported it.
+ *  #974 (on master) deleted that copy: the driver's RideMapView and its
+ *  useDynamicOfflineMap now share this constant precisely so the style
+ *  rendered and the style its offline packs hold cannot drift apart. It is
+ *  live again, and removing it breaks the driver build. */
+export const MAP_STYLE_NAV_NIGHT = 'mapbox://styles/mapbox/navigation-night-v1';
+
 // ── Marker Dimensions ────────────────────────────────────────
 // BUG-218: marker sizes rebalanced — pickup/dropoff slightly bigger as fixed
 // targets, driver smaller so the vehicle icon doesn't dominate the map.
