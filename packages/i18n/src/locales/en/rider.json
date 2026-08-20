@@ -58,6 +58,11 @@
   },
 
   "ride": {
+    "move_map": "Move the map to select",
+    "confirm_location": "Confirm location",
+    "loading_map": "Loading map...",
+    "location_off_title": "Location off",
+    "location_off_body": "Turn on the location permission to center the map on where you are.",
     "request": "Request ride",
     "searching_driver": "Searching for a driver...",
     "search_expired_title": "No driver found",
@@ -523,6 +528,7 @@
   },
 
   "map": {
+    "ride_map": "Ride map",
     "unavailable": "Map not available",
     "pickup_marker": "Pickup",
     "dropoff_marker": "Destination",
