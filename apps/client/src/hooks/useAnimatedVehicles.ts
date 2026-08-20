@@ -25,7 +25,16 @@ export function useAnimatedVehicles(targets: VehicleTarget[] | null | undefined)
   const wasEmptyRef = useRef(true);
   targetsRef.current = targets ?? [];
 
+  // Only run the loop where there is something to animate. RideMapView
+  // mounts on five screens and just two ever pass vehicles, and Expo Router
+  // keeps a tab mounted underneath a pushed screen — so an unconditional
+  // loop would wake the JS thread every frame, twice over, to compute
+  // nothing. Re-arms as soon as vehicles appear.
+  const hasWork = (targets?.length ?? 0) > 0;
+
   useEffect(() => {
+    if (!hasWork && stateRef.current.size === 0) return;
+
     let rafId: number | null = null;
     let lastFrame = 0;
 
@@ -39,14 +48,16 @@ export function useAnimatedVehicles(targets: VehicleTarget[] | null | undefined)
           { moveMs: MOVE_MS, fadeMs: FADE_MS },
         );
         stateRef.current = next;
-        // With nothing to animate, keep handing back the SAME empty array.
-        // RideMapView renders on five screens and only two ever pass
-        // vehicles; a fresh [] every frame would re-render all of them
-        // 30 times a second to draw nothing.
+        // With nothing left to animate, hand back the SAME empty array and
+        // stop: the last departing vehicle has finished fading out.
         if (out.length === 0) {
           if (!wasEmptyRef.current) {
             wasEmptyRef.current = true;
             setRendered(EMPTY);
+          }
+          if (targetsRef.current.length === 0) {
+            stop();
+            return;
           }
         } else {
           wasEmptyRef.current = false;
@@ -57,14 +68,14 @@ export function useAnimatedVehicles(targets: VehicleTarget[] | null | undefined)
     };
 
     const start = () => { if (rafId === null) rafId = requestAnimationFrame(frame); };
-    const stop = () => {
+    function stop() {
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-    };
+    }
 
     if (AppState.currentState === 'active') start();
     const sub = AppState.addEventListener('change', (s) => (s === 'active' ? start() : stop()));
     return () => { sub.remove(); stop(); };
-  }, []);
+  }, [hasWork]);
 
   return rendered;
 }

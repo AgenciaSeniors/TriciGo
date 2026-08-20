@@ -557,6 +557,11 @@ function RideMapViewInner({
   // clearing it on every poll, which would have closed the bubble every
   // 15 seconds (every second in the demo preview) whether or not the
   // vehicle had actually gone anywhere.
+  // Gate on the formatted string, not the raw number: Infinity passes a
+  // `> 0` check but formats to null, which would leave an empty pill
+  // floating over the driver.
+  const driverEtaLabel = formatVehicleEtaMinutes(driverEtaMinutes);
+
   const tappedVehicle = useMemo(() => {
     if (!tappedVehicleId || !nearbyVehicles) return null;
     const v = nearbyVehicles.find((n) => n.driver_profile_id === tappedVehicleId);
@@ -969,9 +974,14 @@ function RideMapViewInner({
           </MapboxGL.ShapeSource>
         )}
 
-        {/* Route polyline — shadow + main line */}
+        {/* Route polyline — shadow + main line + travelled progress.
+            `lineMetrics` is what makes the progress layer's lineTrimOffset
+            work. Without it the trim is ignored and that layer paints the
+            WHOLE route green — wider and more opaque than the blue line
+            beneath it, so 2% into a trip the rider would see a fully
+            travelled route. The style validator gates on exactly this flag. */}
         {routeGeoJSON && (
-          <MapboxGL.ShapeSource id="route" shape={routeGeoJSON}>
+          <MapboxGL.ShapeSource id="route" lineMetrics shape={routeGeoJSON}>
             <MapboxGL.LineLayer
               id="routeShadow"
               style={{
@@ -1233,16 +1243,21 @@ function RideMapViewInner({
           </>
         )}
 
-        {animatedDriver && renderedDriverCoord && driverEtaMinutes != null && driverEtaMinutes > 0 && (
+        {animatedDriver && renderedDriverCoord && driverEtaLabel && (
           <MapboxGL.MarkerView
             id="driver-eta-bubble"
             coordinate={[renderedDriverCoord.longitude, renderedDriverCoord.latitude]}
-            anchor={{ x: 0.5, y: 2.2 }}
+            // Anchor stays inside [0,1] — MarkerView console.warns on every
+            // render otherwise, which at this coordinate's ~30 FPS means a
+            // warning per frame for the whole ride. The lift above the
+            // vehicle icon comes from marginBottom instead.
+            anchor={{ x: 0.5, y: 1 }}
             allowOverlap
           >
             <View
-              accessibilityLabel={t('map.driver_eta', { eta: formatVehicleEtaMinutes(driverEtaMinutes) })}
+              accessibilityLabel={t('map.driver_eta', { eta: driverEtaLabel })}
               style={{
+                marginBottom: MARKER.driver.size * 0.7,
                 backgroundColor: isDark ? darkColors.card : '#ffffff',
                 paddingHorizontal: 8,
                 paddingVertical: 4,
@@ -1255,7 +1270,7 @@ function RideMapViewInner({
               }}
             >
               <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? darkColors.text.primary : colors.neutral[800] }}>
-                {formatVehicleEtaMinutes(driverEtaMinutes)}
+                {driverEtaLabel}
               </Text>
             </View>
           </MapboxGL.MarkerView>
@@ -1269,9 +1284,16 @@ function RideMapViewInner({
             <MapboxGL.ShapeSource
               id="nearby-vehicles"
               shape={nearbyGeoJSON}
-              onPress={(e: { features: Array<{ properties?: { id?: unknown } }> }) => {
-                const id = e.features?.[0]?.properties?.id;
+              onPress={(e: { features: Array<{ properties?: { id?: unknown; opacity?: unknown } }> }) => {
+                const f = e.features?.[0];
+                const id = f?.properties?.id;
                 if (typeof id !== 'string' || !id) return;
+                // A vehicle mid-fade-out is still on screen and still
+                // tappable, but it's already gone from the live list — so
+                // the callout would resolve to nothing. Ignore the tap
+                // rather than buzz and open an empty bubble.
+                const opacity = f?.properties?.opacity;
+                if (typeof opacity === 'number' && opacity < 0.6) return;
                 void triggerSelection();
                 // Tapping the open one closes it, so the bubble isn't a
                 // one-way door on a map with no other dismiss target.
@@ -1313,13 +1335,15 @@ function RideMapViewInner({
           <MapboxGL.MarkerView
             id="vehicle-callout"
             coordinate={tappedVehicle.coordinate}
-            anchor={{ x: 0.5, y: 1.6 }}
+            // Inside [0,1] — see the note on the driver bubble above.
+            anchor={{ x: 0.5, y: 1 }}
           >
             <Pressable
               onPress={() => setTappedVehicleId(null)}
               accessibilityRole="button"
               accessibilityLabel={t('map.dismiss_callout', { defaultValue: 'Cerrar' })}
               style={{
+                marginBottom: 20,
                 backgroundColor: isDark ? darkColors.card : '#ffffff',
                 paddingHorizontal: 10,
                 paddingVertical: 6,
