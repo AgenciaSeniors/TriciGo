@@ -18,7 +18,8 @@
 - `nearbyGeoJSON` (`RideMapView.tsx:508-528`) is built straight from the raw prop; features carry only `id`, `icon`, `heading`. Vehicles jump on every refresh: 15 s in production (`useNearbyVehicles.ts:23`), **1 s** in the dev/demo preview (`useTestVehicles.ts:24-27`) — which is the only mode with vehicles to look at before launch.
 - **Nobody in the monorepo draws map-layer text.** `textField` has zero occurrences in `apps/` and `packages/`; every `SymbolLayer` is icons-only. Existing on-map text is a `MarkerView` with RN children (the vehicle callout, `RideMapView.tsx:1236`). Wave 2 follows that proven path rather than introducing `textField`, whose glyph/font failure mode is silent.
 - `MarkerView` only remounts when given a changing `key` — the dropoff marker does that deliberately. Without a key it tracks a moving coordinate without remounting.
-- `lineTrimOffset?: number[]` exists (`MapboxStyles.d.ts:585`) and, unlike `lineGradient` (`:581`), does **not** require `lineMetrics` on the source. The span between `[start, end]` is painted with `lineTrimColor`, transparent by default.
+- `lineTrimOffset?: number[]` exists (`MapboxStyles.d.ts:585`). The span between `[start, end]` is painted with `lineTrimColor`, transparent by default, so `[progress, 1]` leaves `0→progress` visible.
+- **It does require `lineMetrics: true` on the source**, same as `lineGradient`. The TypeScript types don't say so — only the style validator does (`node_modules/mapbox-gl/dist/mapbox-gl-dev.js` gates on `line-gradient || line-trim-offset` against `!source.lineMetrics`). An earlier draft of this plan claimed the opposite, and without the flag the progress layer paints the whole route instead of the travelled part.
 - `useTripProgress` (`apps/client/src/hooks/useTripProgress.ts:40`) already returns `progressPercent` (**0-100**, not 0-1), throttled to 5 s and monotonic, active only in `in_progress` / `arrived_at_destination`. `RideActiveView.tsx:178` already holds it. No new progress math is needed.
 - The component already re-renders ~33×/s from the ant-march loop (`RideMapView.tsx:210-235`), so a second animation loop adds frames, not a new class of cost.
 
@@ -658,7 +659,7 @@ git commit -m "feat(client): paint the part of the route already travelled"
 
 ## Known risk to settle on the device
 
-`lineTrimOffset` is a newer Mapbox GL Native style property. If the native SDK bundled with this Expo version ignores it, the progress layer paints the **whole** route green instead of just the travelled part — visible immediately, and worse than not shipping it. Check this first when testing. Fallback if it misbehaves: drop the layer and revisit with `lineGradient` plus `lineMetrics: true` on the source.
+`lineTrimOffset` is a newer Mapbox GL Native style property. The source now carries `lineMetrics` (which it genuinely requires — see the verified facts), but if the native SDK bundled with this Expo version still ignores the property, the progress layer paints the **whole** route green instead of just the travelled part. That is immediately visible and worse than not shipping it, so check this first. Fallback: drop the layer and revisit with `lineGradient`, which uses the same `lineMetrics` flag.
 
 ## On-device checklist (the user runs this)
 
