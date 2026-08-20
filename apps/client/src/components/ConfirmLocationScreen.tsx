@@ -304,6 +304,10 @@ export function ConfirmLocationScreen({
             zoomLevel: 15,
           }}
         />
+
+        {/* Orientation while dragging the map under the fixed pin: without
+            this the rider has no anchor for where they actually are. */}
+        <MapboxGL.LocationPuck visible puckBearing="heading" puckBearingEnabled />
       </MapboxGL.MapView>
 
       {/* BUG-292 — Static center pin overlaid on map center.

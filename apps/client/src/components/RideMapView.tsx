@@ -865,6 +865,17 @@ function RideMapViewInner({
                 : {})}
         />
 
+        {/* The rider on their own map. Until now the app drew the rider's
+            position on the DRIVER's map (via useRiderLocationSharing) but
+            never here, so the passenger watched a map they weren't in.
+            Renders nothing when location permission is denied. */}
+        <MapboxGL.LocationPuck
+          visible
+          puckBearing="heading"
+          puckBearingEnabled
+          pulsing={{ isEnabled: true, color: MAP_COLORS.driver, radius: 'accuracy' }}
+        />
+
         {/* Driver-to-pickup route (light blue dashed) */}
         {driverRouteGeoJSON && (
           <MapboxGL.ShapeSource id="driver-to-pickup-route" shape={driverRouteGeoJSON}>
