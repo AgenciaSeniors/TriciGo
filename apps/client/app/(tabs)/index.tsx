@@ -1819,7 +1819,13 @@ function NativeHomeScreen() {
             // 00537 pin confirmation: keep the search-picked address text when
             // the user confirms without moving the pin, and show the explicit
             // "¿El destino es aquí?" prompt.
-            initialAddress={mapPickerMode === 'dropoff-confirm' ? draft.dropoff?.address ?? null : null}
+            //
+            // Only when the picker was opened FROM search, though. A long
+            // press seeds its own coordinate (pickerSeed) and we know no
+            // address for it — passing the previous dropoff's address here
+            // would let the user confirm the old label pinned to the new
+            // point, which is the mismatch 00537 exists to prevent.
+            initialAddress={mapPickerMode === 'dropoff-confirm' && !pickerSeed ? draft.dropoff?.address ?? null : null}
             confirmPrompt={mapPickerMode === 'dropoff-confirm'}
             onConfirm={(address, location) => {
               if (!isValidCoordinate(location.latitude, location.longitude)) { setPickerSeed(null); setMapPickerMode(null); return; }
