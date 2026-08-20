@@ -561,6 +561,14 @@ function RideMapViewInner({
     if (!tappedVehicleId || !nearbyVehicles) return null;
     const v = nearbyVehicles.find((n) => n.driver_profile_id === tappedVehicleId);
     if (!v || !Number.isFinite(v.latitude) || !Number.isFinite(v.longitude)) return null;
+    // Two positions on purpose. The bubble is ANCHORED to the interpolated
+    // one so it rides with the icon instead of drifting away from it while
+    // the vehicle slides, but the distance is MEASURED from the reported
+    // one, which is the only position the server actually vouched for.
+    const drawn = animatedVehicles.find((a) => a.id === tappedVehicleId);
+    const anchor: [number, number] = drawn
+      ? [drawn.longitude, drawn.latitude]
+      : [v.longitude, v.latitude];
     // No pickup means no point to measure from, so fall back to how far the
     // vehicle is from the map's own reference point.
     const from = pickupLocation ?? null;
@@ -576,8 +584,8 @@ function RideMapViewInner({
         ? t('map.vehicle_distance', { distance: dist })
         : null;
     if (!label) return null;
-    return { coordinate: [v.longitude, v.latitude] as [number, number], label };
-  }, [tappedVehicleId, nearbyVehicles, pickupLocation, t]);
+    return { coordinate: anchor, label };
+  }, [tappedVehicleId, nearbyVehicles, animatedVehicles, pickupLocation, t]);
 
   // Compute camera bounds (includes searching driver positions)
   // BUG-229: stabilize bounds via primitive lat/lng deps. Object refs
