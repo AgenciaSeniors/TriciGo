@@ -97,6 +97,9 @@ interface RideMapViewProps {
   /** Minutes until the driver arrives, drawn in a bubble on the marker.
    *  Omit (or pass null) to draw no bubble. */
   driverEtaMinutes?: number | null;
+  /** How much of the route is behind you, 0-1. Paints that much of the line
+   *  in the progress colour. Omit while there's no trip underway. */
+  routeProgress?: number | null;
 }
 
 // Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
@@ -182,6 +185,7 @@ function RideMapViewInner({
   rideStatus,
   onLongPressMap,
   driverEtaMinutes,
+  routeProgress,
 }: RideMapViewProps, ref: React.Ref<RideMapViewHandle>) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
@@ -982,6 +986,21 @@ function RideMapViewInner({
                 lineJoin: 'round',
               }}
             />
+            {routeProgress != null && routeProgress > 0 && (
+              <MapboxGL.LineLayer
+                id="routeProgress"
+                style={{
+                  lineColor: ROUTE.progress.color,
+                  lineWidth: ROUTE.progress.width,
+                  lineOpacity: ROUTE.progress.opacity,
+                  // Hide everything ahead of the driver; what stays painted
+                  // is the part already travelled.
+                  lineTrimOffset: [Math.min(1, Math.max(0, routeProgress)), 1],
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+            )}
           </MapboxGL.ShapeSource>
         )}
 
