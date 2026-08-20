@@ -21,6 +21,7 @@ import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat, getMapFallbackLatLng } from '@/config/demo';
 import { getMapboxGL, ensureMapboxToken } from '@/lib/mapbox';
 import { useTwoStageUserCenter } from '@/lib/userLocation';
+import { useLocateMe } from '@/hooks/useLocateMe';
 
 // Token before any MapView mounts — see the note in lib/mapbox.ts.
 ensureMapboxToken();
@@ -85,8 +86,6 @@ export function ConfirmLocationScreen({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
-  // "Center on my location" FAB — true while resolving the GPS fix.
-  const [isLocating, setIsLocating] = useState(false);
 
   // Shimmer animation for address bar
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -169,38 +168,16 @@ export function ConfirmLocationScreen({
   // position; the existing onMapIdle → getCenter() → geocode path then moves
   // the center pin and refreshes the address bar, exactly like dragging the
   // map. We don't touch centerRef here — the camera move drives everything.
-  const handleGoToMyLocation = useCallback(async () => {
-    if (isLocating) return;
-    setIsLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          t('ride.location_off_title'),
-          t('ride.location_off_body'),
-        );
-        return;
-      }
-      // Instant cached fix first, fresh GPS only if there's no cached one.
-      let pos = await Location.getLastKnownPositionAsync();
-      if (!pos) {
-        pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      }
-      const lat = pos?.coords.latitude;
-      const lng = pos?.coords.longitude;
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  const { locate: handleGoToMyLocation, isLocating } = useLocateMe(
+    useCallback((lng: number, lat: number) => {
       cameraRef.current?.setCamera({
-        centerCoordinate: [lng as number, lat as number],
+        centerCoordinate: [lng, lat],
         zoomLevel: 16,
         animationDuration: 600,
         animationMode: 'flyTo',
       });
-    } catch {
-      /* silent — keep the current map position */
-    } finally {
-      if (mountedRef.current) setIsLocating(false);
-    }
-  }, [isLocating, t]);
+    }, []),
+  );
 
   // The confirm button used to be gated on `disabled={isGeocoding ||
   // !address}`, forcing the user to wait out the reverse-geocode (the
