@@ -356,10 +356,13 @@ const FRAME_MS = 33;
  *
  * Pauses with the app: nobody is watching vehicles glide while backgrounded.
  */
+const EMPTY: AnimatedVehicle[] = [];
+
 export function useAnimatedVehicles(targets: VehicleTarget[] | null | undefined): AnimatedVehicle[] {
-  const [rendered, setRendered] = useState<AnimatedVehicle[]>([]);
+  const [rendered, setRendered] = useState<AnimatedVehicle[]>(EMPTY);
   const stateRef = useRef<Map<string, VehicleAnimState>>(new Map());
   const targetsRef = useRef<VehicleTarget[]>([]);
+  const wasEmptyRef = useRef(true);
   targetsRef.current = targets ?? [];
 
   useEffect(() => {
@@ -376,7 +379,19 @@ export function useAnimatedVehicles(targets: VehicleTarget[] | null | undefined)
           { moveMs: MOVE_MS, fadeMs: FADE_MS },
         );
         stateRef.current = next;
-        setRendered(out);
+        // With nothing to animate, keep handing back the SAME empty array.
+        // RideMapView renders on five screens and only two ever pass
+        // vehicles; a fresh [] every frame would re-render all of them
+        // 30 times a second to draw nothing.
+        if (out.length === 0) {
+          if (!wasEmptyRef.current) {
+            wasEmptyRef.current = true;
+            setRendered(EMPTY);
+          }
+        } else {
+          wasEmptyRef.current = false;
+          setRendered(out);
+        }
       }
       rafId = requestAnimationFrame(frame);
     };
