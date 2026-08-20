@@ -1755,6 +1755,10 @@ function NativeHomeScreen() {
   // aquí?" prompt and keeps the picked address text if the pin isn't moved.
   const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null>(null);
 
+  // A long-press on the map seeds the picker with that exact point instead
+  // of the existing dropoff. Cleared whenever the picker closes.
+  const [pickerSeed, setPickerSeed] = useState<{ latitude: number; longitude: number } | null>(null);
+
   // BUG-253 (Capa 3.5): if the flow transitions away from 'idle'/'selecting'
   // while a picker overlay is open, force-close it. Without this, the
   // local picker state can outlive its valid lifecycle and re-render
@@ -1801,11 +1805,12 @@ function NativeHomeScreen() {
       //   dropoff picker → draft.dropoff ?? draft.pickup (start near the user)
       //   waypoint picker → last waypoint ?? draft.pickup
       const pickerInitialLoc =
-        mapPickerMode === 'pickup'
+        pickerSeed ??
+        (mapPickerMode === 'pickup'
           ? draft.pickup?.location ?? null
           : mapPickerMode === 'waypoint'
             ? lastWaypoint?.location ?? draft.pickup?.location ?? null
-            : draft.dropoff?.location ?? draft.pickup?.location ?? null;
+            : draft.dropoff?.location ?? draft.pickup?.location ?? null);
       return (
         <View style={{ flex: 1 }}>
           <ConfirmLocationScreen
@@ -1817,7 +1822,7 @@ function NativeHomeScreen() {
             initialAddress={mapPickerMode === 'dropoff-confirm' ? draft.dropoff?.address ?? null : null}
             confirmPrompt={mapPickerMode === 'dropoff-confirm'}
             onConfirm={(address, location) => {
-              if (!isValidCoordinate(location.latitude, location.longitude)) { setMapPickerMode(null); return; }
+              if (!isValidCoordinate(location.latitude, location.longitude)) { setPickerSeed(null); setMapPickerMode(null); return; }
               if (mapPickerMode === 'pickup') {
                 setPickup(address, location);
               } else if (mapPickerMode === 'waypoint') {
@@ -1826,14 +1831,23 @@ function NativeHomeScreen() {
               } else {
                 setDropoff(address, location);
               }
+              setPickerSeed(null);
               setMapPickerMode(null);
             }}
-            onClose={() => setMapPickerMode(null)}
+            onClose={() => { setPickerSeed(null); setMapPickerMode(null); }}
           />
         </View>
       );
     }
-    return <SelectingView setMapPickerMode={setMapPickerMode} />;
+    return (
+      <SelectingView
+        setMapPickerMode={setMapPickerMode}
+        openPickerAt={(lng, lat) => {
+          setPickerSeed({ latitude: lat, longitude: lng });
+          setMapPickerMode('dropoff-confirm');
+        }}
+      />
+    );
   }
 
   // Other non-idle flow steps use Screen with scroll
@@ -3039,7 +3053,10 @@ const VEHICLE_ICONS: Record<string, any> = {
 // The `waypoint` variant is the same one added to searchingField so
 // the waypoint-search map-picker flow can be wired later. Keeps the
 // two types aligned (same setter accepts the same values).
-function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null) => void }) {
+function SelectingView({ setMapPickerMode, openPickerAt }: {
+  setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null) => void;
+  openPickerAt: (lng: number, lat: number) => void;
+}) {
   // BUG-282 (revised) — initial map center.
   // Two-stage resolution: (1) AsyncStorage cache for an instant first
   // frame, (2) fresh GPS fix that overrides the cache once it arrives.
@@ -3444,6 +3461,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         // demo-city fallback (São Paulo). userCenter resolves from cached
         // AsyncStorage instantly, then upgrades when GPS gives a fresh fix.
         initialUserCenter={userCenter}
+        onLongPressMap={openPickerAt}
       />
 
       {/* "Center on my location". This fullscreen map was the only one

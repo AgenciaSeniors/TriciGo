@@ -3,7 +3,7 @@ import { View, Text, Animated, AppState, Platform, Image, TouchableOpacity, Pres
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading, formatVehicleEta, formatVehicleDistance, triggerSelection } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading, formatVehicleEta, formatVehicleDistance, triggerSelection, triggerHaptic } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
@@ -93,6 +93,8 @@ interface RideMapViewProps {
    * the static bounds fit (previous behavior).
    */
   rideStatus?: string | null;
+  /** Long-press anywhere on the map. Receives [lng, lat]. */
+  onLongPressMap?: (lng: number, lat: number) => void;
 }
 
 // Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
@@ -176,6 +178,7 @@ function RideMapViewInner({
   fullscreen,
   initialUserCenter,
   rideStatus,
+  onLongPressMap,
 }: RideMapViewProps, ref: React.Ref<RideMapViewHandle>) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
@@ -822,6 +825,14 @@ function RideMapViewInner({
         // timer in handleUserGesture, this prevents the camera from
         // fighting the user's finger.
         onTouchStart={isRideActive ? handleUserGesture : undefined}
+        onLongPress={onLongPressMap ? (feature: any) => {
+          const coords = feature?.geometry?.coordinates;
+          if (!Array.isArray(coords)) return;
+          const [lng, lat] = coords;
+          if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+          void triggerHaptic('medium');
+          onLongPressMap(lng, lat);
+        } : undefined}
       >
         {/* Camera — fit to bounds, or flyTo accepted driver, or default to
             initialUserCenter (BUG-282) / Havana fallback.
