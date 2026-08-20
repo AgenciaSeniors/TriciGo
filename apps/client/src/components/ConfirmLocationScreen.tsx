@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 const ROUTE_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER } from '@tricigo/utils';
+import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, triggerHaptic, triggerSelection } from '@tricigo/utils';
 import type { GeoPoint, StructuredAddress } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
@@ -153,7 +153,15 @@ export function ConfirmLocationScreen({
         if (center && Array.isArray(center) && center.length === 2) {
           const [lng, lat] = center;
           if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            // Capture before overwriting: comparing against centerRef after
+            // the assignment would always measure zero movement.
+            const previous = centerRef.current;
             centerRef.current = { latitude: lat, longitude: lng };
+            // Only when the pin actually landed somewhere else. A map that
+            // settles a metre after the finger lifts should stay silent.
+            if (haversineDistance(previous, { latitude: lat, longitude: lng }) > 15) {
+              void triggerSelection();
+            }
             geocodeCenter(lat, lng);
             return;
           }
@@ -190,6 +198,7 @@ export function ConfirmLocationScreen({
   const handleConfirm = async () => {
     if (confirming) return; // re-entrancy guard (double-tap)
     setConfirming(true);
+    void triggerHaptic('light');
     // Every exit path clears the spinner. The parent usually unmounts this
     // screen right after onConfirm, but when it doesn't (or onConfirm
     // throws) the button used to stay stuck spinning forever.

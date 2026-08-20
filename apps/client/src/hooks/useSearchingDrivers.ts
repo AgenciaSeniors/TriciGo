@@ -6,7 +6,7 @@
 
 import { useEffect, useRef } from 'react';
 import { presenceService } from '@tricigo/api';
-import { logger } from '@tricigo/utils';
+import { logger, triggerHaptic } from '@tricigo/utils';
 import { useRideStore } from '@/stores/ride.store';
 import type { SearchingDriverPresence, DriverAcceptedBroadcast } from '@tricigo/types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -66,6 +66,9 @@ export function useSearchingDrivers(rideId: string | null) {
         driverId: data.driverId,
         name: data.name,
       });
+
+      // The moment worth feeling: someone took your ride.
+      void triggerHaptic('success');
 
       setAcceptedDriver(data);
       setAcceptAnimating(true);
