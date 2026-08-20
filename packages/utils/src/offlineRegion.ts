@@ -14,6 +14,8 @@
 // predictable tile budget.
 // ============================================================
 
+import { MAP_STYLE_NAV_NIGHT } from './mapStyles';
+
 /** Grid cell size in degrees (~13 km at Cuban latitudes). */
 export const OFFLINE_GRID_DEG = 0.12;
 /** Stay under Mapbox's ~6000 tiles/device hard limit (ToS-protected). */
@@ -34,6 +36,9 @@ export interface RegionBounds {
 export interface OfflinePackMeta {
   tiles: number;
   lastUsedAt: number; // epoch ms
+  /** Style the pack's tiles were downloaded for. Absent on packs created
+   *  before this was recorded — treated as unknown, therefore stale. */
+  styleURL?: string;
 }
 
 export interface LatLng {
@@ -154,4 +159,55 @@ export function shouldReresolve(
     return true;
   }
   return distanceM(lastPoint, current) > OFFLINE_RERESOLVE_M;
+}
+
+/**
+ * Whether a cached pack has to be thrown away and downloaded again.
+ *
+ * Tiles are style-specific. Without this check a style change leaves every
+ * pack orphaned — still on disk, still counted against the tile budget,
+ * silently serving the wrong style's data — because `ensurePack` reuses a
+ * pack by cell key alone and never looks further.
+ */
+export function packNeedsRefresh(
+  meta: OfflinePackMeta | undefined,
+  currentStyleURL: string,
+): boolean {
+  if (!meta) return true;
+  return meta.styleURL !== currentStyleURL;
+}
+
+/**
+ * Vector sources a style downloads *on top of* its `composite`, with each
+ * tileset's own maxzoom (nothing is fetched above it — the renderer
+ * overzooms instead). Keyed by style URL; absent means composite-only.
+ *
+ * Measured 2026-08-20 from the Mapbox Styles API + each tileset's TileJSON:
+ *   light-v11           → composite only
+ *   navigation-night-v1 → + mapbox-traffic-v1 (z≤14), mapbox-incidents-v1 (z≤14)
+ */
+const STYLE_EXTRA_SOURCE_MAXZOOM: Record<string, number[]> = {
+  [MAP_STYLE_NAV_NIGHT]: [14, 14],
+};
+
+/**
+ * Tiles a pack for `styleURL` actually costs against the device ceiling.
+ *
+ * `estimateTileCount` prices one source. A style with several sources pays
+ * per source, because Mapbox serves each as its own tile endpoint. Budgeting
+ * a multi-source style with the single-source number silently admits one
+ * cell too many and overruns Mapbox's hard ~6000-tile limit.
+ */
+export function estimatePackTileCount(
+  bounds: RegionBounds,
+  styleURL: string,
+  minZoom: number = OFFLINE_PACK_MIN_ZOOM,
+  maxZoom: number = OFFLINE_PACK_MAX_ZOOM,
+): number {
+  let total = estimateTileCount(bounds, minZoom, maxZoom);
+  for (const sourceMaxZoom of STYLE_EXTRA_SOURCE_MAXZOOM[styleURL] ?? []) {
+    if (sourceMaxZoom < minZoom) continue;
+    total += estimateTileCount(bounds, minZoom, Math.min(maxZoom, sourceMaxZoom));
+  }
+  return total;
 }

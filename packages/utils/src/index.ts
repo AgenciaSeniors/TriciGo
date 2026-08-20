@@ -136,6 +136,8 @@ export {
   estimateTileCount,
   planEviction,
   shouldReresolve,
+  packNeedsRefresh,
+  estimatePackTileCount,
 } from './offlineRegion';
 export type { RegionBounds, OfflinePackMeta, LatLng } from './offlineRegion';
 

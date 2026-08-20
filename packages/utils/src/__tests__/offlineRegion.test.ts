@@ -7,8 +7,11 @@ import {
   estimateTileCount,
   planEviction,
   shouldReresolve,
+  packNeedsRefresh,
+  estimatePackTileCount,
   type OfflinePackMeta,
 } from '../offlineRegion';
+import { MAP_STYLE_LIGHT, MAP_STYLE_NAV_NIGHT } from '../mapStyles';
 
 // Capitolio, Havana
 const HAV = { lat: 23.1357, lng: -82.3666 };
@@ -100,5 +103,67 @@ describe('shouldReresolve', () => {
 
   it('is true when crossing into another cell', () => {
     expect(shouldReresolve(HAV, { lat: HAV.lat + OFFLINE_GRID_DEG, lng: HAV.lng })).toBe(true);
+  });
+});
+
+describe('packNeedsRefresh', () => {
+  const STYLE = 'mapbox://styles/mapbox/light-v11';
+
+  it('refreshes a pack downloaded for a different style', () => {
+    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0, styleURL: 'mapbox://styles/mapbox/streets-v12' }, STYLE)).toBe(true);
+  });
+
+  it('keeps a pack that matches the current style', () => {
+    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0, styleURL: STYLE }, STYLE)).toBe(false);
+  });
+
+  // Packs downloaded before this field existed. One refresh brings them
+  // under management; assuming they match would keep them stale forever.
+  it('refreshes a legacy pack that never recorded its style', () => {
+    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0 }, STYLE)).toBe(true);
+  });
+
+  it('refreshes when there is no metadata at all', () => {
+    expect(packNeedsRefresh(undefined, STYLE)).toBe(true);
+  });
+});
+
+describe('estimatePackTileCount', () => {
+  const b = cellBounds(HAV.lat, HAV.lng);
+  // Mapbox serves a style's `composite` as ONE endpoint per tileset list, so
+  // a pack costs one tile per (z,x,y) for the composite plus one for every
+  // extra source, capped at that tileset's own maxzoom.
+  const composite = estimateTileCount(b, 10, 16);
+
+  it('costs exactly the composite for a single-source style (light-v11)', () => {
+    expect(estimatePackTileCount(b, MAP_STYLE_LIGHT, 10, 16)).toBe(composite);
+  });
+
+  it('adds traffic + incidents for navigation-night-v1, each capped at z14', () => {
+    const capped = estimateTileCount(b, 10, 14); // both extra tilesets stop at z14
+    expect(estimatePackTileCount(b, MAP_STYLE_NAV_NIGHT, 10, 16)).toBe(composite + capped * 2);
+  });
+
+  it('is heavier than the single-source style it replaces', () => {
+    expect(estimatePackTileCount(b, MAP_STYLE_NAV_NIGHT, 10, 16))
+      .toBeGreaterThan(estimatePackTileCount(b, MAP_STYLE_LIGHT, 10, 16));
+  });
+
+  it('falls back to the composite alone for an unknown style', () => {
+    expect(estimatePackTileCount(b, 'mapbox://styles/acme/custom', 10, 16)).toBe(composite);
+  });
+
+  // The reason this helper exists. planEviction is told to hold the total at
+  // or under OFFLINE_MAX_TILES. Priced with the single-source estimate,
+  // navigation-night-v1 looks cheap enough for a 7th cell, so the device
+  // really carries 5964 tiles against a 5500 budget — spending exactly the
+  // headroom that constant keeps in front of Mapbox's hard ~6000 limit.
+  it('stops the LRU budget from admitting a cell it cannot afford', () => {
+    const real = estimatePackTileCount(b, MAP_STYLE_NAV_NIGHT, 10, 16);
+    const cellsIfNaive = Math.floor(OFFLINE_MAX_TILES / composite);
+    const cellsIfReal = Math.floor(OFFLINE_MAX_TILES / real);
+    expect(cellsIfNaive).toBeGreaterThan(cellsIfReal);
+    expect(cellsIfNaive * real).toBeGreaterThan(OFFLINE_MAX_TILES);
+    expect(cellsIfReal * real).toBeLessThanOrEqual(OFFLINE_MAX_TILES);
   });
 });
