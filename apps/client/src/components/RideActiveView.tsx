@@ -1113,6 +1113,7 @@ export function RideActiveView() {
           driverLocation={driverPosition}
           driverHeading={driverPosition?.heading ?? null}
           driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
+          driverEtaMinutes={displayEtaMinutes}
           routeCoordinates={routeCoordinates}
           driverToPickupRoute={driverToPickupRoute}
           waypointLocations={waypointPoints}

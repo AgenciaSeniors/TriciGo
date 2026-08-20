@@ -94,6 +94,9 @@ interface RideMapViewProps {
   rideStatus?: string | null;
   /** Long-press anywhere on the map. Receives [lng, lat]. */
   onLongPressMap?: (lng: number, lat: number) => void;
+  /** Minutes until the driver arrives, drawn in a bubble on the marker.
+   *  Omit (or pass null) to draw no bubble. */
+  driverEtaMinutes?: number | null;
 }
 
 // Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
@@ -178,6 +181,7 @@ function RideMapViewInner({
   initialUserCenter,
   rideStatus,
   onLongPressMap,
+  driverEtaMinutes,
 }: RideMapViewProps, ref: React.Ref<RideMapViewHandle>) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
@@ -1200,6 +1204,34 @@ function RideMapViewInner({
               />
             </MapboxGL.ShapeSource>
           </>
+        )}
+
+        {animatedDriver && renderedDriverCoord && driverEtaMinutes != null && driverEtaMinutes > 0 && (
+          <MapboxGL.MarkerView
+            id="driver-eta-bubble"
+            coordinate={[renderedDriverCoord.longitude, renderedDriverCoord.latitude]}
+            anchor={{ x: 0.5, y: 2.2 }}
+            allowOverlap
+          >
+            <View
+              accessibilityLabel={t('map.driver_eta', { eta: formatVehicleEtaMinutes(driverEtaMinutes) })}
+              style={{
+                backgroundColor: isDark ? darkColors.card : '#ffffff',
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 8,
+                shadowColor: '#000',
+                shadowOpacity: 0.18,
+                shadowRadius: 5,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 4,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? darkColors.text.primary : colors.neutral[800] }}>
+                {formatVehicleEtaMinutes(driverEtaMinutes)}
+              </Text>
+            </View>
+          </MapboxGL.MarkerView>
         )}
 
         {/* Nearby vehicles — GPU-rendered SymbolLayer for performance */}
