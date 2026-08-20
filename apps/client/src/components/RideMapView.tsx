@@ -1,9 +1,9 @@
 import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
-import { View, Text, Animated, AppState, Platform, Image, TouchableOpacity } from 'react-native';
+import { View, Text, Animated, AppState, Platform, Image, TouchableOpacity, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading, formatVehicleEta, formatVehicleDistance, triggerSelection } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
@@ -42,6 +42,8 @@ interface NearbyVehicleMarker {
   longitude: number;
   vehicle_type: string;
   heading?: number | null;
+  eta_seconds?: number | null;
+  distance_to_pickup_m?: number | null;
 }
 
 interface RideMapViewProps {
@@ -260,6 +262,10 @@ function RideMapViewInner({
     }),
     [],
   );
+  const [tappedVehicle, setTappedVehicle] = useState<{
+    coordinate: [number, number];
+    label: string;
+  } | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
@@ -515,9 +521,16 @@ function RideMapViewInner({
           // The SymbolLayer below reads ['get','heading'] for iconRotate.
           // Without this property every nearby vehicle rendered facing north.
           heading: v.heading ?? 0,
+          etaSeconds: v.eta_seconds ?? null,
+          distanceM: v.distance_to_pickup_m ?? null,
         },
       })),
     };
+  }, [nearbyVehicles]);
+
+  // A callout pinned to a stale coordinate is worse than no callout.
+  useEffect(() => {
+    setTappedVehicle(null);
   }, [nearbyVehicles]);
 
   // Compute camera bounds (includes searching driver positions)
@@ -1087,6 +1100,16 @@ function RideMapViewInner({
             {/* Vehicle icon (rotates with smoothed heading) */}
             <MapboxGL.ShapeSource
               id="driver-marker-src"
+              onPress={() => {
+                if (!animatedDriver) return;
+                void triggerSelection();
+                cameraRef.current?.setCamera({
+                  centerCoordinate: [animatedDriver.longitude, animatedDriver.latitude],
+                  zoomLevel: 16,
+                  animationDuration: 600,
+                  animationMode: 'flyTo',
+                });
+              }}
               shape={{
                 type: 'Feature',
                 geometry: {
@@ -1136,7 +1159,27 @@ function RideMapViewInner({
             which dominated; 0.5 was too small to spot). */}
         {nearbyGeoJSON && (
           <>
-            <MapboxGL.ShapeSource id="nearby-vehicles" shape={nearbyGeoJSON}>
+            <MapboxGL.ShapeSource
+              id="nearby-vehicles"
+              shape={nearbyGeoJSON}
+              onPress={(e: { features: Array<{ geometry?: any; properties?: any }> }) => {
+                const f = e.features?.[0];
+                const coords = f?.geometry?.coordinates;
+                if (!Array.isArray(coords) || !Number.isFinite(coords[0]) || !Number.isFinite(coords[1])) return;
+                const eta = formatVehicleEta(f?.properties?.etaSeconds);
+                const dist = formatVehicleDistance(f?.properties?.distanceM);
+                // No ETA and no distance means there is nothing to tell the
+                // rider — stay silent rather than open an empty bubble.
+                const label = eta
+                  ? t('map.vehicle_eta', { eta })
+                  : dist
+                    ? t('map.vehicle_distance', { distance: dist })
+                    : null;
+                if (!label) return;
+                void triggerSelection();
+                setTappedVehicle({ coordinate: [coords[0], coords[1]], label });
+              }}
+            >
               <MapboxGL.SymbolLayer
                 id="nearby-icons"
                 style={{
@@ -1165,6 +1208,35 @@ function RideMapViewInner({
               />
             </MapboxGL.ShapeSource>
           </>
+        )}
+
+        {tappedVehicle && (
+          <MapboxGL.MarkerView
+            id="vehicle-callout"
+            coordinate={tappedVehicle.coordinate}
+            anchor={{ x: 0.5, y: 1.6 }}
+          >
+            <Pressable
+              onPress={() => setTappedVehicle(null)}
+              accessibilityRole="button"
+              accessibilityLabel={t('map.dismiss_callout', { defaultValue: 'Cerrar' })}
+              style={{
+                backgroundColor: isDark ? darkColors.card : '#ffffff',
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8,
+                shadowColor: '#000',
+                shadowOpacity: 0.18,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 4,
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? darkColors.text.primary : colors.neutral[800] }}>
+                {tappedVehicle.label}
+              </Text>
+            </Pressable>
+          </MapboxGL.MarkerView>
         )}
 
         {/* Searching driver avatar markers (Presence-based) */}

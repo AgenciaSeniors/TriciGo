@@ -533,7 +533,9 @@
     "pickup_marker": "Pickup",
     "dropoff_marker": "Destination",
     "stop_marker": "Stop {{n}}",
-    "driver_marker": "Driver"
+    "driver_marker": "Driver",
+    "vehicle_eta": "{{eta}} away",
+    "vehicle_distance": "{{distance}} away"
   },
 
   "prediction": {
