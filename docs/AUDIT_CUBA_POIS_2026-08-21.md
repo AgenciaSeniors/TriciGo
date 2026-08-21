@@ -2,8 +2,19 @@
 
 **Alcance:** las clases de basura detectadas durante la verificación de 00570 (PR #976): duplicados mal
 geolocalizados de hoteles famosos, clusters enteros fuera de Cuba, y puntos famosos mal ubicados que
-des-etiquetan su entorno. **Entregable:** migración [`00571_cuba_pois_garbage_cleanup.sql`](../supabase/migrations/00571_cuba_pois_garbage_cleanup.sql)
-(NO aplicada — MCP guard; requiere autorización explícita).
+des-etiquetan su entorno. **Entregable:** migración [`00571_cuba_pois_garbage_cleanup.sql`](../supabase/migrations/00571_cuba_pois_garbage_cleanup.sql).
+
+> **APLICADA a prod el 2026-08-21** (autorización explícita; registro `20260821191406 cuba_pois_garbage_cleanup`).
+> Resultado: **814 filas desactivadas = 744 clase A + 70 clases B/C/D** (cierre exacto contra lo esperado),
+> ambos RPCs del sync parcheados (targets ausentes de los cuerpos vivos), "Parque Central" (11241) movido a
+> (23.137500, −82.358730) con `tricigo_category='park'`. Suite post-apply con la función real: **14/14 pines
+> idénticos a la simulación GREEN** (incl. NULL en Nuevo Vedado/Camagüey/Santiago/Boyeros, "Parque Central"
+> d=0.3 en el monumento, y el McDonald's de GTMO conservado). Búsqueda: `search_pois_smart('estadio
+> latinoamericano')` → el Cerro con `name_exact`; `('kempinski')` → solo el admin de la Manzana + el resort
+> real de Cayo Guillermo. Nota operativa: el timeout del cliente MCP durante el apply NO cancela la query —
+> el primer intento siguió corriendo server-side (~5 min por la clase A) y comiteó completo; el reintento
+> quedó esperando el lock y terminó como no-op idempotente (por diseño). **Pendiente:** chequeo post-sync del
+> lunes 25/08 (paso 5 del runbook).
 
 > **Contexto de 00570:** se mergeó Y se aplicó a prod el mismo día de esta auditoría (sesión paralela).
 > 00570 NO hizo limpieza alguna — sus únicos UPDATEs siembran `footprint_radius_m` en 6 filas admin
@@ -196,16 +207,18 @@ captación de ningún pin de la suite — verificado por coordenadas — así qu
 - La fila sucia del Hotel Melia Cohiba (tc transport, admin) sigue pendiente de curación admin (ya
   anotada en 00570).
 
-## Runbook post-apply (gated — autorización explícita por paso)
+## Runbook post-apply (ejecutado 2026-08-21; solo queda el paso 5)
 
-1. `mcp__apply_migration` de 00571 (patrón AskUserQuestion de CLAUDE.md). Revisar los NOTICE:
-   A ≈ 744 (4 admin), B/C/D = 70 de 70 (verificado pre-apply: las 70 parejas id+name matchean filas
-   activas no-admin), E movido (1 fila).
-2. Re-correr la suite de pines de arriba con la función real → debe reproducir la columna CANDIDATO.
-3. Chequeo de vacío: la query "fuera de polígonos y >2 km" del pie de la migración debe dar **0**.
-4. Smoke de búsqueda: `search_pois_smart('estadio latinoamericano', …)` ya no debe devolver el pin del
-   Hotel Nacional; `('kempinski', …)` debe devolver solo el admin + Cayo Guillermo real.
-5. El lunes siguiente al apply, verificar que el sync semanal NO re-activó nada:
+1. ✅ `mcp__apply_migration` de 00571 (autorizado via AskUserQuestion). Los NOTICE no llegaron al cliente
+   (timeout — la query completó server-side), pero los conteos reconcilian exactos: 814 desactivadas en la
+   ventana del apply = 744 A + 70 B/C/D; funciones parcheadas; E movido (verificado por estado, no por log).
+2. ✅ Suite de pines re-corrida con la función real: 14/14 idénticos a la columna CANDIDATO.
+3. ✅ (por aritmética + muestra) 757 fuera de polígonos pre-apply − 744 desactivadas = 13 restantes = las
+   costeras ≤2 km conservadas; muestra de la caja Bahamas: 0 activas. La query completa de vacío es cara
+   (~3 min) — opcional re-correrla en frío.
+4. ✅ Smoke de búsqueda: 'estadio latinoamericano' → el Cerro (`name_exact`); 'kempinski' → solo el admin
+   de la Manzana + el resort real de Cayo Guillermo.
+5. ⏳ El lunes 25/08 (post-sync semanal), verificar que el sync NO re-activó nada:
    `SELECT count(*) FROM cuba_pois WHERE is_active AND id IN (211827, 202022, 194312);` → 0.
 
 ## Recomendaciones (fuera del alcance de 00571, no accionadas)
