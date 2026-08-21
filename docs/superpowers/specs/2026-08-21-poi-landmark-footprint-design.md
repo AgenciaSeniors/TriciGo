@@ -120,20 +120,35 @@ magnets ("Estadio Latinoamericano" 9.8 m from Hotel Nacional, "Playa Boca
 Ciega" 13.4 m from Iberostar Parque Central) — so the landmark label is
 physically true regardless.
 
-Seeds (each verified against a 45 m neighbor dump from prod; nearest genuine
-distinct venue listed):
+**Radius rule (measured against the live baseline over 3 iterations — the
+first draft's radii would have caused regressions the suites caught):**
+because of the 10 m banding, a seed's real **influence zone is `r + 10`**.
+Two lessons the measurements taught:
 
-| Landmark (is_admin, conf 1) | r | Nearest genuine distinct thing kept outside |
+1. A distinct venue's *own pin* flips as soon as `dist − r < 10` — caught
+   La Xana (25.3 m vs r=25) and Pastelería (25.1 m vs r=15).
+2. Protecting only the venue's exact point is not enough: a pin **5–7 m from
+   the venue's door** still flipped (Pastelería 6.3 m from the pin lost to
+   Inglaterra with r=12). Hence the final rule: the influence zone `r + 10`
+   must fit inside the landmark's physical body + its own sidewalk, and
+   `r ≤ dist(nearest genuine distinct venue) − 15`.
+
+Seeds (each verified against a 45 m neighbor dump from prod):
+
+| Landmark (is_admin, conf 1) | r | Nearest genuine distinct venue |
 |---|---|---|
-| Gran Hotel Manzana Kempinski | 35 | bus stop 46.7 m, casa particular 47.9 m |
-| Hotel Nacional de Cuba | 40 | none physically possible ≤45 m (promontory grounds) |
-| Hotel Habana Libre | 35 | Fonda La Paila (paladar) 39.5 m |
-| Iberostar Selection Parque Central | 25 | La Xana 25.3 m, Bodeguita del Medio Cuba 25.4 m |
-| Hotel Inglaterra | 15 | Pastelería Francesa 25.1 m |
-| Hotel Casagranda (Santiago de Cuba) | 12 | Parque Céspedes SCU 20.8 m |
-| Hotel Ambos Mundos | 10 | Gabinete de Patrimonio Musical Esteban Salas 13.3 m |
+| Gran Hotel Manzana Kempinski | 30 | bus stop 46.7 m; casa particular 47.9 m |
+| Hotel Nacional de Cuba | 40 | none genuine ≤50 m (promontory grounds) |
+| Hotel Habana Libre | 23 | Fonda La Paila 39.5 m |
+| Iberostar Selection Parque Central | 8 | La Xana 25.3 m, Bodeguita del Medio Cuba 25.4 m |
+| Hotel Inglaterra | 10 | Pastelería Francesa 25.1 m |
+| Hotel Casagranda (Santiago de Cuba) | 5 | Hostal Lena & Linet 19.8 m |
 
 Explicitly **not** seeded, with reasons recorded so nobody retries:
+- **Hotel Ambos Mundos**: no bug exists — its only sub-venue (rooftop bar,
+  6.8 m) always shares the landmark's 10 m band, so `is_admin` already wins
+  today; and any radius > 3 m would threaten the Gabinete de Patrimonio
+  Musical Esteban Salas at 13.3 m.
 - **Hotel Brisas Guardalavaca**: "Hostal Brisas del Mar" 18.8 m / "Hostal
   Finca La Esperanza" 22.3 m from its point — exactly the 721-lesson pattern;
   the point's placement inside the resort is unverified.
