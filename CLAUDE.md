@@ -1202,6 +1202,7 @@ También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`
 | `cuba_search_keywords` | **00551** | SOLO categorías genéricas — 10 marcas borradas (Coppelia/CADECA/ETECSA/Viazul…) porque el anti-placeholder hundía al lugar exacto buscado |
 | Resolver `searchResultEmoji` | `packages/utils/src/addressSearch.ts` | Emoji de categoría en TODO resultado: tricigo cat → calle 🛣️ / esquina 🔀 → categoría cruda → keyword del nombre → 📍 |
 | Anti-pin-inventado | 00546 + `isPlaceholderAddress` | Las sugerencias de transversal llevan coordenada `NaN` + `needsResolution` a propósito: antes se rellenaban con el GPS del pasajero y una dirección a medio escribir llegaba a viajes reales |
+| Higiene de datos `cuba_pois` | **00571** | El sync semanal ya NO resucita filas desactivadas (`is_active` queda bajo control de curación; los INSERT nuevos siguen naciendo activos). 757 filas fuera-de-Cuba desactivadas + dupes tele-transportados de hoteles famosos fuera |
 
 **Verificación rápida de salud del search:**
 
@@ -1369,8 +1370,9 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 | 00554 | `find_intersection_point` v4 + `suggest_cross_streets` v2 | Nombres de 1-2 caracteres por palabra completa: `'%l%'` matchea "Calle …" porque *calle* tiene una `l` → buscar "L" devolvía **Calle K** |
 | *(00555–00569: otras áreas, no search)* | | |
 | **00570** | **Huella de landmarks** — `cuba_pois.footprint_radius_m` + `lookup_nearest_poi_ranked` v3 (PR #976, **aplicada 2026-08-21**) | El pin sobre un landmark-cuadra decía su sub-local: "Rooftop Pool & Bar" (11.6 m) le ganaba al Kempinski (23 m) porque las bandas de 10 m van contra el PUNTO que representa la cuadra. Distancia efectiva `GREATEST(0, cruda − huella)` en gather/bandas/orden/**`distance_m` devuelto**; desempates finales cruda + `p.id` |
+| **00571** | **Limpieza curada de `cuba_pois`** + el sync deja de resucitar filas desactivadas (PR #978, **aplicada 2026-08-21**) | 757 filas activas FUERA de Cuba (Bahamas/Caimán/cruceros), dupes tele-transportados de hoteles famosos ("Kempinski" en Nuevo Vedado a d=0), y el punto del admin "Parque Central" movido al parque real. **Paso 0 obligatorio**: `bulk_upsert_pois`/`apply_osm_delta_batch` forzaban `is_active=TRUE` al re-encontrar la fila upstream — sin ese parche, TODA limpieza no-admin se revertía en el sync semanal |
 
-**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5` **y también contra los PRs abiertos** (`gh pr view <n> --json files`). Al cierre 2026-08-21 la última en master es **00570** (00569 reservada por el PR abierto #965); próxima libre **00571**.
+**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5` **y también contra los PRs abiertos** (`gh pr view <n> --json files`). Al cierre 2026-08-21 la última en master es **00571** (**00572** reservada por el PR abierto #973, **00569** por #965); próxima libre **00573**.
 
 #### Huella de landmarks — el pin sobre un landmark grande debe decir el landmark (00570, 2026-08-21)
 
@@ -1381,7 +1383,7 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 1. **La zona de influencia real es `r + 10 m`** (el ancho de banda): el pin propio de un vecino flipea apenas `dist − r < 10`, y un pin a 5-7 m de su PUERTA flipea antes (medido: Pastelería Francesa a 6.3 m del pin perdía contra Inglaterra con r=12). Regla: `r ≤ dist(vecino genuino más cercano) − 15`, y `r + 10` debe caber en el cuerpo físico del landmark + su propia acera.
 2. **Dump del vecindario a 45 m** y clasificar cada punto: amenity propio / basura mal geocodificada / vecino genuino. **Los landmarks famosos son imanes de basura geocodificada** ("Estadio Latinoamericano" a 9.8 m del Hotel Nacional, "Playa Boca Ciega" a 13.4 m del Iberostar PC): dentro del círculo físico del landmark, tragar lo ajeno MEJORA la etiqueta.
 3. **Suite mínima**: pines del caso + **sobrevivientes** (el punto exacto del vecino genuino más cercano Y un pin a ~6 m de su puerta) + los 3 controles de 00550 + grilla 9×9 paso 15 m. En grillas multi-semilla la aserción es **cross-seed**: un pin del grid de X puede caer legítimamente en el halo de Y (pasó entre Iberostar PC y Kempinski, a 114 m entre sí).
-4. **NO sembrados, con causa — no reintentar**: Ambos Mundos (no hay bug: su único sub-local a 6.8 m siempre comparte banda e `is_admin` ya gana hoy), Brisas Guardalavaca (hostales a 19-22 m del punto = patrón lección-721), "Parque Central" admin (su punto está mal ubicado, a 7.5 m del hotel Iberostar — lo que se cura es el punto, no un radio), Iberostar Grand Trinidad (caso de control + vecindario basural), Melia Cohiba (fila sucia, `tricigo_category='transport'`).
+4. **NO sembrados, con causa — no reintentar**: Ambos Mundos (no hay bug: su único sub-local a 6.8 m siempre comparte banda e `is_admin` ya gana hoy), Brisas Guardalavaca (hostales a 19-22 m del punto = patrón lección-721), "Parque Central" admin (su punto estaba a 7.5 m del hotel Iberostar — **00571 lo movió al centro real del parque**; sigue sin huella, re-evaluable con este protocolo si aparece el síntoma), Iberostar Grand Trinidad (caso de control + vecindario basural), Melia Cohiba (fila sucia, `tricigo_category='transport'`).
 
 #### Debugging guide cuando aparezca un bug nuevo de search
 
@@ -1411,7 +1413,7 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 
 **Síntoma: "Parado sobre un landmark grande, la dirección dice su bar/piscina/tienda interna"**
 
-Clase cerrada por 00570 para los landmarks sembrados. Chequear si ese landmark tiene huella: `SELECT name, footprint_radius_m FROM cuba_pois WHERE is_admin AND footprint_radius_m IS NOT NULL`. Si NO está sembrado → sembrarle huella con el protocolo de arriba. **NO tocar el ranking global**: un bonus genérico de distancia para admins regresiona el control de Trinidad (la ventana que arregla la Manzana y no rompe Trinidad no existe), y la supresión por categoría fue medida con 721 víctimas legítimas (lección-721). Si el punto del landmark está mal ubicado (caso "Parque Central" a 7.5 m del hotel), se cura el punto, no el radio.
+Clase cerrada por 00570 para los landmarks sembrados. Chequear si ese landmark tiene huella: `SELECT name, footprint_radius_m FROM cuba_pois WHERE is_admin AND footprint_radius_m IS NOT NULL`. Si NO está sembrado → sembrarle huella con el protocolo de arriba. **NO tocar el ranking global**: un bonus genérico de distancia para admins regresiona el control de Trinidad (la ventana que arregla la Manzana y no rompe Trinidad no existe), y la supresión por categoría fue medida con 721 víctimas legítimas (lección-721). Si el punto del landmark está mal ubicado, se cura el punto, no el radio (caso "Parque Central" a 7.5 m del hotel — curado en 00571).
 
 **Síntoma: "Calle se duplica en el dropdown"**
 
