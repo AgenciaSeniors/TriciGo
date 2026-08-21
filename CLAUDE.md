@@ -1179,7 +1179,7 @@ También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`
 
 ---
 
-### Search de direcciones — estado canónico (Tier 1.5–1.7 · fuzzy 2026-06-01 · campaña de precisión 2026-08-04/05)
+### Search de direcciones — estado canónico (Tier 1.5–1.7 · fuzzy 2026-06-01 · campaña de precisión 2026-08-04/05 · huella de landmarks 2026-08-21)
 
 > Esta sección documenta el estado actual del search y los patrones aprendidos durante 5 sesiones de trabajo (26 PRs mergeados). Sirve para diagnosticar bugs futuros sin re-descubrir contexto.
 
@@ -1197,7 +1197,7 @@ También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`
 | Cliente — 4 componentes search | AbortController + cache + empty state + cleanup | rider mobile, rider web, web landing. **El driver ya no tiene búsqueda de direcciones** (removida en #905) |
 | RPC `get_destination_suggestions` | 00359 (+ 00360 fix) | Predicciones de destino history-aware; servicio RPC-first con fallback cliente |
 | RPCs de dirección cubana | **00554** | `find_intersection_point` v4 + `suggest_cross_streets` v2: nombres de 1-2 caracteres por palabra completa. Antes buscar la calle "L" matcheaba las 6.883 llamadas "Calle …" y devolvía Calle K |
-| Reverse geocode | 00547 + 00550 | `get_nearest_cross_streets` con umbral 8 m (era 20, perdía callejones); `lookup_nearest_poi_ranked` filtra por `tricigo_category` (la lista OSM excluía el 84,6 % de los lugares, playas incluidas) |
+| Reverse geocode | 00547 + 00550 + **00570** | `get_nearest_cross_streets` con umbral 8 m (era 20, perdía callejones); `lookup_nearest_poi_ranked` **v3**: filtra por `tricigo_category` (la lista OSM excluía el 84,6 %) + **distancia EFECTIVA a la huella del landmark** (`cuba_pois.footprint_radius_m`, 6 semillas curadas) — el pin sobre la Manzana de Gómez dice Kempinski, no "Rooftop Pool & Bar" |
 | RPC `search_pois_smart` | 00362 trgm + 00550 | Nombres tolerantes a typos; river/lake/fountain salen de la lista de exclusión |
 | `cuba_search_keywords` | **00551** | SOLO categorías genéricas — 10 marcas borradas (Coppelia/CADECA/ETECSA/Viazul…) porque el anti-placeholder hundía al lugar exacto buscado |
 | Resolver `searchResultEmoji` | `packages/utils/src/addressSearch.ts` | Emoji de categoría en TODO resultado: tricigo cat → calle 🛣️ / esquina 🔀 → categoría cruda → keyword del nombre → 📍 |
@@ -1367,8 +1367,21 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 | 00552 | v8.1 — el dedupe por alias se comía el mejor match | Dos calles oficiales que comparten alias. **Lo encontró la verificación con semillas de OTRA provincia** |
 | 00553 | v9 — **prefijo genérico + 1 carácter** | "Calle"/"Avenida" decidían el rank (`23` daba una a 7 km); las calles de 1 letra (11 % de las esquinas) no se podían buscar |
 | 00554 | `find_intersection_point` v4 + `suggest_cross_streets` v2 | Nombres de 1-2 caracteres por palabra completa: `'%l%'` matchea "Calle …" porque *calle* tiene una `l` → buscar "L" devolvía **Calle K** |
+| *(00555–00569: otras áreas, no search)* | | |
+| **00570** | **Huella de landmarks** — `cuba_pois.footprint_radius_m` + `lookup_nearest_poi_ranked` v3 (PR #976, **aplicada 2026-08-21**) | El pin sobre un landmark-cuadra decía su sub-local: "Rooftop Pool & Bar" (11.6 m) le ganaba al Kempinski (23 m) porque las bandas de 10 m van contra el PUNTO que representa la cuadra. Distancia efectiva `GREATEST(0, cruda − huella)` en gather/bandas/orden/**`distance_m` devuelto**; desempates finales cruda + `p.id` |
 
-**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5` **y también contra los PRs abiertos** (`gh pr view <n> --json files`). Al cierre 2026-08-05 la última es **00554**; próxima libre **00555**.
+**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5` **y también contra los PRs abiertos** (`gh pr view <n> --json files`). Al cierre 2026-08-21 la última en master es **00570** (00569 reservada por el PR abierto #965); próxima libre **00571**.
+
+#### Huella de landmarks — el pin sobre un landmark grande debe decir el landmark (00570, 2026-08-21)
+
+**Mecánica.** `cuba_pois.footprint_radius_m` (smallint, `NULL` = comportamiento idéntico byte a byte; CHECK: solo `is_admin`, 1..60 — **el 60 está ACOPLADO al prefiltro constante `p_radius_m + 60`** que conserva el índice GIST; si se sube uno, subir el otro). `lookup_nearest_poi_ranked` v3 usa la distancia EFECTIVA en el gather, las bandas, el orden **y el `distance_m` devuelto** — devolverla efectiva es load-bearing: el cliente solo antepone el POI si `distance_m ≤ 20` (`POI_INCLUSION_THRESHOLD_M` en `packages/utils/src/geo.ts`); con la cruda el fix ganaría el ranking y perdería la pantalla. Dentro de la huella el landmark cae en banda 0 e `is_admin` gana el empate contra cualquier sub-local pegado al pin → robusto a imports futuros sin curar nada más. Semillas vivas: Kempinski 30, Hotel Nacional 40, Habana Libre 23, Iberostar Selection Parque Central 8, Inglaterra 10, Casagranda (Santiago) 5.
+
+**Protocolo para sembrar una huella nueva** (todo contra la función viva ANTES de sembrar; los radios de 00570 se re-derivaron 3 veces porque cada borrador flipeaba un vecino real que la suite cazó):
+
+1. **La zona de influencia real es `r + 10 m`** (el ancho de banda): el pin propio de un vecino flipea apenas `dist − r < 10`, y un pin a 5-7 m de su PUERTA flipea antes (medido: Pastelería Francesa a 6.3 m del pin perdía contra Inglaterra con r=12). Regla: `r ≤ dist(vecino genuino más cercano) − 15`, y `r + 10` debe caber en el cuerpo físico del landmark + su propia acera.
+2. **Dump del vecindario a 45 m** y clasificar cada punto: amenity propio / basura mal geocodificada / vecino genuino. **Los landmarks famosos son imanes de basura geocodificada** ("Estadio Latinoamericano" a 9.8 m del Hotel Nacional, "Playa Boca Ciega" a 13.4 m del Iberostar PC): dentro del círculo físico del landmark, tragar lo ajeno MEJORA la etiqueta.
+3. **Suite mínima**: pines del caso + **sobrevivientes** (el punto exacto del vecino genuino más cercano Y un pin a ~6 m de su puerta) + los 3 controles de 00550 + grilla 9×9 paso 15 m. En grillas multi-semilla la aserción es **cross-seed**: un pin del grid de X puede caer legítimamente en el halo de Y (pasó entre Iberostar PC y Kempinski, a 114 m entre sí).
+4. **NO sembrados, con causa — no reintentar**: Ambos Mundos (no hay bug: su único sub-local a 6.8 m siempre comparte banda e `is_admin` ya gana hoy), Brisas Guardalavaca (hostales a 19-22 m del punto = patrón lección-721), "Parque Central" admin (su punto está mal ubicado, a 7.5 m del hotel Iberostar — lo que se cura es el punto, no un radio), Iberostar Grand Trinidad (caso de control + vecindario basural), Melia Cohiba (fila sucia, `tricigo_category='transport'`).
 
 #### Debugging guide cuando aparezca un bug nuevo de search
 
@@ -1395,6 +1408,10 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
    FROM search_streets('<calle>', <user_lat>, <user_lng>, 5);
    -- El primer resultado debe estar en bucket 0 (<25km), no en bucket 3 (>300km)
    ```
+
+**Síntoma: "Parado sobre un landmark grande, la dirección dice su bar/piscina/tienda interna"**
+
+Clase cerrada por 00570 para los landmarks sembrados. Chequear si ese landmark tiene huella: `SELECT name, footprint_radius_m FROM cuba_pois WHERE is_admin AND footprint_radius_m IS NOT NULL`. Si NO está sembrado → sembrarle huella con el protocolo de arriba. **NO tocar el ranking global**: un bonus genérico de distancia para admins regresiona el control de Trinidad (la ventana que arregla la Manzana y no rompe Trinidad no existe), y la supresión por categoría fue medida con 721 víctimas legítimas (lección-721). Si el punto del landmark está mal ubicado (caso "Parque Central" a 7.5 m del hotel), se cura el punto, no el radio.
 
 **Síntoma: "Calle se duplica en el dropdown"**
 
@@ -1425,6 +1442,9 @@ Si `hit_rate_pct` está consistentemente <40% → el cache no está cumpliendo s
 7. **`EXPLAIN ANALYZE` en estas tablas es ruidoso** (la misma consulta dio 3.331 ms en frío y 385 ms en caliente). Comparar SIEMPRE en caliente, alternado, ≥3 corridas. Un filtro más estricto suele salir **más rápido**, no más lento: recorta el candidato.
 8. **Despojar prefijos genéricos por fila cuesta 2,1 s.** Del lado de los nombres va precalculado en `street_search_names`; del lado de la consulta se hace una sola vez.
 9. **El conector MCP se cae con estas mediciones.** Partirlas en tandas de ~80-100 casos y `SET statement_timeout='5min'`.
+10. **Si el DDL está gateado (MCP guard), la candidata corre como SELECT inline** con las columnas nuevas simuladas por un CTE `VALUES` joineado por id — semánticamente idéntico al patrón candidata-con-otro-nombre y no requiere autorización. Así se midió 00570 entero (pines nombrados + grillas de 486 + barridos nacionales de 2.350 pines) antes del apply; post-apply se re-corre la suite vía la función real.
+11. **Cerrar SIEMPRE el ORDER BY con `p.id`.** Los imports apilan POIs distintos en la MISMA coordenada con la misma confidence (3 pares a 0.00 m en el barrido nacional) → sin id, el ganador entre empatados depende del plan de ejecución, no de los datos. Corolario para el A/B: un "diff" puede ser **nondeterminismo preexistente**, no una regresión tuya — la viva devolvió miembros distintos del mismo cluster según el radio de búsqueda; antes de asumir regresión, verificar `ST_Distance(a,b)=0 AND conf_a=conf_b`.
+12. **La suite de sobrevivientes va ANTES de fijar constantes, y "la puerta del vecino" es parte de la suite.** Proteger solo el punto exacto del vecino no alcanza: un pin a 5-7 m de su puerta todavía flipea (banda). Los radios de 00570 se re-derivaron 3 veces porque cada borrador rompía un vecino real (La Xana, Pastelería) que solo la suite detectó — el caso que motivó el cambio jamás lo habría mostrado.
 
 #### Deuda explícitamente diferida (no urgente)
 
