@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Pressable, Share, Animated, useColorScheme, type GestureResponderEvent } from 'react-native';
+import { View, Pressable, Share, Animated, type GestureResponderEvent } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import * as Print from 'expo-print';
@@ -17,6 +17,7 @@ import { rideService, notificationService, useFeatureFlag, getSupabaseClient } f
 import { darkColors } from '@tricigo/theme';
 import { useRideStore } from '@/stores/ride.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
 import { DriverCard } from '@tricigo/ui/DriverCard';
 import { Input } from '@tricigo/ui/Input';
@@ -68,8 +69,7 @@ function AnimatedStar({ filled, onPress, delay = 0 }: { filled: boolean; onPress
 
 export function RideCompleteView() {
   const { t } = useTranslation('rider');
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
   const activeRide = useRideStore((s) => s.activeRide);
   const rideWithDriver = useRideStore((s) => s.rideWithDriver);
   const splits = useRideStore((s) => s.splits);

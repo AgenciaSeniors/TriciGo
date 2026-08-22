@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 const ROUTE_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT } from '@tricigo/utils';
+import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER } from '@tricigo/utils';
 import type { GeoPoint, StructuredAddress } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
@@ -264,7 +264,7 @@ export function ConfirmLocationScreen({
   };
 
   const isPickup = mode === 'pickup';
-  const pinColor = isPickup ? '#22c55e' : colors.brand.orange;
+  const pinColor = isPickup ? MAP_COLORS.pickup : colors.brand.orange;
 
   // BUG-282 (revised) — cache-then-GPS centering, skipped entirely when the
   // caller already handed us a valid initialLocation.
@@ -293,7 +293,7 @@ export function ConfirmLocationScreen({
       <MapboxGL.MapView
         ref={mapRef}
         style={{ flex: 1 }}
-        styleURL={MAP_STYLE_LIGHT}
+        styleURL={isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT}
         attributionEnabled={false}
         logoEnabled={false}
         // Natural map orientation in the pin picker: let the user rotate AND
@@ -368,8 +368,8 @@ export function ConfirmLocationScreen({
         />
         <View
           style={{
-            width: 44,
-            height: 44,
+            width: MARKER.dropoffPin.size,
+            height: MARKER.dropoffPin.size,
             alignItems: 'center',
             justifyContent: 'center',
             shadowColor: '#000',
@@ -382,8 +382,8 @@ export function ConfirmLocationScreen({
           <Image
             source={ROUTE_PIN_ASSET}
             style={{
-              width: 44,
-              height: 44,
+              width: MARKER.dropoffPin.size,
+              height: MARKER.dropoffPin.size,
               tintColor: pinColor,
             }}
             resizeMode="contain"

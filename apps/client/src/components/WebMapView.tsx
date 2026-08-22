@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import { Platform, View, useColorScheme } from 'react-native';
-import { logger, MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
+import { Platform, View } from 'react-native';
+import { logger, MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
 import { darkColors } from '@tricigo/theme';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
+import { useThemeStore } from '@/stores/theme.store';
 
 // Only import mapbox-gl on web
 let mapboxgl: typeof import('mapbox-gl') | null = null;
@@ -61,7 +62,6 @@ ensureMapboxCSS();
 // Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
 const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-const MAP_STYLE = MAP_STYLE_LIGHT;
 
 export interface WebMapViewRef {
   flyTo: (lng: number, lat: number, zoom?: number) => void;
@@ -81,8 +81,8 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
   onCenterChanged,
   showCenterPin = false,
 }: WebMapViewProps, ref) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
+  const isDark = resolvedScheme === 'dark';
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -96,9 +96,13 @@ export const WebMapView = forwardRef<WebMapViewRef, WebMapViewProps>(function We
     // recent .d.ts bundles; runtime accepts the assignment fine.
     (mapboxgl as any).accessToken = MAPBOX_TOKEN;
 
+    // Style is chosen once, at mount. mapbox-gl's setStyle() drops every
+    // layer added afterwards (the route lines here), so switching theme
+    // live would need those rebuilt on 'style.load' — not worth it for a
+    // setting people change rarely and which re-mounts the screen anyway.
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: MAP_STYLE,
+      style: isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT,
       center,
       zoom,
       interactive,

@@ -93,6 +93,9 @@ async function ensurePack(region: {
   );
 
   if (__DEV__) console.log('[OfflineMap] createPack', region.cellKey, `~${tiles} tiles (z${OFFLINE_PACK_MIN_ZOOM}-${OFFLINE_PACK_MAX_ZOOM})`);
+  // Light style only, deliberately: packs are budgeted against a ~6000
+  // tile/device ceiling and caching both themes would halve the area we can
+  // cover. A rider in dark mode without connectivity sees uncached tiles.
   await MapboxGL.offlineManager.createPack({
     name: region.cellKey,
     styleURL: MAP_STYLE_LIGHT,

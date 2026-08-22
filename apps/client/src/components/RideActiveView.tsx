@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Pressable, Linking, Alert, ActivityIndicator, useColorScheme, Dimensions, Animated, Share, ScrollView, Keyboard } from 'react-native';
+import { View, Pressable, Linking, Alert, ActivityIndicator, Dimensions, Animated, Share, ScrollView, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import type { RideSplit } from '@tricigo/types';
 import { useRideStore } from '@/stores/ride.store';
 import { useRideActions } from '@/hooks/useRide';
 import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 import { RideMapView } from '@/components/RideMapView';
 import { TripActionBar } from '@/components/TripActionBar';
 import { useDriverPositionWithCache } from '@/hooks/useDriverPosition';
@@ -47,8 +48,7 @@ import { getRouteETA } from '@/services/mapbox.service';
 
 export function RideActiveView() {
   const { t } = useTranslation('rider');
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
   const insets = useSafeAreaInsets();
 
   const RIDE_STEPS = [

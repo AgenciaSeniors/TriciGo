@@ -14,11 +14,12 @@
  * the driver writes first.
  */
 import React from 'react';
-import { View, Pressable, useColorScheme } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@tricigo/ui/Text';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { useThemeStore } from '@/stores/theme.store';
 
 interface TripActionBarProps {
   /** Unread messages from the driver — drives the chat badge. */
@@ -107,7 +108,7 @@ export function TripActionBar({
   onSafety,
 }: TripActionBarProps) {
   const { t } = useTranslation('rider');
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
 
   const chatLabel =
     unreadCount > 0

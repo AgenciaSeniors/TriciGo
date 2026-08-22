@@ -6,7 +6,6 @@ import {
   Animated,
   Dimensions,
   StyleSheet,
-  useColorScheme,
   PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +13,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
+import { useThemeStore } from '@/stores/theme.store';
 
 interface OnboardingOverlayProps {
   onComplete: () => void;
@@ -64,8 +64,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export function OnboardingOverlay({ onComplete }: OnboardingOverlayProps) {
   const { t } = useTranslation('rider');
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
   const STEPS = useMemo(() => buildSteps(isDark), [isDark]);
   const [currentStep, setCurrentStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
