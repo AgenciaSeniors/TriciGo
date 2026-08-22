@@ -3,7 +3,8 @@ import { View, Text, Animated, AppState, Platform, Image, TouchableOpacity, Pres
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading, estimateVehicleEtaMinutes, formatVehicleEtaMinutes, formatVehicleDistance, triggerSelection, triggerHaptic } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading, estimateVehicleEtaMinutes, formatVehicleEtaMinutes, formatVehicleDistance, triggerSelection, triggerHaptic, POI_LAYER_ID, POI_SOURCE_ID, poiNameFromFeature } from '@tricigo/utils';
+import { PlacesLayer } from './PlacesLayer';
 import { StopMarker } from '@tricigo/ui';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
@@ -100,6 +101,12 @@ interface RideMapViewProps {
   /** How much of the route is behind you, 0-1. Paints that much of the line
    *  in the progress colour. Omit while there's no trip underway. */
   routeProgress?: number | null;
+  /** Draw the places layer. Off while the rider is choosing nothing. */
+  showPlaces?: boolean;
+  /** A place on the map was chosen. Receives its name and [lng, lat]. */
+  onPlacePress?: (name: string, lng: number, lat: number) => void;
+  /** Draw 3D buildings. Opt-in — see useMapDetail. */
+  show3dBuildings?: boolean;
 }
 
 // Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
@@ -156,6 +163,9 @@ const FOLLOW_STATUSES = new Set<string>([
 /** Auto re-engage delay (ms) after a user gesture pauses the follow. */
 const FOLLOW_RESUME_DELAY_MS = 8000;
 
+/** Touch box for picking a place, in dp — the platform minimum target. */
+const PLACE_TAP_TOLERANCE_DP = 44;
+
 /** Imperative handle for screens that need to move the camera themselves —
  *  today only the vehicle-selection map's "center on me" FAB. Everything
  *  else drives the camera declaratively through props. */
@@ -186,6 +196,9 @@ function RideMapViewInner({
   onLongPressMap,
   driverEtaMinutes,
   routeProgress,
+  showPlaces = false,
+  onPlacePress,
+  show3dBuildings = false,
 }: RideMapViewProps, ref: React.Ref<RideMapViewHandle>) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
@@ -211,10 +224,20 @@ function RideMapViewInner({
         hasPickup: !!pickupLocation,
         hasDropoff: !!dropoffLocation,
         rideStatus: rideStatus ?? null,
+        showPlaces: !!showPlaces,
+        show3dBuildings: !!show3dBuildings,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+
+  // Style lifecycle gate — layers mounted BEFORE the style finishes loading
+  // attach (queryRenderedFeatures sees their features) but their react style
+  // is lost in the race, so they draw with Mapbox's DEFAULT paint: black 5px
+  // circles, symbol layers with no icon-image at all. The driver app gates
+  // its custom layers on this exact event; the client never did.
+  const [styleReady, setStyleReady] = useState(false);
 
   // Ant-march animation — 60fps via requestAnimationFrame + setState throttled
   const [dashStep, setDashStep] = useState(0);
@@ -256,7 +279,20 @@ function RideMapViewInner({
     };
   }, [routeCoordinates]);
   const isDark = resolvedScheme === 'dark';
+  const styleURL = isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT;
+  // A theme toggle swaps the styleURL and Mapbox reloads the whole style.
+  // Re-close the gate for the reload: layers that stay mounted through it
+  // are re-added mid-load and lose their paint to the same race as on
+  // first mount. Closing it also drives the veil below, which turns the
+  // piecemeal repaint the user reported into one deliberate transition.
+  useEffect(() => {
+    setStyleReady(false);
+  }, [styleURL]);
   const cameraRef = useRef<any>(null);
+  // Native MapView ref — needed to query rendered features (places layer
+  // taps) at a screen point. Distinct from cameraRef, which only moves
+  // the camera.
+  const mapRef = useRef<any>(null);
   React.useImperativeHandle(
     ref,
     () => ({
@@ -865,8 +901,9 @@ function RideMapViewInner({
   return (
     <View style={fullscreen ? { flex: 1 } : { height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map')}>
       <MapboxGL.MapView
+        ref={mapRef}
         style={{ flex: 1 }}
-        styleURL={isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT}
+        styleURL={styleURL}
         attributionEnabled={false}
         logoEnabled={false}
         compassEnabled={false}
@@ -881,6 +918,7 @@ function RideMapViewInner({
         // timer in handleUserGesture, this prevents the camera from
         // fighting the user's finger.
         onTouchStart={isRideActive ? handleUserGesture : undefined}
+        onDidFinishLoadingStyle={() => setStyleReady(true)}
         onLongPress={onLongPressMap ? (feature: any) => {
           const coords = feature?.geometry?.coordinates;
           if (!Array.isArray(coords)) return;
@@ -888,6 +926,34 @@ function RideMapViewInner({
           if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
           void triggerHaptic('medium');
           onLongPressMap(lng, lat);
+        } : undefined}
+        onPress={showPlaces && onPlacePress ? async (feature: any) => {
+          const x = feature?.properties?.screenPointX;
+          const y = feature?.properties?.screenPointY;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          try {
+            // Query a finger-sized box, not the exact pixel. A place icon is
+            // about 20 dp tall; asking for the single point under the touch
+            // means most honest taps land beside it and silently do nothing,
+            // which reads as a broken map.
+            const half = PLACE_TAP_TOLERANCE_DP / 2;
+            const hits = await mapRef.current?.queryRenderedFeaturesInRect(
+              [y - half, x - half, y + half, x + half],
+              undefined,
+              [POI_LAYER_ID],
+            );
+            const hit = hits?.features?.[0];
+            const name = poiNameFromFeature(hit);
+            const coords = (hit?.geometry as { coordinates?: number[] } | undefined)?.coordinates;
+            // An unnamed place is not a destination anyone can confirm.
+            if (!name || !Array.isArray(coords)) return;
+            const [lng, lat] = coords;
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+            void triggerSelection();
+            onPlacePress(name, lng as number, lat as number);
+          } catch {
+            // A failed query just means no place was chosen.
+          }
         } : undefined}
       >
         {/* Camera — fit to bounds, or flyTo accepted driver, or default to
@@ -957,6 +1023,28 @@ function RideMapViewInner({
           // you're waiting for are painted in. You are not one of them.
           pulsing={{ isEnabled: true, color: MAP_COLORS.brand, radius: 'accuracy' }}
         />
+
+        {/* Places, drawn from the data already inside the downloaded tiles.
+            Icons only: the name appears on tap, so the map stays readable
+            and we avoid map-layer text entirely. */}
+        {showPlaces && styleReady && <PlacesLayer isDark={isDark} />}
+
+        {show3dBuildings && styleReady && (
+          <MapboxGL.FillExtrusionLayer
+            id="tricigo-buildings"
+            sourceID={POI_SOURCE_ID}
+            sourceLayerID="building"
+            minZoomLevel={15}
+            filter={['==', ['get', 'extrude'], 'true'] as never}
+            style={{
+              fillExtrusionColor: isDark ? '#2a2a3e' : '#dcdcdc',
+              fillExtrusionHeight: ['get', 'height'],
+              fillExtrusionBase: ['get', 'min_height'],
+              // Not data-driven for this property — a single value only.
+              fillExtrusionOpacity: 0.6,
+            }}
+          />
+        )}
 
         {/* Driver-to-pickup route (light blue dashed) */}
         {driverRouteGeoJSON && (
@@ -1370,6 +1458,17 @@ function RideMapViewInner({
           />
         )}
       </MapboxGL.MapView>
+
+      {/* Style-load veil: the style swap (first load, theme toggle) takes a
+          beat while the RN chrome flips instantly — covering the map with
+          the theme background reads as one transition, not a piecemeal
+          repaint of half the screen. */}
+      {!styleReady && (
+        <View
+          pointerEvents="none"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: isDark ? '#0f1116' : '#f4f4f5' }}
+        />
+      )}
 
       {/* BUG-267 v3 — Recenter FAB. Visible only while the user has paused
           the Uber-style auto-follow (after pan/zoom during an active ride).

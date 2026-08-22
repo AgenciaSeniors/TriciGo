@@ -13,7 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 const ROUTE_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, triggerHaptic, triggerSelection } from '@tricigo/utils';
+import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, POI_LAYER_ID, poiNameFromFeature, triggerHaptic, triggerSelection } from '@tricigo/utils';
+import { PlacesLayer } from './PlacesLayer';
 import type { GeoPoint, StructuredAddress } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
@@ -83,9 +84,19 @@ export function ConfirmLocationScreen({
   const [isGeocoding, setIsGeocoding] = useState(false);
   // Confirm button is decoupled from geocoding — see handleConfirm.
   const [confirming, setConfirming] = useState(false);
+  // Same load-race gate as RideMapView: style layers mounted before the
+  // style finishes loading keep their attachment but lose their paint.
+  const [styleReady, setStyleReady] = useState(false);
+  const styleURL = isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT;
+  useEffect(() => {
+    setStyleReady(false);
+  }, [styleURL]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<any>(null);
   const cameraRef = useRef<any>(null);
+  // Pin sits at the visual centre of the map; its pixel position is needed
+  // to ask the map which rendered place (if any) the pin is standing on.
+  const mapLayoutRef = useRef<{ w: number; h: number } | null>(null);
 
   // Shimmer animation for address bar
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -117,6 +128,34 @@ export function ConfirmLocationScreen({
       setIsGeocoding(true);
       setDisplay(null); // Show shimmer
 
+      // The name the rider can SEE wins. The map draws places from the
+      // Mapbox tiles; the reverse-geocode POI comes from cuba_pois — two
+      // different datasets. Standing the pin on a place the map itself is
+      // labeling while the address bar names some other (possibly defunct)
+      // venue from the DB reads as a bug, and the user reported it as one.
+      let visiblePoi: string | null = null;
+      try {
+        const lay = mapLayoutRef.current;
+        if (lay) {
+          const half = 28;
+          const hits = await mapRef.current?.queryRenderedFeaturesInRect(
+            [lay.h / 2 - half, lay.w / 2 - half, lay.h / 2 + half, lay.w / 2 + half],
+            undefined,
+            [POI_LAYER_ID],
+          );
+          let bestD = Infinity;
+          for (const f of hits?.features ?? []) {
+            const c = (f?.geometry as { coordinates?: number[] } | undefined)?.coordinates;
+            const name = poiNameFromFeature(f);
+            const cLng = c?.[0];
+            const cLat = c?.[1];
+            if (!name || typeof cLng !== 'number' || typeof cLat !== 'number' || !Number.isFinite(cLng) || !Number.isFinite(cLat)) continue;
+            const d = haversineDistance({ latitude: lat, longitude: lng }, { latitude: cLat, longitude: cLng });
+            if (d <= 25 && d < bestD) { bestD = d; visiblePoi = name; }
+          }
+        }
+      } catch { /* no visible place is a normal outcome */ }
+
       // Retry up to 3 times
       let result: StructuredAddress | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -129,7 +168,11 @@ export function ConfirmLocationScreen({
       }
 
       if (mountedRef.current) {
-        setDisplay(toDisplay(result, lat, lng));
+        {
+          const d = toDisplay(result, lat, lng);
+          if (visiblePoi) d.line1 = visiblePoi;
+          setDisplay(d);
+        }
         setIsGeocoding(false);
       }
     }, 300);
@@ -279,7 +322,35 @@ export function ConfirmLocationScreen({
       <MapboxGL.MapView
         ref={mapRef}
         style={{ flex: 1 }}
-        styleURL={isDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT}
+        styleURL={styleURL}
+        onLayout={(e: { nativeEvent: { layout: { width: number; height: number } } }) => {
+          mapLayoutRef.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
+        }}
+        onDidFinishLoadingStyle={() => setStyleReady(true)}
+        onPress={async (feature: any) => {
+          const x = feature?.properties?.screenPointX;
+          const y = feature?.properties?.screenPointY;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          try {
+            // Tap a place → fly the pin there. The camera move ends in
+            // onMapIdle, which reverse-geocodes like any hand drag — the
+            // address still comes from the geocoder, never the tile label.
+            const half = 22;
+            const hits = await mapRef.current?.queryRenderedFeaturesInRect(
+              [y - half, x - half, y + half, x + half],
+              undefined,
+              [POI_LAYER_ID],
+            );
+            const coords = (hits?.features?.[0]?.geometry as { coordinates?: number[] } | undefined)?.coordinates;
+            if (!Array.isArray(coords)) return;
+            const [lng, lat] = coords;
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+            void triggerSelection();
+            cameraRef.current?.setCamera({ centerCoordinate: [lng, lat], animationDuration: 450 });
+          } catch {
+            /* a missed tap is just a missed tap */
+          }
+        }}
         attributionEnabled={false}
         logoEnabled={false}
         // Natural map orientation in the pin picker: let the user rotate AND
@@ -317,7 +388,17 @@ export function ConfirmLocationScreen({
         {/* Orientation while dragging the map under the fixed pin: without
             this the rider has no anchor for where they actually are. */}
         <MapboxGL.LocationPuck visible puckBearing="heading" puckBearingEnabled />
+        {styleReady && <PlacesLayer isDark={isDark} />}
       </MapboxGL.MapView>
+
+      {/* Style-load veil — see RideMapView: masks the staggered repaint of
+          a style swap behind one clean theme-colored transition. */}
+      {!styleReady && (
+        <View
+          pointerEvents="none"
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: isDark ? '#0f1116' : '#f4f4f5' }}
+        />
+      )}
 
       {/* BUG-292 — Static center pin overlaid on map center.
          Pickup AND dropoff now share the same branded TriciGo pin silhouette,

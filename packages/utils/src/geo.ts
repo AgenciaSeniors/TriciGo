@@ -782,6 +782,40 @@ async function fetchMetadataMapbox(lat: number, lng: number): Promise<GeoMetadat
 }
 
 /**
+ * The Nominatim fallback POI name, gated by the same proximity rule as the
+ * primary cuba_pois source. Nominatim reverse matches the nearest prominent
+ * element, so an UNGATED name here labeled plain street pins with the most
+ * famous venue on the block — the primary path had the 20 m gate, this
+ * fallback didn't. A name whose element can't be placed is dropped: an
+ * unplaceable label must not name the pin.
+ */
+export function nominatimPoiName(
+  data:
+    | {
+        name?: string | null;
+        lat?: string | number | null;
+        lon?: string | number | null;
+        address?: Record<string, string | undefined> | null;
+      }
+    | null
+    | undefined,
+  queryLat: number,
+  queryLng: number,
+): string {
+  const addr = data?.address || {};
+  const name = data?.name || addr.amenity || addr.building || addr.tourism || addr.leisure || '';
+  if (!name) return '';
+  const lat = Number(data?.lat);
+  const lon = Number(data?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+  const distM = haversineDistance(
+    { latitude: queryLat, longitude: queryLng },
+    { latitude: lat, longitude: lon },
+  );
+  return distM <= POI_INCLUSION_THRESHOLD_M ? name : '';
+}
+
+/**
  * Fetch address metadata from Nominatim reverse geocode.
  * ~200ms + 1.1s throttle. Fallback when Mapbox is unavailable.
  */
@@ -798,7 +832,7 @@ async function fetchMetadataNominatim(lat: number, lng: number): Promise<GeoMeta
       road: addr.road || addr.pedestrian || addr.footway || '',
       municipality: addr.city_district || addr.suburb || addr.neighbourhood || '',
       province: cleanProvinceName(addr.state || ''),
-      poiName: data?.name || addr.amenity || addr.building || addr.tourism || addr.leisure || '',
+      poiName: nominatimPoiName(data, lat, lng),
     };
   } catch {
     return null;
@@ -1649,12 +1683,21 @@ const nearestPoiCache = new Map<string, { value: NearestPoi | null; ts: number }
 const NEAREST_POI_CACHE_TTL = 24 * 60 * 60 * 1000;
 const NEAREST_POI_CACHE_MAX = 1000;
 
-/** Quantize a lat/lng to a ~50m grid cell for cache keys. */
-function quantizeCell(lat: number, lng: number): string {
-  // 1e-3 degrees ≈ 111 m; 1e-4 ≈ 11 m. Round to 4 decimals for ~11m
-  // resolution then divide by 5 → ~55m cells (close enough to 50m).
-  const cellLat = Math.round(lat * 10000 / 5);
-  const cellLng = Math.round(lng * 10000 / 5);
+/**
+ * Quantize a lat/lng to a ~11 m grid cell for POI cache keys.
+ *
+ * The cell size is load-bearing for correctness, not just hit rate: the
+ * cached value carries `distance_m` measured from the ORIGINAL pin, and the
+ * 20 m display gate is applied to that stale number. With the previous
+ * ~55 m cells, "Cohiba Atmosphere at 5 m" cached at one corner passed the
+ * gate for a pin 45 m away on the same building — the famous place hijacked
+ * every address on the block. At ~11 m the worst stale-distance error is
+ * ~8 m, below the display threshold.
+ */
+export function quantizeCell(lat: number, lng: number): string {
+  // 1e-4 degrees ≈ 11 m.
+  const cellLat = Math.round(lat * 10000);
+  const cellLng = Math.round(lng * 10000);
   return `${cellLat},${cellLng}`;
 }
 

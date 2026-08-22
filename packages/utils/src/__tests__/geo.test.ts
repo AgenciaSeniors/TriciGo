@@ -23,6 +23,8 @@ import {
   searchStreetsSupabase,
   clearPoiCaches,
   composeStructuredAddress,
+  quantizeCell,
+  nominatimPoiName,
   joinStructured,
   POI_INCLUSION_THRESHOLD_M,
   type SearchBoxResult,
@@ -1332,5 +1334,44 @@ describe('isPlaceholderAddress', () => {
     // A street literally named "Destino" would be a false positive, but the
     // exact-match check keeps anything longer safe.
     expect(isPlaceholderAddress('Destino Final e/ 5ta y 7ma')).toBe(false);
+  });
+});
+
+describe('quantizeCell — POI cache resolution (Cohiba bug)', () => {
+  // 50 m cells let a pin inherit ANOTHER pin's POI *with its stale distance*:
+  // "Cohiba Atmosphere at 5 m" cached at one corner of the cell passed the
+  // 20 m display gate for a pin 45 m away on the same building. ~11 m cells
+  // bound that stale-distance error below the display threshold.
+  it('does not share a cell across ~30 m', () => {
+    const a = quantizeCell(23.13777, -82.35795);
+    const b = quantizeCell(23.13804, -82.35795);
+    expect(a).not.toBe(b);
+  });
+
+  it('still shares a cell for pin wiggles (~3 m)', () => {
+    const a = quantizeCell(23.13777, -82.35795);
+    const b = quantizeCell(23.137796, -82.35795);
+    expect(a).toBe(b);
+  });
+});
+
+describe('nominatimPoiName — the fallback POI is distance-gated too', () => {
+  const q = { lat: 23.13777, lng: -82.35795 };
+
+  it('keeps a name whose element sits at the pin', () => {
+    expect(nominatimPoiName({ name: 'Gran Teatro', lat: '23.13780', lon: '-82.35795' }, q.lat, q.lng)).toBe('Gran Teatro');
+  });
+
+  it('drops a famous name from down the block', () => {
+    // ~45 m away — the "most famous place nearby" hijack the user reported.
+    expect(nominatimPoiName({ name: 'Cohiba Atmosphere', lat: '23.13817', lon: '-82.35772' }, q.lat, q.lng)).toBe('');
+  });
+
+  it('falls through name → amenity → building → tourism → leisure', () => {
+    expect(nominatimPoiName({ address: { amenity: 'Farmacia Taquechel' }, lat: '23.13778', lon: '-82.35794' }, q.lat, q.lng)).toBe('Farmacia Taquechel');
+  });
+
+  it('drops a name it cannot place', () => {
+    expect(nominatimPoiName({ name: 'Fantasma' }, q.lat, q.lng)).toBe('');
   });
 });

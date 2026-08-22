@@ -107,24 +107,41 @@ describe('shouldReresolve', () => {
 });
 
 describe('packNeedsRefresh', () => {
-  const STYLE = 'mapbox://styles/mapbox/light-v11';
+  const LIGHT = 'mapbox://styles/mapbox/light-v11';
+  const NIGHT = 'mapbox://styles/mapbox/navigation-night-v1';
 
   it('refreshes a pack downloaded for a different style', () => {
-    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0, styleURL: 'mapbox://styles/mapbox/streets-v12' }, STYLE)).toBe(true);
+    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0, styleURL: 'mapbox://styles/mapbox/streets-v12' }, LIGHT, LIGHT)).toBe(true);
   });
 
   it('keeps a pack that matches the current style', () => {
-    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0, styleURL: STYLE }, STYLE)).toBe(false);
+    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0, styleURL: LIGHT }, LIGHT, LIGHT)).toBe(false);
   });
 
-  // Packs downloaded before this field existed. One refresh brings them
-  // under management; assuming they match would keep them stale forever.
-  it('refreshes a legacy pack that never recorded its style', () => {
-    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0 }, STYLE)).toBe(true);
+  // Every pack this app ever created was downloaded for the light style,
+  // so a missing field tells us nothing new. Refreshing on it would charge
+  // every existing rider a full re-download over Cuban connectivity to
+  // confirm what the code already guarantees.
+  it('keeps a legacy pack that predates the field', () => {
+    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0 }, LIGHT, LIGHT)).toBe(false);
   });
 
-  it('refreshes when there is no metadata at all', () => {
-    expect(packNeedsRefresh(undefined, STYLE)).toBe(true);
+  // Lost metadata means a lost record, not a wrong style — a reinstall, or
+  // a metadata write that failed on a full disk. Deleting the pack would
+  // throw away a working offline map, and if writes keep failing, on every
+  // single launch.
+  it('adopts a pack whose metadata was lost instead of deleting it', () => {
+    expect(packNeedsRefresh(undefined, LIGHT, LIGHT)).toBe(false);
+  });
+
+  // The mirror case, which is why the legacy style is a parameter. The
+  // driver's unrecorded packs are light too, but it draws navigation-night,
+  // so for it the very same pack is stale. Were "adopt" hardcoded here, its
+  // hook would stamp navigation-night onto tiles that are light and keep
+  // feeding the map a pack it cannot read.
+  it('refreshes an unrecorded pack when the app has since changed style', () => {
+    expect(packNeedsRefresh({ tiles: 100, lastUsedAt: 0 }, NIGHT, LIGHT)).toBe(true);
+    expect(packNeedsRefresh(undefined, NIGHT, LIGHT)).toBe(true);
   });
 });
 

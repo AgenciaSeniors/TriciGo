@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MARKER, MAP_COLORS } from '../mapStyles';
+import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_STYLE_NAV_NIGHT, MARKER, MAP_COLORS } from '../mapStyles';
 
 describe('map styles', () => {
   it('exposes a light and a dark base style', () => {
     expect(MAP_STYLE_LIGHT).toBe('mapbox://styles/mapbox/light-v11');
     expect(MAP_STYLE_DARK).toBe('mapbox://styles/mapbox/dark-v11');
+    // The driver renders this one and pins its offline packs to it. Dropping
+    // it breaks that app's build, so pin it here rather than find out later.
+    expect(MAP_STYLE_NAV_NIGHT).toBe('mapbox://styles/mapbox/navigation-night-v1');
   });
 });
 

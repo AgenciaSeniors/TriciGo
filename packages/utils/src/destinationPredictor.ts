@@ -32,7 +32,10 @@ export interface DestinationCluster {
   score: number;
 }
 
-export type PredictionReason = 'frequent' | 'time_pattern' | 'recent';
+// 'popular' comes from the server RPC's fallback tier — coercing it to
+// 'frequent' client-side put a "frequent" star on places the rider had
+// never been to.
+export type PredictionReason = 'frequent' | 'time_pattern' | 'recent' | 'popular';
 
 export interface PredictedDestination {
   address: string;

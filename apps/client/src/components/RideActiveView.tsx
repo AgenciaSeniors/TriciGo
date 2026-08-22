@@ -43,6 +43,7 @@ import { ConfettiOverlay } from '@/components/ConfettiOverlay';
 import { ArrivalCard } from '@/components/ArrivalCard';
 import { ProximityBanner } from '@/components/ProximityBanner';
 import { useProximityAlert } from '@/hooks/useProximityAlert';
+import { useMapDetail } from '@/hooks/useMapDetail';
 import type { GeoPoint } from '@tricigo/utils';
 import { getRouteETA } from '@/services/mapbox.service';
 
@@ -50,6 +51,7 @@ export function RideActiveView() {
   const { t } = useTranslation('rider');
   const isDark = useThemeStore((s) => s.resolvedScheme) === 'dark';
   const insets = useSafeAreaInsets();
+  const { mapDetail } = useMapDetail();
 
   const RIDE_STEPS = [
     { key: 'accepted', label: t('ride.status_accepted') },
@@ -1140,6 +1142,7 @@ export function RideActiveView() {
             return 'auto';
           })()}
           height={mapHeight}
+          show3dBuildings={mapDetail}
         />
         {!driverPosition && (
           <View

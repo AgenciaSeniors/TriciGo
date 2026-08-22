@@ -22,6 +22,7 @@ import {
   estimateTileCount,
   planEviction,
   shouldReresolve,
+  packNeedsRefresh,
   OFFLINE_PACK_MIN_ZOOM,
   OFFLINE_PACK_MAX_ZOOM,
   OFFLINE_MAX_TILES,
@@ -81,9 +82,22 @@ async function ensurePack(region: {
 
   const existing = await MapboxGL.offlineManager.getPack(region.cellKey).catch(() => null);
   if (existing) {
-    meta[region.cellKey] = { tiles: meta[region.cellKey]?.tiles ?? 0, lastUsedAt: now };
-    await saveMeta(meta);
-    return;
+    // Current and legacy are both light: this app has never downloaded a
+    // pack for anything else, so an unrecorded pack is adopted, not refetched.
+    if (!packNeedsRefresh(meta[region.cellKey], MAP_STYLE_LIGHT, MAP_STYLE_LIGHT)) {
+      meta[region.cellKey] = {
+        tiles: meta[region.cellKey]?.tiles ?? 0,
+        lastUsedAt: now,
+        styleURL: MAP_STYLE_LIGHT,
+      };
+      await saveMeta(meta);
+      return;
+    }
+    // Downloaded for a different style: these tiles are the wrong data.
+    // Falling through re-downloads them for the style in use now.
+    if (__DEV__) console.log('[OfflineMap] style changed — refreshing pack', region.cellKey);
+    await MapboxGL.offlineManager.deletePack(region.cellKey).catch(() => {});
+    delete meta[region.cellKey];
   }
 
   const tiles = estimateTileCount(
@@ -103,7 +117,7 @@ async function ensurePack(region: {
     minZoom: OFFLINE_PACK_MIN_ZOOM,
     maxZoom: OFFLINE_PACK_MAX_ZOOM,
   });
-  meta[region.cellKey] = { tiles, lastUsedAt: now };
+  meta[region.cellKey] = { tiles, lastUsedAt: now, styleURL: MAP_STYLE_LIGHT };
 
   const toDelete = planEviction(meta, OFFLINE_MAX_TILES, [region.cellKey]);
   for (const key of toDelete) {
@@ -140,13 +154,17 @@ export function useDynamicOfflineMap(): void {
       busyRef.current = true;
       try {
         const region = await nearbyService.getOfflineRegionForPoint(current.lat, current.lng);
-        lastPointRef.current = current;
         if (region) {
           if (__DEV__) console.log('[OfflineMap] region', region.cellKey, 'ensuring pack');
           await ensurePack(region);
         } else if (__DEV__) {
           console.log('[OfflineMap] no street data near', current.lat.toFixed(4), current.lng.toFixed(4), '— no pack');
         }
+        // Only after the pack is secured. Marking the point as handled
+        // first means a failure here is never retried this session:
+        // shouldReresolve would say no until the rider moved 5 km or
+        // restarted the app, leaving them with no offline map at all.
+        lastPointRef.current = current;
       } catch (e) {
         console.warn('[OfflineMap] resolve failed (best-effort):', String((e as Error)?.message ?? e));
       } finally {

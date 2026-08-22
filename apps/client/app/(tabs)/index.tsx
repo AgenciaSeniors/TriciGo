@@ -28,7 +28,6 @@ import { WebAddressInput } from '@/components/WebAddressInput';
 import { useNearbyVehicles } from '@/hooks/useNearbyVehicles';
 import { useDeliveryVehicles } from '@/hooks/useDeliveryVehicles';
 import { useTestVehicles } from '@/hooks/useTestVehicles';
-import { SubmitPoiSheet } from '@tricigo/ui';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
@@ -77,6 +76,7 @@ import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
 import { WebActiveRideView } from '@/components/WebActiveRideView';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import { LAST_KNOWN_LOCATION_KEY, readCachedLocation, useTwoStageUserCenter } from '@/lib/userLocation';
+import { useMapDetail } from '@/hooks/useMapDetail';
 
 // Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
 const MAP_FALLBACK_CENTER: [number, number] = getMapFallbackCoordLngLat();
@@ -3077,6 +3077,7 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
   // Permission was already requested in IdleView, so this only reads it.
   const userCenter = useTwoStageUserCenter(true);
   const mapRef = useRef<RideMapViewHandle>(null);
+  const { mapDetail } = useMapDetail();
   const { locate: locateMe, isLocating } = useLocateMe(
     useCallback((lng: number, lat: number) => {
       mapRef.current?.flyTo(lng, lat);
@@ -3127,7 +3128,8 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
     [draft.waypoints],
   );
   const { coordinates: routeCoordinates, distanceM: routeDistanceM, durationS: routeDurationS } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location, waypointPoints);
-  // Memoized lat/lng form of the user center — consumed by SubmitPoiSheet
+  // Memoized lat/lng form of the user center — feeds the search overlay's
+  // proximity-aware "Lugares populares" section
   // (defaults the "report a place" form to where the user is standing).
   const userCenterLatLng = useMemo(
     () => (userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null),
@@ -3230,8 +3232,6 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
   // Crowdsourcing — "Sugerir lugar" sheet visibility + snapshotted coords.
   // PR 3 of POI parity program. Coords default to user's location; we
   // could enhance later to use long-press on the map for "agregar aquí".
-  const [submitPoiOpen, setSubmitPoiOpen] = useState(false);
-  const submitPoiCoords = userCenterLatLng;
 
   /** Format fare based on payment method */
   const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
@@ -3470,12 +3470,21 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
         // AsyncStorage instantly, then upgrades when GPS gives a fresh fix.
         initialUserCenter={userCenter}
         onLongPressMap={openPickerAt}
+        showPlaces
+        show3dBuildings={mapDetail}
+        // The tile's label is ignored on purpose: the pin-confirm screen
+        // reverse-geocodes the coordinate and shows the rider what it
+        // actually found. Trusting the tile's label as the ride address
+        // is exactly how a destination ends up saying one thing and
+        // pointing at another.
+        onPlacePress={(_name, lng, lat) => openPickerAt(lng, lat)}
       />
 
       {/* "Center on my location". This fullscreen map was the only one
           without it: the picker and the active ride both had a way back to
           the user, so panning away here left no way home except reopening
           the screen. */}
+      {!searchingField && (
       <Pressable
         onPress={locateMe}
         disabled={isLocating}
@@ -3499,6 +3508,7 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
           ? <ActivityIndicator size="small" color="#FF4D00" />
           : <Ionicons name="locate" size={22} color="#FF4D00" />}
       </Pressable>
+      )}
 
       {/* Pre-launch map QA toggle — dev/demo only, never in production.
           When ON, the map shows synthetic moving vehicles so the team
@@ -3535,42 +3545,6 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
         </Pressable>
       )}
 
-      {/* Crowdsourcing — "Sugerir lugar" floating button (PR 3 of POI
-          parity). Only visible when not searching/selecting addresses —
-          no clutter while user is actively booking. */}
-      {!searchingField && submitPoiCoords && (
-        <Pressable
-          onPress={() => setSubmitPoiOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Sugerir lugar nuevo"
-          style={{
-            position: 'absolute',
-            top: insets.top + 80,
-            right: 12,
-            width: 44, height: 44, borderRadius: 22,
-            backgroundColor: 'rgba(255,255,255,0.95)',
-            borderWidth: 1,
-            borderColor: 'rgba(0,0,0,0.08)',
-            alignItems: 'center', justifyContent: 'center',
-            shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
-            elevation: 4,
-            zIndex: 30,
-          }}
-        >
-          <Ionicons name="add" size={26} color="#FF4D00" />
-        </Pressable>
-      )}
-
-      {/* SubmitPoiSheet — opens when user taps "+" floating button */}
-      {submitPoiCoords && (
-        <SubmitPoiSheet
-          visible={submitPoiOpen}
-          onClose={() => setSubmitPoiOpen(false)}
-          lat={submitPoiCoords.latitude}
-          lng={submitPoiCoords.longitude}
-          supabase={getSupabaseClient()}
-        />
-      )}
 
       {/* Floating top bar: [X] + compact address summary */}
       {!searchingField && (
@@ -3635,6 +3609,7 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
           {/* AddressSearchInput — always in search mode, auto-expanded with suggestions */}
           <AddressSearchInput
             autoExpand
+            near={userCenterLatLng}
             placeholder={searchingField === 'pickup'
               ? t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })
               : searchingField === 'waypoint'
@@ -3682,10 +3657,13 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
           card below (triciclo 64, moto 25, auto 30, confort 28). Now uses
           the SELECTED service's estimated_duration_s, falling back to
           routeDurationS only if no estimate is available yet. */}
-      {!searchingField && routeDistanceM && (selectedEstimate?.estimated_duration_s || routeDurationS) && (
+      {/* `> 0` twice over: a 0-metre route (dropoff == pickup) deserves no
+          pill, and a bare numeric 0 in a JSX `&&` chain renders as a text
+          node — a LogBox toast in dev, an Invariant CRASH in release. */}
+      {!searchingField && (routeDistanceM ?? 0) > 0 && (selectedEstimate?.estimated_duration_s ?? routeDurationS ?? 0) > 0 && (
         <View style={{ position: 'absolute', bottom: '52%', alignSelf: 'center', zIndex: 9, backgroundColor: colors.brand.orange, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, elevation: 3, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
           <Text variant="caption" style={{ color: '#fff', fontWeight: '600' }}>
-            {(routeDistanceM / 1000).toFixed(1)} km · ~{Math.ceil((selectedEstimate?.estimated_duration_s ?? routeDurationS ?? 0) / 60)} min
+            {((routeDistanceM ?? 0) / 1000).toFixed(1)} km · ~{Math.ceil((selectedEstimate?.estimated_duration_s ?? routeDurationS ?? 0) / 60)} min
           </Text>
         </View>
       )}

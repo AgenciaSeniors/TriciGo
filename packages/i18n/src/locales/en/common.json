@@ -306,6 +306,8 @@
     "notif_trip_requests": "Trip requests",
     "notif_sms": "SMS Alerts",
     "notif_sms_desc": "Receive ride alerts via SMS when offline. Carrier charges may apply.",
+    "map_detail": "Detailed map",
+    "map_detail_desc": "Shows 3D buildings. May run slower on modest phones.",
     "voice_guidance": "Voice guidance",
     "voice_guidance_desc": "Spoken directions while navigating",
     "max_distance": "Maximum distance",
