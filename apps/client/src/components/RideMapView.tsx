@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
-import { View, Text, Animated, Platform, Image, TouchableOpacity } from 'react-native';
+import { View, Text, Animated, AppState, Platform, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
@@ -147,6 +147,13 @@ const FOLLOW_STATUSES = new Set<string>([
 /** Auto re-engage delay (ms) after a user gesture pauses the follow. */
 const FOLLOW_RESUME_DELAY_MS = 8000;
 
+/** Imperative handle for screens that need to move the camera themselves —
+ *  today only the vehicle-selection map's "center on me" FAB. Everything
+ *  else drives the camera declaratively through props. */
+export interface RideMapViewHandle {
+  flyTo: (lng: number, lat: number, zoom?: number) => void;
+}
+
 function RideMapViewInner({
   pickupLocation,
   dropoffLocation,
@@ -167,7 +174,7 @@ function RideMapViewInner({
   fullscreen,
   initialUserCenter,
   rideStatus,
-}: RideMapViewProps) {
+}: RideMapViewProps, ref: React.Ref<RideMapViewHandle>) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
   const { t } = useTranslation('rider');
@@ -203,7 +210,7 @@ function RideMapViewInner({
   const lastFrameRef = useRef(0);
   useEffect(() => {
     if (!routeCoordinates || routeCoordinates.length < 2) return;
-    let rafId: number;
+    let rafId: number | null = null;
     const animate = (timestamp: number) => {
       // Advance one frame every ~30ms (~33fps — fast and fluid)
       if (timestamp - lastFrameRef.current > 30) {
@@ -213,10 +220,46 @@ function RideMapViewInner({
       }
       rafId = requestAnimationFrame(animate);
     };
-    rafId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafId);
+    const start = () => {
+      if (rafId === null) rafId = requestAnimationFrame(animate);
+    };
+    const stop = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+
+    // Nobody is watching a marching dash while the app is backgrounded, but
+    // the ~33 setState/s it costs keep running during an active ride.
+    if (AppState.currentState === 'active') start();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') start();
+      else stop();
+    });
+
+    return () => {
+      sub.remove();
+      stop();
+    };
   }, [routeCoordinates]);
   const isDark = resolvedScheme === 'dark';
+  const cameraRef = useRef<any>(null);
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      flyTo: (lng: number, lat: number, zoom = 16) => {
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+        cameraRef.current?.setCamera({
+          centerCoordinate: [lng, lat],
+          zoomLevel: zoom,
+          animationDuration: 600,
+          animationMode: 'flyTo',
+        });
+      },
+    }),
+    [],
+  );
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
@@ -777,6 +820,7 @@ function RideMapViewInner({
             position. After that, activeBounds takes over once pickup/
             dropoff/driver are known and bounds are computed. */}
         <MapboxGL.Camera
+          ref={cameraRef}
           key={`cam-${
             initialUserCenter &&
             Number.isFinite(initialUserCenter[0]) &&
@@ -1155,4 +1199,4 @@ function RideMapViewInner({
   );
 }
 
-export const RideMapView = React.memo(RideMapViewInner);
+export const RideMapView = React.memo(React.forwardRef(RideMapViewInner));

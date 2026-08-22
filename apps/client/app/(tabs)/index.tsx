@@ -32,6 +32,8 @@ import { SubmitPoiSheet } from '@tricigo/ui';
 import { RideActiveView } from '@/components/RideActiveView';
 import { RideCompleteView } from '@/components/RideCompleteView';
 import { RideMapView } from '@/components/RideMapView';
+import type { RideMapViewHandle } from '@/components/RideMapView';
+import { useLocateMe } from '@/hooks/useLocateMe';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { ConfirmLocationScreen } from '@/components/ConfirmLocationScreen';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
@@ -3047,6 +3049,12 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   // `key` prop in RideMapView remounts cleanly on each update.
   // Permission was already requested in IdleView, so this only reads it.
   const userCenter = useTwoStageUserCenter(true);
+  const mapRef = useRef<RideMapViewHandle>(null);
+  const { locate: locateMe, isLocating } = useLocateMe(
+    useCallback((lng: number, lat: number) => {
+      mapRef.current?.flyTo(lng, lat);
+    }, []),
+  );
   const { t, i18n } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -3425,6 +3433,7 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
     <View style={{ flex: 1 }}>
       {/* Fullscreen map with route */}
       <RideMapView
+        ref={mapRef}
         fullscreen
         pickupLocation={draft.pickup?.location ?? null}
         dropoffLocation={draft.dropoff?.location ?? null}
@@ -3436,6 +3445,34 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
         // AsyncStorage instantly, then upgrades when GPS gives a fresh fix.
         initialUserCenter={userCenter}
       />
+
+      {/* "Center on my location". This fullscreen map was the only one
+          without it: the picker and the active ride both had a way back to
+          the user, so panning away here left no way home except reopening
+          the screen. */}
+      <Pressable
+        onPress={locateMe}
+        disabled={isLocating}
+        accessibilityRole="button"
+        accessibilityLabel={t('ride.center_on_me', { defaultValue: 'Centrar en mi ubicación' })}
+        style={{
+          position: 'absolute',
+          top: insets.top + 80 + 44 + 12,
+          right: 12,
+          width: 44, height: 44, borderRadius: 22,
+          backgroundColor: mode === 'dark' ? tokens.bg.elev1 : 'rgba(255,255,255,0.95)',
+          borderWidth: 1,
+          borderColor: mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+          alignItems: 'center', justifyContent: 'center',
+          shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+          elevation: 4,
+          zIndex: 30,
+        }}
+      >
+        {isLocating
+          ? <ActivityIndicator size="small" color="#FF4D00" />
+          : <Ionicons name="locate" size={22} color="#FF4D00" />}
+      </Pressable>
 
       {/* Pre-launch map QA toggle — dev/demo only, never in production.
           When ON, the map shows synthetic moving vehicles so the team
