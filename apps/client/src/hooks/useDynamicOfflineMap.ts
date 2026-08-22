@@ -92,7 +92,7 @@ async function ensurePack(region: {
     OFFLINE_PACK_MAX_ZOOM,
   );
 
-  console.log('[OfflineMap] createPack', region.cellKey, `~${tiles} tiles (z${OFFLINE_PACK_MIN_ZOOM}-${OFFLINE_PACK_MAX_ZOOM})`);
+  if (__DEV__) console.log('[OfflineMap] createPack', region.cellKey, `~${tiles} tiles (z${OFFLINE_PACK_MIN_ZOOM}-${OFFLINE_PACK_MAX_ZOOM})`);
   await MapboxGL.offlineManager.createPack({
     name: region.cellKey,
     styleURL: MAP_STYLE_LIGHT,
@@ -104,7 +104,7 @@ async function ensurePack(region: {
 
   const toDelete = planEviction(meta, OFFLINE_MAX_TILES, [region.cellKey]);
   for (const key of toDelete) {
-    console.log('[OfflineMap] evict LRU pack', key);
+    if (__DEV__) console.log('[OfflineMap] evict LRU pack', key);
     await MapboxGL.offlineManager.deletePack(key).catch(() => {});
     delete meta[key];
   }
@@ -139,13 +139,13 @@ export function useDynamicOfflineMap(): void {
         const region = await nearbyService.getOfflineRegionForPoint(current.lat, current.lng);
         lastPointRef.current = current;
         if (region) {
-          console.log('[OfflineMap] region', region.cellKey, 'ensuring pack');
+          if (__DEV__) console.log('[OfflineMap] region', region.cellKey, 'ensuring pack');
           await ensurePack(region);
-        } else {
+        } else if (__DEV__) {
           console.log('[OfflineMap] no street data near', current.lat.toFixed(4), current.lng.toFixed(4), '— no pack');
         }
       } catch (e) {
-        console.log('[OfflineMap] resolve failed (best-effort):', String((e as Error)?.message ?? e));
+        console.warn('[OfflineMap] resolve failed (best-effort):', String((e as Error)?.message ?? e));
       } finally {
         busyRef.current = false;
       }

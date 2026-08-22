@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react
 import { Platform, View, useColorScheme } from 'react-native';
 import { logger, MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE } from '@tricigo/utils';
 import { darkColors } from '@tricigo/theme';
+import { getMapFallbackCoordLngLat } from '@/config/demo';
 
 // Only import mapbox-gl on web
 let mapboxgl: typeof import('mapbox-gl') | null = null;
@@ -57,7 +58,8 @@ interface WebMapViewProps {
 // BUG-070: Run CSS injection once at module load instead of on every component mount
 ensureMapboxCSS();
 
-const HAVANA_CENTER: [number, number] = [-82.38, 23.13];
+// Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
+const HAVANA_CENTER: [number, number] = getMapFallbackCoordLngLat();
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 const MAP_STYLE = MAP_STYLE_LIGHT;
 

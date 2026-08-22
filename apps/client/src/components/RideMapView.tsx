@@ -64,6 +64,7 @@ interface NearbyVehicleMarker {
   latitude: number;
   longitude: number;
   vehicle_type: string;
+  heading?: number | null;
 }
 
 interface RideMapViewProps {
@@ -156,8 +157,8 @@ function computeBounds(coords: [number, number][]): {
 
 /** Convert GeoPoint to Mapbox [lng, lat] with validation */
 function toCoord(p: GeoPoint): [number, number] {
-  const lng = Number.isFinite(p?.longitude) ? p.longitude : -82.3666;
-  const lat = Number.isFinite(p?.latitude) ? p.latitude : 23.1136;
+  const lng = Number.isFinite(p?.longitude) ? p.longitude : HAVANA_CENTER[0];
+  const lat = Number.isFinite(p?.latitude) ? p.latitude : HAVANA_CENTER[1];
   return [lng, lat];
 }
 
@@ -384,8 +385,10 @@ function RideMapViewInner({
   // DEBUG-271: log every time the marker coordinate changes so we can
   // see in the rider's Metro log whether the prop chain is delivering
   // fresh positions to MarkerView.
+  // Interpolation re-renders at ~30 FPS, so building coordKey in release
+  // builds is pure waste — the whole block stays behind __DEV__.
   const lastLoggedCoordRef = useRef<string>('');
-  if (animatedDriver) {
+  if (__DEV__ && animatedDriver) {
     const coordKey = `${animatedDriver.latitude.toFixed(5)},${animatedDriver.longitude.toFixed(5)},${animatedDriver.heading.toFixed(0)}`;
     if (lastLoggedCoordRef.current !== coordKey) {
       lastLoggedCoordRef.current = coordKey;
@@ -500,6 +503,9 @@ function RideMapViewInner({
         properties: {
           id: v.driver_profile_id,
           icon: `marker-${v.vehicle_type || 'auto'}`,
+          // The SymbolLayer below reads ['get','heading'] for iconRotate.
+          // Without this property every nearby vehicle rendered facing north.
+          heading: v.heading ?? 0,
         },
       })),
     };

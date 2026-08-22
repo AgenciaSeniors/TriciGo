@@ -19,7 +19,7 @@ import type { GeoPoint, StructuredAddress } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
-import { getMapFallbackCoordLngLat } from '@/config/demo';
+import { getMapFallbackCoordLngLat, getMapFallbackLatLng } from '@/config/demo';
 
 let _MapboxGL: any = undefined;
 function getMapboxGL(): any {
@@ -97,7 +97,7 @@ export function ConfirmLocationScreen({
   // Two-line address display: line1 = POI name (when one sits within a few
   // meters), line2 = the street/locality address. line1 omitted → single line.
   const [display, setDisplay] = useState<{ line1?: string; line2: string } | null>(null);
-  const centerRef = useRef<GeoPoint>(initialLocation ?? { latitude: 23.1136, longitude: -82.3666 });
+  const centerRef = useRef<GeoPoint>(initialLocation ?? getMapFallbackLatLng());
   const [isGeocoding, setIsGeocoding] = useState(false);
   // Confirm button is decoupled from geocoding — see handleConfirm.
   const [confirming, setConfirming] = useState(false);
@@ -234,47 +234,54 @@ export function ConfirmLocationScreen({
   const handleConfirm = async () => {
     if (confirming) return; // re-entrancy guard (double-tap)
     setConfirming(true);
-    const center = centerRef.current;
-    // 00537 pin confirmation: confirming without moving the pin keeps the
-    // address the user PICKED in search ("Calle 3ra e/ 4 y 2, Vedado") —
-    // richer than the reverse geocode of the exact same coordinate. Moving
-    // the pin means the label no longer applies → reverse geocode as usual.
-    if (
-      initialAddress &&
-      initialLocation &&
-      haversineDistance(center, initialLocation) < 20
-    ) {
-      onConfirm(initialAddress, center);
-      return;
-    }
-    // Seed from whatever is already on screen (joined back to one string), then
-    // prefer a fresh string geocode. reverseGeocode shares the structured cache,
-    // so when the bar already resolved this spot it's an instant cache hit.
-    let finalAddress = display ? [display.line1, display.line2].filter(Boolean).join(', ') : null;
+    // Every exit path clears the spinner. The parent usually unmounts this
+    // screen right after onConfirm, but when it doesn't (or onConfirm
+    // throws) the button used to stay stuck spinning forever.
     try {
-      const fresh = await Promise.race([
-        reverseGeocode(center.latitude, center.longitude),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-      ]);
-      if (fresh) finalAddress = fresh;
-    } catch { /* keep current display / fallback */ }
-    // User may have tapped back while the geocode was in flight.
-    if (!mountedRef.current) return;
-    // Incident cd09ba9f: on slow networks the geocode misses the 3 s cap and
-    // the old fallback ('Ubicación seleccionada en el mapa') reached the
-    // driver's offer card, which is useless for deciding. The label must
-    // always SAY something: nearest local preset ("Cerca de Vedado" — pure
-    // local math, no network) before falling back to raw coordinates. Both
-    // fallback forms are sentinels the server-side backstop (00539) upgrades
-    // with real intersection data at ride creation.
-    const coordsRe = /^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/;
-    if (!finalAddress || coordsRe.test(finalAddress)) {
-      const preset = findNearestPreset(center, 5000);
-      finalAddress = preset
-        ? `Cerca de ${preset.label}`
-        : `${center.latitude.toFixed(5)}, ${center.longitude.toFixed(5)}`;
+      const center = centerRef.current;
+      // 00537 pin confirmation: confirming without moving the pin keeps the
+      // address the user PICKED in search ("Calle 3ra e/ 4 y 2, Vedado") —
+      // richer than the reverse geocode of the exact same coordinate. Moving
+      // the pin means the label no longer applies → reverse geocode as usual.
+      if (
+        initialAddress &&
+        initialLocation &&
+        haversineDistance(center, initialLocation) < 20
+      ) {
+        onConfirm(initialAddress, center);
+        return;
+      }
+      // Seed from whatever is already on screen (joined back to one string), then
+      // prefer a fresh string geocode. reverseGeocode shares the structured cache,
+      // so when the bar already resolved this spot it's an instant cache hit.
+      let finalAddress = display ? [display.line1, display.line2].filter(Boolean).join(', ') : null;
+      try {
+        const fresh = await Promise.race([
+          reverseGeocode(center.latitude, center.longitude),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]);
+        if (fresh) finalAddress = fresh;
+      } catch { /* keep current display / fallback */ }
+      // User may have tapped back while the geocode was in flight.
+      if (!mountedRef.current) return;
+      // Incident cd09ba9f: on slow networks the geocode misses the 3 s cap and
+      // the old fallback ('Ubicación seleccionada en el mapa') reached the
+      // driver's offer card, which is useless for deciding. The label must
+      // always SAY something: nearest local preset ("Cerca de Vedado" — pure
+      // local math, no network) before falling back to raw coordinates. Both
+      // fallback forms are sentinels the server-side backstop (00539) upgrades
+      // with real intersection data at ride creation.
+      const coordsRe = /^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/;
+      if (!finalAddress || coordsRe.test(finalAddress)) {
+        const preset = findNearestPreset(center, 5000);
+        finalAddress = preset
+          ? `Cerca de ${preset.label}`
+          : `${center.latitude.toFixed(5)}, ${center.longitude.toFixed(5)}`;
+      }
+      onConfirm(finalAddress, center);
+    } finally {
+      if (mountedRef.current) setConfirming(false);
     }
-    onConfirm(finalAddress, center);
   };
 
   const isPickup = mode === 'pickup';

@@ -11,6 +11,7 @@ import { getInitials, formatRating } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
 import type { SearchingDriverPresence } from '@tricigo/types';
+import { getMapFallbackCoordLngLat } from '@/config/demo';
 
 let _MapboxGL: any = undefined;
 function getMapboxGL(): any {
@@ -24,10 +25,13 @@ interface SearchingDriverMarkersProps {
   acceptedDriverId: string | null;
 }
 
+// Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
+const FALLBACK_CENTER: [number, number] = getMapFallbackCoordLngLat();
+
 /** Convert GeoPoint to Mapbox [lng, lat] with validation */
 function toCoord(p: { latitude: number; longitude: number }): [number, number] {
-  const lng = Number.isFinite(p?.longitude) ? p.longitude : -82.3666;
-  const lat = Number.isFinite(p?.latitude) ? p.latitude : 23.1136;
+  const lng = Number.isFinite(p?.longitude) ? p.longitude : FALLBACK_CENTER[0];
+  const lat = Number.isFinite(p?.latitude) ? p.latitude : FALLBACK_CENTER[1];
   return [lng, lat];
 }
 

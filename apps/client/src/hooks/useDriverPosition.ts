@@ -166,7 +166,7 @@ export function useDriverPositionWithCache(rideId: string | null): DriverPositio
               recorded_at?: string | null;
             } | null;
             if (row && row.latitude != null && row.longitude != null) {
-              if (consecutiveFailures > 0) {
+              if (__DEV__ && consecutiveFailures > 0) {
                 console.log('[useDriverPosition] poll recovered after', consecutiveFailures, 'failures');
               }
               consecutiveFailures = 0;
@@ -216,7 +216,7 @@ export function useDriverPositionWithCache(rideId: string | null): DriverPositio
         if (!row || row.latitude == null || row.longitude == null) {
           // DEBUG-271: log every 5 polls so we know polling is alive even
           // when the RPC has nothing fresh to return.
-          if (pollSeq % 5 === 0) {
+          if (__DEV__ && pollSeq % 5 === 0) {
             console.log('[useDriverPosition] poll #' + pollSeq + ' returned null');
           }
           return;
@@ -230,14 +230,17 @@ export function useDriverPositionWithCache(rideId: string | null): DriverPositio
           recordedAt,
         };
         hasRealtimeRef.current = true;
-        // DEBUG-271: log EVERY poll that returned data so we can see the pipeline
-        // working live. Will remove before release.
-        console.log('[useDriverPosition] poll #' + pollSeq, {
-          lat: pos.latitude.toFixed(5),
-          lng: pos.longitude.toFixed(5),
-          hdg: pos.heading,
-          age_s: Math.round((Date.now() - (recordedAt || Date.now())) / 1000),
-        });
+        // DEBUG-271: one line per poll makes the pipeline visible while
+        // developing. At 1 Hz that is ~3600 lines/hour, so it stays out of
+        // release builds.
+        if (__DEV__) {
+          console.log('[useDriverPosition] poll #' + pollSeq, {
+            lat: pos.latitude.toFixed(5),
+            lng: pos.longitude.toFixed(5),
+            hdg: pos.heading,
+            age_s: Math.round((Date.now() - (recordedAt || Date.now())) / 1000),
+          });
+        }
         // BUG-271: relaxed dedup — only skip if EXACT same recordedAt timestamp
         // (true duplicate from server). Coordinate-based dedup at 0.000001 was
         // too tight and could block real movement on Cuban networks.

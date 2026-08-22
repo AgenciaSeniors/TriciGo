@@ -137,13 +137,15 @@ export function useLiveDriverRoute(
     // refetch fires. Useful while testing: open the client app, watch
     // Metro logs, drive a parallel street with Lockito and confirm a
     // `[useLiveDriverRoute] refetch reason=deviation off=78m` line.
-    // eslint-disable-next-line no-console
-    console.log('[useLiveDriverRoute] refetch', {
-      reason,
-      off_m: Math.round(offRouteM),
-      since_last_ms: sinceLastFetch,
-      target: { lat: target.latitude.toFixed(5), lng: target.longitude.toFixed(5) },
-    });
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.log('[useLiveDriverRoute] refetch', {
+        reason,
+        off_m: Math.round(offRouteM),
+        since_last_ms: sinceLastFetch,
+        target: { lat: target.latitude.toFixed(5), lng: target.longitude.toFixed(5) },
+      });
+    }
 
     let cancelled = false;
     inFlightRef.current = true;
@@ -172,11 +174,13 @@ export function useLiveDriverRoute(
         const coords = result.coordinates.map(([lat, lng]) => ({ latitude: lat, longitude: lng }));
         currentRouteRef.current = coords;
         setCoordinates(coords);
-        // eslint-disable-next-line no-console
-        console.log('[useLiveDriverRoute] route updated', {
-          points: coords.length,
-          distance_m: result.distance_m,
-        });
+        if (__DEV__) {
+          // eslint-disable-next-line no-console
+          console.log('[useLiveDriverRoute] route updated', {
+            points: coords.length,
+            distance_m: result.distance_m,
+          });
+        }
       }
     })();
 

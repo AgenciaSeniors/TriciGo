@@ -73,6 +73,7 @@ import { useRideOfferStats } from '@/hooks/useRideOfferStats';
 import { DriverInfoMiniCard } from '@/components/DriverInfoMiniCard';
 import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
 import { WebActiveRideView } from '@/components/WebActiveRideView';
+import { getMapFallbackCoordLngLat } from '@/config/demo';
 
 // Mapbox GL loaded lazily inside components — NOT at module level
 // Module-level require can crash the entire JS context if native module fails
@@ -84,6 +85,9 @@ function getMapboxGL(): any {
     return MapboxGL;
   } catch { return null; }
 }
+
+// Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
+const MAP_FALLBACK_CENTER: [number, number] = getMapFallbackCoordLngLat();
 
 // Coin icon for BalanceBadge
 const tricoinSmall = require('../../assets/coins/tricoin-small.png');
@@ -1665,7 +1669,7 @@ function WebHomeScreen() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
             <WebMapView
               ref={mapViewRef}
-              center={pickup ? [pickup.longitude, pickup.latitude] : [-82.38, 23.13]}
+              center={pickup ? [pickup.longitude, pickup.latitude] : MAP_FALLBACK_CENTER}
               zoom={16}
               interactive={true}
               pickup={pickup}
@@ -3460,8 +3464,10 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
       // Skip if a recent estimate (<55s ago) just landed — avoids hammering
       // the API on each render of this hook re-entry.
       if (fareEstimatedAt && Date.now() - fareEstimatedAt < 55_000) return;
-      // eslint-disable-next-line no-console
-      console.log('[FareRefresh] auto-refreshing estimate (60s TTL)');
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('[FareRefresh] auto-refreshing estimate (60s TTL)');
+      }
       requestEstimate();
     }, 60_000);
     return () => clearInterval(intervalId);
