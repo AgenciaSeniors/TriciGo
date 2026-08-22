@@ -533,7 +533,9 @@
     "pickup_marker": "Recogida",
     "dropoff_marker": "Destino",
     "stop_marker": "Parada {{n}}",
-    "driver_marker": "Conductor"
+    "driver_marker": "Conductor",
+    "vehicle_eta": "a {{eta}} de ti",
+    "vehicle_distance": "a {{distance}}"
   },
 
   "prediction": {

@@ -1,9 +1,9 @@
 import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
-import { View, Text, Animated, AppState, Platform, Image, TouchableOpacity } from 'react-native';
+import { View, Text, Animated, AppState, Platform, Image, TouchableOpacity, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading, estimateVehicleEtaMinutes, formatVehicleEtaMinutes, formatVehicleDistance, triggerSelection, triggerHaptic } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
@@ -91,6 +91,8 @@ interface RideMapViewProps {
    * the static bounds fit (previous behavior).
    */
   rideStatus?: string | null;
+  /** Long-press anywhere on the map. Receives [lng, lat]. */
+  onLongPressMap?: (lng: number, lat: number) => void;
 }
 
 // Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
@@ -174,6 +176,7 @@ function RideMapViewInner({
   fullscreen,
   initialUserCenter,
   rideStatus,
+  onLongPressMap,
 }: RideMapViewProps, ref: React.Ref<RideMapViewHandle>) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
@@ -260,6 +263,10 @@ function RideMapViewInner({
     }),
     [],
   );
+  // Which nearby vehicle has its callout open, by driver id rather than by
+  // coordinate: the vehicle keeps moving, and a bubble frozen where it used
+  // to be points at empty road.
+  const [tappedVehicleId, setTappedVehicleId] = useState<string | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
@@ -519,6 +526,34 @@ function RideMapViewInner({
       })),
     };
   }, [nearbyVehicles]);
+
+  // The open callout, resolved against the CURRENT vehicle list on every
+  // render: it follows the vehicle as it moves and disappears on its own
+  // when that driver goes offline or leaves the radius. Deriving it beats
+  // clearing it on every poll, which would have closed the bubble every
+  // 15 seconds (every second in the demo preview) whether or not the
+  // vehicle had actually gone anywhere.
+  const tappedVehicle = useMemo(() => {
+    if (!tappedVehicleId || !nearbyVehicles) return null;
+    const v = nearbyVehicles.find((n) => n.driver_profile_id === tappedVehicleId);
+    if (!v || !Number.isFinite(v.latitude) || !Number.isFinite(v.longitude)) return null;
+    // No pickup means no point to measure from, so fall back to how far the
+    // vehicle is from the map's own reference point.
+    const from = pickupLocation ?? null;
+    const distanceM = from
+      ? haversineDistance(from, { latitude: v.latitude, longitude: v.longitude })
+      : null;
+    const eta = formatVehicleEtaMinutes(estimateVehicleEtaMinutes(distanceM));
+    const dist = formatVehicleDistance(distanceM);
+    // Nothing to say means no bubble at all, rather than an empty one.
+    const label = eta
+      ? t('map.vehicle_eta', { eta })
+      : dist
+        ? t('map.vehicle_distance', { distance: dist })
+        : null;
+    if (!label) return null;
+    return { coordinate: [v.longitude, v.latitude] as [number, number], label };
+  }, [tappedVehicleId, nearbyVehicles, pickupLocation, t]);
 
   // Compute camera bounds (includes searching driver positions)
   // BUG-229: stabilize bounds via primitive lat/lng deps. Object refs
@@ -809,6 +844,14 @@ function RideMapViewInner({
         // timer in handleUserGesture, this prevents the camera from
         // fighting the user's finger.
         onTouchStart={isRideActive ? handleUserGesture : undefined}
+        onLongPress={onLongPressMap ? (feature: any) => {
+          const coords = feature?.geometry?.coordinates;
+          if (!Array.isArray(coords)) return;
+          const [lng, lat] = coords;
+          if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+          void triggerHaptic('medium');
+          onLongPressMap(lng, lat);
+        } : undefined}
       >
         {/* Camera — fit to bounds, or flyTo accepted driver, or default to
             initialUserCenter (BUG-282) / Havana fallback.
@@ -863,6 +906,19 @@ function RideMapViewInner({
                     animationDuration: 500,
                   }
                 : {})}
+        />
+
+        {/* The rider on their own map. Until now the app drew the rider's
+            position on the DRIVER's map (via useRiderLocationSharing) but
+            never here, so the passenger watched a map they weren't in.
+            Renders nothing when location permission is denied. */}
+        <MapboxGL.LocationPuck
+          visible
+          puckBearing="heading"
+          puckBearingEnabled
+          // Brand orange, not MAP_COLORS.driver: blue is what the vehicles
+          // you're waiting for are painted in. You are not one of them.
+          pulsing={{ isEnabled: true, color: MAP_COLORS.brand, radius: 'accuracy' }}
         />
 
         {/* Driver-to-pickup route (light blue dashed) */}
@@ -1076,6 +1132,16 @@ function RideMapViewInner({
             {/* Vehicle icon (rotates with smoothed heading) */}
             <MapboxGL.ShapeSource
               id="driver-marker-src"
+              onPress={() => {
+                if (!animatedDriver) return;
+                void triggerSelection();
+                cameraRef.current?.setCamera({
+                  centerCoordinate: [animatedDriver.longitude, animatedDriver.latitude],
+                  zoomLevel: 16,
+                  animationDuration: 600,
+                  animationMode: 'flyTo',
+                });
+              }}
               shape={{
                 type: 'Feature',
                 geometry: {
@@ -1125,7 +1191,18 @@ function RideMapViewInner({
             which dominated; 0.5 was too small to spot). */}
         {nearbyGeoJSON && (
           <>
-            <MapboxGL.ShapeSource id="nearby-vehicles" shape={nearbyGeoJSON}>
+            <MapboxGL.ShapeSource
+              id="nearby-vehicles"
+              shape={nearbyGeoJSON}
+              onPress={(e: { features: Array<{ properties?: { id?: unknown } }> }) => {
+                const id = e.features?.[0]?.properties?.id;
+                if (typeof id !== 'string' || !id) return;
+                void triggerSelection();
+                // Tapping the open one closes it, so the bubble isn't a
+                // one-way door on a map with no other dismiss target.
+                setTappedVehicleId((prev) => (prev === id ? null : id));
+              }}
+            >
               <MapboxGL.SymbolLayer
                 id="nearby-icons"
                 style={{
@@ -1154,6 +1231,35 @@ function RideMapViewInner({
               />
             </MapboxGL.ShapeSource>
           </>
+        )}
+
+        {tappedVehicle && (
+          <MapboxGL.MarkerView
+            id="vehicle-callout"
+            coordinate={tappedVehicle.coordinate}
+            anchor={{ x: 0.5, y: 1.6 }}
+          >
+            <Pressable
+              onPress={() => setTappedVehicleId(null)}
+              accessibilityRole="button"
+              accessibilityLabel={t('map.dismiss_callout', { defaultValue: 'Cerrar' })}
+              style={{
+                backgroundColor: isDark ? darkColors.card : '#ffffff',
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8,
+                shadowColor: '#000',
+                shadowOpacity: 0.18,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 4,
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? darkColors.text.primary : colors.neutral[800] }}>
+                {tappedVehicle.label}
+              </Text>
+            </Pressable>
+          </MapboxGL.MarkerView>
         )}
 
         {/* Searching driver avatar markers (Presence-based) */}
