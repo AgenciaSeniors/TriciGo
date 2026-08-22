@@ -782,7 +782,7 @@ function RideMapViewInner({
   }
 
   return (
-    <View style={fullscreen ? { flex: 1 } : { height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map', { defaultValue: 'Ride map' })}>
+    <View style={fullscreen ? { flex: 1 } : { height, borderRadius: 12, overflow: 'hidden' }} accessibilityLabel={t('map.ride_map')}>
       <MapboxGL.MapView
         style={{ flex: 1 }}
         styleURL={MAP_STYLE_LIGHT}
@@ -1002,7 +1002,7 @@ function RideMapViewInner({
                 source={require('../../assets/markers/dropoff-pin.png')}
                 style={{ width: 44, height: 44, tintColor: MAP_COLORS.brand }}
                 resizeMode="contain"
-                accessibilityLabel="Destino"
+                accessibilityLabel={t('map.dropoff_marker')}
               />
             </Animated.View>
           </MapboxGL.MarkerView>

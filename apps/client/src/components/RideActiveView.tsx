@@ -1148,7 +1148,7 @@ export function RideActiveView() {
               <>
                 <ActivityIndicator size="small" color={isDark ? '#FB923C' : '#F97316'} />
                 <Text variant="caption" color="secondary" className="mt-2">
-                  {t('ride.loading_map', { defaultValue: 'Cargando mapa...' })}
+                  {t('ride.loading_map')}
                 </Text>
               </>
             )}

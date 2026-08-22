@@ -195,10 +195,8 @@ export function ConfirmLocationScreen({
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
-          t('ride.location_off_title', { defaultValue: 'Ubicación desactivada' }),
-          t('ride.location_off_body', {
-            defaultValue: 'Activa el permiso de ubicación para centrar el mapa en dónde estás.',
-          }),
+          t('ride.location_off_title'),
+          t('ride.location_off_body'),
         );
         return;
       }
@@ -452,11 +450,7 @@ export function ConfirmLocationScreen({
               tintColor: pinColor,
             }}
             resizeMode="contain"
-            accessibilityLabel={
-              isPickup
-                ? 'Pin de recogida TriciGo'
-                : 'Pin de destino TriciGo'
-            }
+            accessibilityLabel={isPickup ? t('map.pickup_marker') : t('map.dropoff_marker')}
           />
         </View>
       </View>
@@ -515,7 +509,7 @@ export function ConfirmLocationScreen({
             </>
           ) : (
             <Text variant="bodySmall" numberOfLines={2}>
-              {display?.line2 ?? t('ride.move_map', { defaultValue: 'Mueve el mapa para seleccionar' })}
+              {display?.line2 ?? t('ride.move_map')}
             </Text>
           )}
         </View>
@@ -592,7 +586,7 @@ export function ConfirmLocationScreen({
                 fontSize: 16,
               }}
             >
-              {t('ride.confirm_location', { defaultValue: 'Confirmar ubicación' })}
+              {t('ride.confirm_location')}
             </Text>
           )}
         </Pressable>

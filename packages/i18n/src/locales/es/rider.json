@@ -58,6 +58,11 @@
   },
 
   "ride": {
+    "move_map": "Mueve el mapa para seleccionar",
+    "confirm_location": "Confirmar ubicación",
+    "loading_map": "Cargando mapa...",
+    "location_off_title": "Ubicación desactivada",
+    "location_off_body": "Activa el permiso de ubicación para centrar el mapa donde estás.",
     "request": "Solicitar viaje",
     "searching_driver": "Buscando conductor...",
     "search_expired_title": "No encontramos conductor",
@@ -523,6 +528,7 @@
   },
 
   "map": {
+    "ride_map": "Mapa del viaje",
     "unavailable": "Mapa no disponible",
     "pickup_marker": "Recogida",
     "dropoff_marker": "Destino",
