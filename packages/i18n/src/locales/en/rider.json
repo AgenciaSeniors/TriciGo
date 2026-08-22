@@ -535,7 +535,8 @@
     "stop_marker": "Stop {{n}}",
     "driver_marker": "Driver",
     "vehicle_eta": "{{eta}} away",
-    "vehicle_distance": "{{distance}} away"
+    "vehicle_distance": "{{distance}} away",
+    "driver_eta": "Your driver arrives in {{eta}}"
   },
 
   "prediction": {

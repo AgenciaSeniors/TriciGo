@@ -1113,6 +1113,12 @@ export function RideActiveView() {
           driverLocation={driverPosition}
           driverHeading={driverPosition?.heading ?? null}
           driverMarkerOpacity={driverPosState.isCached ? 0.6 : 1}
+          // Only while the driver is still coming to you. Once the trip is
+          // under way you ARE in that vehicle, and a bubble over it saying
+          // "arrives in 12 min" is nonsense — which is why the ETA card
+          // below hides itself in the same states.
+          driverEtaMinutes={tripProgress.isActive ? null : displayEtaMinutes}
+          routeProgress={tripProgress.isActive ? tripProgress.progressPercent / 100 : null}
           routeCoordinates={routeCoordinates}
           driverToPickupRoute={driverToPickupRoute}
           waypointLocations={waypointPoints}

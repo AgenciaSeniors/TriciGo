@@ -535,7 +535,8 @@
     "stop_marker": "Parada {{n}}",
     "driver_marker": "Motorista",
     "vehicle_eta": "a {{eta}} de você",
-    "vehicle_distance": "a {{distance}}"
+    "vehicle_distance": "a {{distance}}",
+    "driver_eta": "Seu motorista chega em {{eta}}"
   },
 
   "prediction": {

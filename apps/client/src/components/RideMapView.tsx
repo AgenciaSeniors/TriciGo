@@ -8,6 +8,7 @@ import { StopMarker } from '@tricigo/ui';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import { getMapboxGL, ensureMapboxToken, toLngLat as toCoord } from '@/lib/mapbox';
+import { useAnimatedVehicles } from '@/hooks/useAnimatedVehicles';
 import { WebMapView } from './WebMapView';
 import { mapLogger } from '@tricigo/utils';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
@@ -93,6 +94,12 @@ interface RideMapViewProps {
   rideStatus?: string | null;
   /** Long-press anywhere on the map. Receives [lng, lat]. */
   onLongPressMap?: (lng: number, lat: number) => void;
+  /** Minutes until the driver arrives, drawn in a bubble on the marker.
+   *  Omit (or pass null) to draw no bubble. */
+  driverEtaMinutes?: number | null;
+  /** How much of the route is behind you, 0-1. Paints that much of the line
+   *  in the progress colour. Omit while there's no trip underway. */
+  routeProgress?: number | null;
 }
 
 // Fallback center: Havana by default, but switchable via EXPO_PUBLIC_DEMO_CITY
@@ -177,6 +184,8 @@ function RideMapViewInner({
   initialUserCenter,
   rideStatus,
   onLongPressMap,
+  driverEtaMinutes,
+  routeProgress,
 }: RideMapViewProps, ref: React.Ref<RideMapViewHandle>) {
   ensureMapboxToken();
   const MapboxGL = getMapboxGL();
@@ -505,27 +514,42 @@ function RideMapViewInner({
     };
   }, [driverToPickupRoute]);
 
+  // The prop arrives in bursts (15 s in production, 1 s in the demo
+  // preview); this turns those jumps into motion.
+  const vehicleTargets = useMemo(
+    () => (nearbyVehicles ?? []).map((v) => ({
+      id: v.driver_profile_id,
+      latitude: v.latitude,
+      longitude: v.longitude,
+      heading: v.heading ?? 0,
+      vehicleType: v.vehicle_type || 'auto',
+    })),
+    [nearbyVehicles],
+  );
+  const animatedVehicles = useAnimatedVehicles(vehicleTargets);
+
   // Build nearby vehicles GeoJSON FeatureCollection
   const nearbyGeoJSON = useMemo(() => {
-    if (!nearbyVehicles || nearbyVehicles.length === 0) return null;
+    if (animatedVehicles.length === 0) return null;
     return {
       type: 'FeatureCollection' as const,
-      features: nearbyVehicles.map((v) => ({
+      features: animatedVehicles.map((v) => ({
         type: 'Feature' as const,
         geometry: {
           type: 'Point' as const,
           coordinates: [v.longitude, v.latitude],
         },
         properties: {
-          id: v.driver_profile_id,
-          icon: `marker-${v.vehicle_type || 'auto'}`,
+          id: v.id,
+          icon: `marker-${v.vehicleType}`,
           // The SymbolLayer below reads ['get','heading'] for iconRotate.
           // Without this property every nearby vehicle rendered facing north.
-          heading: v.heading ?? 0,
+          heading: v.heading,
+          opacity: v.opacity,
         },
       })),
     };
-  }, [nearbyVehicles]);
+  }, [animatedVehicles]);
 
   // The open callout, resolved against the CURRENT vehicle list on every
   // render: it follows the vehicle as it moves and disappears on its own
@@ -533,10 +557,23 @@ function RideMapViewInner({
   // clearing it on every poll, which would have closed the bubble every
   // 15 seconds (every second in the demo preview) whether or not the
   // vehicle had actually gone anywhere.
+  // Gate on the formatted string, not the raw number: Infinity passes a
+  // `> 0` check but formats to null, which would leave an empty pill
+  // floating over the driver.
+  const driverEtaLabel = formatVehicleEtaMinutes(driverEtaMinutes);
+
   const tappedVehicle = useMemo(() => {
     if (!tappedVehicleId || !nearbyVehicles) return null;
     const v = nearbyVehicles.find((n) => n.driver_profile_id === tappedVehicleId);
     if (!v || !Number.isFinite(v.latitude) || !Number.isFinite(v.longitude)) return null;
+    // Two positions on purpose. The bubble is ANCHORED to the interpolated
+    // one so it rides with the icon instead of drifting away from it while
+    // the vehicle slides, but the distance is MEASURED from the reported
+    // one, which is the only position the server actually vouched for.
+    const drawn = animatedVehicles.find((a) => a.id === tappedVehicleId);
+    const anchor: [number, number] = drawn
+      ? [drawn.longitude, drawn.latitude]
+      : [v.longitude, v.latitude];
     // No pickup means no point to measure from, so fall back to how far the
     // vehicle is from the map's own reference point.
     const from = pickupLocation ?? null;
@@ -552,8 +589,8 @@ function RideMapViewInner({
         ? t('map.vehicle_distance', { distance: dist })
         : null;
     if (!label) return null;
-    return { coordinate: [v.longitude, v.latitude] as [number, number], label };
-  }, [tappedVehicleId, nearbyVehicles, pickupLocation, t]);
+    return { coordinate: anchor, label };
+  }, [tappedVehicleId, nearbyVehicles, animatedVehicles, pickupLocation, t]);
 
   // Compute camera bounds (includes searching driver positions)
   // BUG-229: stabilize bounds via primitive lat/lng deps. Object refs
@@ -937,9 +974,14 @@ function RideMapViewInner({
           </MapboxGL.ShapeSource>
         )}
 
-        {/* Route polyline — shadow + main line */}
+        {/* Route polyline — shadow + main line + travelled progress.
+            `lineMetrics` is what makes the progress layer's lineTrimOffset
+            work. Without it the trim is ignored and that layer paints the
+            WHOLE route green — wider and more opaque than the blue line
+            beneath it, so 2% into a trip the rider would see a fully
+            travelled route. The style validator gates on exactly this flag. */}
         {routeGeoJSON && (
-          <MapboxGL.ShapeSource id="route" shape={routeGeoJSON}>
+          <MapboxGL.ShapeSource id="route" lineMetrics shape={routeGeoJSON}>
             <MapboxGL.LineLayer
               id="routeShadow"
               style={{
@@ -962,6 +1004,21 @@ function RideMapViewInner({
                 lineJoin: 'round',
               }}
             />
+            {routeProgress != null && routeProgress > 0 && (
+              <MapboxGL.LineLayer
+                id="routeProgress"
+                style={{
+                  lineColor: ROUTE.progress.color,
+                  lineWidth: ROUTE.progress.width,
+                  lineOpacity: ROUTE.progress.opacity,
+                  // Hide everything ahead of the driver; what stays painted
+                  // is the part already travelled.
+                  lineTrimOffset: [Math.min(1, Math.max(0, routeProgress)), 1],
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+            )}
           </MapboxGL.ShapeSource>
         )}
 
@@ -1186,6 +1243,39 @@ function RideMapViewInner({
           </>
         )}
 
+        {animatedDriver && renderedDriverCoord && driverEtaLabel && (
+          <MapboxGL.MarkerView
+            id="driver-eta-bubble"
+            coordinate={[renderedDriverCoord.longitude, renderedDriverCoord.latitude]}
+            // Anchor stays inside [0,1] — MarkerView console.warns on every
+            // render otherwise, which at this coordinate's ~30 FPS means a
+            // warning per frame for the whole ride. The lift above the
+            // vehicle icon comes from marginBottom instead.
+            anchor={{ x: 0.5, y: 1 }}
+            allowOverlap
+          >
+            <View
+              accessibilityLabel={t('map.driver_eta', { eta: driverEtaLabel })}
+              style={{
+                marginBottom: MARKER.driver.size * 0.7,
+                backgroundColor: isDark ? darkColors.card : '#ffffff',
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 8,
+                shadowColor: '#000',
+                shadowOpacity: 0.18,
+                shadowRadius: 5,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 4,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? darkColors.text.primary : colors.neutral[800] }}>
+                {driverEtaLabel}
+              </Text>
+            </View>
+          </MapboxGL.MarkerView>
+        )}
+
         {/* Nearby vehicles — GPU-rendered SymbolLayer for performance */}
         {/* BUG-218 v2: 0.55 = comfortable size on default zoom (was 0.9
             which dominated; 0.5 was too small to spot). */}
@@ -1194,9 +1284,16 @@ function RideMapViewInner({
             <MapboxGL.ShapeSource
               id="nearby-vehicles"
               shape={nearbyGeoJSON}
-              onPress={(e: { features: Array<{ properties?: { id?: unknown } }> }) => {
-                const id = e.features?.[0]?.properties?.id;
+              onPress={(e: { features: Array<{ properties?: { id?: unknown; opacity?: unknown } }> }) => {
+                const f = e.features?.[0];
+                const id = f?.properties?.id;
                 if (typeof id !== 'string' || !id) return;
+                // A vehicle mid-fade-out is still on screen and still
+                // tappable, but it's already gone from the live list — so
+                // the callout would resolve to nothing. Ignore the tap
+                // rather than buzz and open an empty bubble.
+                const opacity = f?.properties?.opacity;
+                if (typeof opacity === 'number' && opacity < 0.6) return;
                 void triggerSelection();
                 // Tapping the open one closes it, so the bubble isn't a
                 // one-way door on a map with no other dismiss target.
@@ -1208,6 +1305,7 @@ function RideMapViewInner({
                 style={{
                   iconImage: ['get', 'icon'],
                   iconSize: 0.55,
+                  iconOpacity: ['get', 'opacity'],
                   iconAllowOverlap: true,
                   iconAnchor: 'center',
                   // Cargo box marker (mensajería) has no front — keep
@@ -1237,13 +1335,15 @@ function RideMapViewInner({
           <MapboxGL.MarkerView
             id="vehicle-callout"
             coordinate={tappedVehicle.coordinate}
-            anchor={{ x: 0.5, y: 1.6 }}
+            // Inside [0,1] — see the note on the driver bubble above.
+            anchor={{ x: 0.5, y: 1 }}
           >
             <Pressable
               onPress={() => setTappedVehicleId(null)}
               accessibilityRole="button"
               accessibilityLabel={t('map.dismiss_callout', { defaultValue: 'Cerrar' })}
               style={{
+                marginBottom: 20,
                 backgroundColor: isDark ? darkColors.card : '#ffffff',
                 paddingHorizontal: 10,
                 paddingVertical: 6,
