@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { nearbyService, getOnlineStatus } from '@tricigo/api';
 import {
   MAP_STYLE_NAV_NIGHT,
+  MAP_STYLE_LIGHT,
   estimatePackTileCount,
   planEviction,
   shouldReresolve,
@@ -82,7 +83,12 @@ async function ensurePack(region: {
 
   const existing = await MapboxGL.offlineManager.getPack(region.cellKey).catch(() => null);
   if (existing) {
-    if (!packNeedsRefresh(meta[region.cellKey], DRIVER_MAP_STYLE)) {
+    // Every pack this app made before the styleURL field existed was a light
+    // one, so that is what an unrecorded pack holds. The driver draws
+    // navigation-night now, which shares zero tiles with light (see the note
+    // on DRIVER_MAP_STYLE), so those packs are stale and get refreshed —
+    // the same behaviour as before the legacy style became a parameter.
+    if (!packNeedsRefresh(meta[region.cellKey], DRIVER_MAP_STYLE, MAP_STYLE_LIGHT)) {
       meta[region.cellKey] = {
         tiles: meta[region.cellKey]?.tiles ?? 0,
         lastUsedAt: now,

@@ -174,7 +174,23 @@ $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 
 **Levantar los 2 Metros a la vez (cliente 8081 + driver 8082):** limpiar el cache **una sola vez** antes (`Remove-Item ... metro-* / haste-map-*`) y arrancar **sin `--clear`** en ambos — dos `--clear` simultáneos chocan por `metro-cache\<n>` y tiran `EPERM, Permission denied` (uno de los dos Metro muere al boot). Verificado 2026-05-28.
 
-> Nota: `google-services.json` también es gitignored y falta en worktrees frescos, pero su warning (`Could not parse Expo config: android.googleServicesFile`) es **benigno** para el dev client — ese archivo solo se usa en build/prebuild (ya está horneado en el APK), no afecta el bundle JS servido por Metro.
+> Nota: `google-services.json` también es gitignored y falta en worktrees frescos. **CORRECCIÓN (verificado 2026-08-21): NO es benigno para el dev client.** Sin ese archivo, `expo-updates runtimeversion:resolve` falla al parsear el config y **Metro no puede servir el manifest**: el celu pide y Metro responde error (`Could not parse Expo config: android.googleServicesFile`), la app queda en el splash para siempre. Copiarlo junto con el `.env`:
+> ```powershell
+> Copy-Item "$mainpps\client\google-services.json" "$wtpps\client\google-services.json" -Force
+> ```
+
+### El watcher de Metro puede morir en silencio: `Bundled (1 module)` eterno (verificado 2026-08-21)
+
+**Síntoma:** editás archivos, relanzás la app, y los cambios NO llegan — sin error alguno. **La firma inconfundible:** cada rebuild de Metro dice `Bundled ...ms (1 module)`. Un edit real recompila decenas de módulos; "1 module" repetido = el watcher dejó de ver el disco y Metro sirve su snapshot viejo para siempre. Costó ~4 rondas de "probá ahora" fantasma en un worktree bajo `.claude/worktrees/` (Windows, sin Watchman).
+
+**Verificación decisiva (antes de pedirle al usuario que pruebe NADA):** comparar el disco contra lo que Metro SIRVE:
+```bash
+grep -c "<marker-del-cambio>" <archivo-editado>   # disco
+curl -s "http://localhost:8081/node_modules/expo-router/entry.bundle?platform=android&dev=true&minify=false" | grep -c "<marker-del-cambio>"   # servido
+```
+Si disco>0 y servido=0 → watcher muerto. **Fix: matar Metro y relanzarlo** (el arranque re-crawlea el disco; el transform cache hace que el rebuild sea rápido). Regla operativa: tras CADA edit destinado al celu, verificar el bundle servido con el grep — nunca inferir entrega del "éxito" del edit.
+
+**Trampa hermana (parches scripteados):** un script Python que hace `assert s.count(old)==1` pero olvida el `s.replace(...)` reescribe el archivo idéntico e imprime éxito. Blindaje: `s2=s.replace(old,new); assert s2!=s` + `grep` del marker nuevo en el archivo después de cada parche.
 
 #### Lo mismo aplica a `apps/web`, pero el archivo se llama `.env.local` (verificado 2026-07-19)
 

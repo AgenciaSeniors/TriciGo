@@ -4,12 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
 import type { SavedLocation } from '@tricigo/types';
 import { useTranslation } from '@tricigo/i18n';
+import { useTokens } from '@/hooks/useTokens';
+import { PartnerPlacesCarousel } from './PartnerPlacesCarousel';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
 import type { RecentAddress } from '@/services/recentAddresses';
@@ -50,8 +52,28 @@ function SkeletonRows() {
   );
 }
 
+/**
+ * Category quick-searches for the idle sheet. The `term` stays SPANISH no
+ * matter the UI language: `search_pois_smart`'s category detection speaks
+ * Cuban Spanish, and the term is a query, not copy. Labels translate.
+ */
+const SEARCH_CATEGORIES = [
+  { key: 'hospitals', term: 'hospital', icon: 'medkit-outline', tint: '#EF4444' },
+  { key: 'pharmacies', term: 'farmacia', icon: 'bandage-outline', tint: '#10B981' },
+  { key: 'restaurants', term: 'restaurante', icon: 'restaurant-outline', tint: '#FF4D00' },
+  { key: 'hotels', term: 'hotel', icon: 'bed-outline', tint: '#3B82F6' },
+  { key: 'parks', term: 'parque', icon: 'leaf-outline', tint: '#22C55E' },
+  { key: 'terminals', term: 'terminal de ómnibus', icon: 'bus-outline', tint: '#F59E0B' },
+  { key: 'banks', term: 'banco', icon: 'card-outline', tint: '#8B5CF6' },
+  { key: 'cafes', term: 'cafetería', icon: 'cafe-outline', tint: '#A16207' },
+] as const;
+
 interface AddressSearchInputProps {
   placeholder?: string;
+  /** Rider's current position. Drives the proximity-aware "Lugares
+   *  populares" chips; without it the section hides — Havana presets
+   *  hardcoded for someone standing in Santiago were worse than nothing. */
+  near?: GeoPoint | null;
   selectedAddress?: string | null;
   /** 00537: `meta.confirmPin` marks a selection that resolved a STREET ADDRESS
    *  (not a named POI) from any search source — external geocoders mis-pin
@@ -76,6 +98,7 @@ interface AddressSearchInputProps {
 
 function AddressSearchInputInner({
   placeholder,
+  near,
   selectedAddress,
   onSelect,
   savedLocations = [],
@@ -477,6 +500,21 @@ function AddressSearchInputInner({
     sessionTokenRef.current = null;
     onSelect(loc.address, { latitude: loc.latitude, longitude: loc.longitude });
   };
+
+  const tokens = useTokens();
+
+  // Presets worth offering are the ones the rider can actually ride to.
+  // ALL_PRESETS mixes Havana landmarks with province-capital centers; keep
+  // the closest few within 60 km and hide the section entirely elsewhere.
+  const nearbyPresets = useMemo(() => {
+    if (!near || !Number.isFinite(near.latitude) || !Number.isFinite(near.longitude)) return [];
+    return ALL_PRESETS
+      .map((p) => ({ p, d: haversineDistance(near, { latitude: p.latitude, longitude: p.longitude }) }))
+      .filter((x) => x.d < 60_000)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 8)
+      .map((x) => x.p);
+  }, [near]);
 
   const handleSelectPreset = (preset: typeof HAVANA_PRESETS[number]) => {
     triggerSelection();
@@ -1044,27 +1082,94 @@ function AddressSearchInputInner({
               <Text variant="caption" color="tertiary" className="px-1 mb-1" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
                 {t('ride.suggestions', { defaultValue: 'Sugeridos' })}
               </Text>
-              {predictions.slice(0, 3).map((p, i) => (
-                <Pressable
-                  key={`pred-${i}`}
-                  className="flex-row items-center px-3 py-2.5 rounded-lg"
-                  onPress={() => handleSelectMerged({ address: p.address, latitude: p.latitude, longitude: p.longitude, priority: 0, source: 'prediction', icon: 'navigate-outline', distanceKm: null })}
-                >
-                  <Ionicons name={p.reason === 'frequent' ? 'star' : 'navigate-outline'} size={16} color={colors.brand.orange} />
-                  <Text variant="bodySmall" color="primary" className="flex-1 ml-3 font-medium" numberOfLines={1}>{p.address}</Text>
-                </Pressable>
-              ))}
+              {predictions.slice(0, 3).map((p, i) => {
+                // Exhaustive on purpose (repo rule for enum maps): a new
+                // reason from the server must fail tsc here, not silently
+                // render as something it is not.
+                const REASON_META: Record<import('@tricigo/utils').PredictionReason, { icon: string; chip: string }> = {
+                  frequent: { icon: 'star', chip: t('ride.reason_frequent') },
+                  time_pattern: { icon: 'time-outline', chip: t('ride.reason_time') },
+                  recent: { icon: 'navigate-outline', chip: t('ride.reason_recent') },
+                  popular: { icon: 'trending-up-outline', chip: t('ride.reason_popular') },
+                };
+                const meta = REASON_META[p.reason] ?? REASON_META.recent;
+                const [head, ...rest] = p.address.split(', ');
+                return (
+                  <Pressable
+                    key={`pred-${i}`}
+                    className="flex-row items-center px-3 py-2.5 rounded-lg"
+                    onPress={() => handleSelectMerged({ address: p.address, latitude: p.latitude, longitude: p.longitude, priority: 0, source: 'prediction', icon: 'navigate-outline', distanceKm: null })}
+                  >
+                    <Ionicons name={meta.icon as never} size={16} color={colors.brand.orange} />
+                    <View className="flex-1 ml-3">
+                      <Text variant="bodySmall" color="primary" className="font-medium" numberOfLines={1}>{head}</Text>
+                      {rest.length > 0 && (
+                        <Text variant="caption" color="tertiary" numberOfLines={1}>{rest.join(', ')}</Text>
+                      )}
+                    </View>
+                    <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: 'rgba(255,77,0,0.10)' }}>
+                      <Text variant="caption" style={{ fontSize: 10, color: colors.brand.orange, fontWeight: '600' }}>{meta.chip}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
-          {/* Popular places (presets) */}
+          {/* Category quick-searches — unlike history, these always exist.
+              A fresh account saw a nearly empty sheet; these give it a
+              useful, tappable body from the first session. */}
+          <View className="mt-3">
+            <Text variant="caption" color="tertiary" className="px-1 mb-2" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
+              {t('ride.search_categories')}
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {SEARCH_CATEGORIES.map((c) => (
+                <Pressable
+                  key={c.key}
+                  onPress={() => { void triggerSelection(); handleTextChange(c.term); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(`ride.cat_${c.key}`)}
+                  style={({ pressed }) => ({ width: '25%', alignItems: 'center', paddingVertical: 10, opacity: pressed ? 0.6 : 1 })}
+                >
+                  <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: `${c.tint}1A`, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                    <Ionicons name={c.icon as never} size={22} color={c.tint} />
+                  </View>
+                  <Text variant="caption" color="secondary" style={{ fontSize: 11 }} numberOfLines={1}>
+                    {t(`ride.cat_${c.key}`)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* Partner places with fare discounts. The carousel hides itself
+              when nothing is in range (or the table is still empty), so it
+              costs nothing where the program hasn't launched yet. */}
+          <PartnerPlacesCarousel
+            latitude={near?.latitude ?? null}
+            longitude={near?.longitude ?? null}
+            tokens={tokens}
+            onSelect={(pl) => handleSelectMerged({
+              address: [pl.name, pl.address, pl.municipality].filter(Boolean).join(', '),
+              latitude: pl.latitude,
+              longitude: pl.longitude,
+              priority: 0,
+              source: 'recent',
+              icon: 'pricetag-outline',
+              distanceKm: null,
+            })}
+          />
+
+          {/* Popular places — proximity-aware, hidden when nothing is near */}
+          {nearbyPresets.length > 0 && (
           <View className="mt-3">
             <Text variant="caption" color="secondary" className="mb-2 px-1">
               {t('ride.popular_places', { defaultValue: 'Lugares populares' })}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View className="flex-row gap-2">
-                {HAVANA_PRESETS.map((p) => (
+                {nearbyPresets.map((p) => (
                   <Pressable
                     key={p.label}
                     className={`px-3 py-1.5 rounded-full ${
@@ -1085,6 +1190,7 @@ function AddressSearchInputInner({
               </View>
             </ScrollView>
           </View>
+          )}
         </View>
       )}
     </View>

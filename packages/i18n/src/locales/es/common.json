@@ -306,6 +306,8 @@
     "notif_trip_requests": "Solicitudes de viaje",
     "notif_sms": "Alertas por SMS",
     "notif_sms_desc": "Recibe alertas de viaje por SMS cuando no tengas conexion. Puede generar cargos del operador.",
+    "map_detail": "Mapa detallado",
+    "map_detail_desc": "Muestra edificios en 3D. Puede ir más lento en teléfonos modestos.",
     "voice_guidance": "Guia por voz",
     "voice_guidance_desc": "Indicaciones habladas durante la navegacion",
     "max_distance": "Distancia maxima",

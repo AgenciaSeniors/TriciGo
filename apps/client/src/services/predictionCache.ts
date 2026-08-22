@@ -6,7 +6,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { PredictedDestination } from '@tricigo/utils';
 
-const CACHE_KEY = '@tricigo/destination-predictions';
+// v2 (2026-08-21): key bumped to orphan every cached pre-00571 result —
+// the old RPC suggested bare neighbourhoods, and the 24 h TTL would have
+// kept showing them a full day after the server stopped producing them.
+const CACHE_KEY = '@tricigo/destination-predictions-v2';
 
 interface PredictionCacheEntry {
   predictions: PredictedDestination[];

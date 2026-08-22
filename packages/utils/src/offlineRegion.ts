@@ -172,9 +172,22 @@ export function shouldReresolve(
 export function packNeedsRefresh(
   meta: OfflinePackMeta | undefined,
   currentStyleURL: string,
+  legacyStyleURL: string,
 ): boolean {
-  if (!meta) return true;
-  return meta.styleURL !== currentStyleURL;
+  // An unrecorded pack is not evidence of a wrong style. It is either a lost
+  // record — a reinstall, or a metadata write that failed on a full disk —
+  // or a pack from before this field existed. Either way it holds whatever
+  // the app downloaded back then, which only the caller knows, so it passes
+  // that in rather than the helper assuming.
+  //
+  // Both apps pass the light style, and the same rule gives each the answer
+  // it needs: the client still draws light, so its legacy packs are adopted
+  // and no rider pays a re-download over Cuban connectivity; the driver now
+  // draws navigation-night, so its legacy packs — light, i.e. unreadable by
+  // the map it has to feed — are refreshed. Hardcoding either answer breaks
+  // the other app silently.
+  const held = meta?.styleURL ?? legacyStyleURL;
+  return held !== currentStyleURL;
 }
 
 /**

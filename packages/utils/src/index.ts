@@ -118,6 +118,7 @@ export { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_STYLE_NAV_NIGHT, MARKER, ROUTE, GL
 export { estimateVehicleEtaMinutes, formatVehicleEtaMinutes, formatVehicleDistance } from './mapCallout';
 export { stepVehicles } from './animateVehicles';
 export type { VehicleTarget, AnimatedVehicle, VehicleAnimState, StepOptions } from './animateVehicles';
+export { POI_SOURCE_ID, POI_SOURCE_LAYER, POI_LAYER_ID, POI_MAKI_HIDDEN, POI_FALLBACK_ICON, poiFilter, poiIconImage, poiNameFromFeature } from './mapPoiLayer';
 // BUG-295: per-vehicle-type rotation offset for misaligned marker assets.
 export { VEHICLE_MARKER_ROTATION_OFFSET_DEG, vehicleMarkerRotationOffset } from './markers';
 // BUG-296: POI category → visual group mapping (9 restrained groups).

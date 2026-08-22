@@ -8,7 +8,7 @@
 import type { PredictedDestination, PredictionReason } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 
-const KNOWN_REASONS: PredictionReason[] = ['frequent', 'time_pattern', 'recent'];
+const KNOWN_REASONS: PredictionReason[] = ['frequent', 'time_pattern', 'recent', 'popular'];
 
 // The RPC also emits 'popular' for the global-fallback tier; the shared
 // PredictedDestination type only knows the three personal reasons, so map

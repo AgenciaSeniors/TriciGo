@@ -7,6 +7,7 @@ import { ProfileSection } from '@/components/profile/ProfileSection';
 import { ProfileRow } from '@/components/profile/ProfileRow';
 import { useTokens } from '@/hooks/useTokens';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { useMapDetail } from '@/hooks/useMapDetail';
 import {
   registerPushTokenForUser,
   syncNotifPrefsToDevice,
@@ -40,6 +41,7 @@ const PAYMENT_CYCLE: PaymentMethod[] = ['cash', 'tricicoin', 'mixed'];
 
 export default function SettingsScreen() {
   const { t } = useTranslation('common');
+  const { mapDetail, setMapDetail } = useMapDetail();
   const tokens = useTokens();
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
@@ -300,6 +302,18 @@ export default function SettingsScreen() {
                 }
               />
             ))}
+        </ProfileSection>
+
+        {/* Map detail */}
+        <ProfileSection>
+          <ProfileRow
+            icon="business-outline"
+            tint="#FF4D00"
+            label={t('profile.map_detail')}
+            subtitle={t('profile.map_detail_desc')}
+            isLast
+            right={<Switch value={mapDetail} onValueChange={setMapDetail} />}
+          />
         </ProfileSection>
 
         {/* SMS alerts */}
