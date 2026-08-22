@@ -66,6 +66,13 @@ o sea 12 días sin refrescar lugares, fallando en silencio (el aviso de Slack de
 secret `SLACK_WEBHOOK_OPS` que no está configurado). Dos causas independientes, ninguna de ellas de 00571
 (los runs fallidos del 19/20/21-08 son de las 06:37 UTC y el parche se aplicó el 21 a las 19:14):
 
+> **Corrección del alcance (medido el 22/08 con `gh run list --limit 200`):** el delta diario NO llevaba
+> días caído sino **~2 meses**. Está en rojo **todos los días desde el 2026-06-24**, y sus únicos "success"
+> (08-03, 07-20, 07-13, 07-06, 06-29 — casi todos lunes, justo después de que el full semanal adelantara el
+> puntero) son **no-ops**: el log dice `already up to date at seq NNNN` y el script retorna 0 **sin llamar
+> al RPC**. O sea, **el delta nunca aplicó un solo diff desde que se creó** (2026-05-24). Los días en que
+> tuvo trabajo real, falló. Detalle en la tabla de abajo.
+
 1. **Delta diario, todos los días desde ≥19/08.** `apply_osm_delta_batch` asignaba
    `cuba_pois.name_normalized`, que es **GENERATED ALWAYS** → `428C9` → PostgREST lo devuelve como **400** →
    el script muere en `raise_for_status()`. Asignaba la columna en dos sitios (el INSERT y el SET del
@@ -75,15 +82,45 @@ secret `SLACK_WEBHOOK_OPS` que no está configurado). Dos causas independientes,
    patch in-place sobre el cuerpo VIVO (no sobre 00305, que revertiría el candado de 00571 en silencio),
    con las 4 ramas probadas en `BEGIN…ROLLBACK`.
 2. **Full semanal, desde el 17/08.** El paso de Overture aborta con `Could not fetch STAC catalog: HTTP
-   Error 404` (catálogo remoto que ya no resuelve; `overturemaps>=0.13` ya instala la última versión, así
-   que no es un pin viejo — es upstream). Al ser el paso 1 sin `continue-on-error`, los 4 pasos siguientes
-   quedaban `skipped` y no se hacía ningún upsert. → **Fix: el fallo de una fuente degrada en vez de
-   bloquear** (`continue-on-error` + borrado del parcial + aviso en el job summary); el merge sigue con
-   OSM + Foursquare + Wikidata. La descarga de Overture en sí depende de que su catálogo vuelva.
+   Error 404`. Al ser el paso 1 sin `continue-on-error`, los 4 pasos siguientes quedaban `skipped` y no se
+   hacía ningún upsert.
+
+   **El 404 fue TRANSITORIO — no un endpoint muerto ni un pin viejo.** (Rectifica la primera lectura, que
+   decía "catálogo remoto que ya no resuelve"; el error *parece* un pin vencido y no lo es.) Medido:
+   - `https://stac.overturemaps.org/catalog.json` — literalmente `STAC_CATALOG_URL` en
+     `overturemaps/core.py:15`, el **único** sitio que levanta `Could not fetch STAC catalog` — responde
+     **200 en 3 sondas seguidas**, con `"latest": "2026-08-19.0"`.
+   - `overturemaps` instalado fue **1.0.1 en las DOS corridas**: la última exitosa (run `31364944202`,
+     10/08) y la fallida (`32002252161`, 17/08). Misma versión, mismo código ⇒ lo único que cambió fue la
+     respuesta del otro lado. (`1.0.1` se publicó el 30/06: venía andando 6 semanas.)
+
+   ⇒ El defecto real era que **una sola llamada HTTP a un tercero flojo mataba el sync semanal entero**.
+   → **Fix en dos capas:** (a) **reintento con backoff** 3× (30 s, 90 s) — la causa; y (b) **degradación**
+   `continue-on-error` + borrado del parcial + aviso en el job summary — la red de seguridad, para que si el
+   corte dura más que los reintentos el merge siga con OSM + Foursquare + Wikidata. Sin (a), cada blip deja
+   sin refrescar **11.908 de ~19.679 filas activas** (la fuente más grande) durante una semana entera y en
+   silencio.
 
 **Lección (misma familia que la "ceguera de crons" de CLAUDE.md):** un workflow programado que falla no
-avisa a nadie. Los dos llevaban ~2 semanas en rojo y se descubrieron de casualidad. Queda pendiente darles
-una alerta real (el Slack condicionado a un secret ausente no cuenta).
+avisa a nadie. Los dos se descubrieron de casualidad — uno con 2 semanas en rojo, el otro con 2 meses.
+El aviso de Slack estaba **doblemente** muerto: el secret `SLACK_WEBHOOK_OPS` no existe **y** su condición
+`if: always() && env.SLACK_WEBHOOK != ''` leía un `env:` declarado **en el propio paso**, que GitHub monta
+*después* de evaluar el `if:` — así que valía siempre `''` y el paso nunca corría ni con el secret puesto
+(en el run `32002252161` figura `skipped` aunque el job falló).
+
+→ **Fix: [`00574_poi_sync_failure_alerting.sql`](../supabase/migrations/00574_poi_sync_failure_alerting.sql)**,
+dos capas porque cada una tapa un agujero que la otra no ve:
+
+| capa | qué es | qué atrapa | qué NO puede ver |
+|---|---|---|---|
+| `notify_ops_workflow_failure()` | paso `if: failure()` en ambos workflows → email a `business_notification_email` | el run en **rojo** | que el workflow **no corra** (sin run no hay fallo) |
+| `check_poi_sync_freshness()` | cron horario sobre `poi_sync_state.last_sync_at` | que el sync **deje de correr** (deshabilitado, renombrado, schedule apagado) | un fallo puntual dentro del umbral |
+
+Detalles que hacen que funcione: el alerting es **transition-only** (`ok↔stale`, patrón de 00503) → no hace
+spam; el email usa secrets que **ya existen** (`SUPABASE_SERVICE_ROLE` + `NEXT_PUBLIC_SUPABASE_URL`), que es
+justo lo que mató al de Slack; y el early-return `already up to date` de `apply_osm_delta.py` ahora escribe
+**heartbeat**, sin el cual la base no puede distinguir "corrió y no había nada que aplicar" de "dejó de
+correr" — las dos dejaban `last_sync_at` quieto.
 
 ---
 
