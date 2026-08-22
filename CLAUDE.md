@@ -1392,7 +1392,14 @@ Referencia canónica: `apps/client/src/components/AddressSearchInput.tsx`. Mismo
 | **00570** | **Huella de landmarks** — `cuba_pois.footprint_radius_m` + `lookup_nearest_poi_ranked` v3 (PR #976, **aplicada 2026-08-21**) | El pin sobre un landmark-cuadra decía su sub-local: "Rooftop Pool & Bar" (11.6 m) le ganaba al Kempinski (23 m) porque las bandas de 10 m van contra el PUNTO que representa la cuadra. Distancia efectiva `GREATEST(0, cruda − huella)` en gather/bandas/orden/**`distance_m` devuelto**; desempates finales cruda + `p.id` |
 | **00571** | **Limpieza curada de `cuba_pois`** + el sync deja de resucitar filas desactivadas (PR #978, **aplicada 2026-08-21**) | 757 filas activas FUERA de Cuba (Bahamas/Caimán/cruceros), dupes tele-transportados de hoteles famosos ("Kempinski" en Nuevo Vedado a d=0), y el punto del admin "Parque Central" movido al parque real. **Paso 0 obligatorio**: `bulk_upsert_pois`/`apply_osm_delta_batch` forzaban `is_active=TRUE` al re-encontrar la fila upstream — sin ese parche, TODA limpieza no-admin se revertía en el sync semanal |
 
-**Numeración próxima libre:** verificar antes de cada PR nuevo con `git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5` **y también contra los PRs abiertos** (`gh pr view <n> --json files`). Al cierre 2026-08-21 la última en master es **00571** (**00572** reservada por el PR abierto #973, **00569** por #965); próxima libre **00573**.
+**Numeración próxima libre — calculala, no la leas de acá.** El número escrito en este archivo vence en horas: el 2026-08-21 caducó **dos veces el mismo día** (00571 se la llevó un merge, 00573 un PR abierto minutos después de documentarla). Son dos consultas y **hacen falta las dos**:
+
+```bash
+git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5
+for pr in $(gh pr list --state open --json number --jq '.[].number'); do gh pr view $pr --json files --jq '.files[].path' | grep supabase/migrations; done
+```
+
+**El cruce contra PRs abiertos no es un segundo chequeo opcional, es el que decide**, porque un número reservado puede ser un HUECO en master (ver el detalle en § "Pre-flight para elegir número de migración"). Foto del 2026-08-22, asumila vencida: master en **00572**; reservadas **00569** (#965) y **00573** (#981); **00574** anunciada por otra sesión sin PR todavía; próxima libre **00575**.
 
 #### Huella de landmarks — el pin sobre un landmark grande debe decir el landmark (00570, 2026-08-21)
 
@@ -1723,6 +1730,12 @@ El admin app (`apps/admin/`) usa **react-leaflet** para mapas (`live-map`, `flee
 - Preview en cliente: leer el mismo valor con `walletService.getConfigValue(...)` para que el preview coincida con lo que el server aplicará.
 
 **3. Cadena de PRs apilados por capa, rebasados tras el merge del base.** Features que tocan backend+apps se entregan en cadena (PR-1 migración+service+types → PR-2 cliente → PR-3 driver → PR-4 admin), cada branch desde `origin/master`. Cuando los dependientes se ramifican del backend, **tras mergear el backend (squash)**: `git fetch`; por cada dependiente `git rebase --onto origin/master <sha-base-viejo>` (dropea el commit de backend ya squasheado) + `git push --force-with-lease`. Resultado: cada PR queda con su diff limpio de 1 commit. Autorización **explícita per-PR** para cada merge/force-push/apply (MCP guard + classifier).
+
+**Mergear una cadena larga a master (verificado 2026-08-22 con 8 PRs, `#966`→`#973`).** Un PR apilado NO apunta a master: su base es la rama de arriba, así que mergearlo tal cual lo deja dentro de esa rama y **nunca llega a master** — chequear `gh pr view <n> --json baseRefName` antes de prometer que "se mergeó". El bucle por eslabón es: `gh pr edit <n> --base master` → `rebase --onto origin/master <tip-viejo-de-su-base>` → `push --force-with-lease` → esperar CI → merge. Tres cosas que cuestan si se aprenden a los golpes:
+
+- **`git diff master..rama` (DOS puntos) miente sobre lo que un merge haría.** Mide contenido total distinto, así que lista como "borrados" los archivos que master ganó DESPUÉS del punto de bifurcación — en esta sesión pareció que la cadena revertía dos migraciones ya aplicadas en prod, y era falso. El merge es three-way: no toca lo que solo cambió en master. Para ver el aporte real usar **TRES puntos** (`git diff --stat origin/master...rama`), que además tiene que coincidir con el `+X/-Y` que GitHub reporta para ese PR — si no coincide, el rebase se comió o duplicó algo.
+- **El CI no corre al cambiar la base de un PR.** `ci.yml` escucha `pull_request: branches:[master]` y `push: branches:[master]`, y `edit --base` no genera `synchronize` → el PR queda MERGEABLE **sin un solo check**. Ordenar `edit --base master` ANTES del `push --force-with-lease` para que el push lo dispare; si ya se pusheó antes, `gh pr close <n> && gh pr reopen <n>` lo dispara sin reescribir nada.
+- **Un conflicto puede ser semántico y no textual.** Acá dos fixes independientes tocaban `packNeedsRefresh`: master (#974) le sumó `estimatePackTileCount` —que el hook del **driver** consume— y la rama le agregó un parámetro. Conservar ambos exige **actualizar callers que no están en ninguno de los dos lados**. Y el `pnpm check-types` del proyecto que estás mirando NO lo caza: correr el typecheck y los tests **completos** sobre el resultado ya fusionado, no sobre un lado.
 
 ---
 
