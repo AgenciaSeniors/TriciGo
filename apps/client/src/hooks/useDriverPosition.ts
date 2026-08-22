@@ -91,7 +91,6 @@ export function useDriverPositionWithCache(rideId: string | null): DriverPositio
     if (!rideId) return;
 
     const supabase = getSupabaseClient();
-    let cancelled = false;
 
     // BUG-227: polling fallback. The realtime channel for
     // ride_location_events is unstable in some environments (CHANNEL_ERROR
@@ -267,7 +266,6 @@ export function useDriverPositionWithCache(rideId: string | null): DriverPositio
     }, 1_000);
 
     return () => {
-      cancelled = true;
       clearInterval(pollInterval);
     };
   }, [rideId]);

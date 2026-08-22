@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Pressable, Animated, Platform, Image, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -20,28 +19,10 @@ import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
 import { getMapFallbackCoordLngLat, getMapFallbackLatLng } from '@/config/demo';
+import { getMapboxGL, ensureMapboxToken } from '@/lib/mapbox';
+import { useTwoStageUserCenter } from '@/lib/userLocation';
 
-let _MapboxGL: any = undefined;
-function getMapboxGL(): any {
-  if (_MapboxGL !== undefined) return _MapboxGL;
-  try { _MapboxGL = require('@rnmapbox/maps').default; } catch { _MapboxGL = null; }
-  return _MapboxGL;
-}
-
-// Sync token init before MapView mounts (see note in RideMapView)
-let _mapboxTokenApplied = false;
-function ensureMapboxToken() {
-  if (_mapboxTokenApplied || Platform.OS === 'web') return;
-  const M = getMapboxGL();
-  if (!M) return;
-  try {
-    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-    M.setAccessToken(token);
-    // BUG-216: setWellKnownTileServer removed (deprecated, was log noise)
-    if (typeof M.setTelemetryEnabled === 'function') M.setTelemetryEnabled(false);
-    _mapboxTokenApplied = true;
-  } catch { /* retry via _layout */ }
-}
+// Token before any MapView mounts — see the note in lib/mapbox.ts.
 ensureMapboxToken();
 
 // Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
@@ -285,53 +266,9 @@ export function ConfirmLocationScreen({
   const isPickup = mode === 'pickup';
   const pinColor = isPickup ? '#22c55e' : colors.brand.orange;
 
-  // BUG-282 (revised) — two-stage user-location resolution: instant
-  // AsyncStorage cache read, then fresh GPS fix that overrides it.
-  // On first install the cache is empty, so without the GPS stage the
-  // picker would open at the demo-city / Havana fallback even when the
-  // user is somewhere else. Skipped entirely if the caller already
-  // provided a valid initialLocation.
-  const [cachedFallback, setCachedFallback] = useState<[number, number] | null>(null);
-  useEffect(() => {
-    if (initialLocation) return;
-    let cancelled = false;
-
-    // Stage 1 — cache (instant)
-    AsyncStorage.getItem('last_known_location').then((raw) => {
-      if (cancelled || !raw) return;
-      try {
-        const { latitude, longitude } = JSON.parse(raw);
-        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-          setCachedFallback([longitude, latitude]);
-        }
-      } catch { /* malformed */ }
-    }).catch(() => {});
-
-    // Stage 2 — fresh GPS (overrides cache when it resolves)
-    (async () => {
-      try {
-        const perm = await Location.getForegroundPermissionsAsync();
-        if (perm.status !== 'granted' || cancelled) return;
-        let pos = await Location.getLastKnownPositionAsync();
-        if (!pos) {
-          pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-        }
-        if (!pos || cancelled) return;
-        const lng = pos.coords.longitude;
-        const lat = pos.coords.latitude;
-        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-        setCachedFallback([lng, lat]);
-        AsyncStorage.setItem(
-          'last_known_location',
-          JSON.stringify({ latitude: lat, longitude: lng }),
-        ).catch(() => {});
-      } catch { /* silent — fall back to cache or demo fallback */ }
-    })();
-
-    return () => { cancelled = true; };
-  }, [initialLocation]);
+  // BUG-282 (revised) — cache-then-GPS centering, skipped entirely when the
+  // caller already handed us a valid initialLocation.
+  const cachedFallback = useTwoStageUserCenter(!initialLocation);
 
   if (!MapboxGL) {
     return (

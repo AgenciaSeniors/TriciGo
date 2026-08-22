@@ -74,17 +74,7 @@ import { DriverInfoMiniCard } from '@/components/DriverInfoMiniCard';
 import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
 import { WebActiveRideView } from '@/components/WebActiveRideView';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
-
-// Mapbox GL loaded lazily inside components — NOT at module level
-// Module-level require can crash the entire JS context if native module fails
-function getMapboxGL(): any {
-  try {
-    const MapboxGL = require('@rnmapbox/maps').default;
-    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-    if (token) MapboxGL.setAccessToken(token);
-    return MapboxGL;
-  } catch { return null; }
-}
+import { LAST_KNOWN_LOCATION_KEY, readCachedLocation, useTwoStageUserCenter } from '@/lib/userLocation';
 
 // Map fallback; Havana in prod, configurable for demo (see config/demo.ts).
 const MAP_FALLBACK_CENTER: [number, number] = getMapFallbackCoordLngLat();
@@ -1965,16 +1955,9 @@ function IdleView() {
     let cancelled = false;
 
     // Instant fallback: load cached position from AsyncStorage while GPS resolves
-    AsyncStorage.getItem('last_known_location').then((cached) => {
-      if (cached && !cancelled) {
-        try {
-          const { latitude, longitude } = JSON.parse(cached);
-          if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-            setUserCenter([longitude, latitude]);
-          }
-        } catch { /* ignore malformed cache */ }
-      }
-    }).catch(() => {});
+    void readCachedLocation().then((cached) => {
+      if (cached && !cancelled) setUserCenter([cached.longitude, cached.latitude]);
+    });
 
     (async () => {
       try {
@@ -2004,7 +1987,7 @@ function IdleView() {
         const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
 
         // Cache for future cold starts
-        AsyncStorage.setItem('last_known_location', JSON.stringify(loc)).catch(() => {});
+        AsyncStorage.setItem(LAST_KNOWN_LOCATION_KEY, JSON.stringify(loc)).catch(() => {});
 
         // Center map immediately even before geocoding finishes
         if (!cancelled) setUserCenter([pos.coords.longitude, pos.coords.latitude]);
@@ -3062,52 +3045,8 @@ function SelectingView({ setMapPickerMode }: { setMapPickerMode: (mode: 'pickup'
   // would leave the map stuck at the demo fallback (São Paulo) even
   // when the user is somewhere else (e.g. Foz do Iguaçu). The Camera's
   // `key` prop in RideMapView remounts cleanly on each update.
-  const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-
-    // Stage 1: instant read from cache (no GPS hardware wait)
-    AsyncStorage.getItem('last_known_location').then((cached) => {
-      if (cancelled || !cached) return;
-      try {
-        const { latitude, longitude } = JSON.parse(cached);
-        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-          setUserCenter([longitude, latitude]);
-        }
-      } catch { /* malformed */ }
-    }).catch(() => {});
-
-    // Stage 2: fresh GPS — gives the truth even on first install or
-    // after the user moved cities. Permission was already requested
-    // in IdleView; we only call the position APIs (no permission UI
-    // re-prompt here).
-    (async () => {
-      try {
-        const perm = await Location.getForegroundPermissionsAsync();
-        if (perm.status !== 'granted' || cancelled) return;
-        // Cheapest first: last known native fix (instant if any app
-        // touched GPS recently). Then fall back to a fresh fix.
-        let pos = await Location.getLastKnownPositionAsync();
-        if (!pos) {
-          pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-        }
-        if (!pos || cancelled) return;
-        const lng = pos.coords.longitude;
-        const lat = pos.coords.latitude;
-        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-        setUserCenter([lng, lat]);
-        // Refresh cache so any sibling/subsequent view also benefits.
-        AsyncStorage.setItem(
-          'last_known_location',
-          JSON.stringify({ latitude: lat, longitude: lng }),
-        ).catch(() => {});
-      } catch { /* silently fall back to cache */ }
-    })();
-
-    return () => { cancelled = true; };
-  }, []);
+  // Permission was already requested in IdleView, so this only reads it.
+  const userCenter = useTwoStageUserCenter(true);
   const { t, i18n } = useTranslation('rider');
   const user = useAuthStore((s) => s.user);
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);

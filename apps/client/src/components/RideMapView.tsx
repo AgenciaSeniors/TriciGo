@@ -6,37 +6,13 @@ import { useTranslation } from '@tricigo/i18n';
 import { MAP_STYLE_LIGHT, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading } from '@tricigo/utils';
 import { StopMarker } from '@tricigo/ui';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
-import { useAnimatedPosition } from '@/hooks/useAnimatedPosition';
+import { getMapboxGL, ensureMapboxToken, toLngLat as toCoord } from '@/lib/mapbox';
 import { WebMapView } from './WebMapView';
 import { mapLogger } from '@tricigo/utils';
 import { SearchingDriverMarkers } from './SearchingDriverMarkers';
 import type { SearchingDriverPresence } from '@tricigo/types';
 
-let _MapboxGL: any = undefined;
-function getMapboxGL(): any {
-  if (_MapboxGL !== undefined) return _MapboxGL;
-  try { _MapboxGL = require('@rnmapbox/maps').default; } catch { _MapboxGL = null; }
-  return _MapboxGL;
-}
-
-// Ensure Mapbox access token is set synchronously before any MapView
-// mounts. Guards against the _layout race where token gets applied too
-// late on cold start.
-let _mapboxTokenApplied = false;
-function ensureMapboxToken() {
-  if (_mapboxTokenApplied || Platform.OS === 'web') return;
-  const M = getMapboxGL();
-  if (!M) return;
-  try {
-    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-    M.setAccessToken(token);
-    // BUG-216: setWellKnownTileServer removed (deprecated, was log noise)
-    if (typeof M.setTelemetryEnabled === 'function') M.setTelemetryEnabled(false);
-    _mapboxTokenApplied = true;
-  } catch {
-    // _layout useEffect retry will pick it up
-  }
-}
+// Token before any MapView mounts — see the note in lib/mapbox.ts.
 ensureMapboxToken();
 
 // Vehicle marker images (top-down view)
@@ -84,10 +60,6 @@ interface RideMapViewProps {
   nearbyVehicles?: NearbyVehicleMarker[];
   /** Opacity for the driver marker (0-1). Use < 1 when showing cached position. */
   driverMarkerOpacity?: number;
-  /** Callback when pickup pin is dragged to a new location */
-  onPickupDrag?: (location: GeoPoint) => void;
-  /** Callback when dropoff pin is dragged to a new location */
-  onDropoffDrag?: (location: GeoPoint) => void;
   /** Drivers currently reviewing the ride request (searching phase) */
   searchingDrivers?: SearchingDriverPresence[];
   /** Highlight a specific driver (e.g. the one who accepted) */
@@ -155,13 +127,6 @@ function computeBounds(coords: [number, number][]): {
   return { ne: [maxLng, maxLat], sw: [minLng, minLat] };
 }
 
-/** Convert GeoPoint to Mapbox [lng, lat] with validation */
-function toCoord(p: GeoPoint): [number, number] {
-  const lng = Number.isFinite(p?.longitude) ? p.longitude : HAVANA_CENTER[0];
-  const lat = Number.isFinite(p?.latitude) ? p.latitude : HAVANA_CENTER[1];
-  return [lng, lat];
-}
-
 /** Midpoint between two Mapbox [lng, lat] coords. Used for the `accepted`
  *  camera state where we want to frame both the rider's pickup and the
  *  driver's current position at the same time. */
@@ -191,8 +156,6 @@ function RideMapViewInner({
   waypointStatuses,
   nearbyVehicles,
   driverMarkerOpacity = 1,
-  onPickupDrag,
-  onDropoffDrag,
   searchingDrivers,
   acceptedDriverId,
   isAcceptAnimating,
@@ -904,13 +867,6 @@ function RideMapViewInner({
           <MapboxGL.PointAnnotation
             id="pickup"
             coordinate={toCoord(pickupLocation)}
-            draggable={!!onPickupDrag}
-            onDragEnd={(e: any) => {
-              if (onPickupDrag && e?.geometry?.coordinates) {
-                const [lng, lat] = e.geometry.coordinates;
-                onPickupDrag({ latitude: lat, longitude: lng });
-              }
-            }}
           >
             <View style={{ width: MARKER.driver.ringSize, height: MARKER.driver.ringSize, alignItems: 'center', justifyContent: 'center' }}>
               {/* Pulsing ring */}
@@ -968,13 +924,10 @@ function RideMapViewInner({
          *  trick as the driver MarkerView), so position updates land
          *  reliably on Android.
          *
-         *  Trade-off: MarkerView doesn't support `draggable` the way
-         *  PointAnnotation does. Drag-to-correct-dropoff lives on the
+         *  Neither pin is draggable: correcting a pin lives on the
          *  ConfirmLocation flow, where the user moves the map under a
-         *  static pin instead — this view is the route-preview / vehicle
-         *  picker, where the dropoff is already committed and shouldn't
-         *  be dragged anyway. `onDropoffDrag` is therefore intentionally
-         *  not wired up here. */}
+         *  static pin. This view is the route-preview / vehicle picker,
+         *  where both points are already committed. */}
         {dropoffLocation &&
           Number.isFinite(dropoffLocation.latitude) &&
           Number.isFinite(dropoffLocation.longitude) && (

@@ -31,6 +31,7 @@ import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { colors } from '@tricigo/theme';
 import { getSupabaseClient } from '@tricigo/api';
 import { initSentry, Sentry } from '@/lib/sentry';
+import { ensureMapboxToken } from '@/lib/mapbox';
 import Toast from 'react-native-toast-message';
 import { registerSoundAssets, setupRuntimeLogging } from '@tricigo/utils';
 import { useDynamicOfflineMap } from '@/hooks/useDynamicOfflineMap';
@@ -82,22 +83,7 @@ if (Platform.OS !== 'web') {
 // release builds sometimes lose the race between the module side-effect
 // and native MapView mounting, so the useEffect guarantees the token is
 // set before any map tries to render.
-function initMapbox() {
-  if (Platform.OS === 'web') return;
-  try {
-    const MapboxGL = require('@rnmapbox/maps').default;
-    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-    MapboxGL.setAccessToken(token);
-    // BUG-216: setWellKnownTileServer removed (deprecated in newer
-    // @rnmapbox/maps; tile server auto-detected from access token).
-    if (typeof MapboxGL.setTelemetryEnabled === 'function') {
-      MapboxGL.setTelemetryEnabled(false);
-    }
-  } catch {
-    // Mapbox will fail on map screens but app won't crash on startup
-  }
-}
-initMapbox();
+ensureMapboxToken(true);
 
 function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -114,9 +100,9 @@ function RootNavigator() {
   }, [resolvedScheme, setColorScheme]);
 
   // Re-initialize Mapbox after React mounts — belt + suspenders with
-  // the module-level initMapbox() above.
+  // the module-level call above.
   useEffect(() => {
-    initMapbox();
+    ensureMapboxToken(true);
   }, []);
 
   // Supabase RN token lifecycle (realtime CHANNEL_ERROR hardening). On React
