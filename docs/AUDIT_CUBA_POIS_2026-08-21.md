@@ -13,8 +13,15 @@ des-etiquetan su entorno. **Entregable:** migración [`00571_cuba_pois_garbage_c
 > latinoamericano')` → el Cerro con `name_exact`; `('kempinski')` → solo el admin de la Manzana + el resort
 > real de Cayo Guillermo. Nota operativa: el timeout del cliente MCP durante el apply NO cancela la query —
 > el primer intento siguió corriendo server-side (~5 min por la clase A) y comiteó completo; el reintento
-> quedó esperando el lock y terminó como no-op idempotente (por diseño). **Pendiente:** chequeo post-sync del
-> lunes 25/08 (paso 5 del runbook).
+> quedó esperando el lock y terminó como no-op idempotente (por diseño).
+>
+> **CERRADO el 2026-08-22 — el candado está probado, sin esperar al sync.** `bulk_upsert_pois` corrido en
+> prod dentro de `BEGIN…ROLLBACK` con un payload que matchea por `source_ids.ovt` la fila 195801 (una de las
+> desactivadas): **`synced_at` avanzó y `is_active` siguió FALSE** — refresca sin resucitar, que es
+> exactamente la semántica buscada. Estado: 19.679 activas (= 20.493 − 814 exacto), 0 filas curadas
+> re-activadas, `updated_at` máximo = el instante del apply, un solo asiento en `schema_migrations`.
+> (Corrección: el paso 5 decía "lunes 25/08"; el 21/08 fue **viernes**, o sea lunes **24/08**. Da igual: ese
+> chequeo habría dado un **falso verde**, porque los dos syncs están caídos — ver el aviso de abajo.)
 
 > **Contexto de 00570:** se mergeó Y se aplicó a prod el mismo día de esta auditoría (sesión paralela).
 > 00570 NO hizo limpieza alguna — sus únicos UPDATEs siembran `footprint_radius_m` en 6 filas admin
@@ -51,6 +58,32 @@ admin lo reactive (caso raro; preferible a perder la limpieza cada lunes).
 
 Nota: la desactivación por antigüedad que promete el docstring del script ("not seen in this run AND older
 than 60 days → is_active=false") **no está implementada** en ningún RPC — nada desactiva filas stale hoy.
+
+### Addendum 2026-08-22: los dos syncs estaban CAÍDOS (preexistente) — arreglados en 00573 + workflow
+
+Al ir a verificar el candado se descubrió que **ningún sync corría desde el 2026-08-10** (`max(synced_at)`),
+o sea 12 días sin refrescar lugares, fallando en silencio (el aviso de Slack de ambos workflows cuelga de un
+secret `SLACK_WEBHOOK_OPS` que no está configurado). Dos causas independientes, ninguna de ellas de 00571
+(los runs fallidos del 19/20/21-08 son de las 06:37 UTC y el parche se aplicó el 21 a las 19:14):
+
+1. **Delta diario, todos los días desde ≥19/08.** `apply_osm_delta_batch` asignaba
+   `cuba_pois.name_normalized`, que es **GENERATED ALWAYS** → `428C9` → PostgREST lo devuelve como **400** →
+   el script muere en `raise_for_status()`. Asignaba la columna en dos sitios (el INSERT y el SET del
+   UPDATE) y, como el INSERT corre primero, **todo evento CREATE/MODIFY fallaba**; solo la rama DELETE
+   sobrevivía. `import_search_poi` ya llevaba el arreglo equivalente; a este RPC se le había pasado.
+   → **Fix: [`00573_apply_osm_delta_generated_column_fix.sql`](../supabase/migrations/00573_apply_osm_delta_generated_column_fix.sql)**,
+   patch in-place sobre el cuerpo VIVO (no sobre 00305, que revertiría el candado de 00571 en silencio),
+   con las 4 ramas probadas en `BEGIN…ROLLBACK`.
+2. **Full semanal, desde el 17/08.** El paso de Overture aborta con `Could not fetch STAC catalog: HTTP
+   Error 404` (catálogo remoto que ya no resuelve; `overturemaps>=0.13` ya instala la última versión, así
+   que no es un pin viejo — es upstream). Al ser el paso 1 sin `continue-on-error`, los 4 pasos siguientes
+   quedaban `skipped` y no se hacía ningún upsert. → **Fix: el fallo de una fuente degrada en vez de
+   bloquear** (`continue-on-error` + borrado del parcial + aviso en el job summary); el merge sigue con
+   OSM + Foursquare + Wikidata. La descarga de Overture en sí depende de que su catálogo vuelva.
+
+**Lección (misma familia que la "ceguera de crons" de CLAUDE.md):** un workflow programado que falla no
+avisa a nadie. Los dos llevaban ~2 semanas en rojo y se descubrieron de casualidad. Queda pendiente darles
+una alerta real (el Slack condicionado a un secret ausente no cuenta).
 
 ---
 
@@ -218,8 +251,11 @@ captación de ningún pin de la suite — verificado por coordenadas — así qu
    (~3 min) — opcional re-correrla en frío.
 4. ✅ Smoke de búsqueda: 'estadio latinoamericano' → el Cerro (`name_exact`); 'kempinski' → solo el admin
    de la Manzana + el resort real de Cayo Guillermo.
-5. ⏳ El lunes 25/08 (post-sync semanal), verificar que el sync NO re-activó nada:
-   `SELECT count(*) FROM cuba_pois WHERE is_active AND id IN (211827, 202022, 194312);` → 0.
+5. ✅ **Reemplazado y cumplido el 2026-08-22.** El chequeo "esperar al lunes" habría dado un falso verde
+   (ambos syncs estaban caídos, ver addendum). Se probó el candado directamente: `bulk_upsert_pois` en
+   `BEGIN…ROLLBACK` contra la fila 195801 desactivada → refrescó `synced_at` y dejó `is_active=false`.
+   Sigue valiendo re-correrlo tras el **primer sync exitoso** post-00573:
+   `SELECT count(*) FROM cuba_pois WHERE is_active AND id IN (211827, 202022, 194312, 195801, 22736);` → 0.
 
 ## Recomendaciones (fuera del alcance de 00571, no accionadas)
 

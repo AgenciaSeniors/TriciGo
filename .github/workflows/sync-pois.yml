@@ -67,18 +67,41 @@ jobs:
           echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
           echo "fsq_release=$FSQ_RELEASE" >> "$GITHUB_OUTPUT"
           echo "Bbox: $BBOX  |  Dry run: $DRY_RUN  |  FSQ release: $FSQ_RELEASE"
+          # El directorio se crea acá (paso que siempre corre) y no dentro del
+          # primer download: si esa fuente cae, los pasos siguientes igual
+          # necesitan /tmp/sync para escribir.
+          mkdir -p /tmp/sync
 
       # ─────────── Step 1: Download Overture Places ───────────
+      # 2026-08-22: una fuente caída NO puede volver a tumbar el sync entero.
+      # Este paso venía fallando desde el 17/08 con
+      #   Exception: Could not fetch STAC catalog: HTTP Error 404: Not Found
+      # (el catálogo remoto de Overture al que apunta el CLI ya no resuelve;
+      # `overturemaps>=0.13` en requirements.txt ya instala la última versión,
+      # así que no es un pin viejo — es upstream). Al ser el paso 1 sin
+      # continue-on-error, los 4 pasos siguientes quedaban `skipped` y NO se
+      # hacía ningún upsert: los POIs llevaban 12 días sin refrescarse.
+      # Ahora la caída degrada en vez de bloquear — el merge sigue con OSM +
+      # Foursquare + Wikidata, y `load_overture` saltea el archivo ausente.
       - name: Download Overture Places (bbox-filtered)
+        id: overture
+        continue-on-error: true
         run: |
-          mkdir -p /tmp/sync
-          overturemaps download \
-            --bbox=${{ steps.cfg.outputs.bbox }} \
-            -t place \
-            -f geojson \
-            -o /tmp/sync/overture.geojson
-          ls -lah /tmp/sync/overture.geojson
-          echo "Overture features: $(jq '.features | length' /tmp/sync/overture.geojson)"
+          set -o pipefail
+          if overturemaps download \
+               --bbox=${{ steps.cfg.outputs.bbox }} \
+               -t place \
+               -f geojson \
+               -o /tmp/sync/overture.geojson; then
+            ls -lah /tmp/sync/overture.geojson
+            echo "Overture features: $(jq '.features | length' /tmp/sync/overture.geojson)"
+          else
+            # Borrar el parcial: un GeoJSON truncado haría reventar json.load()
+            # en load_overture, que sí tolera el archivo AUSENTE.
+            rm -f /tmp/sync/overture.geojson
+            echo "::warning::Overture download failed (upstream STAC catalog). Sync continues with OSM + Foursquare + Wikidata; Overture rows just won't be refreshed this run."
+            exit 1
+          fi
 
       # ─────────── Step 2: Download Foursquare OS Places ───────────
       - name: Download Foursquare OS Places (bbox-filtered)
@@ -200,9 +223,14 @@ jobs:
           {
             echo "## POI sync ${{ job.status }}"
             echo ""
+            if [ "${{ steps.overture.outcome }}" != "success" ]; then
+              echo "> ⚠️ **Overture degradado** (\`${{ steps.overture.outcome }}\`): las filas de esa fuente no se refrescaron en esta corrida."
+              echo ""
+            fi
             echo "- **Bbox**: \`${{ steps.cfg.outputs.bbox }}\`"
             echo "- **Dry run**: ${{ steps.cfg.outputs.dry_run }}"
             echo "- **FSQ release**: ${{ steps.cfg.outputs.fsq_release }}"
+            echo "- **Overture**: ${{ steps.overture.outcome }}"
             echo "- **Inserted**: ${{ steps.upsert.outputs.inserted || 'n/a' }}"
             echo "- **Updated**: ${{ steps.upsert.outputs.updated || 'n/a' }}"
             echo "- **Skipped (admin-locked)**: ${{ steps.upsert.outputs.skipped_admin || 'n/a' }}"
