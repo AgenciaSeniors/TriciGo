@@ -282,7 +282,22 @@ def main() -> int:
         return 0
 
     if remote_seq <= last_seq:
+        # Latido. Este early-return es el "success" más común de este workflow
+        # y hasta 2026-08-22 NO escribía estado: entre "corrió y no había nada
+        # que aplicar" (sano) y "el workflow dejó de correr" (roto) la base veía
+        # exactamente lo mismo — un last_sync_at que no se movía. Escribir acá
+        # convierte poi_sync_state en un heartbeat honesto y es lo que le da
+        # sentido al umbral de check_poi_sync_freshness() (00574).
+        # Es un upsert idempotente con la MISMA secuencia: solo refresca los
+        # timestamps, no avanza el puntero ni re-aplica nada.
         print(f"[delta] already up to date at seq {last_seq}", flush=True)
+        if not DRY_RUN:
+            rpc("poi_sync_state_set", {
+                "p_region": REGION,
+                "p_sequence": last_seq,
+                "p_kind": "delta",
+                "p_stats": {"heartbeat": True, "diffs_applied": 0},
+            })
         return 0
 
     # 3. Walk sequences from last_seq+1 to remote_seq, applying each diff

@@ -39,6 +39,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    # A nivel JOB a propósito: el `if:` de un paso NO puede leer el `env:` de
+    # ese mismo paso (GitHub lo evalúa antes de montarlo). Declarado acá, el
+    # `if: env.SLACK_WEBHOOK != ''` del paso de Slack por fin funciona. Hoy el
+    # secret no existe, así que ese paso se saltea — pero ahora se saltea por
+    # el motivo correcto, y basta con crear el secret para encenderlo.
+    env:
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -73,35 +81,62 @@ jobs:
           mkdir -p /tmp/sync
 
       # ─────────── Step 1: Download Overture Places ───────────
-      # 2026-08-22: una fuente caída NO puede volver a tumbar el sync entero.
-      # Este paso venía fallando desde el 17/08 con
+      # 2026-08-22. Este paso venía fallando desde el 17/08 con
       #   Exception: Could not fetch STAC catalog: HTTP Error 404: Not Found
-      # (el catálogo remoto de Overture al que apunta el CLI ya no resuelve;
-      # `overturemaps>=0.13` en requirements.txt ya instala la última versión,
-      # así que no es un pin viejo — es upstream). Al ser el paso 1 sin
-      # continue-on-error, los 4 pasos siguientes quedaban `skipped` y NO se
-      # hacía ningún upsert: los POIs llevaban 12 días sin refrescarse.
-      # Ahora la caída degrada en vez de bloquear — el merge sigue con OSM +
-      # Foursquare + Wikidata, y `load_overture` saltea el archivo ausente.
+      # y, al ser el paso 1 sin continue-on-error, dejaba los 4 siguientes en
+      # `skipped`: NINGÚN upsert, POIs 12 días sin refrescar. Dos arreglos que
+      # atacan cosas distintas — reintento (la causa) y degradación (la red):
+      #
+      # 1) REINTENTO. El 404 fue TRANSITORIO, no un endpoint muerto ni un pin
+      #    viejo. Medido el 22/08 desde este repo:
+      #      · https://stac.overturemaps.org/catalog.json — que es literalmente
+      #        STAC_CATALOG_URL en overturemaps/core.py:15, el único sitio que
+      #        levanta "Could not fetch STAC catalog" — responde 200 en 3 sondas
+      #        seguidas, con "latest": "2026-08-19.0".
+      #      · `overturemaps` instalado fue 1.0.1 en LAS DOS corridas: la última
+      #        exitosa (run 31364944202, 10/08) y la fallida (32002252161,
+      #        17/08). Misma versión, mismo código → lo único que cambió fue la
+      #        respuesta del otro lado.
+      #    O sea: el defecto real era que UNA sola llamada HTTP a un tercero
+      #    flojo mataba el sync semanal entero. Con backoff, el run del 17/08
+      #    probablemente habría pasado de largo.
+      #
+      # 2) DEGRADACIÓN (red de seguridad, por si el corte dura más que los
+      #    reintentos): `continue-on-error` + borrado del parcial. El merge
+      #    sigue con OSM + Foursquare + Wikidata y `load_overture` saltea el
+      #    archivo AUSENTE — pero reventaría con uno truncado, de ahí el `rm`.
+      #    No desactiva nada: ningún RPC del sync borra filas por antigüedad,
+      #    así que las ~11.9k filas de Overture solo quedan sin refrescar.
       - name: Download Overture Places (bbox-filtered)
         id: overture
         continue-on-error: true
+        env:
+          ATTEMPTS: '3'
         run: |
           set -o pipefail
-          if overturemaps download \
-               --bbox=${{ steps.cfg.outputs.bbox }} \
-               -t place \
-               -f geojson \
-               -o /tmp/sync/overture.geojson; then
-            ls -lah /tmp/sync/overture.geojson
-            echo "Overture features: $(jq '.features | length' /tmp/sync/overture.geojson)"
-          else
-            # Borrar el parcial: un GeoJSON truncado haría reventar json.load()
-            # en load_overture, que sí tolera el archivo AUSENTE.
+          delay=30
+          for attempt in $(seq 1 "$ATTEMPTS"); do
+            echo "--- Overture download, intento $attempt/$ATTEMPTS ---"
+            if overturemaps download \
+                 --bbox=${{ steps.cfg.outputs.bbox }} \
+                 -t place \
+                 -f geojson \
+                 -o /tmp/sync/overture.geojson; then
+              ls -lah /tmp/sync/overture.geojson
+              echo "Overture features: $(jq '.features | length' /tmp/sync/overture.geojson)"
+              exit 0
+            fi
+            # Borrar el parcial ANTES de reintentar: un GeoJSON truncado haría
+            # reventar json.load() en load_overture, que sí tolera el ausente.
             rm -f /tmp/sync/overture.geojson
-            echo "::warning::Overture download failed (upstream STAC catalog). Sync continues with OSM + Foursquare + Wikidata; Overture rows just won't be refreshed this run."
-            exit 1
-          fi
+            if [ "$attempt" -lt "$ATTEMPTS" ]; then
+              echo "Falló; reintento en ${delay}s"
+              sleep "$delay"
+              delay=$((delay * 3))
+            fi
+          done
+          echo "::warning::Overture download failed after $ATTEMPTS attempts (upstream STAC catalog). Sync continues with OSM + Foursquare + Wikidata; Overture rows just won't be refreshed this run."
+          exit 1
 
       # ─────────── Step 2: Download Foursquare OS Places ───────────
       - name: Download Foursquare OS Places (bbox-filtered)
@@ -237,10 +272,38 @@ jobs:
             echo "- **Total merged**: ${{ steps.upsert.outputs.total || 'n/a' }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Aviso REAL de fallo (00574). Esto es lo que faltaba: el workflow llevaba
+      # dos semanas en rojo y no avisó a nadie. Va por email a
+      # platform_config.business_notification_email vía la Edge Function
+      # send-email, usando secrets que YA existen — sin secret nuevo, que es
+      # exactamente lo que dejó muerto al aviso de Slack de abajo.
+      - name: Alert ops on failure
+        if: failure()
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          DETAIL="overture=${{ steps.overture.outcome }} upsert=${{ steps.upsert.outcome }} bbox=${{ steps.cfg.outputs.bbox }}"
+          # `|| true`: fallar al avisar no debe agregar un segundo fallo rojo
+          # encima del que estamos reportando.
+          curl -sS -X POST \
+            -H "apikey: $SUPABASE_SERVICE_ROLE" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg w 'sync-pois.yml (POI sync semanal)' --arg u "$RUN_URL" --arg d "$DETAIL" \
+                  '{p_workflow:$w, p_run_url:$u, p_detail:$d}')" \
+            "${SUPABASE_URL}/rest/v1/rpc/notify_ops_workflow_failure" \
+            || echo "::warning::notify_ops_workflow_failure RPC call failed"
+
+      # Slack queda como extra opcional. Ojo con el `if:`: SLACK_WEBHOOK se
+      # declara a nivel JOB, no del paso — GitHub evalúa el `if:` de un paso
+      # ANTES de montar el `env:` de ese mismo paso, así que la versión previa
+      # (`env.SLACK_WEBHOOK` definido en el propio paso) valía siempre '' y el
+      # paso NUNCA corría, ni con el secret puesto. Verificado: en el run
+      # 32002252161 figura `skipped` aunque el job entero falló.
       - name: Slack notify (success or failure)
         if: always() && env.SLACK_WEBHOOK != ''
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
         run: |
           STATUS_EMOJI=":white_check_mark:"
           if [ "${{ job.status }}" != "success" ]; then STATUS_EMOJI=":x:"; fi

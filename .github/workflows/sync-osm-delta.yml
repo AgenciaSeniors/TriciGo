@@ -36,6 +36,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # A nivel JOB a propósito: el `if:` de un paso NO puede leer el `env:` de
+    # ese mismo paso (GitHub lo evalúa antes de montarlo). Declarado acá, el
+    # `if: env.SLACK_WEBHOOK != ''` del paso de Slack por fin funciona. Hoy el
+    # secret no existe, así que ese paso se saltea — pero ahora se saltea por
+    # el motivo correcto, y basta con crear el secret para encenderlo.
+    env:
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -72,10 +80,35 @@ jobs:
             echo "- **New sequence**: ${{ steps.apply.outputs.new_sequence || 'n/a' }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Aviso REAL de fallo (00574). Este workflow estuvo en rojo TODOS los días
+      # desde el 2026-06-24 sin avisarle a nadie: sus únicos "success" eran
+      # no-ops (`already up to date at seq NNNN`, retorna 0 sin llamar al RPC).
+      # Va por email a platform_config.business_notification_email usando
+      # secrets que YA existen — sin secret nuevo, que es exactamente lo que
+      # dejó muerto al aviso de Slack de abajo.
+      - name: Alert ops on failure
+        if: failure()
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          DETAIL="apply=${{ steps.apply.outcome }} diffs=${{ steps.apply.outputs.diffs_applied || '0' }} new_seq=${{ steps.apply.outputs.new_sequence || 'n/a' }}"
+          # `|| true` implícito vía el echo: fallar al avisar no debe agregar un
+          # segundo fallo rojo encima del que estamos reportando.
+          curl -sS -X POST \
+            -H "apikey: $SUPABASE_SERVICE_ROLE" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg w 'sync-osm-delta.yml (delta OSM diario)' --arg u "$RUN_URL" --arg d "$DETAIL" \
+                  '{p_workflow:$w, p_run_url:$u, p_detail:$d}')" \
+            "${SUPABASE_URL}/rest/v1/rpc/notify_ops_workflow_failure" \
+            || echo "::warning::notify_ops_workflow_failure RPC call failed"
+
+      # Slack queda como extra opcional. Ver la nota del `env:` a nivel job:
+      # antes este `if:` leía un env del propio paso y por eso NUNCA corría.
       - name: Slack notify (only on significant changes or failure)
         if: always() && env.SLACK_WEBHOOK != ''
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
         run: |
           INS=${{ steps.apply.outputs.inserted || '0' }}
           UPD=${{ steps.apply.outputs.updated || '0' }}
