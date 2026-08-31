@@ -2373,6 +2373,45 @@ Dos veces en una sesión la verificación fue **real pero sobre la superficie eq
 
 **Métrica de verificación** (línea base ~2,1/conductor/día): `audit_log` con `table_name='driver_profiles'`, `changed_by IS NULL` = lo hizo el cron ⇒ desconexión forzada; con uuid = el conductor tocó el switch.
 
+### La base colapsó por dos tablas de historial sin retención (verificado 2026-08-31, migs 00576/00577)
+
+**El dueño tuvo que reiniciar la base porque colapsó.** Los logs de Postgres retienen 24 h y el reinicio ya los había tapado, así que la causa exacta no se pudo confirmar — pero la medición dejó un candidato dominante y sin discusión.
+
+| Señal | Valor medido |
+|---|---|
+| Base completa | 2141 MB |
+| `audit_log` | **1178 MB (55 % de la base)** — 413.691 filas, **+4.870/día** |
+| `cron.job_run_details` | **306 MB** — 951.450 filas, **+5.482/día** |
+| Conexiones | **36 de 60** ocupadas en reposo (pools internos de Supabase) |
+
+Esas dos tablas son el **69 % de la base** y crecían **~15,7 MB/día sin techo**. El proyecto tiene 8 crons de limpieza (`otp_codes`, `rpc_attempt_log`, `notifications`, `ride_location_events`…) y **ninguno tocaba estas dos** — eran las únicas sin retención.
+
+**Por qué `audit_log` era tan grande.** De sus 413.691 filas, **408.842 (98,8 %) eran de `driver_profiles`**: los latidos de GPS. Cada latido es un UPDATE y `record_audit()` guardaba el perfil entero DOS veces (`old_values` + `new_values` jsonb) → ~2,8 KB por latido. Desglose por conjunto de columnas que cambian (7 días):
+
+```
+last_heartbeat_at                 53,3 %   telemetría
+current_heading, current_location 41,1 %   telemetría
+(ninguna: UPDATE que no cambió nada) 4,0 %  ruido puro
+auto_offline_at, is_online         0,9 %   ← SEÑAL
+is_online                          0,2 %   ← SEÑAL
+resto (status, approved_at…)       0,2 %   ← SEÑAL
+```
+
+**Qué se conserva.** Las filas de `is_online`/`auto_offline_at` — o sea el diagnóstico de desconexión forzada (`changed_by IS NULL` = lo hizo el cron) que usa la sección de conductores que se caen solos — quedan **intactas y completas**. El historial de latidos se movió a `driver_heartbeat_log` (3 columnas, ~50 B/fila en vez de 2.800): misma capacidad forense al 2 % del costo.
+
+**Patrones reutilizables:**
+
+1. **Al auditar por trigger, el criterio NO es una lista de columnas a ignorar sino comparar la fila ENTERA menos la telemetría:** `(to_jsonb(OLD) - cols) IS NOT DISTINCT FROM (to_jsonb(NEW) - cols)`. Si lo que queda es idéntico, solo cambió telemetría. Cualquier cambio real hace que los restos difieran y la fila se audita completa — imposible perder una señal por olvidarse de listarla. Acotá el corto-circuito con `TG_TABLE_NAME` si la función es compartida (`record_audit()` la usan 5 tablas).
+2. **Purgar SIEMPRE por tandas.** Un `DELETE` único de 400k filas sobre una tabla de 1,1 GB genera ~1,1 GB de WAL de un saque — la misma presión que ya tumbó la base. 20.000 filas por corrida horaria drenan el atraso en menos de un día sin un pico.
+3. **La retención por antigüedad NO alcanza para un atraso reciente.** El bulto arrancaba hace 85 días, o sea que entraba cómodo dentro de 90 días de retención. Hacen falta dos reglas: retención general + retención corta específica para telemetría.
+4. **`DELETE` no devuelve el espacio al disco.** Tras drenar, la tabla sigue ocupando lo mismo pero como espacio *reutilizable*: deja de crecer, que es lo que evita el colapso. Recuperar el GB exige `VACUUM (FULL, ANALYZE)` **a mano**: toma `ACCESS EXCLUSIVE LOCK` y, como 5 tablas escriben ahí por trigger, **frena la app** 1-2 minutos. No automatizarlo.
+5. **`'texto' || NULL` es NULL: un correo HTML armado por concatenación se vuelve NULL entero si falta UN campo**, y se envía vacío sin que nadie se entere. Envolver toda interpolación en `COALESCE` y que el emisor se niegue a mandar cuerpo vacío. Lo cazó un test, no la revisión.
+6. **Un helper de test que hace `IF NOT cond`** trata NULL como "no fallo" → imprime FAIL pero no lo contabiliza, y el resumen miente. Usar `IF cond IS NOT TRUE`.
+
+**Cómo probar migraciones SQL de verdad sin tocar prod (verificado acá).** El sandbox trae `psql` **y** los binarios de Postgres 16 en `/usr/lib/postgresql/16/bin`. Postgres no corre como root, así que hay que crear un usuario (`useradd -m pgtest`) y poner el datadir en **su home** (`/tmp` da `Permission denied` con `su`). Con un andamio de ~60 líneas (schemas `auth`/`cron`/`net`, `platform_config`, `get_platform_config_numeric`, `net.http_post` que INSERTA en una tabla en vez de mandar correos) se corre **la migración verbatim** y se le pasan tests de comportamiento. Así se encontró el bug del NULL. Ojo: no hay PostGIS ni pg_cron — simulá `cron.schedule`/`unschedule` y usá `text` donde prod tiene `geography` (válido cuando la columna se resta antes de comparar, o sea cuando su tipo no puede influir en el resultado).
+
+**Watchdog de salud (00577).** `check_database_health()` cada hora (muestra + alerta **solo en transición** ok↔warn↔critical, patrón 00503) y `send_db_health_digest()` diario a las 07:30 UTC al `business_notification_email`. Es SQL puro y no una Edge Function por la misma razón que 00503: si la base está por colapsar, la EF puede no conseguir conexión justo cuando hay que avisar. El aviso temprano real es la **proyección**: con 7 días de muestras calcula MB/día y pasa a `warn` cuando faltan ≤14 días para el umbral, *antes* de cruzarlo. `db_size_warn_mb`/`crit_mb` (6000/7500) son el **único número asumido y no medido** — Postgres no conoce el tamaño del disco que le dio Supabase; ajustar si el disco real es otro.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
