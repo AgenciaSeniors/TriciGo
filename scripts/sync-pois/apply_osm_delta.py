@@ -37,10 +37,12 @@ Optional env:
 from __future__ import annotations
 
 import gzip
+import http.client
 import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -77,12 +79,60 @@ BATCH_SIZE = 500
 # Geofabrik replication helpers
 # ──────────────────────────────────────────────────────────────
 
+# Reintento ante caídas transitorias de Geofabrik. El run 33308115513
+# (2026-08-30) murió a los 0,5 s de pedir state.txt con `HTTP Error 502: Bad
+# Gateway`: UNA sola llamada HTTP a un tercero flojo tumbó el sync diario
+# entero. Es exactamente la clase de fallo que #983 ya había arreglado para
+# Overture — pero aquel arreglo vive en el `run:` de sync-pois.yml, y estas dos
+# llamadas a Geofabrik viven acá adentro, así que se quedaron sin red. Mismo
+# perfil que allá: 3 intentos con backoff 30 s → 90 s (120 s de sleep en el
+# peor caso, holgado dentro del timeout-minutes: 15 del job).
+RETRY_ATTEMPTS = 3
+RETRY_BASE_DELAY_S = 30
+
+
+def urlopen_retrying(target, timeout: int) -> bytes:
+    """urlopen que reintenta SOLO lo transitorio, y devuelve el cuerpo leído.
+
+    Reintenta 5xx, 429 y los cortes de red/timeout. NO reintenta el resto de
+    los 4xx, y esto es load-bearing: el 404 es la señal legítima de "esa
+    secuencia todavía no está publicada" con la que download_diff() corta el
+    walk, así que reintentarlo le sumaría 2 minutos de sleep a CADA corrida
+    normal — el 404 se propaga en el primer intento, como antes.
+
+    El read() va adentro del retry a propósito: un corte a mitad de descarga
+    deja un .osc.gz truncado, y ese archivo reventaría el parser igual que un
+    502 (misma lección que el `rm -f` del parcial de Overture en #983).
+    """
+    delay = RETRY_BASE_DELAY_S
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(target, timeout=timeout) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as e:
+            # HTTPError es subclase de URLError: va primero o nunca se evalúa.
+            if e.code < 500 and e.code != 429:
+                raise
+            last_exc: Exception = e
+        except (urllib.error.URLError, TimeoutError, http.client.HTTPException) as e:
+            last_exc = e
+        if attempt == RETRY_ATTEMPTS:
+            break
+        print(
+            f"[delta] intento {attempt}/{RETRY_ATTEMPTS} falló ({last_exc}); "
+            f"reintento en {delay}s",
+            flush=True,
+        )
+        time.sleep(delay)
+        delay *= 3
+    raise last_exc
+
+
 def fetch_remote_state() -> int:
     """Fetch the latest replication sequence number from Geofabrik's state.txt."""
     url = f"{REPLICATION_URL}/state.txt"
     print(f"[delta] fetching {url}", flush=True)
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        text = resp.read().decode("utf-8")
+    text = urlopen_retrying(url, timeout=30).decode("utf-8")
     for line in text.splitlines():
         if line.startswith("sequenceNumber="):
             return int(line.split("=", 1)[1])
@@ -101,8 +151,7 @@ def download_diff(seq: int, dest_path: Path) -> bool:
     print(f"[delta] downloading seq {seq} from {url}", flush=True)
     req = urllib.request.Request(url, headers={"User-Agent": "TriciGo-POI-Sync/1.0"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            dest_path.write_bytes(resp.read())
+        dest_path.write_bytes(urlopen_retrying(req, timeout=60))
         return True
     except urllib.error.HTTPError as e:
         if e.code == 404:
