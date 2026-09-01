@@ -8,7 +8,7 @@ export { poiService, TRICIGO_CATEGORIES } from './services/poi.service';
 export type { Poi, PoiInput, PoiSource, TriciGoCategory, PoiListFilters, PoiListResult } from './services/poi.service';
 export { walletService } from './services/wallet.service';
 export { rideService } from './services/ride.service';
-export { driverService } from './services/driver.service';
+export { driverService, ACCEPT_PREFLIGHT_TIMEOUT_MS } from './services/driver.service';
 export { reviewService } from './services/review.service';
 export { adminService } from './services/admin.service';
 export type { PendingAccountSummary, PendingAccountDeletability, AdminRideMessage } from './services/admin.service';

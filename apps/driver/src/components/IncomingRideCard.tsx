@@ -45,7 +45,7 @@
  *     `midnightEmber.text.*` styles explícitamente.
  */
 import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
-import { View, Animated, Pressable, Text as RNText, Easing } from 'react-native';
+import { View, Animated, Pressable, Text as RNText, Easing, ActivityIndicator } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCUP, cupToTrcCentavos, haversineDistance, jitterLocation, triggerHaptic, isCargoRide } from '@tricigo/utils';
@@ -66,7 +66,9 @@ interface ServiceConfig {
 
 interface IncomingRideCardProps {
   ride: Ride;
-  onAccept: (rideId: string) => void;
+  /** May be async — the card shows a spinner and freezes the countdown until
+   *  it settles, so a slow network can't make the offer vanish mid-accept. */
+  onAccept: (rideId: string) => void | Promise<void>;
   onReject?: (rideId: string) => void;
   /** Countdown ran out with no driver action. Kept distinct from onReject so a
    *  silent expiry is NOT remembered as an explicit refusal (which would stop
@@ -221,6 +223,19 @@ function IncomingRideCardInner({
   );
   const expiredFiredRef = useRef(false);
 
+  // An accept is in flight. Two jobs: drive the button's spinner/disabled
+  // state, and STOP the countdown from throwing the card away underneath a
+  // request that is still travelling. Before this, tapping "Aceptar" gave a
+  // haptic buzz and nothing else — no spinner, no disabled state — while the
+  // timer kept running; on a stalled connection the offer expired in the
+  // driver's hand and he was left certain he had accepted a ride the server
+  // never heard about. A ref mirrors it because the interval callback closes
+  // over its first render.
+  const [accepting, setAccepting] = useState(false);
+  const acceptingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   useEffect(() => {
     expiredFiredRef.current = false;
 
@@ -237,6 +252,12 @@ function IncomingRideCardInner({
     }).start();
 
     const interval = setInterval(() => {
+      // Hold the clock while an accept is travelling. The request is the
+      // driver's answer to this offer; letting the timer discard the card
+      // mid-flight is what turned a slow network into "acepté y se cayó".
+      // Whatever the server replies, useDriverRide removes the request on
+      // both the success and the failure path, so the card can't get stuck.
+      if (acceptingRef.current) return;
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
@@ -284,9 +305,24 @@ function IncomingRideCardInner({
     onReject?.(ride.id);
   }, [onReject, ride.id, profitTier, secondsLeft, pickupDistanceKm, netEarnings]);
 
-  const handleAccept = useCallback(() => {
+  const handleAccept = useCallback(async () => {
+    if (acceptingRef.current) return;   // double-tap
+    acceptingRef.current = true;
+    setAccepting(true);
     triggerHaptic('medium');
-    onAccept(ride.id);
+    try {
+      await onAccept(ride.id);
+    } catch {
+      // The accept path owns its own error UX (useDriverRide toasts the real
+      // reason). Swallowing here only stops a rejection from escaping this
+      // fire-and-forget onPress as an unhandled promise.
+    } finally {
+      // On success the card unmounts, so this only matters when the accept
+      // failed: hand the button back so the driver can retry within whatever
+      // is left of the window, instead of staring at a dead spinner.
+      acceptingRef.current = false;
+      if (mountedRef.current) setAccepting(false);
+    }
   }, [onAccept, ride.id]);
 
   // ── Derived display values ────────────────────────────
@@ -630,7 +666,9 @@ function IncomingRideCardInner({
               borderColor: midnightEmber.map.line.default,
             }}
             onPress={handleReject}
+            disabled={accepting}
             accessibilityRole="button"
+            accessibilityState={{ disabled: accepting }}
             accessibilityLabel={t('home.reject', { defaultValue: 'No me sirve' })}
             accessibilityHint={t('home.reject_hint', {
               defaultValue: 'Rechaza este viaje y espera el siguiente',
@@ -657,17 +695,28 @@ function IncomingRideCardInner({
               flexDirection: 'row',
               gap: 8,
               ...midnightEmber.shadow.glow,
+              opacity: accepting ? 0.75 : 1,
             }}
             onPress={handleAccept}
+            disabled={accepting}
             accessibilityRole="button"
-            accessibilityLabel={t('home.accept', { defaultValue: 'Aceptar viaje' })}
+            accessibilityState={{ disabled: accepting, busy: accepting }}
+            accessibilityLabel={
+              accepting
+                ? t('home.accepting', { defaultValue: 'Aceptando viaje' })
+                : t('home.accept', { defaultValue: 'Aceptar viaje' })
+            }
           >
-            <Ionicons name="checkmark" size={18} color={midnightEmber.map.text.onAccent} />
+            {accepting
+              ? <ActivityIndicator size="small" color={midnightEmber.map.text.onAccent} />
+              : <Ionicons name="checkmark" size={18} color={midnightEmber.map.text.onAccent} />}
             <RNText style={{
               ...midnightEmber.text.buttonLg,
               color: midnightEmber.map.text.onAccent,
             }}>
-              {t('home.accept_full', { defaultValue: 'Aceptar viaje' })}
+              {accepting
+                ? t('home.accepting_full', { defaultValue: 'Aceptando…' })
+                : t('home.accept_full', { defaultValue: 'Aceptar viaje' })}
             </RNText>
           </Pressable>
         </View>
