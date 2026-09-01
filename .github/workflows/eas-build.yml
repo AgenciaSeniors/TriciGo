@@ -23,6 +23,13 @@ on:
           - ios
           - android
         default: all
+      profile:
+        description: 'EAS profile for Android. production = AAB para las tiendas; preview = APK interno'
+        type: choice
+        options:
+          - production
+          - preview
+        default: production
 
 jobs:
   build-client:
@@ -55,11 +62,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Android (preview APK)
+      - name: Build Android (AAB para tiendas, o APK interno si profile=preview)
         if: >-
           github.event_name == 'push' ||
           (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
-        run: eas build --platform android --profile preview --non-interactive
+        run: eas build --platform android --profile "${PROFILE}" --non-interactive
+        env:
+          PROFILE: ${{ inputs.profile || 'preview' }}
         working-directory: apps/client
 
       - name: Build iOS (production)
@@ -99,11 +108,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Android (preview APK)
+      - name: Build Android (AAB para tiendas, o APK interno si profile=preview)
         if: >-
           github.event_name == 'push' ||
           (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
-        run: eas build --platform android --profile preview --non-interactive
+        run: eas build --platform android --profile "${PROFILE}" --non-interactive
+        env:
+          PROFILE: ${{ inputs.profile || 'preview' }}
         working-directory: apps/driver
 
       - name: Build iOS (production)
