@@ -5,6 +5,11 @@
 // notification. Mirrors process-netopia-webhook.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getStripe, stripeWebhookSecret } from '../_shared/stripe.ts';
+import {
+  releasePaymentIntentClaim,
+  shouldRetryUnclaimedPaymentIntent,
+  type PaymentIntentClaimRepository,
+} from '../_shared/payment-intent-claim.ts';
 
 const ACK = { received: true };
 
@@ -30,6 +35,25 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const claimRepository: PaymentIntentClaimRepository = {
+    async releaseIfProcessing(intentId, retryStatus) {
+      const { data, error } = await supabase
+        .from('payment_intents')
+        .update({ status: retryStatus, updated_at: new Date().toISOString() })
+        .eq('id', intentId)
+        .eq('status', 'processing')
+        .select('id');
+      return { released: !!data?.length, error: error?.message };
+    },
+    async readStatus(intentId) {
+      const { data, error } = await supabase
+        .from('payment_intents')
+        .select('status')
+        .eq('id', intentId)
+        .maybeSingle();
+      return { status: data?.status ?? null, error: error?.message };
+    },
+  };
 
   const session = event.data.object as {
     id: string; client_reference_id?: string | null; payment_status?: string;
@@ -47,14 +71,30 @@ Deno.serve(async (req) => {
   if (!existingIntent) return new Response(JSON.stringify(ACK), { status: 200 });
   if (existingIntent.status === 'completed') return new Response(JSON.stringify(ACK), { status: 200 }); // replay
 
-  // Atomic idempotency claim (0 rows on replay → ACK).
-  const { data: claimed } = await supabase
+  // Atomic idempotency claim. A completed replay is ACKed above; an active
+  // processing lease gets a 503 so Stripe retries instead of dropping it.
+  const { data: claimed, error: claimError } = await supabase
     .from('payment_intents')
     .update({ status: 'processing', error_message: null, updated_at: new Date().toISOString() })
     .eq('id', intentId)
     .in('status', ['pending', 'created', 'failed', 'expired'])
     .select();
-  if (!claimed || claimed.length === 0) return new Response(JSON.stringify(ACK), { status: 200 });
+  if (claimError) {
+    console.error(`[stripe-webhook] failed to claim intent ${intentId}:`, claimError.message);
+    return new Response(JSON.stringify({ error: 'claim_error' }), { status: 500 });
+  }
+  if (!claimed || claimed.length === 0) {
+    try {
+      if (await shouldRetryUnclaimedPaymentIntent(claimRepository, intentId)) {
+        console.warn(`[stripe-webhook] intent ${intentId} is still processing — requesting retry`);
+        return new Response(JSON.stringify({ error: 'intent_processing' }), { status: 503 });
+      }
+    } catch (statusErr) {
+      console.error(`[stripe-webhook] failed to inspect unclaimed intent ${intentId}:`, statusErr);
+      return new Response(JSON.stringify({ error: 'claim_status_error' }), { status: 500 });
+    }
+    return new Response(JSON.stringify(ACK), { status: 200 });
+  }
 
   // Credit the recipient. amount = NET amount_usd so the RPC's ±5% USD check passes.
   const { error: processError } = await supabase.rpc('process_recharge_payment', {
@@ -63,6 +103,18 @@ Deno.serve(async (req) => {
   });
   if (processError) {
     console.error('[stripe-webhook] process_recharge_payment error:', processError.message);
+    try {
+      const release = await releasePaymentIntentClaim(
+        claimRepository,
+        intentId,
+        existingIntent.status,
+      );
+      console.warn(
+        `[stripe-webhook] released failed claim for ${intentId}: released=${release.released} retry_status=${release.retryStatus}`,
+      );
+    } catch (releaseErr) {
+      console.error(`[stripe-webhook] failed to release processing claim for ${intentId}:`, releaseErr);
+    }
     // 500 → Stripe retries the webhook.
     return new Response(JSON.stringify({ error: 'process_error', detail: processError.message }), { status: 500 });
   }
