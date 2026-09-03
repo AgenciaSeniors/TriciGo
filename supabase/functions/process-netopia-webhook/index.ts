@@ -16,10 +16,10 @@
 //   that UUID from create-netopia-payment-intent, so a forged paid IPN for a
 //   self-created intent could mint free top-ups. Authenticity is therefore enforced
 //   by an authoritative server-to-server re-query (requeryNetopiaStatus): before
-//   moving money on a state-changing IPN we POST /operation/status to NETOPIA with
-//   our secret API key and require NETOPIA's own payment.status to confirm it
-//   (3/5 = paid; 8/17 = refund/reversal). A forger can't make NETOPIA report a
-//   transaction it never processed. Defense layers:
+//   persisting paid, refunded, OR failed we POST /operation/status to NETOPIA with
+//   our secret API key and require NETOPIA's own payment.status to confirm the
+//   same transition. A forger can't make NETOPIA report a transaction state it
+//   never observed. Defense layers:
 //     1. Re-query gate: LIVE always fails closed if NETOPIA doesn't confirm; sandbox
 //        is log-only until platform_config netopia_ipn_enforce_sandbox='true'.
 //     2. JWT (Verification-token) is also checked (verifyNetopiaIpnToken) as
@@ -36,6 +36,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { decodeProtectedHeader, importX509 } from 'https://esm.sh/jose@5.9.6';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { translateNetopiaError } from '../_shared/netopia-errors.ts';
+import {
+  isAuthoritativeNetopiaTransition,
+  requiresNetopiaStatusConfirmation,
+  type NetopiaMappedStatus,
+} from '../_shared/netopia-ipn-transition.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -85,7 +90,7 @@ interface NetopiaIPNBody {
 const ACK_OK = { errorCode: 0 };
 
 /** Map NETOPIA numeric status to our payment_intents.status. */
-function mapNetopiaStatus(s: number | undefined): 'paid' | 'failed' | 'pending' | 'refunded' | 'unknown' {
+function mapNetopiaStatus(s: number | undefined): NetopiaMappedStatus {
   // NETOPIA v2 status codes (official PHP SDK constants): 3=PAID, 5=CONFIRMED,
   // 4=CANCELED, 8=CREDIT(refund), 12=DECLINED, 13=FRAUD, 14=PENDING_AUTH,
   // 15=3D_AUTH, 17=REVERSED. AUD-010: 4 is CANCELED (not a refund) — refunds/
@@ -423,11 +428,13 @@ Deno.serve(async (req) => {
     // Best-effort JWT verification (logged, not the gate).
     const ipnAuth = await verifyNetopiaIpnToken({ token: verificationToken, rawBody, posSignature, publicCertPem });
 
-    // Authoritative gate: re-query NETOPIA for state-changing IPNs only.
-    const stateChanging = status === 'paid' || status === 'refunded';
+    // Authoritative gate: re-query NETOPIA for every persistent transition.
+    // A forged `failed` IPN is operationally state-changing too: it can stamp a
+    // fake ntpID and make a later legitimate paid IPN fail the mismatch guard.
+    const requiresConfirmation = requiresNetopiaStatusConfirmation(status);
     let requery: { status: number | null; confirmedPaid: boolean; reason: string; httpStatus?: number } =
       { status: null, confirmedPaid: false, reason: 'not-checked' };
-    if (stateChanging) {
+    if (requiresConfirmation) {
       requery = await requeryNetopiaStatus({ env: netopiaEnv, apiKey, posSignature, ntpId, orderId });
     }
 
@@ -454,11 +461,10 @@ Deno.serve(async (req) => {
     // claimed state before we move money.
     //   paid     -> NETOPIA status 3 (paid) / 5 (confirmed)
     //   refunded -> NETOPIA status 8 (credit/refund) / 17 (reversed)
+    //   failed   -> NETOPIA status 4 (canceled) / 12 (declined) / 13 (fraud)
     // Always fail closed in LIVE; in sandbox, log-only until netopia_ipn_enforce_sandbox=true.
-    if (stateChanging) {
-      const gateOk = status === 'paid'
-        ? requery.confirmedPaid
-        : (requery.status === 8 || requery.status === 17);
+    if (requiresConfirmation) {
+      const gateOk = isAuthoritativeNetopiaTransition(status, requery.status);
       if (!gateOk) {
         if (netopiaEnv === 'live' || enforceSandbox) {
           console.error(
