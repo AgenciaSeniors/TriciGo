@@ -68,7 +68,10 @@ CUBA_QID = "Q241"
 
 def build_sparql_query() -> str:
     """Build the SPARQL query as a single string."""
-    qids_filter = " ".join(f"wd:{q}" for q in POI_TYPE_QIDS)
+    # SPARQL "IN (...)" takes a comma-separated list. A space-separated one is a
+    # syntax error and query.wikidata.org answers HTTP 400 — which is why this
+    # source never produced a single row from 2026-05 until 2026-09 (00579 PR).
+    qids_filter = ", ".join(f"wd:{q}" for q in POI_TYPE_QIDS)
     return f"""
 SELECT DISTINCT ?item ?itemLabel ?coord ?type ?typeLabel WHERE {{
   ?item wdt:P17 wd:{CUBA_QID} .

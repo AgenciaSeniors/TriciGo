@@ -433,15 +433,18 @@ def load_foursquare(path: Path, categories: dict, bbox: tuple) -> Iterable[Recor
 # ──────────────────────────────────────────────────────────────
 
 def _boost_wikidata_importance() -> None:
-    """Bump importance=1 for all Wikidata-sourced rows after the bulk upsert.
+    """Bump importance=1 and flag is_landmark for all Wikidata-sourced rows.
 
     The bulk_upsert_pois RPC doesn't currently read importance from input.
     Rather than rewrite that 200-line RPC, we do a small post-upsert UPDATE
     that hits exactly the rows with `source_ids->>'wd'` set. Respects admin
     protection (never touches is_admin=true rows).
 
-    Only bumps UP (lowers numerically) — won't override an admin's manual
-    importance=2 setting back down.
+    `is_landmark` (00579) is the search-ranking tier the curation columns
+    feed; a row can already be importance=1 and still need the flag, so the
+    filter no longer excludes importance=1 rows. If 00579 is not applied yet
+    the update fails with an unknown-column error and we retry with the
+    importance-only payload (never leaves the boost half-done).
     """
     try:
         from supabase import create_client
@@ -456,18 +459,26 @@ def _boost_wikidata_importance() -> None:
         return
 
     sb = create_client(url, key)
-    try:
-        # Use a raw SQL via PostgREST's RPC mechanism — we don't want to
-        # add a dedicated RPC for this one-line update. The 'rest' filter
-        # syntax handles it cleanly.
+
+    def _run(payload: dict) -> int:
+        # PostgREST filter syntax — no dedicated RPC for this one-line update.
         resp = sb.table("cuba_pois") \
-            .update({"importance": 1}) \
+            .update(payload) \
             .filter("source_ids->>wd", "neq", None) \
             .eq("is_admin", False) \
-            .gt("importance", 1) \
             .execute()
-        n = len(resp.data) if hasattr(resp, "data") and resp.data else 0
-        print(f"[wikidata-boost] bumped importance=1 on {n} Wikidata POIs", flush=True)
+        return len(resp.data) if hasattr(resp, "data") and resp.data else 0
+
+    try:
+        try:
+            n = _run({"importance": 1, "is_landmark": True})
+            print(f"[wikidata-boost] importance=1 + is_landmark on {n} Wikidata POIs", flush=True)
+        except Exception as exc:
+            if "is_landmark" not in repr(exc):
+                raise
+            print("[wikidata-boost] is_landmark column missing (00579 not applied) — importance only", flush=True)
+            n = _run({"importance": 1})
+            print(f"[wikidata-boost] bumped importance=1 on {n} Wikidata POIs", flush=True)
     except Exception as exc:
         print(f"[wikidata-boost] failed (non-fatal): {exc!r}", flush=True)
 
