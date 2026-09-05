@@ -220,3 +220,114 @@ COMMENT ON COLUMN public.cuba_pois.is_landmark       IS '00579: landmark tier fo
 COMMENT ON COLUMN public.cuba_pois.pick_count        IS '00579: rider picks resolved to this POI (PR-2 trigger on rides). Never touched by the sync.';
 COMMENT ON COLUMN public.cuba_pois.last_picked_at    IS '00579: last rider pick resolved to this POI (PR-2).';
 COMMENT ON COLUMN public.cuba_pois.merged_into       IS '00579: set on the deactivated loser of a duplicate merge; points at the surviving row.';
+
+-- ---------------------------------------------------------------------------
+-- D. Popular / official / brand aliases (spec §4.3). Never written by the sync.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.cuba_poi_aliases (
+  id          bigserial PRIMARY KEY,
+  poi_id      bigint NOT NULL REFERENCES public.cuba_pois(id) ON DELETE CASCADE,
+  alias       text   NOT NULL,
+  alias_norm  text   NOT NULL,
+  kind        text   NOT NULL CHECK (kind IN ('popular','official','brand','short','old')),
+  source      text   NOT NULL CHECK (source IN ('admin','osm','seed','import')),
+  created_by  uuid,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (poi_id, alias_norm)
+);
+CREATE INDEX IF NOT EXISTS idx_cuba_poi_aliases_norm ON public.cuba_poi_aliases (alias_norm);
+COMMENT ON TABLE public.cuba_poi_aliases IS '00579: names riders actually use ("La Benéfica" → Hospital Miguel Enríquez). One row per searchable variant; feeds poi_search_names. Admin CRUD via RPCs (PR-4); the sync never touches it.';
+
+ALTER TABLE public.cuba_poi_aliases ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cuba_poi_aliases_read" ON public.cuba_poi_aliases;
+CREATE POLICY "cuba_poi_aliases_read" ON public.cuba_poi_aliases FOR SELECT TO anon, authenticated USING (true);
+GRANT SELECT ON public.cuba_poi_aliases TO anon, authenticated;
+-- No INSERT/UPDATE/DELETE policy: only service_role / SECURITY DEFINER admin RPCs write.
+
+-- Seeds 1/2 — OSM tags already stored on active rows.
+INSERT INTO public.cuba_poi_aliases (poi_id, alias, alias_norm, kind, source)
+SELECT p.id, trim(v.alias), lower(unaccent(trim(v.alias))), v.kind, 'osm'
+FROM public.cuba_pois p
+CROSS JOIN LATERAL (VALUES
+  (p.tags->>'alt_name',      'popular'),
+  (p.tags->>'official_name', 'official'),
+  (p.tags->>'short_name',    'short'),
+  (p.tags->>'old_name',      'old'),
+  (p.tags->>'brand',         'brand'),
+  (p.tags->>'name:es',       'official')) AS v(alias, kind)
+WHERE p.is_active AND v.alias IS NOT NULL AND length(trim(v.alias)) BETWEEN 2 AND 80
+  AND lower(unaccent(trim(v.alias))) <> p.name_normalized
+ON CONFLICT (poi_id, alias_norm) DO NOTHING;
+
+-- Seeds 2/2 — curated Havana popular names. Each target is resolved by an ILIKE
+-- pattern on name_normalized inside 800 m of the given point, never a transport
+-- row (bus stops carry landmark names), preferring is_admin, then merged, then
+-- confidence. Missing target → NOTICE, no row. Alias equal to the target's own
+-- name → skipped (the bare/display dictionary rows already cover it).
+DO $seed$
+DECLARE r record; v_id bigint; v_norm text; v_n int := 0;
+BEGIN
+  FOR r IN SELECT * FROM (VALUES
+    ('La Ceguera',            '%oftalmolog%',              23.0946, -82.4177),
+    ('La Benéfica',           '%miguel enriquez%',         23.1128, -82.3340),
+    ('El Naval',              '%hospital naval%',          23.1548, -82.3068),
+    ('Maternidad de Línea',   '%america arias%',           23.1409, -82.3870),
+    ('Pediátrico del Cerro',  '%pediatrico%cerro%',        23.1102, -82.3782),
+    ('Oncológico',            '%oncolog%',                 23.1268, -82.3815),
+    ('La Coubre',             '%coubre%',                  23.1259, -82.3486),
+    ('Cuatro Caminos',        'mercado 4 caminos',         23.1275, -82.3651),
+    ('FAC',                   '%fabrica de arte cubano%',  23.1298, -82.4066),
+    ('Fábrica de Arte',       '%fabrica de arte cubano%',  23.1298, -82.4066),
+    ('El Cañonazo',           '%san carlos de la cabana%', 23.1508, -82.3486),
+    ('La Cabaña',             '%san carlos de la cabana%', 23.1508, -82.3486),
+    ('La Lonja',              'lonja del comercio%',       23.1382, -82.3467),
+    ('Karl Marx',             'teatro karl marx%',         23.1220, -82.4109),
+    ('Ciudad Deportiva',      'coliseo de la ciudad deportiva', 23.1055, -82.3792),
+    ('Cementerio de Colón',   '%cementerio de colon%',     23.1257, -82.3968),
+    ('Zoológico de 26',       'jardin zoologico de la habana', 23.1206, -82.3946),
+    ('Zoológico Nacional',    'parque zoologico nacional', 23.0170, -82.4040),
+    ('ExpoCuba',              'expocuba',                  23.0018, -82.3840),
+    ('Marina Hemingway',      'marina hemingway',          23.0906, -82.5010),
+    ('Manzana de Gómez',      'gran hotel manzana kempinski', 23.1379, -82.3583),
+    ('Habana Libre',          'hotel habana libre',        23.1401, -82.3866),
+    ('Hotel Nacional',        'hotel nacional de cuba',    23.1441, -82.3813),
+    ('Capitolio',             'el capitolio',              23.1353, -82.3592),
+    ('Bodeguita',             'la bodeguita del medio',    23.1408, -82.3519),
+    ('Floridita',             'el floridita%',             23.1375, -82.3562),
+    ('Tropicana',             'cabaret tropicana',         23.1049, -82.4302),
+    ('Terminal de Ómnibus',   'terminal de omnibus nacionales%', 23.1268, -82.3922),
+    ('Terminal 3',            'terminal 3%',               22.9975, -82.4056),
+    ('Ameijeiras',            'hospital hermanos ameijeiras', 23.1430, -82.3696),
+    ('Calixto García',        'hospital universitario general calixto garcia', 23.1403, -82.3893),
+    ('Coppelia',              'coppelia',                  23.1397, -82.3849),
+    ('Cine Yara',             'cine yara',                 23.1396, -82.3851),
+    ('Estadio Latinoamericano','estadio latinoamericano',  23.1213, -82.3782),
+    ('Plaza Carlos III',      'plaza carlos iii',          23.1311, -82.3820),
+    ('Universidad de La Habana','universidad de la habana', 23.1373, -82.3826),
+    ('CUJAE',                 'cujae',                     23.0298, -82.4362),
+    ('Plaza de la Revolución','plaza de la revolucion',    23.1233, -82.3871),
+    ('Parque Central',        'parque central',            23.1381, -82.3590),
+    ('Parque Lenin',          'parque lenin',              23.0033, -82.3707),
+    ('Playa Santa María',     'santa maria del mar',       23.1810, -82.2360),
+    ('Alias Sin Destino',     'zzz-no-such-place-zzz',     23.1, -82.4)          -- proves the guard
+  ) AS s(alias, pattern, lat, lng)
+  LOOP
+    v_id := NULL;
+    SELECT p.id, p.name_normalized INTO v_id, v_norm FROM public.cuba_pois p
+    WHERE p.is_active AND p.name_normalized ILIKE r.pattern
+      AND p.category IS DISTINCT FROM 'public_transport' AND p.tricigo_category IS DISTINCT FROM 'transport'
+      AND ST_DWithin(p.location, ST_SetSRID(ST_MakePoint(r.lng, r.lat), 4326)::geography, 800)
+    ORDER BY p.is_admin DESC, (p.source = 'merged') DESC, p.confidence DESC NULLS LAST, p.id
+    LIMIT 1;
+    IF v_id IS NULL THEN
+      RAISE NOTICE '00579D: alias "%" — target not found (pattern %), skipped', r.alias, r.pattern;
+      CONTINUE;
+    END IF;
+    IF lower(unaccent(r.alias)) = v_norm THEN CONTINUE; END IF;
+    INSERT INTO public.cuba_poi_aliases (poi_id, alias, alias_norm, kind, source)
+    VALUES (v_id, r.alias, lower(unaccent(r.alias)), 'popular', 'seed')
+    ON CONFLICT (poi_id, alias_norm) DO NOTHING;
+    v_n := v_n + 1;
+  END LOOP;
+  RAISE NOTICE '00579D: % curated aliases seeded', v_n;
+END $seed$;

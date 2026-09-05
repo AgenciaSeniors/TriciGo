@@ -88,3 +88,18 @@ DO $$ DECLARE v_id bigint; BEGIN
   PERFORM _t('T3g fixture cleaned', (SELECT display_name = 'Casa Medina' FROM cuba_pois WHERE name = 'Casa Medina La Habana Cuba'));
   PERFORM _t('T3h taxonomy has 24 values', array_length(poi_taxonomy(), 1) = 24 AND 'landmark' = ANY (poi_taxonomy()));
 END $$;
+
+-- T4: aliases
+DO $$ DECLARE v_id bigint; BEGIN
+  SELECT id INTO v_id FROM cuba_pois WHERE name = 'Hospital Miguel Enríquez' LIMIT 1;   -- fixture row
+  PERFORM _t('T4a curated seed resolved', EXISTS (SELECT 1 FROM cuba_poi_aliases WHERE poi_id = v_id AND alias = 'La Benéfica' AND kind = 'popular' AND source = 'seed'));
+  PERFORM _t('T4b alias_norm', (SELECT alias_norm = 'la benefica' FROM cuba_poi_aliases WHERE poi_id = v_id AND alias = 'La Benéfica'));
+  PERFORM _t('T4c osm brand seed', EXISTS (SELECT 1 FROM cuba_poi_aliases a JOIN cuba_pois p ON p.id = a.poi_id WHERE p.tags->>'brand' = 'Cupet' AND a.alias = 'Cupet' AND a.kind = 'brand' AND a.source = 'osm'));
+  PERFORM _t('T4d no alias equal to name', NOT EXISTS (SELECT 1 FROM cuba_poi_aliases a JOIN cuba_pois p ON p.id = a.poi_id WHERE a.alias_norm = p.name_normalized));
+  PERFORM _t('T4e missing seed target is skipped', NOT EXISTS (SELECT 1 FROM cuba_poi_aliases WHERE alias = 'Alias Sin Destino'));
+  PERFORM _t('T4f alias never lands on a bus stop', NOT EXISTS (SELECT 1 FROM cuba_poi_aliases a JOIN cuba_pois p ON p.id = a.poi_id WHERE a.alias = 'Calixto García' AND p.category = 'public_transport'));
+  PERFORM _t('T4g seed equal to the target name is skipped', NOT EXISTS (SELECT 1 FROM cuba_poi_aliases WHERE alias = 'Coppelia'));
+  PERFORM _t('T4h osm alt_name seeded', EXISTS (SELECT 1 FROM cuba_poi_aliases WHERE alias = 'Hospital Ameijeiras' AND kind = 'popular' AND source = 'osm'));
+  PERFORM _t('T4i inactive rows get no osm alias', NOT EXISTS (SELECT 1 FROM cuba_poi_aliases a JOIN cuba_pois p ON p.id = a.poi_id WHERE NOT p.is_active));
+  PERFORM _t('T4j rls enabled', (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.cuba_poi_aliases'::regclass));
+END $$;
