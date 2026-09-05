@@ -1489,6 +1489,22 @@ Abordar cuando aparezca un síntoma concreto que lo justifique, NO preventivamen
 
 ---
 
+### POIs — capa de curación (00579–00581, PR-1 de la campaña 2026-09-05)
+
+Spec: `docs/superpowers/specs/2026-09-05-poi-quality-design.md`; plan PR-1: `docs/superpowers/plans/2026-09-05-poi-quality-pr1-data.md`. **Ensayo local obligatorio antes de tocar estas migraciones:** `supabase/tests/poi/run.sh` (Postgres 16 + PostGIS del sandbox, usuario `pgtest`, puerto 5433) reconstruye la base desde `scaffold.sql` (DDL real de `cuba_pois` + cuerpos VIVOS de los RPC admin), aplica cada `0058x` **dos veces** (idempotencia) y corre `tests.sql` (101 aserciones). Si prod redefine `admin_update_poi` / `admin_create_poi` / `approve_poi_submission` / `import_search_poi` / `map_category_to_tricigo`, re-capturar el cuerpo en el scaffold: los `DO $patch$` asertan que su literal aparece exactamente una vez.
+
+| Pieza | Dónde | Regla |
+|---|---|---|
+| `display_name` | trigger `tg_cuba_pois_display_name` = `COALESCE(name_override, _poi_clean_name(name))` | El sync jamás la ensucia (recalcula al renombrar); el admin gana con `name_override`. Las apps muestran `display_name`, no `name` |
+| `_poi_clean_name` | 00579 §B, 37 fixtures de nombres reales | Saca descriptores suecos de Wikidata, ", La Habana, Cuba", comillas, repara MAYÚSCULAS / minúsculas / "De La … Los". **Exige coma o ciudad antes de "Cuba"**: "Banco Central de Cuba" y "Universidad de La Habana" quedan intactos |
+| `cuba_poi_aliases` | popular/official/brand/short/old; seeds OSM (`alt_name`, `brand`…) + 41 nombres populares habaneros ("La Benéfica" → Hospital Miguel Enríquez) | Nunca sobre una fila `transport` (las paradas llevan nombres de landmarks). Alias igual al nombre → se omite |
+| `poi_search_names` | diccionario precalculado (display / bare / alias / brand), triggers a nivel sentencia con transition tables | Solo filas activas y no fusionadas. Índice `text_pattern_ops` (la collation es `en_US.UTF-8`: un btree plano NO sirve `LIKE 'x%'`). `search_pois_smart` v2 (PR-2) lee solo esto |
+| municipio / provincia | 00580, `_poi_admin_area` por punto-en-polígono, trigger `UPDATE OF location` + backfill por tandas de 20k | `COALESCE`: fuera de todo polígono conserva lo que traía |
+| taxonomía | `poi_taxonomy()` = 24 valores (+ `landmark` 🏛️, `venue` 🎭, `stadium` 🏟️); CHECK en `tricigo_category` y `category_override` | **Seis superficies** (TS union, SQL, `categories.json`, importer Mapbox, emoji, grupos visuales) — `pnpm check:poi-taxonomy` en CI falla si divergen |
+| curación sync-proof | `name_override`, `category_override`, `is_landmark`, `pick_count`, `merged_into` | `bulk_upsert_pois` **sí** reescribe `tricigo_category` (por eso `categories.json` va en el mismo PR); nunca toca estas columnas |
+
+**Bugs que destapó (y sus trampas):** (1) `admin_update_poi` / `admin_create_poi` / `approve_poi_submission` fallaban con **428C9** desde 00309 (asignaban la columna GENERATED `name_normalized`) — patch in-place. (2) Wikidata nunca cargó: `" ".join` en el `IN (...)` del SPARQL → HTTP 400 en cada corrida; `", ".join` lo arregla (95 features desde el sandbox). (3) Foursquare: el matcher de `label_keywords` itera en orden y `landmark` precedía a `beach`/`park` → 77 playas, 44 parques y 86 barrios etiquetados `museum`. **El orden del JSON es semántica.** (4) En regex de Postgres **`\b` es backspace**, el límite de palabra es `\y` — el borrador del plan lo tenía y habría convertido "Banco Central de Cuba" en "Banco Central de". (5) En un test plpgsql `PERFORM _t(nombre, f_volatil(...) AND EXISTS (SELECT …))` Postgres puede evaluar el `EXISTS` como initplan ANTES de la llamada → asignar primero a una variable y asertar después.
+
 ### Wallet model — 2 generaciones coexistiendo (verificado 2026-05-28)
 
 **Esto es crítico para cualquier RPC nuevo o fix que toque dinero.** Hay 2 generaciones de wallets viviendo en `wallet_accounts` simultáneamente:
