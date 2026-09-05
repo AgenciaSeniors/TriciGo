@@ -157,6 +157,7 @@
     "earned": "You'll earn",
     "passenger_name": "Passenger: {{name}}",
     "pickup_address": "Pickup",
+    "rider_note": "Passenger note",
     "dropoff_address": "Dropoff",
     "call_passenger": "Call passenger",
     "toolbar_call": "Call",

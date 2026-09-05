@@ -36,6 +36,12 @@ export interface SavedLocation {
   address: string;
   latitude: number;
   longitude: number;
+  /** Fixed slot. Legacy rows have no kind and fall back to the label
+   *  ("Casa" / "Trabajo") — see resolveFixedPlaces in @tricigo/utils. */
+  kind?: 'home' | 'work' | 'other';
+  /** Details for the driver saved with the place ("#302 apto 4, edificio
+   *  azul"); prefilled into the ride's notes when the place is chosen. */
+  details?: string | null;
 }
 
 export interface EmergencyContact {

@@ -37,6 +37,7 @@ import { AddressSearchInput } from '@/components/AddressSearchInput';
 import { ConfirmLocationScreen } from '@/components/ConfirmLocationScreen';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { RouteSummary } from '@tricigo/ui/RouteSummary';
+import { AddressDetailsSheet } from '@/components/AddressDetailsSheet';
 import { Skeleton, SkeletonCard } from '@tricigo/ui/Skeleton';
 import { FareBreakdownCard } from '@tricigo/ui/FareBreakdownCard';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
@@ -1837,13 +1838,14 @@ function NativeHomeScreen() {
             counterpart={counterpart}
             onConfirm={(address, location) => {
               if (!isValidCoordinate(location.latitude, location.longitude)) { setPicker(null); return; }
+              // Adjusting the pin does not discard the note the rider wrote.
               if (isPickupPicker) {
-                setPickup(address, location);
+                setPickup(address, location, draft.pickup?.notes);
               } else if (picker.target === 'waypoint') {
                 const wpIdx = draft.waypoints.length - 1;
                 if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
               } else {
-                setDropoff(address, location);
+                setDropoff(address, location, draft.dropoff?.notes);
               }
               setPicker(null);
             }}
@@ -1959,6 +1961,8 @@ function IdleView() {
     dropoff_address: string;
     pickup_location: { latitude: number; longitude: number } | null;
     dropoff_location: { latitude: number; longitude: number } | null;
+    /** 00578 — restored into the new draft so the note is typed once. */
+    dropoff_notes?: string | null;
     created_at: string;
   } | null>(null);
   const { recentAddresses } = useRecentAddresses();
@@ -2150,6 +2154,7 @@ function IdleView() {
           dropoff_address: ride.dropoff_address ?? '',
           pickup_location: ride.pickup_location,
           dropoff_location: ride.dropoff_location,
+          dropoff_notes: ride.dropoff_notes ?? null,
           created_at: ride.created_at,
         });
       } catch (err) {
@@ -2461,7 +2466,7 @@ function IdleView() {
               onPress={() => {
                 if (!lastRide.dropoff_location) return;
                 triggerHaptic('light');
-                setDropoff(lastRide.dropoff_address, lastRide.dropoff_location);
+                setDropoff(lastRide.dropoff_address, lastRide.dropoff_location, lastRide.dropoff_notes);
                 resetServiceSelection(); // passenger trip — never inherit a stuck mensajería mode
                 setFlowStep('selecting');
               }}
@@ -3147,6 +3152,10 @@ function SelectingView({ openPicker }: {
   const { predictions } = useDestinationPredictions(userCenterLatLng);
   const { accounts: corporateAccounts } = useCorporateAccounts();
   const setEndpointAddress = useRideStore((s) => s.setEndpointAddress);
+  const setPickupNotes = useRideStore((s) => s.setPickupNotes);
+  const setDropoffNotes = useRideStore((s) => s.setDropoffNotes);
+  // Which endpoint's details sheet is open (00578 notes for the driver).
+  const [detailsTarget, setDetailsTarget] = useState<'pickup' | 'dropoff' | null>(null);
 
   // A long-press (or a place tap) on the map seeds the dropoff picker with
   // that exact point. keepAddress is false on purpose: we know no address for
@@ -3164,8 +3173,9 @@ function SelectingView({ openPicker }: {
   const [showDragHint, setShowDragHint] = useState(false);
   const handleMarkerDragEnd = useCallback((target: 'pickup' | 'dropoff') => async (lng: number, lat: number) => {
     const loc = { latitude: lat, longitude: lng };
-    const prevAddress = useRideStore.getState().draft[target]?.address ?? '';
-    if (target === 'pickup') setPickup(prevAddress, loc); else setDropoff(prevAddress, loc);
+    const prev = useRideStore.getState().draft[target];
+    const prevAddress = prev?.address ?? '';
+    if (target === 'pickup') setPickup(prevAddress, loc, prev?.notes); else setDropoff(prevAddress, loc, prev?.notes);
     setShowDragHint(false);
     AsyncStorage.setItem('@tricigo/drag_hint_seen', '1').catch(() => {});
     const gen = ++adjustGenRef.current;
@@ -3655,6 +3665,14 @@ function SelectingView({ openPicker }: {
                       {t('ride.adjusting', { defaultValue: 'Ajustando…' })}
                     </Text>
                   )}
+                  {draft.pickup && (
+                    <Pressable onPress={() => setDetailsTarget('pickup')} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <Ionicons name={draft.pickup.notes ? 'document-text' : 'add-circle-outline'} size={12} color={colors.brand.orange} />
+                      <Text variant="caption" numberOfLines={1} style={{ color: draft.pickup.notes ? colors.neutral[700] : colors.brand.orange, marginLeft: 4, flex: 1 }}>
+                        {draft.pickup.notes || t('ride.add_details', { defaultValue: 'Agregar detalles (apto, edificio, timbre)' })}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
                 <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
               </Pressable>
@@ -3683,6 +3701,14 @@ function SelectingView({ openPicker }: {
                       {t('ride.adjusting', { defaultValue: 'Ajustando…' })}
                     </Text>
                   )}
+                  {draft.dropoff && (
+                    <Pressable onPress={() => setDetailsTarget('dropoff')} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <Ionicons name={draft.dropoff.notes ? 'document-text' : 'add-circle-outline'} size={12} color={colors.brand.orange} />
+                      <Text variant="caption" numberOfLines={1} style={{ color: draft.dropoff.notes ? colors.neutral[700] : colors.brand.orange, marginLeft: 4, flex: 1 }}>
+                        {draft.dropoff.notes || t('ride.add_details', { defaultValue: 'Agregar detalles (apto, edificio, timbre)' })}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
                 <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
               </Pressable>
@@ -3707,6 +3733,18 @@ function SelectingView({ openPicker }: {
             </Pressable>
           )}
         </View>
+      )}
+
+      {/* Notes for the driver at the chosen endpoint (00578). */}
+      {detailsTarget && (
+        <AddressDetailsSheet
+          visible
+          target={detailsTarget}
+          address={draft[detailsTarget]?.address ?? ''}
+          value={draft[detailsTarget]?.notes ?? null}
+          onSave={(notes) => (detailsTarget === 'pickup' ? setPickupNotes(notes) : setDropoffNotes(notes))}
+          onClose={() => setDetailsTarget(null)}
+        />
       )}
 
       {/* One-time hint: the drag starts with a long-press on the pin. */}
@@ -3754,7 +3792,7 @@ function SelectingView({ openPicker }: {
                 : t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
             onSelect={(address, location, meta) => {
               if (searchingField === 'pickup') {
-                setPickup(address, location);
+                setPickup(address, location, meta?.notes);
                 // Same 00537 rule as the dropoff branch below: a street or a
                 // ZONE result asks the rider to confirm the pin. This branch
                 // used to ignore the flag, so a zone picked as PICKUP was
@@ -3769,7 +3807,7 @@ function SelectingView({ openPicker }: {
                 const wpIdx = draft.waypoints.length - 1;
                 if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
               } else {
-                setDropoff(address, location);
+                setDropoff(address, location, meta?.notes);
                 // 00537 (incident b428022b): a geocoded street address can pin
                 // far from the real destination (1,650 m in the incident, and
                 // nobody noticed until the driver couldn't finish). For those
@@ -4206,6 +4244,9 @@ function ReviewingView() {
   const mode: 'light' | 'dark' = resolvedScheme;
   const tokens = mode === 'dark' ? cubanDark : cubanLight;
   const { draft, fareEstimate, allFareEstimates, setFlowStep, setServiceType, isLoading, isFareEstimating, error, promoCode, promoResult, setPromoCode, splits, setInsurance, setRidePreferences, setShareRide, activeRide } = useRideStore();
+  const setPickupNotes = useRideStore((s) => s.setPickupNotes);
+  const setDropoffNotes = useRideStore((s) => s.setDropoffNotes);
+  const [reviewDetailsTarget, setReviewDetailsTarget] = useState<'pickup' | 'dropoff' | null>(null);
 
   /** Format fare based on payment method */
   const formatFare = useCallback((cupAmount: number, trcAmount?: number): string => {
@@ -4554,11 +4595,38 @@ function ReviewingView() {
               dropoffAddress={draft.dropoff?.address ?? ''}
               pickupLabel={t('ride.pickup')}
               dropoffLabel={t('ride.dropoff')}
+              pickupNote={draft.pickup?.notes}
+              dropoffNote={draft.dropoff?.notes}
               waypoints={draft.waypoints.map((wp, i) => ({
                 address: wp.address,
                 label: t('ride.stop_n', { n: i + 1, defaultValue: `Parada ${i + 1}` }),
               }))}
             />
+            {/* 00578: the note is still editable here, before the request goes out. */}
+            <View className="flex-row mt-3 pt-3 border-t border-neutral-200" style={{ gap: 16 }}>
+              <Pressable onPress={() => setReviewDetailsTarget('pickup')} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="document-text-outline" size={14} color={colors.brand.orange} />
+                <Text variant="caption" color="accent" className="ml-1">
+                  {draft.pickup?.notes ? t('ride.edit_details_pickup', { defaultValue: 'Editar detalles de recogida' }) : t('ride.add_details_pickup', { defaultValue: 'Detalles de recogida' })}
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => setReviewDetailsTarget('dropoff')} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="document-text-outline" size={14} color={colors.brand.orange} />
+                <Text variant="caption" color="accent" className="ml-1">
+                  {draft.dropoff?.notes ? t('ride.edit_details_dropoff', { defaultValue: 'Editar detalles del destino' }) : t('ride.add_details_dropoff', { defaultValue: 'Detalles del destino' })}
+                </Text>
+              </Pressable>
+            </View>
+            {reviewDetailsTarget && (
+              <AddressDetailsSheet
+                visible
+                target={reviewDetailsTarget}
+                address={draft[reviewDetailsTarget]?.address ?? ''}
+                value={draft[reviewDetailsTarget]?.notes ?? null}
+                onSave={(notes) => (reviewDetailsTarget === 'pickup' ? setPickupNotes(notes) : setDropoffNotes(notes))}
+                onClose={() => setReviewDetailsTarget(null)}
+              />
+            )}
             {draft.scheduledAt && (
               <View className="flex-row items-center mt-3 pt-3 border-t border-neutral-200">
                 <Ionicons name="calendar-outline" size={16} color={colors.brand.orange} />

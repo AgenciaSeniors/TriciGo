@@ -47,6 +47,10 @@ export type RideFlowStep =
 interface LocationDraft {
   address: string;
   location: GeoPoint;
+  /** Rider's note for the driver at this endpoint (00578): "#302 apto 4,
+   *  edificio azul, tocar el timbre". Travels with the endpoint (a swap
+   *  moves it with its address) and is cleared by a fresh selection. */
+  notes?: string;
 }
 
 interface WaypointDraft {
@@ -164,8 +168,11 @@ interface RideState {
   ratingReminderId: string | null;
 
   setFlowStep: (step: RideFlowStep) => void;
-  setPickup: (address: string, location: GeoPoint) => void;
-  setDropoff: (address: string, location: GeoPoint) => void;
+  setPickup: (address: string, location: GeoPoint, notes?: string | null) => void;
+  setDropoff: (address: string, location: GeoPoint, notes?: string | null) => void;
+  /** Edit ONLY the note of an endpoint. Keeps the fare estimate. */
+  setPickupNotes: (notes: string | null) => void;
+  setDropoffNotes: (notes: string | null) => void;
   /** Update ONLY the label of an endpoint — used after a marker drag, once
    *  the reverse geocode of the new point lands. Keeps the fare estimate:
    *  the coordinate was already committed through setPickup/setDropoff. */
@@ -238,7 +245,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   // pinned. The user must explicitly cancel the active ride first via
   // cancelRide(). Without this guard, the local draft and the DB row
   // diverged ("phantom ride" — vehicle picker locked, address mismatch).
-  setPickup: (address, location) =>
+  setPickup: (address, location, notes) =>
     set((s) => {
       if (s.activeRide) {
         logger.warn('[ride.store] setPickup ignored — activeRide is pinned', {
@@ -252,10 +259,10 @@ export const useRideStore = create<RideState>((set, get) => ({
       // can't be persisted by confirmRide. The TTL guard keys on
       // fareEstimatedAt; nulling it forces a fresh requestEstimate before the
       // ride can be confirmed. Mirrors swapPickupDropoff / addWaypoint.
-      return { draft: { ...s.draft, pickup: { address, location } }, fareEstimate: null, fareEstimatedAt: null };
+      return { draft: { ...s.draft, pickup: { address, location, ...(notes ? { notes } : {}) } }, fareEstimate: null, fareEstimatedAt: null };
     }),
 
-  setDropoff: (address, location) =>
+  setDropoff: (address, location, notes) =>
     set((s) => {
       if (s.activeRide) {
         logger.warn('[ride.store] setDropoff ignored — activeRide is pinned', {
@@ -268,7 +275,19 @@ export const useRideStore = create<RideState>((set, get) => ({
       // on dropoff change so confirmRide can't persist a fare from the
       // previous destination. Root cause of estimated_fare_cup (e.g. 2200,
       // far destination) not matching estimated_distance_m (near destination).
-      return { draft: { ...s.draft, dropoff: { address, location } }, fareEstimate: null, fareEstimatedAt: null };
+      return { draft: { ...s.draft, dropoff: { address, location, ...(notes ? { notes } : {}) } }, fareEstimate: null, fareEstimatedAt: null };
+    }),
+
+  setPickupNotes: (notes) =>
+    set((s) => {
+      if (!s.draft.pickup || s.activeRide) return s;
+      return { draft: { ...s.draft, pickup: { ...s.draft.pickup, notes: notes ?? undefined } } };
+    }),
+
+  setDropoffNotes: (notes) =>
+    set((s) => {
+      if (!s.draft.dropoff || s.activeRide) return s;
+      return { draft: { ...s.draft, dropoff: { ...s.draft.dropoff, notes: notes ?? undefined } } };
     }),
 
   setEndpointAddress: (target, address) =>

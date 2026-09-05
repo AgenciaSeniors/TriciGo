@@ -10,6 +10,7 @@ vi.mock('../../client', () => ({
 
 // Import after mock is set up
 import { customerService } from '../customer.service';
+import { updateProfileSchema } from '../../schemas';
 
 describe('customerService', () => {
   beforeEach(() => {
@@ -208,5 +209,24 @@ describe('customerService', () => {
       });
       expect(result).toEqual(newProfile);
     });
+  });
+});
+
+describe('updateProfileSchema — saved_locations', () => {
+  const loc = { label: 'Casa', address: 'Calle 23 e/ L y M, Vedado', latitude: 23.1399, longitude: -82.383 };
+
+  it('accepts the shape the app actually sends (label, not name)', () => {
+    expect(updateProfileSchema.safeParse({ saved_locations: [loc] }).success).toBe(true);
+    expect(updateProfileSchema.safeParse({ saved_locations: [{ ...loc, label: undefined, name: 'Casa' }] }).success).toBe(false);
+  });
+
+  it('accepts the fixed-place kind and the details for the driver', () => {
+    const r = updateProfileSchema.safeParse({ saved_locations: [{ ...loc, kind: 'home', details: '#302 apto 4, edificio azul' }] });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects an unknown kind and over-long details', () => {
+    expect(updateProfileSchema.safeParse({ saved_locations: [{ ...loc, kind: 'castle' }] }).success).toBe(false);
+    expect(updateProfileSchema.safeParse({ saved_locations: [{ ...loc, details: 'x'.repeat(201) }] }).success).toBe(false);
   });
 });

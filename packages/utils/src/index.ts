@@ -71,6 +71,9 @@ export type {
 export { generateHistoryCSV, generateWalletCSV } from './historyExport';
 export { clusterDestinations, scorePredictions } from './destinationPredictor';
 export { pinConfidence, pickerZoomFor, isNearScreenPoint, coordsEqual } from './mapPicker';
+export { trimNotes, ADDRESS_NOTES_MAX } from './addressNotes';
+export { resolveFixedPlaces } from './savedPlaces';
+export type { FixedPlaceKind, FixedPlaces } from './savedPlaces';
 export type { PinConfidence, ScreenPoint } from './mapPicker';
 export type {
   RideHistoryEntry,

@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -102,6 +103,9 @@ interface AddressSearchInputProps {
   onPickOnMap?: () => void;
   /** When true, component starts expanded with suggestions visible */
   autoExpand?: boolean;
+  /** Offer the fixed Casa / Trabajo slots at the top of the idle panel (an
+   *  empty slot links to the saved-places screen). Off inside that screen. */
+  showFixedPlaces?: boolean;
 }
 
 function AddressSearchInputInner({
@@ -115,6 +119,7 @@ function AddressSearchInputInner({
   showUseMyLocation = false,
   onPickOnMap,
   autoExpand = false,
+  showFixedPlaces = true,
 }: AddressSearchInputProps) {
   const { t } = useTranslation('rider');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -575,6 +580,9 @@ function AddressSearchInputInner({
       .map((x) => x.p);
   }, [near]);
 
+  // Casa / Trabajo slots + the rest of the saved places (00578).
+  const fixedPlaces = useMemo(() => resolveFixedPlaces(savedLocations), [savedLocations]);
+
   const handleSelectPreset = (preset: typeof HAVANA_PRESETS[number]) => {
     triggerSelection();
     setQuery('');
@@ -661,6 +669,8 @@ function AddressSearchInputInner({
     longitude: number;
     streetLike?: boolean;
     zoneLike?: boolean;
+    /** Details saved with the place (home/work/recents) — prefill the ride's notes. */
+    notes?: string | null;
   }) => {
     trackEvent('address_searched', { query: query.trim() });
     setQuery('');
@@ -688,7 +698,7 @@ function AddressSearchInputInner({
     // selection and on unmount so a slow reverseGeocode (up to ~6 s, it races
     // Overpass) can't land after the user already moved on.
     const selectGen = ++selectGenRef.current;
-    onSelect(initial, { latitude: item.latitude, longitude: item.longitude }, { confirmPin, zoneLike });
+    onSelect(initial, { latitude: item.latitude, longitude: item.longitude }, { confirmPin, zoneLike, notes: item.notes ?? undefined });
     // Background: enrich with Cuban cross-street format via reverseGeocode.
     // reverseGeocode already prepends the nearest POI when it finds one,
     // so this naturally upgrades a "Calle 23" pick to "Hotel Bruzón, Calle 23
@@ -728,6 +738,7 @@ function AddressSearchInputInner({
     streetLike?: boolean;
     zoneLike?: boolean;
     needsResolution?: boolean;
+    notes?: string | null;
   }) => {
     triggerSelection();
 
@@ -1150,29 +1161,69 @@ function AddressSearchInputInner({
             </Pressable>
           )}
 
-          {/* Saved locations section (Casa, Trabajo, etc.) — like web */}
-          {savedLocations.length > 0 && (
+          {/* Casa / Trabajo — fixed slots, always offered. An empty slot is
+              an invitation to save it; a filled one carries its details
+              ("#302 apto 4") straight into the ride's notes. */}
+          {showFixedPlaces && (
+            <View className="mb-2">
+              {(['home', 'work'] as const).map((slot) => {
+                const place = fixedPlaces[slot];
+                const iconName = slot === 'home' ? 'home' : 'briefcase';
+                if (place) {
+                  return (
+                    <Pressable
+                      key={`fixed-${slot}`}
+                      className="flex-row items-center px-3 py-3 rounded-lg"
+                      onPress={() => handleSelectMerged({ address: place.address, latitude: place.latitude, longitude: place.longitude, priority: 0, source: 'saved', icon: iconName, distanceKm: null, notes: place.details ?? null })}
+                    >
+                      <Ionicons name={iconName} size={18} color={colors.brand.orange} />
+                      <View className="flex-1 ml-3">
+                        <Text variant="body" className="font-semibold" numberOfLines={1}>{place.label}</Text>
+                        <Text variant="caption" color="tertiary" numberOfLines={1}>{place.address}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                }
+                return (
+                  <Pressable
+                    key={`fixed-${slot}`}
+                    className="flex-row items-center px-3 py-3 rounded-lg"
+                    onPress={() => { setIsExpanded(false); router.push(`/profile/saved-locations?kind=${slot}`); }}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name={slot === 'home' ? 'home-outline' : 'briefcase-outline'} size={18} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
+                    <Text variant="body" color="secondary" className="flex-1 ml-3" numberOfLines={1}>
+                      {slot === 'home'
+                        ? t('ride.add_home', { defaultValue: 'Agregar Casa' })
+                        : t('ride.add_work', { defaultValue: 'Agregar Trabajo' })}
+                    </Text>
+                    <Ionicons name="add-circle-outline" size={18} color={colors.brand.orange} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Other saved places (everything that is not the Casa / Trabajo slot) */}
+          {fixedPlaces.others.length > 0 && (
             <View className="mb-2">
               <Text variant="caption" color="tertiary" className="px-1 mb-1" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
                 {t('ride.saved_locations', { defaultValue: 'Ubicaciones guardadas' })}
               </Text>
-              {savedLocations.map((loc, i) => {
-                const iconName = (loc as any).label?.toLowerCase().includes('casa') ? 'home' : (loc as any).label?.toLowerCase().includes('trabajo') ? 'briefcase' : 'star';
-                return (
-                  <Pressable
-                    key={`saved-${i}`}
-                    className="flex-row items-center px-3 py-3 rounded-lg"
-                    style={{ borderBottomWidth: i < savedLocations.length - 1 ? 1 : 0, borderBottomColor: isDark ? '#333' : '#f0f0f0' }}
-                    onPress={() => handleSelectMerged({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude, priority: 0, source: 'saved', icon: iconName, distanceKm: null })}
-                  >
-                    <Ionicons name={iconName as any} size={18} color={colors.brand.orange} />
-                    <View className="flex-1 ml-3">
-                      <Text variant="body" className="font-semibold" numberOfLines={1}>{(loc as any).label || loc.address}</Text>
-                      <Text variant="caption" color="tertiary" numberOfLines={1}>{loc.address}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
+              {fixedPlaces.others.map((loc, i) => (
+                <Pressable
+                  key={`saved-${i}`}
+                  className="flex-row items-center px-3 py-3 rounded-lg"
+                  style={{ borderBottomWidth: i < fixedPlaces.others.length - 1 ? 1 : 0, borderBottomColor: isDark ? '#333' : '#f0f0f0' }}
+                  onPress={() => handleSelectMerged({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude, priority: 0, source: 'saved', icon: 'star', distanceKm: null, notes: loc.details ?? null })}
+                >
+                  <Ionicons name="star" size={18} color={colors.brand.orange} />
+                  <View className="flex-1 ml-3">
+                    <Text variant="body" className="font-semibold" numberOfLines={1}>{loc.label || loc.address}</Text>
+                    <Text variant="caption" color="tertiary" numberOfLines={1}>{loc.address}</Text>
+                  </View>
+                </Pressable>
+              ))}
             </View>
           )}
 
@@ -1188,7 +1239,7 @@ function AddressSearchInputInner({
                 <Pressable
                   key={`recent-${i}`}
                   className="flex-row items-center px-3 py-2.5 rounded-lg"
-                  onPress={() => handleSelectMerged({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 0, source: 'recent', icon: 'time-outline', distanceKm: null })}
+                  onPress={() => handleSelectMerged({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 0, source: 'recent', icon: 'time-outline', distanceKm: null, notes: r.notes ?? null })}
                 >
                   <Ionicons name="time-outline" size={16} color={colors.brand.orange} />
                   <Text variant="bodySmall" color="primary" className="flex-1 ml-3 font-medium" numberOfLines={1}>{r.address}</Text>
