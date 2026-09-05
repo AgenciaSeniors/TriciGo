@@ -79,17 +79,20 @@ RETURNS text LANGUAGE sql IMMUTABLE SET search_path TO 'public','pg_catalog' AS 
   -- p_keep_case = false : Title Case every token (input was all-caps or all-lower).
   -- p_keep_case = true  : tokens keep their case; only the Spanish connectors are
   --                       lowercased (input was over-capitalised: "De La ... Los").
-  -- Connectors are never touched in first position; Cuban acronyms stay upper.
+  -- Connectors are never touched in first position; "La Habana" keeps its capital;
+  -- Cuban acronyms and "S.A."-style abbreviations stay upper.
   SELECT string_agg(
     CASE
+      WHEN i > 1 AND lower(w) = 'la' AND lower(nw) = 'habana' THEN 'La'
       WHEN i > 1 AND lower(w) IN ('de','del','la','las','los','y','e','el','al','en','con','por','para') THEN lower(w)
       WHEN p_keep_case THEN w
-      WHEN lower(w) IN ('etecsa','cupet','cimex','trd','cujae','uneac','icaic','focsa','minsap','mincult',
+      WHEN lower(w) IN ('etecsa','cupet','cimex','trd','cujae','uneac','icaic','focsa','minsap','mincult','ueb',
                         'bpa','bandec','bfi','cadeca','ecasa','egrem','isa','uci','fac','dhl','ups','atm') THEN upper(w)
-      WHEN w ~ '&' THEN w
+      WHEN w ~ '&' OR w ~ '^([A-Z]\.)+$' THEN w
       ELSE upper(left(w,1)) || lower(substr(w,2))
     END, ' ' ORDER BY i)
-  FROM unnest(string_to_array(s, ' ')) WITH ORDINALITY AS t(w, i) WHERE w <> '';
+  FROM (SELECT w, i, lead(w) OVER (ORDER BY i) AS nw
+          FROM unnest(string_to_array(s, ' ')) WITH ORDINALITY AS t(w, i) WHERE w <> '') x;
 $function$;
 
 CREATE OR REPLACE FUNCTION public._poi_clean_name(s text)
@@ -98,25 +101,34 @@ DECLARE v text; v_in text; v_conn int;
 BEGIN
   IF s IS NULL THEN RETURN NULL; END IF;
   v_in := regexp_replace(trim(s), '\s+', ' ', 'g');
-  v := replace(replace(replace(replace(v_in, '“', '"'), '”', '"'), '‘', ''''), '’', '''');
+  -- Typographic quotes → ASCII (U+201C/U+201D/U+2018/U+2019).
+  v := replace(replace(replace(replace(v_in, chr(8220), '"'), chr(8221), '"'), chr(8216), ''''), chr(8217), '''');
   -- A name wrapped entirely in quotes loses them; inner quotes are part of the name.
-  v := regexp_replace(v, '^"([^"]+)"$', '\1');
+  -- An unbalanced quote is a typo ("Teatro Mariana Grajales"") and goes away.
+  v := regexp_replace(v, '^"(.+)"$', '\1');
   v := regexp_replace(v, '^''([^'']+)''$', '\1');
+  IF (length(v) - length(replace(v, '"', ''))) % 2 = 1 THEN v := replace(v, '"', ''); END IF;
+  v := regexp_replace(v, '\s+,', ',', 'g');
+  v := regexp_replace(trim(v), '[,\s]+$', '');
   -- Wikidata Swedish descriptors imported by Overture: "(ö i Kuba)", "(periodiskt
   -- vattendrag i Kuba, Provincia de …)". Anchored on the "<term> … i Kuba" shape so
   -- "(by Sheraton)" survives.
   v := regexp_replace(v, '\s*\(((ö|öar|vattendrag|periodiskt|sjö|berg|by|ort|udde|bukt|flod|kulle|kommun|stad|halvö|lagun|vik|kanal|damm|grotta)\s+)+i\s+kuba\y[^)]*\)', '', 'gi');
-  -- "(habana -Cuba )", "(La Habana)", "(Cuba)".
+  -- "(habana -Cuba )", "(La Habana)", "(Cuba)", "(Cuba cell)".
   v := regexp_replace(v, '\s*\(\s*(la\s+)?(habana|havana|cuba)\y[^)]*\)', '', 'gi');
-  -- City / country suffixes. A comma OR a city word is required before "Cuba":
-  -- "Banco Central de Cuba" and "Hotel Nacional de Cuba" keep their name.
+  -- Trailing period unless the last token is an abbreviation ("S.A.").
+  IF v ~ '\.$' AND v !~ '\S*\.\S+\.$' THEN v := left(v, -1); END IF;
+  -- City / country suffixes. A comma, a period OR a city word is required before
+  -- "Cuba": "Banco Central de Cuba" and "Hotel Nacional de Cuba" keep their name.
   v := regexp_replace(v,
-    '(,\s*(la\s+)?(habana|havana|l''havana|trinidad|varadero|cienfuegos|santiago de cuba|pinar del r[ií]o|holgu[ií]n|camag[uü]ey|matanzas|santa clara)?(,\s*|\s+)?cuba'
-    || '|\s+(la\s+)?(habana|havana|trinidad|varadero|cienfuegos|santiago de cuba|pinar del r[ií]o|holgu[ií]n|camag[uü]ey|matanzas|santa clara)\s*,?\s*cuba)\s*$', '', 'i');
-  -- ", La Habana" / ", Vedado" trailing — comma required ("Universidad de La Habana" stays).
-  v := regexp_replace(v, ',\s*(la\s+)?(habana|havana)\s*$', '', 'i');
-  v := regexp_replace(v, ',\s*(vedado|centro habana|habana vieja|playa|miramar|cerro)\s*$', '', 'i');
-  v := regexp_replace(trim(v), '[,.\s]+$', '');
+    '([,.]\s*(la\s+)?(habana|havana|l''havana|trinidad|varadero|cienfuegos|santiago de cuba|pinar del r[ií]o|holgu[ií]n|camag[uü]ey|matanzas|santa clara)?([,.]\s*|\s+)?cuba'
+    || '|\s+(la\s+)?(habana|havana|trinidad|varadero|cienfuegos|santiago de cuba|pinar del r[ií]o|holgu[ií]n|camag[uü]ey|matanzas|santa clara)\s*[,.]?\s*cuba'
+    || '|\.cuba)\s*$', '', 'i');
+  -- ", La Habana" / ". Camagüey" / ", Vedado" trailing — a separator is required
+  -- ("Universidad de La Habana" stays).
+  v := regexp_replace(v, '[,.]\s*(la\s+)?(habana|havana|trinidad|varadero|cienfuegos|santiago de cuba|pinar del r[ií]o|holgu[ií]n|camag[uü]ey|matanzas|santa clara|vedado|centro habana|habana vieja|playa|miramar|cerro)\s*$', '', 'i');
+  v := regexp_replace(trim(v), '[,\s]+$', '');
+  IF v ~ '\.$' AND v !~ '\S*\.\S+\.$' THEN v := left(v, -1); END IF;
   v := regexp_replace(v, '\s+', ' ', 'g');
   IF v = '' THEN RETURN v_in; END IF;
   -- Case repair.
@@ -125,12 +137,19 @@ BEGIN
     IF v !~ '^[A-ZÁÉÍÓÚÑ&]{2,6}$' THEN v := _poi_title_case(v, false); END IF;
   ELSIF v = lower(v) AND v ~ '[a-záéíóúñ]{4,}' THEN
     v := _poi_title_case(v, false);
-  ELSE
-    -- Mixed case but every word capitalised with ≥ 2 capitalised connectors after the
-    -- first word = a title-caser ran over it ("Museo Nacional De La Lucha Contra Los
-    -- Bandidos"). One capitalised article stays ("Restaurante Los Nardos").
+  ELSIF v !~ '(^|\s)[a-záéíóúñ]' THEN
+    -- Mixed case, every word capitalised. "De/Del/Y" mid-name are never part of a
+    -- proper name → always lowercased ("Palacio De Convenciones"). Articles
+    -- ("La/Los/El") only when ≥ 2 capitalised connectors betray a title-caser
+    -- ("Museo Nacional De La Lucha Contra Los Bandidos"); one capitalised article
+    -- stays ("Restaurante Los Nardos").
     SELECT count(*) INTO v_conn FROM regexp_matches(v, '\s(De|Del|La|Las|Los|Y|E|El|Al|En|Con|Por|Para)\y', 'g');
-    IF v_conn >= 2 AND v !~ '(^|\s)[a-záéíóúñ]' THEN v := _poi_title_case(v, true); END IF;
+    IF v_conn >= 2 THEN
+      v := _poi_title_case(v, true);
+    ELSE
+      SELECT string_agg(CASE WHEN i > 1 AND w IN ('De','Del','Y','Al','En','Con','Por','Para') THEN lower(w) ELSE w END, ' ' ORDER BY i)
+        INTO v FROM unnest(string_to_array(v, ' ')) WITH ORDINALITY AS t(w, i);
+    END IF;
   END IF;
   RETURN v;
 END $function$;

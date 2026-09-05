@@ -53,3 +53,18 @@ DO $$ BEGIN
   PERFORM _t('T2x bare generic + de la', _poi_bare_name('Casa de la Música') = 'musica');
   PERFORM _t('T2y null', _poi_clean_name(NULL) IS NULL AND _poi_bare_name(NULL) IS NULL);
 END $$;
+-- T2 (cont.): cases from a 157-name prod sample run through the first draft
+DO $$ BEGIN
+  PERFORM _t('T2z1 lone De lowered', _poi_clean_name('Palacio De Convenciones, La Habana') = 'Palacio de Convenciones');
+  PERFORM _t('T2z2 trailing period then suffix', _poi_clean_name('Loma de La Cruz, Holguín, Cuba.') = 'Loma de La Cruz');
+  PERFORM _t('T2z3 unbalanced quote', _poi_clean_name('Teatro Mariana Grajales"') = 'Teatro Mariana Grajales');
+  PERFORM _t('T2z4 S.A. kept', _poi_clean_name('MCV Servicios, S.A.') = 'MCV Servicios, S.A.');
+  PERFORM _t('T2z5 period-separated city', _poi_clean_name('Lago De Los Sueños. Camagüey. Cuba') = 'Lago de los Sueños');
+  PERFORM _t('T2z6 La Habana keeps capital', _poi_clean_name('FACULTAD DE CONTABILIDAD DE LA HABANA') = 'Facultad de Contabilidad de La Habana');
+  PERFORM _t('T2z7 outer quotes with inner quotes', _poi_clean_name('"Restaurante Paladar "La Casa""') = 'Restaurante Paladar "La Casa"');
+  PERFORM _t('T2z8 space before comma', _poi_clean_name('Hostal la Casita , Trinidad, Cuba') = 'Hostal la Casita');
+  PERFORM _t('T2z9 ETECSA (Cuba cell)', _poi_clean_name('ETECSA (Cuba cell)') = 'ETECSA');
+  PERFORM _t('T2z10 hotel named after city kept', _poi_clean_name('Hotel Santiago de Cuba') = 'Hotel Santiago de Cuba');
+  PERFORM _t('T2z11 initial E. kept', _poi_clean_name('Feria De Comidas (Antorcha E.)') = 'Feria de Comidas (Antorcha E.)');
+  PERFORM _t('T2z12 .cuba garbage', _poi_clean_name('Iglesia Del Cobre, Santiago De Cuba.cuba') = 'Iglesia del Cobre');
+END $$;
