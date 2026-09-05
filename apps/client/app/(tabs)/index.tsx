@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService } from '@tricigo/api';
@@ -1753,37 +1753,23 @@ function NativeHomeScreen() {
   // 'dropoff-confirm' (00537): same dropoff picker, but opened automatically to
   // CONFIRM a low-confidence geocoded search result — shows the "¿El destino es
   // aquí?" prompt and keeps the picked address text if the pin isn't moved.
-  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'pickup-confirm' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null>(null);
-  // The confirm picker was opened for a ZONE result (neighbourhood /
-  // municipality): its caption asks to move the pin to the exact spot
-  // instead of "¿El destino es aquí?". Cleared with the picker.
-  const [pickerZoneHint, setPickerZoneHint] = useState(false);
-  const openPicker = useCallback(
-    (mode: 'pickup' | 'pickup-confirm' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null, opts?: { zone?: boolean }) => {
-      setPickerZoneHint(!!opts?.zone);
-      setMapPickerMode(mode);
-    },
-    [],
-  );
-
-  // A long-press on the map seeds the picker with that exact point instead
-  // of the existing dropoff. Cleared whenever the picker closes.
-  const [pickerSeed, setPickerSeed] = useState<{ latitude: number; longitude: number } | null>(null);
+  // One object instead of mode + seed + zone flag: every entry point (search
+  // confirmation, "Elegir en el mapa", long-press, place tap, "Ajustar") says
+  // explicitly what it wants — see PickerState.
+  const [picker, setPicker] = useState<PickerState | null>(null);
 
   // BUG-253 (Capa 3.5): if the flow transitions away from 'idle'/'selecting'
   // while a picker overlay is open, force-close it. Without this, the
   // local picker state can outlive its valid lifecycle and re-render
   // on top of a pinned activeRide ("phantom" symptom).
   useEffect(() => {
-    if (flowStep !== 'idle' && flowStep !== 'selecting' && mapPickerMode !== null) {
+    if (flowStep !== 'idle' && flowStep !== 'selecting' && picker !== null) {
       // The seed goes with it. Surviving this path, it would hijack the NEXT
       // picker of any mode — opening the pickup pin at a point the rider
       // long-pressed during a previous ride.
-      setPickerSeed(null);
-      setPickerZoneHint(false);
-      setMapPickerMode(null);
+      setPicker(null);
     }
-  }, [flowStep, mapPickerMode]);
+  }, [flowStep, picker]);
 
   // Crossfade animation between flow steps
   const flowFadeAnim = useRef(new Animated.Value(1)).current;
@@ -1813,70 +1799,60 @@ function NativeHomeScreen() {
   if (flowStep === 'selecting') {
     // Render ONLY the map picker when active to avoid two Mapbox MapView
     // instances fighting for gestures on Android (caused frozen pan/zoom).
-    if (mapPickerMode) {
+    if (picker) {
       const lastWaypoint = draft.waypoints.length > 0 ? draft.waypoints[draft.waypoints.length - 1] : null;
       // BUG-282 — fallback chain so the picker doesn't open at HAVANA_CENTER
       // (= São Paulo in demo mode) when the slot is empty for the first time:
       //   pickup picker  → draft.pickup ?? draft.dropoff (no useful fallback otherwise)
       //   dropoff picker → draft.dropoff ?? draft.pickup (start near the user)
       //   waypoint picker → last waypoint ?? draft.pickup
-      const isPickupPicker = mapPickerMode === 'pickup' || mapPickerMode === 'pickup-confirm';
-      const isConfirmPicker = mapPickerMode === 'pickup-confirm' || mapPickerMode === 'dropoff-confirm';
+      const isPickupPicker = picker.target === 'pickup';
+      const draftEndpoint = isPickupPicker ? draft.pickup : picker.target === 'dropoff' ? draft.dropoff : null;
       const pickerInitialLoc =
-        pickerSeed ??
+        picker.seed ??
         (isPickupPicker
           ? draft.pickup?.location ?? null
-          : mapPickerMode === 'waypoint'
+          : picker.target === 'waypoint'
             ? lastWaypoint?.location ?? draft.pickup?.location ?? null
             : draft.dropoff?.location ?? draft.pickup?.location ?? null);
+      // The other end of the trip, for orientation while picking.
+      const counterpart = isPickupPicker
+        ? (draft.dropoff ? { location: draft.dropoff.location, mode: 'dropoff' as const } : null)
+        : (draft.pickup ? { location: draft.pickup.location, mode: 'pickup' as const } : null);
       return (
         <View style={{ flex: 1 }}>
           <ConfirmLocationScreen
             mode={isPickupPicker ? 'pickup' : 'dropoff'}
             initialLocation={pickerInitialLoc}
-            // 00537 pin confirmation: keep the search-picked address text when
-            // the user confirms without moving the pin, and show the explicit
-            // "¿El destino es aquí?" prompt.
-            //
-            // Only when the picker was opened FROM search, though. A long
-            // press seeds its own coordinate (pickerSeed) and we know no
-            // address for it — passing the previous dropoff's address here
-            // would let the user confirm the old label pinned to the new
-            // point, which is the mismatch 00537 exists to prevent.
-            initialAddress={
-              isConfirmPicker && !pickerSeed
-                ? (isPickupPicker ? draft.pickup?.address : draft.dropoff?.address) ?? null
-                : null
-            }
-            confirmPrompt={isConfirmPicker}
-            confirmHint={pickerZoneHint ? 'zone' : null}
+            // 00537 pin confirmation: keep the draft's address text when the
+            // user confirms without moving the pin — only when the entry point
+            // said so (keepAddress). A long press / place tap seeds its own
+            // coordinate and we know no address for it: passing the previous
+            // label there would let the user confirm the old label pinned to
+            // the new point, which is the mismatch 00537 exists to prevent.
+            initialAddress={picker.keepAddress ? draftEndpoint?.address ?? null : null}
+            seeded={!!picker.seed || picker.keepAddress}
+            confirmPrompt={picker.confirm}
+            confirmHint={picker.zoneHint ? 'zone' : null}
+            counterpart={counterpart}
             onConfirm={(address, location) => {
-              if (!isValidCoordinate(location.latitude, location.longitude)) { setPickerSeed(null); openPicker(null); return; }
+              if (!isValidCoordinate(location.latitude, location.longitude)) { setPicker(null); return; }
               if (isPickupPicker) {
                 setPickup(address, location);
-              } else if (mapPickerMode === 'waypoint') {
+              } else if (picker.target === 'waypoint') {
                 const wpIdx = draft.waypoints.length - 1;
                 if (wpIdx >= 0) updateWaypoint(wpIdx, address, location);
               } else {
                 setDropoff(address, location);
               }
-              setPickerSeed(null);
-              openPicker(null);
+              setPicker(null);
             }}
-            onClose={() => { setPickerSeed(null); openPicker(null); }}
+            onClose={() => setPicker(null)}
           />
         </View>
       );
     }
-    return (
-      <SelectingView
-        setMapPickerMode={openPicker}
-        openPickerAt={(lng, lat) => {
-          setPickerSeed({ latitude: lat, longitude: lng });
-          openPicker('dropoff-confirm');
-        }}
-      />
-    );
+    return <SelectingView openPicker={setPicker} />;
   }
 
   // Other non-idle flow steps use Screen with scroll
@@ -3043,6 +3019,25 @@ const idleStyles = StyleSheet.create({
 });
 
 // X2.4: Geocoding coordinate validation
+type PickerTarget = 'pickup' | 'dropoff' | 'waypoint';
+
+/** State of the fullscreen pin picker (ConfirmLocationScreen). Null = closed. */
+interface PickerState {
+  target: PickerTarget;
+  /** Opened to CONFIRM a point (search result, long-press, place tap): shows
+   *  the "¿… es aquí?" caption. */
+  confirm: boolean;
+  /** Open ON this exact point instead of the draft's current value. */
+  seed?: { latitude: number; longitude: number } | null;
+  /** Keep the draft's address text when the pin is confirmed without moving
+   *  (<20 m). NEVER together with a seed we know no address for: a
+   *  long-press must not inherit the previous destination's label pinned
+   *  to a new point (00537, incident b428022b). */
+  keepAddress: boolean;
+  /** The point is a ZONE result: ask to move the pin to the exact spot. */
+  zoneHint?: boolean;
+}
+
 function isValidCoordinate(lat: number, lng: number): boolean {
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0);
 }
@@ -3088,12 +3083,8 @@ const VEHICLE_ICONS: Record<string, any> = {
 // The `waypoint` variant is the same one added to searchingField so
 // the waypoint-search map-picker flow can be wired later. Keeps the
 // two types aligned (same setter accepts the same values).
-function SelectingView({ setMapPickerMode, openPickerAt }: {
-  setMapPickerMode: (
-    mode: 'pickup' | 'pickup-confirm' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null,
-    opts?: { zone?: boolean },
-  ) => void;
-  openPickerAt: (lng: number, lat: number) => void;
+function SelectingView({ openPicker }: {
+  openPicker: (state: PickerState | null) => void;
 }) {
   // BUG-282 (revised) — initial map center.
   // Two-stage resolution: (1) AsyncStorage cache for an instant first
@@ -3155,6 +3146,68 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
   );
   const { predictions } = useDestinationPredictions(userCenterLatLng);
   const { accounts: corporateAccounts } = useCorporateAccounts();
+  const setEndpointAddress = useRideStore((s) => s.setEndpointAddress);
+
+  // A long-press (or a place tap) on the map seeds the dropoff picker with
+  // that exact point. keepAddress is false on purpose: we know no address for
+  // a bare coordinate (00537).
+  const openPickerAt = useCallback((lng: number, lat: number) => {
+    openPicker({ target: 'dropoff', confirm: true, seed: { latitude: lat, longitude: lng }, keepAddress: false });
+  }, [openPicker]);
+
+  // Marker drag. The coordinate is committed the moment the finger lifts (the
+  // pin stays put and the fare re-estimates); the label follows once the
+  // reverse geocode lands, through setEndpointAddress so the estimate is not
+  // cleared a second time. A newer drag invalidates an older geocode.
+  const [adjusting, setAdjusting] = useState<'pickup' | 'dropoff' | null>(null);
+  const adjustGenRef = useRef(0);
+  const [showDragHint, setShowDragHint] = useState(false);
+  const handleMarkerDragEnd = useCallback((target: 'pickup' | 'dropoff') => async (lng: number, lat: number) => {
+    const loc = { latitude: lat, longitude: lng };
+    const prevAddress = useRideStore.getState().draft[target]?.address ?? '';
+    if (target === 'pickup') setPickup(prevAddress, loc); else setDropoff(prevAddress, loc);
+    setShowDragHint(false);
+    AsyncStorage.setItem('@tricigo/drag_hint_seen', '1').catch(() => {});
+    const gen = ++adjustGenRef.current;
+    setAdjusting(target);
+    let address: string | null = null;
+    try {
+      address = await Promise.race([
+        reverseGeocode(lat, lng),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+    } catch { /* fallback below */ }
+    if (gen !== adjustGenRef.current) return;
+    // Same fallback ladder as ConfirmLocationScreen: never a placeholder.
+    // "Cerca de X" and raw coordinates are sentinels the server backstop
+    // (00539) upgrades with real intersection data at ride creation.
+    if (!address || /^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/.test(address)) {
+      const preset = findNearestPreset(loc, 5000);
+      address = preset ? `Cerca de ${preset.label}` : `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    }
+    setEndpointAddress(target, address);
+    setAdjusting(null);
+  }, [setPickup, setDropoff, setEndpointAddress]);
+  const handlePickupDragEnd = useMemo(() => handleMarkerDragEnd('pickup'), [handleMarkerDragEnd]);
+  const handleDropoffDragEnd = useMemo(() => handleMarkerDragEnd('dropoff'), [handleMarkerDragEnd]);
+
+  // First-time hint: dragging starts with a long-press on the pin, which
+  // nothing on screen announces. Shown once, the first time both pins exist.
+  useEffect(() => {
+    if (!draft.pickup || !draft.dropoff) return;
+    let cancelled = false;
+    AsyncStorage.getItem('@tricigo/drag_hint_seen').then((seen) => {
+      if (cancelled || seen) return;
+      setShowDragHint(true);
+      setTimeout(() => {
+        if (!cancelled) setShowDragHint(false);
+        AsyncStorage.setItem('@tricigo/drag_hint_seen', '1').catch(() => {});
+      }, 7000);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // Only the first time both endpoints exist — not on every coordinate change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!draft.pickup && !!draft.dropoff]);
   const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
   const insets = useSafeAreaInsets();
   const waypointPoints = useMemo(
@@ -3498,6 +3551,8 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
         // AsyncStorage instantly, then upgrades when GPS gives a fresh fix.
         initialUserCenter={userCenter}
         onLongPressMap={openPickerAt}
+        onPickupDragEnd={handlePickupDragEnd}
+        onDropoffDragEnd={handleDropoffDragEnd}
         showPlaces
         show3dBuildings={mapDetail}
         // The tile's label is ignored on purpose: the pin-confirm screen
@@ -3584,23 +3639,65 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
             <Ionicons name="close" size={22} color={colors.neutral[700]} />
           </Pressable>
 
-          {/* Two compact address rows — tap to open fullscreen search */}
+          {/* Two compact address rows — tap to open fullscreen search; the
+              map icon opens the pin picker ON the current point, keeping the
+              label if the pin is confirmed where it is. */}
           <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 14, elevation: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, overflow: 'hidden' }}>
-            <Pressable onPress={() => setSearchingField('pickup')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 }}>
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: MAP_COLORS.pickup, marginRight: 10 }} />
-              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.pickup?.address ? colors.neutral[900] : colors.neutral[400] }}>
-                {draft.pickup?.address || t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
-              </Text>
-              <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable onPress={() => setSearchingField('pickup')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 8, paddingVertical: 12, minHeight: 44 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: MAP_COLORS.pickup, marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="body" numberOfLines={1} style={{ color: draft.pickup?.address ? colors.neutral[900] : colors.neutral[400] }}>
+                    {draft.pickup?.address || t('ride.enter_pickup', { defaultValue: 'Punto de recogida' })}
+                  </Text>
+                  {adjusting === 'pickup' && (
+                    <Text variant="caption" style={{ color: colors.brand.orange }}>
+                      {t('ride.adjusting', { defaultValue: 'Ajustando…' })}
+                    </Text>
+                  )}
+                </View>
+                <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
+              </Pressable>
+              {draft.pickup && (
+                <Pressable
+                  onPress={() => openPicker({ target: 'pickup', confirm: false, seed: draft.pickup!.location, keepAddress: true })}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ride.adjust_on_map', { defaultValue: 'Ajustar en el mapa' })}
+                  hitSlop={4}
+                  style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Ionicons name="map-outline" size={18} color={colors.brand.orange} />
+                </Pressable>
+              )}
+            </View>
             <View style={{ height: 1, backgroundColor: colors.neutral[100], marginHorizontal: 12 }} />
-            <Pressable onPress={() => setSearchingField('dropoff')} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, minHeight: 44 }}>
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand.orange, marginRight: 10 }} />
-              <Text variant="body" numberOfLines={1} style={{ flex: 1, color: draft.dropoff?.address ? colors.neutral[900] : colors.neutral[400] }}>
-                {draft.dropoff?.address || t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
-              </Text>
-              <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable onPress={() => setSearchingField('dropoff')} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 8, paddingVertical: 12, minHeight: 44 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand.orange, marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="body" numberOfLines={1} style={{ color: draft.dropoff?.address ? colors.neutral[900] : colors.neutral[400] }}>
+                    {draft.dropoff?.address || t('ride.where_to', { defaultValue: '¿A dónde vas?' })}
+                  </Text>
+                  {adjusting === 'dropoff' && (
+                    <Text variant="caption" style={{ color: colors.brand.orange }}>
+                      {t('ride.adjusting', { defaultValue: 'Ajustando…' })}
+                    </Text>
+                  )}
+                </View>
+                <Ionicons name="pencil-outline" size={14} color={colors.neutral[400]} />
+              </Pressable>
+              {draft.dropoff && (
+                <Pressable
+                  onPress={() => openPicker({ target: 'dropoff', confirm: false, seed: draft.dropoff!.location, keepAddress: true })}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('ride.adjust_on_map', { defaultValue: 'Ajustar en el mapa' })}
+                  hitSlop={4}
+                  style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Ionicons name="map-outline" size={18} color={colors.brand.orange} />
+                </Pressable>
+              )}
+            </View>
           </View>
 
           {/* Swap button — 40px + hitSlop for 56px touch area */}
@@ -3609,6 +3706,18 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
               <Ionicons name="swap-vertical" size={18} color={colors.neutral[500]} />
             </Pressable>
           )}
+        </View>
+      )}
+
+      {/* One-time hint: the drag starts with a long-press on the pin. */}
+      {!searchingField && showDragHint && (
+        <View pointerEvents="none" style={{ position: 'absolute', top: insets.top + 8 + 100, left: 0, right: 0, alignItems: 'center', zIndex: 9 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(17,17,17,0.85)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 }}>
+            <Ionicons name="hand-left-outline" size={14} color="#fff" />
+            <Text variant="caption" style={{ color: '#fff', marginLeft: 6 }}>
+              {t('map.drag_hint', { defaultValue: 'Mantén presionado el pin para moverlo' })}
+            </Text>
+          </View>
         </View>
       )}
 
@@ -3652,7 +3761,7 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
                 // committed at its centroid.
                 if (meta?.confirmPin) {
                   setSearchingField(null);
-                  setMapPickerMode('pickup-confirm', { zone: !!meta.zoneLike });
+                  openPicker({ target: 'pickup', confirm: true, keepAddress: true, zoneHint: !!meta.zoneLike });
                   return;
                 }
               } else if (searchingField === 'waypoint') {
@@ -3669,7 +3778,7 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
                 // fixes the coords before the ride is ever requested.
                 if (meta?.confirmPin) {
                   setSearchingField(null);
-                  setMapPickerMode('dropoff-confirm', { zone: !!meta.zoneLike });
+                  openPicker({ target: 'dropoff', confirm: true, keepAddress: true, zoneHint: !!meta.zoneLike });
                   return;
                 }
               }
@@ -3680,8 +3789,9 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
             predictions={searchingField === 'dropoff' ? predictions : undefined}
             showUseMyLocation={searchingField === 'pickup'}
             onPickOnMap={() => {
+              const target = searchingField;
               setSearchingField(null);
-              setMapPickerMode(searchingField);
+              if (target) openPicker({ target, confirm: false, keepAddress: false });
             }}
           />
         </ScrollView>

@@ -70,6 +70,8 @@ export type {
 } from './mapLogger';
 export { generateHistoryCSV, generateWalletCSV } from './historyExport';
 export { clusterDestinations, scorePredictions } from './destinationPredictor';
+export { pinConfidence, pickerZoomFor, isNearScreenPoint, coordsEqual } from './mapPicker';
+export type { PinConfidence, ScreenPoint } from './mapPicker';
 export type {
   RideHistoryEntry,
   DestinationCluster,

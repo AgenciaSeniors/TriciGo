@@ -166,6 +166,10 @@ interface RideState {
   setFlowStep: (step: RideFlowStep) => void;
   setPickup: (address: string, location: GeoPoint) => void;
   setDropoff: (address: string, location: GeoPoint) => void;
+  /** Update ONLY the label of an endpoint — used after a marker drag, once
+   *  the reverse geocode of the new point lands. Keeps the fare estimate:
+   *  the coordinate was already committed through setPickup/setDropoff. */
+  setEndpointAddress: (target: 'pickup' | 'dropoff', address: string) => void;
   setServiceType: (type: ServiceTypeSlug) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
   setScheduledAt: (date: Date | null) => void;
@@ -265,6 +269,13 @@ export const useRideStore = create<RideState>((set, get) => ({
       // previous destination. Root cause of estimated_fare_cup (e.g. 2200,
       // far destination) not matching estimated_distance_m (near destination).
       return { draft: { ...s.draft, dropoff: { address, location } }, fareEstimate: null, fareEstimatedAt: null };
+    }),
+
+  setEndpointAddress: (target, address) =>
+    set((s) => {
+      const current = s.draft[target];
+      if (!current || s.activeRide) return s;
+      return { draft: { ...s.draft, [target]: { ...current, address } } };
     }),
 
   setServiceType: (serviceType) =>
