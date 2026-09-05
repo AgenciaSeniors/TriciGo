@@ -6,10 +6,14 @@
 //   4. Mapbox importer map                  supabase/functions/import-mapbox-poi/_shared/mapbox-categories.ts
 //   5. emoji map                            packages/utils/src/geo.ts (tricigoCategoryEmoji)
 //   6. visual groups                        packages/utils/src/poiCategories.ts (TRICIGO_CATEGORY_TO_GROUP)
+//   7. SQL mapper map_category_to_tricigo   newest supabase/migrations/*.sql defining it — must be
+//                                           byte-for-byte what gen-sql-mapper.mjs renders from (3)
 // A value that exists in one and not the others silently hides rows (00579 CHECK), drops
-// imports, or renders a 📍 / grey pin. Fails the build when the sets differ.
+// imports, or renders a 📍 / grey pin; a mapper that drifts from categories.json gets its
+// rows flipped back by the weekly sync. Fails the build when the sets (or the mapper) differ.
 // Usage: node scripts/check-poi-taxonomy.mjs   (pnpm check:poi-taxonomy)
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { renderMapperSql } from './sync-pois/gen-sql-mapper.mjs';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const literals = (src) => [...src.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
 
@@ -49,5 +53,19 @@ extra('geo.ts TricigoCategory union', tsUnion);
 missing('geo.ts TricigoCategory union', tsUnion, ['other']);
 missing('geo.ts tricigoCategoryEmoji()', emoji, ['other']);
 missing('poiCategories.ts TRICIGO_CATEGORY_TO_GROUP', groups);
+
+// 7. The newest migration that defines the SQL mapper must carry exactly the generated text.
+const migrations = readdirSync(new URL('../supabase/migrations', import.meta.url)).filter((f) => f.endsWith('.sql')).sort();
+const mapperFile = migrations.filter((f) => read(`supabase/migrations/${f}`).includes('FUNCTION public.map_category_to_tricigo(')).pop();
+const mig = read(`supabase/migrations/${mapperFile}`);
+const from = mig.indexOf('CREATE OR REPLACE FUNCTION public.map_category_to_tricigo(');
+const to = mig.indexOf('$function$;', from);
+const embedded = from >= 0 && to >= 0 ? mig.slice(from, to + '$function$;'.length).trim() : '';
+const expected = renderMapperSql(cats).trim();
+if (embedded !== expected) {
+  console.error(`✗ supabase/migrations/${mapperFile} map_category_to_tricigo() differs from categories.json.`);
+  console.error('  Regenerate with `node scripts/sync-pois/gen-sql-mapper.mjs` and paste it into a NEW migration.');
+  bad++;
+}
 if (bad) process.exit(1);
-console.log(`✓ POI taxonomy consistent across 6 surfaces (${ts.length} values)`);
+console.log(`✓ POI taxonomy consistent across 7 surfaces (${ts.length} values; mapper = ${mapperFile})`);

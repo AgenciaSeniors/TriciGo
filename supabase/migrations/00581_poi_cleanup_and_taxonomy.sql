@@ -6,14 +6,21 @@
 --
 -- 1. map_category_to_tricigo v2: theatre/cinema → venue, monuments/historic →
 --    landmark, stadiums → stadium, Foursquare "Landmarks and Outdoors" split.
---    Full CREATE OR REPLACE over the 00302 body (live md5 asserted first).
+--    The body is GENERATED from scripts/sync-pois/categories.json by
+--    scripts/sync-pois/gen-sql-mapper.mjs (same PR) and CI keeps both equal, so
+--    the weekly sync — which rewrites tricigo_category from that JSON — can never
+--    flip what this migration sets. Live md5 asserted first.
 -- 2. Search keywords for the new categories.
 -- 3. import_search_poi allow-list accepts the new values (in-place patch).
 -- 4. Re-map rows whose stored category now resolves to a new value.
--- 5. Deactivate Wikidata-Swedish descriptor rows ("Arroyo X (vattendrag i
---    Kuba…)") — 195 streams / islets / hills imported as landmarks.
+-- 5. Deactivate Wikidata-Swedish natural-feature rows ("Arroyo X (vattendrag i
+--    Kuba…)") — streams / mines / shoals / hills imported as landmarks; islands
+--    and towns keep their (cleaned) name and stay active.
+-- 5b. Rows nobody can ride to: no Latin letter in the name, flight codes,
+--    pins outside every province polygon (guarded by the admin-area count).
 -- 6. CUPET brand → gas_station via category_override (sync-proof).
--- 7. Exact duplicates (same normalised name + category ≤ 150 m): one winner.
+-- 7. Duplicates: same normalised name and (a) same category ≤ 150 m or
+--    (b) different category ≤ 60 m with neither side a transport stop: one winner.
 -- 8. Validate the tricigo_category CHECK left NOT VALID by 00579.
 -- ============================================================================
 
@@ -24,7 +31,7 @@ BEGIN
   SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE proname = 'map_category_to_tricigo' AND pronamespace = 'public'::regnamespace;
   IF v_md5 IS NULL THEN RAISE NOTICE '00581: map_category_to_tricigo absent — creating v2';
   ELSIF v_md5 = '2ef5ae47ff6e2c349f9884b2f6735d58' THEN RAISE NOTICE '00581: live mapper is the 00302 body — replacing with v2';
-  ELSIF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'map_category_to_tricigo' AND pronamespace = 'public'::regnamespace AND prosrc LIKE '%00581: venue%') THEN
+  ELSIF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'map_category_to_tricigo' AND pronamespace = 'public'::regnamespace AND prosrc LIKE '%GENERATED from scripts/sync-pois/categories.json%') THEN
     RAISE NOTICE '00581: mapper already v2 — re-applying the same body';
   ELSE
     RAISE EXCEPTION '00581: map_category_to_tricigo has an unknown body (md5 %). Re-derive v2 from pg_get_functiondef before applying.', v_md5;
@@ -37,124 +44,384 @@ CREATE OR REPLACE FUNCTION public.map_category_to_tricigo(p_category text, p_sub
  IMMUTABLE
  SET search_path TO 'public', 'extensions', 'pg_catalog'
 AS $function$
+-- GENERATED from scripts/sync-pois/categories.json by scripts/sync-pois/gen-sql-mapper.mjs.
+-- Do not edit by hand: edit the JSON, regenerate, paste into a NEW migration.
+-- Mirror of merge_and_upsert.py: OSM `tag=value` exact then `tag=*`; a Foursquare label
+-- (anything with whitespace or '>') takes the FIRST keyword found in its normalised path,
+-- so the order of c_fsq is semantics; any other single category (Overture, merged rows)
+-- is exact then first substring. Unknown → 'other'.
+DECLARE
+  v_cat  text := lower(btrim(p_category));
+  v_sub  text := lower(btrim(p_subcategory));
+  v_key  text;
+  v_wild text;
+  v_pair text[];
+  c_osm CONSTANT text[][] := ARRAY[
+    ['amenity=hospital', 'hospital'],
+    ['amenity=clinic', 'hospital'],
+    ['amenity=doctors', 'hospital'],
+    ['amenity=dentist', 'hospital'],
+    ['amenity=pharmacy', 'pharmacy'],
+    ['healthcare=hospital', 'hospital'],
+    ['healthcare=pharmacy', 'pharmacy'],
+    ['healthcare=*', 'hospital'],
+    ['amenity=school', 'school'],
+    ['amenity=university', 'school'],
+    ['amenity=college', 'school'],
+    ['amenity=kindergarten', 'school'],
+    ['amenity=library', 'school'],
+    ['amenity=townhall', 'gov'],
+    ['amenity=courthouse', 'gov'],
+    ['amenity=post_office', 'gov'],
+    ['amenity=public_building', 'gov'],
+    ['amenity=police', 'gov'],
+    ['amenity=fire_station', 'gov'],
+    ['amenity=prison', 'gov'],
+    ['amenity=community_centre', 'gov'],
+    ['amenity=social_facility', 'gov'],
+    ['office=government', 'gov'],
+    ['office=diplomatic', 'embassy'],
+    ['amenity=embassy', 'embassy'],
+    ['tourism=hotel', 'hotel'],
+    ['tourism=guest_house', 'hotel'],
+    ['tourism=hostel', 'hotel'],
+    ['tourism=motel', 'hotel'],
+    ['tourism=apartment', 'hotel'],
+    ['tourism=chalet', 'hotel'],
+    ['tourism=camp_site', 'hotel'],
+    ['tourism=cabin', 'hotel'],
+    ['tourism=wilderness_hut', 'hotel'],
+    ['tourism=alpine_hut', 'hotel'],
+    ['tourism=beach_resort', 'hotel'],
+    ['amenity=restaurant', 'restaurant'],
+    ['amenity=food_court', 'restaurant'],
+    ['amenity=cafe', 'cafe'],
+    ['amenity=ice_cream', 'cafe'],
+    ['amenity=fast_food', 'restaurant'],
+    ['amenity=bar', 'bar'],
+    ['amenity=pub', 'bar'],
+    ['amenity=biergarten', 'bar'],
+    ['amenity=nightclub', 'bar'],
+    ['shop=supermarket', 'supermarket'],
+    ['shop=convenience', 'supermarket'],
+    ['shop=mall', 'shop'],
+    ['shop=department_store', 'shop'],
+    ['amenity=marketplace', 'supermarket'],
+    ['shop=*', 'shop'],
+    ['amenity=bank', 'bank'],
+    ['amenity=bureau_de_change', 'bank'],
+    ['amenity=atm', 'atm'],
+    ['amenity=fuel', 'gas_station'],
+    ['tourism=museum', 'museum'],
+    ['tourism=gallery', 'museum'],
+    ['tourism=attraction', 'landmark'],
+    ['tourism=viewpoint', 'landmark'],
+    ['tourism=artwork', 'landmark'],
+    ['tourism=zoo', 'park'],
+    ['tourism=theme_park', 'park'],
+    ['tourism=aquarium', 'park'],
+    ['tourism=information', 'other'],
+    ['amenity=cinema', 'venue'],
+    ['amenity=theatre', 'venue'],
+    ['amenity=arts_centre', 'venue'],
+    ['historic=*', 'landmark'],
+    ['leisure=stadium', 'stadium'],
+    ['leisure=marina', 'transport'],
+    ['leisure=park', 'park'],
+    ['leisure=garden', 'park'],
+    ['leisure=playground', 'park'],
+    ['leisure=*', 'park'],
+    ['natural=beach', 'beach'],
+    ['amenity=place_of_worship', 'religion'],
+    ['amenity=bus_station', 'transport'],
+    ['amenity=ferry_terminal', 'transport'],
+    ['amenity=taxi', 'transport'],
+    ['amenity=fuel_station', 'gas_station'],
+    ['public_transport=*', 'transport'],
+    ['railway=station', 'transport'],
+    ['railway=halt', 'transport'],
+    ['aeroway=aerodrome', 'transport'],
+    ['aeroway=terminal', 'transport'],
+    ['office=*', 'gov']
+  ];
+  c_fsq CONSTANT text[][] := ARRAY[
+    ['hospital', 'hospital'],
+    ['clinic', 'hospital'],
+    ['doctor', 'hospital'],
+    ['medical', 'hospital'],
+    ['pharmacy', 'pharmacy'],
+    ['drugstore', 'pharmacy'],
+    ['school', 'school'],
+    ['university', 'school'],
+    ['college', 'school'],
+    ['library', 'school'],
+    ['government', 'gov'],
+    ['post_office', 'gov'],
+    ['embassy', 'embassy'],
+    ['consulate', 'embassy'],
+    ['hotel', 'hotel'],
+    ['lodging', 'hotel'],
+    ['guest_house', 'hotel'],
+    ['hostel', 'hotel'],
+    ['bnb', 'hotel'],
+    ['motel', 'hotel'],
+    ['resort', 'hotel'],
+    ['restaurant', 'restaurant'],
+    ['paladar', 'paladar'],
+    ['cafe', 'cafe'],
+    ['coffee', 'cafe'],
+    ['bakery', 'cafe'],
+    ['ice_cream', 'cafe'],
+    ['barber', 'shop'],
+    ['bar', 'bar'],
+    ['public_art', 'landmark'],
+    ['public_plaza', 'landmark'],
+    ['public_transportation', 'transport'],
+    ['public_service', 'gov'],
+    ['pub', 'bar'],
+    ['nightclub', 'bar'],
+    ['lounge', 'bar'],
+    ['grocery', 'supermarket'],
+    ['supermarket', 'supermarket'],
+    ['market', 'supermarket'],
+    ['convenience', 'supermarket'],
+    ['bank', 'bank'],
+    ['atm', 'atm'],
+    ['gas_station', 'gas_station'],
+    ['fuel', 'gas_station'],
+    ['museum', 'museum'],
+    ['gallery', 'museum'],
+    ['theater', 'venue'],
+    ['theatre', 'venue'],
+    ['cinema', 'venue'],
+    ['movie', 'venue'],
+    ['concert', 'venue'],
+    ['performing_arts', 'venue'],
+    ['night_club', 'bar'],
+    ['salsa_club', 'bar'],
+    ['comedy_club', 'venue'],
+    ['stadium', 'stadium'],
+    ['arena', 'stadium'],
+    ['shopping_plaza', 'shop'],
+    ['park', 'park'],
+    ['garden', 'park'],
+    ['fair', 'park'],
+    ['great_outdoors', 'park'],
+    ['lake', 'park'],
+    ['campground', 'park'],
+    ['plaza', 'landmark'],
+    ['square', 'landmark'],
+    ['beach', 'beach'],
+    ['church', 'religion'],
+    ['mosque', 'religion'],
+    ['temple', 'religion'],
+    ['synagogue', 'religion'],
+    ['religious', 'religion'],
+    ['bus_station', 'transport'],
+    ['train_station', 'transport'],
+    ['airport', 'transport'],
+    ['taxi', 'transport'],
+    ['ferry', 'transport'],
+    ['pier', 'transport'],
+    ['harbor', 'transport'],
+    ['marina', 'transport'],
+    ['states_and_municipalities', 'other'],
+    ['neighborhood', 'other'],
+    ['farm', 'other'],
+    ['stable', 'other'],
+    ['field', 'other'],
+    ['roof_deck', 'other'],
+    ['internet_cafe', 'cafe'],
+    ['gaming_cafe', 'cafe'],
+    ['bathing_area', 'beach'],
+    ['dive_spot', 'beach'],
+    ['surf_spot', 'beach'],
+    ['waterfront', 'beach'],
+    ['bay', 'beach'],
+    ['cave', 'park'],
+    ['waterfall', 'park'],
+    ['scenic', 'park'],
+    ['mountain', 'park'],
+    ['river', 'park'],
+    ['hiking', 'park'],
+    ['nature_preserve', 'park'],
+    ['forest', 'park'],
+    ['zoo', 'park'],
+    ['aquarium', 'park'],
+    ['tree', 'other'],
+    ['monument', 'landmark'],
+    ['memorial', 'landmark'],
+    ['historic', 'landmark'],
+    ['castle', 'landmark'],
+    ['lighthouse', 'landmark'],
+    ['attraction', 'landmark'],
+    ['landmark', 'landmark'],
+    ['travel_and_transportation', 'transport'],
+    ['dining_and_drinking', 'restaurant'],
+    ['retail', 'shop'],
+    ['health_and_medicine', 'hospital']
+  ];
+  c_ovt CONSTANT text[][] := ARRAY[
+    ['hospital', 'hospital'],
+    ['clinic', 'hospital'],
+    ['medical_center', 'hospital'],
+    ['pharmacy', 'pharmacy'],
+    ['drugstore', 'pharmacy'],
+    ['school', 'school'],
+    ['university', 'school'],
+    ['college', 'school'],
+    ['library', 'school'],
+    ['preschool', 'school'],
+    ['city_hall', 'gov'],
+    ['government_office', 'gov'],
+    ['post_office', 'gov'],
+    ['embassy', 'embassy'],
+    ['consulate', 'embassy'],
+    ['hotel', 'hotel'],
+    ['motel', 'hotel'],
+    ['hostel', 'hotel'],
+    ['bed_and_breakfast', 'hotel'],
+    ['guest_house', 'hotel'],
+    ['casa_particular', 'hotel'],
+    ['resort', 'hotel'],
+    ['accommodation', 'hotel'],
+    ['restaurant', 'restaurant'],
+    ['cuban_restaurant', 'paladar'],
+    ['paladar', 'paladar'],
+    ['cafe', 'cafe'],
+    ['coffee_shop', 'cafe'],
+    ['ice_cream_shop', 'cafe'],
+    ['bakery', 'cafe'],
+    ['bar', 'bar'],
+    ['pub', 'bar'],
+    ['nightclub', 'bar'],
+    ['dance_club', 'bar'],
+    ['lounge', 'bar'],
+    ['barber', 'shop'],
+    ['barber_shop', 'shop'],
+    ['hair_salon', 'shop'],
+    ['beauty_salon', 'shop'],
+    ['nail_salon', 'shop'],
+    ['supermarket', 'supermarket'],
+    ['grocery_store', 'supermarket'],
+    ['convenience_store', 'supermarket'],
+    ['bank', 'bank'],
+    ['atm', 'atm'],
+    ['gas_station', 'gas_station'],
+    ['museum', 'museum'],
+    ['art_gallery', 'museum'],
+    ['history_museum', 'museum'],
+    ['art_museum', 'museum'],
+    ['modern_art_museum', 'museum'],
+    ['arts_and_entertainment', 'park'],
+    ['cultural_center', 'venue'],
+    ['historic_site', 'landmark'],
+    ['landmark_and_historical_building', 'landmark'],
+    ['monument', 'landmark'],
+    ['memorial', 'landmark'],
+    ['tourist_attraction', 'landmark'],
+    ['public_plaza', 'landmark'],
+    ['castle', 'landmark'],
+    ['fort', 'landmark'],
+    ['fortress', 'landmark'],
+    ['lighthouse', 'landmark'],
+    ['palace', 'landmark'],
+    ['bridge', 'landmark'],
+    ['tower', 'landmark'],
+    ['ruins', 'landmark'],
+    ['archaeological_site', 'landmark'],
+    ['theatre', 'venue'],
+    ['theater', 'venue'],
+    ['cinema', 'venue'],
+    ['movie_theater', 'venue'],
+    ['performing_arts', 'venue'],
+    ['concert_hall', 'venue'],
+    ['music_production', 'venue'],
+    ['topic_concert_venue', 'venue'],
+    ['music_venue', 'venue'],
+    ['theatrical_productions', 'venue'],
+    ['theaters_and_performance_venues', 'venue'],
+    ['drive_in_theater', 'venue'],
+    ['comedy_club', 'venue'],
+    ['stadium_arena', 'stadium'],
+    ['stadium', 'stadium'],
+    ['sports_stadium', 'stadium'],
+    ['football_stadium', 'stadium'],
+    ['baseball_stadium', 'stadium'],
+    ['soccer_stadium', 'stadium'],
+    ['park', 'park'],
+    ['playground', 'park'],
+    ['garden', 'park'],
+    ['zoo', 'park'],
+    ['aquarium', 'park'],
+    ['petting_zoo', 'park'],
+    ['amusement_park', 'park'],
+    ['water_park', 'park'],
+    ['botanical_garden', 'park'],
+    ['national_park', 'park'],
+    ['nature_reserve', 'park'],
+    ['cave', 'park'],
+    ['waterfall', 'park'],
+    ['beach', 'beach'],
+    ['church', 'religion'],
+    ['church_cathedral', 'religion'],
+    ['mosque', 'religion'],
+    ['temple', 'religion'],
+    ['bus_station', 'transport'],
+    ['train_station', 'transport'],
+    ['airport', 'transport'],
+    ['taxi_stand', 'transport'],
+    ['pier', 'transport'],
+    ['marina', 'transport'],
+    ['harbor', 'transport'],
+    ['professional_services', 'other'],
+    ['structure_and_geography', 'other'],
+    ['other', 'other']
+  ];
+  c_ovt_sub CONSTANT text[][] := ARRAY[
+    ['hospital', 'hospital'],
+    ['school', 'school'],
+    ['hotel', 'hotel'],
+    ['restaurant', 'restaurant'],
+    ['cafe', 'cafe'],
+    ['bar', 'bar'],
+    ['shop', 'shop'],
+    ['store', 'shop'],
+    ['park', 'park'],
+    ['museum', 'museum'],
+    ['stadium', 'stadium'],
+    ['theat', 'venue'],
+    ['landmark', 'landmark'],
+    ['monument', 'landmark']
+  ];
 BEGIN
-  IF p_subcategory IS NOT NULL THEN
-    CASE
-      WHEN p_subcategory IN ('restaurant','fast_food','food_court','bakery') THEN RETURN 'restaurant';
-      WHEN p_subcategory IN ('cafe','coffee','coffee_shop') THEN RETURN 'cafe';
-      WHEN p_subcategory IN ('bar','pub','nightclub','dance_club') THEN RETURN 'bar';
-      WHEN p_subcategory = 'paladar' THEN RETURN 'paladar';
-      WHEN p_subcategory IN ('hotel','guest_house','hostel','apartment','motel','resort',
-                              'casa_particular','holiday_rental_home') THEN RETURN 'hotel';
-      WHEN p_subcategory IN ('supermarket','convenience','marketplace') THEN
-        RETURN CASE WHEN p_subcategory = 'supermarket' THEN 'supermarket' ELSE 'shop' END;
-      WHEN p_subcategory IN ('shop','clothes','electronics','jewelry','beauty','hairdresser',
-                              'hair_salon','beauty_salon','mall','kiosk','mobile_phone') THEN RETURN 'shop';
-      WHEN p_subcategory IN ('hospital','clinic','doctors','dentist','health_and_medical') THEN RETURN 'hospital';
-      WHEN p_subcategory = 'pharmacy' THEN RETURN 'pharmacy';
-      WHEN p_subcategory IN ('bank','bureau_de_change') THEN RETURN 'bank';
-      WHEN p_subcategory = 'atm' THEN RETURN 'atm';
-      WHEN p_subcategory IN ('school','university','college','kindergarten','education',
-                              'college_university') THEN RETURN 'school';
-      WHEN p_subcategory IN ('police','fire_station','townhall','courthouse','post_office',
-                              'public_and_government_association','public_service_and_government',
-                              'social_service_organizations','non_governmental_association',
-                              'community_services_non_profits') THEN RETURN 'gov';
-      WHEN p_subcategory IN ('embassy','consulate') THEN RETURN 'embassy';
-      WHEN p_subcategory IN ('place_of_worship','church','synagogue','mosque',
-                              'religious_organization','catholic_church','evangelical_church') THEN RETURN 'religion';
-      WHEN p_subcategory IN ('museum','gallery','history_museum') THEN RETURN 'museum';
-      -- 00581: venue / landmark / stadium split out of the old museum-else-park group.
-      WHEN p_subcategory IN ('theatre','cinema','topic_concert_venue','music_production','cabaret',
-                              'nightclub_venue','concert_hall','performing_arts','amphitheatre') THEN RETURN 'venue';
-      WHEN p_subcategory IN ('monument','attraction','artwork','landmark','landmark_and_historical_building',
-                              'historic','memorial','ruins','archaeological_site','fort','fortress','castle',
-                              'lighthouse','public_plaza','tower','viewpoint','wayside_shrine') THEN RETURN 'landmark';
-      WHEN p_subcategory IN ('stadium','sports_stadium','sports_complex','arena','baseball_stadium',
-                              'soccer_stadium') THEN RETURN 'stadium';
-      WHEN p_subcategory IN ('arts_centre','cultural_center','arts_and_entertainment','arts_and_crafts') THEN RETURN 'park';
-      WHEN p_subcategory IN ('park','garden','playground','active_life','gym') THEN RETURN 'park';
-      WHEN p_subcategory IN ('beach','coastal') THEN RETURN 'beach';
-      WHEN p_subcategory IN ('fuel','gas_station') THEN RETURN 'gas_station';
-      WHEN p_subcategory IN ('bus_station','bus_stop','taxi','ferry_terminal','aerodrome',
-                              'aeroway','transportation','tours','travel_services','tourism') THEN RETURN 'transport';
-      ELSE NULL;
-    END CASE;
+  IF v_cat IS NULL OR v_cat = '' THEN RETURN 'other'; END IF;
+
+  -- OSM tag/value (also merged rows, whose category/subcategory come from the OSM member).
+  v_key  := CASE WHEN v_sub IS NOT NULL AND v_sub <> '' THEN v_cat || '=' || v_sub END;
+  v_wild := NULL;
+  FOREACH v_pair SLICE 1 IN ARRAY c_osm LOOP
+    IF v_pair[1] = v_key THEN RETURN v_pair[2]; END IF;
+    IF v_wild IS NULL AND v_pair[1] = v_cat || '=*' THEN v_wild := v_pair[2]; END IF;
+  END LOOP;
+  IF v_wild IS NOT NULL THEN RETURN v_wild; END IF;
+
+  -- Foursquare category label ("Landmarks and Outdoors > Beach").
+  IF v_cat ~ '[[:space:]>]' THEN
+    v_key := replace(replace(v_cat, ' ', '_'), '-', '_');
+    FOREACH v_pair SLICE 1 IN ARRAY c_fsq LOOP
+      IF position(v_pair[1] IN v_key) > 0 THEN RETURN v_pair[2]; END IF;
+    END LOOP;
+    RETURN 'other';
   END IF;
 
-  IF p_category IS NOT NULL THEN
-    CASE
-      WHEN p_category IN ('restaurant','fast_food','food_court','bakery') THEN RETURN 'restaurant';
-      WHEN p_category IN ('cafe','coffee','coffee_shop') THEN RETURN 'cafe';
-      WHEN p_category IN ('bar','pub','nightclub','dance_club') THEN RETURN 'bar';
-      WHEN p_category IN ('hotel','guest_house','hostel','apartment','motel','resort',
-                          'casa_particular','holiday_rental_home') THEN RETURN 'hotel';
-      WHEN p_category = 'supermarket' THEN RETURN 'supermarket';
-      WHEN p_category IN ('shop','convenience','clothes','electronics','jewelry','beauty',
-                          'hairdresser','hair_salon','beauty_salon','beauty_and_spa',
-                          'mall','kiosk','mobile_phone','tattoo_and_piercing','arts_and_crafts',
-                          'automotive_repair','motorcycle_repair','car_repair','real_estate',
-                          'industrial_company','commercial_industrial','construction_services',
-                          'printing_services','computer_hardware_company',
-                          'it_service_and_computer_repair','public_utility_company',
-                          'agriculture','media_news_company','event_planning','event_photography',
-                          'gym','active_life') THEN RETURN 'shop';
-      WHEN p_category IN ('hospital','clinic','doctors','dentist','health_and_medical') THEN RETURN 'hospital';
-      WHEN p_category = 'pharmacy' THEN RETURN 'pharmacy';
-      WHEN p_category IN ('bank','bureau_de_change') THEN RETURN 'bank';
-      WHEN p_category = 'atm' THEN RETURN 'atm';
-      WHEN p_category IN ('school','university','college','kindergarten','education',
-                          'college_university') THEN RETURN 'school';
-      WHEN p_category IN ('police','fire_station','townhall','courthouse','post_office',
-                          'public_and_government_association','public_service_and_government',
-                          'social_service_organizations','non_governmental_association',
-                          'community_services_non_profits') THEN RETURN 'gov';
-      WHEN p_category IN ('embassy','consulate') THEN RETURN 'embassy';
-      WHEN p_category IN ('place_of_worship','church','synagogue','mosque',
-                          'religious_organization','catholic_church','evangelical_church') THEN RETURN 'religion';
-      WHEN p_category IN ('museum','gallery','history_museum') THEN RETURN 'museum';
-      -- 00581: venue / landmark / stadium split out of the old museum-else-park group.
-      WHEN p_category IN ('theatre','cinema','topic_concert_venue','music_production','cabaret',
-                          'nightclub_venue','concert_hall','performing_arts','amphitheatre') THEN RETURN 'venue';
-      WHEN p_category IN ('monument','attraction','artwork','landmark','landmark_and_historical_building',
-                          'historic','memorial','ruins','archaeological_site','fort','fortress','castle',
-                          'lighthouse','public_plaza','tower','viewpoint','wayside_shrine') THEN RETURN 'landmark';
-      WHEN p_category IN ('stadium','sports_stadium','sports_complex','arena','baseball_stadium',
-                          'soccer_stadium') THEN RETURN 'stadium';
-      WHEN p_category IN ('arts_centre','cultural_center','arts_and_entertainment') THEN RETURN 'park';
-      WHEN p_category IN ('park','garden','playground') THEN RETURN 'park';
-      WHEN p_category IN ('beach','coastal') THEN RETURN 'beach';
-      WHEN p_category IN ('fuel','gas_station') THEN RETURN 'gas_station';
-      WHEN p_category IN ('bus_station','bus_stop','taxi','ferry_terminal','aerodrome',
-                          'aeroway','transportation','tours','travel_services','tourism') THEN RETURN 'transport';
-      ELSE NULL;
-    END CASE;
-
-    IF p_category ILIKE 'travel and transportation%' THEN RETURN 'transport'; END IF;
-    -- 00581: Foursquare "Landmarks and Outdoors > …" (neighbourhood/city rows stay
-    -- 'other'; beaches, parks and marinas keep their own category; the rest is a landmark).
-    IF p_category ILIKE 'landmarks and outdoors > states and municipalities%' THEN RETURN 'other'; END IF;
-    IF p_category ILIKE 'landmarks and outdoors%' THEN
-      IF p_category ~* '(beach|bathing area|\ybay\y|dive spot|surf spot|waterfront)' THEN RETURN 'beach'; END IF;
-      IF p_category ~* '(harbor|marina)' THEN RETURN 'transport'; END IF;
-      IF p_category ~* '(park|garden|cave|waterfall|scenic lookout|mountain|river|lake|hiking|nature preserve|forest|campground|great outdoors)' THEN RETURN 'park'; END IF;
-      IF p_category ~* '(farm|stable|\yfield\y|\ytree\y|roof deck)' THEN RETURN 'other'; END IF;
-      RETURN 'landmark';
-    END IF;
-    IF p_category ILIKE 'arts and entertainment > night club' OR p_category ILIKE 'arts and entertainment > salsa club' THEN RETURN 'bar'; END IF;
-    IF p_category ~* 'arts and entertainment > (internet cafe|gaming cafe)' THEN RETURN 'cafe'; END IF;
-    IF p_category ~* 'arts and entertainment > (casino|bowling|pool hall|arcade|mini golf|go kart|strip club)' THEN RETURN 'other'; END IF;
-    IF p_category ILIKE 'arts and entertainment > museum%' OR p_category ILIKE 'arts and entertainment > art gallery' THEN RETURN 'museum'; END IF;
-    IF p_category ILIKE 'arts and entertainment > performing arts venue%' OR p_category ILIKE 'arts and entertainment > movie theater%'
-       OR p_category ILIKE 'arts and entertainment > comedy club' THEN RETURN 'venue'; END IF;
-    IF p_category ILIKE 'arts and entertainment > stadium%' THEN RETURN 'stadium'; END IF;
-    IF p_category ILIKE 'arts and entertainment > public art%' THEN RETURN 'landmark'; END IF;
-    IF p_category ILIKE 'arts and entertainment%' THEN RETURN 'park'; END IF;
-    IF p_category ILIKE 'food and dining%' THEN RETURN 'restaurant'; END IF;
-    IF p_category ILIKE 'shopping%' THEN RETURN 'shop'; END IF;
-    IF p_category ILIKE 'health%' THEN RETURN 'hospital'; END IF;
-  END IF;
-
+  -- Overture primary category (and any other bare category).
+  FOREACH v_pair SLICE 1 IN ARRAY c_ovt LOOP
+    IF v_pair[1] = v_cat THEN RETURN v_pair[2]; END IF;
+  END LOOP;
+  FOREACH v_pair SLICE 1 IN ARRAY c_ovt_sub LOOP
+    IF position(v_pair[1] IN v_cat) > 0 THEN RETURN v_pair[2]; END IF;
+  END LOOP;
   RETURN 'other';
 END;
 $function$;
@@ -194,12 +461,29 @@ UPDATE public.cuba_pois p SET tricigo_category = public.map_category_to_tricigo(
         OR p.category ILIKE 'landmarks and outdoors%' OR p.category ILIKE 'arts and entertainment%')
    AND p.tricigo_category IS DISTINCT FROM public.map_category_to_tricigo(p.category, p.subcategory);
 
--- 5. Wikidata Swedish descriptors imported by Overture as "landmarks": streams,
---    islets, hills. 182 rows carry "… i Kuba", 13 more only the noun.
+-- 5. Wikidata Swedish descriptors imported by Overture as "landmarks" (prod dry-run
+--    2026-09-05: 191 rows say "… i Kuba", 13 more carry only the noun). Natural
+--    features nobody rides to — streams, mines, shoals, hills, swamps, canals, river
+--    mouths — are deactivated. Islands (Cayo Coco, Cayo Levisa), towns, bays and
+--    peninsulas STAY: they are destinations, and _poi_clean_name already shows them
+--    without the descriptor.
 UPDATE public.cuba_pois SET is_active = false, updated_at = now()
  WHERE is_active AND NOT is_admin
-   AND (name ~* '\(((ö|öar|vattendrag|periodiskt|sjö|berg|by|ort|udde|bukt|flod|kulle|kommun|stad|halvö|lagun|vik|kanal|damm|grotta)\s+)+i\s+kuba\y'
-     OR name ~* '\(((periodiskt|vattendrag|ö|öar|sjö|udde|bukt|flod|kulle|halvö|lagun|vik|kanal|damm|grotta)\s*)+\)');
+   AND name ~* '\((periodiskt|vattendrag|sjö|berg|kulle|damm|grotta|kanal|havskanal|sumpmark|grund|gruva|flodmynning|flod|källa|träsk|rev)(\s+(periodiskt|vattendrag|sjö|berg|kulle|damm|grotta|kanal|havskanal|sumpmark|grund|gruva|flodmynning|flod|källa|träsk|rev))*\s*(i\s+kuba\y|\))';
+
+-- 5b. Rows that cannot be a Cuban destination: names without a single Latin letter
+--     (91 in prod: Cyrillic/Thai/Persian duplicates, digits-only), flight codes
+--     ("AV 959 HAV-LIM", 4 rows), and pins outside every province polygon (13:
+--     cruise ships, "Caribbean Sea", a café in Bangalore) — that last rule only runs
+--     with the full admin set loaded, so a partial fixture never triggers it.
+UPDATE public.cuba_pois SET is_active = false, updated_at = now()
+ WHERE is_active AND NOT is_admin
+   AND (name !~ '[A-Za-zÀ-ÿ]' OR name ~ '^[A-Z]{2}\s?\d{2,4}\s+[A-Z]{3}-[A-Z]{3}$');
+UPDATE public.cuba_pois p SET is_active = false, updated_at = now()
+ WHERE p.is_active AND NOT p.is_admin
+   AND (SELECT count(*) FROM public.cuba_admin_areas WHERE admin_level = 4) >= 15
+   AND NOT EXISTS (SELECT 1 FROM public.cuba_admin_areas a
+                    WHERE a.admin_level = 4 AND a.geom && p.location::geometry AND ST_Contains(a.geom, p.location::geometry));
 
 -- 6. Brand → category (curated override so the weekly sync cannot undo it).
 UPDATE public.cuba_pois SET category_override = 'gas_station'
@@ -207,7 +491,11 @@ UPDATE public.cuba_pois SET category_override = 'gas_station'
    AND (lower(coalesce(tags->>'brand','')) = 'cupet' OR lower(coalesce(tags->>'operator','')) LIKE 'cupet%' OR name_normalized ~ '^cupet\M')
    AND coalesce(tricigo_category,'') <> 'gas_station';
 
--- 7. Exact duplicates: same normalised name, same effective category, ≤ 150 m.
+-- 7. Exact duplicates: same normalised name and (a) same effective category ≤ 150 m
+--    (761 pairs in prod) or (b) different category ≤ 60 m when neither side is
+--    transport (185 more: "Teatro La Caridad" museum vs park, "Jardín Zoológico de la
+--    Habana" ×3 — the same place labelled by three sources; a bus stop named after a
+--    hotel is NOT the hotel, hence the transport guard).
 --    One winner per pair: is_admin > merged > overture > foursquare > osm, then
 --    confidence, then lowest id. The loser is deactivated with merged_into set
 --    (its dictionary rows leave via the 00579 trigger); the winner inherits the
@@ -225,8 +513,10 @@ BEGIN
         CASE WHEN a.is_admin THEN 4 WHEN a.source='merged' THEN 3 WHEN a.source='overture' THEN 2 WHEN a.source='foursquare' THEN 1 ELSE 0 END AS a_rank,
         CASE WHEN b.is_admin THEN 4 WHEN b.source='merged' THEN 3 WHEN b.source='overture' THEN 2 WHEN b.source='foursquare' THEN 1 ELSE 0 END AS b_rank,
         a.confidence AS a_conf, b.confidence AS b_conf
-      FROM act a JOIN act b ON a.id < b.id AND a.name_normalized = b.name_normalized AND a.cat IS NOT DISTINCT FROM b.cat
-       AND ST_DWithin(a.location, b.location, 150))
+      FROM act a JOIN act b ON a.id < b.id AND a.name_normalized = b.name_normalized
+       AND ((a.cat IS NOT DISTINCT FROM b.cat AND ST_DWithin(a.location, b.location, 150))
+         OR (a.cat IS DISTINCT FROM b.cat AND coalesce(a.cat,'') <> 'transport' AND coalesce(b.cat,'') <> 'transport'
+             AND ST_DWithin(a.location, b.location, 60))))
     SELECT CASE WHEN (a_rank, coalesce(a_conf,0), -a_id) >= (b_rank, coalesce(b_conf,0), -b_id) THEN a_id ELSE b_id END AS winner,
            CASE WHEN (a_rank, coalesce(a_conf,0), -a_id) >= (b_rank, coalesce(b_conf,0), -b_id) THEN b_id ELSE a_id END AS loser
     FROM pairs

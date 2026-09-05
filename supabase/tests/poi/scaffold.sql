@@ -828,4 +828,20 @@ FROM (VALUES
 ) AS f(name, category, subcategory, tricigo_category, lat, lng, source, confidence, source_ids, tags, is_admin, province, municipality, address);
 
 UPDATE public.cuba_pois SET is_active = false WHERE name = 'POI Desactivado';
+
+-- Prod-id fixture for the curated reactivation of 00579 §D (the cabaret hidden by the
+-- confidence gate), plus rows for the 00581 cleanup / merge rules.
+INSERT INTO public.cuba_pois (id, name, category, subcategory, location, source, confidence, source_ids, is_active, province, municipality) VALUES
+  (120847, 'Tropicana', 'amenity', 'nightclub', ST_SetSRID(ST_MakePoint(-82.4302, 23.1049),4326)::geography, 'osm', 0.5, '{"osm":"n120847"}', false, 'La Habana', 'Marianao');
+INSERT INTO public.cuba_pois (name, category, subcategory, tricigo_category, location, source, confidence, source_ids, province, municipality) VALUES
+  ('Cayo Prueba (ö i Kuba, Provincia de Villa Clara)', 'landmark', NULL, 'other', ST_SetSRID(ST_MakePoint(-82.30, 23.20),4326)::geography, 'overture', 0.65, '{"ovt":"o33","wd":"Q33"}', 'La Habana', NULL),
+  ('Charco Prueba (gruva)',                            'landmark', NULL, 'other', ST_SetSRID(ST_MakePoint(-82.31, 23.19),4326)::geography, 'overture', 0.65, '{"ovt":"o34"}',            'La Habana', NULL),
+  ('ร้านอาหารทดสอบ',                                    'restaurant', NULL, NULL,   ST_SetSRID(ST_MakePoint(-82.37, 23.13),4326)::geography, 'foursquare', 0.7, '{"fsq":"f35"}',           'La Habana', 'Centro Habana'),
+  ('AV 959 HAV-LIM',                                  'other', NULL, NULL,        ST_SetSRID(ST_MakePoint(-82.41, 22.99),4326)::geography, 'foursquare', 0.7, '{"fsq":"f36"}',           'La Habana', 'Boyeros'),
+  -- same name, different category, 20 m apart, neither transport → merged by rule (b)
+  ('Radio Prueba',                                    'broadcasting', NULL, 'other',  ST_SetSRID(ST_MakePoint(-82.3650, 23.1330),4326)::geography, 'merged',   0.8, '{"osm":"n37"}', 'La Habana', 'Centro Habana'),
+  ('Radio Prueba',                                    'museum', NULL, 'museum',       ST_SetSRID(ST_MakePoint(-82.3652, 23.1330),4326)::geography, 'overture', 0.7, '{"ovt":"o38"}', 'La Habana', 'Centro Habana'),
+  -- a bus stop named after a hotel is NOT the hotel → never merged
+  ('Hotel Prueba Deauville',                          'public_transport', 'bus_stop', NULL, ST_SetSRID(ST_MakePoint(-82.3660, 23.1400),4326)::geography, 'merged',     0.8, '{"osm":"n39"}', 'La Habana', 'Centro Habana'),
+  ('Hotel Prueba Deauville',                          'hotel', NULL, NULL,            ST_SetSRID(ST_MakePoint(-82.3661, 23.1401),4326)::geography, 'foursquare', 0.7, '{"fsq":"f40"}', 'La Habana', 'Centro Habana');
 UPDATE public.cuba_pois SET footprint_radius_m = 25 WHERE name = 'El Capitolio';

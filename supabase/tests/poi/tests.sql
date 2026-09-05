@@ -103,6 +103,8 @@ DO $$ DECLARE v_id bigint; BEGIN
   PERFORM _t('T4h osm alt_name seeded', EXISTS (SELECT 1 FROM cuba_poi_aliases WHERE alias = 'Hospital Ameijeiras' AND kind = 'popular' AND source = 'osm'));
   PERFORM _t('T4i inactive rows get no osm alias', NOT EXISTS (SELECT 1 FROM cuba_poi_aliases a JOIN cuba_pois p ON p.id = a.poi_id WHERE NOT p.is_active));
   PERFORM _t('T4j rls enabled', (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.cuba_poi_aliases'::regclass));
+  PERFORM _t('T4k curated reactivation by prod id', (SELECT is_active AND is_landmark AND category_override = 'venue' FROM cuba_pois WHERE id = 120847));
+  PERFORM _t('T4l reactivated row is searchable', EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = 120847 AND norm = 'tropicana'));
 END $$;
 
 -- T5: dictionary
@@ -181,12 +183,61 @@ DO $$ DECLARE v_win bigint; v_lose bigint; v_imp jsonb; BEGIN
   PERFORM _t('T7t osm historic subcats', map_category_to_tricigo('historic', 'memorial') = 'landmark' AND map_category_to_tricigo('historic', 'ruins') = 'landmark'
                                         AND map_category_to_tricigo('tourism', 'viewpoint') = 'landmark' AND map_category_to_tricigo('amenity', 'cinema') = 'venue');
   PERFORM _t('T7u old mappings intact', map_category_to_tricigo('restaurant', NULL) = 'restaurant' AND map_category_to_tricigo('amenity', 'pharmacy') = 'pharmacy'
-                                        AND map_category_to_tricigo('Food and Dining > Cafe', NULL) = 'restaurant' AND map_category_to_tricigo('nonsense', NULL) = 'other');
+                                        AND map_category_to_tricigo('Dining and Drinking > Restaurant > Cuban Restaurant', NULL) = 'restaurant'
+                                        AND map_category_to_tricigo('Dining and Drinking > Cafe, Coffee, and Tea House', NULL) = 'cafe'
+                                        AND map_category_to_tricigo('nonsense', NULL) = 'other');
+  -- 2026-09-05 dry-run: the 9 (source, category) pairs the hand-written mapper and categories.json
+  -- disagreed on (101 active prod rows the weekly sync would have flipped back), plus the
+  -- substring traps the generated mirror must not re-introduce.
+  PERFORM _t('T7z8 sql = json on the flip-risk pairs', map_category_to_tricigo('art_gallery', NULL) = 'museum' AND map_category_to_tricigo('modern_art_museum', NULL) = 'museum'
+                                        AND map_category_to_tricigo('leisure', 'pitch') = 'park' AND map_category_to_tricigo('leisure', 'fitness_centre') = 'park'
+                                        AND map_category_to_tricigo('Retail > Shopping Plaza', NULL) = 'shop' AND map_category_to_tricigo('cave', NULL) = 'park'
+                                        AND map_category_to_tricigo('amenity', 'fast_food') = 'restaurant' AND map_category_to_tricigo('shop', 'mall') = 'shop'
+                                        AND map_category_to_tricigo('amenity', 'arts_centre') = 'venue' AND map_category_to_tricigo('cultural_center', NULL) = 'venue');
+  PERFORM _t('T7z9 keyword order and substring traps', map_category_to_tricigo('Retail > Pharmacy', NULL) = 'pharmacy' AND map_category_to_tricigo('Dining and Drinking > Bakery', NULL) = 'cafe'
+                                        AND map_category_to_tricigo('Business and Professional Services > Health and Beauty Service > Barbershop', NULL) = 'shop'
+                                        AND map_category_to_tricigo('barber_shop', NULL) = 'shop' AND map_category_to_tricigo('barbecue_restaurant', NULL) = 'restaurant'
+                                        AND map_category_to_tricigo('Travel and Transportation > Transport Hub', NULL) = 'transport' AND map_category_to_tricigo('Health and Medicine > Physician', NULL) = 'hospital'
+                                        AND map_category_to_tricigo('Landmarks and Outdoors > States and Municipalities > City', NULL) = 'other'
+                                        AND map_category_to_tricigo('office', 'company') = 'gov' AND map_category_to_tricigo('shop', 'bakery') = 'shop'
+                                        AND map_category_to_tricigo(' Beach ', NULL) = 'beach' AND map_category_to_tricigo(NULL, NULL) = 'other' AND map_category_to_tricigo('', 'x') = 'other');
   PERFORM _t('T7v admin row untouched', (SELECT is_active AND tricigo_category = 'gov' FROM cuba_pois WHERE name = 'El Capitolio'));
   PERFORM _t('T7w fsq beach row re-mapped', (SELECT tricigo_category = 'beach' FROM cuba_pois WHERE name = 'Playa Prueba Foursquare'));
   PERFORM _t('T7x fsq neighbourhood row re-mapped', (SELECT tricigo_category = 'other' FROM cuba_pois WHERE name = 'Vedado'));
   PERFORM _t('T7y fsq arts leftovers', map_category_to_tricigo('Arts and Entertainment > Zoo', NULL) = 'park'
                                      AND map_category_to_tricigo('Arts and Entertainment > Internet Cafe', NULL) = 'cafe'
-                                     AND map_category_to_tricigo('Arts and Entertainment > Casino', NULL) = 'other');
+                                     AND map_category_to_tricigo('Arts and Entertainment > Casino', NULL) = 'other'
+                                     AND map_category_to_tricigo('Arts and Entertainment', NULL) = 'other');
+  PERFORM _t('T7z1 parity additions', map_category_to_tricigo('stadium_arena', NULL) = 'stadium' AND map_category_to_tricigo('music_production', NULL) = 'venue'
+                                     AND map_category_to_tricigo('Landmarks and Outdoors > Plaza', NULL) = 'landmark' AND map_category_to_tricigo('zoo', NULL) = 'park'
+                                     AND map_category_to_tricigo('tourism', 'zoo') = 'park' AND map_category_to_tricigo('pier', NULL) = 'transport'
+                                     AND map_category_to_tricigo('castle', NULL) = 'landmark');
+  PERFORM _t('T7z2 island keeps active with a clean name', (SELECT is_active AND display_name = 'Cayo Prueba' FROM cuba_pois WHERE name LIKE 'Cayo Prueba (%'));
+  PERFORM _t('T7z3 mine deactivated', (SELECT NOT is_active FROM cuba_pois WHERE name = 'Charco Prueba (gruva)'));
+  PERFORM _t('T7z4 non-latin and flight rows deactivated', NOT EXISTS (SELECT 1 FROM cuba_pois WHERE is_active AND (name = 'AV 959 HAV-LIM' OR name !~ '[A-Za-zÀ-ÿ]')));
+  PERFORM _t('T7z5 diff-category duplicates merge', (SELECT count(*) FILTER (WHERE is_active) = 1 AND count(*) FILTER (WHERE merged_into IS NOT NULL) = 1 FROM cuba_pois WHERE name = 'Radio Prueba')
+                                     AND (SELECT source = 'merged' FROM cuba_pois WHERE name = 'Radio Prueba' AND is_active));
+  PERFORM _t('T7z6 bus stop is not the hotel', (SELECT count(*) FILTER (WHERE is_active) = 2 FROM cuba_pois WHERE name = 'Hotel Prueba Deauville'));
+  PERFORM _t('T7z7 outside-province rule needs the full admin set', (SELECT is_active FROM cuba_pois WHERE name = 'Máximo Gómez Airport (AVI)'));
 END $$;
 
+-- T2 (cont.): cases from the prod dry-run of 2026-09-05 (190 tricky real names)
+DO $$ BEGIN
+  PERFORM _t('T2z14 city inside the name survives ", Cuba"', _poi_clean_name('Hotel Pinar Del Río, Cuba') = 'Hotel Pinar del Río');
+  PERFORM _t('T2z15 whole-name city+country kept', _poi_clean_name('La Habana Cuba') = 'La Habana Cuba' AND _poi_clean_name('Havana Cuba') = 'Havana Cuba');
+  PERFORM _t('T2z16 long city suffix', _poi_clean_name('Buena Vista, Playa, Ciudad De La Habana, Cuba') = 'Buena Vista');
+  PERFORM _t('T2z17 dash separators, two passes', _poi_clean_name('Hostal Nely - Cuba - La Habana') = 'Hostal Nely' AND _poi_clean_name('Casa Tania La Habana-Cuba') = 'Casa Tania' AND _poi_clean_name('Casa Particular Studio Carlos - Centro Habana') = 'Casa Particular Studio Carlos');
+  PERFORM _t('T2z18 trailing dash after strip', _poi_clean_name('Internacional Discotec Cabaret - Varadero Cuba') = 'Internacional Discotec Cabaret' AND _poi_clean_name('Casa Mobi - Guesthouse -> La Habana Cuba') = 'Casa Mobi - Guesthouse');
+  PERFORM _t('T2z19 Kuba spelling', _poi_clean_name('Cárdenas, Kuba') = 'Cárdenas');
+  PERFORM _t('T2z20 any "i Kuba" parenthetical', _poi_clean_name('Canalizo Norte (havskanal i Kuba)') = 'Canalizo Norte' AND _poi_clean_name('Charco Redondo (gruva)') = 'Charco Redondo');
+  PERFORM _t('T2z21 (city, Cuba) parenthetical', _poi_clean_name('Boquerón (Guantánamo, Cuba)') = 'Boquerón');
+  PERFORM _t('T2z22 all-caps articles', _poi_clean_name('HOTEL PARADISUS LOS CAYOS') = 'Hotel Paradisus Los Cayos' AND _poi_clean_name('IGLESIA DE LA CARIDAD') = 'Iglesia de la Caridad');
+  PERFORM _t('T2z23 parenthesised acronym kept', _poi_clean_name('UNIVERSIDAD DE LAS ARTES (ISA)') = 'Universidad de las Artes (ISA)');
+  PERFORM _t('T2z24 generic-word guard', _poi_clean_name('Hotel Pinar Del Río Cuba') = 'Hotel Pinar del Río Cuba');
+  PERFORM _t('T2z25 l''havana', _poi_clean_name('Playa Santa Maria Atlantico L''havana Cuba') = 'Playa Santa Maria Atlantico');
+  PERFORM _t('T2z26 leading noise', _poi_clean_name('¡¡¡¡¡hostal La Dominicana "') = 'Hostal La Dominicana');
+  PERFORM _t('T2z27 Varadero, Cuba → Varadero', _poi_clean_name('Varadero, Cuba') = 'Varadero' AND _poi_clean_name('Cayo Largo, Cuba') = 'Cayo Largo');
+  PERFORM _t('T2z28 first letter after a paren', _poi_clean_name('OSDE GELMA (TRIGAL)') = 'Osde Gelma (Trigal)');
+  PERFORM _t('T2z29 leading lowercase word', _poi_clean_name('hostal casa Mía') = 'Hostal casa Mía' AND _poi_clean_name('el bosque de la habana') = 'El Bosque de La Habana');
+  PERFORM _t('T2z30 camel-case first word kept', _poi_clean_name('iPhone Store Habana') = 'iPhone Store Habana');
+END $$;
