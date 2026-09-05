@@ -126,3 +126,18 @@ DO $$ DECLARE v_id bigint; BEGIN
   PERFORM _t('T5k alias update re-syncs', EXISTS (SELECT 1 FROM poi_search_names WHERE norm = 'la benefica del cerro') AND NOT EXISTS (SELECT 1 FROM poi_search_names WHERE norm = 'la benefica'));
   UPDATE cuba_poi_aliases SET alias = 'La Benéfica', alias_norm = 'la benefica' WHERE alias = 'La Benéfica del Cerro';
 END $$;
+
+-- T6: admin areas (fixture polygons: Plaza de la Revolución / Centro Habana / La Habana Vieja inside La Habana)
+DO $$ DECLARE v_id bigint; BEGIN
+  INSERT INTO cuba_pois (name, category, location, source, municipality, province) VALUES
+   ('Cafetería Prueba Vedado', 'cafe', ST_SetSRID(ST_MakePoint(-82.3866,23.1401),4326)::geography, 'overture', 'Ciudad de la Habana', 'FL') RETURNING id INTO v_id;
+  PERFORM _t('T6a insert derives from polygons', (SELECT municipality = 'Plaza de la Revolución' AND province = 'La Habana' FROM cuba_pois WHERE id = v_id));
+  UPDATE cuba_pois SET location = ST_SetSRID(ST_MakePoint(-82.3560,23.1370),4326)::geography WHERE id = v_id;
+  PERFORM _t('T6b move re-derives', (SELECT municipality = 'La Habana Vieja' FROM cuba_pois WHERE id = v_id));
+  PERFORM _t('T6c backfill fixed legacy rows', NOT EXISTS (SELECT 1 FROM cuba_pois WHERE is_active AND province NOT IN (SELECT name_es FROM cuba_admin_areas WHERE admin_level = 4)));
+  PERFORM _t('T6d garbage province fixed', (SELECT province = 'La Habana' AND municipality = 'Plaza de la Revolución' FROM cuba_pois WHERE name = 'La Roca, La Habana, Cuba'));
+  PERFORM _t('T6e cyrillic province fixed, municipality kept', (SELECT province = 'Mayabeque' AND municipality = 'Santa Cruz del Norte' FROM cuba_pois WHERE name = 'Playa Jibacoa'));
+  PERFORM _t('T6f outside polygons untouched', (SELECT province IS NULL AND municipality IS NULL FROM cuba_pois WHERE name = 'Máximo Gómez Airport (AVI)'));
+  UPDATE cuba_pois SET phone = '+53 7 000 0000' WHERE id = v_id;   -- non-location UPDATE must not touch the areas
+  PERFORM _t('T6g non-location update keeps areas', (SELECT municipality = 'La Habana Vieja' FROM cuba_pois WHERE id = v_id));
+END $$;
