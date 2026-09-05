@@ -12,6 +12,8 @@ import {
   isProviderStreetResult,
   filterProviderStreetsByLocalAnchor,
   LOCAL_STREET_TRUST_RADIUS_M,
+  isZoneLevelResult,
+  ZONE_LEVEL_CATEGORIES,
   type ScorableResult,
 } from '../addressSearch';
 
@@ -416,5 +418,62 @@ describe('filterProviderStreetsByLocalAnchor', () => {
   it('the trust radius is 3 km', () => {
     // Documents the constant so a future edit is a deliberate choice.
     expect(LOCAL_STREET_TRUST_RADIUS_M).toBe(3000);
+  });
+});
+
+describe('isZoneLevelResult — zone-level (neighbourhood/municipality) rows', () => {
+  it('flags Google administrative rows by their first type', () => {
+    expect(isZoneLevelResult({ source: 'google', matchedCategory: 'sublocality_level_1' })).toBe(true);
+    expect(isZoneLevelResult({ source: 'google', matchedCategory: 'neighborhood' })).toBe(true);
+    expect(isZoneLevelResult({ source: 'google', matchedCategory: 'locality' })).toBe(true);
+    expect(isZoneLevelResult({ source: 'google', matchedCategory: 'administrative_area_level_2' })).toBe(true);
+  });
+
+  it('does not flag a Google venue or street', () => {
+    expect(isZoneLevelResult({ source: 'google', matchedCategory: 'restaurant' })).toBe(false);
+    expect(isZoneLevelResult({ source: 'google', matchedCategory: 'lodging' })).toBe(false);
+    expect(isZoneLevelResult({ source: 'google', matchedCategory: 'route' })).toBe(false);
+  });
+
+  it('flags Mapbox place/neighborhood/district feature types', () => {
+    expect(isZoneLevelResult({ source: 'mapbox', category: 'neighborhood' })).toBe(true);
+    expect(isZoneLevelResult({ source: 'searchbox', category: 'place' })).toBe(true);
+    expect(isZoneLevelResult({ source: 'mapbox', category: 'poi' })).toBe(false);
+  });
+
+  it('never flags local rows, whatever their category says', () => {
+    expect(isZoneLevelResult({ source: 'supabase', category: 'locality' })).toBe(false);
+    expect(isZoneLevelResult({ source: 'overpass', category: 'neighborhood' })).toBe(false);
+    expect(isZoneLevelResult({ category: 'locality' })).toBe(false);
+  });
+
+  it('falls back to a known zone name only when no category is known', () => {
+    expect(isZoneLevelResult({ source: 'google', place_name: 'Vedado', address: 'Vedado, La Habana' })).toBe(true);
+    expect(isZoneLevelResult({ source: 'google', place_name: 'Playa', address: 'Playa, La Habana, Cuba' })).toBe(true);
+    expect(isZoneLevelResult({ source: 'google', place_name: 'Hotel Vedado', address: 'Calle O, Vedado' })).toBe(false);
+    // A known category wins over the name: a café called "Vedado" is a café.
+    expect(isZoneLevelResult({ source: 'google', matchedCategory: 'cafe', place_name: 'Vedado', address: 'Vedado, La Habana' })).toBe(false);
+  });
+
+  it('exports the category tables so callers can reuse them', () => {
+    expect(ZONE_LEVEL_CATEGORIES.has('sublocality')).toBe(true);
+    expect(ZONE_LEVEL_CATEGORIES.has('restaurant')).toBe(false);
+  });
+});
+
+describe('rankSearchResults with a zone-level row', () => {
+  it('sinks the zone below a same-distance venue even on an exact name match', () => {
+    const zone = result({ place_name: 'Vedado', matchedCategory: 'sublocality_level_1', address: 'Vedado, La Habana', latitude: NEAR.latitude, longitude: NEAR.longitude });
+    const venue = result({ place_name: 'Vedado Café', matchedCategory: 'cafe', address: 'Calle 23, Vedado', latitude: NEAR.latitude, longitude: NEAR.longitude });
+    const ranked = rankSearchResults([zone, venue], 'vedado', HAVANA);
+    expect(ranked[0]).toBe(venue);
+    expect(ranked[1]).toBe(zone);
+  });
+
+  it('leaves the order of non-zone rows untouched', () => {
+    const a = result({ place_name: 'Coppelia', matchedCategory: 'cafe', latitude: NEAR.latitude, longitude: NEAR.longitude });
+    const b = result({ place_name: 'Coppelia Anexo', matchedCategory: 'cafe', latitude: NEAR.latitude, longitude: NEAR.longitude });
+    const before = scoreSearchResult(a, 'coppelia', HAVANA) - scoreSearchResult(b, 'coppelia', HAVANA);
+    expect(before).toBeGreaterThan(0);
   });
 });

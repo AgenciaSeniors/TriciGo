@@ -27,6 +27,7 @@ import {
   nominatimPoiName,
   joinStructured,
   POI_INCLUSION_THRESHOLD_M,
+  parseCornerQuery,
   type SearchBoxResult,
   type TricigoCategory,
   type StructuredAddress,
@@ -1373,5 +1374,48 @@ describe('nominatimPoiName — the fallback POI is distance-gated too', () => {
 
   it('drops a name it cannot place', () => {
     expect(nominatimPoiName({ name: 'Fantasma' }, q.lat, q.lng)).toBe('');
+  });
+});
+
+describe('parseCornerQuery — Cuban corner form "X y Y" / "X esq. Y"', () => {
+  it('parses a numbered-grid corner as strong', () => {
+    expect(parseCornerQuery('23 y 12')).toEqual({ main: '23', cross1: '12', strength: 'strong' });
+  });
+
+  it('parses an ordinal avenue corner as strong', () => {
+    expect(parseCornerQuery('5ta y 42')).toEqual({ main: '5ta', cross1: '42', strength: 'strong' });
+  });
+
+  it('accepts "esq. a" with a single-letter cross street', () => {
+    expect(parseCornerQuery('Línea esq. a G')).toEqual({ main: 'Línea', cross1: 'G', strength: 'strong' });
+  });
+
+  it('accepts the long "esquina" separator', () => {
+    expect(parseCornerQuery('23 esquina 12')).toEqual({ main: '23', cross1: '12', strength: 'strong' });
+  });
+
+  it('parses a named-street corner as weak (server decides)', () => {
+    expect(parseCornerQuery('Infanta y San Lázaro')).toEqual({ main: 'Infanta', cross1: 'San Lázaro', strength: 'weak' });
+  });
+
+  it('rejects business names joined by "y"', () => {
+    expect(parseCornerQuery('Pan y Canela')).toBeNull();
+    expect(parseCornerQuery('Tacos y Más')).toBeNull();
+    expect(parseCornerQuery('Restaurante Sol y Mar')).toBeNull();
+  });
+
+  it('rejects more than one separator', () => {
+    expect(parseCornerQuery('23 y 12 y 14')).toBeNull();
+  });
+
+  it('defers block-form addresses to parseCubanAddress', () => {
+    expect(parseCornerQuery('Reina entre Campanario y Lealtad')).toBeNull();
+    expect(parseCornerQuery('Calle 23 e/ L y M')).toBeNull();
+  });
+
+  it('rejects queries with commas or empty sides', () => {
+    expect(parseCornerQuery('Hospital Calixto García, Vedado')).toBeNull();
+    expect(parseCornerQuery('23 y ')).toBeNull();
+    expect(parseCornerQuery(' y 12')).toBeNull();
   });
 });

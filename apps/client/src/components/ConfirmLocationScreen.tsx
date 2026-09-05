@@ -42,6 +42,10 @@ interface ConfirmLocationScreenProps {
    *  used when the screen opens to CONFIRM a geocoded search result
    *  (incident b428022b) rather than to pick a point from scratch. */
   confirmPrompt?: boolean;
+  /** The point being confirmed came from a ZONE search result (neighbourhood
+   *  / municipality centroid, see `isZoneLevelResult`): the caption asks to
+   *  move the pin to the exact spot instead of "¿El destino es aquí?". */
+  confirmHint?: 'zone' | null;
   onConfirm: (address: string, location: GeoPoint) => void;
   onClose: () => void;
 }
@@ -68,6 +72,7 @@ export function ConfirmLocationScreen({
   initialLocation,
   initialAddress,
   confirmPrompt,
+  confirmHint,
   onConfirm,
   onClose,
 }: ConfirmLocationScreenProps) {
@@ -489,11 +494,15 @@ export function ConfirmLocationScreen({
 
         <View style={{ flex: 1 }}>
           <Text variant="caption" color="secondary" style={{ marginBottom: 2 }}>
-            {confirmPrompt
-              ? t('ride.confirm_pin_prompt', { defaultValue: '¿El destino es aquí? Ajústalo si no' })
-              : isPickup
-                ? t('ride.pickup', { defaultValue: 'Punto de recogida' })
-                : t('ride.dropoff', { defaultValue: 'Destino' })}
+            {confirmHint === 'zone'
+              ? t('ride.zone_adjust_prompt', { defaultValue: 'Es una zona amplia — ajusta el pin al lugar exacto' })
+              : confirmPrompt
+                ? isPickup
+                  ? t('ride.confirm_pickup_pin_prompt', { defaultValue: '¿Te recogemos aquí? Ajústalo si no' })
+                  : t('ride.confirm_pin_prompt', { defaultValue: '¿El destino es aquí? Ajústalo si no' })
+                : isPickup
+                  ? t('ride.pickup', { defaultValue: 'Punto de recogida' })
+                  : t('ride.dropoff', { defaultValue: 'Destino' })}
           </Text>
           {isGeocoding ? (
             <Animated.View

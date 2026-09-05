@@ -1753,7 +1753,18 @@ function NativeHomeScreen() {
   // 'dropoff-confirm' (00537): same dropoff picker, but opened automatically to
   // CONFIRM a low-confidence geocoded search result — shows the "¿El destino es
   // aquí?" prompt and keeps the picked address text if the pin isn't moved.
-  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null>(null);
+  const [mapPickerMode, setMapPickerMode] = useState<'pickup' | 'pickup-confirm' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null>(null);
+  // The confirm picker was opened for a ZONE result (neighbourhood /
+  // municipality): its caption asks to move the pin to the exact spot
+  // instead of "¿El destino es aquí?". Cleared with the picker.
+  const [pickerZoneHint, setPickerZoneHint] = useState(false);
+  const openPicker = useCallback(
+    (mode: 'pickup' | 'pickup-confirm' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null, opts?: { zone?: boolean }) => {
+      setPickerZoneHint(!!opts?.zone);
+      setMapPickerMode(mode);
+    },
+    [],
+  );
 
   // A long-press on the map seeds the picker with that exact point instead
   // of the existing dropoff. Cleared whenever the picker closes.
@@ -1769,6 +1780,7 @@ function NativeHomeScreen() {
       // picker of any mode — opening the pickup pin at a point the rider
       // long-pressed during a previous ride.
       setPickerSeed(null);
+      setPickerZoneHint(false);
       setMapPickerMode(null);
     }
   }, [flowStep, mapPickerMode]);
@@ -1808,9 +1820,11 @@ function NativeHomeScreen() {
       //   pickup picker  → draft.pickup ?? draft.dropoff (no useful fallback otherwise)
       //   dropoff picker → draft.dropoff ?? draft.pickup (start near the user)
       //   waypoint picker → last waypoint ?? draft.pickup
+      const isPickupPicker = mapPickerMode === 'pickup' || mapPickerMode === 'pickup-confirm';
+      const isConfirmPicker = mapPickerMode === 'pickup-confirm' || mapPickerMode === 'dropoff-confirm';
       const pickerInitialLoc =
         pickerSeed ??
-        (mapPickerMode === 'pickup'
+        (isPickupPicker
           ? draft.pickup?.location ?? null
           : mapPickerMode === 'waypoint'
             ? lastWaypoint?.location ?? draft.pickup?.location ?? null
@@ -1818,7 +1832,7 @@ function NativeHomeScreen() {
       return (
         <View style={{ flex: 1 }}>
           <ConfirmLocationScreen
-            mode={mapPickerMode === 'pickup' ? 'pickup' : 'dropoff'}
+            mode={isPickupPicker ? 'pickup' : 'dropoff'}
             initialLocation={pickerInitialLoc}
             // 00537 pin confirmation: keep the search-picked address text when
             // the user confirms without moving the pin, and show the explicit
@@ -1829,11 +1843,16 @@ function NativeHomeScreen() {
             // address for it — passing the previous dropoff's address here
             // would let the user confirm the old label pinned to the new
             // point, which is the mismatch 00537 exists to prevent.
-            initialAddress={mapPickerMode === 'dropoff-confirm' && !pickerSeed ? draft.dropoff?.address ?? null : null}
-            confirmPrompt={mapPickerMode === 'dropoff-confirm'}
+            initialAddress={
+              isConfirmPicker && !pickerSeed
+                ? (isPickupPicker ? draft.pickup?.address : draft.dropoff?.address) ?? null
+                : null
+            }
+            confirmPrompt={isConfirmPicker}
+            confirmHint={pickerZoneHint ? 'zone' : null}
             onConfirm={(address, location) => {
-              if (!isValidCoordinate(location.latitude, location.longitude)) { setPickerSeed(null); setMapPickerMode(null); return; }
-              if (mapPickerMode === 'pickup') {
+              if (!isValidCoordinate(location.latitude, location.longitude)) { setPickerSeed(null); openPicker(null); return; }
+              if (isPickupPicker) {
                 setPickup(address, location);
               } else if (mapPickerMode === 'waypoint') {
                 const wpIdx = draft.waypoints.length - 1;
@@ -1842,19 +1861,19 @@ function NativeHomeScreen() {
                 setDropoff(address, location);
               }
               setPickerSeed(null);
-              setMapPickerMode(null);
+              openPicker(null);
             }}
-            onClose={() => { setPickerSeed(null); setMapPickerMode(null); }}
+            onClose={() => { setPickerSeed(null); openPicker(null); }}
           />
         </View>
       );
     }
     return (
       <SelectingView
-        setMapPickerMode={setMapPickerMode}
+        setMapPickerMode={openPicker}
         openPickerAt={(lng, lat) => {
           setPickerSeed({ latitude: lat, longitude: lng });
-          setMapPickerMode('dropoff-confirm');
+          openPicker('dropoff-confirm');
         }}
       />
     );
@@ -1967,7 +1986,13 @@ function IdleView() {
     created_at: string;
   } | null>(null);
   const { recentAddresses } = useRecentAddresses();
-  const { predictions } = useDestinationPredictions();
+  // Predictions are proximity-aware server-side (get_destination_suggestions
+  // takes lat/lng); without `near` that tier was dead on mobile.
+  const idleNear = useMemo(
+    () => (userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null),
+    [userCenter],
+  );
+  const { predictions } = useDestinationPredictions(idleNear);
   const { data: weather } = useWeather(
     userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null,
   );
@@ -3064,7 +3089,10 @@ const VEHICLE_ICONS: Record<string, any> = {
 // the waypoint-search map-picker flow can be wired later. Keeps the
 // two types aligned (same setter accepts the same values).
 function SelectingView({ setMapPickerMode, openPickerAt }: {
-  setMapPickerMode: (mode: 'pickup' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null) => void;
+  setMapPickerMode: (
+    mode: 'pickup' | 'pickup-confirm' | 'dropoff' | 'dropoff-confirm' | 'waypoint' | null,
+    opts?: { zone?: boolean },
+  ) => void;
   openPickerAt: (lng: number, lat: number) => void;
 }) {
   // BUG-282 (revised) — initial map center.
@@ -3117,7 +3145,15 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
   } = useRideStore();
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
   const { recentAddresses } = useRecentAddresses();
-  const { predictions } = useDestinationPredictions();
+  // Memoized lat/lng form of the user center — feeds the search overlay's
+  // proximity-aware "Lugares populares" section and the destination
+  // predictions (get_destination_suggestions has a proximity tier that was
+  // dead on mobile while this was passed as null).
+  const userCenterLatLng = useMemo(
+    () => (userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null),
+    [userCenter],
+  );
+  const { predictions } = useDestinationPredictions(userCenterLatLng);
   const { accounts: corporateAccounts } = useCorporateAccounts();
   const debouncedConfirmRide = useDebouncePress(() => { triggerHaptic('medium'); confirmRide(); });
   const insets = useSafeAreaInsets();
@@ -3128,14 +3164,6 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
     [draft.waypoints],
   );
   const { coordinates: routeCoordinates, distanceM: routeDistanceM, durationS: routeDurationS } = useRoutePolyline(draft.pickup?.location, draft.dropoff?.location, waypointPoints);
-  // Memoized lat/lng form of the user center — feeds the search overlay's
-  // proximity-aware "Lugares populares" section
-  // (defaults the "report a place" form to where the user is standing).
-  const userCenterLatLng = useMemo(
-    () => (userCenter ? { latitude: userCenter[1], longitude: userCenter[0] } : null),
-    [userCenter],
-  );
-
   // ── Which vehicles can actually carry this package ──
   // Dispatch filters cargo offers fail-closed on accepts_cargo, weight and
   // category (00326 wired up by 00512). A rider who picks a vehicle that
@@ -3618,6 +3646,15 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
             onSelect={(address, location, meta) => {
               if (searchingField === 'pickup') {
                 setPickup(address, location);
+                // Same 00537 rule as the dropoff branch below: a street or a
+                // ZONE result asks the rider to confirm the pin. This branch
+                // used to ignore the flag, so a zone picked as PICKUP was
+                // committed at its centroid.
+                if (meta?.confirmPin) {
+                  setSearchingField(null);
+                  setMapPickerMode('pickup-confirm', { zone: !!meta.zoneLike });
+                  return;
+                }
               } else if (searchingField === 'waypoint') {
                 // Update the last added waypoint (addWaypoint was called before opening search)
                 const wpIdx = draft.waypoints.length - 1;
@@ -3632,7 +3669,7 @@ function SelectingView({ setMapPickerMode, openPickerAt }: {
                 // fixes the coords before the ride is ever requested.
                 if (meta?.confirmPin) {
                   setSearchingField(null);
-                  setMapPickerMode('dropoff-confirm');
+                  setMapPickerMode('dropoff-confirm', { zone: !!meta.zoneLike });
                   return;
                 }
               }
