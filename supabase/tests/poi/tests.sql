@@ -67,6 +67,7 @@ DO $$ BEGIN
   PERFORM _t('T2z10 hotel named after city kept', _poi_clean_name('Hotel Santiago de Cuba') = 'Hotel Santiago de Cuba');
   PERFORM _t('T2z11 initial E. kept', _poi_clean_name('Feria De Comidas (Antorcha E.)') = 'Feria de Comidas (Antorcha E.)');
   PERFORM _t('T2z12 .cuba garbage', _poi_clean_name('Iglesia Del Cobre, Santiago De Cuba.cuba') = 'Iglesia del Cobre');
+  PERFORM _t('T2z13 swedish-only parenthetical', _poi_clean_name('Arroyo Conuco (periodiskt vattendrag)') = 'Arroyo Conuco' AND _poi_clean_name('Cayo del Medio (halvö)') = 'Cayo del Medio');
 END $$;
 
 -- T3: display_name derivation survives a sync-style UPDATE of name; overrides win
@@ -141,3 +142,46 @@ DO $$ DECLARE v_id bigint; BEGIN
   UPDATE cuba_pois SET phone = '+53 7 000 0000' WHERE id = v_id;   -- non-location UPDATE must not touch the areas
   PERFORM _t('T6g non-location update keeps areas', (SELECT municipality = 'La Habana Vieja' FROM cuba_pois WHERE id = v_id));
 END $$;
+
+-- T7: cleanup + taxonomy
+DO $$ DECLARE v_win bigint; v_lose bigint; v_imp jsonb; BEGIN
+  PERFORM _t('T7a swedish landmark deactivated', NOT EXISTS (SELECT 1 FROM cuba_pois WHERE is_active AND name LIKE 'Arroyo Guayabo (vattendrag%'));
+  SELECT id INTO v_win  FROM cuba_pois WHERE name = 'Coppelia' AND source = 'merged';
+  SELECT id INTO v_lose FROM cuba_pois WHERE name = 'Coppelia' AND source = 'overture';
+  PERFORM _t('T7b merged wins over overture', (SELECT is_active FROM cuba_pois WHERE id = v_win));
+  PERFORM _t('T7c loser points at winner', (SELECT NOT is_active AND merged_into = v_win FROM cuba_pois WHERE id = v_lose));
+  PERFORM _t('T7d winner inherits source_ids', (SELECT source_ids ? 'ovt' AND source_ids ? 'osm' FROM cuba_pois WHERE id = v_win));
+  PERFORM _t('T7e loser left the dictionary', NOT EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = v_lose));
+  PERFORM _t('T7f cupet brand → gas_station', (SELECT category_override = 'gas_station' FROM cuba_pois WHERE tags->>'brand' = 'Cupet' LIMIT 1));
+  PERFORM _t('T7f2 cupet by name → gas_station', (SELECT category_override = 'gas_station' FROM cuba_pois WHERE name = 'Cupet Santa Catalina'));
+  PERFORM _t('T7g theatre → venue via mapper', map_category_to_tricigo('theatre', NULL) = 'venue');
+  PERFORM _t('T7h landmark via mapper', map_category_to_tricigo('landmark_and_historical_building', NULL) = 'landmark');
+  PERFORM _t('T7i stadium via mapper', map_category_to_tricigo('leisure', 'stadium') = 'stadium');
+  PERFORM _t('T7j museum stays museum', map_category_to_tricigo('museum', NULL) = 'museum');
+  -- call first, assert after: inside one expression Postgres may run the EXISTS initplan before the volatile call
+  v_imp := import_search_poi('Teatro Prueba', 23.10, -82.40, NULL, 'venue', 'mb.test.1');
+  PERFORM _t('T7k import allow-list accepts venue', (v_imp->>'imported')::boolean AND EXISTS (SELECT 1 FROM cuba_pois WHERE name = 'Teatro Prueba' AND tricigo_category = 'venue'));
+  PERFORM _t('T7l keyword teatro → venue', EXISTS (SELECT 1 FROM cuba_search_keywords WHERE keyword = 'teatro' AND tricigo_category = 'venue'));
+  PERFORM _t('T7m CHECK validated', (SELECT convalidated FROM pg_constraint WHERE conname = 'cuba_pois_tricigo_category_chk'));
+  PERFORM _t('T7n fixture rows re-mapped', (SELECT tricigo_category FROM cuba_pois WHERE name = 'Teatro Karl Marx') = 'venue'
+                                        AND (SELECT tricigo_category FROM cuba_pois WHERE name = 'Cine Yara') = 'venue'
+                                        AND (SELECT tricigo_category FROM cuba_pois WHERE name = 'estadio latinoamericano') = 'stadium');
+  PERFORM _t('T7o fsq beach stays beach', map_category_to_tricigo('Landmarks and Outdoors > Beach', NULL) = 'beach'
+                                        AND map_category_to_tricigo('Landmarks and Outdoors > Bay', NULL) = 'beach');
+  PERFORM _t('T7p fsq neighbourhood is other', map_category_to_tricigo('Landmarks and Outdoors > States and Municipalities > Neighborhood', NULL) = 'other');
+  PERFORM _t('T7q fsq monument is landmark', map_category_to_tricigo('Landmarks and Outdoors > Monument', NULL) = 'landmark'
+                                        AND map_category_to_tricigo('Landmarks and Outdoors > Historic and Protected Site', NULL) = 'landmark');
+  PERFORM _t('T7r fsq park/marina', map_category_to_tricigo('Landmarks and Outdoors > Park > National Park', NULL) = 'park'
+                                        AND map_category_to_tricigo('Landmarks and Outdoors > Harbor or Marina', NULL) = 'transport');
+  PERFORM _t('T7s fsq arts split', map_category_to_tricigo('Arts and Entertainment > Museum > History Museum', NULL) = 'museum'
+                                        AND map_category_to_tricigo('Arts and Entertainment > Performing Arts Venue > Theater', NULL) = 'venue'
+                                        AND map_category_to_tricigo('Arts and Entertainment > Stadium > Baseball Stadium', NULL) = 'stadium'
+                                        AND map_category_to_tricigo('Arts and Entertainment > Night Club', NULL) = 'bar'
+                                        AND map_category_to_tricigo('Arts and Entertainment > Public Art', NULL) = 'landmark');
+  PERFORM _t('T7t osm historic subcats', map_category_to_tricigo('historic', 'memorial') = 'landmark' AND map_category_to_tricigo('historic', 'ruins') = 'landmark'
+                                        AND map_category_to_tricigo('tourism', 'viewpoint') = 'landmark' AND map_category_to_tricigo('amenity', 'cinema') = 'venue');
+  PERFORM _t('T7u old mappings intact', map_category_to_tricigo('restaurant', NULL) = 'restaurant' AND map_category_to_tricigo('amenity', 'pharmacy') = 'pharmacy'
+                                        AND map_category_to_tricigo('Food and Dining > Cafe', NULL) = 'restaurant' AND map_category_to_tricigo('nonsense', NULL) = 'other');
+  PERFORM _t('T7v admin row untouched', (SELECT is_active AND tricigo_category = 'gov' FROM cuba_pois WHERE name = 'El Capitolio'));
+END $$;
+

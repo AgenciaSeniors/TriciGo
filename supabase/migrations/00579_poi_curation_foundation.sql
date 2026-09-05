@@ -114,6 +114,8 @@ BEGIN
   -- vattendrag i Kuba, Provincia de …)". Anchored on the "<term> … i Kuba" shape so
   -- "(by Sheraton)" survives.
   v := regexp_replace(v, '\s*\(((ö|öar|vattendrag|periodiskt|sjö|berg|by|ort|udde|bukt|flod|kulle|kommun|stad|halvö|lagun|vik|kanal|damm|grotta)\s+)+i\s+kuba\y[^)]*\)', '', 'gi');
+  -- …and the 13 prod rows whose parenthetical is ONLY Swedish nouns: "(periodiskt vattendrag)", "(halvö)".
+  v := regexp_replace(v, '\s*\(((periodiskt|vattendrag|ö|öar|sjö|udde|bukt|flod|kulle|halvö|lagun|vik|kanal|damm|grotta)\s*)+\)', '', 'gi');
   -- "(habana -Cuba )", "(La Habana)", "(Cuba)", "(Cuba cell)".
   v := regexp_replace(v, '\s*\(\s*(la\s+)?(habana|havana|cuba)\y[^)]*\)', '', 'gi');
   -- Trailing period unless the last token is an abbreviation ("S.A.").
