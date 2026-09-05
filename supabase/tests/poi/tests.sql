@@ -68,3 +68,23 @@ DO $$ BEGIN
   PERFORM _t('T2z11 initial E. kept', _poi_clean_name('Feria De Comidas (Antorcha E.)') = 'Feria de Comidas (Antorcha E.)');
   PERFORM _t('T2z12 .cuba garbage', _poi_clean_name('Iglesia Del Cobre, Santiago De Cuba.cuba') = 'Iglesia del Cobre');
 END $$;
+
+-- T3: display_name derivation survives a sync-style UPDATE of name; overrides win
+DO $$ DECLARE v_id bigint; BEGIN
+  INSERT INTO cuba_pois (name, category, location, source, confidence) VALUES
+   ('LA ROCA, La Habana, Cuba', 'restaurant', ST_SetSRID(ST_MakePoint(-82.38,23.14),4326)::geography, 'overture', 0.9) RETURNING id INTO v_id;
+  PERFORM _t('T3a display derived on insert', (SELECT display_name = 'La Roca' FROM cuba_pois WHERE id = v_id));
+  UPDATE cuba_pois SET name = 'LA ROCA BAR, La Habana, Cuba' WHERE id = v_id;           -- what bulk_upsert does
+  PERFORM _t('T3b display follows sync rename', (SELECT display_name = 'La Roca Bar' FROM cuba_pois WHERE id = v_id));
+  UPDATE cuba_pois SET name_override = 'La Roca (Vedado)' WHERE id = v_id;
+  UPDATE cuba_pois SET name = 'LA ROCA, Cuba' WHERE id = v_id;
+  PERFORM _t('T3c override wins over sync', (SELECT display_name = 'La Roca (Vedado)' FROM cuba_pois WHERE id = v_id));
+  PERFORM _t('T3d defaults', (SELECT is_landmark = false AND pick_count = 0 AND merged_into IS NULL FROM cuba_pois WHERE id = v_id));
+  BEGIN
+    UPDATE cuba_pois SET category_override = 'bogus' WHERE id = v_id;
+    PERFORM _t('T3e category_override CHECK', false);
+  EXCEPTION WHEN check_violation THEN PERFORM _t('T3e category_override CHECK', true); END;
+  PERFORM _t('T3f backfill left no NULL display_name', NOT EXISTS (SELECT 1 FROM cuba_pois WHERE display_name IS NULL));
+  PERFORM _t('T3g fixture cleaned', (SELECT display_name = 'Casa Medina' FROM cuba_pois WHERE name = 'Casa Medina La Habana Cuba'));
+  PERFORM _t('T3h taxonomy has 24 values', array_length(poi_taxonomy(), 1) = 24 AND 'landmark' = ANY (poi_taxonomy()));
+END $$;

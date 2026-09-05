@@ -165,3 +165,58 @@ RETURNS text LANGUAGE sql IMMUTABLE SET search_path TO 'public','extensions','pg
       '^((hotel|hostal|restaurante|restaurant|bar|cafeteria|cafe|paladar|parque|playa|hospital|policlinico|clinica|escuela|iglesia|museo|teatro|cine|farmacia|banco|tienda|mercado|agromercado|panaderia|dulceria|heladeria|pizzeria|estadio|terminal|aeropuerto|universidad|instituto|casa|villa|plaza)(\s+(de las|de los|de la|del|de))?|el|la|los|las)\s+(?=\S)', '')), ''),
     lower(unaccent(s))) END;
 $function$;
+
+-- ---------------------------------------------------------------------------
+-- C. Curation columns (spec §4.1). None of these is written by
+--    bulk_upsert_pois / apply_osm_delta_batch (verified against the live
+--    ON CONFLICT clause on 2026-09-05), so the weekly sync cannot undo them.
+-- ---------------------------------------------------------------------------
+ALTER TABLE public.cuba_pois
+  ADD COLUMN IF NOT EXISTS display_name      text,
+  ADD COLUMN IF NOT EXISTS name_override     text,
+  ADD COLUMN IF NOT EXISTS category_override text,
+  ADD COLUMN IF NOT EXISTS is_landmark       boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS pick_count        integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS last_picked_at    timestamptz,
+  ADD COLUMN IF NOT EXISTS merged_into       bigint REFERENCES public.cuba_pois(id) ON DELETE SET NULL;
+
+-- The 24-value taxonomy. scripts/check-poi-taxonomy.mjs (CI) keeps the TS
+-- side (@tricigo/utils TricigoCategory) byte-equal to this list.
+CREATE OR REPLACE FUNCTION public.poi_taxonomy() RETURNS text[] LANGUAGE sql IMMUTABLE AS $$
+  SELECT ARRAY['hospital','pharmacy','school','gov','hotel','restaurant','paladar','cafe','bar',
+               'supermarket','shop','bank','atm','gas_station','museum','park','beach','embassy',
+               'religion','transport','other','landmark','venue','stadium'] $$;
+
+DO $$ BEGIN
+  ALTER TABLE public.cuba_pois ADD CONSTRAINT cuba_pois_category_override_chk
+    CHECK (category_override IS NULL OR category_override = ANY (public.poi_taxonomy()));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- tricigo_category gets the same CHECK as NOT VALID here; 00581 validates it after the data fixes.
+DO $$ BEGIN
+  ALTER TABLE public.cuba_pois ADD CONSTRAINT cuba_pois_tricigo_category_chk
+    CHECK (tricigo_category IS NULL OR tricigo_category = ANY (public.poi_taxonomy())) NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE OR REPLACE FUNCTION public.tg_cuba_pois_display_name() RETURNS trigger
+LANGUAGE plpgsql SET search_path TO 'public','pg_catalog' AS $function$
+BEGIN
+  NEW.display_name := COALESCE(NULLIF(trim(NEW.name_override), ''), public._poi_clean_name(NEW.name), NEW.name);
+  RETURN NEW;
+END $function$;
+DROP TRIGGER IF EXISTS trg_cuba_pois_display_name ON public.cuba_pois;
+CREATE TRIGGER trg_cuba_pois_display_name
+  BEFORE INSERT OR UPDATE OF name, name_override ON public.cuba_pois
+  FOR EACH ROW EXECUTE FUNCTION public.tg_cuba_pois_display_name();
+
+-- Backfill in one pass (110k rows; RowExclusiveLock only, reads unaffected).
+UPDATE public.cuba_pois SET display_name = public._poi_clean_name(name) WHERE display_name IS NULL;
+ALTER TABLE public.cuba_pois ALTER COLUMN display_name SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_cuba_pois_merged_into ON public.cuba_pois (merged_into) WHERE merged_into IS NOT NULL;
+
+COMMENT ON COLUMN public.cuba_pois.display_name      IS '00579: what the apps show. COALESCE(name_override, _poi_clean_name(name)); recomputed by trigger, so the sync cannot dirty it.';
+COMMENT ON COLUMN public.cuba_pois.name_override     IS '00579: admin-set display name; survives the sync (never in its ON CONFLICT SET).';
+COMMENT ON COLUMN public.cuba_pois.category_override IS '00579: admin-set category; effective category = COALESCE(category_override, tricigo_category).';
+COMMENT ON COLUMN public.cuba_pois.is_landmark       IS '00579: landmark tier for search ranking (Wikidata + curated). Never touched by the sync.';
+COMMENT ON COLUMN public.cuba_pois.pick_count        IS '00579: rider picks resolved to this POI (PR-2 trigger on rides). Never touched by the sync.';
+COMMENT ON COLUMN public.cuba_pois.last_picked_at    IS '00579: last rider pick resolved to this POI (PR-2).';
+COMMENT ON COLUMN public.cuba_pois.merged_into       IS '00579: set on the deactivated loser of a duplicate merge; points at the surviving row.';
