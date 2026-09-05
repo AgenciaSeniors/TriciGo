@@ -103,3 +103,26 @@ DO $$ DECLARE v_id bigint; BEGIN
   PERFORM _t('T4i inactive rows get no osm alias', NOT EXISTS (SELECT 1 FROM cuba_poi_aliases a JOIN cuba_pois p ON p.id = a.poi_id WHERE NOT p.is_active));
   PERFORM _t('T4j rls enabled', (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.cuba_poi_aliases'::regclass));
 END $$;
+
+-- T5: dictionary
+DO $$ DECLARE v_id bigint; BEGIN
+  SELECT id INTO v_id FROM cuba_pois WHERE name = 'Hotel Habana Libre' LIMIT 1;   -- fixture row
+  PERFORM _t('T5a display row',  EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = v_id AND kind='display' AND norm='hotel habana libre'));
+  PERFORM _t('T5b bare row',     EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = v_id AND kind='bare' AND norm='habana libre'));
+  INSERT INTO cuba_poi_aliases (poi_id, alias, alias_norm, kind, source) VALUES (v_id, 'El Libre', 'el libre', 'popular', 'admin');
+  PERFORM _t('T5c alias row appears', EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = v_id AND kind='alias' AND norm='el libre'));
+  DELETE FROM cuba_poi_aliases WHERE poi_id = v_id AND alias_norm = 'el libre';
+  PERFORM _t('T5d alias row removed', NOT EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = v_id AND kind='alias' AND norm='el libre'));
+  UPDATE cuba_pois SET name_override = 'Habana Libre Tryp' WHERE id = v_id;
+  PERFORM _t('T5e display row follows override', EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = v_id AND kind='display' AND norm='habana libre tryp') AND NOT EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = v_id AND norm='hotel habana libre'));
+  UPDATE cuba_pois SET is_active = false WHERE id = v_id;
+  PERFORM _t('T5f inactive rows leave', NOT EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = v_id));
+  UPDATE cuba_pois SET is_active = true, name_override = NULL WHERE id = v_id;
+  PERFORM _t('T5g reactivation rebuilds', (SELECT count(*) FILTER (WHERE kind='display') = 1 AND count(*) FILTER (WHERE kind='bare') = 1 AND count(*) FILTER (WHERE kind='alias' AND norm='habana libre') = 1 FROM poi_search_names WHERE poi_id = v_id));
+  PERFORM _t('T5h brand alias is kind brand', EXISTS (SELECT 1 FROM poi_search_names n JOIN cuba_pois p ON p.id = n.poi_id WHERE p.tags->>'brand' = 'Cupet' AND n.kind = 'brand' AND n.norm = 'cupet'));
+  PERFORM _t('T5i inactive fixture absent', NOT EXISTS (SELECT 1 FROM poi_search_names n JOIN cuba_pois p ON p.id = n.poi_id WHERE NOT p.is_active));
+  PERFORM _t('T5j every active poi has a display row', NOT EXISTS (SELECT 1 FROM cuba_pois p WHERE p.is_active AND p.merged_into IS NULL AND NOT EXISTS (SELECT 1 FROM poi_search_names n WHERE n.poi_id = p.id AND n.kind = 'display')));
+  UPDATE cuba_poi_aliases SET alias = 'La Benéfica del Cerro', alias_norm = 'la benefica del cerro' WHERE alias = 'La Benéfica';
+  PERFORM _t('T5k alias update re-syncs', EXISTS (SELECT 1 FROM poi_search_names WHERE norm = 'la benefica del cerro') AND NOT EXISTS (SELECT 1 FROM poi_search_names WHERE norm = 'la benefica'));
+  UPDATE cuba_poi_aliases SET alias = 'La Benéfica', alias_norm = 'la benefica' WHERE alias = 'La Benéfica del Cerro';
+END $$;

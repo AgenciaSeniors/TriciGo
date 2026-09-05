@@ -331,3 +331,83 @@ BEGIN
   END LOOP;
   RAISE NOTICE '00579D: % curated aliases seeded', v_n;
 END $seed$;
+
+-- ---------------------------------------------------------------------------
+-- E. Precomputed search dictionary (spec §4.4; pattern: street_search_names,
+--    00544). Every searchable name of every ACTIVE, unmerged POI, accent-
+--    stripped. Rebuilt per POI (delete + reinsert) by statement-level triggers
+--    with transition tables, so a 5,000-row sync batch costs one statement.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.poi_search_names (
+  poi_id bigint NOT NULL REFERENCES public.cuba_pois(id) ON DELETE CASCADE,
+  norm   text   NOT NULL,
+  kind   text   NOT NULL CHECK (kind IN ('display','bare','alias','brand')),
+  weight real   NOT NULL DEFAULT 1.0,
+  PRIMARY KEY (poi_id, norm, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_poi_search_names_norm_trgm ON public.poi_search_names USING gin (norm gin_trgm_ops);
+-- text_pattern_ops: the database collation is en_US.UTF-8, so a plain btree cannot
+-- serve the prefix scans (norm LIKE 'habana%') search v2 relies on.
+CREATE INDEX IF NOT EXISTS idx_poi_search_names_norm ON public.poi_search_names (norm text_pattern_ops);
+ALTER TABLE public.poi_search_names ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "poi_search_names_read" ON public.poi_search_names;
+CREATE POLICY "poi_search_names_read" ON public.poi_search_names FOR SELECT TO anon, authenticated USING (true);
+GRANT SELECT ON public.poi_search_names TO anon, authenticated;
+COMMENT ON TABLE public.poi_search_names IS '00579: every searchable name of every ACTIVE, unmerged POI, accent-stripped: display (display_name), bare (minus generic prefix), alias/brand (cuba_poi_aliases). Rebuilt per POI by statement triggers; search_pois_smart v2 (PR-2) reads only this.';
+
+CREATE OR REPLACE FUNCTION public._poi_search_names_rebuild(p_ids bigint[]) RETURNS void
+LANGUAGE plpgsql SET search_path TO 'public','extensions','pg_catalog' AS $function$
+BEGIN
+  IF p_ids IS NULL OR cardinality(p_ids) = 0 THEN RETURN; END IF;
+  DELETE FROM public.poi_search_names WHERE poi_id = ANY (p_ids);
+  INSERT INTO public.poi_search_names (poi_id, norm, kind, weight)
+  SELECT p.id, lower(unaccent(p.display_name)), 'display', 1.0
+    FROM public.cuba_pois p WHERE p.id = ANY (p_ids) AND p.is_active AND p.merged_into IS NULL
+  UNION
+  SELECT p.id, public._poi_bare_name(p.display_name), 'bare', 0.9
+    FROM public.cuba_pois p WHERE p.id = ANY (p_ids) AND p.is_active AND p.merged_into IS NULL
+     AND public._poi_bare_name(p.display_name) <> lower(unaccent(p.display_name))
+  UNION
+  SELECT a.poi_id, a.alias_norm, CASE WHEN a.kind = 'brand' THEN 'brand' ELSE 'alias' END, 1.0
+    FROM public.cuba_poi_aliases a JOIN public.cuba_pois p ON p.id = a.poi_id
+   WHERE a.poi_id = ANY (p_ids) AND p.is_active AND p.merged_into IS NULL
+  ON CONFLICT (poi_id, norm, kind) DO NOTHING;
+END $function$;
+
+-- Trigger wrappers: transition tables are per-event, hence one function per event.
+CREATE OR REPLACE FUNCTION public._poi_search_names_sync_pois() RETURNS trigger
+LANGUAGE plpgsql SET search_path TO 'public','pg_catalog' AS $function$
+BEGIN
+  PERFORM public._poi_search_names_rebuild(ARRAY(SELECT DISTINCT id FROM new_rows));
+  RETURN NULL;
+END $function$;
+CREATE OR REPLACE FUNCTION public._poi_search_names_sync_aliases_ins() RETURNS trigger
+LANGUAGE plpgsql SET search_path TO 'public','pg_catalog' AS $function$
+BEGIN PERFORM public._poi_search_names_rebuild(ARRAY(SELECT DISTINCT poi_id FROM new_rows)); RETURN NULL; END $function$;
+CREATE OR REPLACE FUNCTION public._poi_search_names_sync_aliases_del() RETURNS trigger
+LANGUAGE plpgsql SET search_path TO 'public','pg_catalog' AS $function$
+BEGIN PERFORM public._poi_search_names_rebuild(ARRAY(SELECT DISTINCT poi_id FROM old_rows)); RETURN NULL; END $function$;
+CREATE OR REPLACE FUNCTION public._poi_search_names_sync_aliases_upd() RETURNS trigger
+LANGUAGE plpgsql SET search_path TO 'public','pg_catalog' AS $function$
+BEGIN PERFORM public._poi_search_names_rebuild(ARRAY(SELECT DISTINCT poi_id FROM new_rows UNION SELECT DISTINCT poi_id FROM old_rows)); RETURN NULL; END $function$;
+
+-- Plain AFTER INSERT / AFTER UPDATE (no column list: transition tables forbid one, 0A000).
+DROP TRIGGER IF EXISTS trg_poi_search_names_pois_ins ON public.cuba_pois;
+CREATE TRIGGER trg_poi_search_names_pois_ins AFTER INSERT ON public.cuba_pois
+  REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public._poi_search_names_sync_pois();
+DROP TRIGGER IF EXISTS trg_poi_search_names_pois_upd ON public.cuba_pois;
+CREATE TRIGGER trg_poi_search_names_pois_upd AFTER UPDATE ON public.cuba_pois
+  REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public._poi_search_names_sync_pois();
+DROP TRIGGER IF EXISTS trg_poi_search_names_alias_ins ON public.cuba_poi_aliases;
+CREATE TRIGGER trg_poi_search_names_alias_ins AFTER INSERT ON public.cuba_poi_aliases
+  REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public._poi_search_names_sync_aliases_ins();
+DROP TRIGGER IF EXISTS trg_poi_search_names_alias_del ON public.cuba_poi_aliases;
+CREATE TRIGGER trg_poi_search_names_alias_del AFTER DELETE ON public.cuba_poi_aliases
+  REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION public._poi_search_names_sync_aliases_del();
+DROP TRIGGER IF EXISTS trg_poi_search_names_alias_upd ON public.cuba_poi_aliases;
+CREATE TRIGGER trg_poi_search_names_alias_upd AFTER UPDATE ON public.cuba_poi_aliases
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION public._poi_search_names_sync_aliases_upd();
+
+-- Backfill: every active row (≈20k in prod), one statement.
+SELECT public._poi_search_names_rebuild(ARRAY(SELECT id FROM public.cuba_pois WHERE is_active));
+ANALYZE public.poi_search_names;
