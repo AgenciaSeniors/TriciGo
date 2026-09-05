@@ -71,6 +71,13 @@ jobs:
       - name: Check i18n (parity + duplicate keys)
         run: pnpm check:i18n
 
+      # Guardrail: the POI category vocabulary lives in 6 places (TS union,
+      # SQL poi_taxonomy(), sync categories.json, Mapbox importer, emoji map,
+      # visual groups). A value in one and not the others hides rows (00579
+      # CHECK) or drops imports.
+      - name: Check POI taxonomy parity
+        run: pnpm check:poi-taxonomy
+
       - name: Type check
         run: pnpm check-types
 
