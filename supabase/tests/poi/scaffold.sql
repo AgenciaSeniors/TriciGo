@@ -821,7 +821,10 @@ FROM (VALUES
   -- 29. transport in Habana Vieja
   ('Estación Central de Ferrocarriles', 'railway', 'station',    NULL,        23.1280, -82.3530, 'osm',        0.80, '{"osm":"n29"}',                '{}', false, 'La Habana', 'La Habana Vieja', 'Egido y Arsenal'),
   -- 30. inactive row (must never enter the dictionary)
-  ('POI Desactivado',                'shop',         NULL,        NULL,        23.1300, -82.3600, 'osm',        0.50, '{"osm":"n30"}',                '{}', false, 'La Habana', 'Centro Habana', NULL)
+  ('POI Desactivado',                'shop',         NULL,        NULL,        23.1300, -82.3600, 'osm',        0.50, '{"osm":"n30"}',                '{}', false, 'La Habana', 'Centro Habana', NULL),
+  -- 31/32. Foursquare rows the sync labelled "museum" because the 'landmark' keyword matched "Landmarks and Outdoors > …" first (prod: 77 beaches, 44 parks, 86 neighbourhoods)
+  ('Playa Prueba Foursquare',        'Landmarks and Outdoors > Beach', NULL, 'museum', 23.1750, -82.2900, 'foursquare', 0.70, '{"fsq":"f31"}', '{}', false, 'La Habana', 'Habana del Este', NULL),
+  ('Vedado',                         'Landmarks and Outdoors > States and Municipalities > Neighborhood', NULL, 'museum', 23.1390, -82.3830, 'foursquare', 0.70, '{"fsq":"f32"}', '{}', false, 'La Habana', 'Plaza de la Revolución', NULL)
 ) AS f(name, category, subcategory, tricigo_category, lat, lng, source, confidence, source_ids, tags, is_admin, province, municipality, address);
 
 UPDATE public.cuba_pois SET is_active = false WHERE name = 'POI Desactivado';

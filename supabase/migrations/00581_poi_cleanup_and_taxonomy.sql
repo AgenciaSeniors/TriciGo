@@ -142,6 +142,8 @@ BEGIN
       RETURN 'landmark';
     END IF;
     IF p_category ILIKE 'arts and entertainment > night club' OR p_category ILIKE 'arts and entertainment > salsa club' THEN RETURN 'bar'; END IF;
+    IF p_category ~* 'arts and entertainment > (internet cafe|gaming cafe)' THEN RETURN 'cafe'; END IF;
+    IF p_category ~* 'arts and entertainment > (casino|bowling|pool hall|arcade|mini golf|go kart|strip club)' THEN RETURN 'other'; END IF;
     IF p_category ILIKE 'arts and entertainment > museum%' OR p_category ILIKE 'arts and entertainment > art gallery' THEN RETURN 'museum'; END IF;
     IF p_category ILIKE 'arts and entertainment > performing arts venue%' OR p_category ILIKE 'arts and entertainment > movie theater%'
        OR p_category ILIKE 'arts and entertainment > comedy club' THEN RETURN 'venue'; END IF;
@@ -181,11 +183,15 @@ END $patch$;
 -- 4. Re-map rows whose stored category now resolves to a NEW value (only where
 --    nothing was curated). Rows the sync labelled museum/park/other from a
 --    theatre / monument / stadium source category move to venue / landmark /
---    stadium; scripts/sync-pois/categories.json (same PR) makes the weekly sync
---    agree, so it cannot flip them back.
+--    stadium. Foursquare "Landmarks and Outdoors > …" / "Arts and Entertainment
+--    > …" rows are re-mapped whatever the new value: the sync's keyword matcher
+--    hit 'landmark' before 'beach'/'park', so 77 beaches, 44 parks and 86
+--    neighbourhoods are labelled museum today. scripts/sync-pois/categories.json
+--    (same PR) makes the weekly sync agree, so it cannot flip them back.
 UPDATE public.cuba_pois p SET tricigo_category = public.map_category_to_tricigo(p.category, p.subcategory)
  WHERE p.is_active AND NOT p.is_admin AND p.category_override IS NULL
-   AND public.map_category_to_tricigo(p.category, p.subcategory) IN ('landmark','venue','stadium')
+   AND (public.map_category_to_tricigo(p.category, p.subcategory) IN ('landmark','venue','stadium')
+        OR p.category ILIKE 'landmarks and outdoors%' OR p.category ILIKE 'arts and entertainment%')
    AND p.tricigo_category IS DISTINCT FROM public.map_category_to_tricigo(p.category, p.subcategory);
 
 -- 5. Wikidata Swedish descriptors imported by Overture as "landmarks": streams,

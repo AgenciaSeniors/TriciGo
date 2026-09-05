@@ -183,5 +183,10 @@ DO $$ DECLARE v_win bigint; v_lose bigint; v_imp jsonb; BEGIN
   PERFORM _t('T7u old mappings intact', map_category_to_tricigo('restaurant', NULL) = 'restaurant' AND map_category_to_tricigo('amenity', 'pharmacy') = 'pharmacy'
                                         AND map_category_to_tricigo('Food and Dining > Cafe', NULL) = 'restaurant' AND map_category_to_tricigo('nonsense', NULL) = 'other');
   PERFORM _t('T7v admin row untouched', (SELECT is_active AND tricigo_category = 'gov' FROM cuba_pois WHERE name = 'El Capitolio'));
+  PERFORM _t('T7w fsq beach row re-mapped', (SELECT tricigo_category = 'beach' FROM cuba_pois WHERE name = 'Playa Prueba Foursquare'));
+  PERFORM _t('T7x fsq neighbourhood row re-mapped', (SELECT tricigo_category = 'other' FROM cuba_pois WHERE name = 'Vedado'));
+  PERFORM _t('T7y fsq arts leftovers', map_category_to_tricigo('Arts and Entertainment > Zoo', NULL) = 'park'
+                                     AND map_category_to_tricigo('Arts and Entertainment > Internet Cafe', NULL) = 'cafe'
+                                     AND map_category_to_tricigo('Arts and Entertainment > Casino', NULL) = 'other');
 END $$;
 
