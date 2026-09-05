@@ -28,6 +28,7 @@ apply_all
 
 if [[ -f supabase/tests/poi/tests.sql ]]; then
   echo "== tests"
-  "${PSQL[@]}" -d "$DB" -f supabase/tests/poi/tests.sql 2>&1 | grep -E "PASS|FAIL|ERROR|NOTICE:  0058" || true
-  "${PSQL[@]}" -d "$DB" -c "SELECT count(*) AS failures FROM _t_fail;" 2>/dev/null || true
+  # -f and -c run in ONE session so the TEMP _t_fail table is still there for the count.
+  "${PSQL[@]}" -d "$DB" -f supabase/tests/poi/tests.sql -c "SELECT count(*) AS failures FROM _t_fail;" 2>&1 \
+    | grep -E "PASS|FAIL|ERROR|failures|^ +[0-9]+$" || true
 fi
