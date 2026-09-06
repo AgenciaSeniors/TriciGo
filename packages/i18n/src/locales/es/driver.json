@@ -157,6 +157,7 @@
     "earned": "Vas a ganar",
     "passenger_name": "Pasajero: {{name}}",
     "pickup_address": "Recogida",
+    "rider_note": "Nota del pasajero",
     "dropoff_address": "Destino",
     "call_passenger": "Llamar al pasajero",
     "toolbar_call": "Llamar",

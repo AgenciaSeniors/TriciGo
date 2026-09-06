@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { View, TextInput, Pressable, ActivityIndicator, ScrollView, Animated } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -80,8 +81,16 @@ interface AddressSearchInputProps {
    *  Cuban addresses (incident b428022b) and the local street DB is
    *  OSM-derived, so neither is trusted blindly. The caller should ask the
    *  user to confirm the pin on the map before booking to that point.
-   *  Saved/recent/prediction selections never set it. */
-  onSelect: (address: string, location: GeoPoint, meta?: { confirmPin?: boolean }) => void;
+   *  Saved/recent/prediction selections never set it.
+   *  `meta.zoneLike` marks a ZONE row (neighbourhood/municipality) from an
+   *  external provider — it always sets `confirmPin` too, and the caller can
+   *  show a "zona amplia" prompt instead of the generic one.
+   *  `meta.notes` carries the details saved with a place (home/work/recents). */
+  onSelect: (
+    address: string,
+    location: GeoPoint,
+    meta?: { confirmPin?: boolean; zoneLike?: boolean; notes?: string },
+  ) => void;
   /** User's saved locations from customer profile */
   savedLocations?: SavedLocation[];
   /** Recently used addresses from AsyncStorage */
@@ -94,6 +103,9 @@ interface AddressSearchInputProps {
   onPickOnMap?: () => void;
   /** When true, component starts expanded with suggestions visible */
   autoExpand?: boolean;
+  /** Offer the fixed Casa / Trabajo slots at the top of the idle panel (an
+   *  empty slot links to the saved-places screen). Off inside that screen. */
+  showFixedPlaces?: boolean;
 }
 
 function AddressSearchInputInner({
@@ -107,6 +119,7 @@ function AddressSearchInputInner({
   showUseMyLocation = false,
   onPickOnMap,
   autoExpand = false,
+  showFixedPlaces = true,
 }: AddressSearchInputProps) {
   const { t } = useTranslation('rider');
   const resolvedScheme = useThemeStore((s) => s.resolvedScheme);
@@ -126,6 +139,11 @@ function AddressSearchInputInner({
   const lastQueryRef = useRef<string>('');
   /** Bumped on every selection and on unmount; see handleSelectMerged. */
   const selectGenRef = useRef(0);
+  /** True once a search for the CURRENT query has settled. Gates the empty
+   *  state: without it "No se encontraron resultados" flashed between the
+   *  moment a stale search cleared `isSearching` and the moment the new one
+   *  answered (CLAUDE.md canon for the four search components). */
+  const hasSearchedRef = useRef(false);
   // PR C of POI parity — Google Places session token. Generated lazily on
   // the first keystroke and reused for every keystroke + the Place Details
   // lookup until the user selects, clears, or empties the input. Bills the
@@ -189,6 +207,7 @@ function AddressSearchInputInner({
   const handleTextChange = useCallback((text: string) => {
     setQuery(text);
     lastQueryRef.current = text;
+    hasSearchedRef.current = false;
 
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -304,6 +323,9 @@ function AddressSearchInputInner({
           displayName: r.place_name && r.place_name !== r.address ? r.place_name : undefined,
           tricigoCategory: r.tricigoCategory ?? null,
           category: r.category,
+          // A neighbourhood/municipality row must not be committed at its
+          // centroid — it goes through pin confirmation (see onSelect meta).
+          zoneLike: isZoneLevelResult(r) || undefined,
         });
 
         // Fire Google + cuba_pois + streets in parallel. Streets are always
@@ -319,12 +341,27 @@ function AddressSearchInputInner({
         // search_pois_smart would return pure category noise for "C".
         const gridOnly = text.trim().length === 1;
 
-        const [unifiedResults, poiResults, streetResults] = await Promise.all([
+        // Cuban CORNER form ("23 y 12", "Infanta y San Lázaro", "Línea esq. a
+        // G"). The server has resolved corners for months; the client never
+        // asked because only the block form ("X e/ Y y Z") was parsed, so
+        // "23 y 12" reached search_streets and came back as two unrelated
+        // streets. Runs IN PARALLEL with the normal search and is only
+        // PREPENDED on a hit — a venue literally named "Pan y Canela" keeps
+        // its row, and a miss costs one ~5 ms RPC.
+        const corner = cubanParsed ? null : parseCornerQuery(text);
+        const cornerProximity = userLocation
+          ? { latitude: userLocation.latitude, longitude: userLocation.longitude }
+          : undefined;
+
+        const [unifiedResults, poiResults, streetResults, cornerHit] = await Promise.all([
           gridOnly
             ? Promise.resolve<SearchBoxResult[]>([])
             : searchAddressUnified(text, getSupabaseClient(), userLocation, controller.signal, 10, sessionTokenRef.current ?? undefined),
           gridOnly ? Promise.resolve<SearchBoxResult[]>([]) : searchPoisSupabase(text, userLocation, 6),
           searchStreetsSupabase(text, userLocation, 8),
+          corner
+            ? lookupIntersectionPoint(corner.main, corner.cross1, undefined, cornerProximity).catch(() => null)
+            : Promise.resolve(null),
         ]);
 
         const externalAttribution = inferAttributionSource(unifiedResults);
@@ -367,13 +404,33 @@ function AddressSearchInputInner({
 
         // Normalize for display; keep _src on external rows so handleSelect
         // can fire-and-forget import-mapbox-poi for Google selections.
-        const searchResults: AddressSearchResult[] = ranked
+        const rankedResults: AddressSearchResult[] = ranked
           .slice(0, searchResultCap(text))
           .map((r) =>
             r.source === 'google' || r.source === 'mapbox' || r.source === 'searchbox'
               ? { ...normalize(r), _src: r }
               : normalize(r),
           );
+
+        // The resolved corner goes first (displayName === address → it is a
+        // street row, so it asks for pin confirmation like any other). Rows
+        // that sit on the same corner (≤100 m) are duplicates and go.
+        const searchResults: AddressSearchResult[] = cornerHit
+          ? [
+              {
+                address: cornerHit.address,
+                displayName: cornerHit.address,
+                latitude: cornerHit.latitude,
+                longitude: cornerHit.longitude,
+                category: 'street',
+              },
+              ...rankedResults.filter((r) =>
+                haversineDistance(
+                  { latitude: r.latitude, longitude: r.longitude },
+                  { latitude: cornerHit.latitude, longitude: cornerHit.longitude },
+                ) > 100),
+            ].slice(0, searchResultCap(text))
+          : rankedResults;
 
         // Last-resort: nothing came back from anywhere → ultimate Mapbox/
         // Nominatim fallback (free, slower) so the user gets *something*.
@@ -440,7 +497,13 @@ function AddressSearchInputInner({
           setIsOffline(true);
         }
       } finally {
-        setIsSearching(false);
+        // Only the search for the query still in the box may settle the UI.
+        // A slower, older search finishing here used to clear the spinner
+        // while the newer one was still in flight — the empty-state flash.
+        if (lastQueryRef.current === text) {
+          hasSearchedRef.current = true;
+          setIsSearching(false);
+        }
       }
     }, SEARCH_DEBOUNCE_MS);
   }, [userLocation]);
@@ -471,10 +534,11 @@ function AddressSearchInputInner({
     sessionTokenRef.current = null;
     // 00537: same rule as handleSelectMerged — any street-address result
     // (no distinct POI name) confirms the pin; see onSelect meta.confirmPin.
+    const zoneLike = !!result.zoneLike;
     onSelect(
       result.address,
       { latitude: result.latitude, longitude: result.longitude },
-      { confirmPin: !result.displayName || result.displayName === result.address },
+      { confirmPin: !result.displayName || result.displayName === result.address || zoneLike, zoneLike },
     );
     // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox lookup
     // when the selection came from Google/Mapbox unified search. Never blocks UX.
@@ -515,6 +579,9 @@ function AddressSearchInputInner({
       .slice(0, 8)
       .map((x) => x.p);
   }, [near]);
+
+  // Casa / Trabajo slots + the rest of the saved places (00578).
+  const fixedPlaces = useMemo(() => resolveFixedPlaces(savedLocations), [savedLocations]);
 
   const handleSelectPreset = (preset: typeof HAVANA_PRESETS[number]) => {
     triggerSelection();
@@ -590,30 +657,21 @@ function AddressSearchInputInner({
   // used for UI badging upstream; the handler itself only needs the
   // coordinates, so accept the enrichment fields as optional so both
   // shapes type-check without an unsafe cast at each call site.
-  const handleSelectMerged = (item: {
+  /**
+   * Commit a row with real coordinates: collapse the input, tell the parent,
+   * then upgrade the label in the background. Shared by the merged-list tap
+   * and the one-tap cross-street resolution below.
+   */
+  const commitSelection = (item: {
     address: string;
     displayName?: string;
     latitude: number;
     longitude: number;
-    priority?: number;
-    source?: string;
-    icon?: string;
-    distanceKm?: number | null;
     streetLike?: boolean;
-    needsResolution?: boolean;
+    zoneLike?: boolean;
+    /** Details saved with the place (home/work/recents) — prefill the ride's notes. */
+    notes?: string | null;
   }) => {
-    triggerSelection();
-
-    // A cross-street suggestion is a TEXT COMPLETION with no geometry. Feed it
-    // back into the search box: once the address reads "X e/ Y y Z" the
-    // full-address branch resolves it through find_intersection_point and the
-    // rider picks a row with real coordinates. Never commit these — their
-    // lat/lng are NaN by design.
-    if (item.needsResolution || !Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) {
-      handleTextChange(item.address);
-      return;
-    }
-
     trackEvent('address_searched', { query: query.trim() });
     setQuery('');
     setResults([]);
@@ -621,21 +679,26 @@ function AddressSearchInputInner({
     sessionTokenRef.current = null;
     // Immediate select: if the item is a POI with a known street address,
     // combine "POI name, street" so the user sees the full label right
-    // away (no flicker waiting for reverseGeocode background enrich).
+    // away (no flicker waiting for reverseGeocode background enrich). Skip
+    // the prefix when the address already starts with the name — a zone row
+    // ("Vedado" / "Vedado, La Habana") would otherwise read "Vedado, Vedado".
     const initial = item.displayName && item.address && item.displayName !== item.address
+      && !item.address.toLowerCase().startsWith(item.displayName.toLowerCase())
       ? `${item.displayName}, ${item.address}`
       : item.address;
     // 00537 (incident b428022b): every street-address search result asks for
     // pin confirmation — geocoders mis-pin Cuban addresses and the local
     // street DB is OSM-derived (see matchedApi mapping). Named POIs and
     // saved/recent/prediction rows (streetLike undefined) skip: those coords
-    // were searched by name or already ridden to.
-    const confirmPin = !!item.streetLike;
+    // were searched by name or already ridden to. A ZONE row (neighbourhood /
+    // municipality) always confirms: its coordinate is a centroid, not a door.
+    const zoneLike = !!item.zoneLike;
+    const confirmPin = !!item.streetLike || zoneLike;
     // Generation guard for the background label upgrade below. Bumped on every
     // selection and on unmount so a slow reverseGeocode (up to ~6 s, it races
     // Overpass) can't land after the user already moved on.
     const selectGen = ++selectGenRef.current;
-    onSelect(initial, { latitude: item.latitude, longitude: item.longitude }, { confirmPin });
+    onSelect(initial, { latitude: item.latitude, longitude: item.longitude }, { confirmPin, zoneLike, notes: item.notes ?? undefined });
     // Background: enrich with Cuban cross-street format via reverseGeocode.
     // reverseGeocode already prepends the nearest POI when it finds one,
     // so this naturally upgrades a "Calle 23" pick to "Hotel Bruzón, Calle 23
@@ -655,12 +718,71 @@ function AddressSearchInputInner({
         const looksLikeStreet =
           poiHint.includes(' e/ ') || poiHint.includes(' entre ') ||
           /^(Calle|Avenida|Calzada|Carretera|Av\.)\s/i.test(poiHint);
-        const finalAddress = !looksLikeStreet && !enriched.includes(poiHint)
+        const finalAddress = !looksLikeStreet && !zoneLike && !enriched.includes(poiHint)
           ? `${poiHint}, ${enriched}`
           : enriched;
         onSelect(finalAddress, { latitude: item.latitude, longitude: item.longitude });
       }).catch(() => {});
     }
+  };
+
+  const handleSelectMerged = (item: {
+    address: string;
+    displayName?: string;
+    latitude: number;
+    longitude: number;
+    priority?: number;
+    source?: string;
+    icon?: string;
+    distanceKm?: number | null;
+    streetLike?: boolean;
+    zoneLike?: boolean;
+    needsResolution?: boolean;
+    notes?: string | null;
+  }) => {
+    triggerSelection();
+
+    // A cross-street suggestion is a TEXT COMPLETION with no geometry. Never
+    // commit these — their lat/lng are NaN by design.
+    if (item.needsResolution || !Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) {
+      // One tap: a COMPLETE "X e/ Y y Z" completion is resolved right here
+      // instead of being fed back into the box for the rider to tap the
+      // same address a second time. The partial ones ("X e/ Y") still
+      // complete the text so the next cross street can be suggested.
+      const parsed = parseCubanAddress(item.address);
+      if (parsed && !parsed.partial && parsed.cross1) {
+        setQuery(item.address);
+        lastQueryRef.current = item.address;
+        setIsSearching(true);
+        const loc = userLocation
+          ? { latitude: userLocation.latitude, longitude: userLocation.longitude }
+          : undefined;
+        lookupIntersectionPoint(parsed.main, parsed.cross1, parsed.cross2, loc)
+          .then((hit) => {
+            if (lastQueryRef.current !== item.address) return;
+            if (hit) {
+              setIsSearching(false);
+              commitSelection({
+                address: hit.address,
+                displayName: hit.address,
+                latitude: hit.latitude,
+                longitude: hit.longitude,
+                streetLike: true,
+              });
+            } else {
+              handleTextChange(item.address);
+            }
+          })
+          .catch(() => {
+            if (lastQueryRef.current === item.address) handleTextChange(item.address);
+          });
+        return;
+      }
+      handleTextChange(item.address);
+      return;
+    }
+
+    commitSelection(item);
   };
 
   // UBER-1.3: Merge and rank all sources into a single list of up to 5.
@@ -682,6 +804,8 @@ function AddressSearchInputInner({
      * undefined and fall back to the Ionicon `icon` field.
      */
     emoji?: string;
+    /** See AddressSearchResult.zoneLike — forces pin confirmation. */
+    zoneLike?: boolean;
   };
 
   const mergedResults: MergedResult[] = (() => {
@@ -727,6 +851,7 @@ function AddressSearchInputInner({
         // Cross-street text completions carry no geometry — see
         // handleSelectMerged, which completes the query instead of selecting.
         needsResolution: r.needsResolution,
+        zoneLike: r.zoneLike,
       }));
 
     const all = [...matchedPreds, ...matchedSvd, ...matchedRec, ...matchedApi];
@@ -911,6 +1036,14 @@ function AddressSearchInputInner({
                           {item.address}
                         </Text>
                       )}
+                      {item.zoneLike && (
+                        <View className="flex-row items-center mt-0.5">
+                          <Ionicons name="alert-circle-outline" size={12} color={colors.brand.orange} />
+                          <Text variant="caption" numberOfLines={1} style={{ color: colors.brand.orange, marginLeft: 4 }}>
+                            {t('ride.zone_caption', { defaultValue: 'Zona amplia — te pediremos ajustar el pin' })}
+                          </Text>
+                        </View>
+                      )}
                     </>
                   ) : (
                     <Text
@@ -952,8 +1085,8 @@ function AddressSearchInputInner({
               </View>
             )}
 
-            {/* No results */}
-            {!isSearching && mergedResults.length === 0 && (
+            {/* No results — only once a search for THIS query has settled */}
+            {!isSearching && hasSearchedRef.current && mergedResults.length === 0 && (
               <View className="px-4 py-3">
                 <Text variant="caption" color="secondary">
                   {t('home.no_address_results', { defaultValue: 'No se encontraron resultados' })}
@@ -1028,29 +1161,69 @@ function AddressSearchInputInner({
             </Pressable>
           )}
 
-          {/* Saved locations section (Casa, Trabajo, etc.) — like web */}
-          {savedLocations.length > 0 && (
+          {/* Casa / Trabajo — fixed slots, always offered. An empty slot is
+              an invitation to save it; a filled one carries its details
+              ("#302 apto 4") straight into the ride's notes. */}
+          {showFixedPlaces && (
+            <View className="mb-2">
+              {(['home', 'work'] as const).map((slot) => {
+                const place = fixedPlaces[slot];
+                const iconName = slot === 'home' ? 'home' : 'briefcase';
+                if (place) {
+                  return (
+                    <Pressable
+                      key={`fixed-${slot}`}
+                      className="flex-row items-center px-3 py-3 rounded-lg"
+                      onPress={() => handleSelectMerged({ address: place.address, latitude: place.latitude, longitude: place.longitude, priority: 0, source: 'saved', icon: iconName, distanceKm: null, notes: place.details ?? null })}
+                    >
+                      <Ionicons name={iconName} size={18} color={colors.brand.orange} />
+                      <View className="flex-1 ml-3">
+                        <Text variant="body" className="font-semibold" numberOfLines={1}>{place.label}</Text>
+                        <Text variant="caption" color="tertiary" numberOfLines={1}>{place.address}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                }
+                return (
+                  <Pressable
+                    key={`fixed-${slot}`}
+                    className="flex-row items-center px-3 py-3 rounded-lg"
+                    onPress={() => { setIsExpanded(false); router.push(`/profile/saved-locations?kind=${slot}`); }}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name={slot === 'home' ? 'home-outline' : 'briefcase-outline'} size={18} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
+                    <Text variant="body" color="secondary" className="flex-1 ml-3" numberOfLines={1}>
+                      {slot === 'home'
+                        ? t('ride.add_home', { defaultValue: 'Agregar Casa' })
+                        : t('ride.add_work', { defaultValue: 'Agregar Trabajo' })}
+                    </Text>
+                    <Ionicons name="add-circle-outline" size={18} color={colors.brand.orange} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Other saved places (everything that is not the Casa / Trabajo slot) */}
+          {fixedPlaces.others.length > 0 && (
             <View className="mb-2">
               <Text variant="caption" color="tertiary" className="px-1 mb-1" style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 }}>
                 {t('ride.saved_locations', { defaultValue: 'Ubicaciones guardadas' })}
               </Text>
-              {savedLocations.map((loc, i) => {
-                const iconName = (loc as any).label?.toLowerCase().includes('casa') ? 'home' : (loc as any).label?.toLowerCase().includes('trabajo') ? 'briefcase' : 'star';
-                return (
-                  <Pressable
-                    key={`saved-${i}`}
-                    className="flex-row items-center px-3 py-3 rounded-lg"
-                    style={{ borderBottomWidth: i < savedLocations.length - 1 ? 1 : 0, borderBottomColor: isDark ? '#333' : '#f0f0f0' }}
-                    onPress={() => handleSelectMerged({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude, priority: 0, source: 'saved', icon: iconName, distanceKm: null })}
-                  >
-                    <Ionicons name={iconName as any} size={18} color={colors.brand.orange} />
-                    <View className="flex-1 ml-3">
-                      <Text variant="body" className="font-semibold" numberOfLines={1}>{(loc as any).label || loc.address}</Text>
-                      <Text variant="caption" color="tertiary" numberOfLines={1}>{loc.address}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
+              {fixedPlaces.others.map((loc, i) => (
+                <Pressable
+                  key={`saved-${i}`}
+                  className="flex-row items-center px-3 py-3 rounded-lg"
+                  style={{ borderBottomWidth: i < fixedPlaces.others.length - 1 ? 1 : 0, borderBottomColor: isDark ? '#333' : '#f0f0f0' }}
+                  onPress={() => handleSelectMerged({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude, priority: 0, source: 'saved', icon: 'star', distanceKm: null, notes: loc.details ?? null })}
+                >
+                  <Ionicons name="star" size={18} color={colors.brand.orange} />
+                  <View className="flex-1 ml-3">
+                    <Text variant="body" className="font-semibold" numberOfLines={1}>{loc.label || loc.address}</Text>
+                    <Text variant="caption" color="tertiary" numberOfLines={1}>{loc.address}</Text>
+                  </View>
+                </Pressable>
+              ))}
             </View>
           )}
 
@@ -1066,7 +1239,7 @@ function AddressSearchInputInner({
                 <Pressable
                   key={`recent-${i}`}
                   className="flex-row items-center px-3 py-2.5 rounded-lg"
-                  onPress={() => handleSelectMerged({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 0, source: 'recent', icon: 'time-outline', distanceKm: null })}
+                  onPress={() => handleSelectMerged({ address: r.address, latitude: r.latitude, longitude: r.longitude, priority: 0, source: 'recent', icon: 'time-outline', distanceKm: null, notes: r.notes ?? null })}
                 >
                   <Ionicons name="time-outline" size={16} color={colors.brand.orange} />
                   <Text variant="bodySmall" color="primary" className="flex-1 ml-3 font-medium" numberOfLines={1}>{r.address}</Text>

@@ -97,3 +97,25 @@ describe('recentAddressService.getAll (self-heal)', () => {
     expect(out).toEqual([]);
   });
 });
+
+describe('recentAddressService.add (notes for the driver)', () => {
+  it('stores the rider notes with the address', async () => {
+    const { recentAddressService } = await import('../recentAddresses');
+    const out = await recentAddressService.add('Casa', 23.137, -82.383, '#302 apto 4');
+    expect(out[0]!.notes).toBe('#302 apto 4');
+  });
+
+  it('omits the notes key when there are none', async () => {
+    const { recentAddressService } = await import('../recentAddresses');
+    const out = await recentAddressService.add('Vedado', 23.137, -82.383);
+    expect(out[0]).not.toHaveProperty('notes');
+  });
+
+  it('lets the newest notes win over an older row at the same place', async () => {
+    const { recentAddressService } = await import('../recentAddresses');
+    await recentAddressService.add('Casa', 23.137, -82.383, 'viejo');
+    const out = await recentAddressService.add('Casa', 23.137, -82.383, 'nuevo');
+    expect(out).toHaveLength(1);
+    expect(out[0]!.notes).toBe('nuevo');
+  });
+});

@@ -342,6 +342,8 @@
     "route_section": "Rota",
     "label_origin": "Origem",
     "label_destination": "Destino",
+    "label_pickup_notes": "Detalhes do embarque (passageiro)",
+    "label_dropoff_notes": "Detalhes do destino (passageiro)",
     "label_distance": "Distância",
     "label_duration": "Duração",
     "label_payment_method": "Método de pagamento",

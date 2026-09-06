@@ -666,6 +666,13 @@ export interface AddressSearchResult {
    * exactly on the hardcoded centre.
    */
   needsResolution?: boolean;
+  /**
+   * The row is a ZONE (neighbourhood / municipality / province) from an
+   * external provider, not a place — see `isZoneLevelResult`. Measured in
+   * prod: 13 % of dropoffs were a bare zone committed at its centroid. A zone
+   * row must go through pin confirmation before it can become a destination.
+   */
+  zoneLike?: boolean;
 }
 
 /* ─── Nominatim throttle ─── */
@@ -1900,6 +1907,86 @@ export function parseCubanAddress(query: string): CubanParsed | null {
   if (m) return { main: m[1]!.trim(), cross1: '', partial: 'waiting_cross1' };
 
   return null;
+}
+
+export interface CornerParsed {
+  main: string;
+  cross1: string;
+  /** `strong` when either side is grid-like ("23", "5ta", "G", "Calle …");
+   *  `weak` for two named streets. Both are only a hint: the server's
+   *  `find_intersection_point` returning null is the real guard. */
+  strength: 'strong' | 'weak';
+}
+
+/** Separator between the two streets of a corner. One of: "y", "esq.",
+ *  "esq. a", "esquina", "esquina a". */
+const CORNER_SEPARATOR = /\s+(?:y|esq\.?|esquina)(?:\s+a)?\s+/i;
+
+/** Words that mark a business name rather than a corner ("Pan y Canela",
+ *  "Sol y Mar", "Hnos. y Cía."). Compared accent-stripped, whole token. */
+const CORNER_STOP_WORDS = new Set([
+  'pan', 'tacos', 'cafe', 'pizza', 'ron', 'sol', 'mar', 'mas', 'cia', 'hnos',
+  'hijos', 'co', 'asociados',
+]);
+
+/**
+ * A query that STARTS with one of these is a venue, never a corner. The list comes
+ * from running the parser over every active prod POI name (2026-09-06): 791 of
+ * 19,939 parsed as a corner, and three quarters of them were "Hostal X y Y" /
+ * "Casa X y Y" (a couple's name), institutions ("Banco de Crédito y Comercio",
+ * "Facultad de Artes y Letras") or venues ("Cine 23 y 12"). Each would have cost
+ * one find_intersection_point round-trip per keystroke for nothing.
+ */
+const CORNER_BUSINESS_START = /^(?:restaurante|restaurant|bar|cafeteria|cafe|hotel|hostal|hostel|hospedaje|motel|resort|casa|villa|apartamento|apto|rent|renta|paladar|pizzeria|pizza|panaderia|dulceria|heladeria|tienda|bodega|mercado|kiosko|farmacia|policlinico|hospital|clinica|instituto|facultad|escuela|universidad|banco|iglesia|seminario|palacio|parque|cine|teatro|museo|club|centro|empresa|ministerio|direccion|agencia|taller|salon|peluqueria|barberia|gimnasio|galeria|floristeria|hamburguesas)\b/;
+
+/** Grid-like street token: "23", "5c", "5ta", "1ra", "G", "Calle 8", "Avenida 31". */
+const CORNER_GRID_SIDE = /^(?:\d{1,3}[a-z]?|\d{1,2}(?:ra|da|ta|ma|va|na|ª|°)|[a-p]|(?:calle|calzada|avenida|ave?\.?|linea|paseo)\b.*)$/;
+
+function stripAccentsLower(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Parse the Cuban CORNER form of an address — "23 y 12", "Infanta y San
+ * Lázaro", "Línea esq. a G", "23 esquina 12" — into its two streets.
+ *
+ * Complements `parseCubanAddress`, which only understands the BLOCK form
+ * ("X e/ Y y Z"). The server (`find_intersection_point` with cross2 NULL)
+ * already resolves corners; until now the client never asked because this
+ * form was not recognised, so "23 y 12" went to `search_streets` and came
+ * back as two unrelated streets.
+ *
+ * Deliberately a cheap pre-filter, not a classifier: a false positive costs
+ * one ~5 ms RPC that returns null; a false negative loses the corner. So the
+ * guards only reject what is clearly NOT a corner — a comma, a block-form
+ * separator, more than one "y", a venue word — and the caller must run the
+ * lookup IN PARALLEL with the normal search, never instead of it, so a POI
+ * literally named "Pan y Canela" keeps its row.
+ */
+export function parseCornerQuery(query: string): CornerParsed | null {
+  const q = query.trim();
+  if (!q || q.length > 60) return null;
+  if (q.includes(',')) return null;
+  const lower = stripAccentsLower(q);
+  if (/\se\/\s*/.test(lower) || /\sentre\s/.test(lower)) return null;
+  if (CORNER_BUSINESS_START.test(lower)) return null;
+
+  const parts = q.split(CORNER_SEPARATOR);
+  if (parts.length !== 2) return null;
+  const [main, cross1] = parts.map((p) => p.trim()) as [string, string];
+  if (!main || !cross1) return null;
+
+  let strength: CornerParsed['strength'] = 'weak';
+  for (const side of [main, cross1]) {
+    const tokens = side.split(/\s+/);
+    if (tokens.length > 4) return null;
+    for (const tok of tokens) {
+      if (tok.length > 20) return null;
+      if (CORNER_STOP_WORDS.has(stripAccentsLower(tok).replace(/\.$/, ''))) return null;
+    }
+    if (CORNER_GRID_SIDE.test(stripAccentsLower(side))) strength = 'strong';
+  }
+  return { main, cross1, strength };
 }
 
 /**

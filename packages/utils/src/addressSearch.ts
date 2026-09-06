@@ -13,6 +13,7 @@
 
 import { haversineDistance, computeSpecificity, tricigoCategoryEmoji, isGenericStreetAddress, type SearchBoxResult } from './geo';
 import { stripAccents, fuzzyMatch } from './fuzzyMatch';
+import { CUBA_PROVINCES, CUBA_MUNICIPALITIES } from './cuba-geo';
 
 /** Unified typeahead debounce. Replaces the old per-app 200/250/350/500 ms spread. */
 export const SEARCH_DEBOUNCE_MS = 300;
@@ -24,6 +25,11 @@ export interface ScorableResult {
   longitude: number;
   source?: SearchBoxResult['source'] | string;
   specificity?: number;
+  /** Provider category (Google `types[0]` / Mapbox feature type) — lets the
+   *  score sink zone-level rows. Optional: history rows don't carry it. */
+  matchedCategory?: string | null;
+  category?: string;
+  address?: string;
 }
 
 interface GeoPointLike {
@@ -201,6 +207,81 @@ export function filterProviderStreetsByLocalAnchor<T extends {
 }
 
 /**
+ * Provider categories that describe an AREA (a neighbourhood, a municipality,
+ * a province) rather than a place you can be driven to. Google Places
+ * `types[0]` on the left of the comment, Mapbox `feature_type` on the right.
+ *
+ * Measured in prod (90 days, 207 rides): 13 % of dropoffs were a bare zone —
+ * "Vedado, La Habana", "Cerro, La Habana". A zone row from Google has a
+ * `place_name` ("Vedado") that differs from its `address` ("Vedado, La
+ * Habana"), so the dropdown treated it like a named POI and committed the
+ * ride at the zone centroid with no pin confirmation.
+ */
+export const ZONE_LEVEL_CATEGORIES: ReadonlySet<string> = new Set([
+  // Google
+  'locality', 'sublocality', 'sublocality_level_1', 'sublocality_level_2',
+  'sublocality_level_3', 'sublocality_level_4', 'sublocality_level_5',
+  'neighborhood', 'political', 'colloquial_area', 'postal_code', 'country',
+  'administrative_area_level_1', 'administrative_area_level_2',
+  'administrative_area_level_3', 'administrative_area_level_4',
+  'administrative_area_level_5', 'administrative_area_level_6',
+  'administrative_area_level_7',
+  // Mapbox
+  'place', 'district', 'region', 'postcode',
+]);
+
+/** Havana neighbourhoods riders name as a destination on their own. Only the
+ *  ones that are NOT already a municipality in `CUBA_MUNICIPALITIES`. */
+const HAVANA_NEIGHBOURHOODS = [
+  'vedado', 'nuevo vedado', 'miramar', 'siboney', 'kohly', 'lawton',
+  'santos suarez', 'la vibora', 'vibora', 'alamar', 'cojimar', 'santa fe',
+  'jaimanitas', 'el cerro', 'luyano', 'casino deportivo', 'reparto flores',
+  'buenavista', 'almendares', 'la lisa', 'fontanar', 'mantilla', 'parraga',
+];
+
+let zoneNameSet: Set<string> | null = null;
+function knownZoneNames(): Set<string> {
+  if (zoneNameSet) return zoneNameSet;
+  const names = new Set<string>();
+  for (const p of CUBA_PROVINCES) names.add(stripAccents(p.label.toLowerCase()));
+  for (const list of Object.values(CUBA_MUNICIPALITIES)) {
+    for (const m of list) names.add(stripAccents(m.label.toLowerCase()));
+  }
+  for (const n of HAVANA_NEIGHBOURHOODS) names.add(n);
+  zoneNameSet = names;
+  return names;
+}
+
+/**
+ * Whether an EXTERNAL search result is a zone (neighbourhood / municipality /
+ * province) rather than a specific place. Zone rows must not be committed as
+ * a destination without the rider placing the pin.
+ *
+ * Only Google / Mapbox rows are eligible: local rows (`search_pois_smart`,
+ * `search_streets`) are real points by construction. The category decides
+ * whenever the provider gave one; the name-based fallback only runs when both
+ * category fields are empty, because a café called "Vedado" is a café.
+ */
+export function isZoneLevelResult(r: {
+  source?: SearchBoxResult['source'] | string;
+  matchedCategory?: string | null;
+  category?: string;
+  place_name?: string;
+  address?: string;
+}): boolean {
+  const external = r.source === 'google' || r.source === 'searchbox' || r.source === 'mapbox';
+  if (!external) return false;
+  const cat = (r.matchedCategory || r.category || '').toLowerCase();
+  if (cat) return ZONE_LEVEL_CATEGORIES.has(cat);
+  const name = stripAccents((r.place_name ?? '').toLowerCase().trim());
+  if (!name) return false;
+  const parts = (r.address ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  if (parts.length > 3) return false;
+  if (/\d/.test(r.address ?? '') || /\se\/\s/.test(r.address ?? '')) return false;
+  return knownZoneNames().has(name);
+}
+
+/**
  * Present a Cuban street label "alias first, official in parens".
  * Mirrors the backend `_street_full_display` helper so any raw
  * "Official (Alias)" string that leaks through to the client gets the
@@ -293,7 +374,12 @@ export function scoreSearchResult(
     }
   }
 
-  return textScore * 0.35 + specScore * 0.25 + distScore * 0.25 + sourceScore * 0.15 + frequentBonus;
+  // A zone (neighbourhood/municipality) is never what the rider wants to be
+  // driven TO; it sorts below every specific row in the same bucket even on
+  // an exact name match ("vedado" → "Vedado" scores 1.0 on text alone).
+  const zonePenalty = isZoneLevelResult(result) ? 0.35 : 0;
+
+  return textScore * 0.35 + specScore * 0.25 + distScore * 0.25 + sourceScore * 0.15 + frequentBonus - zonePenalty;
 }
 
 /**

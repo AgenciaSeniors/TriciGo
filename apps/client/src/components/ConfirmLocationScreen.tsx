@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 const ROUTE_PIN_ASSET = require('../../assets/markers/dropoff-pin.png');
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
-import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, POI_LAYER_ID, poiNameFromFeature, triggerHaptic, triggerSelection } from '@tricigo/utils';
+import { reverseGeocode, reverseGeocodeStructured, haversineDistance, findNearestPreset, MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, POI_LAYER_ID, poiNameFromFeature, triggerHaptic, triggerSelection, pinConfidence, pickerZoomFor } from '@tricigo/utils';
 import { PlacesLayer } from './PlacesLayer';
 import type { GeoPoint, StructuredAddress } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
@@ -42,6 +42,15 @@ interface ConfirmLocationScreenProps {
    *  used when the screen opens to CONFIRM a geocoded search result
    *  (incident b428022b) rather than to pick a point from scratch. */
   confirmPrompt?: boolean;
+  /** The point being confirmed came from a ZONE search result (neighbourhood
+   *  / municipality centroid, see `isZoneLevelResult`): the caption asks to
+   *  move the pin to the exact spot instead of "¿El destino es aquí?". */
+  confirmHint?: 'zone' | null;
+  /** Opened to adjust/confirm an EXISTING point: open close (zoom 17) so the
+   *  street under the tip is readable. From scratch the picker opens wider. */
+  seeded?: boolean;
+  /** The other end of the trip, drawn static for orientation while picking. */
+  counterpart?: { location: GeoPoint; mode: 'pickup' | 'dropoff' } | null;
   onConfirm: (address: string, location: GeoPoint) => void;
   onClose: () => void;
 }
@@ -68,6 +77,9 @@ export function ConfirmLocationScreen({
   initialLocation,
   initialAddress,
   confirmPrompt,
+  confirmHint,
+  seeded,
+  counterpart,
   onConfirm,
   onClose,
 }: ConfirmLocationScreenProps) {
@@ -80,6 +92,10 @@ export function ConfirmLocationScreen({
   // Two-line address display: line1 = POI name (when one sits within a few
   // meters), line2 = the street/locality address. line1 omitted → single line.
   const [display, setDisplay] = useState<{ line1?: string; line2: string } | null>(null);
+  // Which reverse-geocode layer produced `display`. Drives the confidence
+  // caption: a pin with no street within 200 m used to render
+  // "Cerro, La Habana" exactly like a real address — 13 % of prod dropoffs.
+  const [source, setSource] = useState<StructuredAddress['source'] | null>(null);
   const centerRef = useRef<GeoPoint>(initialLocation ?? getMapFallbackLatLng());
   const [isGeocoding, setIsGeocoding] = useState(false);
   // Confirm button is decoupled from geocoding — see handleConfirm.
@@ -117,6 +133,21 @@ export function ConfirmLocationScreen({
     outputRange: [0.4, 1],
   });
 
+  // Pin "lift": rises while the map moves under it and drops when it settles,
+  // so the gesture reads as picking the pin up rather than sliding a map.
+  // onCameraChanged fires per frame — the ref keeps it to one animation per
+  // gesture.
+  const liftAnim = useRef(new Animated.Value(0)).current;
+  const liftedRef = useRef(false);
+  const setLifted = useCallback((lifted: boolean) => {
+    if (liftedRef.current === lifted) return;
+    liftedRef.current = lifted;
+    Animated.timing(liftAnim, { toValue: lifted ? 1 : 0, duration: 120, useNativeDriver: true }).start();
+  }, [liftAnim]);
+  const pinLift = liftAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
+  const shadowScale = liftAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.6] });
+  const shadowOpacity = liftAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.5] });
+
   // Reverse geocode the center point
   const mountedRef = useRef(true);
   useEffect(() => { return () => { mountedRef.current = false; }; }, []);
@@ -127,6 +158,7 @@ export function ConfirmLocationScreen({
       if (!mountedRef.current) return;
       setIsGeocoding(true);
       setDisplay(null); // Show shimmer
+      setSource(null);
 
       // The name the rider can SEE wins. The map draws places from the
       // Mapbox tiles; the reverse-geocode POI comes from cuba_pois — two
@@ -172,6 +204,7 @@ export function ConfirmLocationScreen({
           const d = toDisplay(result, lat, lng);
           if (visiblePoi) d.line1 = visiblePoi;
           setDisplay(d);
+          setSource(result?.source ?? null);
         }
         setIsGeocoding(false);
       }
@@ -190,6 +223,7 @@ export function ConfirmLocationScreen({
 
   // Geocode when map stops moving — get center from MapView ref
   const handleMapIdle = useCallback(async () => {
+    setLifted(false);
     try {
       if (mapRef.current?.getCenter) {
         const center = await mapRef.current.getCenter();
@@ -213,7 +247,7 @@ export function ConfirmLocationScreen({
     } catch { /* fallback below */ }
     // Fallback: use whatever is in centerRef (initial location)
     geocodeCenter(centerRef.current.latitude, centerRef.current.longitude);
-  }, [geocodeCenter]);
+  }, [geocodeCenter, setLifted]);
 
   // "Center on my location" FAB. Flies the camera to the user's current
   // position; the existing onMapIdle → getCenter() → geocode path then moves
@@ -294,6 +328,8 @@ export function ConfirmLocationScreen({
 
   const isPickup = mode === 'pickup';
   const pinColor = isPickup ? MAP_COLORS.pickup : colors.brand.orange;
+  const confidence = pinConfidence(source);
+  const showConfidence = !isGeocoding && !!display;
 
   // BUG-282 (revised) — cache-then-GPS centering, skipped entirely when the
   // caller already handed us a valid initialLocation.
@@ -370,6 +406,7 @@ export function ConfirmLocationScreen({
         zoomEnabled={true}
         pitchEnabled={true}
         rotateEnabled={true}
+        onCameraChanged={() => setLifted(true)}
         onMapIdle={handleMapIdle}
       >
         {/* BUG-282 — key forces Camera remount when initialCenter resolves
@@ -381,9 +418,36 @@ export function ConfirmLocationScreen({
           key={`cam-${initialCenter[0].toFixed(4)},${initialCenter[1].toFixed(4)}`}
           defaultSettings={{
             centerCoordinate: initialCenter,
-            zoomLevel: 15,
+            zoomLevel: pickerZoomFor(!!seeded),
           }}
         />
+
+        {/* The other end of the trip, for orientation: picking the dropoff
+            while the pickup is off-screen is picking blind. Static, never
+            interactive — the only pin that moves here is the center one. */}
+        {counterpart
+          && Number.isFinite(counterpart.location.latitude)
+          && Number.isFinite(counterpart.location.longitude) && (
+          <MapboxGL.MarkerView
+            id="counterpart"
+            coordinate={[counterpart.location.longitude, counterpart.location.latitude]}
+            anchor={counterpart.mode === 'dropoff' ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }}
+            allowOverlap
+          >
+            <View pointerEvents="none" style={{ opacity: 0.85 }}>
+              {counterpart.mode === 'dropoff' ? (
+                <Image
+                  source={ROUTE_PIN_ASSET}
+                  style={{ width: MARKER.dropoffPin.size * 0.8, height: MARKER.dropoffPin.size * 0.8, tintColor: colors.brand.orange }}
+                  resizeMode="contain"
+                  accessibilityLabel={t('map.dropoff_marker')}
+                />
+              ) : (
+                <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: MAP_COLORS.pickup, borderWidth: 3, borderColor: 'white' }} />
+              )}
+            </View>
+          </MapboxGL.MarkerView>
+        )}
 
         {/* Orientation while dragging the map under the fixed pin: without
             this the rider has no anchor for where they actually are. */}
@@ -427,17 +491,18 @@ export function ConfirmLocationScreen({
            shadow sits) and the visual tip of the pin asset (a few px
            higher than the asset midpoint). Same offset for both modes
            since the asset is the same. */}
-        <View
+        <Animated.View
           style={{
             width: 10,
             height: 4,
             borderRadius: 4,
             backgroundColor: 'rgba(0,0,0,0.22)',
             marginBottom: -2,
-            transform: [{ translateY: 22 }],
+            opacity: shadowOpacity,
+            transform: [{ translateY: 22 }, { scaleX: shadowScale }],
           }}
         />
-        <View
+        <Animated.View
           style={{
             width: MARKER.dropoffPin.size,
             height: MARKER.dropoffPin.size,
@@ -448,6 +513,7 @@ export function ConfirmLocationScreen({
             shadowOpacity: 0.3,
             shadowRadius: 4,
             elevation: 5,
+            transform: [{ translateY: pinLift }],
           }}
         >
           <Image
@@ -460,7 +526,7 @@ export function ConfirmLocationScreen({
             resizeMode="contain"
             accessibilityLabel={isPickup ? t('map.pickup_marker') : t('map.dropoff_marker')}
           />
-        </View>
+        </Animated.View>
       </View>
 
       {/* Top address bar */}
@@ -489,11 +555,15 @@ export function ConfirmLocationScreen({
 
         <View style={{ flex: 1 }}>
           <Text variant="caption" color="secondary" style={{ marginBottom: 2 }}>
-            {confirmPrompt
-              ? t('ride.confirm_pin_prompt', { defaultValue: '¿El destino es aquí? Ajústalo si no' })
-              : isPickup
-                ? t('ride.pickup', { defaultValue: 'Punto de recogida' })
-                : t('ride.dropoff', { defaultValue: 'Destino' })}
+            {confirmHint === 'zone'
+              ? t('ride.zone_adjust_prompt', { defaultValue: 'Es una zona amplia — ajusta el pin al lugar exacto' })
+              : confirmPrompt
+                ? isPickup
+                  ? t('ride.confirm_pickup_pin_prompt', { defaultValue: '¿Te recogemos aquí? Ajústalo si no' })
+                  : t('ride.confirm_pin_prompt', { defaultValue: '¿El destino es aquí? Ajústalo si no' })
+                : isPickup
+                  ? t('ride.pickup', { defaultValue: 'Punto de recogida' })
+                  : t('ride.dropoff', { defaultValue: 'Destino' })}
           </Text>
           {isGeocoding ? (
             <Animated.View
@@ -519,6 +589,25 @@ export function ConfirmLocationScreen({
             <Text variant="bodySmall" numberOfLines={2}>
               {display?.line2 ?? t('ride.move_map')}
             </Text>
+          )}
+          {/* Confidence — the geocoder's own verdict on the point under the
+              tip. `near` (a street within 200 m) says nothing: that is the
+              normal case. */}
+          {showConfidence && confidence === 'exact' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+              <Ionicons name="checkmark-circle" size={12} color={MAP_COLORS.pickup} />
+              <Text variant="caption" style={{ color: MAP_COLORS.pickup, marginLeft: 4 }}>
+                {t('ride.pin_exact', { defaultValue: 'Dirección exacta' })}
+              </Text>
+            </View>
+          )}
+          {showConfidence && confidence === 'none' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+              <Ionicons name="alert-circle" size={12} color={colors.brand.orange} />
+              <Text variant="caption" numberOfLines={2} style={{ color: colors.brand.orange, marginLeft: 4, flex: 1 }}>
+                {t('ride.pin_no_street', { defaultValue: 'Sin calle cercana — acerca el pin a una calle' })}
+              </Text>
+            </View>
           )}
         </View>
       </View>
@@ -594,7 +683,9 @@ export function ConfirmLocationScreen({
                 fontSize: 16,
               }}
             >
-              {t('ride.confirm_location')}
+              {showConfidence && confidence === 'none'
+                ? t('ride.confirm_anyway', { defaultValue: 'Confirmar de todos modos' })
+                : t('ride.confirm_location')}
             </Text>
           )}
         </Pressable>

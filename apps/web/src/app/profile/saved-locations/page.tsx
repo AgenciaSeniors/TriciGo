@@ -21,6 +21,10 @@ interface SavedLocation {
   address: string;
   latitude: number;
   longitude: number;
+  /** Fixed slot (Casa / Trabajo) — parity with the mobile client (00578). */
+  kind?: 'home' | 'work' | 'other';
+  /** Details for the driver, prefilled into rides to this place. */
+  details?: string | null;
 }
 
 export default function SavedLocationsPage() {
@@ -36,6 +40,8 @@ export default function SavedLocationsPage() {
   const [showForm, setShowForm] = useState(false);
   const [formLabel, setFormLabel] = useState('');
   const [formAddress, setFormAddress] = useState('');
+  const [formKind, setFormKind] = useState<'home' | 'work' | 'other'>('other');
+  const [formDetails, setFormDetails] = useState('');
   const [formLat, setFormLat] = useState(0);
   const [formLng, setFormLng] = useState(0);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -69,11 +75,14 @@ export default function SavedLocationsPage() {
 
   async function handleSave() {
     if (!profileId || !formLabel.trim() || !formAddress.trim()) return;
+    const details = formDetails.replace(/\s+/g, ' ').trim().slice(0, 200);
     const newLoc: SavedLocation = {
       label: formLabel.trim(),
       address: formAddress.trim(),
       latitude: formLat,
       longitude: formLng,
+      kind: formKind,
+      details: details || null,
     };
 
     let updated: SavedLocation[];
@@ -91,6 +100,8 @@ export default function SavedLocationsPage() {
       setEditingIndex(null);
       setFormLabel('');
       setFormAddress('');
+      setFormKind('other');
+      setFormDetails('');
       setFormLat(0);
       setFormLng(0);
     } catch (err) {
@@ -118,6 +129,8 @@ export default function SavedLocationsPage() {
     setEditingIndex(index);
     setFormLabel(loc.label);
     setFormAddress(loc.address);
+    setFormKind(loc.kind ?? 'other');
+    setFormDetails(loc.details ?? '');
     setFormLat(loc.latitude);
     setFormLng(loc.longitude);
     setShowForm(true);
@@ -177,9 +190,10 @@ export default function SavedLocationsPage() {
     </svg>
   );
 
-  const getIcon = (label: string) => {
-    const lower = label.toLowerCase();
-    if (lower === 'casa' || lower === 'home') {
+  const getIcon = (loc: SavedLocation) => {
+    const lower = loc.label.toLowerCase();
+    const kind = loc.kind ?? (lower === 'casa' || lower === 'home' ? 'home' : lower === 'trabajo' || lower === 'work' ? 'work' : 'other');
+    if (kind === 'home') {
       return (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
@@ -187,7 +201,7 @@ export default function SavedLocationsPage() {
         </svg>
       );
     }
-    if (lower === 'trabajo' || lower === 'work') {
+    if (kind === 'work') {
       return (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
@@ -281,7 +295,7 @@ export default function SavedLocationsPage() {
                 flexShrink: 0,
                 transition: 'background 0.15s ease',
               }}>
-                {getIcon(loc.label)}
+                {getIcon(loc)}
               </div>
               <div style={{ flex: 1 }}>
                 <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{loc.label}</p>
@@ -325,6 +339,37 @@ export default function SavedLocationsPage() {
             />
           </div>
 
+          {/* Fixed slot — Casa / Trabajo get a permanent row at the top of the search (parity with mobile) */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            {(['home', 'work', 'other'] as const).map((k) => {
+              const active = formKind === k;
+              const label = k === 'home'
+                ? t('web.location_kind_home', { defaultValue: 'Casa' })
+                : k === 'work'
+                  ? t('web.location_kind_work', { defaultValue: 'Trabajo' })
+                  : t('web.location_kind_other', { defaultValue: 'Otro' });
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setFormKind(k);
+                    if (k !== 'other' && !formLabel.trim()) setFormLabel(label);
+                  }}
+                  style={{
+                    flex: 1, padding: '0.5rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+                    border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+                    background: active ? 'rgba(255,77,0,0.08)' : 'var(--bg-page)',
+                    color: active ? 'var(--primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
           <div style={{ marginBottom: '1rem' }}>
             <AddressAutocomplete
               label={t('web.address', { defaultValue: 'Direccion' })}
@@ -336,6 +381,25 @@ export default function SavedLocationsPage() {
                 setFormLat(r.latitude);
                 setFormLng(r.longitude);
                 setSelectMode(false);
+              }}
+            />
+          </div>
+
+          {/* Details for the driver, saved with the place (00578) */}
+          <div style={{ marginBottom: '1rem' }}>
+            <label htmlFor="saved-location-details" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+              {t('web.location_details', { defaultValue: 'Detalles para el conductor' })}
+            </label>
+            <textarea
+              id="saved-location-details"
+              value={formDetails}
+              maxLength={200}
+              rows={2}
+              onChange={(e) => setFormDetails(e.target.value)}
+              placeholder={t('web.location_details_placeholder', { defaultValue: 'Ej: #302 apto 4, edificio azul, tocar el timbre' })}
+              style={{
+                width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)', resize: 'vertical',
+                fontSize: '0.95rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box', fontFamily: 'inherit',
               }}
             />
           </div>

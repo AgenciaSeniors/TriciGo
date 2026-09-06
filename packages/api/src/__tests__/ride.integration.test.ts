@@ -80,6 +80,7 @@ vi.mock('@tricigo/utils', () => ({
   DEFAULT_EXCHANGE_RATE: 300,
   calculateTripDuration: vi.fn().mockReturnValue(600),
   cupToTrc: vi.fn().mockImplementation((cup: number) => Math.round(cup / 300)),
+  trimNotes: vi.fn().mockImplementation((s: string | null | undefined) => (s && s.trim() ? s.trim() : null)),
 }));
 
 // Mock sibling services

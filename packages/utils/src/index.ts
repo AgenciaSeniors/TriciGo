@@ -70,6 +70,11 @@ export type {
 } from './mapLogger';
 export { generateHistoryCSV, generateWalletCSV } from './historyExport';
 export { clusterDestinations, scorePredictions } from './destinationPredictor';
+export { pinConfidence, pickerZoomFor, isNearScreenPoint, coordsEqual } from './mapPicker';
+export { trimNotes, ADDRESS_NOTES_MAX } from './addressNotes';
+export { resolveFixedPlaces } from './savedPlaces';
+export type { FixedPlaceKind, FixedPlaces } from './savedPlaces';
+export type { PinConfidence, ScreenPoint } from './mapPicker';
 export type {
   RideHistoryEntry,
   DestinationCluster,
@@ -89,6 +94,8 @@ export {
   isProviderStreetResult,
   filterProviderStreetsByLocalAnchor,
   LOCAL_STREET_TRUST_RADIUS_M,
+  isZoneLevelResult,
+  ZONE_LEVEL_CATEGORIES,
 } from './addressSearch';
 export type { ScorableResult } from './addressSearch';
 export { QUICK_REPLIES, getQuickRepliesForRole } from './chatQuickReplies';
@@ -159,7 +166,7 @@ export function getInitials(name: string): string {
 }
 export { CUBAN_CITY_PACKS } from './mapboxOffline';
 export type { SearchBoxResult, TricigoCategory } from './geo';
-export type { CubanParsed } from './geo';
+export type { CubanParsed, CornerParsed } from './geo';
 export { jitterLocation } from './geo';
 export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, searchStreetsSupabase, computeSpecificity, tricigoCategoryEmoji, mapExternalCategoryToTricigo, enrichWithCrossStreets, isGenericStreetAddress, isPlaceholderAddress, lookupIntersectionPoint, parseCubanAddress, suggestCrossStreetsSupabase } from './geo';
 export { coverScale, cropOffsetBounds, clampCropOffset, computeCropRect, computeDisplayRect } from './imageCrop';
