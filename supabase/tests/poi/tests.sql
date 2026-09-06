@@ -349,3 +349,58 @@ BEGIN
      AND find_nearby_poi_match(m.name, ST_Y(m.location::geometry), ST_X(m.location::geometry), 60) = m.id;
   PERFORM _t('T9i merged rows never matched', v_n = 0);
 END $$;
+
+-- T9 (cont.): venue name extraction, rides trigger, drain tick (00584 part 2)
+DO $$
+DECLARE v_hotel bigint; v_before int; v_n int; v_req bigint;
+BEGIN
+  SELECT id INTO v_hotel FROM cuba_pois WHERE name = 'Hotel Habana Libre' AND category <> 'public_transport' AND is_active LIMIT 1;
+  PERFORM _t('T9j venue leads', _poi_leading_venue_name('Coppelia, Calle 23 e/ L y K, Plaza de la Revolución, La Habana') = 'Coppelia'
+                              AND _poi_leading_venue_name('Paladar Doña Eutimia, Callejón del Chorro 60, La Habana Vieja') = 'Paladar Doña Eutimia');
+  PERFORM _t('T9k corners/streets/zones/placeholders give NULL',
+             _poi_leading_venue_name('Calle 23 y Calle 12, Plaza, La Habana') IS NULL
+         AND _poi_leading_venue_name('Reina e/ Campanario y Lealtad, Centro Habana') IS NULL
+         AND _poi_leading_venue_name('23 y 12, Vedado') IS NULL
+         AND _poi_leading_venue_name('Vedado, La Habana') IS NULL
+         AND _poi_leading_venue_name('Plaza de la Revolución, La Habana') IS NULL
+         AND _poi_leading_venue_name('Playa, La Habana') IS NULL
+         AND _poi_leading_venue_name('Detectando dirección...') IS NULL
+         AND _poi_leading_venue_name('Cerca de Capitolio') IS NULL
+         AND _poi_leading_venue_name('23.12638, -82.35472') IS NULL
+         AND _poi_leading_venue_name('Av 51, Marianao') IS NULL
+         AND _poi_leading_venue_name('X, La Habana') IS NULL);
+
+  SELECT pick_count INTO v_before FROM cuba_pois WHERE id = v_hotel;
+  INSERT INTO rides (pickup_address, pickup_lat, pickup_lng, dropoff_address, dropoff_lat, dropoff_lng)
+  VALUES ('Calle 23 y Calle 12, Plaza de la Revolución, La Habana', 23.1408, -82.3830,
+          'Hotel Habana Libre, Calle L e/ 23 y 25, Plaza de la Revolución, La Habana',
+          ST_Y((SELECT location::geometry FROM cuba_pois WHERE id = v_hotel)), ST_X((SELECT location::geometry FROM cuba_pois WHERE id = v_hotel)));
+  PERFORM _t('T9l ride dropoff credits the POI', (SELECT pick_count FROM cuba_pois WHERE id = v_hotel) = v_before + 1);
+  PERFORM _t('T9m nothing queued for a known POI or a corner', (SELECT count(*) FROM poi_import_queue) = 0);
+
+  INSERT INTO rides (pickup_address, pickup_lat, pickup_lng, dropoff_address, dropoff_lat, dropoff_lng)
+  VALUES ('Vedado, La Habana', 23.1408, -82.3830, 'Paladar Doña Eutimia, Callejón del Chorro 60, La Habana Vieja', 23.1412, -82.3520);
+  INSERT INTO rides (pickup_address, pickup_lat, pickup_lng, dropoff_address, dropoff_lat, dropoff_lng)
+  VALUES ('Vedado, La Habana', 23.1408, -82.3830, 'Paladar Dona Eutimia, Callejón del Chorro, La Habana Vieja', 23.1413, -82.3521);
+  SELECT count(*) INTO v_n FROM poi_import_queue WHERE status = 'pending';
+  PERFORM _t('T9n unknown venue queued exactly once', v_n = 1
+             AND (SELECT name || '|' || endpoint FROM poi_import_queue LIMIT 1) = 'Paladar Doña Eutimia|dropoff');
+
+  INSERT INTO rides (pickup_address, dropoff_address) VALUES ('Coppelia, Calle 23', 'Hotel Habana Libre, Calle L');
+  PERFORM _t('T9o ride inserts even without coordinates', (SELECT count(*) FROM rides) = 4);
+
+  UPDATE poi_import_queue SET status = 'done';
+  PERFORM _t('T9p tick is a no-op without pending rows', drain_poi_import_queue_tick() IS NULL AND (SELECT count(*) FROM cron_http_calls) = 0);
+  UPDATE poi_import_queue SET status = 'pending';
+  v_req := drain_poi_import_queue_tick();
+  PERFORM _t('T9q tick posts {drain:20} with the service key via cron_http_post',
+             v_req IS NOT NULL
+         AND (SELECT jobname FROM cron_http_calls WHERE request_id = v_req) = 'drain-poi-import-queue'
+         AND (SELECT body->>'drain' FROM net._stub_requests WHERE id = v_req) = '20'
+         AND (SELECT headers->>'Authorization' FROM net._stub_requests WHERE id = v_req) = 'Bearer sb_secret_local_stub'
+         AND (SELECT timeout_ms FROM net._stub_requests WHERE id = v_req) = 30000);
+  PERFORM _t('T9r cron job scheduled every 15 min', (SELECT schedule FROM cron.job WHERE jobname = 'drain-poi-import-queue') = '*/15 * * * *');
+  PERFORM _t('T9s tick/trigger helpers not executable by app roles',
+             NOT has_function_privilege('authenticated', 'public.drain_poi_import_queue_tick()', 'EXECUTE')
+         AND NOT has_function_privilege('anon', 'public._poi_leading_venue_name(text)', 'EXECUTE'));
+END $$;
