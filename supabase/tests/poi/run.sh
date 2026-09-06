@@ -9,13 +9,13 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 PSQL=(sudo -u pgtest psql -p 5433 -h /home/pgtest -v ON_ERROR_STOP=1 -q)
 DB=poi_rehearsal
-MAX="${MAX:-00581}"
+MAX="${MAX:-00584}"
 
 "${PSQL[@]}" -d postgres -c "DROP DATABASE IF EXISTS $DB;" -c "CREATE DATABASE $DB;"
 "${PSQL[@]}" -d "$DB" -f supabase/tests/poi/scaffold.sql
 
 apply_all() {
-  for m in 00579 00580 00581; do
+  for m in 00579 00580 00581 00583 00584; do
     [[ "$m" > "$MAX" ]] && break
     f=$(ls supabase/migrations/${m}_*.sql 2>/dev/null | head -1) || true
     [[ -n "${f:-}" ]] || continue
