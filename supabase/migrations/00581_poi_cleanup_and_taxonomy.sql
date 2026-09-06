@@ -24,6 +24,11 @@
 -- 8. Validate the tricigo_category CHECK left NOT VALID by 00579.
 -- ============================================================================
 
+-- The generated mapper costs ~160 µs per call (measured locally: 60k worst-case
+-- labels in 5.3 s); step 4 calls it up to 3× per active row (~20k rows) and step 7
+-- self-joins the active set. Same guard as 00580 so an MCP/CLI apply cannot time out.
+SET statement_timeout = 0;
+
 -- 1. Guard: the live mapper must be the 00302 body we edited from, or already v2.
 DO $guard$
 DECLARE v_md5 text;
@@ -536,3 +541,5 @@ END $merge$;
 --    CHECK from 00579 (0 rows outside it in prod on 2026-09-05; the UPDATE is a belt).
 UPDATE public.cuba_pois SET tricigo_category = 'other' WHERE tricigo_category IS NOT NULL AND NOT (tricigo_category = ANY (public.poi_taxonomy()));
 ALTER TABLE public.cuba_pois VALIDATE CONSTRAINT cuba_pois_tricigo_category_chk;
+
+RESET statement_timeout;
