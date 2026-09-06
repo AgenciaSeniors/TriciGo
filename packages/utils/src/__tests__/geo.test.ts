@@ -1404,6 +1404,18 @@ describe('parseCornerQuery — Cuban corner form "X y Y" / "X esq. Y"', () => {
     expect(parseCornerQuery('Restaurante Sol y Mar')).toBeNull();
   });
 
+  it('rejects lodging, institution and venue names joined by "y" (prod sweep 2026-09-06)', () => {
+    expect(parseCornerQuery('Hostal Tito y Vicky')).toBeNull();
+    expect(parseCornerQuery('Casa Mayra y Enrique')).toBeNull();
+    expect(parseCornerQuery('Villa Yudy y Emilio')).toBeNull();
+    expect(parseCornerQuery('Banco de Crédito y Comercio')).toBeNull();
+    expect(parseCornerQuery('Facultad de Artes y Letras')).toBeNull();
+    expect(parseCornerQuery('Policlinico Lidia y Clodomira')).toBeNull();
+    expect(parseCornerQuery('Cine 23 y 12')).toBeNull();
+    // a bare corner that merely CONTAINS such a word still parses
+    expect(parseCornerQuery('Calle Hospital y Enramadas')).toEqual({ main: 'Calle Hospital', cross1: 'Enramadas', strength: 'strong' });
+  });
+
   it('rejects more than one separator', () => {
     expect(parseCornerQuery('23 y 12 y 14')).toBeNull();
   });

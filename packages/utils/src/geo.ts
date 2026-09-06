@@ -1929,8 +1929,15 @@ const CORNER_STOP_WORDS = new Set([
   'hijos', 'co', 'asociados',
 ]);
 
-/** A query that STARTS with one of these is a venue, never a corner. */
-const CORNER_BUSINESS_START = /^(?:restaurante|bar|cafeteria|hotel|paladar|pizzeria|panaderia|tienda|farmacia|casa de)\b/;
+/**
+ * A query that STARTS with one of these is a venue, never a corner. The list comes
+ * from running the parser over every active prod POI name (2026-09-06): 791 of
+ * 19,939 parsed as a corner, and three quarters of them were "Hostal X y Y" /
+ * "Casa X y Y" (a couple's name), institutions ("Banco de Crédito y Comercio",
+ * "Facultad de Artes y Letras") or venues ("Cine 23 y 12"). Each would have cost
+ * one find_intersection_point round-trip per keystroke for nothing.
+ */
+const CORNER_BUSINESS_START = /^(?:restaurante|restaurant|bar|cafeteria|cafe|hotel|hostal|hostel|hospedaje|motel|resort|casa|villa|apartamento|apto|rent|renta|paladar|pizzeria|pizza|panaderia|dulceria|heladeria|tienda|bodega|mercado|kiosko|farmacia|policlinico|hospital|clinica|instituto|facultad|escuela|universidad|banco|iglesia|seminario|palacio|parque|cine|teatro|museo|club|centro|empresa|ministerio|direccion|agencia|taller|salon|peluqueria|barberia|gimnasio|galeria|floristeria|hamburguesas)\b/;
 
 /** Grid-like street token: "23", "5c", "5ta", "1ra", "G", "Calle 8", "Avenida 31". */
 const CORNER_GRID_SIDE = /^(?:\d{1,3}[a-z]?|\d{1,2}(?:ra|da|ta|ma|va|na|ª|°)|[a-p]|(?:calle|calzada|avenida|ave?\.?|linea|paseo)\b.*)$/;
