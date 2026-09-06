@@ -105,6 +105,7 @@ DO $$ DECLARE v_id bigint; BEGIN
   PERFORM _t('T4j rls enabled', (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.cuba_poi_aliases'::regclass));
   PERFORM _t('T4k curated reactivation by prod id', (SELECT is_active AND is_landmark AND category_override = 'venue' FROM cuba_pois WHERE id = 120847));
   PERFORM _t('T4l reactivated row is searchable', EXISTS (SELECT 1 FROM poi_search_names WHERE poi_id = 120847 AND norm = 'tropicana'));
+  PERFORM _t('T4m a seed may target a transport row', EXISTS (SELECT 1 FROM cuba_poi_aliases a JOIN cuba_pois p ON p.id = a.poi_id WHERE a.alias = 'Terminal de Ómnibus' AND p.tricigo_category = 'transport'));
 END $$;
 
 -- T5: dictionary
@@ -233,11 +234,17 @@ DO $$ BEGIN
   PERFORM _t('T2z21 (city, Cuba) parenthetical', _poi_clean_name('Boquerón (Guantánamo, Cuba)') = 'Boquerón');
   PERFORM _t('T2z22 all-caps articles', _poi_clean_name('HOTEL PARADISUS LOS CAYOS') = 'Hotel Paradisus Los Cayos' AND _poi_clean_name('IGLESIA DE LA CARIDAD') = 'Iglesia de la Caridad');
   PERFORM _t('T2z23 parenthesised acronym kept', _poi_clean_name('UNIVERSIDAD DE LAS ARTES (ISA)') = 'Universidad de las Artes (ISA)');
-  PERFORM _t('T2z24 generic-word guard', _poi_clean_name('Hotel Pinar Del Río Cuba') = 'Hotel Pinar del Río Cuba');
+  PERFORM _t('T2z24 generic-word guard drops only the country', _poi_clean_name('Hotel Pinar Del Río Cuba') = 'Hotel Pinar del Río');
   PERFORM _t('T2z25 l''havana', _poi_clean_name('Playa Santa Maria Atlantico L''havana Cuba') = 'Playa Santa Maria Atlantico');
   PERFORM _t('T2z26 leading noise', _poi_clean_name('¡¡¡¡¡hostal La Dominicana "') = 'Hostal La Dominicana');
   PERFORM _t('T2z27 Varadero, Cuba → Varadero', _poi_clean_name('Varadero, Cuba') = 'Varadero' AND _poi_clean_name('Cayo Largo, Cuba') = 'Cayo Largo');
   PERFORM _t('T2z28 first letter after a paren', _poi_clean_name('OSDE GELMA (TRIGAL)') = 'Osde Gelma (Trigal)');
   PERFORM _t('T2z29 leading lowercase word', _poi_clean_name('hostal casa Mía') = 'Hostal casa Mía' AND _poi_clean_name('el bosque de la habana') = 'El Bosque de La Habana');
   PERFORM _t('T2z30 camel-case first word kept', _poi_clean_name('iPhone Store Habana') = 'iPhone Store Habana');
+  -- 2026-09-06: the 19,939-row prod rehearsal (2,463 renames eyeballed by class)
+  PERFORM _t('T2z31 brand + city keeps the city', _poi_clean_name('Melia Cayo Santa Maria Cuba') = 'Melia Cayo Santa Maria' AND _poi_clean_name('Skydive Varadero Cuba') = 'Skydive Varadero');
+  PERFORM _t('T2z32 dangling connector keeps the city', _poi_clean_name('Languages Center University of Cienfuegos Cuba') = 'Languages Center University of Cienfuegos');
+  PERFORM _t('T2z33 articles alone are a name', _poi_clean_name('Restaurante El Rancho La Finca') = 'Restaurante El Rancho La Finca' AND _poi_clean_name('Ooh La La Bar') = 'Ooh La La Bar');
+  PERFORM _t('T2z34 initial abbreviation keeps its period', _poi_clean_name('Copextel S. A. Villa Clara') = 'Copextel S. A.');
+  PERFORM _t('T2z35 en Cuba is a name', _poi_clean_name('Embajada de Suiza en Cuba') = 'Embajada de Suiza en Cuba' AND _poi_clean_name('Casa Medina La Habana Cuba') = 'Casa Medina');
 END $$;

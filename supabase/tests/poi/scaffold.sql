@@ -845,3 +845,7 @@ INSERT INTO public.cuba_pois (name, category, subcategory, tricigo_category, loc
   ('Hotel Prueba Deauville',                          'public_transport', 'bus_stop', NULL, ST_SetSRID(ST_MakePoint(-82.3660, 23.1400),4326)::geography, 'merged',     0.8, '{"osm":"n39"}', 'La Habana', 'Centro Habana'),
   ('Hotel Prueba Deauville',                          'hotel', NULL, NULL,            ST_SetSRID(ST_MakePoint(-82.3661, 23.1401),4326)::geography, 'foursquare', 0.7, '{"fsq":"f40"}', 'La Habana', 'Centro Habana');
 UPDATE public.cuba_pois SET footprint_radius_m = 25 WHERE name = 'El Capitolio';
+
+-- Bus terminal: transport row a curated seed is allowed to alias (00579 §D allow_transport).
+INSERT INTO public.cuba_pois (name, category, subcategory, tricigo_category, location, source, confidence, source_ids, province, municipality)
+VALUES ('Terminal de Ómnibus Nacionales de Villanueva', 'amenity', 'bus_station', 'transport', ST_SetSRID(ST_MakePoint(-82.3922, 23.1268), 4326)::geography, 'merged', 0.8, '{"osm": "node/900001"}', 'La Habana', 'Plaza de la Revolución');

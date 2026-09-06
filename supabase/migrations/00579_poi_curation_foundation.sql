@@ -104,7 +104,7 @@ $function$;
 CREATE OR REPLACE FUNCTION public._poi_clean_name(s text)
 RETURNS text LANGUAGE plpgsql IMMUTABLE SET search_path TO 'public','pg_catalog' AS $function$
 DECLARE
-  v text; v_in text; v_before text; v_conn int; v_pass int;
+  v text; v_in text; v_before text; v_b2 text; v_conn int; v_prep int; v_pass int;
   -- Cities / areas that appear as suffixes ("…, La Habana, Cuba", "… Varadero Cuba").
   -- Longest alternatives first is not required (POSIX longest match), but keep the
   -- multi-word ones explicit.
@@ -147,13 +147,28 @@ BEGIN
   v_before := v;
   FOR v_pass IN 1..2 LOOP
     v := regexp_replace(v, '(\s*[,.]\s*|\s+[-–]\s+)(la\s+)?' || c_cities || '?(\s*[,.\-–]\s*|\s+)?(cuba|kuba)\s*$', '', 'i');
-    v := regexp_replace(v, '(^|\s+)(la\s+)?' || c_cities || '([-–]|\s+)(cuba|kuba)\s*$', '', 'i');
+    -- "Melia Cayo Santa Maria Cuba" / "Skydive Varadero Cuba": when the unpunctuated
+    -- city+country strip would leave a single word, the city is part of the brand —
+    -- drop only the country.
+    v_b2 := regexp_replace(v, '(^|\s+)(la\s+)?' || c_cities || '([-–]|\s+)(cuba|kuba)\s*$', '', 'i');
+    IF v_b2 <> v AND v_b2 <> '' AND v_b2 !~ '\s' THEN v_b2 := regexp_replace(v, '\s+(cuba|kuba)\s*$', '', 'i'); END IF;
+    v := v_b2;
     v := regexp_replace(v, '(\s*[,.]\s*|\s+[-–]\s+)(la\s+)?' || c_cities || '\s*$', '', 'i');
     v := regexp_replace(trim(v), '[,\s\-–>:;|/]+$', '');
-    IF v ~ '\.$' AND v !~ '\S*\.\S+\.$' THEN v := left(v, -1); END IF;
+    -- Trailing period goes, unless it closes an abbreviation ("S.A.", "S. A.", "Antorcha E.").
+    IF v ~ '\.$' AND v !~ '\S*\.\S+\.$' AND v !~ '\y[A-Z]\.$' THEN v := left(v, -1); END IF;
   END LOOP;
-  -- A lone generic word means the "city" was part of the name ("Hotel Pinar Del Río Cuba").
-  IF v ~* c_generic THEN v := v_before; END IF;
+  -- A lone generic word ("Hotel Pinar Del Río Cuba" → "Hotel") or a dangling connector
+  -- ("Languages Center University of Cienfuegos Cuba" → "… of") means the city was part
+  -- of the name: keep it and drop only the country — never a "… de Cuba" / "… en Cuba".
+  IF v ~* c_generic OR v ~* '\y(de|del|la|el|los|las|en|of|the|y|al)$' THEN
+    v := CASE WHEN v_before ~* '\y(de|del|en|in|of|the)\s+(cuba|kuba)\s*$' THEN v_before
+              ELSE regexp_replace(v_before, '(\s*[,.\-–]\s*|\s+)(cuba|kuba)\s*$', '', 'i') END;
+    v := regexp_replace(trim(v), '[,\s\-–>:;|/]+$', '');
+  END IF;
+  -- The separator before a stripped city may have been an abbreviation's period
+  -- ("Copextel S. A. Villa Clara"): give it back.
+  IF v ~ '\y[A-Z]$' AND v_before LIKE v || '.%' THEN v := v || '.'; END IF;
   v := regexp_replace(v, '\s+', ' ', 'g');
   IF v = '' THEN RETURN v_in; END IF;
   -- Case repair.
@@ -168,8 +183,11 @@ BEGIN
     -- ("La/Los/El") only when ≥ 2 capitalised connectors betray a title-caser
     -- ("Museo Nacional De La Lucha Contra Los Bandidos"); one capitalised article
     -- stays ("Restaurante Los Nardos").
+    -- Articles alone ("Restaurante El Rancho La Finca", "Ooh La La Bar") are names; a
+    -- title-caser also capitalises the prepositions, so one of those must be present.
     SELECT count(*) INTO v_conn FROM regexp_matches(v, '\s(De|Del|La|Las|Los|Y|E|El|Al|En|Con|Por|Para)\y', 'g');
-    IF v_conn >= 2 THEN
+    SELECT count(*) INTO v_prep FROM regexp_matches(v, '\s(De|Del|Y|E|Al|En|Con|Por|Para)\y', 'g');
+    IF v_conn >= 2 AND v_prep >= 1 THEN
       v := _poi_title_case(v, true);
     ELSE
       SELECT string_agg(CASE WHEN i > 1 AND w IN ('De','Del','Y','Al','En','Con','Por','Para') THEN lower(w) ELSE w END, ' ' ORDER BY i)
@@ -306,7 +324,8 @@ UPDATE public.cuba_pois SET category_override = 'venue'     WHERE id = 120847 AN
 -- pattern on name_normalized inside `radius` metres of the given point (measured
 -- against prod on 2026-09-05: the active rows sit 0.8–4.8 km from the textbook
 -- coordinates, so the radius is per seed), never a transport row (bus stops carry
--- landmark names), preferring is_admin, then merged, then confidence. Missing
+-- landmark names) unless the seed says so (the bus terminal IS transport), preferring
+-- is_admin, then merged, then confidence. Missing
 -- target → NOTICE, no row. Alias equal to the target's own name → skipped (the
 -- bare/display dictionary rows already cover it). Dropped after the prod dry-run
 -- because no active non-transport row exists: El Naval, ExpoCuba, La Coubre, CUJAE
@@ -315,48 +334,47 @@ DO $seed$
 DECLARE r record; v_id bigint; v_norm text; v_n int := 0;
 BEGIN
   FOR r IN SELECT * FROM (VALUES
-    ('La Ceguera',            '%oftalmolog%',              23.0946, -82.4177, 1500),
-    ('La Benéfica',           '%miguel enriquez%',         23.1128, -82.3340, 4000),
-    ('Maternidad de Línea',   '%america arias%',           23.1409, -82.3870, 1500),
-    ('Pediátrico del Cerro',  '%pediatrico%cerro%',        23.1102, -82.3782, 2500),
-    ('Oncológico',            '%oncolog%',                 23.1268, -82.3815, 2500),
-    ('Cuatro Caminos',        'mercado 4 caminos',         23.1275, -82.3651, 1500),
-    ('FAC',                   '%fabrica de arte cubano%',  23.1298, -82.4066, 1500),
-    ('Fábrica de Arte',       '%fabrica de arte cubano%',  23.1298, -82.4066, 1500),
-    ('El Cañonazo',           '%san carlos de la cabana%', 23.1508, -82.3486, 1500),
-    ('La Cabaña',             '%san carlos de la cabana%', 23.1508, -82.3486, 1500),
-    ('La Lonja',              'lonja del comercio%',       23.1382, -82.3467, 1500),
-    ('Karl Marx',             '%karl marx%',               23.1220, -82.4109, 2500),
-    ('Ciudad Deportiva',      'coliseo de la ciudad deportiva', 23.1055, -82.3792, 2500),
-    ('Cementerio de Colón',   '%cementerio de colon%',     23.1257, -82.3968, 1500),
-    ('Zoológico de 26',       'jardin zoologico de la habana', 23.1206, -82.3946, 2500),
-    ('Zoológico Nacional',    'parque zoologico nacional', 23.0170, -82.4040, 2500),
-    ('Marina Hemingway',      'marina hemingway',          23.0906, -82.5010, 1500),
-    ('Manzana de Gómez',      'gran hotel manzana kempinski', 23.1379, -82.3583, 1500),
-    ('Habana Libre',          'hotel habana libre',        23.1401, -82.3866, 1500),
-    ('Hotel Nacional',        'hotel nacional de cuba',    23.1441, -82.3813, 1500),
-    ('Capitolio',             'el capitolio',              23.1353, -82.3592, 1500),
-    ('Bodeguita',             'la bodeguita del medio',    23.1408, -82.3519, 1500),
-    ('Floridita',             'el floridita%',             23.1375, -82.3562, 1500),
-    ('Terminal de Ómnibus',   'terminal de omnibus nacionales%', 23.1268, -82.3922, 2500),
-    ('Ameijeiras',            'hospital hermanos ameijeiras', 23.1430, -82.3696, 1500),
-    ('Calixto García',        'hospital universitario general calixto garcia', 23.1403, -82.3893, 2500),
-    ('Coppelia',              'coppelia',                  23.1397, -82.3849, 1500),
-    ('Cine Yara',             'cine yara',                 23.1396, -82.3851, 1500),
-    ('Estadio Latinoamericano','estadio latinoamericano',  23.1213, -82.3782, 1500),
-    ('Plaza Carlos III',      'plaza carlos iii',          23.1311, -82.3820, 1500),
-    ('Universidad de La Habana','universidad de la habana', 23.1373, -82.3826, 1500),
-    ('Plaza de la Revolución','plaza de la revolucion',    23.1233, -82.3871, 1500),
-    ('Parque Central',        'parque central',            23.1381, -82.3590, 1500),
-    ('Parque Lenin',          'parque lenin',              23.0033, -82.3707, 2500),
-    ('Playa Santa María',     'santa maria del mar',       23.1810, -82.2360, 6000),
-    ('Alias Sin Destino',     'zzz-no-such-place-zzz',     23.1, -82.4, 800)          -- proves the guard
-  ) AS s(alias, pattern, lat, lng, radius)
+    ('La Ceguera',            '%oftalmolog%',              23.0946, -82.4177, 1500, false),
+    ('La Benéfica',           '%miguel enriquez%',         23.1128, -82.3340, 4000, false),
+    ('Maternidad de Línea',   '%america arias%',           23.1409, -82.3870, 1500, false),
+    ('Pediátrico del Cerro',  '%pediatrico%cerro%',        23.1102, -82.3782, 2500, false),
+    ('Oncológico',            '%oncolog%',                 23.1268, -82.3815, 2500, false),
+    ('Cuatro Caminos',        'mercado 4 caminos',         23.1275, -82.3651, 1500, false),
+    ('FAC',                   '%fabrica de arte cubano%',  23.1298, -82.4066, 1500, false),
+    ('Fábrica de Arte',       '%fabrica de arte cubano%',  23.1298, -82.4066, 1500, false),
+    ('El Cañonazo',           '%san carlos de la cabana%', 23.1508, -82.3486, 1500, false),
+    ('La Cabaña',             '%san carlos de la cabana%', 23.1508, -82.3486, 1500, false),
+    ('La Lonja',              'lonja del comercio%',       23.1382, -82.3467, 1500, false),
+    ('Karl Marx',             '%karl marx%',               23.1220, -82.4109, 2500, false),
+    ('Ciudad Deportiva',      'coliseo de la ciudad deportiva', 23.1055, -82.3792, 2500, false),
+    ('Cementerio de Colón',   '%cementerio de colon%',     23.1257, -82.3968, 1500, false),
+    ('Zoológico de 26',       'jardin zoologico de la habana', 23.1206, -82.3946, 2500, false),
+    ('Zoológico Nacional',    'parque zoologico nacional', 23.0170, -82.4040, 2500, false),
+    ('Marina Hemingway',      'marina hemingway',          23.0906, -82.5010, 1500, false),
+    ('Manzana de Gómez',      'gran hotel manzana kempinski', 23.1379, -82.3583, 1500, false),
+    ('Habana Libre',          'hotel habana libre',        23.1401, -82.3866, 1500, false),
+    ('Hotel Nacional',        'hotel nacional de cuba',    23.1441, -82.3813, 1500, false),
+    ('Capitolio',             'el capitolio',              23.1353, -82.3592, 1500, false),
+    ('Bodeguita',             'la bodeguita del medio',    23.1408, -82.3519, 1500, false),
+    ('Floridita',             'el floridita%',             23.1375, -82.3562, 1500, false),
+    ('Terminal de Ómnibus',   'terminal de omnibus nacionales%', 23.1268, -82.3922, 2500, true),
+    ('Ameijeiras',            'hospital hermanos ameijeiras', 23.1430, -82.3696, 1500, false),
+    ('Calixto García',        'hospital universitario general calixto garcia', 23.1403, -82.3893, 2500, false),
+    ('Coppelia',              'coppelia',                  23.1397, -82.3849, 1500, false),
+    ('Cine Yara',             'cine yara',                 23.1396, -82.3851, 1500, false),
+    ('Estadio Latinoamericano','estadio latinoamericano',  23.1213, -82.3782, 1500, false),
+    ('Plaza Carlos III',      'plaza carlos iii',          23.1311, -82.3820, 1500, false),
+    ('Universidad de La Habana','universidad de la habana', 23.1373, -82.3826, 1500, false),
+    ('Plaza de la Revolución','plaza de la revolucion',    23.1233, -82.3871, 1500, false),
+    ('Parque Central',        'parque central',            23.1381, -82.3590, 1500, false),
+    ('Parque Lenin',          'parque lenin',              23.0033, -82.3707, 2500, false),
+    ('Playa Santa María',     'santa maria del mar',       23.1810, -82.2360, 6000, false)
+  ) AS s(alias, pattern, lat, lng, radius, allow_transport)
   LOOP
     v_id := NULL;
     SELECT p.id, p.name_normalized INTO v_id, v_norm FROM public.cuba_pois p
     WHERE p.is_active AND p.name_normalized ILIKE r.pattern
-      AND p.category IS DISTINCT FROM 'public_transport' AND p.tricigo_category IS DISTINCT FROM 'transport'
+      AND (r.allow_transport OR (p.category IS DISTINCT FROM 'public_transport' AND p.tricigo_category IS DISTINCT FROM 'transport'))
       AND ST_DWithin(p.location, ST_SetSRID(ST_MakePoint(r.lng, r.lat), 4326)::geography, r.radius)
     ORDER BY p.is_admin DESC, (p.source = 'merged') DESC, p.confidence DESC NULLS LAST, p.id
     LIMIT 1;
