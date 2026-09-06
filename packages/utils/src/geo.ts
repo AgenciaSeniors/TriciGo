@@ -643,14 +643,6 @@ export interface AddressSearchResult {
   /** Raw provider/OSM category (e.g. "street", "public_transport") — used by the emoji resolver as a fallback. */
   category?: string;
   /**
-   * PR 4b: original `SearchBoxResult` carried through from the
-   * unified search call so the selection handler can fire-and-forget
-   * `importPoiFromSearch` for Google-sourced rows. Always undefined
-   * for Supabase/POI/street rows (already in cuba_pois) and for
-   * cached/manual entries — those paths skip the import.
-   */
-  _src?: SearchBoxResult;
-  /**
    * 00544: the row is a CROSS-STREET NAME SUGGESTION, not a place. It has no
    * geometry — `suggest_cross_streets` returns street names only — so
    * `latitude`/`longitude` are NaN and must never be committed as a pickup or
@@ -3464,83 +3456,6 @@ export async function searchAddressUnified(
 // This function NEVER throws and NEVER blocks the UX. Skips when
 // the result is already from Mapbox or Supabase (nothing to import).
 // ============================================================
-/**
- * Fire-and-forget. Triggers Mapbox lookup for the just-selected
- * search result and persists it to cuba_pois (source='mapbox') if
- * not already present. Resolves immediately on caller side; the
- * actual Edge Function call happens async. Never rejects.
- *
- * Skipped when:
- *  - `supabase` is null (no client available at the call site)
- *  - `result.source === 'mapbox'` (already from Mapbox)
- *  - `result.source === 'supabase'` (already in cuba_pois)
- */
-export async function importPoiFromSearch(
-  result: SearchBoxResult,
-  supabase: SupabaseClientLike | null,
-): Promise<void> {
-  if (!supabase) return;
-  if (result.source === 'mapbox' || result.source === 'supabase') return;
-  if (!result.place_name || !result.latitude || !result.longitude) return;
-
-  const start = Date.now();
-  mapLogger.poiSubmit({
-    event: 'submit',
-    name: result.place_name,
-    lat: result.latitude,
-    lng: result.longitude,
-    app: 'client',
-  });
-  try {
-    const { data, error } = await supabase.functions.invoke('import-mapbox-poi', {
-      body: {
-        query: result.place_name,
-        proximity: { lat: result.latitude, lng: result.longitude },
-        google_result: {
-          place_name: result.place_name,
-          address: result.address ?? result.full_address ?? '',
-          latitude: result.latitude,
-          longitude: result.longitude,
-        },
-      },
-    });
-    if (error) {
-      mapLogger.poiSubmit({
-        event: 'reject',
-        name: result.place_name,
-        lat: result.latitude,
-        lng: result.longitude,
-        app: 'client',
-        latency_ms: Date.now() - start,
-        reject_reason: 'ef_invoke_error',
-        error: String(error.message ?? error),
-      });
-      return;
-    }
-    const payload = (data ?? {}) as { imported?: boolean; mapbox_found?: boolean; reason?: string };
-    mapLogger.poiSubmit({
-      event: payload.imported ? 'success' : 'reject',
-      name: result.place_name,
-      lat: result.latitude,
-      lng: result.longitude,
-      app: 'client',
-      latency_ms: Date.now() - start,
-      reject_reason: payload.imported ? undefined : payload.reason ?? 'unknown',
-    });
-  } catch (err) {
-    // Silent — fire-and-forget. Visibility via EF logs.
-    mapLogger.poiSubmit({
-      event: 'reject',
-      name: result.place_name,
-      lat: result.latitude,
-      lng: result.longitude,
-      app: 'client',
-      latency_ms: Date.now() - start,
-      reject_reason: 'throw',
-      error: String(err instanceof Error ? err.message : err),
-    });
-  }
-}
 
 // ============================================================
 // PR F (2026-05-25) — dedupeSearchResults
