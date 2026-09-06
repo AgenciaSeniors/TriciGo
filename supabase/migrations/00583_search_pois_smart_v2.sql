@@ -70,6 +70,9 @@ RETURNS TABLE(
 LANGUAGE plpgsql
 STABLE
 SET search_path TO 'public', 'extensions', 'pg_catalog'
+-- Measured on the real rows: with JIT on, a keyword query ("hotel") spent
+-- 149 ms compiling ~108 expressions for a plan that executes in 45 ms.
+SET jit TO off
 AS $function$
 DECLARE
   v_norm             TEXT;
@@ -111,13 +114,14 @@ BEGIN
   RETURN QUERY
   WITH dict AS (
     -- Candidate gather: index-only on the precomputed dictionary (00579 §E).
+    -- Bare-name rules: the query's generic prefix ("hotel", "paladar"…)
+    -- may be absent from the row ("hotel habana libre" → "Habana Libre":
+    -- rank 0.5, just below the full-name exact so "Hotel Melia Cohiba"
+    -- beats the "Meliá Cohiba" twin) or DIFFERENT from the row's
+    -- ("restaurante la guarida" → "Paladar La Guarida": rank 1.5, below a
+    -- true prefix match so that "panadería prueba" prefers "Panadería
+    -- Prueba X" over "Café de Prueba").
     SELECT d.poi_id,
-           -- Bare-name rules: the query's generic prefix ("hotel", "paladar"…)
-           -- may be absent from the row ("hotel habana libre" → "Habana Libre":
-           -- rank 0.5, just below the full-name exact so "Hotel Melia Cohiba"
-           -- beats the "Meliá Cohiba" twin) or DIFFERENT from the row's ("restaurante la guarida" →
-           -- "Paladar La Guarida": rank 1.5, below a true prefix match so that
-           -- "panadería prueba" prefers "Panadería Prueba X" over "Café de Prueba").
            MIN(CASE
                  WHEN d.norm = v_norm                                              THEN 0
                  WHEN v_bare <> v_norm AND d.kind <> 'bare' AND d.norm = v_bare    THEN 0.5
@@ -127,35 +131,50 @@ BEGIN
                  WHEN similarity(d.norm, v_norm) > 0.3                             THEN 2.8
                  ELSE 9 END)::numeric AS drank,
            bool_or(d.kind IN ('alias', 'brand')
-                   AND (d.norm = v_norm OR d.norm LIKE v_norm || '%' OR d.norm LIKE v_like)) AS via_alias
+                   AND (d.norm = v_norm OR d.norm LIKE v_norm || '%' OR d.norm LIKE v_like)) AS via_alias,
+           -- The row's own name (display or bare) IS the query: with a keyword
+           -- query that is the "Farmacia" / "La Farmacia" placeholder (00551).
+           bool_or(d.kind IN ('display', 'bare') AND d.norm = v_norm) AS name_is_query
     FROM poi_search_names d
     WHERE d.norm LIKE v_norm || '%'
-       OR d.norm LIKE v_like
-       OR d.norm % v_norm
+       -- pg_trgm cannot index a needle shorter than 3 chars: for "ca" the
+       -- substring/similarity branches would scan the whole dictionary
+       -- (measured 2.5 s on the real rows). Under 3 chars the prefix
+       -- (btree text_pattern_ops) and bare-exact branches are the gather.
+       OR (length(v_norm) >= 3 AND d.norm LIKE v_like)
+       OR (length(v_norm) >= 3 AND d.norm % v_norm)
        OR (v_bare <> v_norm AND d.norm = v_bare)
-       OR (v_token_count >= 2 AND d.norm LIKE '%' || v_longest || '%')
+       OR (v_token_count >= 2 AND length(v_longest) >= 3 AND d.norm LIKE '%' || v_longest || '%')
     GROUP BY d.poi_id
   ),
   cand AS (
-    SELECT p.*, dict.drank, dict.via_alias
+    SELECT p.*, dict.drank, dict.via_alias, dict.name_is_query
     FROM cuba_pois p
     JOIN dict ON dict.poi_id = p.id
     WHERE p.is_active AND p.merged_into IS NULL
       AND ST_DWithin(p.location, v_origin, radius_m)
     UNION ALL
-    SELECT p.*, 9::numeric AS drank, false AS via_alias
+    -- Category rows not already gathered by name. Written as a LEFT JOIN
+    -- anti-join: NOT EXISTS ran as a nested loop over the CTE (650k
+    -- comparisons, 82 ms for "hotel") and NOT IN kept a 100k cost estimate
+    -- that pushed the whole statement over jit_above_cost.
+    SELECT p.*, 9::numeric AS drank, false AS via_alias, false AS name_is_query
     FROM cuba_pois p
+    LEFT JOIN dict d2 ON d2.poi_id = p.id
     WHERE v_category IS NOT NULL
+      AND d2.poi_id IS NULL
       AND p.is_active AND p.merged_into IS NULL
       AND COALESCE(p.category_override, p.tricigo_category) = v_category
       AND ST_DWithin(p.location, v_origin, radius_m)
-      AND NOT EXISTS (SELECT 1 FROM dict WHERE dict.poi_id = p.id)
   ),
   scored AS (
+    -- No per-row unaccent()/regexp here: a keyword query has ~1,300
+    -- candidates and each such call costs ~100 µs. Everything text-derived
+    -- comes from the dictionary or the precomputed *_normalized columns;
+    -- the display-name normalisation happens on the top-K window below.
     SELECT c.id, c.category, c.subcategory,
            COALESCE(c.category_override, c.tricigo_category) AS category_eff,
            COALESCE(c.display_name, c.name)                  AS disp,
-           lower(unaccent(COALESCE(c.display_name, c.name))) AS disp_norm,
            COALESCE(c.address, '')                 AS address,
            COALESCE(c.municipality, c.city, '')    AS municipality,
            COALESCE(c.province, '')                AS province,
@@ -167,30 +186,22 @@ BEGIN
            c.pick_count, c.synced_at, c.via_alias,
            ST_Distance(c.location, v_origin) AS distance_m,
            -- Tier order: dictionary exact/bare/prefix/substring (≤2) → every
-           -- query token in name/address/municipality (2.5) → trigram fuzzy
-           -- (2.8) → category. The token tier is checked BEFORE fuzzy so
-           -- "museo de bellas artes" prefers "Museo Nacional de Bellas Artes"
-           -- (all tokens) over "Museo de Artes Decorativas" (similar trigrams).
+           -- query token in name/address (2.5) → trigram fuzzy (2.8) →
+           -- category. The token tier is checked BEFORE fuzzy so "museo de
+           -- bellas artes" prefers "Museo Nacional de Bellas Artes" (all
+           -- tokens) over "Museo de Artes Decorativas" (similar trigrams).
            CASE
              WHEN c.drank <= 2 THEN c.drank
              WHEN v_token_count > 0 AND NOT EXISTS (
                     SELECT 1 FROM unnest(v_tokens) AS t
                     WHERE NOT (c.name_normalized LIKE '%' || t || '%'
-                            OR lower(unaccent(COALESCE(c.display_name, ''))) LIKE '%' || t || '%'
-                            OR COALESCE(c.address_normalized, '') LIKE '%' || t || '%'
-                            OR lower(unaccent(COALESCE(c.municipality, ''))) LIKE '%' || t || '%'))
+                            OR COALESCE(c.address_normalized, '') LIKE '%' || t || '%'))
                THEN 2.5::numeric
              WHEN c.drank <= 2.8 THEN c.drank
              WHEN v_category IS NOT NULL AND COALESCE(c.category_override, c.tricigo_category) = v_category THEN 3::numeric
              ELSE 9::numeric
            END AS rank_quality,
-           -- Anti-placeholder (00551 semantics): a keyword query ("farmacia")
-           -- must not be won by a row called "Farmacia" or "La Farmacia".
-           CASE WHEN v_query_is_keyword
-                 AND (c.name_normalized = v_norm
-                      OR lower(unaccent(COALESCE(c.display_name, ''))) = v_norm
-                      OR public._poi_bare_name(COALESCE(c.display_name, c.name)) = v_norm)
-                THEN 1 ELSE 0 END AS is_generic,
+           CASE WHEN v_query_is_keyword AND c.name_is_query THEN 1 ELSE 0 END AS is_generic,
            (c.category = 'public_transport'
             AND COALESCE(c.subcategory, '') IN ('platform', 'stop_position', 'stop', 'bus_stop')) AS is_stop
     FROM cand c
@@ -216,24 +227,37 @@ BEGIN
       )::numeric AS score
     FROM scored s
     WHERE s.rank_quality < 9
-      -- A stop that carries the exact name of a real place ≤400 m away is that
-      -- place's shadow ("Clínica Cira García" platform 17 m from the clinic):
-      -- drop it unless the rider asked for the stop.
-      AND NOT (s.is_stop AND NOT v_transport_intent AND EXISTS (
+  ),
+  top AS (
+    -- The shadow rule and the 300 m collapse below need the normalised
+    -- display name and a self-join; bound both to the rows that can reach
+    -- the page. A duplicate or a shadow stop that outranks another row is
+    -- always inside this window, so nothing the page would show is lost.
+    SELECT f.*, lower(unaccent(f.disp)) AS disp_norm
+    FROM filtered f
+    ORDER BY f.score ASC, f.id ASC
+    LIMIT GREATEST(max_results * 6, 60)
+  ),
+  shaded AS (
+    -- A stop that carries the exact name of a real place ≤400 m away is that
+    -- place's shadow ("Clínica Cira García" platform 17 m from the clinic):
+    -- drop it unless the rider asked for the stop.
+    SELECT t.* FROM top t
+    WHERE NOT (t.is_stop AND NOT v_transport_intent AND EXISTS (
             SELECT 1 FROM cuba_pois o
-            WHERE o.is_active AND o.merged_into IS NULL AND o.id <> s.id
+            WHERE o.is_active AND o.merged_into IS NULL AND o.id <> t.id
               AND COALESCE(o.category_override, o.tricigo_category) <> 'transport'
-              AND lower(unaccent(COALESCE(o.display_name, o.name))) = s.disp_norm
-              AND ST_DWithin(o.location, s.location, 400)))
+              AND ST_DWithin(o.location, t.location, 400)
+              AND lower(unaccent(COALESCE(o.display_name, o.name))) = t.disp_norm))
   ),
   collapsed AS (
     -- Same display name AND same effective category within 300 m: keep the
     -- best-scored (ties: lower id). The category guard keeps a stop named
     -- after a hotel from being folded into the hotel when the rider asked
     -- for the stop.
-    SELECT f.* FROM filtered f
+    SELECT f.* FROM shaded f
     WHERE NOT EXISTS (
-      SELECT 1 FROM filtered b
+      SELECT 1 FROM shaded b
       WHERE b.disp_norm = f.disp_norm AND b.id <> f.id
         AND b.category_eff = f.category_eff
         AND ST_DWithin(b.location, f.location, 300)
