@@ -2968,7 +2968,8 @@ export type TricigoCategory =
   | 'hotel' | 'restaurant' | 'cafe' | 'bar' | 'paladar'
   | 'supermarket' | 'shop' | 'pharmacy' | 'hospital'
   | 'bank' | 'atm' | 'gas_station' | 'school' | 'gov'
-  | 'museum' | 'park' | 'beach' | 'embassy' | 'religion' | 'transport';
+  | 'museum' | 'park' | 'beach' | 'embassy' | 'religion' | 'transport'
+  | 'landmark' | 'venue' | 'stadium';
 
 const GOOGLE_TO_TRICIGO: Record<string, TricigoCategory> = {
   // Lodging
@@ -3017,6 +3018,14 @@ const GOOGLE_TO_TRICIGO: Record<string, TricigoCategory> = {
   // Culture
   museum: 'museum',
   art_gallery: 'museum',
+  tourist_attraction: 'landmark',
+  landmark: 'landmark',
+  historical_landmark: 'landmark',
+  monument: 'landmark',
+  movie_theater: 'venue',
+  performing_arts_theater: 'venue',
+  concert_hall: 'venue',
+  stadium: 'stadium',
   // Nature
   park: 'park',
   amusement_park: 'park',
@@ -3084,6 +3093,17 @@ const MAPBOX_TO_TRICIGO: Record<string, TricigoCategory> = {
   // Culture
   museum: 'museum',
   gallery: 'museum',
+  monument: 'landmark',
+  landmark: 'landmark',
+  historic: 'landmark',
+  tourist_attraction: 'landmark',
+  theatre: 'venue',
+  theater: 'venue',
+  cinema: 'venue',
+  movie_theater: 'venue',
+  concert_hall: 'venue',
+  stadium: 'stadium',
+  arena: 'stadium',
   // Nature
   park: 'park',
   garden: 'park',
@@ -3167,6 +3187,9 @@ export function tricigoCategoryEmoji(category?: string | null): string {
     case 'embassy':     return '\ud83d\udec2';
     case 'religion':    return '\u26ea';
     case 'transport':   return '\ud83d\ude8c';
+    case 'landmark':    return '\ud83c\udfdb\ufe0f';
+    case 'venue':       return '\ud83c\udfad';
+    case 'stadium':     return '\ud83c\udfdf\ufe0f';
     default:            return '\ud83d\udccd';
   }
 }
