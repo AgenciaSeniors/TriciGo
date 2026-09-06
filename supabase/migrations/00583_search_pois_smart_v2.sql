@@ -114,12 +114,13 @@ BEGIN
     SELECT d.poi_id,
            -- Bare-name rules: the query's generic prefix ("hotel", "paladar"…)
            -- may be absent from the row ("hotel habana libre" → "Habana Libre":
-           -- rank 0) or DIFFERENT from the row's ("restaurante la guarida" →
+           -- rank 0.5, just below the full-name exact so "Hotel Melia Cohiba"
+           -- beats the "Meliá Cohiba" twin) or DIFFERENT from the row's ("restaurante la guarida" →
            -- "Paladar La Guarida": rank 1.5, below a true prefix match so that
            -- "panadería prueba" prefers "Panadería Prueba X" over "Café de Prueba").
            MIN(CASE
                  WHEN d.norm = v_norm                                              THEN 0
-                 WHEN v_bare <> v_norm AND d.kind <> 'bare' AND d.norm = v_bare    THEN 0
+                 WHEN v_bare <> v_norm AND d.kind <> 'bare' AND d.norm = v_bare    THEN 0.5
                  WHEN d.norm LIKE v_norm || '%'                                    THEN 1
                  WHEN v_bare <> v_norm AND d.kind = 'bare' AND d.norm = v_bare     THEN 1.5
                  WHEN d.norm LIKE v_like                                           THEN 2
@@ -165,8 +166,13 @@ BEGIN
            COALESCE(c.is_landmark, false) AS is_landmark,
            c.pick_count, c.synced_at, c.via_alias,
            ST_Distance(c.location, v_origin) AS distance_m,
+           -- Tier order: dictionary exact/bare/prefix/substring (≤2) → every
+           -- query token in name/address/municipality (2.5) → trigram fuzzy
+           -- (2.8) → category. The token tier is checked BEFORE fuzzy so
+           -- "museo de bellas artes" prefers "Museo Nacional de Bellas Artes"
+           -- (all tokens) over "Museo de Artes Decorativas" (similar trigrams).
            CASE
-             WHEN c.drank <= 2.8 THEN c.drank
+             WHEN c.drank <= 2 THEN c.drank
              WHEN v_token_count > 0 AND NOT EXISTS (
                     SELECT 1 FROM unnest(v_tokens) AS t
                     WHERE NOT (c.name_normalized LIKE '%' || t || '%'
@@ -174,11 +180,16 @@ BEGIN
                             OR COALESCE(c.address_normalized, '') LIKE '%' || t || '%'
                             OR lower(unaccent(COALESCE(c.municipality, ''))) LIKE '%' || t || '%'))
                THEN 2.5::numeric
+             WHEN c.drank <= 2.8 THEN c.drank
              WHEN v_category IS NOT NULL AND COALESCE(c.category_override, c.tricigo_category) = v_category THEN 3::numeric
              ELSE 9::numeric
            END AS rank_quality,
+           -- Anti-placeholder (00551 semantics): a keyword query ("farmacia")
+           -- must not be won by a row called "Farmacia" or "La Farmacia".
            CASE WHEN v_query_is_keyword
-                 AND (c.name_normalized = v_norm OR lower(unaccent(COALESCE(c.display_name, ''))) = v_norm)
+                 AND (c.name_normalized = v_norm
+                      OR lower(unaccent(COALESCE(c.display_name, ''))) = v_norm
+                      OR public._poi_bare_name(COALESCE(c.display_name, c.name)) = v_norm)
                 THEN 1 ELSE 0 END AS is_generic,
            (c.category = 'public_transport'
             AND COALESCE(c.subcategory, '') IN ('platform', 'stop_position', 'stop', 'bus_stop')) AS is_stop
@@ -192,6 +203,10 @@ BEGIN
         + s.is_generic * 5000
         + CASE WHEN s.is_landmark THEN -120 WHEN s.is_admin THEN -60 ELSE 0 END
         + CASE WHEN s.is_stop AND NOT v_transport_intent THEN 700 ELSE 0 END
+        -- Keyword query ("farmacia", "hospital naval"): within a tier, a row of
+        -- the keyword's category beats a same-named row of another category
+        -- ("Farmacia Taquechel" over "Museo de la Farmacia Habanera").
+        + CASE WHEN v_category IS NOT NULL AND s.category_eff <> v_category THEN 250 ELSE 0 END
         - LEAST(s.pick_count, 20) * 15
         + CASE WHEN NOT s.is_admin AND s.synced_at IS NOT NULL
                     AND s.synced_at < now() - interval '90 days' THEN 150 ELSE 0 END
@@ -230,6 +245,7 @@ BEGIN
          v_category AS matched_category,
          CASE c.rank_quality
            WHEN 0   THEN 'name_exact'
+           WHEN 0.5 THEN 'name_bare'
            WHEN 1   THEN 'name_prefix'
            WHEN 1.5 THEN 'name_bare'
            WHEN 2   THEN 'name_substring'
