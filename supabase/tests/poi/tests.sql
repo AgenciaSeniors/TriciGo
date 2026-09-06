@@ -248,3 +248,65 @@ DO $$ BEGIN
   PERFORM _t('T2z34 initial abbreviation keeps its period', _poi_clean_name('Copextel S. A. Villa Clara') = 'Copextel S. A.');
   PERFORM _t('T2z35 en Cuba is a name', _poi_clean_name('Embajada de Suiza en Cuba') = 'Embajada de Suiza en Cuba' AND _poi_clean_name('Casa Medina La Habana Cuba') = 'Casa Medina');
 END $$;
+
+-- T8: search_pois_smart v2 (00583)
+DO $$
+DECLARE v_hotel bigint; v_stop bigint; v_pc_lm bigint; v_pc_other bigint; v_r record; v_n int;
+BEGIN
+  SELECT id INTO v_hotel FROM cuba_pois WHERE name = 'Hotel Habana Libre' AND category <> 'public_transport' AND is_active LIMIT 1;
+  SELECT id INTO v_stop  FROM cuba_pois WHERE name = 'Hotel Habana Libre' AND category = 'public_transport' LIMIT 1;
+
+  PERFORM _t('T8a return type ends with the 3 new columns',
+    pg_get_function_result('public.search_pois_smart(text,double precision,double precision,integer,integer)'::regprocedure)
+      LIKE '%matched_alias text, display_name text, is_landmark boolean)');
+  SELECT * INTO v_r FROM search_pois_smart('capitolio', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8b exact bare match is first and named by display_name', v_r.name = 'El Capitolio' AND v_r.display_name = 'El Capitolio' AND v_r.match_reason = 'name_exact');
+
+  SELECT * INTO v_r FROM search_pois_smart('la benefica', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8c alias resolves with matched_alias', v_r.name LIKE 'Hospital Miguel Enr%' AND v_r.matched_alias IS NOT NULL);
+
+  SELECT count(*) INTO v_n FROM search_pois_smart('habana libre', 23.1357, -82.3666, 30000, 10) s WHERE s.id = v_stop;
+  PERFORM _t('T8d shadow stop demoted out', v_n = 0);
+  SELECT * INTO v_r FROM search_pois_smart('habana libre', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8e bare query hits the hotel first', v_r.id = v_hotel);
+  SELECT count(*) INTO v_n FROM search_pois_smart('parada habana libre', 23.1357, -82.3666, 30000, 10) s WHERE s.id = v_stop;
+  PERFORM _t('T8f transport intent restores the stop', v_n = 1);
+
+  SELECT id INTO v_pc_other FROM cuba_pois WHERE name = 'Parque Central' AND municipality = 'Centro Habana' LIMIT 1;
+  SELECT id INTO v_pc_lm    FROM cuba_pois WHERE name = 'Parque Central' AND id <> v_pc_other AND is_active LIMIT 1;
+  UPDATE cuba_pois SET is_landmark = true WHERE id = v_pc_lm;
+  SELECT * INTO v_r FROM search_pois_smart('parque central', 23.1435, -82.3590, 30000, 5) LIMIT 1;  -- origin ON the non-landmark twin
+  PERFORM _t('T8g landmark outranks the closer twin', v_r.id = v_pc_lm AND v_r.is_landmark);
+
+  UPDATE cuba_pois SET is_landmark = false WHERE id = v_pc_lm;
+  UPDATE cuba_pois SET pick_count = 20 WHERE id = v_pc_other;
+  SELECT * INTO v_r FROM search_pois_smart('parque central', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8h picks outrank the plain twin', v_r.id = v_pc_other);
+  UPDATE cuba_pois SET pick_count = 0 WHERE id = v_pc_other;
+
+  SELECT count(*) INTO v_n FROM search_pois_smart('coppelia', 23.1357, -82.3666, 30000, 10) s
+   WHERE EXISTS (SELECT 1 FROM cuba_pois m WHERE m.id = s.id AND m.merged_into IS NOT NULL);
+  PERFORM _t('T8i merged rows excluded', v_n = 0);
+
+  -- 'cafeteria …' also triggers the category keyword, so count only the name matches
+  SELECT count(*) INTO v_n FROM search_pois_smart('cafeteria la rampa', 23.1357, -82.3666, 30000, 10) s WHERE s.match_reason = 'name_exact';
+  PERFORM _t('T8j same-name rows within 300 m collapse', v_n = 2);
+
+  SELECT * INTO v_r FROM search_pois_smart('panaderia prueba', 23.1352, -82.3702, 30000, 5) LIMIT 1;  -- origin on the OLD one
+  PERFORM _t('T8k stale row sinks below the fresh twin', v_r.name = 'Panadería Prueba Fresca');
+
+  SELECT count(*) INTO v_n FROM search_pois_smart('capitolio', NULL, NULL, 30000, 5);
+  PERFORM _t('T8l null proximity returns nothing', v_n = 0);
+
+  SELECT count(*) INTO v_n FROM search_pois_smart('hospital', 23.1357, -82.3666, 30000, 10) s WHERE s.matched_category = 'hospital' AND s.tricigo_category = 'hospital';
+  PERFORM _t('T8m keyword query returns category matches', v_n >= 2);
+  SELECT * INTO v_r FROM search_pois_smart('hospital', 23.1357, -82.3666, 30000, 10) LIMIT 1;
+  PERFORM _t('T8n generic placeholder is not first', lower(v_r.name) <> 'hospital');
+
+  SELECT * INTO v_r FROM search_pois_smart('cupet santa catalina', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8o effective category returned', v_r.tricigo_category = 'gas_station');
+
+  SELECT l.name INTO v_r FROM cuba_pois p, LATERAL lookup_nearest_poi_ranked(ST_Y(p.location::geometry), ST_X(p.location::geometry), 30) l
+   WHERE p.name = 'La Roca, La Habana, Cuba' LIMIT 1;
+  PERFORM _t('T8p reverse geocode returns display_name', v_r.name = 'La Roca');
+END $$;
