@@ -69,6 +69,9 @@ const TRICIGO_CATEGORY_TO_GROUP: Record<string, string> = {
   museum: 'culture',
   park: 'culture',
   beach: 'culture',
+  landmark: 'culture',
+  venue: 'culture',
+  stadium: 'culture',
   transport: 'transport',
   gas_station: 'transport',
   other: 'other',
@@ -102,6 +105,7 @@ const SUBCATEGORY_TO_GROUP: Record<string, string> = {
   park: 'culture', beach: 'culture', attraction: 'culture',
   museum: 'culture', monument: 'culture', theatre: 'culture',
   cinema: 'culture', artwork: 'culture', gallery: 'culture',
+  stadium: 'culture', memorial: 'culture', viewpoint: 'culture',
   // transport
   fuel: 'transport', bus_station: 'transport', ferry_terminal: 'transport',
   aerodrome: 'transport', taxi: 'transport',

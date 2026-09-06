@@ -7,8 +7,10 @@
 // Cuba. Unknown values fall through to 'other'.
 //
 // Keep in sync with the tricigo_category allow-list inside
-// import_search_poi RPC (migration 00308) and with the OSM/Overture
-// mappers in `scripts/sync-pois/categories.json`.
+// import_search_poi RPC (migration 00308, extended in 00581) and with the
+// OSM/Overture mappers in `scripts/sync-pois/categories.json`.
+// `scripts/check-poi-taxonomy.mjs` (CI) fails when a value here is not in
+// TRICIGO_CATEGORIES.
 // ============================================================
 
 export const MAPBOX_TO_TRICIGO: Record<string, string> = {
@@ -68,10 +70,23 @@ export const MAPBOX_TO_TRICIGO: Record<string, string> = {
   museum: 'museum',
   art_gallery: 'museum',
   gallery: 'museum',
-  monument: 'museum',
-  landmark: 'museum',
-  tourist_attraction: 'museum',
-  historic_site: 'museum',
+  monument: 'landmark',
+  landmark: 'landmark',
+  tourist_attraction: 'landmark',
+  historic_site: 'landmark',
+  memorial: 'landmark',
+  castle: 'landmark',
+  lighthouse: 'landmark',
+  theatre: 'venue',
+  theater: 'venue',
+  cinema: 'venue',
+  movie_theater: 'venue',
+  concert_hall: 'venue',
+  performing_arts: 'venue',
+  cabaret: 'venue',
+  stadium: 'stadium',
+  arena: 'stadium',
+  sports_stadium: 'stadium',
   // Outdoor
   park: 'park',
   garden: 'park',

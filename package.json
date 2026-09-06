@@ -14,6 +14,7 @@
     "check-types": "turbo run check-types",
     "test": "turbo run test",
     "check:i18n": "node scripts/check-i18n-parity.mjs",
+    "check:poi-taxonomy": "node scripts/check-poi-taxonomy.mjs",
     "check:ef-imports": "node scripts/check-ef-pinned-imports.mjs",
     "check:ef-types": "node scripts/check-ef-types.mjs",
     "check:netopia-sync": "node scripts/check-netopia-checkout-sync.mjs",

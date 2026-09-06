@@ -843,8 +843,8 @@ describe('mapExternalCategoryToTricigo', () => {
       expect(mapExternalCategoryToTricigo('google', 'post_office')).toBe('gov');
     });
 
-    it('returns null for unknown Google types (tourist_attraction, point_of_interest, establishment)', () => {
-      expect(mapExternalCategoryToTricigo('google', 'tourist_attraction')).toBeNull();
+    it('returns null for unknown Google types (car_wash, point_of_interest, establishment)', () => {
+      expect(mapExternalCategoryToTricigo('google', 'car_wash')).toBeNull();   // tourist_attraction → landmark since 00579
       expect(mapExternalCategoryToTricigo('google', 'point_of_interest')).toBeNull();
       expect(mapExternalCategoryToTricigo('google', 'establishment')).toBeNull();
     });
@@ -924,8 +924,22 @@ describe('mapExternalCategoryToTricigo', () => {
     });
 
     it('unknown Google type → 📍 default via the full pipeline', () => {
-      const tc = mapExternalCategoryToTricigo('google', 'tourist_attraction');
+      const tc = mapExternalCategoryToTricigo('google', 'car_wash');
       expect(tricigoCategoryEmoji(tc)).toBe('📍');
+    });
+
+    // 00579/00581: landmark / venue / stadium joined the taxonomy.
+    it('new taxonomy values have their own emoji', () => {
+      expect(tricigoCategoryEmoji('landmark')).toBe('🏛️');
+      expect(tricigoCategoryEmoji('venue')).toBe('🎭');
+      expect(tricigoCategoryEmoji('stadium')).toBe('🏟️');
+    });
+
+    it('Google tourist_attraction / Mapbox monument → landmark 🏛️', () => {
+      expect(mapExternalCategoryToTricigo('google', 'tourist_attraction')).toBe('landmark');
+      expect(mapExternalCategoryToTricigo('mapbox', 'monument')).toBe('landmark');
+      expect(tricigoCategoryEmoji(mapExternalCategoryToTricigo('mapbox', ['theatre']))).toBe('🎭');
+      expect(tricigoCategoryEmoji(mapExternalCategoryToTricigo('google', 'stadium'))).toBe('🏟️');
     });
   });
 });

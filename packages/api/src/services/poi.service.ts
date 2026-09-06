@@ -2,9 +2,11 @@ import { getSupabaseClient } from '../client';
 
 /**
  * Unified TriciGo POI category. The migration backfilled these from
- * OSM (category, subcategory) pairs; the monthly Foursquare/Overture
- * sync refines them. Keep in sync with `scripts/sync-pois/categories.json`
- * and `supabase/migrations/00248_pois_multi_source.sql`.
+ * OSM (category, subcategory) pairs; the weekly Foursquare/Overture
+ * sync refines them. The single source of truth is `poi_taxonomy()`
+ * (migration 00579) — `scripts/check-poi-taxonomy.mjs` (CI) fails the
+ * build when this list, `scripts/sync-pois/categories.json`, the Mapbox
+ * importer map or the emoji/visual-group maps in @tricigo/utils drift.
  */
 export type TriciGoCategory =
   | 'hospital'
@@ -27,15 +29,21 @@ export type TriciGoCategory =
   | 'embassy'
   | 'religion'
   | 'transport'
-  | 'other';
+  | 'other'
+  | 'landmark'
+  | 'venue'
+  | 'stadium';
 
 export const TRICIGO_CATEGORIES: TriciGoCategory[] = [
   'hospital', 'pharmacy', 'school', 'gov', 'hotel', 'restaurant', 'paladar',
   'cafe', 'bar', 'supermarket', 'shop', 'bank', 'atm', 'gas_station',
   'museum', 'park', 'beach', 'embassy', 'religion', 'transport', 'other',
+  'landmark', 'venue', 'stadium',
 ];
 
-export type PoiSource = 'admin' | 'osm' | 'overture' | 'foursquare' | 'merged';
+export type PoiSource =
+  | 'admin' | 'osm' | 'overture' | 'foursquare' | 'merged'
+  | 'wikidata' | 'crowdsource' | 'mapbox';
 
 export interface Poi {
   id: number;
@@ -60,6 +68,14 @@ export interface Poi {
   importance: number | null;
   synced_at: string | null;
   updated_at: string;
+  // Curation columns (00579). Optional until admin_list_pois returns them (PR-4);
+  // the sync never writes any of these.
+  display_name?: string;
+  name_override?: string | null;
+  category_override?: TriciGoCategory | null;
+  is_landmark?: boolean;
+  pick_count?: number;
+  merged_into?: number | null;
 }
 
 export interface PoiInput {
