@@ -310,3 +310,42 @@ BEGIN
    WHERE p.name = 'La Roca, La Habana, Cuba' LIMIT 1;
   PERFORM _t('T8p reverse geocode returns display_name', v_r.name = 'La Roca');
 END $$;
+
+-- T9: learning from picks (00584)
+DO $$
+DECLARE v_hotel bigint; v_ben bigint; v_before int; v_ok boolean; v_uid uuid := '00000000-0000-0000-0000-00000000c001'; v_n int;
+BEGIN
+  SELECT id INTO v_hotel FROM cuba_pois WHERE name = 'Hotel Habana Libre' AND category <> 'public_transport' AND is_active LIMIT 1;
+  SELECT id INTO v_ben   FROM cuba_pois WHERE name = 'Hospital Miguel Enríquez' AND is_active LIMIT 1;
+  INSERT INTO users (id, role, full_name) VALUES (v_uid, 'customer', 'Rider Prueba') ON CONFLICT DO NOTHING;
+
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  PERFORM _t('T9a unauthenticated pick refused', record_poi_pick(v_hotel) = false);
+  PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+  SELECT pick_count INTO v_before FROM cuba_pois WHERE id = v_hotel;
+  v_ok := record_poi_pick(v_hotel);
+  PERFORM _t('T9b authenticated pick counts', v_ok AND (SELECT pick_count FROM cuba_pois WHERE id = v_hotel) = v_before + 1
+                                              AND (SELECT last_picked_at FROM cuba_pois WHERE id = v_hotel) > now() - interval '1 minute');
+  PERFORM _t('T9c pick on a merged row is a no-op',
+             record_poi_pick((SELECT id FROM cuba_pois WHERE merged_into IS NOT NULL LIMIT 1)) = false);
+  -- rate limit 60/h: T9b + T9c already used 2 of the window → 58 more succeed, the 61st is refused
+  FOR i IN 1..58 LOOP PERFORM record_poi_pick(v_hotel); END LOOP;
+  PERFORM _t('T9d 61st pick in the hour is refused', record_poi_pick(v_hotel) = false);
+  DELETE FROM rate_limits WHERE key LIKE 'poi_pick:%';
+  UPDATE cuba_pois SET pick_count = v_before WHERE id = v_hotel;
+
+  PERFORM _t('T9e bump_poi_pick not executable by app roles',
+             NOT has_function_privilege('authenticated', 'public.bump_poi_pick(bigint)', 'EXECUTE')
+         AND NOT has_function_privilege('anon', 'public.bump_poi_pick(bigint)', 'EXECUTE'));
+  PERFORM _t('T9f record_poi_pick not executable by anon', NOT has_function_privilege('anon', 'public.record_poi_pick(bigint)', 'EXECUTE')
+         AND has_function_privilege('authenticated', 'public.record_poi_pick(bigint)', 'EXECUTE'));
+
+  PERFORM _t('T9g find_nearby_poi_match by alias',
+             find_nearby_poi_match('La Benéfica', ST_Y((SELECT location::geometry FROM cuba_pois WHERE id = v_ben)), ST_X((SELECT location::geometry FROM cuba_pois WHERE id = v_ben)), 60) = v_ben);
+  PERFORM _t('T9h find_nearby_poi_match by display name',
+             find_nearby_poi_match('La Roca', ST_Y((SELECT location::geometry FROM cuba_pois WHERE name = 'La Roca, La Habana, Cuba')), ST_X((SELECT location::geometry FROM cuba_pois WHERE name = 'La Roca, La Habana, Cuba')), 60)
+             = (SELECT id FROM cuba_pois WHERE name = 'La Roca, La Habana, Cuba'));
+  SELECT count(*) INTO v_n FROM cuba_pois m WHERE m.merged_into IS NOT NULL
+     AND find_nearby_poi_match(m.name, ST_Y(m.location::geometry), ST_X(m.location::geometry), 60) = m.id;
+  PERFORM _t('T9i merged rows never matched', v_n = 0);
+END $$;
