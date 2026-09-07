@@ -891,6 +891,11 @@ export function DriverTripView() {
           const secondaryAddress = (isToPickup || isAtPickup)
             ? activeTrip.pickup_address
             : activeTrip.dropoff_address;
+          // 00578: the rider's note for THIS endpoint ("#302 apto 4, tocar el
+          // timbre"). Only here and in the route card — never on the offer.
+          const secondaryNote = (isToPickup || isAtPickup)
+            ? activeTrip.pickup_notes
+            : activeTrip.dropoff_notes;
           return (
             <>
               <Text
@@ -918,6 +923,31 @@ export function DriverTripView() {
                   >
                     {secondaryAddress}
                   </Text>
+                </View>
+              ) : null}
+              {secondaryNote ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'flex-start',
+                    gap: 6,
+                    marginTop: 6,
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    borderRadius: midnightEmber.radius.input,
+                    backgroundColor: 'rgba(245,158,11,0.14)',
+                  }}
+                  accessibilityLabel={`${t('trip.rider_note', { defaultValue: 'Nota del pasajero' })}: ${secondaryNote}`}
+                >
+                  <Ionicons name="chatbubble-ellipses-outline" size={14} color={midnightEmber.state.warning} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="caption" style={{ color: midnightEmber.state.warning, fontWeight: '600' }}>
+                      {t('trip.rider_note', { defaultValue: 'Nota del pasajero' })}
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: midnightEmber.map.text.primary }} numberOfLines={3}>
+                      {secondaryNote}
+                    </Text>
+                  </View>
                 </View>
               ) : null}
               {/* WaitTimer renders INSIDE the hero block now during
@@ -1139,6 +1169,8 @@ export function DriverTripView() {
         status={activeTrip.status}
         pickupAddress={activeTrip.pickup_address}
         dropoffAddress={activeTrip.dropoff_address}
+        pickupNotes={activeTrip.pickup_notes}
+        dropoffNotes={activeTrip.dropoff_notes}
         waypoints={waypoints}
         nextLegAddress={nextWaypoint?.address ?? null}
       />

@@ -13,6 +13,9 @@ import { triggerHaptic } from '@tricigo/utils';
 import type { ServiceTypeSlug, PaymentMethod } from '@tricigo/types';
 import { useAuthStore } from '@/stores/auth.store';
 import { AddressSearchInput } from '@/components/AddressSearchInput';
+import { useRecentAddresses } from '@/hooks/useRecentAddresses';
+import { useSavedLocations } from '@/hooks/useSavedLocations';
+import { useDestinationPredictions } from '@/hooks/useDestinationPredictions';
 import type { GeoPoint } from '@tricigo/utils';
 
 interface CreateRecurringRideSheetProps {
@@ -37,6 +40,11 @@ const PAYMENT_METHODS: { key: PaymentMethod; icon: string }[] = [
 export function CreateRecurringRideSheet({ visible, onClose, onCreated }: CreateRecurringRideSheetProps) {
   const { t } = useTranslation('rider');
   const userId = useAuthStore((s) => s.user?.id);
+  // A recurring ride is the rider's most repeated route — give the search the
+  // same history the booking screen has (saved places, recents, predictions).
+  const { savedLocations } = useSavedLocations();
+  const { recentAddresses } = useRecentAddresses();
+  const { predictions } = useDestinationPredictions();
 
   const [pickupAddress, setPickupAddress] = useState('');
   const [pickupLocation, setPickupLocation] = useState<GeoPoint | null>(null);
@@ -135,12 +143,17 @@ export function CreateRecurringRideSheet({ visible, onClose, onCreated }: Create
         placeholder={t('ride.pickup_placeholder', { defaultValue: '¿Dónde te recogemos?' })}
         selectedAddress={pickupAddress || null}
         onSelect={handlePickupSelect}
+        savedLocations={savedLocations}
+        recentAddresses={recentAddresses}
         showUseMyLocation
       />
       <AddressSearchInput
         placeholder={t('ride.dropoff_placeholder', { defaultValue: '¿A dónde vas?' })}
         selectedAddress={dropoffAddress || null}
         onSelect={handleDropoffSelect}
+        savedLocations={savedLocations}
+        recentAddresses={recentAddresses}
+        predictions={predictions}
       />
 
       {/* Days of week */}

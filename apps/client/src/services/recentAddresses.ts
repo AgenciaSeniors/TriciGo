@@ -16,6 +16,9 @@ export interface RecentAddress {
   latitude: number;
   longitude: number;
   timestamp: number;
+  /** Notes for the driver the rider wrote the last time (00578). Restored
+   *  when the place is picked again so they are typed once. */
+  notes?: string;
 }
 
 /** A row is usable only if its coordinate is real: not null, not NaN, not ±Infinity. */
@@ -61,6 +64,7 @@ async function add(
   address: string,
   latitude: number,
   longitude: number,
+  notes?: string | null,
 ): Promise<RecentAddress[]> {
   // Reject non-finite coordinates at the door. Cross-street SUGGESTIONS carry
   // { latitude: NaN, longitude: NaN, needsResolution: true } on purpose (see
@@ -87,6 +91,7 @@ async function add(
     latitude,
     longitude,
     timestamp: Date.now(),
+    ...(notes ? { notes } : {}),
   };
 
   const updated = [entry, ...filtered].slice(0, MAX_ENTRIES);

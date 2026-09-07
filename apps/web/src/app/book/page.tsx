@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance, getErrorMessage } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance, getErrorMessage, trimNotes } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService, useFeatureFlag } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory, RidePreferences } from '@tricigo/types';
@@ -107,6 +107,10 @@ export default function BookPage() {
   /* ─── Location state ─── */
   const [pickup, setPickup] = useState<LocationPreset | null>(null);
   const [dropoff, setDropoff] = useState<LocationPreset | null>(null);
+  // 00578: notes for the driver at each endpoint (parity with the mobile
+  // client's AddressDetailsSheet). Sent as pickup_notes / dropoff_notes.
+  const [pickupNotes, setPickupNotes] = useState('');
+  const [dropoffNotes, setDropoffNotes] = useState('');
   const [selectionStep, setSelectionStep] = useState<SelectionStep>('pickup');
   const [mapCenter, setMapCenter] = useState({ latitude: 23.1136, longitude: -82.3666 });
 
@@ -542,6 +546,8 @@ export default function BookPage() {
     setPassengerCount(1);
     fareEstimatedAtRef.current = null;
     setDeliveryDetails({ recipient_name: '', recipient_phone: '', package_description: '', package_category: 'paquete_pequeno', estimated_weight_kg: '', special_instructions: '', client_accompanies: false, package_length_cm: '', package_width_cm: '', package_height_cm: '' });
+    setPickupNotes('');
+    setDropoffNotes('');
   }
 
   function handleSwapLocations() {
@@ -822,9 +828,11 @@ export default function BookPage() {
         pickup_latitude: pickup.latitude,
         pickup_longitude: pickup.longitude,
         pickup_address: pickup.address || pickup.label,
+        pickup_notes: trimNotes(pickupNotes),
         dropoff_latitude: dropoff.latitude,
         dropoff_longitude: dropoff.longitude,
         dropoff_address: dropoff.address || dropoff.label,
+        dropoff_notes: trimNotes(dropoffNotes),
         estimated_fare_cup: freshEstimate.estimated_fare_cup,
         estimated_distance_m: freshEstimate.estimated_distance_m,
         estimated_duration_s: freshEstimate.estimated_duration_s,
@@ -1134,6 +1142,15 @@ export default function BookPage() {
                     {pickupAddress}
                   </p>
                 )}
+                <input
+                  type="text"
+                  value={pickupNotes}
+                  maxLength={200}
+                  onChange={(e) => setPickupNotes(e.target.value)}
+                  placeholder={t('book.pickup_notes_placeholder', { defaultValue: 'Detalles para el conductor: #302 apto 4, edificio azul…' })}
+                  aria-label={t('book.pickup_notes_label', { defaultValue: 'Detalles de recogida para el conductor' })}
+                  style={{ marginTop: '0.5rem', width: '100%', padding: '0.5rem 0.6rem', borderRadius: '0.4rem', border: '1px solid var(--border)', fontSize: '0.8rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box' }}
+                />
               </div>
             )}
             {dropoff && (
@@ -1164,6 +1181,15 @@ export default function BookPage() {
                     {dropoffAddress}
                   </p>
                 )}
+                <input
+                  type="text"
+                  value={dropoffNotes}
+                  maxLength={200}
+                  onChange={(e) => setDropoffNotes(e.target.value)}
+                  placeholder={t('book.dropoff_notes_placeholder', { defaultValue: 'Detalles para el conductor: local 3, portón verde…' })}
+                  aria-label={t('book.dropoff_notes_label', { defaultValue: 'Detalles del destino para el conductor' })}
+                  style={{ marginTop: '0.5rem', width: '100%', padding: '0.5rem 0.6rem', borderRadius: '0.4rem', border: '1px solid var(--border)', fontSize: '0.8rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box' }}
+                />
               </div>
             )}
             {/* ═══ Waypoints (W1.1) ═══ */}

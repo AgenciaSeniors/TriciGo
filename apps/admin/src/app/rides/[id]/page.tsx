@@ -215,6 +215,18 @@ export default function RideDetailPage() {
               <dt className="text-sm text-ink-muted">{t('rides.label_destination')}</dt>
               <dd className="text-sm font-medium">{ride.dropoff_address}</dd>
             </div>
+            {ride.pickup_notes && (
+              <div>
+                <dt className="text-sm text-ink-muted">{t('rides.label_pickup_notes', { defaultValue: 'Detalles de recogida (pasajero)' })}</dt>
+                <dd className="text-sm font-medium whitespace-pre-line">{ride.pickup_notes}</dd>
+              </div>
+            )}
+            {ride.dropoff_notes && (
+              <div>
+                <dt className="text-sm text-ink-muted">{t('rides.label_dropoff_notes', { defaultValue: 'Detalles del destino (pasajero)' })}</dt>
+                <dd className="text-sm font-medium whitespace-pre-line">{ride.dropoff_notes}</dd>
+              </div>
+            )}
             <div className="flex gap-6">
               <div>
                 <dt className="text-sm text-ink-muted">{t('rides.label_distance')}</dt>

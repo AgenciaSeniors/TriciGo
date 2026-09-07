@@ -73,6 +73,13 @@ export interface Ride {
   pickup_address: string;
   dropoff_location: GeoPoint;
   dropoff_address: string;
+  /** 00578: rider's note for the driver at the pickup ("#302 apto 4,
+   *  edificio azul, tocar el timbre"). Absent until the migration is
+   *  applied; null when the rider wrote nothing. Never in push payloads
+   *  nor in the public share view. */
+  pickup_notes?: string | null;
+  /** 00578: same for the dropoff. */
+  dropoff_notes?: string | null;
 
   // Estimates (set at request time)
   estimated_fare_cup: number;

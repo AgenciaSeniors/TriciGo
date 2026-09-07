@@ -16,8 +16,8 @@ export function useRecentAddresses() {
   }, []);
 
   const addRecentAddress = useCallback(
-    async (address: string, latitude: number, longitude: number) => {
-      const updated = await recentAddressService.add(address, latitude, longitude);
+    async (address: string, latitude: number, longitude: number, notes?: string | null) => {
+      const updated = await recentAddressService.add(address, latitude, longitude, notes);
       setRecentAddresses(updated);
     },
     [],

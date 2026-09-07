@@ -50,6 +50,10 @@ export const createRideSchema = z.object({
   dropoff_latitude: cubaLatSchema,
   dropoff_longitude: cubaLngSchema,
   dropoff_address: z.string().min(1).max(500),
+  // 00578: optional rider notes for the driver, one per endpoint. Cap
+  // mirrors the column CHECK; trimNotes() in createRide normalises them.
+  pickup_notes: z.string().trim().max(200).optional().nullable(),
+  dropoff_notes: z.string().trim().max(200).optional().nullable(),
   estimated_fare_cup: z.number().positive().max(1000000).optional(),
   estimated_distance_m: z.number().positive().optional(),
   estimated_duration_s: z.number().positive().optional(),
@@ -235,10 +239,14 @@ export const recordLocationSchema = z.object({
 export const updateProfileSchema = z.object({
   default_payment_method: paymentMethodSchema.optional(),
   saved_locations: z.array(z.object({
-    name: z.string().min(1).max(100),
+    // The app always sent `label`; this schema said `name` for months and
+    // nobody noticed because updateProfile never ran it.
+    label: z.string().min(1).max(100),
     latitude: cubaLatSchema,
     longitude: cubaLngSchema,
     address: z.string().min(1).max(500),
+    kind: z.enum(['home', 'work', 'other']).optional(),
+    details: z.string().trim().max(200).optional().nullable(),
   })).max(20).optional(),
   emergency_contact: z.object({
     name: z.string().min(1).max(200),
