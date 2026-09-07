@@ -34,6 +34,9 @@ interface SavedLocationItem {
   address: string;
   latitude: number;
   longitude: number;
+  /** Fixed slot from the profile (00578); the label is only a fallback. */
+  kind?: 'home' | 'work' | 'other' | string;
+  details?: string | null;
 }
 
 interface AddressAutocompleteProps {
@@ -52,8 +55,10 @@ interface AddressAutocompleteProps {
   enrichAddress?: (lat: number, lng: number) => Promise<{ address: string } | null>;
 }
 
-function getSavedIcon(label: string): string {
-  const lower = label.toLowerCase();
+function getSavedIcon(loc: SavedLocationItem): string {
+  if (loc.kind === 'home') return '🏠';
+  if (loc.kind === 'work') return '🏢';
+  const lower = loc.label.toLowerCase();
   if (lower.includes('casa') || lower.includes('home')) return '🏠';
   if (lower.includes('trabajo') || lower.includes('work') || lower.includes('oficina')) return '🏢';
   if (lower.includes('gym') || lower.includes('gimnasio')) return '🏋️';
@@ -845,7 +850,7 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
                     transition: 'background 0.1s ease',
                   }}
                 >
-                  <span style={{ flexShrink: 0, fontSize: '1.2rem' }} aria-hidden="true">{getSavedIcon(loc.label)}</span>
+                  <span style={{ flexShrink: 0, fontSize: '1.2rem' }} aria-hidden="true">{getSavedIcon(loc)}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>{loc.label}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loc.address}</div>

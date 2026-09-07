@@ -299,6 +299,9 @@ export default function RideDetailPage() {
                     <div>
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: 0 }}>Recogida</p>
                       <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', margin: 0 }}>{ride.pickup_address}</p>
+                      {ride.pickup_notes && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--primary)', margin: '0.15rem 0 0', whiteSpace: 'pre-line' }}>{ride.pickup_notes}</p>
+                      )}
                     </div>
                   </div>
                   <div style={{ borderLeft: '2px dashed var(--border)', marginLeft: 4, height: 16 }} />
@@ -307,6 +310,9 @@ export default function RideDetailPage() {
                     <div>
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: 0 }}>Destino</p>
                       <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', margin: 0 }}>{ride.dropoff_address}</p>
+                      {ride.dropoff_notes && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--primary)', margin: '0.15rem 0 0', whiteSpace: 'pre-line' }}>{ride.dropoff_notes}</p>
+                      )}
                     </div>
                   </div>
                 </div>

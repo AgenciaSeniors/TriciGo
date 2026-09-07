@@ -3,7 +3,7 @@ import { View, Text, Animated, AppState, Platform, Image, TouchableOpacity, Pres
 import { Ionicons } from '@expo/vector-icons';
 import { colors, darkColors } from '@tricigo/theme';
 import { useTranslation } from '@tricigo/i18n';
-import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading, estimateVehicleEtaMinutes, formatVehicleEtaMinutes, formatVehicleDistance, triggerSelection, triggerHaptic, POI_LAYER_ID, POI_SOURCE_ID, poiNameFromFeature } from '@tricigo/utils';
+import { MAP_STYLE_LIGHT, MAP_STYLE_DARK, MAP_COLORS, MARKER, ROUTE, haversineDistance, snapDriverToRoute, smoothHeading, vehicleMarkerRotationOffset, useAnimatedCoordinate, useAnimatedHeading, estimateVehicleEtaMinutes, formatVehicleEtaMinutes, formatVehicleDistance, triggerSelection, triggerHaptic, POI_LAYER_ID, POI_SOURCE_ID, poiNameFromFeature, isNearScreenPoint, coordsEqual } from '@tricigo/utils';
 import { PlacesLayer } from './PlacesLayer';
 import { StopMarker } from '@tricigo/ui';
 import { useThemeStore } from '@/stores/theme.store';
@@ -95,6 +95,12 @@ interface RideMapViewProps {
   rideStatus?: string | null;
   /** Long-press anywhere on the map. Receives [lng, lat]. */
   onLongPressMap?: (lng: number, lat: number) => void;
+  /** Make the pickup marker draggable (long-press it, then move). Called with
+   *  [lng, lat] when the finger lifts. Only the vehicle-selection map passes
+   *  these; the review and active-ride maps keep their pins fixed. */
+  onPickupDragEnd?: (lng: number, lat: number) => void;
+  /** Same for the dropoff pin. */
+  onDropoffDragEnd?: (lng: number, lat: number) => void;
   /** Minutes until the driver arrives, drawn in a bubble on the marker.
    *  Omit (or pass null) to draw no bubble. */
   driverEtaMinutes?: number | null;
@@ -194,6 +200,8 @@ function RideMapViewInner({
   initialUserCenter,
   rideStatus,
   onLongPressMap,
+  onPickupDragEnd,
+  onDropoffDragEnd,
   driverEtaMinutes,
   routeProgress,
   showPlaces = false,
@@ -316,6 +324,12 @@ function RideMapViewInner({
   const pickupPulseAnim = useRef(new Animated.Value(1)).current;
   const pickupPulseOpacity = useRef(new Animated.Value(0.6)).current;
   const dropoffScale = useRef(new Animated.Value(0.3)).current;
+  // Marker drag state. `draggingRef` keeps a long-press that started a drag
+  // from also opening the pin picker; `lastDragCoordRef` tells the ghost
+  // swap below that a dropoff change came from the finger, not from search.
+  const draggingRef = useRef(false);
+  const lastDragCoordRef = useRef<GeoPoint | null>(null);
+  const [dropoffGhost, setDropoffGhost] = useState(false);
 
   // BUG-270: render the driver marker exactly the way the DRIVER's own
   // app does — directly from the latest position, no interpolation. The
@@ -524,6 +538,26 @@ function RideMapViewInner({
     return () => animation.stop();
   }, [dropoffLocation, dropoffScale]);
 
+  // Ghost swap (draggable dropoff only). The bounce above runs on a
+  // MarkerView, which PointAnnotation cannot animate (BUG-307: it snapshots
+  // its children). So for ~600 ms after a programmatic change the animated
+  // MarkerView is shown, then the static draggable PointAnnotation takes
+  // over. A change that came from a drag skips the bounce — the pin is
+  // already where the finger left it.
+  useEffect(() => {
+    if (!onDropoffDragEnd || !dropoffLocation) {
+      setDropoffGhost(false);
+      return;
+    }
+    if (coordsEqual(lastDragCoordRef.current, dropoffLocation)) {
+      setDropoffGhost(false);
+      return;
+    }
+    setDropoffGhost(true);
+    const timer = setTimeout(() => setDropoffGhost(false), 600);
+    return () => clearTimeout(timer);
+  }, [dropoffLocation, onDropoffDragEnd]);
+
   // Build route GeoJSON from coordinates (static — no animation)
   const routeGeoJSON = useMemo(() => {
     if (!routeCoordinates || routeCoordinates.length < 2) return null;
@@ -726,6 +760,24 @@ function RideMapViewInner({
     }
   }, [bounds, hasFitInitially, rideKey]);
 
+  // A marker was dropped. The camera re-fits bounds whenever the
+  // pickup+dropoff key changes, so record the key the parent's update will
+  // produce BEFORE it lands — otherwise every drag ends with the map jumping
+  // away from the finger.
+  const handleMarkerDragEnd = useCallback((target: 'pickup' | 'dropoff', payload: unknown) => {
+    draggingRef.current = false;
+    const coords = (payload as { geometry?: { coordinates?: unknown } } | null)?.geometry?.coordinates;
+    if (!Array.isArray(coords)) return;
+    const [lng, lat] = coords as [number, number];
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    lastFitRideKey.current = target === 'pickup'
+      ? `${lat},${lng}|${dropoffLat ?? ''},${dropoffLng ?? ''}`
+      : `${pickupLat ?? ''},${pickupLng ?? ''}|${lat},${lng}`;
+    if (target === 'dropoff') lastDragCoordRef.current = { latitude: lat, longitude: lng };
+    void triggerHaptic('light');
+    (target === 'pickup' ? onPickupDragEnd : onDropoffDragEnd)?.(lng, lat);
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng, onPickupDragEnd, onDropoffDragEnd]);
+
   // ─── BUG-267 v3: Uber-style camera follow ──────────────────────────────
   // When the ride is between `accepted` and `in_progress` we keep the
   // camera centered on the driver with a state-specific cinematic
@@ -919,11 +971,35 @@ function RideMapViewInner({
         // fighting the user's finger.
         onTouchStart={isRideActive ? handleUserGesture : undefined}
         onDidFinishLoadingStyle={() => setStyleReady(true)}
-        onLongPress={onLongPressMap ? (feature: any) => {
+        onLongPress={onLongPressMap ? async (feature: any) => {
+          if (draggingRef.current) return;
           const coords = feature?.geometry?.coordinates;
           if (!Array.isArray(coords)) return;
           const [lng, lat] = coords;
           if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+          // A long-press ON a draggable marker is the start of a drag, not a
+          // request to pick a new point there. Compared in screen space so
+          // the tolerance is a thumb, whatever the zoom.
+          if (onPickupDragEnd || onDropoffDragEnd) {
+            const sx = feature?.properties?.screenPointX;
+            const sy = feature?.properties?.screenPointY;
+            if (Number.isFinite(sx) && Number.isFinite(sy)) {
+              try {
+                const targets = [pickupLocation, dropoffLocation].filter(
+                  (c): c is GeoPoint => !!c && Number.isFinite(c.latitude) && Number.isFinite(c.longitude),
+                );
+                const points = await Promise.all(targets.map(async (c) => {
+                  const p = await mapRef.current?.getPointInView([c.longitude, c.latitude]);
+                  return Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])
+                    ? { x: p[0] as number, y: p[1] as number }
+                    : null;
+                }));
+                if (draggingRef.current || isNearScreenPoint({ x: sx, y: sy }, points)) return;
+              } catch {
+                // A failed projection must not swallow the gesture.
+              }
+            }
+          }
           void triggerHaptic('medium');
           onLongPressMap(lng, lat);
         } : undefined}
@@ -1115,6 +1191,9 @@ function RideMapViewInner({
           <MapboxGL.PointAnnotation
             id="pickup"
             coordinate={toCoord(pickupLocation)}
+            draggable={!!onPickupDragEnd}
+            onDragStart={onPickupDragEnd ? () => { draggingRef.current = true; } : undefined}
+            onDragEnd={onPickupDragEnd ? (p: unknown) => handleMarkerDragEnd('pickup', p) : undefined}
           >
             <View style={{ width: MARKER.driver.ringSize, height: MARKER.driver.ringSize, alignItems: 'center', justifyContent: 'center' }}>
               {/* Pulsing ring */}
@@ -1172,13 +1251,16 @@ function RideMapViewInner({
          *  trick as the driver MarkerView), so position updates land
          *  reliably on Android.
          *
-         *  Neither pin is draggable: correcting a pin lives on the
-         *  ConfirmLocation flow, where the user moves the map under a
-         *  static pin. This view is the route-preview / vehicle picker,
-         *  where both points are already committed. */}
+         *  Dragging is opt-in through onPickupDragEnd / onDropoffDragEnd,
+         *  which only the vehicle-selection map passes. There the dropoff is
+         *  a draggable PointAnnotation (the only annotation with a drag API)
+         *  and this MarkerView plays the bounce as a short-lived "ghost" —
+         *  see the ghost-swap effect. Everywhere else (review, active ride)
+         *  the pins stay fixed and this MarkerView is the only dropoff. */}
         {dropoffLocation &&
           Number.isFinite(dropoffLocation.latitude) &&
-          Number.isFinite(dropoffLocation.longitude) && (
+          Number.isFinite(dropoffLocation.longitude) &&
+          (!onDropoffDragEnd || dropoffGhost) && (
           <MapboxGL.MarkerView
             id="dropoff"
             key={`dropoff-${dropoffLocation.latitude.toFixed(5)}-${dropoffLocation.longitude.toFixed(5)}`}
@@ -1207,6 +1289,39 @@ function RideMapViewInner({
               />
             </Animated.View>
           </MapboxGL.MarkerView>
+        )}
+
+        {/* Draggable dropoff — static children only (Android renders a
+            PointAnnotation's children to a bitmap at mount). Long-press the
+            pin, move it, lift: onDragEnd carries the new [lng, lat]. */}
+        {dropoffLocation &&
+          Number.isFinite(dropoffLocation.latitude) &&
+          Number.isFinite(dropoffLocation.longitude) &&
+          onDropoffDragEnd && !dropoffGhost && (
+          <MapboxGL.PointAnnotation
+            id="dropoff-draggable"
+            coordinate={toCoord(dropoffLocation)}
+            anchor={{ x: 0.5, y: 1 }}
+            draggable
+            onDragStart={() => { draggingRef.current = true; }}
+            onDragEnd={(p: unknown) => handleMarkerDragEnd('dropoff', p)}
+          >
+            <View
+              style={{
+                width: MARKER.dropoffPin.size,
+                height: MARKER.dropoffPin.size,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Image
+                source={require('../../assets/markers/dropoff-pin.png')}
+                style={{ width: MARKER.dropoffPin.size, height: MARKER.dropoffPin.size, tintColor: MAP_COLORS.brand }}
+                resizeMode="contain"
+                accessibilityLabel={t('map.dropoff_marker')}
+              />
+            </View>
+          </MapboxGL.PointAnnotation>
         )}
 
         {/* Waypoint markers — Cuban Modern StopMarker. Taller (36px)

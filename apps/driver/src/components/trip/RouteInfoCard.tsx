@@ -40,6 +40,9 @@ interface RouteInfoCardProps {
   waypoints: RouteWaypoint[];
   /** During in_progress, the address of the next leg (waypoint or dropoff). */
   nextLegAddress: string | null;
+  /** 00578: rider notes for the driver at each endpoint. */
+  pickupNotes?: string | null;
+  dropoffNotes?: string | null;
 }
 
 function Dot({ color, size = 12 }: { color: string; size?: number }) {
@@ -59,6 +62,8 @@ export function RouteInfoCard({
   status,
   pickupAddress,
   dropoffAddress,
+  pickupNotes,
+  dropoffNotes,
   waypoints,
   nextLegAddress,
 }: RouteInfoCardProps) {
@@ -141,6 +146,11 @@ export function RouteInfoCard({
                 >
                   {pickupAddress}
                 </Text>
+                {pickupNotes ? (
+                  <Text variant="caption" style={{ color: midnightEmber.state.warning, marginTop: 2 }}>
+                    {t('trip.rider_note', { defaultValue: 'Nota del pasajero' })}: {pickupNotes}
+                  </Text>
+                ) : null}
               </View>
             </View>
             {waypoints.map((wp) => (
@@ -196,6 +206,11 @@ export function RouteInfoCard({
                 >
                   {dropoffAddress}
                 </Text>
+                {dropoffNotes ? (
+                  <Text variant="caption" style={{ color: midnightEmber.state.warning, marginTop: 2 }}>
+                    {t('trip.rider_note', { defaultValue: 'Nota del pasajero' })}: {dropoffNotes}
+                  </Text>
+                ) : null}
               </View>
             </View>
           </View>

@@ -9,6 +9,9 @@ export interface RouteSummaryProps {
   dropoffLabel?: string;
   /** Intermediate waypoints between pickup and dropoff */
   waypoints?: Array<{ address: string; label?: string }>;
+  /** Rider's note for the driver at each endpoint (00578). */
+  pickupNote?: string | null;
+  dropoffNote?: string | null;
   compact?: boolean;
   className?: string;
 }
@@ -19,6 +22,8 @@ export function RouteSummary({
   pickupLabel,
   dropoffLabel,
   waypoints = [],
+  pickupNote,
+  dropoffNote,
   compact = false,
   className,
 }: RouteSummaryProps) {
@@ -46,6 +51,9 @@ export function RouteSummary({
             <Text variant="caption" color="secondary">{pickupLabel}</Text>
           )}
           <Text variant="bodySmall" numberOfLines={1}>{pickupAddress}</Text>
+          {pickupNote ? (
+            <Text variant="caption" color="accent" numberOfLines={2}>{pickupNote}</Text>
+          ) : null}
           {waypoints.length === 0 && <View className={compact ? 'h-2' : 'h-3'} />}
         </View>
       </View>
@@ -76,6 +84,9 @@ export function RouteSummary({
             <Text variant="caption" color="secondary">{dropoffLabel}</Text>
           )}
           <Text variant="bodySmall" numberOfLines={1}>{dropoffAddress}</Text>
+          {dropoffNote ? (
+            <Text variant="caption" color="accent" numberOfLines={2}>{dropoffNote}</Text>
+          ) : null}
         </View>
       </View>
     </View>

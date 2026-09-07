@@ -43,6 +43,7 @@ import {
   isLocationInCuba,
   fetchRoute,
   fetchMultiStopRoute,
+  trimNotes,
 } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { transformRideCoordinates } from './_ride-coordinates';
@@ -55,6 +56,12 @@ import { realtimeStatusLogger } from './_realtime-status';
 import { AppError, AuthError, ValidationError, ForbiddenError } from '../errors';
 import { deliveryService } from './delivery.service';
 
+/** PostgREST's "column does not exist" for exactly the 00578 note columns. */
+function isMissingNotesColumn(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err || err.code !== 'PGRST204') return false;
+  return /\b(pickup|dropoff)_notes\b/.test(err.message ?? '');
+}
+
 export interface CreateRideParams {
   service_type: ServiceTypeSlug;
   payment_method: PaymentMethod;
@@ -64,6 +71,9 @@ export interface CreateRideParams {
   dropoff_latitude: number;
   dropoff_longitude: number;
   dropoff_address: string;
+  /** 00578: rider notes for the driver at each endpoint (≤200 chars). */
+  pickup_notes?: string | null;
+  dropoff_notes?: string | null;
   estimated_fare_cup?: number;
   estimated_distance_m?: number;
   estimated_duration_s?: number;
@@ -467,9 +477,11 @@ export const rideService = {
       paymentMethod = 'corporate';
     }
 
-    const { data, error } = await supabase
-      .from('rides')
-      .insert({
+    // 00578: the two note columns may not exist yet in an environment where
+    // the migration has not been applied (MCP guard — see CLAUDE.md). The
+    // insert is retried WITHOUT them on the precise PostgREST error for
+    // those columns; any other missing column still fails loudly.
+    const rideRow: Record<string, unknown> = {
         customer_id: user.id,
         service_type: validParams.service_type,
         payment_method: paymentMethod,
@@ -502,10 +514,18 @@ export const rideService = {
         // trigger (00347) — never trusted from the client.
         shared_ride: validParams.share_ride ?? false,
         shared_ride_seats_occupied: validParams.share_ride ? (validParams.declared_passengers ?? 1) : null,
+        pickup_notes: trimNotes(validParams.pickup_notes),
+        dropoff_notes: trimNotes(validParams.dropoff_notes),
         status: 'searching' as RideStatus,
-      })
-      .select()
-      .single();
+    };
+    const insertRideRow = (row: Record<string, unknown>) =>
+      supabase.from('rides').insert(row).select().single();
+    let { data, error } = await insertRideRow(rideRow);
+    if (error && isMissingNotesColumn(error)) {
+      console.warn('[rideService] rides.pickup_notes/dropoff_notes missing (00578 not applied) — retrying without notes');
+      const { pickup_notes: _pn, dropoff_notes: _dn, ...withoutNotes } = rideRow;
+      ({ data, error } = await insertRideRow(withoutNotes));
+    }
     if (error) {
       // PostgrestError from Supabase is a plain object, not an Error
       // instance. If we throw it raw, callers that do `String(err)` or

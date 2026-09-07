@@ -1702,3 +1702,92 @@ describe('rideService.getRideWithRider — phone for the "Llamar al pasajero" bu
     expect(result?.rider_masked_phone).toBeNull();
   });
 });
+
+describe('createRide — endpoint notes (00578)', () => {
+  const BASE = {
+    service_type: 'triciclo_basico' as const,
+    payment_method: 'cash' as const,
+    pickup_latitude: 23.1352,
+    pickup_longitude: -82.3599,
+    pickup_address: 'Capitolio',
+    dropoff_latitude: 23.1375,
+    dropoff_longitude: -82.3964,
+    dropoff_address: 'Hotel Nacional',
+    estimated_fare_cup: 5000,
+  };
+  const RIDE_ROW = { id: 'ride-notes', customer_id: 'user-1', status: 'searching', ...BASE };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+  });
+
+  function insertChain(results: Array<{ data: unknown; error: unknown }>) {
+    const single = vi.fn();
+    for (const r of results) single.mockResolvedValueOnce(r);
+    single.mockResolvedValue({ data: RIDE_ROW, error: null });
+    const insert = vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single }) });
+    mockFrom.mockReturnValue({ insert });
+    return insert;
+  }
+
+  it('forwards trimmed pickup/dropoff notes to the rides insert', async () => {
+    const insert = insertChain([{ data: RIDE_ROW, error: null }]);
+    await rideService.createRide({ ...BASE, pickup_notes: '  #302 apto 4 ', dropoff_notes: 'tocar el timbre' });
+    const payload = insert.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.pickup_notes).toBe('#302 apto 4');
+    expect(payload.dropoff_notes).toBe('tocar el timbre');
+  });
+
+  it('sends null notes when the rider wrote none', async () => {
+    const insert = insertChain([{ data: RIDE_ROW, error: null }]);
+    await rideService.createRide({ ...BASE });
+    const payload = insert.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.pickup_notes).toBeNull();
+    expect(payload.dropoff_notes).toBeNull();
+  });
+
+  it('retries WITHOUT the note columns when the migration is not applied yet', async () => {
+    const insert = insertChain([
+      { data: null, error: { code: 'PGRST204', message: "Could not find the 'pickup_notes' column of 'rides' in the schema cache" } },
+      { data: RIDE_ROW, error: null },
+    ]);
+    const ride = await rideService.createRide({ ...BASE, pickup_notes: 'edificio azul' });
+    expect(ride.id).toBe('ride-notes');
+    expect(insert).toHaveBeenCalledTimes(2);
+    const first = insert.mock.calls[0]?.[0] as Record<string, unknown>;
+    const second = insert.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect(first).toHaveProperty('pickup_notes');
+    expect(second).not.toHaveProperty('pickup_notes');
+    expect(second).not.toHaveProperty('dropoff_notes');
+  });
+
+  it('does not swallow a PGRST204 about some OTHER column', async () => {
+    const insert = insertChain([
+      { data: null, error: { code: 'PGRST204', message: "Could not find the 'wallet_ratio' column of 'rides' in the schema cache" } },
+    ]);
+    await expect(rideService.createRide({ ...BASE, pickup_notes: 'x' })).rejects.toThrow();
+    expect(insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a note longer than the column allows', async () => {
+    insertChain([{ data: RIDE_ROW, error: null }]);
+    await expect(
+      rideService.createRide({ ...BASE, dropoff_notes: 'x'.repeat(201) }),
+    ).rejects.toThrow();
+  });
+
+  it('never copies notes into the public share view', async () => {
+    mockRpc.mockImplementation(async (fn: string) => {
+      if (fn === 'get_shared_ride_by_token') {
+        return { data: [{ id: 'r1', status: 'accepted', service_type: 'triciclo_basico', pickup_address: 'A', dropoff_address: 'B', pickup_notes: 'SECRET', dropoff_notes: 'SECRET' }], error: null };
+      }
+      return { data: [], error: null };
+    });
+    const view = await rideService.getPublicRideByShareToken('tok');
+    expect(view).not.toBeNull();
+    expect(view).not.toHaveProperty('pickup_notes');
+    expect(view).not.toHaveProperty('dropoff_notes');
+    expect(JSON.stringify(view)).not.toContain('SECRET');
+  });
+});

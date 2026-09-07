@@ -5,7 +5,7 @@ import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rideService, deliveryService, walletService, corporateService, partnerPlaceService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance, isPlaceholderAddress, reverseGeocode } from '@tricigo/utils';
+import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance, isPlaceholderAddress, reverseGeocode, trimNotes } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { useAuthStore } from '@/stores/auth.store';
@@ -800,6 +800,10 @@ export function useRideActions() {
         dropoff_latitude: d.dropoff.location.latitude,
         dropoff_longitude: d.dropoff.location.longitude,
         dropoff_address: dropoffAddressFinal,
+        // 00578: notes for the driver at each endpoint. createRide tolerates
+        // the columns being absent (migration not applied yet).
+        pickup_notes: trimNotes(d.pickup.notes),
+        dropoff_notes: trimNotes(d.dropoff.notes),
         estimated_fare_cup: selectedFare?.estimated_fare_cup,
         estimated_distance_m: selectedFare?.estimated_distance_m,
         estimated_duration_s: selectedFare?.estimated_duration_s,
@@ -905,8 +909,8 @@ export function useRideActions() {
       }
 
       // Save pickup & dropoff as recent addresses (fire-and-forget)
-      recentAddressService.add(d.pickup.address, d.pickup.location.latitude, d.pickup.location.longitude).catch(() => {});
-      recentAddressService.add(d.dropoff.address, d.dropoff.location.latitude, d.dropoff.location.longitude).catch(() => {});
+      recentAddressService.add(d.pickup.address, d.pickup.location.latitude, d.pickup.location.longitude, d.pickup.notes).catch(() => {});
+      recentAddressService.add(d.dropoff.address, d.dropoff.location.latitude, d.dropoff.location.longitude, d.dropoff.notes).catch(() => {});
 
       setActiveRide(ride);
       setFlowStep('searching');

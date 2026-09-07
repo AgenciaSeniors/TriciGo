@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, FlatList, Alert, Pressable, RefreshControl, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
@@ -13,7 +13,7 @@ import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { colors, darkColors } from '@tricigo/theme';
 import { customerService } from '@tricigo/api';
-import { getErrorMessage, triggerHaptic } from '@tricigo/utils';
+import { getErrorMessage, triggerHaptic, trimNotes, ADDRESS_NOTES_MAX } from '@tricigo/utils';
 import { EmptyState } from '@tricigo/ui/EmptyState';
 import { SkeletonListItem } from '@tricigo/ui/Skeleton';
 import { useAuthStore } from '@/stores/auth.store';
@@ -53,6 +53,11 @@ export default function SavedLocationsScreen() {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [newLabel, setNewLabel] = useState('');
+  // 00578: fixed slot + details for the driver, saved with the place.
+  const [newKind, setNewKind] = useState<'home' | 'work' | 'other'>('other');
+  const [newDetails, setNewDetails] = useState('');
+  // Deep link from the search panel's empty Casa / Trabajo row.
+  const { kind: kindParam } = useLocalSearchParams<{ kind?: string }>();
   const [selectedAddress, setSelectedAddress] = useState<{ address: string; location: GeoPoint } | null>(null);
   const [saving, setSaving] = useState(false);
   const [mapSelectMode, setMapSelectMode] = useState(false);
@@ -83,6 +88,22 @@ export default function SavedLocationsScreen() {
     }).catch(() => {}).finally(() => setRefreshing(false));
   }, [user]);
 
+  // Linked from the search panel's empty Casa / Trabajo row: open the sheet
+  // with the slot already chosen and a default label.
+  useEffect(() => {
+    if (kindParam !== 'home' && kindParam !== 'work') return;
+    setEditingIndex(null);
+    setNewKind(kindParam);
+    setNewLabel(kindParam === 'home'
+      ? t('profile.location_kind_home', { defaultValue: 'Casa' })
+      : t('profile.location_kind_work', { defaultValue: 'Trabajo' }));
+    setNewDetails('');
+    setSelectedAddress(null);
+    setSheetVisible(true);
+    // Only on arrival with the param — not on every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kindParam]);
+
   const handleSave = async () => {
     if (!profile || !newLabel.trim() || !selectedAddress) return;
     setSaving(true);
@@ -92,6 +113,8 @@ export default function SavedLocationsScreen() {
         address: selectedAddress.address,
         latitude: selectedAddress.location.latitude,
         longitude: selectedAddress.location.longitude,
+        kind: newKind,
+        details: trimNotes(newDetails),
       };
 
       let updated: SavedLocation[];
@@ -105,6 +128,8 @@ export default function SavedLocationsScreen() {
       setLocations(updated);
       setSheetVisible(false);
       setNewLabel('');
+      setNewKind('other');
+      setNewDetails('');
       setSelectedAddress(null);
       setEditingIndex(null);
       setMapSelectMode(false);
@@ -152,12 +177,16 @@ export default function SavedLocationsScreen() {
       const loc = locations[index]!;
       setEditingIndex(index);
       setNewLabel(loc.label);
+      setNewKind(loc.kind ?? 'other');
+      setNewDetails(loc.details ?? '');
       setSelectedAddress({
         address: loc.address,
         location: { latitude: loc.latitude, longitude: loc.longitude },
       });
     } else {
       setEditingIndex(null);
+      setNewKind('other');
+      setNewDetails('');
       setNewLabel('');
       setSelectedAddress(null);
     }
@@ -275,6 +304,34 @@ export default function SavedLocationsScreen() {
           value={newLabel}
           onChangeText={setNewLabel}
         />
+        {/* Fixed slot: Casa / Trabajo get a permanent row at the top of the search. */}
+        <View className="flex-row gap-2 mt-3">
+          {(['home', 'work', 'other'] as const).map((k) => {
+            const active = newKind === k;
+            const icon = k === 'home' ? 'home-outline' : k === 'work' ? 'briefcase-outline' : 'star-outline';
+            const label = k === 'home'
+              ? t('profile.location_kind_home', { defaultValue: 'Casa' })
+              : k === 'work'
+                ? t('profile.location_kind_work', { defaultValue: 'Trabajo' })
+                : t('profile.location_kind_other', { defaultValue: 'Otro' });
+            return (
+              <Pressable
+                key={k}
+                onPress={() => {
+                  setNewKind(k);
+                  if (k !== 'other' && !newLabel.trim()) setNewLabel(label);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                className="flex-1 flex-row items-center justify-center py-2 rounded-lg border"
+                style={{ borderColor: active ? colors.brand.orange : colors.neutral[200], backgroundColor: active ? 'rgba(255,77,0,0.08)' : 'transparent', minHeight: 40 }}
+              >
+                <Ionicons name={icon} size={16} color={active ? colors.brand.orange : colors.neutral[500]} />
+                <Text variant="bodySmall" className="ml-1" style={{ color: active ? colors.brand.orange : colors.neutral[700] }}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <Text variant="bodySmall" color="secondary" className="mt-3 mb-2">
           {t('profile.location_address')}
         </Text>
@@ -320,6 +377,21 @@ export default function SavedLocationsScreen() {
             </Text>
           </View>
         )}
+
+        {/* 00578: details for the driver, saved with the place and prefilled
+            into every ride to it. */}
+        <View className="mt-3">
+          <Input
+            label={t('profile.location_details', { defaultValue: 'Detalles para el conductor' })}
+            placeholder={t('profile.location_details_placeholder', { defaultValue: 'Ej: #302 apto 4, edificio azul, tocar el timbre' })}
+            value={newDetails}
+            onChangeText={setNewDetails}
+            multiline
+            numberOfLines={2}
+            maxLength={ADDRESS_NOTES_MAX}
+            style={{ minHeight: 64, textAlignVertical: 'top' }}
+          />
+        </View>
 
         <View className="flex-row gap-3 mt-4">
           <View className="flex-1">
