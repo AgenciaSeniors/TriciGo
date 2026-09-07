@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, importPoiFromSearch, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -402,15 +402,12 @@ function AddressSearchInputInner({
         const dedupedStreets = dedupeSearchResults(primary, streetResults);
         const ranked = rankSearchResults([...primary, ...dedupedStreets], text, userLocation, frequentZonesRef.current);
 
-        // Normalize for display; keep _src on external rows so handleSelect
-        // can fire-and-forget import-mapbox-poi for Google selections.
+        // Normalize for display. (The client-side Mapbox import that used to
+        // ride on Google selections is gone: 00584 learns from the rides
+        // themselves, server-side, for the app and the web alike.)
         const rankedResults: AddressSearchResult[] = ranked
           .slice(0, searchResultCap(text))
-          .map((r) =>
-            r.source === 'google' || r.source === 'mapbox' || r.source === 'searchbox'
-              ? { ...normalize(r), _src: r }
-              : normalize(r),
-          );
+          .map((r) => normalize(r));
 
         // The resolved corner goes first (displayName === address → it is a
         // street row, so it asks for pin confirmation like any other). Rows
@@ -540,11 +537,6 @@ function AddressSearchInputInner({
       { latitude: result.latitude, longitude: result.longitude },
       { confirmPin: !result.displayName || result.displayName === result.address || zoneLike, zoneLike },
     );
-    // PR 4b: background fire-and-forget — grow cuba_pois via Mapbox lookup
-    // when the selection came from Google/Mapbox unified search. Never blocks UX.
-    if (result._src) {
-      void importPoiFromSearch(result._src, getSupabaseClient());
-    }
   };
 
   const handleSelectSaved = (loc: SavedLocation) => {

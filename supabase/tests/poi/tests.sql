@@ -248,3 +248,159 @@ DO $$ BEGIN
   PERFORM _t('T2z34 initial abbreviation keeps its period', _poi_clean_name('Copextel S. A. Villa Clara') = 'Copextel S. A.');
   PERFORM _t('T2z35 en Cuba is a name', _poi_clean_name('Embajada de Suiza en Cuba') = 'Embajada de Suiza en Cuba' AND _poi_clean_name('Casa Medina La Habana Cuba') = 'Casa Medina');
 END $$;
+
+-- T8: search_pois_smart v2 (00583)
+DO $$
+DECLARE v_hotel bigint; v_stop bigint; v_pc_lm bigint; v_pc_other bigint; v_r record; v_n int;
+BEGIN
+  SELECT id INTO v_hotel FROM cuba_pois WHERE name = 'Hotel Habana Libre' AND category <> 'public_transport' AND is_active LIMIT 1;
+  SELECT id INTO v_stop  FROM cuba_pois WHERE name = 'Hotel Habana Libre' AND category = 'public_transport' LIMIT 1;
+
+  PERFORM _t('T8a return type ends with the 3 new columns',
+    pg_get_function_result('public.search_pois_smart(text,double precision,double precision,integer,integer)'::regprocedure)
+      LIKE '%matched_alias text, display_name text, is_landmark boolean)');
+  SELECT * INTO v_r FROM search_pois_smart('capitolio', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8b exact bare match is first and named by display_name', v_r.name = 'El Capitolio' AND v_r.display_name = 'El Capitolio' AND v_r.match_reason = 'name_exact');
+
+  SELECT * INTO v_r FROM search_pois_smart('la benefica', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8c alias resolves with matched_alias', v_r.name LIKE 'Hospital Miguel Enr%' AND v_r.matched_alias IS NOT NULL);
+
+  SELECT count(*) INTO v_n FROM search_pois_smart('habana libre', 23.1357, -82.3666, 30000, 10) s WHERE s.id = v_stop;
+  PERFORM _t('T8d shadow stop demoted out', v_n = 0);
+  SELECT * INTO v_r FROM search_pois_smart('habana libre', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8e bare query hits the hotel first', v_r.id = v_hotel);
+  SELECT count(*) INTO v_n FROM search_pois_smart('parada habana libre', 23.1357, -82.3666, 30000, 10) s WHERE s.id = v_stop;
+  PERFORM _t('T8f transport intent restores the stop', v_n = 1);
+
+  SELECT id INTO v_pc_other FROM cuba_pois WHERE name = 'Parque Central' AND municipality = 'Centro Habana' LIMIT 1;
+  SELECT id INTO v_pc_lm    FROM cuba_pois WHERE name = 'Parque Central' AND id <> v_pc_other AND is_active LIMIT 1;
+  UPDATE cuba_pois SET is_landmark = true WHERE id = v_pc_lm;
+  SELECT * INTO v_r FROM search_pois_smart('parque central', 23.1435, -82.3590, 30000, 5) LIMIT 1;  -- origin ON the non-landmark twin
+  PERFORM _t('T8g landmark outranks the closer twin', v_r.id = v_pc_lm AND v_r.is_landmark);
+
+  UPDATE cuba_pois SET is_landmark = false WHERE id = v_pc_lm;
+  UPDATE cuba_pois SET pick_count = 20 WHERE id = v_pc_other;
+  SELECT * INTO v_r FROM search_pois_smart('parque central', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8h picks outrank the plain twin', v_r.id = v_pc_other);
+  UPDATE cuba_pois SET pick_count = 0 WHERE id = v_pc_other;
+
+  SELECT count(*) INTO v_n FROM search_pois_smart('coppelia', 23.1357, -82.3666, 30000, 10) s
+   WHERE EXISTS (SELECT 1 FROM cuba_pois m WHERE m.id = s.id AND m.merged_into IS NOT NULL);
+  PERFORM _t('T8i merged rows excluded', v_n = 0);
+
+  -- 'cafeteria …' also triggers the category keyword, so count only the name matches
+  SELECT count(*) INTO v_n FROM search_pois_smart('cafeteria la rampa', 23.1357, -82.3666, 30000, 10) s WHERE s.match_reason = 'name_exact';
+  PERFORM _t('T8j same-name rows within 300 m collapse', v_n = 2);
+
+  SELECT * INTO v_r FROM search_pois_smart('panaderia prueba', 23.1352, -82.3702, 30000, 5) LIMIT 1;  -- origin on the OLD one
+  PERFORM _t('T8k stale row sinks below the fresh twin', v_r.name = 'Panadería Prueba Fresca');
+
+  SELECT count(*) INTO v_n FROM search_pois_smart('capitolio', NULL, NULL, 30000, 5);
+  PERFORM _t('T8l null proximity returns nothing', v_n = 0);
+
+  SELECT count(*) INTO v_n FROM search_pois_smart('hospital', 23.1357, -82.3666, 30000, 10) s WHERE s.matched_category = 'hospital' AND s.tricigo_category = 'hospital';
+  PERFORM _t('T8m keyword query returns category matches', v_n >= 2);
+  SELECT * INTO v_r FROM search_pois_smart('hospital', 23.1357, -82.3666, 30000, 10) LIMIT 1;
+  PERFORM _t('T8n generic placeholder is not first', lower(v_r.name) <> 'hospital');
+
+  SELECT * INTO v_r FROM search_pois_smart('cupet santa catalina', 23.1357, -82.3666, 30000, 5) LIMIT 1;
+  PERFORM _t('T8o effective category returned', v_r.tricigo_category = 'gas_station');
+
+  SELECT l.name INTO v_r FROM cuba_pois p, LATERAL lookup_nearest_poi_ranked(ST_Y(p.location::geometry), ST_X(p.location::geometry), 30) l
+   WHERE p.name = 'La Roca, La Habana, Cuba' LIMIT 1;
+  PERFORM _t('T8p reverse geocode returns display_name', v_r.name = 'La Roca');
+END $$;
+
+-- T9: learning from picks (00584)
+DO $$
+DECLARE v_hotel bigint; v_ben bigint; v_before int; v_ok boolean; v_uid uuid := '00000000-0000-0000-0000-00000000c001'; v_n int;
+BEGIN
+  SELECT id INTO v_hotel FROM cuba_pois WHERE name = 'Hotel Habana Libre' AND category <> 'public_transport' AND is_active LIMIT 1;
+  SELECT id INTO v_ben   FROM cuba_pois WHERE name = 'Hospital Miguel Enríquez' AND is_active LIMIT 1;
+  INSERT INTO users (id, role, full_name) VALUES (v_uid, 'customer', 'Rider Prueba') ON CONFLICT DO NOTHING;
+
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  PERFORM _t('T9a unauthenticated pick refused', record_poi_pick(v_hotel) = false);
+  PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+  SELECT pick_count INTO v_before FROM cuba_pois WHERE id = v_hotel;
+  v_ok := record_poi_pick(v_hotel);
+  PERFORM _t('T9b authenticated pick counts', v_ok AND (SELECT pick_count FROM cuba_pois WHERE id = v_hotel) = v_before + 1
+                                              AND (SELECT last_picked_at FROM cuba_pois WHERE id = v_hotel) > now() - interval '1 minute');
+  PERFORM _t('T9c pick on a merged row is a no-op',
+             record_poi_pick((SELECT id FROM cuba_pois WHERE merged_into IS NOT NULL LIMIT 1)) = false);
+  -- rate limit 60/h: T9b + T9c already used 2 of the window → 58 more succeed, the 61st is refused
+  FOR i IN 1..58 LOOP PERFORM record_poi_pick(v_hotel); END LOOP;
+  PERFORM _t('T9d 61st pick in the hour is refused', record_poi_pick(v_hotel) = false);
+  DELETE FROM rate_limits WHERE key LIKE 'poi_pick:%';
+  UPDATE cuba_pois SET pick_count = v_before WHERE id = v_hotel;
+
+  PERFORM _t('T9e bump_poi_pick not executable by app roles',
+             NOT has_function_privilege('authenticated', 'public.bump_poi_pick(bigint)', 'EXECUTE')
+         AND NOT has_function_privilege('anon', 'public.bump_poi_pick(bigint)', 'EXECUTE'));
+  PERFORM _t('T9f record_poi_pick not executable by anon', NOT has_function_privilege('anon', 'public.record_poi_pick(bigint)', 'EXECUTE')
+         AND has_function_privilege('authenticated', 'public.record_poi_pick(bigint)', 'EXECUTE'));
+
+  PERFORM _t('T9g find_nearby_poi_match by alias',
+             find_nearby_poi_match('La Benéfica', ST_Y((SELECT location::geometry FROM cuba_pois WHERE id = v_ben)), ST_X((SELECT location::geometry FROM cuba_pois WHERE id = v_ben)), 60) = v_ben);
+  PERFORM _t('T9h find_nearby_poi_match by display name',
+             find_nearby_poi_match('La Roca', ST_Y((SELECT location::geometry FROM cuba_pois WHERE name = 'La Roca, La Habana, Cuba')), ST_X((SELECT location::geometry FROM cuba_pois WHERE name = 'La Roca, La Habana, Cuba')), 60)
+             = (SELECT id FROM cuba_pois WHERE name = 'La Roca, La Habana, Cuba'));
+  SELECT count(*) INTO v_n FROM cuba_pois m WHERE m.merged_into IS NOT NULL
+     AND find_nearby_poi_match(m.name, ST_Y(m.location::geometry), ST_X(m.location::geometry), 60) = m.id;
+  PERFORM _t('T9i merged rows never matched', v_n = 0);
+END $$;
+
+-- T9 (cont.): venue name extraction, rides trigger, drain tick (00584 part 2)
+DO $$
+DECLARE v_hotel bigint; v_before int; v_n int; v_req bigint;
+BEGIN
+  SELECT id INTO v_hotel FROM cuba_pois WHERE name = 'Hotel Habana Libre' AND category <> 'public_transport' AND is_active LIMIT 1;
+  PERFORM _t('T9j venue leads', _poi_leading_venue_name('Coppelia, Calle 23 e/ L y K, Plaza de la Revolución, La Habana') = 'Coppelia'
+                              AND _poi_leading_venue_name('Paladar Doña Eutimia, Callejón del Chorro 60, La Habana Vieja') = 'Paladar Doña Eutimia');
+  PERFORM _t('T9k corners/streets/zones/placeholders give NULL',
+             _poi_leading_venue_name('Calle 23 y Calle 12, Plaza, La Habana') IS NULL
+         AND _poi_leading_venue_name('Reina e/ Campanario y Lealtad, Centro Habana') IS NULL
+         AND _poi_leading_venue_name('23 y 12, Vedado') IS NULL
+         AND _poi_leading_venue_name('Vedado, La Habana') IS NULL
+         AND _poi_leading_venue_name('Plaza de la Revolución, La Habana') IS NULL
+         AND _poi_leading_venue_name('Playa, La Habana') IS NULL
+         AND _poi_leading_venue_name('Detectando dirección...') IS NULL
+         AND _poi_leading_venue_name('Cerca de Capitolio') IS NULL
+         AND _poi_leading_venue_name('23.12638, -82.35472') IS NULL
+         AND _poi_leading_venue_name('Av 51, Marianao') IS NULL
+         AND _poi_leading_venue_name('X, La Habana') IS NULL);
+
+  SELECT pick_count INTO v_before FROM cuba_pois WHERE id = v_hotel;
+  INSERT INTO rides (pickup_address, pickup_lat, pickup_lng, dropoff_address, dropoff_lat, dropoff_lng)
+  VALUES ('Calle 23 y Calle 12, Plaza de la Revolución, La Habana', 23.1408, -82.3830,
+          'Hotel Habana Libre, Calle L e/ 23 y 25, Plaza de la Revolución, La Habana',
+          ST_Y((SELECT location::geometry FROM cuba_pois WHERE id = v_hotel)), ST_X((SELECT location::geometry FROM cuba_pois WHERE id = v_hotel)));
+  PERFORM _t('T9l ride dropoff credits the POI', (SELECT pick_count FROM cuba_pois WHERE id = v_hotel) = v_before + 1);
+  PERFORM _t('T9m nothing queued for a known POI or a corner', (SELECT count(*) FROM poi_import_queue) = 0);
+
+  INSERT INTO rides (pickup_address, pickup_lat, pickup_lng, dropoff_address, dropoff_lat, dropoff_lng)
+  VALUES ('Vedado, La Habana', 23.1408, -82.3830, 'Paladar Doña Eutimia, Callejón del Chorro 60, La Habana Vieja', 23.1412, -82.3520);
+  INSERT INTO rides (pickup_address, pickup_lat, pickup_lng, dropoff_address, dropoff_lat, dropoff_lng)
+  VALUES ('Vedado, La Habana', 23.1408, -82.3830, 'Paladar Dona Eutimia, Callejón del Chorro, La Habana Vieja', 23.1413, -82.3521);
+  SELECT count(*) INTO v_n FROM poi_import_queue WHERE status = 'pending';
+  PERFORM _t('T9n unknown venue queued exactly once', v_n = 1
+             AND (SELECT name || '|' || endpoint FROM poi_import_queue LIMIT 1) = 'Paladar Doña Eutimia|dropoff');
+
+  INSERT INTO rides (pickup_address, dropoff_address) VALUES ('Coppelia, Calle 23', 'Hotel Habana Libre, Calle L');
+  PERFORM _t('T9o ride inserts even without coordinates', (SELECT count(*) FROM rides) = 4);
+
+  UPDATE poi_import_queue SET status = 'done';
+  PERFORM _t('T9p tick is a no-op without pending rows', drain_poi_import_queue_tick() IS NULL AND (SELECT count(*) FROM cron_http_calls) = 0);
+  UPDATE poi_import_queue SET status = 'pending';
+  v_req := drain_poi_import_queue_tick();
+  PERFORM _t('T9q tick posts {drain:20} with the service key via cron_http_post',
+             v_req IS NOT NULL
+         AND (SELECT jobname FROM cron_http_calls WHERE request_id = v_req) = 'drain-poi-import-queue'
+         AND (SELECT body->>'drain' FROM net._stub_requests WHERE id = v_req) = '20'
+         AND (SELECT headers->>'Authorization' FROM net._stub_requests WHERE id = v_req) = 'Bearer sb_secret_local_stub'
+         AND (SELECT timeout_ms FROM net._stub_requests WHERE id = v_req) = 30000);
+  PERFORM _t('T9r cron job scheduled every 15 min', (SELECT schedule FROM cron.job WHERE jobname = 'drain-poi-import-queue') = '*/15 * * * *');
+  PERFORM _t('T9s tick/trigger helpers not executable by app roles',
+             NOT has_function_privilege('authenticated', 'public.drain_poi_import_queue_tick()', 'EXECUTE')
+         AND NOT has_function_privilege('anon', 'public._poi_leading_venue_name(text)', 'EXECUTE'));
+END $$;

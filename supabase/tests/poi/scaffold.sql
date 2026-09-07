@@ -849,3 +849,464 @@ UPDATE public.cuba_pois SET footprint_radius_m = 25 WHERE name = 'El Capitolio';
 -- Bus terminal: transport row a curated seed is allowed to alias (00579 §D allow_transport).
 INSERT INTO public.cuba_pois (name, category, subcategory, tricigo_category, location, source, confidence, source_ids, province, municipality)
 VALUES ('Terminal de Ómnibus Nacionales de Villanueva', 'amenity', 'bus_station', 'transport', ST_SetSRID(ST_MakePoint(-82.3922, 23.1268), 4326)::geography, 'merged', 0.8, '{"osm": "node/900001"}', 'La Habana', 'Plaza de la Revolución');
+
+-- ============================================================================
+-- PR-2 shims (00583 / 00584): rides, rate limiter, cron + net stubs, the live
+-- bodies 00583 patches or drops, and the fixture rows T8/T9 need.
+-- ============================================================================
+CREATE TABLE public.rides (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id uuid,
+  status text NOT NULL DEFAULT 'searching',
+  pickup_address text, dropoff_address text,
+  pickup_lat double precision, pickup_lng double precision,
+  dropoff_lat double precision, dropoff_lng double precision,
+  pickup_location geography(Point,4326), dropoff_location geography(Point,4326),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- 00105 (live): rate limiter
+CREATE TABLE IF NOT EXISTS public.rate_limits (
+  key TEXT NOT NULL,
+  window_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  count INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (key, window_start)
+);
+CREATE OR REPLACE FUNCTION public.check_rate_limit(p_key TEXT, p_max_requests INTEGER, p_window_seconds INTEGER)
+RETURNS TABLE(allowed BOOLEAN, current_count INTEGER, reset_at TIMESTAMPTZ)
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_window_start TIMESTAMPTZ; v_count INTEGER;
+BEGIN
+  v_window_start := to_timestamp(floor(EXTRACT(EPOCH FROM NOW()) / p_window_seconds) * p_window_seconds);
+  INSERT INTO rate_limits (key, window_start, count) VALUES (p_key, v_window_start, 1)
+  ON CONFLICT (key, window_start) DO UPDATE SET count = rate_limits.count + 1
+  RETURNING rate_limits.count INTO v_count;
+  RETURN QUERY SELECT v_count <= p_max_requests, v_count, v_window_start + make_interval(secs => p_window_seconds);
+END $$;
+
+-- pg_cron / pg_net stand-ins: schedule() records, http_post() records.
+CREATE SCHEMA IF NOT EXISTS cron;
+CREATE TABLE cron.job (jobid bigserial PRIMARY KEY, jobname text UNIQUE, schedule text, command text);
+CREATE OR REPLACE FUNCTION cron.schedule(p_jobname text, p_schedule text, p_command text) RETURNS bigint LANGUAGE sql AS $$
+  INSERT INTO cron.job (jobname, schedule, command) VALUES (p_jobname, p_schedule, p_command) RETURNING jobid $$;
+CREATE OR REPLACE FUNCTION cron.unschedule(p_jobname text) RETURNS boolean LANGUAGE sql AS $$
+  DELETE FROM cron.job WHERE jobname = p_jobname RETURNING true $$;
+CREATE SCHEMA IF NOT EXISTS net;
+CREATE TABLE net._stub_requests (id bigserial PRIMARY KEY, url text, headers jsonb, body jsonb, timeout_ms int, created_at timestamptz DEFAULT now());
+CREATE OR REPLACE FUNCTION net.http_post(url text, body jsonb DEFAULT '{}'::jsonb, params jsonb DEFAULT '{}'::jsonb, headers jsonb DEFAULT '{}'::jsonb, timeout_milliseconds integer DEFAULT 5000)
+RETURNS bigint LANGUAGE sql AS $$
+  INSERT INTO net._stub_requests (url, headers, body, timeout_ms) VALUES (url, headers, body, timeout_milliseconds) RETURNING id $$;
+CREATE TABLE public.cron_http_calls (request_id bigint PRIMARY KEY, jobname text NOT NULL, called_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.cron_http_expectations (jobname text PRIMARY KEY, ok_statuses int[] NOT NULL, note text);
+-- 00506 (live shape): fire first, log second.
+CREATE OR REPLACE FUNCTION public.cron_http_post(p_jobname text, url text, headers jsonb DEFAULT '{}'::jsonb, body jsonb DEFAULT '{}'::jsonb, timeout_milliseconds integer DEFAULT 5000)
+RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public', 'net', 'pg_catalog' AS $function$
+DECLARE v_url text := url; v_headers jsonb := headers; v_body jsonb := body; v_timeout integer := timeout_milliseconds; v_id bigint;
+BEGIN
+  v_id := net.http_post(url := v_url, headers := v_headers, body := v_body, timeout_milliseconds := v_timeout);
+  BEGIN
+    INSERT INTO public.cron_http_calls (request_id, jobname) VALUES (v_id, p_jobname);
+  EXCEPTION WHEN OTHERS THEN RAISE WARNING 'cron_http_post: log failed for %: %', p_jobname, SQLERRM;
+  END;
+  RETURN v_id;
+END $function$;
+CREATE OR REPLACE FUNCTION public.get_service_role_key() RETURNS text LANGUAGE sql AS $$ SELECT 'sb_secret_local_stub' $$;
+REVOKE ALL ON FUNCTION public.get_service_role_key() FROM PUBLIC, anon, authenticated;
+
+-- 00546 (live): placeholder detector
+CREATE OR REPLACE FUNCTION public._ride_address_is_placeholder(p_addr text)
+RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path TO 'public', 'extensions', 'pg_catalog' AS $function$
+  SELECT
+    p_addr IS NULL
+    OR btrim(p_addr) = ''
+    OR p_addr ~ '^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$'
+    OR p_addr = 'Ubicación seleccionada en el mapa'
+    OR p_addr LIKE 'Cerca de %'
+    OR btrim(p_addr) IN (
+         'Detectando dirección...', 'Detecting address...', 'Detectando endereço...',
+         'Detectando dirección…', 'Detecting address…', 'Detectando endereço…',
+         'Ubicación actual', 'Current location', 'Localização atual'
+       );
+$function$;
+
+-- LIVE 2026-09-06 (md5(prosrc) 0cbc8cab5a14df4d5a2583c52277f47e): lookup_nearest_poi_ranked (00570 body)
+CREATE OR REPLACE FUNCTION public.lookup_nearest_poi_ranked(p_lat double precision, p_lng double precision, p_radius_m integer DEFAULT 30)
+ RETURNS TABLE(name text, category text, distance_m double precision)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+  SELECT
+    p.name,
+    p.category,
+    -- 00570: distancia EFECTIVA a la huella del landmark, no a su punto.
+    -- Filas sin huella (footprint_radius_m NULL, todas salvo las curadas):
+    -- idéntica a la cruda. Devolverla efectiva es load-bearing: el cliente
+    -- solo antepone el POI si distance_m <= 20 (POI_INCLUSION_THRESHOLD_M
+    -- en packages/utils/src/geo.ts).
+    GREATEST(
+      ST_Distance(
+        p.location,
+        ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography
+      ) - (CASE WHEN p.is_admin THEN COALESCE(p.footprint_radius_m, 0) ELSE 0 END),
+      0
+    ) AS distance_m
+  FROM cuba_pois p
+  WHERE p_lat IS NOT NULL
+    AND p_lng IS NOT NULL
+    AND p.is_active = true
+    -- 00570: prefiltro CONSTANTE para que el índice GIST siga sirviendo la
+    -- consulta (60 = tope duro del CHECK de footprint_radius_m — mantener
+    -- acoplados). El filtro exacto por fila viene después.
+    AND ST_DWithin(
+      p.location,
+      ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography,
+      p_radius_m + 60
+    )
+    -- 00570: un landmark califica si su HUELLA toca el círculo de búsqueda,
+    -- aunque su punto central quede fuera. Filas sin huella: predicado
+    -- idéntico al de 00550.
+    AND ST_DWithin(
+      p.location,
+      ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography,
+      p_radius_m + (CASE WHEN p.is_admin THEN COALESCE(p.footprint_radius_m, 0) ELSE 0 END)
+    )
+    -- 00550: el vocabulario normalizado (poblado al 100 %), no la lista
+    -- blanca de categorías crudas estilo OSM, que dejaba fuera al 84,6 %
+    -- de los lugares — incluidas todas las playas, hoteles, hospitales e
+    -- iglesias.
+    AND p.tricigo_category IS NOT NULL
+  ORDER BY
+    -- 00550: la distancia manda, en bandas de 10 m; is_admin y confidence
+    -- desempatan dentro de la banda. 00570: la distancia que banda es la
+    -- EFECTIVA — un pin dentro de la huella pone al landmark en banda 0 y
+    -- ahí is_admin le gana el empate a cualquier sub-local pegado al pin.
+    floor(GREATEST(
+      ST_Distance(p.location, ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography)
+      - (CASE WHEN p.is_admin THEN COALESCE(p.footprint_radius_m, 0) ELSE 0 END), 0) / 10),
+    p.is_admin DESC,
+    p.confidence DESC NULLS LAST,
+    GREATEST(
+      ST_Distance(p.location, ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography)
+      - (CASE WHEN p.is_admin THEN COALESCE(p.footprint_radius_m, 0) ELSE 0 END), 0),
+    -- 00570: desempates finales DETERMINISTAS: distancia cruda (dos admins
+    -- con efectiva 0 resuelven al punto más cercano) y p.id — los imports
+    -- apilan POIs distintos en la MISMA coordenada con la misma confidence
+    -- (medido: 3 pares a 0.00 m en el barrido nacional) y sin id el ganador
+    -- depende del plan de ejecución, no de los datos.
+    ST_Distance(p.location, ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography),
+    p.id
+  LIMIT 1;
+$function$;
+
+-- LIVE 2026-09-06 (md5(prosrc) 72be440035deeaff062bba120a333658): search_pois_smart v1 —
+-- the real name (00583 drops it) and _v1 (A/B control for search_suite.sql).
+CREATE OR REPLACE FUNCTION public.search_pois_smart(query text, lat double precision DEFAULT 23.1136, lng double precision DEFAULT '-82.3666'::numeric, radius_m integer DEFAULT 50000, max_results integer DEFAULT 10)
+ RETURNS TABLE(id bigint, name text, category text, subcategory text, tricigo_category text, address text, municipality text, province text, latitude double precision, longitude double precision, phone text, website text, source text, is_admin boolean, confidence real, distance_m double precision, matched_category text, match_reason text)
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+DECLARE
+  v_norm TEXT;
+  v_like TEXT;
+  v_category TEXT;
+  v_query_is_keyword BOOLEAN;
+  v_tokens TEXT[];
+  v_token_count INT;
+BEGIN
+  v_norm := lower(unaccent(trim(query)));
+  IF v_norm IS NULL OR length(v_norm) < 1 THEN RETURN; END IF;
+  v_like := '%' || v_norm || '%';
+
+  v_tokens := ARRAY(
+    SELECT t FROM unnest(string_to_array(v_norm, ' ')) AS t
+    WHERE length(t) >= 2
+  );
+  v_token_count := COALESCE(array_length(v_tokens, 1), 0);
+
+  SELECT k.tricigo_category INTO v_category
+  FROM cuba_search_keywords k
+  WHERE v_norm = k.keyword OR v_norm LIKE k.keyword || ' %'
+  ORDER BY length(k.keyword) DESC
+  LIMIT 1;
+
+  SELECT EXISTS (
+    SELECT 1 FROM cuba_search_keywords k WHERE k.keyword = v_norm
+  ) INTO v_query_is_keyword;
+
+  RETURN QUERY
+  WITH ranked AS (
+    SELECT
+      p.id, p.name, p.category, p.subcategory, p.tricigo_category,
+      COALESCE(p.address, '') AS address,
+      COALESCE(p.municipality, p.city, '') AS municipality,
+      COALESCE(p.province, '') AS province,
+      ST_Y(p.location::geometry) AS latitude,
+      ST_X(p.location::geometry) AS longitude,
+      p.phone, p.website, p.source, p.is_admin, p.confidence,
+      ST_Distance(
+        p.location,
+        ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography
+      ) AS distance_m,
+      v_category AS matched_category,
+      CASE
+        WHEN p.name_normalized = v_norm THEN 'name_exact'
+        WHEN p.name_normalized ILIKE v_norm || '%' THEN 'name_prefix'
+        WHEN p.name_normalized ILIKE v_like OR p.name ILIKE v_like THEN 'name_substring'
+        WHEN v_token_count > 0
+             AND NOT EXISTS (
+               SELECT 1 FROM unnest(v_tokens) AS t
+               WHERE NOT (
+                 p.name_normalized ILIKE '%' || t || '%'
+                 OR COALESCE(p.address_normalized, '') ILIKE '%' || t || '%'
+               )
+             )
+        THEN 'name_address_tokens'
+        WHEN similarity(p.name_normalized, v_norm) > 0.3 THEN 'name_fuzzy'
+        WHEN v_category IS NOT NULL AND p.tricigo_category = v_category THEN 'category_only'
+        ELSE 'unknown'
+      END AS match_reason,
+      CASE
+        WHEN v_query_is_keyword AND p.name_normalized = v_norm THEN 1
+        ELSE 0
+      END AS is_generic,
+      CASE
+        WHEN p.name_normalized = v_norm THEN 0::numeric
+        WHEN p.name_normalized ILIKE v_norm || '%' THEN 1::numeric
+        WHEN p.name_normalized ILIKE v_like OR p.name ILIKE v_like THEN 2::numeric
+        WHEN v_token_count > 0
+             AND NOT EXISTS (
+               SELECT 1 FROM unnest(v_tokens) AS t
+               WHERE NOT (
+                 p.name_normalized ILIKE '%' || t || '%'
+                 OR COALESCE(p.address_normalized, '') ILIKE '%' || t || '%'
+               )
+             )
+        THEN 2.5::numeric
+        WHEN similarity(p.name_normalized, v_norm) > 0.3 THEN 2.8::numeric
+        WHEN v_category IS NOT NULL AND p.tricigo_category = v_category THEN 3::numeric
+        ELSE 9::numeric
+      END AS rank_quality
+    FROM cuba_pois p
+    WHERE p.is_active
+      AND ST_DWithin(p.location, ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography, radius_m)
+      AND p.category NOT IN (
+        'highway', 'landuse', 'waterway', 'building', 'natural', 'barrier', 'place', 'man_made',
+        'railway'
+      )
+      AND NOT (p.category = 'amenity' AND p.subcategory IN ('telephone', 'drinking_water'))
+      AND (
+        p.name_normalized ILIKE v_like
+        OR p.name ILIKE v_like
+        OR (
+          v_token_count > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest(v_tokens) AS t
+            WHERE NOT (
+              p.name_normalized ILIKE '%' || t || '%'
+              OR COALESCE(p.address_normalized, '') ILIKE '%' || t || '%'
+            )
+          )
+        )
+        OR similarity(p.name_normalized, v_norm) > 0.3
+        OR (v_category IS NOT NULL AND p.tricigo_category = v_category)
+      )
+  ),
+  deduped AS (
+    SELECT r.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY
+          FLOOR(r.longitude * 1000)::int,
+          FLOOR(r.latitude * 1000)::int,
+          COALESCE(r.matched_category, r.tricigo_category, r.match_reason)
+        ORDER BY
+          r.rank_quality ASC,
+          r.is_admin DESC,
+          r.confidence DESC NULLS LAST,
+          r.distance_m ASC
+      ) AS coord_rk
+    FROM ranked r
+  )
+  SELECT
+    d.id, d.name, d.category, d.subcategory, d.tricigo_category,
+    d.address, d.municipality, d.province, d.latitude, d.longitude,
+    d.phone, d.website, d.source, d.is_admin, d.confidence,
+    d.distance_m, d.matched_category, d.match_reason
+  FROM deduped d
+  WHERE d.coord_rk = 1
+  ORDER BY (
+    d.rank_quality * 1000
+    + d.is_generic * 5000
+    + CASE WHEN d.is_admin THEN 0 ELSE 40 END
+    + (1 - COALESCE(d.confidence, 0.5)) * 30
+    + LEAST(d.distance_m / 1000.0, 30)
+    + CASE WHEN d.phone IS NOT NULL OR d.website IS NOT NULL THEN 0 ELSE 8 END
+  ) ASC,
+  d.id ASC
+  LIMIT max_results;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.search_pois_smart_v1(query text, lat double precision DEFAULT 23.1136, lng double precision DEFAULT '-82.3666'::numeric, radius_m integer DEFAULT 50000, max_results integer DEFAULT 10)
+ RETURNS TABLE(id bigint, name text, category text, subcategory text, tricigo_category text, address text, municipality text, province text, latitude double precision, longitude double precision, phone text, website text, source text, is_admin boolean, confidence real, distance_m double precision, matched_category text, match_reason text)
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+DECLARE
+  v_norm TEXT;
+  v_like TEXT;
+  v_category TEXT;
+  v_query_is_keyword BOOLEAN;
+  v_tokens TEXT[];
+  v_token_count INT;
+BEGIN
+  v_norm := lower(unaccent(trim(query)));
+  IF v_norm IS NULL OR length(v_norm) < 1 THEN RETURN; END IF;
+  v_like := '%' || v_norm || '%';
+
+  v_tokens := ARRAY(
+    SELECT t FROM unnest(string_to_array(v_norm, ' ')) AS t
+    WHERE length(t) >= 2
+  );
+  v_token_count := COALESCE(array_length(v_tokens, 1), 0);
+
+  SELECT k.tricigo_category INTO v_category
+  FROM cuba_search_keywords k
+  WHERE v_norm = k.keyword OR v_norm LIKE k.keyword || ' %'
+  ORDER BY length(k.keyword) DESC
+  LIMIT 1;
+
+  SELECT EXISTS (
+    SELECT 1 FROM cuba_search_keywords k WHERE k.keyword = v_norm
+  ) INTO v_query_is_keyword;
+
+  RETURN QUERY
+  WITH ranked AS (
+    SELECT
+      p.id, p.name, p.category, p.subcategory, p.tricigo_category,
+      COALESCE(p.address, '') AS address,
+      COALESCE(p.municipality, p.city, '') AS municipality,
+      COALESCE(p.province, '') AS province,
+      ST_Y(p.location::geometry) AS latitude,
+      ST_X(p.location::geometry) AS longitude,
+      p.phone, p.website, p.source, p.is_admin, p.confidence,
+      ST_Distance(
+        p.location,
+        ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography
+      ) AS distance_m,
+      v_category AS matched_category,
+      CASE
+        WHEN p.name_normalized = v_norm THEN 'name_exact'
+        WHEN p.name_normalized ILIKE v_norm || '%' THEN 'name_prefix'
+        WHEN p.name_normalized ILIKE v_like OR p.name ILIKE v_like THEN 'name_substring'
+        WHEN v_token_count > 0
+             AND NOT EXISTS (
+               SELECT 1 FROM unnest(v_tokens) AS t
+               WHERE NOT (
+                 p.name_normalized ILIKE '%' || t || '%'
+                 OR COALESCE(p.address_normalized, '') ILIKE '%' || t || '%'
+               )
+             )
+        THEN 'name_address_tokens'
+        WHEN similarity(p.name_normalized, v_norm) > 0.3 THEN 'name_fuzzy'
+        WHEN v_category IS NOT NULL AND p.tricigo_category = v_category THEN 'category_only'
+        ELSE 'unknown'
+      END AS match_reason,
+      CASE
+        WHEN v_query_is_keyword AND p.name_normalized = v_norm THEN 1
+        ELSE 0
+      END AS is_generic,
+      CASE
+        WHEN p.name_normalized = v_norm THEN 0::numeric
+        WHEN p.name_normalized ILIKE v_norm || '%' THEN 1::numeric
+        WHEN p.name_normalized ILIKE v_like OR p.name ILIKE v_like THEN 2::numeric
+        WHEN v_token_count > 0
+             AND NOT EXISTS (
+               SELECT 1 FROM unnest(v_tokens) AS t
+               WHERE NOT (
+                 p.name_normalized ILIKE '%' || t || '%'
+                 OR COALESCE(p.address_normalized, '') ILIKE '%' || t || '%'
+               )
+             )
+        THEN 2.5::numeric
+        WHEN similarity(p.name_normalized, v_norm) > 0.3 THEN 2.8::numeric
+        WHEN v_category IS NOT NULL AND p.tricigo_category = v_category THEN 3::numeric
+        ELSE 9::numeric
+      END AS rank_quality
+    FROM cuba_pois p
+    WHERE p.is_active
+      AND ST_DWithin(p.location, ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography, radius_m)
+      AND p.category NOT IN (
+        'highway', 'landuse', 'waterway', 'building', 'natural', 'barrier', 'place', 'man_made',
+        'railway'
+      )
+      AND NOT (p.category = 'amenity' AND p.subcategory IN ('telephone', 'drinking_water'))
+      AND (
+        p.name_normalized ILIKE v_like
+        OR p.name ILIKE v_like
+        OR (
+          v_token_count > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest(v_tokens) AS t
+            WHERE NOT (
+              p.name_normalized ILIKE '%' || t || '%'
+              OR COALESCE(p.address_normalized, '') ILIKE '%' || t || '%'
+            )
+          )
+        )
+        OR similarity(p.name_normalized, v_norm) > 0.3
+        OR (v_category IS NOT NULL AND p.tricigo_category = v_category)
+      )
+  ),
+  deduped AS (
+    SELECT r.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY
+          FLOOR(r.longitude * 1000)::int,
+          FLOOR(r.latitude * 1000)::int,
+          COALESCE(r.matched_category, r.tricigo_category, r.match_reason)
+        ORDER BY
+          r.rank_quality ASC,
+          r.is_admin DESC,
+          r.confidence DESC NULLS LAST,
+          r.distance_m ASC
+      ) AS coord_rk
+    FROM ranked r
+  )
+  SELECT
+    d.id, d.name, d.category, d.subcategory, d.tricigo_category,
+    d.address, d.municipality, d.province, d.latitude, d.longitude,
+    d.phone, d.website, d.source, d.is_admin, d.confidence,
+    d.distance_m, d.matched_category, d.match_reason
+  FROM deduped d
+  WHERE d.coord_rk = 1
+  ORDER BY (
+    d.rank_quality * 1000
+    + d.is_generic * 5000
+    + CASE WHEN d.is_admin THEN 0 ELSE 40 END
+    + (1 - COALESCE(d.confidence, 0.5)) * 30
+    + LEAST(d.distance_m / 1000.0, 30)
+    + CASE WHEN d.phone IS NOT NULL OR d.website IS NOT NULL THEN 0 ELSE 8 END
+  ) ASC,
+  d.id ASC
+  LIMIT max_results;
+END;
+$function$;
+
+-- ---------------------------------------------------------- PR-2 fixtures --
+INSERT INTO public.cuba_pois (name, category, subcategory, tricigo_category, location, source, confidence, source_ids, province, municipality) VALUES
+  -- a bus platform carrying the hotel's name 15 m north of the hotel fixture (T8: stop demotion)
+  ('Hotel Habana Libre', 'public_transport', 'platform', 'transport', ST_SetSRID(ST_MakePoint(-82.3866, 23.14023), 4326)::geography, 'osm', 0.7, '{"osm": "node/910001"}', 'La Habana', 'Plaza de la Revolución'),
+  -- second "Parque Central" 600 m north, non-landmark (T8: landmark boost)
+  ('Parque Central', 'leisure', 'park', 'park', ST_SetSRID(ST_MakePoint(-82.3590, 23.1435), 4326)::geography, 'osm', 0.7, '{"osm": "node/910002"}', 'La Habana', 'Centro Habana'),
+  -- two "Cafetería La Rampa" 200 m apart (>150 m so 00581 keeps both; <300 m so v2 collapses them) and one 2 km away (kept)
+  ('Cafetería La Rampa', 'amenity', 'cafe', 'cafe', ST_SetSRID(ST_MakePoint(-82.3830, 23.1390), 4326)::geography, 'overture', 0.6, '{"overture": "r1"}', 'La Habana', 'Plaza de la Revolución'),
+  ('Cafeteria La Rampa', 'amenity', 'cafe', 'cafe', ST_SetSRID(ST_MakePoint(-82.3830, 23.1408), 4326)::geography, 'foursquare', 0.6, '{"fsq": "r2"}', 'La Habana', 'Plaza de la Revolución'),
+  ('Cafetería La Rampa', 'amenity', 'cafe', 'cafe', ST_SetSRID(ST_MakePoint(-82.4010, 23.1300), 4326)::geography, 'overture', 0.6, '{"overture": "r3"}', 'La Habana', 'Playa'),
+  -- stale vs fresh twins (T8: staleness penalty)
+  ('Panadería Prueba Fresca', 'shop', 'bakery', 'shop', ST_SetSRID(ST_MakePoint(-82.3700, 23.1350), 4326)::geography, 'overture', 0.6, '{"overture": "s1"}', 'La Habana', 'Plaza de la Revolución'),
+  ('Panadería Prueba Vieja', 'shop', 'bakery', 'shop', ST_SetSRID(ST_MakePoint(-82.3702, 23.1352), 4326)::geography, 'overture', 0.6, '{"overture": "s2"}', 'La Habana', 'Plaza de la Revolución');
+UPDATE public.cuba_pois SET synced_at = now() - interval '200 days' WHERE name = 'Panadería Prueba Vieja';
+UPDATE public.cuba_pois SET synced_at = now() - interval '3 days'   WHERE name = 'Panadería Prueba Fresca';

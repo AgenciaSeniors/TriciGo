@@ -4,7 +4,6 @@ import { Text } from '@tricigo/ui/Text';
 import {
   searchAddressUnified,
   newSessionToken,
-  importPoiFromSearch,
   searchPoisSupabase,
   haversineDistance,
   stripAccents,
@@ -466,10 +465,6 @@ export function WebAddressInput({
     sessionTokenRef.current = null;
     onAddRecent?.(addr);
     onSelect(addr);
-    // PR 4b — background fire-and-forget: when the user picks a Google
-    // result, persist it to cuba_pois via Mapbox lookup (Google TOS forbids
-    // storage; Mapbox SearchBox explicitly allows it). Never blocks UX.
-    void importPoiFromSearch(result, getSupabaseClient());
   };
 
   const handleSelectCrossStreet = (streetName: string) => {
