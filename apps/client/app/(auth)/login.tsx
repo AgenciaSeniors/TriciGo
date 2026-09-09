@@ -337,7 +337,21 @@ export default function LoginScreen() {
                         ],
                       });
                       if (!credential.identityToken) throw new Error('No Apple identity token');
-                      await authService.signInWithAppleIdToken(credential.identityToken);
+                      // Apple hands the name back ONLY on the first
+                      // authorization and never inside the identity token, so
+                      // it has to be forwarded here or it is lost for good —
+                      // and the app would then have to ask for a name Apple
+                      // already gave us (App Store Guideline 4 rejection).
+                      const fullName = [
+                        credential.fullName?.givenName,
+                        credential.fullName?.familyName,
+                      ]
+                        .filter(Boolean)
+                        .join(' ')
+                        .trim();
+                      await authService.signInWithAppleIdToken(credential.identityToken, {
+                        fullName,
+                      });
                     } else {
                       // Android: no native Apple module — use the web OAuth flow
                       // in an in-app browser, mirroring Google. Returns via the

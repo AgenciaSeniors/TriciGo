@@ -29,6 +29,13 @@ export default function VerifyPhoneScreen() {
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
+  // Optional, and pre-filled with whatever the provider already gave us.
+  // Sign in with Apple returns the name only on the FIRST authorization, so
+  // it is captured at sign-in (auth.service.signInWithAppleIdToken) and shown
+  // here for confirmation — never demanded again. Asking for a name Apple had
+  // already supplied is what App Review rejected under Guideline 4.
+  const [fullName, setFullName] = useState(user?.full_name ?? '');
+  const [nameTouched, setNameTouched] = useState(false);
   const [dialCode, setDialCode] = useState<string>(DEMO_MODE ? DEMO_DIAL_CODES[0]!.code : '+53');
   const [dialPickerOpen, setDialPickerOpen] = useState(false);
   const [code, setCode] = useState('');
@@ -36,6 +43,13 @@ export default function VerifyPhoneScreen() {
   const [error, setError] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
   const [normalizedPhone, setNormalizedPhone] = useState('');
+
+  // The name captured from the Apple credential is written right after the
+  // token exchange, which can land after this screen has mounted. Adopt it
+  // when it arrives — unless the user already started typing their own.
+  useEffect(() => {
+    if (!nameTouched && user?.full_name) setFullName(user.full_name);
+  }, [user?.full_name, nameTouched]);
 
   useEffect(() => {
     if (resendTimer <= 0) return;
@@ -87,9 +101,15 @@ export default function VerifyPhoneScreen() {
     setLoading(true);
     try {
       await authService.verifyPhoneLink(normalizedPhone, code);
-      // Update user profile with the phone
+      // Update user profile with the phone (and the name, if the user typed
+      // or confirmed one — it is optional, so an empty field just means the
+      // profile keeps whatever it already had).
       if (user) {
-        const updated = await authService.updateProfile(user.id, { phone: normalizedPhone });
+        const typedName = fullName.trim();
+        const updated = await authService.updateProfile(user.id, {
+          phone: normalizedPhone,
+          ...(typedName && typedName !== user.full_name ? { full_name: typedName } : {}),
+        });
         setUser(updated);
       }
       // Navigation handled by auth guard in _layout.tsx
@@ -222,8 +242,32 @@ export default function VerifyPhoneScreen() {
                 </Modal>
               )}
 
+              {/* Optional name. Sits BELOW the phone on purpose: the phone is
+                  the required field, this one only confirms what the provider
+                  already told us. It is deliberately absent from the button's
+                  `disabled` rule — nothing here may block the user. */}
+              <View className="mt-5">
+                <Input
+                  label={t('auth.name_optional_label', { defaultValue: 'Nombre (opcional)' })}
+                  placeholder={t('profile.name_placeholder', { defaultValue: 'Tu nombre completo' })}
+                  value={fullName}
+                  onChangeText={(v) => {
+                    setNameTouched(true);
+                    setFullName(v);
+                  }}
+                  leftIcon={<Ionicons name="person-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />}
+                  autoCapitalize="words"
+                  maxLength={80}
+                />
+                <Text variant="caption" color="tertiary" className="mt-1 ml-1">
+                  {t('auth.name_optional_help', {
+                    defaultValue: 'Para que los conductores sepan quién eres',
+                  })}
+                </Text>
+              </View>
+
               {error ? (
-                <Text variant="bodySmall" color="error" className="mb-2">{error}</Text>
+                <Text variant="bodySmall" color="error" className="mb-2 mt-3">{error}</Text>
               ) : null}
 
               <Button

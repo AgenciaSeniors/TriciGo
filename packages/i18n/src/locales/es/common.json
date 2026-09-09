@@ -60,6 +60,8 @@
     "otp_rate_limited_title": "Demasiados códigos",
     "verify_phone_title": "Verifica tu teléfono",
     "verify_phone_subtitle": "Necesitamos tu número para contactarte durante el viaje y para emergencias",
+    "name_optional_label": "Nombre (opcional)",
+    "name_optional_help": "Para que los conductores sepan quién eres",
     "change_phone": "Cambiar número",
     "logout": "Cerrar sesión",
     "logging_out": "Cerrando sesión…",

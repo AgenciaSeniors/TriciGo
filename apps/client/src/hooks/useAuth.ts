@@ -153,8 +153,23 @@ async function fetchUserDirectWeb(userId: string, accessToken: string, anonKey: 
   return rows?.[0] ?? null;
 }
 
+/**
+ * How the live session was created ('apple' | 'google' | 'phone' | 'email').
+ * The onboarding guard in `app/_layout.tsx` needs it: a social sign-in must
+ * never be pushed through a mandatory "type your name" screen (Apple
+ * Guideline 4 — Apple already gave us the name), while a phone/OTP sign-up
+ * still must be, because no provider hands us one there.
+ */
+function providerOf(sessionUser: unknown): string | null {
+  return (
+    (sessionUser as { app_metadata?: { provider?: string } } | null | undefined)?.app_metadata
+      ?.provider ?? null
+  );
+}
+
 export function useAuthInit() {
   const setUser = useAuthStore((s) => s.setUser);
+  const setAuthProvider = useAuthStore((s) => s.setAuthProvider);
   const reset = useAuthStore((s) => s.reset);
 
   useEffect(() => {
@@ -182,6 +197,7 @@ export function useAuthInit() {
               );
               if (mounted && user) {
                 logger.info('[Auth] Web fast-path: session restored from localStorage');
+                setAuthProvider(providerOf(parsed.user));
                 setUser(user);
                 identifyUser(user.id, { email: realEmail(user.email) ?? undefined });
                 customerService.ensureProfile(user.id).catch((err) =>
@@ -200,6 +216,7 @@ export function useAuthInit() {
       try {
         const session = await withTimeout(authService.getSession(), 8000, 'getSession');
         if (session && mounted) {
+          setAuthProvider(providerOf(session.user));
           const userId = session.user?.id;
           const user = userId
             ? await withTimeout(authService.getUserById(userId), 8000, 'getUserById')
@@ -292,6 +309,7 @@ export function useAuthInit() {
           setTimeout(async () => {
             if (!mounted) return;
             try {
+              setAuthProvider(providerOf((session as any).user));
               const userId = (session as any).user?.id;
               const user = userId
                 ? await authService.getUserById(userId)
@@ -316,5 +334,5 @@ export function useAuthInit() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [setUser, reset]);
+  }, [setUser, setAuthProvider, reset]);
 }

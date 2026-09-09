@@ -157,6 +157,7 @@ function RootNavigator() {
   const navRef = useNavigationContainerRef();
 
   const user = useAuthStore((s) => s.user);
+  const authProvider = useAuthStore((s) => s.authProvider);
 
   useEffect(() => {
     if (isLoading || !navRef.isReady()) return;
@@ -185,15 +186,31 @@ function RootNavigator() {
     // authenticated and on /refer or /promo we let them stay there
     // since those screens handle missing-profile state themselves).
     if (isAuthenticated && !inPublicDeepLink) {
-      if (!user?.full_name) {
-        if (!currentRoute.includes('complete-profile') && !currentRoute.includes('verify-phone')) {
-          router.replace('/(auth)/complete-profile');
-        }
-        return;
-      }
+      // Phone first, and it is the only hard requirement left for everyone:
+      // dispatch, the in-ride call button and SOS all need it.
       if (!user?.phone) {
         if (!currentRoute.includes('verify-phone')) {
           router.replace('/(auth)/verify-phone');
+        }
+        return;
+      }
+      // The name is DEMANDED only of phone/OTP sign-ups (provider 'email',
+      // the synthetic phone_*@tricigo.app account), where no provider hands
+      // us one. After Sign in with Apple the name arrives with the credential
+      // and is stored at sign-in, so asking again is precisely what App Review
+      // rejected under Guideline 4 — and on a REPEAT Apple sign-in the
+      // framework returns nothing at all, so there would be nothing to
+      // pre-fill and the user would be trapped behind a mandatory field.
+      // Social users get the name as an optional, pre-filled field on the
+      // phone screen instead.
+      //
+      // Fails open on an unknown provider (null while the session is still
+      // resolving, or an offline cache hydrate): letting someone in without a
+      // name is recoverable, trapping an Apple user is not.
+      const nameRequired = authProvider === 'email' || authProvider === 'phone';
+      if (!user?.full_name && nameRequired) {
+        if (!currentRoute.includes('complete-profile') && !currentRoute.includes('verify-phone')) {
+          router.replace('/(auth)/complete-profile');
         }
         return;
       }
@@ -204,7 +221,7 @@ function RootNavigator() {
         router.replace('/(tabs)');
       }
     }
-  }, [isAuthenticated, isLoading, segments, user?.full_name, user?.phone]);
+  }, [isAuthenticated, isLoading, segments, user?.full_name, user?.phone, authProvider]);
 
   if (isLoading) {
     const bgColor = resolvedScheme === 'dark' ? colors.background.dark : colors.background.primary;

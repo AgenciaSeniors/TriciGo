@@ -354,7 +354,22 @@ export default function LoginScreen() {
                         ],
                       });
                       if (!credential.identityToken) throw new Error('No Apple identity token');
-                      await authService.signInWithAppleIdToken(credential.identityToken);
+                      // Apple hands the name back ONLY on the first
+                      // authorization and never inside the identity token, so
+                      // it has to be forwarded here or it is lost for good.
+                      // Onboarding's personal-info screen pre-fills from
+                      // users.full_name, so this is what puts the driver's name
+                      // in that field instead of an empty box.
+                      const fullName = [
+                        credential.fullName?.givenName,
+                        credential.fullName?.familyName,
+                      ]
+                        .filter(Boolean)
+                        .join(' ')
+                        .trim();
+                      await authService.signInWithAppleIdToken(credential.identityToken, {
+                        fullName,
+                      });
                     } else {
                       // Android: no native Apple module — use the web OAuth flow
                       // in an in-app browser, mirroring Google. Returns via the
