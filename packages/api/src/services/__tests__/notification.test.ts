@@ -59,6 +59,83 @@ describe('notificationService', () => {
     });
   });
 
+  describe('recordPushRegistration', () => {
+    it('upserts the outcome keyed by user and app', async () => {
+      const mockUpsertFn = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValueOnce({ upsert: mockUpsertFn });
+
+      await notificationService.recordPushRegistration({
+        userId: 'user-1',
+        app: 'driver',
+        outcome: 'blocked',
+        platform: 'android',
+      });
+
+      expect(mockFrom).toHaveBeenCalledWith('push_registration_status');
+      expect(mockUpsertFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_id: 'user-1',
+          app: 'driver',
+          outcome: 'blocked',
+          platform: 'android',
+          detail: null,
+        }),
+        { onConflict: 'user_id,app' },
+      );
+    });
+
+    it('never throws when the table is missing (migration not applied yet)', async () => {
+      mockFrom.mockReturnValueOnce({
+        upsert: vi.fn().mockResolvedValue({
+          error: { code: 'PGRST205', message: "Could not find the table 'public.push_registration_status'" },
+        }),
+      });
+
+      await expect(
+        notificationService.recordPushRegistration({
+          userId: 'user-1',
+          app: 'client',
+          outcome: 'registered',
+          platform: 'ios',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('never throws when the client itself blows up', async () => {
+      // This runs INSIDE registerPushTokenForUser's try block. If it threw, a
+      // successful registration would be reported as 'error' — the telemetry
+      // would corrupt the very number it exists to measure.
+      mockFrom.mockImplementationOnce(() => {
+        throw new Error('network down');
+      });
+
+      await expect(
+        notificationService.recordPushRegistration({
+          userId: 'user-1',
+          app: 'driver',
+          outcome: 'registered',
+          platform: 'android',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('truncates detail so a stack trace cannot bloat the row', async () => {
+      const mockUpsertFn = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValueOnce({ upsert: mockUpsertFn });
+
+      await notificationService.recordPushRegistration({
+        userId: 'user-1',
+        app: 'driver',
+        outcome: 'error',
+        platform: 'android',
+        detail: 'x'.repeat(500),
+      });
+
+      const detail = mockUpsertFn.mock.calls[0]![0].detail as string;
+      expect(detail).toHaveLength(300);
+    });
+  });
+
   describe('removePushToken', () => {
     it('calls supabase delete with correct eq chain', async () => {
       const mockSecondEq = vi.fn().mockResolvedValue({ error: null });

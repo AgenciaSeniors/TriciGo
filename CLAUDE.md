@@ -2434,6 +2434,46 @@ Dos veces en una sesión la verificación fue **real pero sobre la superficie eq
 
 **Interacción con el dispatch:** `dispatch_heartbeat_window_s=0` (00524) deja elegible al conductor con la app muerta durante los 10-15 min hasta que el cron lo saca. Medido: 0 de 14 ofertas en 7 días cayeron en esa ventana (volumen bajísimo), pero el riesgo crece con la demanda — si aparece, subir esa key a >0 lo cierra sin migración.
 
+### El 74 % de la gente que usa TriciGo no puede recibir un push (medido 2026-09-08, mig 00585)
+
+**El embudo de por qué mueren los viajes.** De 220 viajes: 29 completados (13 %), 20 cancelados ya con conductor, **80 (37 %) recibieron ofertas que nadie tomó** y **89 (41 %) no generaron una sola oferta**. El matcher NO está roto: de los 137 conductores aprobados, **117 pasan todas las verjas** de `find_best_drivers` (vehículo activo, `is_financially_eligible`, `match_score`, geofence, sin viaje en curso). La única que mata es `is_online` — en 14 días hay **1,7 conductores en línea de promedio** y el **35 % de las horas no hay nadie**.
+
+**Las ofertas confirman que es alcance, no desinterés.** Ningún conductor rechazó una oferta jamás (`ride_offers.status`: 81 `expired`, 55 `superseded`, 29 `accepted`, **0 `rejected`**). Las aceptadas venían de conductores a **789 m** de mediana y se contestaron en **13 s**; las vencidas, de conductores a **4.300 m**. Y el pasajero abandona a los **132 s**, antes de que la segunda ronda pueda salir (`offer_ttl_seconds`=60 + `reoffer_cooldown_s`=120).
+
+**La causa alcanzable: 67 de los 91 conductores que trabajaron en 30 días no tienen fila en `user_devices`.** Prueba en vivo en los logs de la EF: `[send-push] summary: sent=11 failed=0 total_tokens=11 targets=51`. Y **52 de las 81 ofertas vencidas** fueron a conductores sin token.
+
+**Descartado con evidencia (no repetir el camino):**
+- *Los tokens se borran* (`DeviceNotRegistered` → `DELETE` en `send-push:423`): `failed=0` en todos los envíos recientes y **cero** líneas `Cleaned N dead token(s)`.
+- *Preferencias*: `ride_offer` está en las categorías **no filtrables** de `FILTERABLE_CATEGORY_TO_PREF`; una oferta se entrega siempre.
+- *Esquema/RLS*: `UNIQUE (user_id, push_token)` existe y las políticas `ud_own`/`ud_admin` son correctas (una policy `FOR ALL` sin `WITH CHECK` reusa el `USING`, así que el upsert propio pasa).
+- *Bug de la app del conductor*: **pasajeros 28 % con token vs conductores 26 %** — idéntico, o sea que es el camino compartido de permiso/registro, no una app. Ese test diferencial es el que ordena el diagnóstico; hacerlo primero.
+- *El soft-ask de agosto lo empeoró*: los pasajeros, que no tuvieron ese cambio, cayeron igual. Con n=38 y n=21 la caída por cohorte no aguanta la atribución.
+
+**Lo que quedaba y no se podía medir:** el permiso del SO nunca se concedió — pero *denegó*, *nunca se le preguntó* y *falló el registro* se ven **exactamente igual** desde el servidor, porque `user_devices` solo registra ÉXITOS. `registerPushTokenForUser` ya calculaba el motivo y devolvía `'registered' | 'denied' | 'error'`, y **sus tres llamadores tiraban ese valor**, dentro de un `catch {}`. Es la misma clase que "un fallback que nunca se ejerció no es un fallback": lo que no se escribe, no existe.
+
+**00585 lo cierra**: tabla `push_registration_status` (PK `(user_id, app)`) con `outcome` ∈ `registered | never_asked | denied | blocked | error` — `never_asked` = bug nuestro, `blocked` = solo Ajustes lo recupera (Android 13+ no vuelve a preguntar), `error` = plomería rota. El helper puro es `classifyPushPermission` (`packages/utils/src/pushRegistration.ts`): **`canAskAgain` es el campo que decide**, no `status`. Vista `driver_push_reachability` (`security_invoker`) para ver hoy mismo quién está incomunicado, sin esperar ninguna app.
+
+**Dos reglas al instrumentar algo así:** (1) la telemetría corre DENTRO del `try` del que mide, así que si puede lanzar convierte un registro exitoso en `'error'` — la medición corrompiendo su propio número; `report()` es fire-and-forget y `recordPushRegistration` no lanza nunca (ni siquiera si falta la tabla). (2) **No cambies el tipo de retorno**: los llamadores comparan `result === 'denied'` (`apps/{driver,client}/app/profile/settings.tsx`); el outcome fino va al servidor, el retorno queda igual.
+
+**Límite honesto:** esto solo produce datos en los teléfonos que instalen un APK nuevo. La comprobación de 10 segundos que confirma la hipótesis sin código: Ajustes → Apps → TriciGo Conductor → Notificaciones.
+
+**Consultas canónicas:**
+```sql
+-- ¿quién no puede recibir una oferta?  (funciona sin tocar las apps)
+SELECT full_name, phone, is_online, push_tokens, last_registration_outcome
+FROM driver_push_reachability WHERE push_tokens = 0 ORDER BY is_online DESC;
+
+-- desconexión forzada vs manual: changed_by IS NULL = lo hizo el cron
+SELECT count(*) FILTER (WHERE changed_by IS NULL) AS forzadas, count(*) AS total
+FROM audit_log WHERE table_name='driver_profiles' AND created_at > now()-interval '30 days'
+  AND (old_values->>'is_online') IS DISTINCT FROM (new_values->>'is_online')
+  AND NOT (new_values->>'is_online')::boolean;
+
+-- distancia de las ofertas aceptadas vs vencidas (la economía del alcance)
+SELECT status, count(*), round(percentile_cont(0.5) WITHIN GROUP (ORDER BY distance_m)::numeric,0) AS mediana_m
+FROM ride_offers GROUP BY 1;
+```
+
 ### Un no-op se vuelve regresión cuando el fix lo hace real (verificado 2026-08-06, #926 → PR de revisión)
 
 **Clase de bug, no incidente aislado.** #926 des-condicionó el arranque del foreground service del permiso "Siempre", así que por fin corría. Pero `useDriverRide.ts` lo **detenía** desde 4 lugares al terminar/cancelar un viaje (`stopBgLocationTracking`, líneas 241/859/875/1073) con el conductor todavía en línea. Mientras el servicio no arrancaba nunca, esos stops eran inocuos. Al volverse real, cada finalización de viaje mataba el único latido que sobrevive con la pantalla apagada → el cron sacaba al conductor de línea 10 min después. **El fix creó exactamente el síntoma que venía a eliminar**, y por eso la métrica no se movió (2,16 → 2,06 desconexiones forzadas por conductor y por día, sin mejora).

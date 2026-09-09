@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { notificationService } from '@tricigo/api';
+import { classifyPushPermission } from '@tricigo/utils';
+import type { PushRegistrationOutcome } from '@tricigo/utils';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -229,20 +231,45 @@ export async function registerPushTokenForUser(
   userId: string,
   opts?: { promptIfNeeded?: boolean },
 ): Promise<PushRegistrationResult> {
-  try {
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    let finalStatus = existing;
+  // Telemetry ONLY. Deliberately fire-and-forget and deliberately unable to
+  // throw (see notificationService.recordPushRegistration): this function's
+  // return value and timing must stay exactly what they were, or measuring the
+  // problem would change it.
+  const report = (outcome: PushRegistrationOutcome, detail?: string) => {
+    try {
+      void notificationService.recordPushRegistration({
+        userId,
+        app: 'client',
+        outcome,
+        platform: Platform.OS,
+        detail,
+      });
+    } catch {
+      // Unreachable in a shipped bundle, and load-bearing anyway: this runs
+      // inside the caller's try, so a throw here would turn a SUCCESSFUL
+      // registration into 'error' — the measurement corrupting its own number.
+    }
+  };
 
-    if (existing !== 'granted') {
+  try {
+    const permissions = await Notifications.getPermissionsAsync();
+    let state = classifyPushPermission(permissions);
+
+    if (state !== 'granted') {
       // Never burn the one-shot OS prompt from an unattended code path —
       // Android 13+ asks once per install and a denial is permanent. See
       // registerForPushNotifications in services/push.service.ts.
-      if (!opts?.promptIfNeeded) return 'denied';
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+      if (!opts?.promptIfNeeded) {
+        report(state);
+        return 'denied';
+      }
+      state = classifyPushPermission(await Notifications.requestPermissionsAsync());
     }
 
-    if (finalStatus !== 'granted') return 'denied';
+    if (state !== 'granted') {
+      report(state);
+      return 'denied';
+    }
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId: Constants.expoConfig?.extra?.eas?.projectId,
@@ -253,8 +280,10 @@ export async function registerPushTokenForUser(
       tokenData.data,
       Platform.OS,
     );
+    report('registered');
     return 'registered';
-  } catch {
+  } catch (err) {
+    report('error', err instanceof Error ? err.message : String(err));
     return 'error';
   }
 }
