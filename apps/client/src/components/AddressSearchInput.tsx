@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Text } from '@tricigo/ui/Text';
-import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
+import { searchAddress, reverseGeocode, HAVANA_PRESETS, ALL_PRESETS, trackEvent, triggerSelection, haversineDistance, fuzzyMatch, enrichWithCrossStreets, shouldEnrichResult, parseCubanAddress, parseCornerQuery, bareStreetName, isZoneLevelResult, lookupIntersectionPoint, suggestCrossStreetsSupabase, searchPoisSupabase, searchStreetsSupabase, searchResultEmoji, searchAddressUnified, newSessionToken, dedupeSearchResults, SEARCH_DEBOUNCE_MS, rankSearchResults, searchResultCap, findNearestPreset, historyMatchesQuery, tokenOverlapRatio, isProviderStreetResult, filterProviderStreetsByLocalAnchor, resolveFixedPlaces } from '@tricigo/utils';
 import { SourceAttribution, inferAttributionSource } from '@tricigo/ui';
 import { getSupabaseClient } from '@tricigo/api';
 import type { GeoPoint, AddressSearchResult, SearchBoxResult } from '@tricigo/utils';
@@ -771,6 +771,53 @@ function AddressSearchInputInner({
         return;
       }
       handleTextChange(item.address);
+      return;
+    }
+
+    // A row that names ONLY a street is an unfinished Cuban address: 78 % of
+    // real destinations are a corner. Committing it drops the rider somewhere
+    // along a street that can run for kilometres (they then have to hunt for
+    // the right block by dragging the pin). Ask the question the address is
+    // missing instead, reusing the same completions the "23 e/" typing path
+    // already produces.
+    //
+    // Only street rows (`source === 'api'`): a POI named "Infanta" is an
+    // answer, not half of one. And if the street has no known cross streets,
+    // fall through to the previous behaviour rather than stranding the rider
+    // on an empty list.
+    const bareStreet = item.source === 'api' ? bareStreetName(item.address) : null;
+    if (bareStreet) {
+      const completion = `${bareStreet} e/ `;
+      setQuery(completion);
+      lastQueryRef.current = completion;
+      setIsSearching(true);
+      const loc = userLocation
+        ? { latitude: userLocation.latitude, longitude: userLocation.longitude }
+        : undefined;
+      suggestCrossStreetsSupabase(bareStreet, loc)
+        .then((crossStreets) => {
+          if (lastQueryRef.current !== completion) return;
+          setIsSearching(false);
+          if (crossStreets.length === 0) {
+            commitSelection(item);
+            return;
+          }
+          // Same contract as the typing path: NO geometry, needsResolution
+          // set, coordinates NaN so any caller that ignored the flag fails
+          // loudly instead of booking a plausible-looking wrong point.
+          setResults(crossStreets.map((cs) => ({
+            address: `${bareStreet} e/ ${cs}`,
+            displayName: `${bareStreet} e/ ${cs}`,
+            latitude: NaN,
+            longitude: NaN,
+            needsResolution: true,
+          })));
+        })
+        .catch(() => {
+          if (lastQueryRef.current !== completion) return;
+          setIsSearching(false);
+          commitSelection(item);
+        });
       return;
     }
 

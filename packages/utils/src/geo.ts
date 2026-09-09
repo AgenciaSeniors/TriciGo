@@ -1955,6 +1955,29 @@ function stripAccentsLower(s: string): string {
  * lookup IN PARALLEL with the normal search, never instead of it, so a POI
  * literally named "Pan y Canela" keeps its row.
  */
+/**
+ * The street name of an address that names ONLY a street, or null.
+ *
+ * 78 % of real TriciGo destinations are a corner ("23 e/ L y K"), so a search
+ * result that names just a street is the rider halfway to an address, not an
+ * answer: committing it drops the pin somewhere along a street that can run for
+ * kilometres. Callers use this to offer the cross streets instead.
+ *
+ * Returns null whenever the address already carries a corner — in either the
+ * "e/" / "entre" form or the "X y Y" / "X esq. Y" form — because there is
+ * nothing left to ask. The corner check runs on the head segment: an address
+ * like "Calle 23 y 12, Vedado" carries a comma, which parseCornerQuery
+ * deliberately rejects on a raw query.
+ */
+export function bareStreetName(address: string): string | null {
+  if (!address) return null;
+  if (parseCubanAddress(address)) return null;
+  const head = address.split(',')[0]?.trim() ?? '';
+  if (!head) return null;
+  if (parseCornerQuery(head)) return null;
+  return head;
+}
+
 export function parseCornerQuery(query: string): CornerParsed | null {
   const q = query.trim();
   if (!q || q.length > 60) return null;
