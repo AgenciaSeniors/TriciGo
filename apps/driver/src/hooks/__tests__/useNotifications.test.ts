@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Every native module is mocked with a factory so the real React Native
 // runtime is never loaded — mirrors src/services/__tests__.
-const permissions = { status: 'undetermined' as string };
-const requestPermissionsAsync = vi.fn(async () => ({ status: permissions.status }));
-const getPermissionsAsync = vi.fn(async () => ({ status: permissions.status }));
+const permissions = { status: 'undetermined' as string, canAskAgain: true };
+const requestPermissionsAsync = vi.fn(async () => ({ ...permissions }));
+const getPermissionsAsync = vi.fn(async () => ({ ...permissions }));
 const getExpoPushTokenAsync = vi.fn(async () => ({ data: 'ExponentPushToken[test]' }));
 const setNotificationChannelAsync = vi.fn(async () => undefined);
 
@@ -25,10 +25,12 @@ vi.mock('expo-constants', () => ({
 }));
 
 const registerPushToken = vi.fn(async () => undefined);
+const recordPushRegistration = vi.fn(async () => undefined);
 vi.mock('@tricigo/api', () => ({
   notificationService: {
     registerPushToken: (...a: unknown[]) => registerPushToken(...(a as [])),
     removePushToken: vi.fn(async () => undefined),
+    recordPushRegistration: (...a: unknown[]) => recordPushRegistration(...(a as [])),
   },
 }));
 
@@ -49,6 +51,7 @@ describe('registerPushTokenForUser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     permissions.status = 'undetermined';
+    permissions.canAskAgain = true;
   });
 
   // The regression this guards: the OS permission dialog used to fire from
@@ -66,7 +69,7 @@ describe('registerPushTokenForUser', () => {
 
   it('prompts only when the caller explicitly opts in', async () => {
     permissions.status = 'undetermined';
-    requestPermissionsAsync.mockResolvedValueOnce({ status: 'granted' });
+    requestPermissionsAsync.mockResolvedValueOnce({ status: 'granted', canAskAgain: false });
 
     const result = await registerPushTokenForUser('user-1', { promptIfNeeded: true });
 
@@ -87,7 +90,7 @@ describe('registerPushTokenForUser', () => {
 
   it('reports denied — without registering — when the user refuses the prompt', async () => {
     permissions.status = 'undetermined';
-    requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
+    requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
 
     const result = await registerPushTokenForUser('user-1', { promptIfNeeded: true });
 
@@ -101,5 +104,80 @@ describe('registerPushTokenForUser', () => {
     await registerPushTokenForUser('user-1');
 
     expect(setNotificationChannelAsync).toHaveBeenCalledWith('rides', expect.anything());
+  });
+});
+
+// `user_devices` can only ever record a SUCCESS, so on the server a driver who
+// refused the permission, one nobody ever asked, and one whose token minting
+// threw are the same thing: no row. 74 % of the people who used TriciGo in the
+// last month were in that bucket with no way to tell which. These assertions
+// are the whole point of the instrumentation.
+describe('registerPushTokenForUser — telemetry', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    permissions.status = 'undetermined';
+    permissions.canAskAgain = true;
+  });
+
+  it('reports never_asked when it stays silent rather than burning the prompt', async () => {
+    await registerPushTokenForUser('user-1');
+
+    expect(recordPushRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', app: 'driver', outcome: 'never_asked' }),
+    );
+  });
+
+  it('reports blocked when the OS will never prompt again', async () => {
+    permissions.status = 'denied';
+    permissions.canAskAgain = false;
+
+    await registerPushTokenForUser('user-1');
+
+    expect(recordPushRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'blocked' }),
+    );
+  });
+
+  it('reports denied when the driver refuses a prompt that could come back', async () => {
+    permissions.status = 'denied';
+
+    await registerPushTokenForUser('user-1', { promptIfNeeded: true });
+
+    expect(recordPushRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'denied' }),
+    );
+  });
+
+  it('reports registered once the token is stored', async () => {
+    permissions.status = 'granted';
+
+    await registerPushTokenForUser('user-1');
+
+    expect(registerPushToken).toHaveBeenCalled();
+    expect(recordPushRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'registered', platform: 'android' }),
+    );
+  });
+
+  it('reports error with the reason when minting the token throws', async () => {
+    permissions.status = 'granted';
+    getExpoPushTokenAsync.mockRejectedValueOnce(new Error('projectId missing'));
+
+    const result = await registerPushTokenForUser('user-1');
+
+    expect(result).toBe('error');
+    expect(recordPushRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'error', detail: 'projectId missing' }),
+    );
+  });
+
+  it('still registers when the telemetry write itself blows up', async () => {
+    // The measurement must never be able to change what it measures.
+    permissions.status = 'granted';
+    recordPushRegistration.mockImplementationOnce(() => {
+      throw new Error('telemetry exploded');
+    });
+
+    await expect(registerPushTokenForUser('user-1')).resolves.toBe('registered');
   });
 });

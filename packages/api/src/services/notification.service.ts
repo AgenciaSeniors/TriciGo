@@ -2,6 +2,7 @@ import { getSupabaseClient } from '../client';
 import type { AppNotification, NotificationType } from '@tricigo/types';
 import { realtimeStatusLogger } from './_realtime-status';
 import { realEmail } from '@tricigo/utils';
+import type { PushRegistrationOutcome } from '@tricigo/utils';
 
 export const notificationService = {
   async registerPushToken(
@@ -17,6 +18,55 @@ export const notificationService = {
         { onConflict: 'user_id,push_token' },
       );
     if (error) throw error;
+  },
+
+  /**
+   * Record WHY this device does or does not have a push token.
+   *
+   * `user_devices` only ever records success, so a user who refused the OS
+   * permission, one who was never asked, and one whose token minting threw are
+   * indistinguishable on the server — all three are simply a missing row.
+   * Measured 2026-09-08: 74 % of the people who used TriciGo in the last month
+   * had no row, and nothing recorded which of the three it was.
+   *
+   * NEVER THROWS, by construction. Callers invoke this from inside the try
+   * block of `registerPushTokenForUser`; if it threw, a registration that
+   * actually succeeded would be reported as 'error' and the telemetry would
+   * corrupt the very number it exists to measure. It also swallows the
+   * table-missing error so the apps keep working before the migration lands.
+   */
+  async recordPushRegistration(params: {
+    userId: string;
+    app: 'client' | 'driver';
+    outcome: PushRegistrationOutcome;
+    platform: string;
+    detail?: string | null;
+  }): Promise<void> {
+    try {
+      const detail = params.detail ? params.detail.slice(0, 300) : null;
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('push_registration_status')
+        .upsert(
+          {
+            user_id: params.userId,
+            app: params.app,
+            outcome: params.outcome,
+            platform: params.platform,
+            detail,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,app' },
+        );
+      if (error) {
+        // Telemetry is never worth a user-visible failure. The table may not
+        // exist yet (PGRST205 / 42P01) on an app build that ships ahead of the
+        // migration; anything else is logged and dropped just the same.
+        console.warn('[notificationService] push registration telemetry failed:', error.message);
+      }
+    } catch (err) {
+      console.warn('[notificationService] push registration telemetry threw:', err);
+    }
   },
 
   async removePushToken(userId: string, token: string): Promise<void> {
