@@ -411,14 +411,52 @@ export const authService = {
    * platform-agnostic package); this method only performs the Supabase
    * exchange. Supabase verifies the token against Apple's public keys, so the
    * Apple provider must be enabled with the app bundle IDs as Client IDs.
+   *
+   * `profile.fullName` carries what the native sheet handed back in
+   * `credential.fullName`, and persisting it here is NOT optional polish —
+   * it is a store-review requirement (Guideline 4: never ask for what
+   * AuthenticationServices already gave you). Two facts force this shape:
+   *
+   *  - Apple returns the name ONLY on the very first authorization of an
+   *    Apple ID for a bundle ID, and it never travels in the identity token.
+   *    So `handle_new_user` cannot see it — the trigger writes `full_name=''`
+   *    and the name is gone for good unless the caller stores it right here.
+   *  - The web/Android OAuth path gets this for free (Apple posts the name to
+   *    Supabase, it lands in `raw_user_meta_data`, the trigger copies it), so
+   *    this is the native flow catching up to the one that already works.
    */
-  async signInWithAppleIdToken(identityToken: string) {
+  async signInWithAppleIdToken(
+    identityToken: string,
+    profile?: { fullName?: string | null },
+  ) {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'apple',
       token: identityToken,
     });
     if (error) throw error;
+
+    const fullName = profile?.fullName?.trim();
+    const userId = (data as { user?: { id?: string } } | null)?.user?.id;
+    if (fullName && userId) {
+      try {
+        await supabase
+          .from('users')
+          .update({ full_name: fullName })
+          .eq('id', userId)
+          // Fill a blank only. A returning user who renamed themselves in
+          // Perfil must not get Apple's copy stamped back over it.
+          .eq('full_name', '');
+        // Keep auth metadata in step with the OAuth path so later sessions
+        // and any consumer reading user_metadata see the same name.
+        await supabase.auth.updateUser({ data: { full_name: fullName } });
+      } catch {
+        // Best effort by design: losing the name costs a pre-filled field,
+        // losing the session would be a broken login. The phone screen still
+        // offers the name as an optional field.
+      }
+    }
+
     return data;
   },
 

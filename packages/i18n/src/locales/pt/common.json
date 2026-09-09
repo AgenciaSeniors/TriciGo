@@ -60,6 +60,8 @@
     "otp_rate_limited_title": "Códigos demais",
     "verify_phone_title": "Verifique seu telefone",
     "verify_phone_subtitle": "Precisamos do seu número para contato durante a viagem e em emergências",
+    "name_optional_label": "Nome (opcional)",
+    "name_optional_help": "Para que os motoristas saibam quem é você",
     "change_phone": "Alterar número",
     "switch_account": "Sair",
     "switch_account_prompt": "Conta errada? Sair",

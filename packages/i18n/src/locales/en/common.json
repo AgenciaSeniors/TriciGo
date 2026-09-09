@@ -60,6 +60,8 @@
     "otp_rate_limited_title": "Too many codes",
     "verify_phone_title": "Verify your phone",
     "verify_phone_subtitle": "We need your number to reach you during the ride and for emergencies",
+    "name_optional_label": "Name (optional)",
+    "name_optional_help": "So drivers know who you are",
     "change_phone": "Change number",
     "switch_account": "Sign out",
     "switch_account_prompt": "Wrong account? Sign out",

@@ -9,6 +9,7 @@ const mockAuth = {
   signOut: vi.fn(),
   onAuthStateChange: vi.fn(),
   signInWithOAuth: vi.fn(),
+  signInWithIdToken: vi.fn(),
   updateUser: vi.fn(),
   setSession: vi.fn(),
   signInWithPassword: vi.fn(),
@@ -394,6 +395,90 @@ describe('authService', () => {
       mockAuth.signInWithOAuth.mockResolvedValue({ data: null, error: err });
 
       await expect(authService.signInWithApple()).rejects.toEqual(err);
+    });
+  });
+
+  // ==================== signInWithAppleIdToken ====================
+  describe('signInWithAppleIdToken', () => {
+    const APPLE_SESSION = {
+      user: { id: 'u-apple' },
+      session: { access_token: 'tok-apple' },
+    };
+
+    /** from('users').update({...}).eq('id', x).eq('full_name', '') */
+    const stubGuardedUpdate = (result: { error: unknown } = { error: null }) => {
+      const eqFullName = vi.fn().mockResolvedValue(result);
+      const eqId = vi.fn(() => ({ eq: eqFullName }));
+      const update = vi.fn(() => ({ eq: eqId }));
+      mockFrom.mockReturnValueOnce({ update });
+      return { update, eqId, eqFullName };
+    };
+
+    it('exchanges the identity token for a session', async () => {
+      mockAuth.signInWithIdToken.mockResolvedValue({ data: APPLE_SESSION, error: null });
+
+      const result = await authService.signInWithAppleIdToken('id-token-123');
+
+      expect(mockAuth.signInWithIdToken).toHaveBeenCalledWith({
+        provider: 'apple',
+        token: 'id-token-123',
+      });
+      expect(result).toEqual(APPLE_SESSION);
+    });
+
+    it('does not touch the profile when Apple returned no name', async () => {
+      mockAuth.signInWithIdToken.mockResolvedValue({ data: APPLE_SESSION, error: null });
+
+      // Apple only returns fullName on the FIRST authorization; every later
+      // sign-in gives us nothing, and that must stay a plain no-op.
+      await authService.signInWithAppleIdToken('id-token-123', { fullName: '   ' });
+
+      expect(mockAuth.updateUser).not.toHaveBeenCalled();
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('persists the name Apple returned, only while the row still has none', async () => {
+      mockAuth.signInWithIdToken.mockResolvedValue({ data: APPLE_SESSION, error: null });
+      mockAuth.updateUser.mockResolvedValue({ data: {}, error: null });
+      const { update, eqId, eqFullName } = stubGuardedUpdate();
+
+      await authService.signInWithAppleIdToken('id-token-123', {
+        fullName: 'Ana María Pérez',
+      });
+
+      expect(mockAuth.updateUser).toHaveBeenCalledWith({
+        data: { full_name: 'Ana María Pérez' },
+      });
+      expect(mockFrom).toHaveBeenCalledWith('users');
+      expect(update).toHaveBeenCalledWith({ full_name: 'Ana María Pérez' });
+      expect(eqId).toHaveBeenCalledWith('id', 'u-apple');
+      // The guard: never overwrite a name the user already set themselves.
+      expect(eqFullName).toHaveBeenCalledWith('full_name', '');
+    });
+
+    it('still signs the user in when persisting the name fails', async () => {
+      mockAuth.signInWithIdToken.mockResolvedValue({ data: APPLE_SESSION, error: null });
+      mockAuth.updateUser.mockResolvedValue({ data: {}, error: null });
+      const eqFullName = vi.fn().mockRejectedValue(new Error('network down'));
+      const eqId = vi.fn(() => ({ eq: eqFullName }));
+      const update = vi.fn(() => ({ eq: eqId }));
+      mockFrom.mockReturnValueOnce({ update });
+
+      // Losing the name is a cosmetic loss; losing the session is a broken login.
+      await expect(
+        authService.signInWithAppleIdToken('id-token-123', { fullName: 'Ana Pérez' }),
+      ).resolves.toEqual(APPLE_SESSION);
+      expect(eqFullName).toHaveBeenCalled();
+    });
+
+    it('throws when the token exchange itself fails', async () => {
+      const err = { message: 'Invalid token', code: 'invalid_grant' };
+      mockAuth.signInWithIdToken.mockResolvedValue({ data: null, error: err });
+
+      await expect(
+        authService.signInWithAppleIdToken('bad-token', { fullName: 'Ana Pérez' }),
+      ).rejects.toEqual(err);
+      expect(mockFrom).not.toHaveBeenCalled();
     });
   });
 
