@@ -27,6 +27,7 @@ import {
   joinStructured,
   POI_INCLUSION_THRESHOLD_M,
   parseCornerQuery,
+  bareStreetName,
   type SearchBoxResult,
   type TricigoCategory,
   type StructuredAddress,
@@ -1357,5 +1358,30 @@ describe('parseCornerQuery — Cuban corner form "X y Y" / "X esq. Y"', () => {
     expect(parseCornerQuery('Hospital Calixto García, Vedado')).toBeNull();
     expect(parseCornerQuery('23 y ')).toBeNull();
     expect(parseCornerQuery(' y 12')).toBeNull();
+  });
+});
+
+describe('bareStreetName — a street with no corner is an unfinished address', () => {
+  it('returns the street name when the address is a plain street', () => {
+    // 78 % of real destinations are a corner. A row that names only a street
+    // is the rider halfway there, not an answer.
+    expect(bareStreetName('Calle 23, Vedado, La Habana')).toBe('Calle 23');
+    expect(bareStreetName('Infanta')).toBe('Infanta');
+    expect(bareStreetName('  Línea  , Vedado')).toBe('Línea');
+  });
+
+  it('returns null when the address already carries a corner', () => {
+    // These commit as they always did — there is nothing left to ask.
+    expect(bareStreetName('Calle 23 e/ L y K, Vedado')).toBeNull();
+    expect(bareStreetName('Castillo entre Fernandina y Pila')).toBeNull();
+    expect(bareStreetName('Calle 23 e/ L')).toBeNull();
+    expect(bareStreetName('23 y 12')).toBeNull();
+    expect(bareStreetName('Línea esq. a G')).toBeNull();
+  });
+
+  it('returns null when there is no usable street name', () => {
+    expect(bareStreetName('')).toBeNull();
+    expect(bareStreetName('   ')).toBeNull();
+    expect(bareStreetName(', Vedado')).toBeNull();
   });
 });
