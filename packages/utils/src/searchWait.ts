@@ -83,3 +83,59 @@ export function searchWaitStage(elapsedSeconds: number): SearchWaitStage {
   if (elapsedSeconds < SEARCH_LONG_WAIT_S) return 'extended';
   return 'long';
 }
+
+/** What the waiting screen knows about right now. */
+export interface SearchWaitInput {
+  /** Seconds since the ride was requested. */
+  elapsedSeconds: number;
+  /** Drivers holding a live offer for this ride (`ride_offers.pending_count`). */
+  pendingOfferCount: number;
+  /** Seconds left on the earliest live offer, or null when none is open. */
+  offerSecondsLeft: number | null;
+}
+
+/**
+ * Everything the waiting screen renders, as one decision.
+ *
+ * Note what is NOT in this type: a failure state. There is no elapsed time at
+ * which the app may claim the search is over, because the server never stops
+ * while this screen is open.
+ */
+export interface SearchWaitView {
+  stage: SearchWaitStage;
+  /** Reassurance line under the status message, or none. */
+  hint: 'typical' | 'still_searching' | null;
+  /** The "this is taking longer than usual" panel, with what dispatch is doing. */
+  longNotice: boolean;
+  /**
+   * Which progress bar to draw.
+   *   offer    a live offer window draining — the only REAL deadline on screen
+   *   typical  filling over the typical wait
+   *   sweep    indeterminate, because the wait has no end to fill toward
+   */
+  progress: 'offer' | 'typical' | 'sweep';
+}
+
+export function searchWaitView(input: SearchWaitInput): SearchWaitView {
+  const stage = searchWaitStage(input.elapsedSeconds);
+
+  // A live offer countdown already answers "is anything happening?", and more
+  // specifically than any of our copy can. Everything else stays quiet.
+  const quiet = input.pendingOfferCount > 0;
+
+  const hint = quiet ? null
+    : stage === 'opening' ? 'typical' as const
+    : stage === 'extended' ? 'still_searching' as const
+    : null;
+
+  // `offerSecondsLeft` ticks to 0 a moment before the poll clears it; 0 is not
+  // a live window, and a 0 %-wide bar reads as a frozen screen.
+  const offerLive = input.offerSecondsLeft !== null && input.offerSecondsLeft > 0;
+  const progress = offerLive
+    ? 'offer' as const
+    : Number.isFinite(input.elapsedSeconds) && input.elapsedSeconds >= SEARCH_TYPICAL_WAIT_S
+      ? 'sweep' as const
+      : 'typical' as const;
+
+  return { stage, hint, longNotice: !quiet && stage === 'long', progress };
+}

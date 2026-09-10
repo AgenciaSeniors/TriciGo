@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitStage } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService } from '@tricigo/api';
@@ -231,6 +231,10 @@ function WebSearchingState({
     return () => clearInterval(interval);
   }, []);
 
+  // Same tested decision as the native screen. This panel has no offer-stats
+  // poll, so no countdown can be live here.
+  const webWait = searchWaitView({ elapsedSeconds: elapsedSec, pendingOfferCount: 0, offerSecondsLeft: null });
+
   const searchMessage = WEB_SEARCH_MESSAGES[searchPhase] ?? WEB_SEARCH_MESSAGES[0];
   const fmtCUP = (v: number) => `${Math.round(v).toLocaleString('es-CU')} CUP`;
   const fmtPrice = (cupAmount: number, trcAmount?: number) =>
@@ -410,7 +414,7 @@ function WebSearchingState({
             {searchMessage}
           </div>
           )}
-          {!acceptedDriver && searchWaitStage(elapsedSec) === 'long' && (
+          {!acceptedDriver && webWait.longNotice && (
             <div style={{
               marginTop: 10, padding: '10px 12px', borderRadius: 10,
               background: 'rgba(255,77,0,0.08)',
@@ -427,7 +431,7 @@ function WebSearchingState({
           {/* Progress bar */}
           <div style={{ width: '100%', marginTop: 16, padding: '0 12px' }}>
             <div style={{ height: 3, backgroundColor: c.surfaceAlt, borderRadius: 2, overflow: 'hidden' }}>
-              {elapsedSec >= SEARCH_TYPICAL_WAIT_S ? (
+              {webWait.progress === 'sweep' ? (
                 <div style={{
                   position: 'relative', height: '100%', width: '35%',
                   backgroundColor: colors.brand.orange, borderRadius: 2,
@@ -442,7 +446,7 @@ function WebSearchingState({
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: c.textFaint }}>
               <span>{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}</span>
-              <span>{elapsedSec >= SEARCH_TYPICAL_WAIT_S ? 'Buscando' : 'Espera habitual 2:00'}</span>
+              <span>{webWait.progress === 'sweep' ? 'Buscando' : 'Espera habitual 2:00'}</span>
             </div>
           </div>
         </div>
@@ -5095,7 +5099,7 @@ function SearchingView() {
 
   // UX: drivers show an elapsed time counter so the rider can frame their
   // own wait — is this normal? am I stuck? — without counting in their head.
-  // The counter also drives which reassurance the rider gets (searchWaitStage).
+  // The counter also drives which reassurance the rider gets (searchWaitView).
   const searchStartedAtRef = useRef(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   useEffect(() => {
@@ -5119,8 +5123,14 @@ function SearchingView() {
   // that had not happened, on top of the 21 % of rides that get accepted
   // after the two-minute mark, and its retry button called `requestEstimate`
   // without restarting anything. See packages/utils/src/searchWait.ts.
-  const waitStage = searchWaitStage(elapsedSeconds);
-  const pastTypicalWait = elapsedSeconds >= SEARCH_TYPICAL_WAIT_S;
+  // One tested decision (packages/utils/src/searchWait.ts) instead of inline
+  // conditionals a renderless test suite could never reach.
+  const wait = searchWaitView({
+    elapsedSeconds,
+    pendingOfferCount: offerStats?.pending_count ?? 0,
+    offerSecondsLeft,
+  });
+  const pastTypicalWait = wait.progress === 'sweep';
 
   // UBER-2.1: Progress bar over the TYPICAL wait (79 % of accepted rides land
   // inside it). Once it is full the wait is simply slower than most — not
@@ -5283,7 +5293,7 @@ function SearchingView() {
       />
 
       {/* The search never "fails" while this screen is up — see the
-           searchWaitStage comment above. What changes over time is only how
+           searchWaitView comment above. What changes over time is only how
            much the app explains itself. */}
       {!acceptedDriver ? (
         <>
@@ -5294,12 +5304,12 @@ function SearchingView() {
           </Animated.View>
           {/* Hints only while no offer is pending — a pending offer has its
                own live countdown and does not need reassurance on top. */}
-          {(offerStats?.pending_count ?? 0) === 0 && waitStage === 'opening' && (
+          {wait.hint === 'typical' && (
             <Text variant="caption" color="tertiary" className="mb-4 text-center">
               {t('home.typical_wait_hint', { defaultValue: 'Normalmente menos de 2 minutos' })}
             </Text>
           )}
-          {(offerStats?.pending_count ?? 0) === 0 && waitStage === 'extended' && (
+          {wait.hint === 'still_searching' && (
             <Text variant="caption" color="tertiary" className="mb-4 text-center">
               {t('home.still_searching_hint', { defaultValue: 'Seguimos buscando — puedes cancelar si necesitas.' })}
             </Text>
@@ -5310,7 +5320,7 @@ function SearchingView() {
                dispatch retries every minute for as long as this screen is
                open. This replaced a screen that claimed the search had
                failed while all of that was still running. */}
-          {waitStage === 'long' && (
+          {wait.longNotice && (
             <View className="w-full px-8 mb-4">
               <View
                 style={{
@@ -5346,16 +5356,16 @@ function SearchingView() {
               onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
               style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}
             >
-              {offerSecondsLeft !== null && offerSecondsLeft > 0 ? (
+              {wait.progress === 'offer' ? (
                 <View
                   style={{
                     height: '100%',
                     backgroundColor: colors.brand.orange,
                     borderRadius: 2,
-                    width: `${Math.max(0, Math.min(100, (offerSecondsLeft / 30) * 100))}%`,
+                    width: `${Math.max(0, Math.min(100, ((offerSecondsLeft ?? 0) / 30) * 100))}%`,
                   }}
                 />
-              ) : pastTypicalWait && trackWidth > 0 ? (
+              ) : wait.progress === 'sweep' && trackWidth > 0 ? (
                 <Animated.View
                   style={{
                     height: '100%',
