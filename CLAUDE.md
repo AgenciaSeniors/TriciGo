@@ -2474,6 +2474,27 @@ SELECT status, count(*), round(percentile_cont(0.5) WITHIN GROUP (ORDER BY dista
 FROM ride_offers GROUP BY 1;
 ```
 
+### La búsqueda NO tiene deadline en el servidor — el cartel de "no hay conductor" era mentira (verificado 2026-09-10)
+
+**`searching_abandon_seconds` NO es "cuánto busca el servidor".** Es la ventana de ABANDONO: `cleanup_orphan_searching_rides` solo cancela viajes cuyo `searching_seen_at` quedó viejo, o sea cuando la app del pasajero **dejó de mirar**. Mientras la pantalla de búsqueda está arriba, `useRideInit` late cada 30 s (`touch_searching_ride`) y esa columna nunca envejece. Y `retry_dispatch_expired_rides` (cron cada minuto) re-despacha **sin tope alguno**: cualquier viaje `searching` cuyo último despacho tenga >30 s y sin oferta viva. Igual `notify_offline_drivers_for_searching_rides`. **Conclusión: con la app abierta, la búsqueda es ilimitada.**
+
+**La app decía lo contrario.** Cliente y web declaraban `searchTimedOut` a los **120 s hardcodeados** y reemplazaban toda la pantalla por "No encontramos conductor" + botón "Reintentar búsqueda" — que llamaba `requestEstimate()` y **no reiniciaba nada**, porque no había nada que reiniciar.
+
+**Medido contra prod (2026-09-10):**
+
+| Señal | Valor |
+|---|---|
+| Aceptación real (`ride_offers.responded_at − rides.created_at`, n=29) | p50 **29 s** · p75 72 s · p90 145 s · máx **1256 s** (completó) |
+| Aceptados DESPUÉS de los 120 s | **6 de 29 (21 %)** |
+| Viajes que recibieron una oferta **nueva** pasados los 120 s | **19 de 111** (la más tardía a 690 s) |
+| Cancelaciones del pasajero entre 122 s y 179 s | **27** — el minuto que se abre justo cuando aparece el cartel |
+
+**Trampa de datos que casi arruina la medición:** `rides.accepted_at − created_at` da p50 = 120 s, y eso es **un artefacto**: 14 viajes sembrados de junio están en exactamente 120 s y 6 en exactamente 180 s, ninguno con fila en `ride_offers`. Filtrar a los que tienen una oferta aceptada real los saca. **Si una distribución te sale en números redondos, sospechá de datos sembrados antes de creerle.**
+
+**Lo que se hizo (PR #996):** se eliminó el estado de timeout en las dos superficies. La espera ahora se narra por etapas puras (`packages/utils/src/searchWait.ts`, `searchWaitStage`): `opening` (<15 s) fija expectativa, `normal` (15-44 s) calla, `extended` (45-179 s) tranquiliza, `long` (≥180 s, apenas sobre el p90) admite que va lento **y dice qué está haciendo el despacho**. La barra llena sobre `SEARCH_TYPICAL_WAIT_S`=120 s (79 % de los aceptados caen adentro) y después pasa a un barrido indeterminado — una barra llena sobre una búsqueda viva se lee como "terminado". La salida del pasajero sigue siendo el botón Cancelar, que ya lleva su propio cronómetro.
+
+**Regla general:** antes de poner un deadline en el cliente, verificá con `pg_get_functiondef` **vivo** si el servidor tiene alguno. Un timeout de UI que no corresponde a un timeout real no es una salvaguarda, es una mentira con botón.
+
 ### Un no-op se vuelve regresión cuando el fix lo hace real (verificado 2026-08-06, #926 → PR de revisión)
 
 **Clase de bug, no incidente aislado.** #926 des-condicionó el arranque del foreground service del permiso "Siempre", así que por fin corría. Pero `useDriverRide.ts` lo **detenía** desde 4 lugares al terminar/cancelar un viaje (`stopBgLocationTracking`, líneas 241/859/875/1073) con el conductor todavía en línea. Mientras el servicio no arrancaba nunca, esos stops eran inocuos. Al volverse real, cada finalización de viaje mataba el único latido que sobrevive con la pantalla apagada → el cron sacaba al conductor de línea 10 min después. **El fix creó exactamente el síntoma que venía a eliminar**, y por eso la métrica no se movió (2,16 → 2,06 desconexiones forzadas por conductor y por día, sin mejora).

@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitStage } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService } from '@tricigo/api';
@@ -152,6 +152,12 @@ const WEB_SEARCHING_CSS = `
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
+  /* Hand-off for a wait that ran past the typical one: a full bar over a
+     search that is still running reads as finished. */
+  @keyframes ws-sweep {
+    from { left: -35%; }
+    to { left: 100%; }
+  }
 `;
 
 const WEB_SEARCH_MESSAGES = [
@@ -179,7 +185,6 @@ function WebSearchingState({
   paymentMethod: string;
 }) {
   const [searchPhase, setSearchPhase] = useState(0);
-  const [searchTimedOut, setSearchTimedOut] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
 
   // ── Interactive searching: real-time driver presence ──
@@ -214,11 +219,11 @@ function WebSearchingState({
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  // Timeout
-  useEffect(() => {
-    const timeout = setTimeout(() => setSearchTimedOut(true), 120_000);
-    return () => clearTimeout(timeout);
-  }, []);
+  // No timeout on purpose. `retry_dispatch_expired_rides` re-dispatches this
+  // ride every minute with no cap, and the reaper only touches searches whose
+  // `searching_seen_at` went stale — which useSearchingRide keeps fresh while
+  // this panel is open. The old 120s "Sin conductor disponible" was reporting
+  // a failure that had not happened. See packages/utils/src/searchWait.ts.
 
   // Elapsed timer
   useEffect(() => {
@@ -247,7 +252,7 @@ function WebSearchingState({
         )}
 
         {/* ETA Badge floating on map */}
-        {selectedEstimate?.estimated_duration_s && !searchTimedOut && (
+        {selectedEstimate?.estimated_duration_s && (
           <div style={{
             position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
             display: 'flex', alignItems: 'center', gap: 6,
@@ -277,225 +282,215 @@ function WebSearchingState({
             {serviceType === 'mensajeria' ? 'Seguimiento de envío' : 'Seguimiento de viaje'}
           </div>
           <div style={{ fontSize: 22, fontWeight: 800, color: c.text, letterSpacing: '-0.02em' }}>
-            {searchTimedOut ? 'Sin conductor disponible' : '¡Viaje solicitado!'}
+            ¡Viaje solicitado!
           </div>
         </div>
 
-        {/* Ripple Animation or Timeout */}
+        {/* Ripple animation — this panel has no failure state */}
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           padding: '20px 0', animation: 'ws-fadeIn 0.4s ease both 0.05s',
         }}>
-          {searchTimedOut ? (
-            <>
+          {/* Ripple circles */}
+          <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 16 }}>
+            {[0, 0.6, 1.2].map((delay, i) => (
+              <div key={i} style={{
+                position: 'absolute', top: '50%', left: '50%',
+                width: 80, height: 80, borderRadius: '50%',
+                border: '2px solid rgba(255,77,0,0.3)',
+                animation: `ws-ripple 2.4s ease-out ${delay}s infinite`,
+              }} />
+            ))}
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: 'translate(-50%,-50%)',
+              width: 56, height: 56, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #FF4D00, #FF6B2C)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 16px rgba(255,77,0,0.3)',
+              animation: 'ws-glow 2s ease-in-out infinite',
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2L19 21L12 17L5 21L12 2Z" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Driver accepted — celebration overlay */}
+          {acceptedDriver && (
+            <div style={{
+              animation: 'ws-fadeIn 0.4s ease both',
+              background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
+              borderRadius: 14, padding: 20, width: '100%',
+              border: '2px solid #22c55e', textAlign: 'center' as const,
+              marginBottom: 12,
+            }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>&#10003;</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#15803d', marginBottom: 4 }}>
+                Conductor encontrado!
+              </div>
+              <div style={{ fontSize: 14, color: '#16a34a', marginBottom: 12 }}>
+                {acceptedDriver.name} va en camino
+              </div>
               <div style={{
-                width: 72, height: 72, borderRadius: '50%',
-                background: 'rgba(156,163,175,0.1)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                marginBottom: 16,
+                display: 'flex', alignItems: 'center', gap: 10,
+                background: '#fff', borderRadius: 12, padding: '10px 14px',
               }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={c.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: c.text, textAlign: 'center' as const, marginBottom: 6 }}>
-                No encontramos conductor
-              </div>
-              <div style={{ fontSize: 13, color: c.textMuted, textAlign: 'center' as const, marginBottom: 16 }}>
-                Intenta de nuevo o prueba con otro tipo de vehículo
-              </div>
-              <button onClick={onReset} style={{
-                width: '100%', padding: '14px 24px', borderRadius: 12,
-                background: colors.brand.orange, color: '#fff',
-                fontWeight: 700, fontSize: 15, border: 'none', cursor: 'pointer',
-                ...font,
-              }}>
-                Solicitar otro viaje
-              </button>
-            </>
-          ) : (
-            <>
-              {/* Ripple circles */}
-              <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 16 }}>
-                {[0, 0.6, 1.2].map((delay, i) => (
-                  <div key={i} style={{
-                    position: 'absolute', top: '50%', left: '50%',
-                    width: 80, height: 80, borderRadius: '50%',
-                    border: '2px solid rgba(255,77,0,0.3)',
-                    animation: `ws-ripple 2.4s ease-out ${delay}s infinite`,
-                  }} />
-                ))}
                 <div style={{
-                  position: 'absolute', top: '50%', left: '50%',
-                  transform: 'translate(-50%,-50%)',
-                  width: 56, height: 56, borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #FF4D00, #FF6B2C)',
+                  width: 44, height: 44, borderRadius: '50%',
+                  background: colors.brand.orange,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 4px 16px rgba(255,77,0,0.3)',
-                  animation: 'ws-glow 2s ease-in-out infinite',
+                  color: '#fff', fontWeight: 700, fontSize: 16,
+                  border: '2px solid #22c55e',
                 }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2L19 21L12 17L5 21L12 2Z" />
-                  </svg>
+                  {acceptedDriver.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                </div>
+                <div style={{ flex: 1, textAlign: 'left' as const }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{acceptedDriver.name}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>{formatRating(acceptedDriver.rating, 'Nuevo')}</div>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Driver accepted — celebration overlay */}
-              {acceptedDriver && (
+          {/* Searching drivers count + chips */}
+          {!acceptedDriver && searchingDrivers.length > 0 && (
+            <div style={{
+              width: '100%', background: c.surface,
+              border: `1px solid ${c.borderFaint}`, borderRadius: 12,
+              padding: '12px 14px', marginBottom: 12,
+              animation: 'ws-fadeIn 0.3s ease both',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <div style={{
-                  animation: 'ws-fadeIn 0.4s ease both',
-                  background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
-                  borderRadius: 14, padding: 20, width: '100%',
-                  border: '2px solid #22c55e', textAlign: 'center' as const,
-                  marginBottom: 12,
-                }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>&#10003;</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#15803d', marginBottom: 4 }}>
-                    Conductor encontrado!
-                  </div>
-                  <div style={{ fontSize: 14, color: '#16a34a', marginBottom: 12 }}>
-                    {acceptedDriver.name} va en camino
-                  </div>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    background: '#fff', borderRadius: 12, padding: '10px 14px',
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: colors.brand.orange,
+                  animation: 'ws-pulse 2s ease-in-out infinite',
+                }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>
+                  {searchingDrivers.length} {searchingDrivers.length === 1 ? 'conductor revisando' : 'conductores revisando'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                {searchingDrivers
+                  .filter((d, i, arr) => arr.findIndex(x => x.driverId === d.driverId) === i)
+                  .map((d) => (
+                  <div key={d.driverId} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: c.panel, borderRadius: 20,
+                    padding: '5px 10px', border: `1px solid ${c.border}`,
+                    animation: 'ws-fadeIn 0.3s ease both',
                   }}>
                     <div style={{
-                      width: 44, height: 44, borderRadius: '50%',
+                      width: 22, height: 22, borderRadius: '50%',
                       background: colors.brand.orange,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontWeight: 700, fontSize: 16,
-                      border: '2px solid #22c55e',
+                      color: '#fff', fontWeight: 700, fontSize: 9,
                     }}>
-                      {acceptedDriver.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                      {d.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
                     </div>
-                    <div style={{ flex: 1, textAlign: 'left' as const }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a1a' }}>{acceptedDriver.name}</div>
-                      <div style={{ fontSize: 12, color: '#6b7280' }}>{formatRating(acceptedDriver.rating, 'Nuevo')}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Searching drivers count + chips */}
-              {!acceptedDriver && searchingDrivers.length > 0 && (
-                <div style={{
-                  width: '100%', background: c.surface,
-                  border: `1px solid ${c.borderFaint}`, borderRadius: 12,
-                  padding: '12px 14px', marginBottom: 12,
-                  animation: 'ws-fadeIn 0.3s ease both',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <div style={{
-                      width: 8, height: 8, borderRadius: '50%',
-                      background: colors.brand.orange,
-                      animation: 'ws-pulse 2s ease-in-out infinite',
-                    }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>
-                      {searchingDrivers.length} {searchingDrivers.length === 1 ? 'conductor revisando' : 'conductores revisando'}
+                    <span style={{ fontSize: 12, fontWeight: 500, color: c.text }}>
+                      {d.name.split(' ')[0]}
                     </span>
+                    <span style={{ fontSize: 11, color: c.textFaint }}>{formatRating(d.rating, 'Nuevo')}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    {searchingDrivers
-                      .filter((d, i, arr) => arr.findIndex(x => x.driverId === d.driverId) === i)
-                      .map((d) => (
-                      <div key={d.driverId} style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        background: c.panel, borderRadius: 20,
-                        padding: '5px 10px', border: `1px solid ${c.border}`,
-                        animation: 'ws-fadeIn 0.3s ease both',
-                      }}>
-                        <div style={{
-                          width: 22, height: 22, borderRadius: '50%',
-                          background: colors.brand.orange,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: '#fff', fontWeight: 700, fontSize: 9,
-                        }}>
-                          {d.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 500, color: c.text }}>
-                          {d.name.split(' ')[0]}
-                        </span>
-                        <span style={{ fontSize: 11, color: c.textFaint }}>{formatRating(d.rating, 'Nuevo')}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ fontSize: 15, fontWeight: 700, color: c.text, textAlign: 'center' as const, marginBottom: 4 }}>
-                {acceptedDriver ? '' : 'Buscando conductor'}
+                ))}
               </div>
-              {!acceptedDriver && (
-              <div key={searchPhase} style={{
-                fontSize: 13, color: c.textMuted, textAlign: 'center' as const,
-                animation: 'ws-fadeIn 0.3s ease both',
-              }}>
-                {searchMessage}
-              </div>
-              )}
-
-              {/* Progress bar */}
-              <div style={{ width: '100%', marginTop: 16, padding: '0 12px' }}>
-                <div style={{ height: 3, backgroundColor: c.surfaceAlt, borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%', backgroundColor: colors.brand.orange,
-                    borderRadius: 2, animation: 'ws-progress 120s linear forwards',
-                  }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: c.textFaint }}>
-                  <span>{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}</span>
-                  <span>2:00</span>
-                </div>
-              </div>
-            </>
+            </div>
           )}
+
+          <div style={{ fontSize: 15, fontWeight: 700, color: c.text, textAlign: 'center' as const, marginBottom: 4 }}>
+            {acceptedDriver ? '' : 'Buscando conductor'}
+          </div>
+          {!acceptedDriver && (
+          <div key={searchPhase} style={{
+            fontSize: 13, color: c.textMuted, textAlign: 'center' as const,
+            animation: 'ws-fadeIn 0.3s ease both',
+          }}>
+            {searchMessage}
+          </div>
+          )}
+          {!acceptedDriver && searchWaitStage(elapsedSec) === 'long' && (
+            <div style={{
+              marginTop: 10, padding: '10px 12px', borderRadius: 10,
+              background: 'rgba(255,77,0,0.08)',
+              fontSize: 12, color: c.textMuted, lineHeight: 1.5,
+              textAlign: 'center' as const,
+              animation: 'ws-fadeIn 0.3s ease both',
+            }}>
+              <strong style={{ color: c.text }}>Está tardando más de lo normal.</strong>{' '}
+              Ampliamos la búsqueda a toda la ciudad y avisamos a los conductores desconectados.
+              Seguimos intentando — puedes esperar o cancelar sin costo.
+            </div>
+          )}
+
+          {/* Progress bar */}
+          <div style={{ width: '100%', marginTop: 16, padding: '0 12px' }}>
+            <div style={{ height: 3, backgroundColor: c.surfaceAlt, borderRadius: 2, overflow: 'hidden' }}>
+              {elapsedSec >= SEARCH_TYPICAL_WAIT_S ? (
+                <div style={{
+                  position: 'relative', height: '100%', width: '35%',
+                  backgroundColor: colors.brand.orange, borderRadius: 2,
+                  animation: 'ws-sweep 1.6s ease-in-out infinite',
+                }} />
+              ) : (
+                <div style={{
+                  height: '100%', backgroundColor: colors.brand.orange, borderRadius: 2,
+                  animation: `ws-progress ${SEARCH_TYPICAL_WAIT_S}s linear forwards`,
+                }} />
+              )}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11, color: c.textFaint }}>
+              <span>{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}</span>
+              <span>{elapsedSec >= SEARCH_TYPICAL_WAIT_S ? 'Buscando' : 'Espera habitual 2:00'}</span>
+            </div>
+          </div>
         </div>
 
         {/* Status Stepper */}
-        {!searchTimedOut && (
-          <div style={{
-            background: c.surface, border: `1px solid ${c.borderFaint}`, borderRadius: 12,
-            padding: 16, animation: 'ws-fadeIn 0.4s ease both 0.1s',
-          }}>
-            {[
-              { label: 'Buscando conductor', active: true },
-              { label: 'Conductor asignado', active: false },
-              { label: 'En camino a recogerte', active: false },
-              { label: 'Viaje en curso', active: false },
-            ].map((step, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: idx < 3 ? 12 : 0 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 24, flexShrink: 0 }}>
-                  <div style={{
-                    width: 24, height: 24, borderRadius: '50%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700,
-                    ...(step.active
-                      ? { background: colors.brand.orange, color: '#fff', animation: 'ws-glow 2s ease-in-out infinite' }
-                      : { background: c.surfaceAlt, color: c.textFaint, border: `2px solid ${c.border}` }),
-                  }}>
-                    {idx + 1}
-                  </div>
-                  {idx < 3 && (
-                    <div style={{
-                      width: 2, flex: 1, minHeight: 12, marginTop: 4,
-                      background: step.active ? colors.brand.orange : c.border,
-                      ...(step.active ? {} : {
-                        background: `repeating-linear-gradient(to bottom, ${c.border} 0px, ${c.border} 3px, transparent 3px, transparent 6px)`,
-                      }),
-                    }} />
-                  )}
-                </div>
-                <span style={{
-                  fontSize: 13, paddingTop: 3, lineHeight: '1.3',
+        <div style={{
+          background: c.surface, border: `1px solid ${c.borderFaint}`, borderRadius: 12,
+          padding: 16, animation: 'ws-fadeIn 0.4s ease both 0.1s',
+        }}>
+          {[
+            { label: 'Buscando conductor', active: true },
+            { label: 'Conductor asignado', active: false },
+            { label: 'En camino a recogerte', active: false },
+            { label: 'Viaje en curso', active: false },
+          ].map((step, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: idx < 3 ? 12 : 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 24, flexShrink: 0 }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700,
                   ...(step.active
-                    ? { fontWeight: 700, color: c.text }
-                    : { fontWeight: 500, color: c.textFaint }),
+                    ? { background: colors.brand.orange, color: '#fff', animation: 'ws-glow 2s ease-in-out infinite' }
+                    : { background: c.surfaceAlt, color: c.textFaint, border: `2px solid ${c.border}` }),
                 }}>
-                  {step.label}
-                </span>
+                  {idx + 1}
+                </div>
+                {idx < 3 && (
+                  <div style={{
+                    width: 2, flex: 1, minHeight: 12, marginTop: 4,
+                    background: step.active ? colors.brand.orange : c.border,
+                    ...(step.active ? {} : {
+                      background: `repeating-linear-gradient(to bottom, ${c.border} 0px, ${c.border} 3px, transparent 3px, transparent 6px)`,
+                    }),
+                  }} />
+                )}
               </div>
-            ))}
-          </div>
-        )}
+              <span style={{
+                fontSize: 13, paddingTop: 3, lineHeight: '1.3',
+                ...(step.active
+                  ? { fontWeight: 700, color: c.text }
+                  : { fontWeight: 500, color: c.textFaint }),
+              }}>
+                {step.label}
+              </span>
+            </div>
+          ))}
+        </div>
 
         {/* Route Card */}
         <div style={{
@@ -543,36 +538,32 @@ function WebSearchingState({
         )}
 
         {/* Cancel button */}
-        {!searchTimedOut && (
-          <button onClick={onReset} style={{
-            width: '100%', padding: '14px 24px', borderRadius: 12,
-            background: 'transparent', color: c.textMuted,
-            fontWeight: 600, fontSize: 14, cursor: 'pointer',
-            border: `1.5px solid ${c.border}`, ...font,
-            transition: 'all 0.2s ease',
-            animation: 'ws-fadeIn 0.4s ease both 0.25s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = c.border; e.currentTarget.style.color = c.textMuted; }}
-          >
-            Cancelar búsqueda
-          </button>
-        )}
+        <button onClick={onReset} style={{
+          width: '100%', padding: '14px 24px', borderRadius: 12,
+          background: 'transparent', color: c.textMuted,
+          fontWeight: 600, fontSize: 14, cursor: 'pointer',
+          border: `1.5px solid ${c.border}`, ...font,
+          transition: 'all 0.2s ease',
+          animation: 'ws-fadeIn 0.4s ease both 0.25s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = c.border; e.currentTarget.style.color = c.textMuted; }}
+        >
+          Cancelar búsqueda
+        </button>
 
         {/* Live indicator */}
-        {!searchTimedOut && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: 8, fontSize: 11, color: c.textFaint, fontWeight: 500,
+          animation: 'ws-fadeIn 0.4s ease both 0.3s',
+        }}>
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 8, fontSize: 11, color: c.textFaint, fontWeight: 500,
-            animation: 'ws-fadeIn 0.4s ease both 0.3s',
-          }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%', background: '#22c55e',
-              animation: 'ws-pulse 2s ease-in-out infinite',
-            }} />
-            Búsqueda en tiempo real
-          </div>
-        )}
+            width: 8, height: 8, borderRadius: '50%', background: '#22c55e',
+            animation: 'ws-pulse 2s ease-in-out infinite',
+          }} />
+          Búsqueda en tiempo real
+        </div>
       </div>
     </div>
   );
@@ -5026,7 +5017,7 @@ function SearchingView() {
   const { t } = useTranslation('rider');
   const { isTablet } = useResponsive();
   const { isLoading, error, activeRide } = useRideStore();
-  const { cancelRide, requestEstimate } = useRideActions();
+  const { cancelRide } = useRideActions();
   const { coordinates: routeCoordinates } = useRoutePolyline(
     activeRide?.pickup_location ?? null,
     activeRide?.dropoff_location ?? null,
@@ -5102,29 +5093,9 @@ function SearchingView() {
     return () => timers.forEach(clearTimeout);
   }, [fadeAndSetPhase]);
 
-  // UBER-2.1: Progress bar animation (0% to 100% over 120s search timeout)
-  const progressAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: 1,
-      duration: 120000,
-      useNativeDriver: false,
-    }).start();
-    return () => { progressAnim.stopAnimation(); };
-  }, [progressAnim]);
-
-  // I3.1: Search timeout state
-  const [searchTimedOut, setSearchTimedOut] = useState(false);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setSearchTimedOut(true), 120_000);
-    return () => clearTimeout(timeout);
-  }, []);
-
   // UX: drivers show an elapsed time counter so the rider can frame their
   // own wait — is this normal? am I stuck? — without counting in their head.
-  // The counter also lets us gate reassurance and hint messages on time.
+  // The counter also drives which reassurance the rider gets (searchWaitStage).
   const searchStartedAtRef = useRef(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   useEffect(() => {
@@ -5140,14 +5111,41 @@ function SearchingView() {
     return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`;
   })();
 
-  // I3.3: Retry handler
-  const handleRetrySearch = useCallback(() => {
-    setSearchTimedOut(false);
-    setSearchPhase(0);
-    progressAnim.setValue(0);
-    Animated.timing(progressAnim, { toValue: 1, duration: 120000, useNativeDriver: false }).start();
-    requestEstimate();
-  }, [progressAnim, requestEstimate]);
+  // I3.1 REMOVED (2026-09-10): the 120s "search timed out" state and its
+  // retry button. The server never times out while this screen is up —
+  // `retry_dispatch_expired_rides` re-dispatches forever and the reaper only
+  // touches rides whose `searching_seen_at` went stale, which the heartbeat
+  // in useRideInit keeps fresh. So the failure screen was reporting something
+  // that had not happened, on top of the 21 % of rides that get accepted
+  // after the two-minute mark, and its retry button called `requestEstimate`
+  // without restarting anything. See packages/utils/src/searchWait.ts.
+  const waitStage = searchWaitStage(elapsedSeconds);
+  const pastTypicalWait = elapsedSeconds >= SEARCH_TYPICAL_WAIT_S;
+
+  // UBER-2.1: Progress bar over the TYPICAL wait (79 % of accepted rides land
+  // inside it). Once it is full the wait is simply slower than most — not
+  // over — so the bar hands off to an indeterminate sweep rather than sitting
+  // pinned at 100 %, which reads as a finished, stuck screen.
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: SEARCH_TYPICAL_WAIT_S * 1000,
+      useNativeDriver: false,
+    }).start();
+    return () => { progressAnim.stopAnimation(); };
+  }, [progressAnim]);
+
+  const sweepAnim = useRef(new Animated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = useState(0);
+  useEffect(() => {
+    if (!pastTypicalWait || trackWidth <= 0) return;
+    const loop = Animated.loop(
+      Animated.timing(sweepAnim, { toValue: 1, duration: 1600, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => { loop.stop(); sweepAnim.setValue(0); };
+  }, [pastTypicalWait, trackWidth, sweepAnim]);
 
   const SEARCH_MESSAGES = [
     t('home.searching_best'),
@@ -5231,8 +5229,7 @@ function SearchingView() {
 
       {/* BUG-293: radar dot now lives inside the DriverInfoMiniCard header.
            The standalone floating car icon felt disconnected from the rest
-           of the searching state. Keeping it ONLY for the timed-out case so
-           the rider has a visible signal something is still happening. */}
+           of the searching state. */}
 
       {/* Interactive driver presence mini-card — now carries pickup/
            dropoff/fare so the rider has useful context while waiting. */}
@@ -5261,7 +5258,7 @@ function SearchingView() {
         return (
           <DriverInfoMiniCard
             drivers={searchingDrivers}
-            isSearching={!searchTimedOut}
+            isSearching
             pickupAddress={activeRide.pickup_address ?? null}
             dropoffAddress={activeRide.dropoff_address ?? null}
             fareDisplay={fareDisplay}
@@ -5273,7 +5270,7 @@ function SearchingView() {
 
       {/* Fallback radar — visible only while the card itself isn't shown
            (e.g. when activeRide is null in an edge state). */}
-      {!acceptedDriver && !searchTimedOut && !activeRide && (
+      {!acceptedDriver && !activeRide && (
         <View style={{ alignItems: 'center', justifyContent: 'center', height: 100, marginBottom: 8 }}>
           <RadarPulseAnimation />
         </View>
@@ -5285,54 +5282,70 @@ function SearchingView() {
         className="w-full mb-6"
       />
 
-      {/* I3.2: Timeout UI vs active search UI */}
-      {searchTimedOut ? (
-        <View className="items-center mb-6 px-6">
-          <Ionicons name="alert-circle-outline" size={48} color="#9CA3AF" />
-          <Text variant="h4" className="mt-3 mb-2 text-center">
-            {t('ride.no_driver_found_title')}
-          </Text>
-          <Text variant="bodySmall" color="secondary" className="mb-6 text-center">
-            {t('ride.no_driver_found_subtitle')}
-          </Text>
-          <Button
-            title={t('ride.retry_search')}
-            size="lg"
-            fullWidth
-            onPress={handleRetrySearch}
-          />
-        </View>
-      ) : !acceptedDriver ? (
+      {/* The search never "fails" while this screen is up — see the
+           searchWaitStage comment above. What changes over time is only how
+           much the app explains itself. */}
+      {!acceptedDriver ? (
         <>
           <Animated.View style={{ opacity: searchFadeAnim }}>
             <Text variant="bodySmall" color="secondary" className="mb-2 text-center">
               {searchMessage}
             </Text>
           </Animated.View>
-          {/* UX: frame the expected wait so riders don't read silent
-               searching as a stuck app. Only show before there's a
-               pending offer (which has its own live countdown) and only
-               during the opening window so it doesn't shout at users who
-               are already deep in the wait. */}
-          {elapsedSeconds < 15 && (offerStats?.pending_count ?? 0) === 0 && (
+          {/* Hints only while no offer is pending — a pending offer has its
+               own live countdown and does not need reassurance on top. */}
+          {(offerStats?.pending_count ?? 0) === 0 && waitStage === 'opening' && (
             <Text variant="caption" color="tertiary" className="mb-4 text-center">
               {t('home.typical_wait_hint', { defaultValue: 'Normalmente menos de 2 minutos' })}
             </Text>
           )}
-          {/* UX: at the mid-wait mark, reassure the rider that the search
-               is still actively running. 45-90s is exactly the zone where
-               anxiety spikes but timeout hasn't fired. */}
-          {elapsedSeconds >= 45 && elapsedSeconds < 90 && (offerStats?.pending_count ?? 0) === 0 && (
+          {(offerStats?.pending_count ?? 0) === 0 && waitStage === 'extended' && (
             <Text variant="caption" color="tertiary" className="mb-4 text-center">
               {t('home.still_searching_hint', { defaultValue: 'Seguimos buscando — puedes cancelar si necesitas.' })}
             </Text>
           )}
+          {/* Past the 90th percentile the honest thing is to say it is slow
+               AND to say what is still happening: the radius opened to the
+               whole city at 45s, offline drivers were notified at 60s, and
+               dispatch retries every minute for as long as this screen is
+               open. This replaced a screen that claimed the search had
+               failed while all of that was still running. */}
+          {waitStage === 'long' && (
+            <View className="w-full px-8 mb-4">
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: 'rgba(255,77,0,0.08)',
+                }}
+              >
+                <Ionicons name="time-outline" size={18} color={colors.brand.orange} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="bodySmall" className="mb-1">
+                    {t('home.long_wait_title', { defaultValue: 'Está tardando más de lo normal' })}
+                  </Text>
+                  <Text variant="caption" color="tertiary">
+                    {t('home.long_wait_body', {
+                      defaultValue: 'Ampliamos la búsqueda a toda la ciudad y avisamos a los conductores desconectados. Seguimos intentando — puedes esperar o cancelar sin costo.',
+                    })}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
 
-          {/* Thin progress bar — when a pending offer exists, show the
-               30s offer window draining; otherwise keep the legacy
-               120s stale-ride progress as a fallback. */}
+          {/* Thin progress bar. Three states, in priority order:
+               a pending offer drains its own 30s window; before the typical
+               wait the bar fills; after it, an indeterminate sweep, because
+               a full bar on a search that is still running reads as done. */}
           <View className="w-full px-8 mb-6">
-            <View style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}>
+            <View
+              onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+              style={{ height: 3, backgroundColor: '#E5E7EB', borderRadius: 2, overflow: 'hidden' }}
+            >
               {offerSecondsLeft !== null && offerSecondsLeft > 0 ? (
                 <View
                   style={{
@@ -5340,6 +5353,21 @@ function SearchingView() {
                     backgroundColor: colors.brand.orange,
                     borderRadius: 2,
                     width: `${Math.max(0, Math.min(100, (offerSecondsLeft / 30) * 100))}%`,
+                  }}
+                />
+              ) : pastTypicalWait && trackWidth > 0 ? (
+                <Animated.View
+                  style={{
+                    height: '100%',
+                    width: trackWidth * 0.35,
+                    backgroundColor: colors.brand.orange,
+                    borderRadius: 2,
+                    transform: [{
+                      translateX: sweepAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-trackWidth * 0.35, trackWidth],
+                      }),
+                    }],
                   }}
                 />
               ) : (
