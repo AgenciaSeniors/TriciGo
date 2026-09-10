@@ -2447,7 +2447,26 @@ Dos veces en una sesión la verificación fue **real pero sobre la superficie eq
 - *Preferencias*: `ride_offer` está en las categorías **no filtrables** de `FILTERABLE_CATEGORY_TO_PREF`; una oferta se entrega siempre.
 - *Esquema/RLS*: `UNIQUE (user_id, push_token)` existe y las políticas `ud_own`/`ud_admin` son correctas (una policy `FOR ALL` sin `WITH CHECK` reusa el `USING`, así que el upsert propio pasa).
 - *Bug de la app del conductor*: **pasajeros 28 % con token vs conductores 26 %** — idéntico, o sea que es el camino compartido de permiso/registro, no una app. Ese test diferencial es el que ordena el diagnóstico; hacerlo primero.
-- *El soft-ask de agosto lo empeoró*: los pasajeros, que no tuvieron ese cambio, cayeron igual. Con n=38 y n=21 la caída por cohorte no aguanta la atribución.
+- *El soft-ask de agosto lo empeoró*: **descartado el 2026-09-08 por falta de n, RESUCITADO Y CONFIRMADO el 2026-09-10 con la medición correcta** — ver abajo. La lectura vieja comparaba cohortes crudas (n=38 y n=21) sin normalizar exposición.
+
+**La corrección (2026-09-10): NO es un 74 % plano, es una caída con fecha.** Comparar cohortes por "¿tiene token hoy?" está sesgado — un usuario de julio tuvo dos meses de aperturas para conceder el permiso y uno de septiembre tuvo días. La métrica honesta es **la misma ventana para todos: ¿consiguió token dentro de los 7 días de su alta?** (y descartar cohortes con menos de 7 días de antigüedad, para que la ventana esté completa):
+
+| Cohorte de alta | Usuarios | Con token en 7 d |
+|---|---|---|
+| junio | 12 | **50 %** |
+| julio | **302** | **24 %** |
+| agosto | **209** | **7 %** |
+| septiembre | 14 | 7 % |
+
+Julio→agosto es 24 %→7 % con n=302 y n=209: no es ruido. Los **dos roles caen juntos** (conductores que usaron la app de verdad: julio 31/99, agosto 7/73, septiembre 3/36), lo que descarta un bug de una app. Y el registro **no está roto** — entran ~33 tokens por mes, el último de conductor el 2026-09-08.
+
+**Lo que cambió en ese borde:** la app dejó de preguntar. Un `requestPermissionsAsync()` incondicional en el primer arranque fue reemplazado por el soft-ask sheet como ÚNICO camino. El sheet es bueno **recuperando** (deep-link a Ajustes, que es la única vuelta posible tras una negación) pero como único preguntador junta un tercio de las concesiones: cuesta dos taps y un modal se descarta por reflejo.
+
+**Trampa de método que casi arruina la medición dos veces:** (1) cohortes sin normalizar exposición dan una pendiente monótona aunque el comportamiento sea constante; (2) el corte semanal muestra conductores en **0 %** cuatro semanas seguidas, que parece un corte brutal y es solo n≈13 por semana — el agregado mensual lo desmiente. Mirar siempre las dos escalas antes de concluir.
+
+**El arreglo (decisión del usuario 2026-09-10):** volver a preguntar, pero **con sesión iniciada**, no en el arranque en frío como julio. El gate es `shouldSpendPushPrompt` (`packages/utils/src/pushRegistration.ts`, con tests): gasta el prompt de una sola vez **solo mientras el permiso está `undetermined`**. Una negación NUNCA re-pregunta — `requestPermissionsAsync()` ahí resuelve al instante con la misma respuesta y el usuario no ve nada, o sea que parecería que se pregunta mientras se juntan cero concesiones; esos van al deep-link del sheet. Cableado en `useNotificationSetup` de los dos apps.
+
+**Bug concreto arreglado de paso:** el sheet del conductor leía `userId` del closure de render, pero el sheet aparece **1500 ms después del montaje** y el store de auth puede no haber hidratado todavía. En esa ventana caía a un `requestPermissionsAsync()` pelado: preguntaba, **no guardaba token**, y después quemaba el cooldown de 7 días — un conductor que decía que sí quedaba incomunicado una semana sin segunda oportunidad. Ahora el id se lee en el momento del tap (`useAuthStore.getState()`).
 
 **Lo que quedaba y no se podía medir:** el permiso del SO nunca se concedió — pero *denegó*, *nunca se le preguntó* y *falló el registro* se ven **exactamente igual** desde el servidor, porque `user_devices` solo registra ÉXITOS. `registerPushTokenForUser` ya calculaba el motivo y devolvía `'registered' | 'denied' | 'error'`, y **sus tres llamadores tiraban ese valor**, dentro de un `catch {}`. Es la misma clase que "un fallback que nunca se ejerció no es un fallback": lo que no se escribe, no existe.
 

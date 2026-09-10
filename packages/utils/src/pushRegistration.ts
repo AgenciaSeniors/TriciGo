@@ -47,3 +47,33 @@ export function classifyPushPermission(snapshot: PushPermissionSnapshot): PushPe
   // it is permanent (blocked) nor that we failed to ask (never_asked).
   return 'denied';
 }
+
+/**
+ * May the app spend its one OS permission prompt right now?
+ *
+ * MEASURED 2026-09-10, share of users holding a push token within 7 days of
+ * signing up (same window for every cohort, so exposure is not the variable):
+ *
+ *   June  50 % (n=12)   July 24 % (n=302)   August 7 % (n=209)   Sept 7 % (n=14)
+ *
+ * Both roles fell together, which rules out an app-specific bug. What changed
+ * at that boundary is that the app stopped asking: an unconditional
+ * `requestPermissionsAsync()` on first launch was replaced by a soft-ask sheet
+ * alone. The sheet is good at recovery — it deep-links to Settings, which is
+ * the only way back after a denial — but as the ONLY asker it collects a third
+ * of the grants, because it costs two taps and a modal is easy to wave away.
+ *
+ * So the app asks again. Not the way July did, though: July asked at cold
+ * mount with no session, before the person had signed up or seen a screen, and
+ * its own code comment records the result — "three quarters of them denied it
+ * for good". This gate is the difference. It says yes only while `undetermined`,
+ * so the prompt is spent at most once, and only on a state where a grant is
+ * still reachable. Everything else is left to the sheet.
+ *
+ * Never returns true for a denial: after one, `requestPermissionsAsync()`
+ * resolves instantly with the same answer and the user sees nothing at all.
+ * Firing it there would look like a working ask while collecting zero grants.
+ */
+export function shouldSpendPushPrompt(snapshot: PushPermissionSnapshot): boolean {
+  return classifyPushPermission(snapshot) === 'never_asked';
+}

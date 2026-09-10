@@ -172,7 +172,7 @@ export { jitterLocation } from './geo';
 export { searchAddressSearchBox, searchOverpassPOI, searchPoisSupabase, searchStreetsSupabase, computeSpecificity, tricigoCategoryEmoji, mapExternalCategoryToTricigo, enrichWithCrossStreets, isGenericStreetAddress, isPlaceholderAddress, lookupIntersectionPoint, parseCubanAddress, suggestCrossStreetsSupabase } from './geo';
 export { coverScale, cropOffsetBounds, clampCropOffset, computeCropRect, computeDisplayRect } from './imageCrop';
 export type { CropInput, CropRect } from './imageCrop';
-export { classifyPushPermission } from './pushRegistration';
+export { classifyPushPermission, shouldSpendPushPrompt } from './pushRegistration';
 export type { PushPermissionState, PushPermissionSnapshot, PushRegistrationOutcome } from './pushRegistration';
 
 export { SEARCH_TYPICAL_WAIT_S, SEARCH_LONG_WAIT_S, searchWaitStage, searchWaitView } from './searchWait';
