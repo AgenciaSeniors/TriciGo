@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { notificationService } from '@tricigo/api';
-import { classifyPushPermission } from '@tricigo/utils';
+import { classifyPushPermission, shouldSpendPushPrompt } from '@tricigo/utils';
 import type { PushRegistrationOutcome } from '@tricigo/utils';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -303,7 +303,18 @@ export function useNotificationSetup(userId: string | null | undefined) {
         const pref = await AsyncStorage.getItem(NOTIF_PREF_KEY);
         if (pref === 'false') return;
 
-        const result = await registerPushTokenForUser(userId!);
+        // Ask again (2026-09-10). Measured: the share of people holding a
+        // token within 7 days of signing up fell from 24 % (July, n=302) to
+        // 7 % (August, n=209) when the app stopped asking and left it all to
+        // the soft-ask sheet. So we ask — but signed in, not at cold mount
+        // like July did, so the person has already seen what TriciGo is.
+        // shouldSpendPushPrompt spends the one-shot prompt only while the
+        // permission is undetermined; a denial goes to the sheet's Settings
+        // deep-link instead, since re-requesting it there shows nothing.
+        const promptIfNeeded = shouldSpendPushPrompt(await Notifications.getPermissionsAsync());
+        if (cancelled) return;
+
+        const result = await registerPushTokenForUser(userId!, { promptIfNeeded });
         if (cancelled) return;
         if (result === 'registered') registeredRef.current = true;
       } catch {

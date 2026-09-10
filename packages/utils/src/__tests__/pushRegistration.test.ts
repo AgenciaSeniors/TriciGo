@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyPushPermission } from '../pushRegistration';
+import { classifyPushPermission, shouldSpendPushPrompt } from '../pushRegistration';
 
 describe('classifyPushPermission — why a device has no push token', () => {
   it('reports granted when the OS permission is already given', () => {
@@ -39,5 +39,39 @@ describe('classifyPushPermission — why a device has no push token', () => {
     expect(classifyPushPermission({})).toBe('denied');
     expect(classifyPushPermission({ status: null, canAskAgain: null })).toBe('denied');
     expect(classifyPushPermission({ status: 'provisional' })).toBe('denied');
+  });
+});
+
+describe('shouldSpendPushPrompt — when the app may spend its one OS prompt', () => {
+  it('spends it exactly once, while the question has never been put', () => {
+    // Android 13+ shows POST_NOTIFICATIONS once per install. `undetermined`
+    // is the only state in which asking can still produce a grant.
+    expect(shouldSpendPushPrompt({ status: 'undetermined', canAskAgain: true })).toBe(true);
+  });
+
+  it('does not ask someone who already said yes', () => {
+    expect(shouldSpendPushPrompt({ status: 'granted', canAskAgain: true })).toBe(false);
+    expect(shouldSpendPushPrompt({ status: 'granted', canAskAgain: false })).toBe(false);
+  });
+
+  it('does not fire a silent no-op at someone who already refused', () => {
+    // After a denial the OS dialog never appears again: requestPermissions
+    // resolves instantly with the same denial and the user sees NOTHING.
+    // Those users need the Settings deep-link, not another silent request.
+    expect(shouldSpendPushPrompt({ status: 'denied', canAskAgain: false })).toBe(false);
+    expect(shouldSpendPushPrompt({ status: 'denied', canAskAgain: true })).toBe(false);
+  });
+
+  it('stays silent when the OS says it will not ask again, whatever the status', () => {
+    // canAskAgain is the load-bearing field. An unfamiliar status plus
+    // "won't ask again" must never be read as an opportunity.
+    expect(shouldSpendPushPrompt({ status: 'undetermined', canAskAgain: false })).toBe(false);
+  });
+
+  it('stays silent on a missing or unknown snapshot', () => {
+    // Never spend the one-shot prompt on a guess.
+    expect(shouldSpendPushPrompt({})).toBe(false);
+    expect(shouldSpendPushPrompt({ status: null, canAskAgain: null })).toBe(false);
+    expect(shouldSpendPushPrompt({ status: 'provisional' })).toBe(false);
   });
 });

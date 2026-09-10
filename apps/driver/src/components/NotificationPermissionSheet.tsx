@@ -36,7 +36,6 @@ export function NotificationPermissionSheet({
   context?: 'active' | 'pending';
 }) {
   const { t } = useTranslation('common');
-  const userId = useAuthStore((s) => s.user?.id);
   // Rendered inside a transparent RN Modal, which does NOT inherit the app's
   // SafeAreaView — pad the CTAs clear of the home indicator / gesture bar.
   const insets = useSafeAreaInsets();
@@ -84,21 +83,28 @@ export function NotificationPermissionSheet({
       if (status === 'denied') {
         // Android never re-prompts after a denial; Settings is the only way back.
         await Linking.openSettings();
-      } else if (userId) {
+      } else {
         // This tap is the informed consent the OS dialog was missing, so it
         // may spend the one-shot prompt. Registering here (rather than
         // leaving it to the next foreground retry) means a driver who says
         // yes is reachable immediately, not one app-switch later.
-        await registerPushTokenForUser(userId, { promptIfNeeded: true });
-      } else {
-        await Notifications.requestPermissionsAsync();
+        //
+        // Read the id at TAP time, not from the render closure: this sheet
+        // surfaces 1500ms after mount and the auth store may still have been
+        // hydrating then. The previous code fell back to a bare
+        // requestPermissionsAsync() in that window — it asked, stored no
+        // token, and then burned the 7-day cooldown below, so a driver who
+        // said yes stayed unreachable with no second chance for a week.
+        const id = useAuthStore.getState().user?.id;
+        if (id) await registerPushTokenForUser(id, { promptIfNeeded: true });
+        else await Notifications.requestPermissionsAsync();
       }
     } catch {
       // User may deny / Settings may fail to open — that's fine
     }
     await markShown();
     setVisible(false);
-  }, [markShown, userId]);
+  }, [markShown]);
 
   const handleDismiss = useCallback(async () => {
     await markShown();
