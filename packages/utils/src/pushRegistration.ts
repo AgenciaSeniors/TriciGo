@@ -77,3 +77,85 @@ export function classifyPushPermission(snapshot: PushPermissionSnapshot): PushPe
 export function shouldSpendPushPrompt(snapshot: PushPermissionSnapshot): boolean {
   return classifyPushPermission(snapshot) === 'never_asked';
 }
+
+/**
+ * How much of an error message survives into `push_registration_status.detail`.
+ *
+ * **This number is duplicated in the database on purpose and MUST match it**
+ * (`push_registration_status_detail_len`, migration 00586). If the app ever
+ * sends more than the CHECK allows, the upsert fails, `recordPushRegistration`
+ * logs and swallows it, and the row is lost ENTIRELY — strictly worse than the
+ * truncation it was meant to avoid.
+ *
+ * Why it moved from 300 to 2000: the first `error` row ever recorded was a 403
+ * from `exp.host` whose body is a full Google Cloud denial page. At 300 it was
+ * cut mid-sentence, and the diagnosis had to be rebuilt by reading the Expo
+ * source. One row per (user, app) — the storage is irrelevant, the evidence
+ * is not.
+ */
+export const PUSH_DETAIL_MAX_LEN = 2000;
+
+/** Attempts (1 initial + retries) at minting the Expo token. */
+export const PUSH_TOKEN_MAX_ATTEMPTS = 3;
+
+/**
+ * Expo error codes that no number of attempts can fix.
+ *
+ * Both are configuration, not connectivity: the value is missing from the
+ * build, so the next attempt reads the same missing value.
+ */
+const PERMANENT_PUSH_TOKEN_ERROR_CODES = new Set([
+  'ERR_NOTIFICATIONS_NO_EXPERIENCE_ID',
+  'ERR_NOTIFICATIONS_NO_APPLICATION_ID',
+]);
+
+/** Reads `CodedError.code` off an unknown throw without assuming its shape. */
+function errorCode(err: unknown): string | null {
+  const code = (err as { code?: unknown } | null | undefined)?.code;
+  return typeof code === 'string' ? code : null;
+}
+
+/**
+ * Turn whatever was thrown into the line we will get to read months later.
+ *
+ * Prefixes the Expo `code` when there is one, so causes group by something
+ * structured instead of by parsing an HTML body.
+ *
+ * Deliberately does NOT truncate: the cap lives at the single write choke
+ * point (`recordPushRegistration`), where it can stay in step with the DB
+ * CHECK. Two places to cut means two numbers to keep in sync.
+ */
+export function describePushError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const code = errorCode(err);
+  return code ? `[${code}] ${message}` : message;
+}
+
+/**
+ * Is this failure worth another attempt?
+ *
+ * **Deny-list, not allow-list, and that is the whole point.** The failure that
+ * prompted this — a 403 from Google Cloud's edge in front of `exp.host`, seen
+ * from a Cuban IP — was on nobody's list of expected errors. An allow-list
+ * would have refused to retry the one case that mattered. So everything is
+ * retryable except the two codes that retrying provably cannot change.
+ *
+ * Note this cannot be `isNetworkError` from './networkError': a 403 is a
+ * decision the server made, so that helper correctly returns false for it.
+ * Here we want it retried, because the block is partial and intermittent —
+ * 37 of 143 drivers hold a token and new ones still arrive daily.
+ */
+export function isRetryablePushTokenError(err: unknown): boolean {
+  const code = errorCode(err);
+  return code === null || !PERMANENT_PUSH_TOKEN_ERROR_CODES.has(code);
+}
+
+/**
+ * Backoff before the attempt after `attempt` (0-based).
+ *
+ * Kept short on purpose: this runs during app start, and the whole budget has
+ * to finish well inside the time the person spends on the first screen.
+ */
+export function pushTokenRetryDelayMs(attempt: number): number {
+  return 800 * 3 ** attempt;
+}

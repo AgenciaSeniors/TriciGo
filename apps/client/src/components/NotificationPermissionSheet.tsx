@@ -8,7 +8,9 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { colors } from '@tricigo/theme';
+import { useAuthStore } from '@/stores/auth.store';
 import { registerForPushNotifications } from '@/services/push.service';
+import { registerPushTokenForUser } from '@/hooks/useNotifications';
 
 // Timestamp (ms) of the last time we surfaced the soft-ask. We re-surface at
 // most once per RESHOW_INTERVAL_MS while notifications are NOT granted, so a
@@ -19,6 +21,14 @@ import { registerForPushNotifications } from '@/services/push.service';
 // silent no-op requestPermissions().
 const PROMPT_LAST_SHOWN_KEY = '@tricigo/notification_prompt_last_shown';
 const RESHOW_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// A registration that FAILED is not an answer. Until now, saying yes and then
+// losing the token — the Cuban 403 from Google Cloud's edge in front of
+// exp.host is the case seen in production — cost the same 7 days of silence as
+// a dismissal: the person most willing to be reached stayed unreachable for a
+// week, with no second chance. Short cooldown for that case only. Not zero
+// cooldown: if the block turned out to be permanent the sheet would come back
+// on every single launch.
+const ERROR_RETRY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Friendly bottom sheet explaining why notifications are needed. Re-surfaces
@@ -62,15 +72,26 @@ export function NotificationPermissionSheet() {
     return () => { cancelled = true; };
   }, []);
 
-  const markShown = useCallback(async () => {
+  /**
+   * Stamp the cooldown. `retryAfterMs` is how long until the sheet may
+   * surface again, stored by BACKDATING the timestamp rather than adding a
+   * second key: the check above needs no change, and a value written by an
+   * older build still means exactly what it always meant.
+   */
+  const markShown = useCallback(async (retryAfterMs: number = RESHOW_INTERVAL_MS) => {
     try {
-      await AsyncStorage.setItem(PROMPT_LAST_SHOWN_KEY, String(Date.now()));
+      const backdate = Math.max(0, RESHOW_INTERVAL_MS - retryAfterMs);
+      await AsyncStorage.setItem(PROMPT_LAST_SHOWN_KEY, String(Date.now() - backdate));
     } catch {
       // best-effort
     }
   }, []);
 
   const handleEnable = useCallback(async () => {
+    // Default to the full cooldown. Only a registration that actually failed
+    // earns the short one — a dismissal or a refusal is an answer, and
+    // re-asking tomorrow would be nagging.
+    let retryAfterMs = RESHOW_INTERVAL_MS;
     try {
       // Re-read status fresh: if the OS already denied us, requestPermissions
       // is a silent no-op, so the only way back is system Settings.
@@ -79,17 +100,37 @@ export function NotificationPermissionSheet() {
         await Linking.openSettings();
       } else {
         // This tap is the informed consent the OS dialog was missing, so it
-        // may spend the one-shot prompt. Going through the service (rather
-        // than requestPermissionsAsync alone) also mints and stores the
-        // token and creates the Android channel in the same breath, so a
-        // user who says yes is reachable immediately — not one cold start
-        // later, silent in the meantime because the channel was missing.
-        await registerForPushNotifications({ promptIfNeeded: true });
+        // may spend the one-shot prompt. Registering here (rather than
+        // leaving it to the next foreground retry) also mints the token and
+        // creates the Android channel in the same breath, so someone who says
+        // yes is reachable immediately — not one cold start later, silent in
+        // the meantime because the channel was missing.
+        //
+        // Read the id at TAP time, not from the render closure: this sheet
+        // surfaces 1500ms after mount and the auth store may still have been
+        // hydrating then. registerPushTokenForUser is the instrumented path —
+        // it retries the Expo round-trip and reports WHY it failed, which is
+        // the whole difference between a 24-hour and a 7-day cooldown.
+        const id = useAuthStore.getState().user?.id;
+        if (id) {
+          const result = await registerPushTokenForUser(id, { promptIfNeeded: true });
+          if (result === 'error') retryAfterMs = ERROR_RETRY_INTERVAL_MS;
+        } else {
+          // Store not hydrated yet. push.service resolves the user from the
+          // session instead, so the tap is never wasted — it just cannot say
+          // why it failed. Hence the re-read: permission granted and still no
+          // token is exactly the failure the short cooldown exists for.
+          const token = await registerForPushNotifications({ promptIfNeeded: true });
+          if (!token) {
+            const after = await Notifications.getPermissionsAsync();
+            if (after.status === 'granted') retryAfterMs = ERROR_RETRY_INTERVAL_MS;
+          }
+        }
       }
     } catch {
       // User may deny / Settings may fail to open — that's fine
     }
-    await markShown();
+    await markShown(retryAfterMs);
     setVisible(false);
   }, [markShown]);
 

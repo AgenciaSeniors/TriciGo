@@ -24,6 +24,7 @@ const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 // Import after mock is set up
+import { PUSH_DETAIL_MAX_LEN } from '@tricigo/utils';
 import { notificationService } from '../notification.service';
 
 describe('notificationService', () => {
@@ -119,7 +120,7 @@ describe('notificationService', () => {
       ).resolves.toBeUndefined();
     });
 
-    it('truncates detail so a stack trace cannot bloat the row', async () => {
+    it('truncates detail at the DB limit so a stack trace cannot bloat the row', async () => {
       const mockUpsertFn = vi.fn().mockResolvedValue({ error: null });
       mockFrom.mockReturnValueOnce({ upsert: mockUpsertFn });
 
@@ -128,11 +129,37 @@ describe('notificationService', () => {
         app: 'driver',
         outcome: 'error',
         platform: 'android',
-        detail: 'x'.repeat(500),
+        detail: 'x'.repeat(PUSH_DETAIL_MAX_LEN + 500),
       });
 
       const detail = mockUpsertFn.mock.calls[0]![0].detail as string;
-      expect(detail).toHaveLength(300);
+      expect(detail).toHaveLength(PUSH_DETAIL_MAX_LEN);
+    });
+
+    it('keeps a full Google Cloud 403 page intact', async () => {
+      // The regression this cap exists for: at 300 the first `error` row ever
+      // recorded was cut mid-sentence and the diagnosis had to be rebuilt from
+      // the Expo source. A whole denial page must now survive.
+      const body =
+        '[ERR_NOTIFICATIONS_SERVER_ERROR] Error encountered while fetching Expo token, ' +
+        'expected an OK response, received: 403 (body: "' +
+        '<html><head><title>403 Forbidden</title></head>'.repeat(10) +
+        '")';
+      const mockUpsertFn = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValueOnce({ upsert: mockUpsertFn });
+
+      await notificationService.recordPushRegistration({
+        userId: 'user-1',
+        app: 'driver',
+        outcome: 'error',
+        platform: 'android',
+        detail: body,
+      });
+
+      const detail = mockUpsertFn.mock.calls[0]![0].detail as string;
+      expect(detail).toBe(body);
+      expect(detail).toContain('403 Forbidden');
+      expect(detail).toContain('ERR_NOTIFICATIONS_SERVER_ERROR');
     });
   });
 
