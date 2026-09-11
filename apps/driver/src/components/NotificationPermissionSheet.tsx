@@ -18,6 +18,14 @@ import { registerPushTokenForUser } from '@/hooks/useNotifications';
 // so when permission is already 'denied' the button deep-links to Settings.
 const PROMPT_LAST_SHOWN_KEY = '@tricigo/notification_prompt_last_shown';
 const RESHOW_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// A registration that FAILED is not an answer. Until now, saying yes and then
+// losing the token — the Cuban 403 from Google Cloud's edge in front of
+// exp.host is the case seen in production — cost the same 7 days of silence as
+// a dismissal: the person most willing to be reached stayed unreachable for a
+// week, with no second chance. Short cooldown for that case only. Not zero
+// cooldown: if the block turned out to be permanent the sheet would come back
+// on every single launch.
+const ERROR_RETRY_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Friendly bottom sheet explaining why notifications are needed for drivers.
@@ -69,15 +77,26 @@ export function NotificationPermissionSheet({
     return () => { cancelled = true; };
   }, []);
 
-  const markShown = useCallback(async () => {
+  /**
+   * Stamp the cooldown. `retryAfterMs` is how long until the sheet may
+   * surface again, stored by BACKDATING the timestamp rather than adding a
+   * second key: the check above needs no change, and a value written by an
+   * older build still means exactly what it always meant.
+   */
+  const markShown = useCallback(async (retryAfterMs: number = RESHOW_INTERVAL_MS) => {
     try {
-      await AsyncStorage.setItem(PROMPT_LAST_SHOWN_KEY, String(Date.now()));
+      const backdate = Math.max(0, RESHOW_INTERVAL_MS - retryAfterMs);
+      await AsyncStorage.setItem(PROMPT_LAST_SHOWN_KEY, String(Date.now() - backdate));
     } catch {
       // best-effort
     }
   }, []);
 
   const handleEnable = useCallback(async () => {
+    // Default to the full cooldown. Only a registration that actually failed
+    // earns the short one — a dismissal or a refusal is an answer, and
+    // re-asking tomorrow would be nagging.
+    let retryAfterMs = RESHOW_INTERVAL_MS;
     try {
       const { status } = await Notifications.getPermissionsAsync();
       if (status === 'denied') {
@@ -96,13 +115,22 @@ export function NotificationPermissionSheet({
         // token, and then burned the 7-day cooldown below, so a driver who
         // said yes stayed unreachable with no second chance for a week.
         const id = useAuthStore.getState().user?.id;
-        if (id) await registerPushTokenForUser(id, { promptIfNeeded: true });
-        else await Notifications.requestPermissionsAsync();
+        if (id) {
+          const result = await registerPushTokenForUser(id, { promptIfNeeded: true });
+          // 'error' means the driver SAID YES and we still have no token.
+          // Come back tomorrow, not next week.
+          if (result === 'error') retryAfterMs = ERROR_RETRY_INTERVAL_MS;
+        } else {
+          const { status: asked } = await Notifications.requestPermissionsAsync();
+          // Same shape as an error: permission is on and nothing was stored,
+          // because there was no id to store it against.
+          if (asked === 'granted') retryAfterMs = ERROR_RETRY_INTERVAL_MS;
+        }
       }
     } catch {
       // User may deny / Settings may fail to open — that's fine
     }
-    await markShown();
+    await markShown(retryAfterMs);
     setVisible(false);
   }, [markShown]);
 

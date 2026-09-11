@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '../client';
 import type { AppNotification, NotificationType } from '@tricigo/types';
 import { realtimeStatusLogger } from './_realtime-status';
-import { realEmail } from '@tricigo/utils';
+import { realEmail, PUSH_DETAIL_MAX_LEN } from '@tricigo/utils';
 import type { PushRegistrationOutcome } from '@tricigo/utils';
 
 export const notificationService = {
@@ -43,7 +43,11 @@ export const notificationService = {
     detail?: string | null;
   }): Promise<void> {
     try {
-      const detail = params.detail ? params.detail.slice(0, 300) : null;
+      // The ONLY place detail is cut, and it must stay equal to the DB CHECK
+      // (`push_registration_status_detail_len`, migration 00586). Sending more
+      // than the constraint allows fails the upsert, which the catch below
+      // swallows — losing the whole row instead of its tail.
+      const detail = params.detail ? params.detail.slice(0, PUSH_DETAIL_MAX_LEN) : null;
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('push_registration_status')

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { classifyPushPermission, shouldSpendPushPrompt } from '../pushRegistration';
+import {
+  classifyPushPermission,
+  describePushError,
+  isRetryablePushTokenError,
+  pushTokenRetryDelayMs,
+  shouldSpendPushPrompt,
+  PUSH_DETAIL_MAX_LEN,
+  PUSH_TOKEN_MAX_ATTEMPTS,
+} from '../pushRegistration';
 
 describe('classifyPushPermission — why a device has no push token', () => {
   it('reports granted when the OS permission is already given', () => {
@@ -73,5 +81,122 @@ describe('shouldSpendPushPrompt — when the app may spend its one OS prompt', (
     expect(shouldSpendPushPrompt({})).toBe(false);
     expect(shouldSpendPushPrompt({ status: null, canAskAgain: null })).toBe(false);
     expect(shouldSpendPushPrompt({ status: 'provisional' })).toBe(false);
+  });
+});
+
+describe('describePushError — what we get to read when the token fetch fails', () => {
+  it('prefixes the Expo error code so causes group without parsing the body', () => {
+    // The 403 that started this arrives as a CodedError whose message is a
+    // whole HTML page. The code is the only structured thing in it.
+    const err = Object.assign(new Error('403 (body: "<html>…")'), {
+      code: 'ERR_NOTIFICATIONS_SERVER_ERROR',
+    });
+    expect(describePushError(err)).toBe('[ERR_NOTIFICATIONS_SERVER_ERROR] 403 (body: "<html>…")');
+  });
+
+  it('falls back to the bare message when there is no code', () => {
+    expect(describePushError(new Error('boom'))).toBe('boom');
+  });
+
+  it('survives being handed something that is not an Error', () => {
+    // This runs inside a catch: it must never throw on its way to reporting.
+    expect(describePushError('just a string')).toBe('just a string');
+    expect(describePushError(null)).toBe('null');
+    expect(describePushError(undefined)).toBe('undefined');
+  });
+
+  it('does not truncate — the cap belongs to the single write choke point', () => {
+    // recordPushRegistration caps it once, matching the DB CHECK. Cutting it
+    // here too would mean two numbers to keep in sync and a silent mismatch.
+    const long = 'x'.repeat(PUSH_DETAIL_MAX_LEN + 500);
+    expect(describePushError(new Error(long))).toHaveLength(long.length);
+  });
+});
+
+describe('PUSH_DETAIL_MAX_LEN — must equal the DB CHECK', () => {
+  it('is 2000, the value migration 00586 enforces', () => {
+    // If these ever disagree the upsert fails and recordPushRegistration
+    // swallows it — the row is lost entirely, which is worse than truncation.
+    expect(PUSH_DETAIL_MAX_LEN).toBe(2000);
+  });
+
+  it('leaves room for a full Google Cloud 403 page', () => {
+    // The body that got cut at 300 was ~500 chars of boilerplate HTML plus the
+    // wrapper message. 2000 keeps the whole thing.
+    expect(PUSH_DETAIL_MAX_LEN).toBeGreaterThan(1000);
+  });
+});
+
+describe('isRetryablePushTokenError — what deserves another attempt', () => {
+  it('retries the Cuban 403 from exp.host', () => {
+    // A server decision, so isNetworkError() says false — but it is exactly
+    // the case worth retrying, because the block is partial/intermittent.
+    const err = Object.assign(new Error('403 Forbidden'), {
+      code: 'ERR_NOTIFICATIONS_SERVER_ERROR',
+    });
+    expect(isRetryablePushTokenError(err)).toBe(true);
+  });
+
+  it('retries a plain network failure', () => {
+    const err = Object.assign(new Error('Network request failed'), {
+      code: 'ERR_NOTIFICATIONS_NETWORK_ERROR',
+    });
+    expect(isRetryablePushTokenError(err)).toBe(true);
+  });
+
+  it('does NOT retry a missing projectId — no attempt can fix config', () => {
+    const err = Object.assign(new Error('No "projectId" found'), {
+      code: 'ERR_NOTIFICATIONS_NO_EXPERIENCE_ID',
+    });
+    expect(isRetryablePushTokenError(err)).toBe(false);
+  });
+
+  it('does NOT retry a missing applicationId', () => {
+    const err = Object.assign(new Error('No "applicationId" found'), {
+      code: 'ERR_NOTIFICATIONS_NO_APPLICATION_ID',
+    });
+    expect(isRetryablePushTokenError(err)).toBe(false);
+  });
+
+  it('retries anything it does not recognise', () => {
+    // The lesson of this very bug: the real failure mode was not on anyone's
+    // list. An allowlist would have refused to retry the one case that mattered.
+    expect(isRetryablePushTokenError(new Error('something new'))).toBe(true);
+    expect(isRetryablePushTokenError('a string')).toBe(true);
+    expect(isRetryablePushTokenError(null)).toBe(true);
+    expect(isRetryablePushTokenError(Object.assign(new Error('x'), { code: 'ERR_UNHEARD_OF' }))).toBe(true);
+  });
+});
+
+describe('pushTokenRetryDelayMs — backoff between attempts', () => {
+  it('waits longer on each successive attempt', () => {
+    expect(pushTokenRetryDelayMs(0)).toBe(800);
+    expect(pushTokenRetryDelayMs(1)).toBe(2400);
+  });
+
+  it('grows monotonically and never returns a negative wait', () => {
+    let previous = -1;
+    for (let attempt = 0; attempt < PUSH_TOKEN_MAX_ATTEMPTS; attempt += 1) {
+      const delay = pushTokenRetryDelayMs(attempt);
+      expect(delay).toBeGreaterThan(previous);
+      expect(delay).toBeGreaterThanOrEqual(0);
+      previous = delay;
+    }
+  });
+
+  it('keeps the whole retry budget short enough to stay out of the way', () => {
+    // This runs during app start. Three attempts must not add seconds of
+    // background work that outlive the screen the user is looking at.
+    let total = 0;
+    for (let attempt = 0; attempt < PUSH_TOKEN_MAX_ATTEMPTS - 1; attempt += 1) {
+      total += pushTokenRetryDelayMs(attempt);
+    }
+    expect(total).toBeLessThanOrEqual(5000);
+  });
+});
+
+describe('PUSH_TOKEN_MAX_ATTEMPTS', () => {
+  it('gives an intermittent block more than one chance, without hammering', () => {
+    expect(PUSH_TOKEN_MAX_ATTEMPTS).toBe(3);
   });
 });

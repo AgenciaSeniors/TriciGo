@@ -45,7 +45,24 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 vi.mock('expo-router', () => ({ router: { push: vi.fn(), replace: vi.fn() } }));
 
+import { PUSH_TOKEN_MAX_ATTEMPTS } from '@tricigo/utils';
 import { registerPushTokenForUser } from '../useNotifications';
+
+/**
+ * Run a registration with timers faked, so the retry backoff costs no wall
+ * clock. Without this the tests that exhaust the attempts really sleep for the
+ * whole budget each.
+ */
+async function registerWithoutWaiting(userId: string) {
+  vi.useFakeTimers();
+  try {
+    const pending = registerPushTokenForUser(userId);
+    await vi.runAllTimersAsync();
+    return await pending;
+  } finally {
+    vi.useRealTimers();
+  }
+}
 
 describe('registerPushTokenForUser', () => {
   beforeEach(() => {
@@ -159,16 +176,71 @@ describe('registerPushTokenForUser — telemetry', () => {
     );
   });
 
-  it('reports error with the reason when minting the token throws', async () => {
+  it('gives up and reports error when every attempt at minting the token throws', async () => {
     permissions.status = 'granted';
-    getExpoPushTokenAsync.mockRejectedValueOnce(new Error('projectId missing'));
+    // mockRejectedValue, not ...Once: with the retry loop a single rejection
+    // would be recovered on attempt 2 and this would pass while asserting the
+    // opposite of what it claims.
+    getExpoPushTokenAsync.mockRejectedValue(
+      Object.assign(new Error('403 Forbidden'), { code: 'ERR_NOTIFICATIONS_SERVER_ERROR' }),
+    );
+
+    const result = await registerWithoutWaiting('user-1');
+
+    expect(result).toBe('error');
+    expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(PUSH_TOKEN_MAX_ATTEMPTS);
+    expect(recordPushRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'error',
+        detail: '[ERR_NOTIFICATIONS_SERVER_ERROR] 403 Forbidden',
+      }),
+    );
+    getExpoPushTokenAsync.mockReset();
+    getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test]' });
+  });
+
+  it('recovers when the Expo round-trip fails once and then works', async () => {
+    // The Cuban 403 is partial and intermittent — this is the case the retry
+    // exists for, and the only one that turns a lost token into a kept one.
+    permissions.status = 'granted';
+    getExpoPushTokenAsync.mockRejectedValueOnce(
+      Object.assign(new Error('403 Forbidden'), { code: 'ERR_NOTIFICATIONS_SERVER_ERROR' }),
+    );
+
+    const result = await registerWithoutWaiting('user-1');
+
+    expect(result).toBe('registered');
+    expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(2);
+    expect(registerPushToken).toHaveBeenCalled();
+  });
+
+  it('does not waste attempts on a misconfiguration no retry can fix', async () => {
+    permissions.status = 'granted';
+    getExpoPushTokenAsync.mockRejectedValue(
+      Object.assign(new Error('No "projectId" found'), {
+        code: 'ERR_NOTIFICATIONS_NO_EXPERIENCE_ID',
+      }),
+    );
 
     const result = await registerPushTokenForUser('user-1');
 
     expect(result).toBe('error');
-    expect(recordPushRegistration).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: 'error', detail: 'projectId missing' }),
-    );
+    expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(1);
+    getExpoPushTokenAsync.mockReset();
+    getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test]' });
+  });
+
+  it('never reports a failed round-trip as denied', async () => {
+    // 'denied' makes the settings screen turn the switch off and tell the user
+    // to open system Settings — useless, and actively misleading, when the
+    // real cause is a network block.
+    permissions.status = 'granted';
+    getExpoPushTokenAsync.mockRejectedValue(new Error('network down'));
+
+    await expect(registerWithoutWaiting('user-1')).resolves.not.toBe('denied');
+
+    getExpoPushTokenAsync.mockReset();
+    getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test]' });
   });
 
   it('still registers when the telemetry write itself blows up', async () => {

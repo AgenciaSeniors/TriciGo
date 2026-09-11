@@ -2,7 +2,14 @@ import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { notificationService } from '@tricigo/api';
-import { classifyPushPermission, shouldSpendPushPrompt } from '@tricigo/utils';
+import {
+  classifyPushPermission,
+  shouldSpendPushPrompt,
+  describePushError,
+  isRetryablePushTokenError,
+  pushTokenRetryDelayMs,
+  PUSH_TOKEN_MAX_ATTEMPTS,
+} from '@tricigo/utils';
 import type { PushRegistrationOutcome } from '@tricigo/utils';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -220,9 +227,32 @@ export async function registerPushTokenForUser(
       return 'denied';
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId,
-    });
+    // Retry ONLY the Expo round-trip. Its one failure observed in production is
+    // a 403 from Google Cloud's edge in front of exp.host, seen from a Cuban IP
+    // — partial and intermittent (37 of 143 drivers hold a token and new ones
+    // still arrive daily), so a second attempt is worth its couple of seconds.
+    //
+    // The permission gates above stay OUTSIDE the loop on purpose: re-running
+    // requestPermissionsAsync is a silent no-op after an answer and would touch
+    // the one-shot-prompt semantics.
+    let tokenData: Awaited<ReturnType<typeof Notifications.getExpoPushTokenAsync>> | undefined;
+    for (let attempt = 0; attempt < PUSH_TOKEN_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        tokenData = await Notifications.getExpoPushTokenAsync({
+          projectId: Constants.expoConfig?.extra?.eas?.projectId,
+        });
+        break;
+      } catch (err) {
+        const lastAttempt = attempt === PUSH_TOKEN_MAX_ATTEMPTS - 1;
+        // Rethrow to the outer catch, which reports 'error' — NOT 'denied'.
+        // The settings screens read 'denied' as "the OS refused" and turn the
+        // switch off with a go-to-Settings alert, which cannot help someone
+        // whose network is the problem.
+        if (lastAttempt || !isRetryablePushTokenError(err)) throw err;
+        await new Promise((resolve) => setTimeout(resolve, pushTokenRetryDelayMs(attempt)));
+      }
+    }
+    if (!tokenData) throw new Error('Expo push token unavailable after retries');
 
     await notificationService.registerPushToken(
       userId,
@@ -232,7 +262,7 @@ export async function registerPushTokenForUser(
     report('registered');
     return 'registered';
   } catch (err) {
-    report('error', err instanceof Error ? err.message : String(err));
+    report('error', describePushError(err));
     return 'error';
   }
 }
