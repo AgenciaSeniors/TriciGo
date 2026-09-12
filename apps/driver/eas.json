@@ -13,6 +13,7 @@
         "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg",
         "EXPO_PUBLIC_SENTRY_DSN": "https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296",
         "EXPO_PUBLIC_POSTHOG_API_KEY": "phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9",
+        "EXPO_PUBLIC_EXPO_TOKEN_PROXY_URL": "https://lqaufszburqvlslpcuac.supabase.co/functions/v1/expo-proxy/",
         "SENTRY_ORG": "agencia-senores",
         "SENTRY_PROJECT": "tricigo-mobile"
       }

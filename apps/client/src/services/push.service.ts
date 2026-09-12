@@ -1,8 +1,8 @@
 import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { getSupabaseClient, notificationService } from '@tricigo/api';
+import { resolveExpoPushToken } from '@/hooks/useNotifications';
 
 // NOTE: this module deliberately no longer calls setNotificationHandler.
 //
@@ -65,11 +65,12 @@ export async function registerForPushNotifications(
   }
 
   try {
-    // Pass projectId explicitly so token minting never relies on
-    // autodetect (can break in bare/prebuild dev-client contexts).
-    const token = (await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId,
-    })).data;
+    // Straight from Expo, falling back to our proxy when this phone's ISP gets
+    // a 403 from Google Cloud's edge in front of exp.host. projectId is passed
+    // explicitly in there so minting never relies on autodetect (which breaks
+    // in bare/prebuild dev-client contexts).
+    const token = await resolveExpoPushToken();
+    if (!token) return null;
     // Save to user_devices table via notificationService
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();

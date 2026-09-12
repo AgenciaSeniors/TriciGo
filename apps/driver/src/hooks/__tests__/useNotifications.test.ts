@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+// The hook captures the proxy URL in a module-level const, so it has to exist
+// before the module is evaluated. vi.hoisted runs ahead of the import graph.
+const PROXY_URL = vi.hoisted(() => {
+  const url = 'https://example.test/functions/v1/expo-proxy/';
+  process.env.EXPO_PUBLIC_EXPO_TOKEN_PROXY_URL = url;
+  return url;
+});
+
 // Every native module is mocked with a factory so the real React Native
 // runtime is never loaded — mirrors src/services/__tests__.
 const permissions = { status: 'undetermined' as string, canAskAgain: true };
@@ -134,6 +142,11 @@ describe('registerPushTokenForUser — telemetry', () => {
     vi.clearAllMocks();
     permissions.status = 'undetermined';
     permissions.canAskAgain = true;
+    // Restore up front, not as cleanup at the end of each test: a failing
+    // assertion skips trailing cleanup, and a leaked mockRejectedValue then
+    // fails the NEXT test for a reason that has nothing to do with it.
+    getExpoPushTokenAsync.mockReset();
+    getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test]' });
   });
 
   it('reports never_asked when it stays silent rather than burning the prompt', async () => {
@@ -188,15 +201,15 @@ describe('registerPushTokenForUser — telemetry', () => {
     const result = await registerWithoutWaiting('user-1');
 
     expect(result).toBe('error');
-    expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(PUSH_TOKEN_MAX_ATTEMPTS);
+    // +1: after the direct attempts are exhausted it tries the proxy once,
+    // which the blanket mockRejectedValue also fails.
+    expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(PUSH_TOKEN_MAX_ATTEMPTS + 1);
     expect(recordPushRegistration).toHaveBeenCalledWith(
       expect.objectContaining({
         outcome: 'error',
         detail: '[ERR_NOTIFICATIONS_SERVER_ERROR] 403 Forbidden',
       }),
     );
-    getExpoPushTokenAsync.mockReset();
-    getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test]' });
   });
 
   it('recovers when the Expo round-trip fails once and then works', async () => {
@@ -226,8 +239,6 @@ describe('registerPushTokenForUser — telemetry', () => {
 
     expect(result).toBe('error');
     expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(1);
-    getExpoPushTokenAsync.mockReset();
-    getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test]' });
   });
 
   it('never reports a failed round-trip as denied', async () => {
@@ -238,9 +249,6 @@ describe('registerPushTokenForUser — telemetry', () => {
     getExpoPushTokenAsync.mockRejectedValue(new Error('network down'));
 
     await expect(registerWithoutWaiting('user-1')).resolves.not.toBe('denied');
-
-    getExpoPushTokenAsync.mockReset();
-    getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test]' });
   });
 
   it('still registers when the telemetry write itself blows up', async () => {
@@ -251,5 +259,94 @@ describe('registerPushTokenForUser — telemetry', () => {
     });
 
     await expect(registerPushTokenForUser('user-1')).resolves.toBe('registered');
+  });
+});
+
+// The retry from #1000 assumed the Cuban 403 was intermittent. Measured
+// 2026-09-12: 9 of the 10 drivers hitting it had NEVER held a token, so it is
+// persistent per device/network and no number of attempts helps. These tests
+// cover the thing that actually rescues them.
+describe('registerPushTokenForUser — proxy fallback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    permissions.status = 'granted';
+    permissions.canAskAgain = true;
+    getExpoPushTokenAsync.mockReset();
+  });
+
+  const cuban403 = () =>
+    Object.assign(new Error('403 Forbidden'), { code: 'ERR_NOTIFICATIONS_SERVER_ERROR' });
+
+  it('mints through the proxy once the direct attempts are exhausted', async () => {
+    getExpoPushTokenAsync.mockImplementation(async (opts?: { baseUrl?: string }) => {
+      if (opts?.baseUrl) return { data: 'ExponentPushToken[viaproxy]' };
+      throw cuban403();
+    });
+
+    const result = await registerWithoutWaiting('user-1');
+
+    expect(result).toBe('registered');
+    expect(registerPushToken).toHaveBeenCalledWith('user-1', 'ExponentPushToken[viaproxy]', 'android');
+    // The proxy URL must be handed over verbatim, trailing slash included:
+    // getExpoPushTokenAsync concatenates `${baseUrl}push/getExpoPushToken`.
+    expect(getExpoPushTokenAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ baseUrl: PROXY_URL }),
+    );
+  });
+
+  // Without this the rescue is invisible and we cannot tell whether the proxy
+  // is doing anything at all once it ships.
+  it('records via=proxy so the rescue can be counted', async () => {
+    getExpoPushTokenAsync.mockImplementation(async (opts?: { baseUrl?: string }) => {
+      if (opts?.baseUrl) return { data: 'ExponentPushToken[viaproxy]' };
+      throw cuban403();
+    });
+
+    await registerWithoutWaiting('user-1');
+
+    expect(recordPushRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'registered', detail: 'via=proxy' }),
+    );
+  });
+
+  it('leaves the happy path untouched — no proxy call, no lost auto-refresh', async () => {
+    // Passing baseUrl makes expo-notifications skip its device-token refresh
+    // loop. Anyone for whom Expo works directly must never pay that price.
+    getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[direct]' });
+
+    const result = await registerPushTokenForUser('user-1');
+
+    expect(result).toBe('registered');
+    expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(1);
+    expect(getExpoPushTokenAsync).not.toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: expect.anything() }),
+    );
+    expect(recordPushRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'registered', detail: 'via=direct' }),
+    );
+  });
+
+  it('still reports error — never denied — when the proxy fails too', async () => {
+    // 'denied' makes the settings screen turn the switch off and send the user
+    // to system Settings, where there is nothing to fix.
+    getExpoPushTokenAsync.mockRejectedValue(cuban403());
+
+    const result = await registerWithoutWaiting('user-1');
+
+    expect(result).toBe('error');
+    expect(registerPushToken).not.toHaveBeenCalled();
+  });
+
+  it('does not waste a proxy round trip on a misconfiguration', async () => {
+    getExpoPushTokenAsync.mockRejectedValue(
+      Object.assign(new Error('No "projectId" found'), {
+        code: 'ERR_NOTIFICATIONS_NO_EXPERIENCE_ID',
+      }),
+    );
+
+    const result = await registerPushTokenForUser('user-1');
+
+    expect(result).toBe('error');
+    expect(getExpoPushTokenAsync).toHaveBeenCalledTimes(1);
   });
 });

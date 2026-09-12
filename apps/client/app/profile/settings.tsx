@@ -10,6 +10,7 @@ import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { useMapDetail } from '@/hooks/useMapDetail';
 import {
   registerPushTokenForUser,
+  resolveExpoPushToken,
   syncNotifPrefsToDevice,
   readDeviceNotifPrefs,
   type ServerNotifPref,
@@ -20,8 +21,6 @@ import { notificationService, authService, customerService } from '@tricigo/api'
 import { triggerHaptic, logger } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
 import type { Language, PaymentMethod, CustomerProfile } from '@tricigo/types';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
@@ -177,10 +176,11 @@ export default function SettingsScreen() {
 
     if (!enabled) {
       try {
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId: Constants.expoConfig?.extra?.eas?.projectId,
-        });
-        await notificationService.removePushToken(userId, tokenData.data);
+        // Through the proxy when Expo will not answer this phone: otherwise the
+        // token cannot be resolved, the row is never deleted, and the person
+        // keeps receiving pushes after switching them off.
+        const token = await resolveExpoPushToken();
+        if (token) await notificationService.removePushToken(userId, token);
       } catch {
         /* best-effort */
       }
