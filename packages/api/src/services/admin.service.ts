@@ -2686,4 +2686,53 @@ export const adminService = {
   // future PR will add an admin-gated RPC that pg_net.http_posts to
   // the EF using get_service_role_key() server-side. For now the
   // admin tab is read-only + download-existing-PDFs.
+
+  // ── Competitor price observatory (migrations 00587-00589) ──────────────────
+  /**
+   * Latest quote per (route, competitor, category) with the delta vs TriciGo's
+   * own price for the same route in the same cycle. Admin-gated in the RPC.
+   */
+  async getCompetitorSummary(): Promise<Array<{
+    route_id: string;
+    route_label: string;
+    province: string;
+    competitor: string;
+    competitor_category: string;
+    tricigo_service_type: string;
+    competitor_price_cup: number | null;
+    tricigo_price_cup: number;
+    delta_cup: number | null;
+    cheaper_side: string;
+    captured_at: string;
+  }>> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_competitor_summary');
+    if (error) throw error;
+    return (data ?? []) as Array<{
+      route_id: string; route_label: string; province: string;
+      competitor: string; competitor_category: string; tricigo_service_type: string;
+      competitor_price_cup: number | null; tricigo_price_cup: number;
+      delta_cup: number | null; cheaper_side: string; captured_at: string;
+    }>;
+  },
+
+  /** Time series (both competitors + our price) for one route, N days back. */
+  async getCompetitorPriceSeries(routeId: string, daysBack = 30): Promise<Array<{
+    captured_at: string;
+    competitor: string;
+    competitor_category: string;
+    competitor_price_cup: number | null;
+    tricigo_price_cup: number;
+  }>> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_competitor_price_series', {
+      p_route_id: routeId,
+      p_days_back: daysBack,
+    });
+    if (error) throw error;
+    return (data ?? []) as Array<{
+      captured_at: string; competitor: string; competitor_category: string;
+      competitor_price_cup: number | null; tricigo_price_cup: number;
+    }>;
+  },
 };

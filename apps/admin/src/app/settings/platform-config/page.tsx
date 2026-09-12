@@ -17,6 +17,13 @@ type KnownKey = {
   options?: { label: string; value: string }[];
 };
 const KNOWN_KEYS: Record<string, KnownKey> = {
+  // ── Observatorio de precios de la competencia (00587-00589) ──
+  competitor_tracking_enabled: { type: 'select', helpKey: 'platform_config.competitor_tracking_enabled_help', options: [{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }] },
+  competitor_tracking_interval_min: { type: 'number', helpKey: 'platform_config.competitor_tracking_interval_min_help' },
+  competitor_tracking_stale_hours: { type: 'number', helpKey: 'platform_config.competitor_tracking_stale_hours_help' },
+  competitor_session_warn_hours: { type: 'number', helpKey: 'platform_config.competitor_session_warn_hours_help' },
+  competitor_quotes_retention_days: { type: 'number', helpKey: 'platform_config.competitor_quotes_retention_days_help' },
+  competitor_quotes_prune_batch: { type: 'number', helpKey: 'platform_config.competitor_quotes_prune_batch_help' },
   // ── Lugares aliados (00531) ──
   partner_places_discovery_radius_m: {
     type: 'number',
