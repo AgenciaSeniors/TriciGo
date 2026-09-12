@@ -7,6 +7,7 @@ import {
   shouldSpendPushPrompt,
   describePushError,
   isRetryablePushTokenError,
+  shouldFallbackToProxy,
   pushTokenRetryDelayMs,
   PUSH_TOKEN_MAX_ATTEMPTS,
 } from '@tricigo/utils';
@@ -212,6 +213,68 @@ function handleNotificationNavigation(data: Record<string, unknown> | undefined)
   }
 }
 
+/**
+ * Our own stand-in for Expo's token endpoint, for phones whose ISP gets a 403
+ * from Google Cloud's edge in front of exp.host.
+ *
+ * MUST end in a slash: getExpoPushTokenAsync builds the final URL by bare
+ * string concatenation — `${baseUrl}push/getExpoPushToken` — with no
+ * normalization (getExpoPushTokenAsync.js:62-63).
+ *
+ * Static dot notation is load-bearing: Metro only substitutes literal
+ * `process.env.X` references, so computed access would ship as undefined.
+ */
+const EXPO_TOKEN_PROXY_URL = process.env.EXPO_PUBLIC_EXPO_TOKEN_PROXY_URL;
+
+/**
+ * Mint the Expo token through our proxy instead of straight from the device.
+ *
+ * Passing `baseUrl` has one documented side effect: expo-notifications skips
+ * `setAutoServerRegistrationEnabledAsync(true)`, which is the loop that tells
+ * Expo when FCM/APNs rotates the device token. That is an acceptable trade
+ * ONLY because this runs after the direct path already failed — the people who
+ * land here have no token at all today, so there is nothing to keep fresh.
+ * Anyone for whom the direct path works never reaches this and keeps the
+ * refresh loop intact.
+ */
+async function mintTokenViaProxy() {
+  if (!EXPO_TOKEN_PROXY_URL) return undefined;
+  return Notifications.getExpoPushTokenAsync({
+    projectId: Constants.expoConfig?.extra?.eas?.projectId,
+    baseUrl: EXPO_TOKEN_PROXY_URL,
+  });
+}
+
+
+/**
+ * The Expo push token for this device: straight from Expo, or through our proxy
+ * if Expo will not answer this phone.
+ *
+ * Exported because two other places need the token VALUE, not a registration:
+ * the settings switch's OFF branch (which deletes the row by token) and, in the
+ * client, the startup path in services/push.service.ts. Before this existed,
+ * each built its own options object inline and none of them had a fallback — so
+ * on a blocked device the OFF branch silently failed to delete the row and the
+ * person kept receiving pushes after turning notifications off.
+ *
+ * Returns undefined rather than throwing: every caller here is best-effort.
+ */
+export async function resolveExpoPushToken(): Promise<string | undefined> {
+  try {
+    const direct = await Notifications.getExpoPushTokenAsync({
+      projectId: Constants.expoConfig?.extra?.eas?.projectId,
+    });
+    return direct.data;
+  } catch (err) {
+    if (!shouldFallbackToProxy(err)) return undefined;
+    try {
+      return (await mintTokenViaProxy())?.data;
+    } catch {
+      return undefined;
+    }
+  }
+}
+
 /** Outcome of a push-token registration attempt. */
 export type PushRegistrationResult = 'registered' | 'denied' | 'error';
 
@@ -278,15 +341,20 @@ export async function registerPushTokenForUser(
       return 'denied';
     }
 
-    // Retry ONLY the Expo round-trip. Its one failure observed in production is
-    // a 403 from Google Cloud's edge in front of exp.host, seen from a Cuban IP
-    // — partial and intermittent, so a second attempt is worth its couple of
-    // seconds. A passenger without a token never learns their driver arrived.
+    // Retry ONLY the Expo round-trip, then fall back to our proxy.
+    //
+    // Its failure in production is a 403 from Google Cloud's edge in front of
+    // exp.host, seen from a Cuban IP. The retry was built believing that block
+    // was intermittent; the telemetry says otherwise (9 of 10 affected drivers
+    // never held a token), so the retry is kept for genuinely flaky cases and
+    // the proxy is what actually rescues the rest. A passenger without a token
+    // never learns their driver arrived.
     //
     // The permission gates above stay OUTSIDE the loop on purpose: re-running
     // requestPermissionsAsync is a silent no-op after an answer and would touch
     // the one-shot-prompt semantics.
     let tokenData: Awaited<ReturnType<typeof Notifications.getExpoPushTokenAsync>> | undefined;
+    let via = 'via=direct';
     for (let attempt = 0; attempt < PUSH_TOKEN_MAX_ATTEMPTS; attempt += 1) {
       try {
         tokenData = await Notifications.getExpoPushTokenAsync({
@@ -295,11 +363,24 @@ export async function registerPushTokenForUser(
         break;
       } catch (err) {
         const lastAttempt = attempt === PUSH_TOKEN_MAX_ATTEMPTS - 1;
-        // Rethrow to the outer catch, which reports 'error' — NOT 'denied'.
-        // The settings screen reads 'denied' as "the OS refused" and turns the
-        // switch off with a go-to-Settings alert, which cannot help someone
-        // whose network is the problem.
-        if (lastAttempt || !isRetryablePushTokenError(err)) throw err;
+        if (lastAttempt || !isRetryablePushTokenError(err)) {
+          // Direct is exhausted. The 403 that motivated all this is persistent
+          // per device/network — measured 2026-09-12, 9 of the 10 drivers who
+          // hit it had NEVER held a token — so retrying harder cannot help.
+          // Ask a machine Expo will actually answer.
+          if (shouldFallbackToProxy(err)) {
+            tokenData = await mintTokenViaProxy();
+            if (tokenData) {
+              via = 'via=proxy';
+              break;
+            }
+          }
+          // Rethrow to the outer catch, which reports 'error' — NOT 'denied'.
+          // The settings screen reads 'denied' as "the OS refused" and turns the
+          // switch off with a go-to-Settings alert, which cannot help someone
+          // whose network is the problem.
+          throw err;
+        }
         await new Promise((resolve) => setTimeout(resolve, pushTokenRetryDelayMs(attempt)));
       }
     }
@@ -310,7 +391,9 @@ export async function registerPushTokenForUser(
       tokenData.data,
       Platform.OS,
     );
-    report('registered');
+    // 'via=' rides in detail rather than becoming a new `outcome` value: the
+    // column has a CHECK and the driver_push_reachability view reads it.
+    report('registered', via);
     return 'registered';
   } catch (err) {
     report('error', describePushError(err));

@@ -475,6 +475,13 @@ verify_jwt = false
 # admin/super_admin user JWT (admin panel "Generar contrato" button).
 [functions.generate-driver-contract]
 verify_jwt = false
+# Forwards ONE Expo route (push token minting) for phones whose ISP gets a 403
+# from Google Cloud's edge in front of exp.host. MUST stay false: the caller is
+# expo-notifications' getExpoPushTokenAsync, which sends only content-type and
+# cannot carry a JWT. Its defense is shape, not credentials — POST-only, one
+# fixed upstream, one exact subpath, rate limited by IP.
+[functions.expo-proxy]
+verify_jwt = false
 
 # Internal / cron functions currently verify_jwt=false in prod. They must
 # rely on their OWN service-role/secret checks — TODO: audit each handler

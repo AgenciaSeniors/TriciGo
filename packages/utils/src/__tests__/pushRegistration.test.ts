@@ -7,6 +7,7 @@ import {
   shouldSpendPushPrompt,
   PUSH_DETAIL_MAX_LEN,
   PUSH_TOKEN_MAX_ATTEMPTS,
+  shouldFallbackToProxy,
 } from '../pushRegistration';
 
 describe('classifyPushPermission — why a device has no push token', () => {
@@ -198,5 +199,49 @@ describe('pushTokenRetryDelayMs — backoff between attempts', () => {
 describe('PUSH_TOKEN_MAX_ATTEMPTS', () => {
   it('gives an intermittent block more than one chance, without hammering', () => {
     expect(PUSH_TOKEN_MAX_ATTEMPTS).toBe(3);
+  });
+});
+
+// The retry shipped in #1000 assumed the Cuban 403 was intermittent. It is not:
+// measured 2026-09-12, 9 of the 10 drivers hitting it had NEVER held a token.
+// Three attempts in ~3 s against a stable edge denial fail three times, so the
+// only thing that rescues them is asking a machine Expo will actually answer.
+describe('shouldFallbackToProxy', () => {
+  it('falls back on the Cuban 403 — the case the proxy exists for', () => {
+    const err = Object.assign(
+      new Error('Error encountered while fetching Expo token, expected an OK response, received: 403'),
+      { code: 'ERR_NOTIFICATIONS_SERVER_ERROR' },
+    );
+    expect(shouldFallbackToProxy(err)).toBe(true);
+  });
+
+  it('falls back on an error nobody has seen yet', () => {
+    // Same reasoning as isRetryablePushTokenError: deny-list, not allow-list.
+    // An allow-list would have refused the one failure that actually happened.
+    expect(shouldFallbackToProxy(new Error('something new'))).toBe(true);
+    expect(shouldFallbackToProxy(undefined)).toBe(true);
+  });
+
+  it('does NOT fall back on a misconfiguration the proxy cannot fix', () => {
+    // A missing projectId is missing on the proxy too. Retrying it there only
+    // costs the user a round trip before the same failure.
+    for (const code of ['ERR_NOTIFICATIONS_NO_EXPERIENCE_ID', 'ERR_NOTIFICATIONS_NO_APPLICATION_ID']) {
+      expect(shouldFallbackToProxy(Object.assign(new Error('x'), { code }))).toBe(false);
+    }
+  });
+
+  it('agrees with isRetryablePushTokenError — one policy, not two', () => {
+    // If these ever diverge, an error would be retried but not proxied (or the
+    // reverse) and the reason would live in nobody's head.
+    const cases: unknown[] = [
+      new Error('plain'),
+      Object.assign(new Error('a'), { code: 'ERR_NOTIFICATIONS_SERVER_ERROR' }),
+      Object.assign(new Error('b'), { code: 'ERR_NOTIFICATIONS_NO_EXPERIENCE_ID' }),
+      Object.assign(new Error('c'), { code: 'ERR_NOTIFICATIONS_NO_APPLICATION_ID' }),
+      null,
+    ];
+    for (const err of cases) {
+      expect(shouldFallbackToProxy(err)).toBe(isRetryablePushTokenError(err));
+    }
   });
 });

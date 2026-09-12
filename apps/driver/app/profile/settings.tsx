@@ -49,9 +49,7 @@ import { logger } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
-import { registerPushTokenForUser } from '@/hooks/useNotifications';
+import { registerPushTokenForUser, resolveExpoPushToken } from '@/hooks/useNotifications';
 import { useVoiceGuidancePref } from '@/hooks/useVoiceGuidancePref';
 import { SettingsRow } from '@/components/settings/SettingsRow';
 import { SettingsGroup } from '@/components/settings/SettingsGroup';
@@ -235,10 +233,11 @@ export default function DriverSettingsScreen() {
 
     if (!enabled) {
       try {
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId: Constants.expoConfig?.extra?.eas?.projectId,
-        });
-        await notificationService.removePushToken(userId, tokenData.data);
+        // Through the proxy when Expo will not answer this phone: otherwise the
+        // token cannot be resolved, the row is never deleted, and the person
+        // keeps receiving pushes after switching them off.
+        const token = await resolveExpoPushToken();
+        if (token) await notificationService.removePushToken(userId, token);
       } catch {
         /* best-effort */
       }

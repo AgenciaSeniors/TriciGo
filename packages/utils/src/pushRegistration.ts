@@ -159,3 +159,24 @@ export function isRetryablePushTokenError(err: unknown): boolean {
 export function pushTokenRetryDelayMs(attempt: number): number {
   return 800 * 3 ** attempt;
 }
+
+/**
+ * After the direct attempts to Expo are exhausted, is it worth asking our own
+ * proxy instead?
+ *
+ * **Why a proxy at all, when we already retry.** The retry was built on the
+ * belief that the Cuban 403 was intermittent. It is not. Measured 2026-09-12
+ * with the telemetry from migration 00585: of the drivers who granted the
+ * permission, 10 of 14 failed here — and **9 of those 10 had never held a
+ * token at all**. Three attempts over ~3 seconds against a stable edge denial
+ * fail three times. The only thing that rescues those people is asking a
+ * machine Expo will actually answer.
+ *
+ * Deliberately the same policy as {@link isRetryablePushTokenError}, and the
+ * test suite asserts they never diverge. Two nearly-identical rules drift, and
+ * the day they do, an error gets retried but not proxied for a reason that
+ * lives in nobody's head.
+ */
+export function shouldFallbackToProxy(err: unknown): boolean {
+  return isRetryablePushTokenError(err);
+}
