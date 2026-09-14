@@ -36,6 +36,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { decodeProtectedHeader, importX509 } from 'https://esm.sh/jose@5.9.6';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { translateNetopiaError } from '../_shared/netopia-errors.ts';
+import {
+  releasePaymentIntentClaim,
+  shouldRetryUnclaimedPaymentIntent,
+  type PaymentIntentClaimRepository,
+} from '../_shared/payment-intent-claim.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -322,6 +327,25 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const claimRepository: PaymentIntentClaimRepository = {
+      async releaseIfProcessing(intentId, retryStatus) {
+        const { data, error } = await supabase
+          .from('payment_intents')
+          .update({ status: retryStatus, updated_at: new Date().toISOString() })
+          .eq('id', intentId)
+          .eq('status', 'processing')
+          .select('id');
+        return { released: !!data?.length, error: error?.message };
+      },
+      async readStatus(intentId) {
+        const { data, error } = await supabase
+          .from('payment_intents')
+          .select('status')
+          .eq('id', intentId)
+          .maybeSingle();
+        return { status: data?.status ?? null, error: error?.message };
+      },
+    };
 
     // ── 1. Parse body ──
     const rawBody = await req.text();
@@ -549,8 +573,30 @@ Deno.serve(async (req) => {
         .in('status', ['pending', 'created', 'failed', 'expired'])
         .select();
 
-      if (claimError || !claimed || claimed.length === 0) {
-        console.log(`[netopia] Intent ${orderId} already claimed — replay skipped`);
+      if (claimError) {
+        console.error(`[netopia] Failed to claim intent ${orderId}:`, claimError);
+        return new Response(
+          JSON.stringify({ error: 'claim_error', detail: claimError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      if (!claimed || claimed.length === 0) {
+        try {
+          if (await shouldRetryUnclaimedPaymentIntent(claimRepository, orderId)) {
+            console.warn(`[netopia] Intent ${orderId} is still processing — requesting provider retry`);
+            return new Response(
+              JSON.stringify({ error: 'intent_processing', detail: 'Retry later' }),
+              { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            );
+          }
+        } catch (statusErr) {
+          console.error(`[netopia] Failed to inspect unclaimed intent ${orderId}:`, statusErr);
+          return new Response(
+            JSON.stringify({ error: 'claim_status_error' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        console.log(`[netopia] Intent ${orderId} is no longer claimable — replay skipped`);
         return new Response(JSON.stringify(ACK_OK), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -592,6 +638,18 @@ Deno.serve(async (req) => {
 
       if (processError) {
         console.error('[netopia] Error processing recharge:', processError);
+        try {
+          const release = await releasePaymentIntentClaim(
+            claimRepository,
+            orderId,
+            existingIntent.status,
+          );
+          console.warn(
+            `[netopia] Released failed claim for ${orderId}: released=${release.released} retry_status=${release.retryStatus}`,
+          );
+        } catch (releaseErr) {
+          console.error(`[netopia] Failed to release processing claim for ${orderId}:`, releaseErr);
+        }
         return new Response(
           JSON.stringify({ error: 'process_error', detail: processError.message }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
