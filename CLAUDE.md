@@ -2565,6 +2565,38 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 
 **Watchdog de salud (00577).** `check_database_health()` cada hora (muestra + alerta **solo en transición** ok↔warn↔critical, patrón 00503) y `send_db_health_digest()` diario a las 07:30 UTC al `business_notification_email`. Es SQL puro y no una Edge Function por la misma razón que 00503: si la base está por colapsar, la EF puede no conseguir conexión justo cuando hay que avisar. El aviso temprano real es la **proyección**: con 7 días de muestras calcula MB/día y pasa a `warn` cuando faltan ≤14 días para el umbral, *antes* de cruzarlo. `db_size_warn_mb`/`crit_mb` (6000/7500) son el **único número asumido y no medido** — Postgres no conoce el tamaño del disco que le dio Supabase; ajustar si el disco real es otro.
 
+### Los REVOKE de una migración de lockdown se verifican en prod, no se asumen (00531 → 00591, 2026-09-15)
+
+**Bug verificado.** `00531_lock_down_ungated_public_rpcs.sql` (31-07) revocaba 9 RPCs SECURITY DEFINER sin gate; la auditoría de pagos del 2026-09-15 encontró que **8 de las 9 seguían ejecutables por `anon`/`authenticated` en prod**: la migración quedó en git y nunca se aplicó. Buscar su número en `schema_migrations` no sirve (los applies por MCP se registran por timestamp — ver § "Cómo se registra el `version`"); lo que decide es `has_function_privilege` contra prod. `00591` la re-aplica con guardas `to_regprocedure()` y cierra dos más de la misma clase (`check_rate_limit` ejecutable por `authenticated`, `ensure_wallet_account` sin guard).
+
+**Chequeo canónico después de CUALQUIER migración de permisos** (correr contra prod, no leer el archivo):
+```sql
+SELECT p.proname, has_function_privilege('anon', p.oid,'EXECUTE') AS anon_x,
+       has_function_privilege('authenticated', p.oid,'EXECUTE') AS auth_x
+FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ('…');
+```
+
+**Patrón "llamada directa vs anidada" para helpers SECDEF que las apps llaman para sí mismas** (`ensure_wallet_account`, 00591). Un guard ingenuo (`p_user_id = auth.uid()`) rompe a los llamadores internos (`send_gift` la llama para el receptor, `complete_ride_and_pay` para el conductor y la plataforma) porque dentro de ellos `auth.uid()` sigue siendo el usuario. `GET DIAGNOSTICS v_ctx = PG_CONTEXT;` lo resuelve: una llamada RPC directa (PostgREST) tiene UNA sola línea; llamada desde otra función plpgsql trae 2+ líneas separadas por `\n`. Restringir solo el caso directo deja intactos a los llamadores internos sin tocarlos y sin cambiar las apps. Antes de usarlo, listar los llamadores con `SELECT proname, prosecdef, lanname FROM pg_proc … WHERE prosrc ILIKE '%<helper>%'` (los de prod son todos plpgsql SECDEF).
+
+**Ojo con las funciones SQL-language intermedias: NO siempre añaden frame.** Medido con un probe que devuelve `PG_CONTEXT` (corregido 2026-09-15; una versión previa de esta nota afirmaba lo contrario):
+
+| Wrapper `LANGUAGE sql` | Frames | El guard lo ve como |
+|---|---|---|
+| plano (sin `STRICT`/`STABLE`/`SECURITY DEFINER`/`SET`) | **1** | llamada DIRECTA — el planner lo **inlinea** y el wrapper desaparece |
+| `STRICT`, `STABLE`, o `SECURITY DEFINER`+`SET` | 2 | anidada (exento) |
+
+O sea que un wrapper SQL plano queda **denegado**, no exento: el riesgo va en la otra dirección.
+
+**La frontera de confianza, explícita:** la exención significa *"me llamó otra función plpgsql"*, NO *"me llamó código confiable"*. Cualquier función ejecutable por `authenticated` que reenvíe `(p_user_id, p_type)` elegidos por el llamante —una plpgsql, o una SQL no-inlinable— **reabre el agujero**; hay que validar el tipo en esa call site. Hoy ninguna lo hace (`send_gift` filtra su wallet de origen; los llamadores de cargo/referidos/corporativo pasan tipos fijos), y ni `anon` ni `authenticated` pueden `CREATE` en `public` (verificado con `has_schema_privilege`), así que solo un desarrollador puede introducirlo. Está escrito en el `COMMENT` de la función para que se lea donde importa.
+
+**El vector del ancla en `wa_insert_own` (00197 → borrada en 00591).** La policy dejaba insertar `customer_cash` con `balance = 0` pero no limitaba `anchor_usd_cents` / `unbacked_cup`; `revalue_anchored_wallets` pone `balance = ancla/100 × tasa + unbacked` al día siguiente → un usuario SIN fila `customer_cash` (261 de 610 el 2026-09-15, 110 conductores) podía acuñar saldo. Regla: toda columna que un trigger o cron convierte en dinero (`anchor_usd_cents`, `unbacked_cup`, `balance_usd_cents`) queda fuera del alcance de INSERT/UPDATE de usuarios, no solo `balance`; las filas de billetera se crean SIEMPRE vía `ensure_wallet_account`. Y las búsquedas de cuentas de plataforma (`platform_fx_reserve`, `platform_revenue`) filtran por `user_id = '…0001'`, nunca `LIMIT 1` por tipo.
+
+**Una migración de permisos tiene que ASERTAR su resultado, no confiar en su propio loop.** Los `REVOKE` de 00591 se hacen sobre firmas exactas y saltan con un `NOTICE` si la función no existe — y un `NOTICE` es **invisible** a través de `apply_migration`. Si la firma de prod hubiera derivado, la migración habría reportado éxito dejando el agujero abierto: exactamente cómo 00531 "funcionó" sin cambiar nada. Por eso 00591 cierra con bloques que recorren `pg_proc` **por nombre** (todas las sobrecargas) y hacen `RAISE EXCEPTION` si alguna sigue siendo ejecutable por `anon`/`authenticated`. Misma idea antes de parchear `revalue_anchored_wallets`: si la fila `platform_fx_reserve` no es del usuario plataforma, el pin la dejaría sin encontrar y la revaluación diaria sería un **no-op silencioso** (su rama `NULL` hace `RAISE WARNING; RETURN 0`, y el watchdog FX de 00503 solo mira la frescura de `exchange_rates`), así que aborta. **Residual aceptado:** `wallet_accounts.user_id` es FK `ON DELETE SET NULL`, o sea que borrar al usuario plataforma anularía ese dueño y silenciaría la revaluación — antes del pin, el `LIMIT 1` igual la encontraba.
+
+**Ensayo local reproducible:** `supabase/tests/00591/run.sh none` (RED: 27 fallos, incluida la acuñación) / `run.sh supabase/migrations/00591_*.sql` (GREEN: 58/58, aplicada dos veces). El andamio lleva los cuerpos VIVOS de prod y sus ACLs, no los de git. Las dos aserciones de arriba tienen **pruebas negativas propias** (G1/G2: se rompe el invariante en una base desechable y se exige que la migración aborte) — una verificación que nunca se vio fallar no es una verificación.
+
+**Trampa de método en la que caí verificando esto:** probé el guard contra la base del ensayo que había quedado del baseline **RED**, o sea sin el guard aplicado, y concluí que un wrapper SQL plano lo evadía. Todo pasaba porque no había nada que evadir. Si un probe de seguridad da "permitido", confirmá primero contra qué base estás hablando.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
