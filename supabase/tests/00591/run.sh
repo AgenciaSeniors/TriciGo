@@ -37,8 +37,11 @@ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS pr1" -c "CREATE DAT
 $P -f "$DIR/scaffold.sql" >/dev/null || { echo "scaffold failed"; exit 1; }
 
 if [ "$MIG" != "none" ]; then
-  echo "== apply migration (1st) =="; $P -f "$MIG" >/dev/null || { echo "migration failed"; exit 1; }
-  echo "== apply migration (2nd, idempotency) =="; $P -f "$MIG" >/dev/null || { echo "migration NOT idempotent"; exit 1; }
+  # 1st pass under an EMPTY search_path: the strictest environment a migration runner can use. Any
+  # unqualified type/function name in the migration would make a to_regprocedure() guard return NULL
+  # and silently SKIP that lock instead of failing loudly.
+  echo "== apply migration (1st, search_path = '') =="; $P -c "SET search_path = ''" -f "$MIG" >/dev/null || { echo "migration failed"; exit 1; }
+  echo "== apply migration (2nd, idempotency, search_path = '') =="; $P -c "SET search_path = ''" -f "$MIG" >/dev/null || { echo "migration NOT idempotent"; exit 1; }
 fi
 
 echo "== tests =="

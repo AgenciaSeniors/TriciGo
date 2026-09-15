@@ -204,10 +204,13 @@ DECLARE
   v_fn text;
 BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
-    'public.send_gift(uuid, uuid, integer, text, wallet_account_type, text)',
-    'public.send_gift(uuid, uuid, integer, text, wallet_account_type)'
+    -- Schema-qualified on purpose: with an empty search_path an unqualified enum makes
+    -- to_regprocedure() return NULL and the lock would be skipped silently.
+    'public.send_gift(uuid, uuid, integer, text, public.wallet_account_type, text)',
+    'public.send_gift(uuid, uuid, integer, text, public.wallet_account_type)'
   ] LOOP
     IF to_regprocedure(v_fn) IS NULL THEN
+      RAISE NOTICE '00591: % is absent in this database; skipping', v_fn;
       CONTINUE;
     END IF;
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon', v_fn);
