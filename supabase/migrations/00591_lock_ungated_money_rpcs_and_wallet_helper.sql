@@ -35,10 +35,17 @@
 --      with NO caller check: any user could create a wallet row of ANY
 --      type for ANY user, including a look-alike 'platform_fx_reserve'.
 --      The apps legitimately call it for the caller's own
---      customer_cash / tricicoin / corporate_cash, and every internal
---      caller (send_gift, complete_ride_and_pay, admin_send_gift, the
---      referral/corporate triggers, ...) calls it for OTHER users and
---      platform types. The guard therefore distinguishes a DIRECT call
+--      customer_cash / tricicoin (walletService.ensureAccount), and every
+--      internal caller (send_gift, complete_ride_and_pay, admin_send_gift,
+--      the referral/corporate triggers, ...) calls it for OTHER users and
+--      platform types. corporate_cash is allowed for symmetry with the
+--      server-side shape (the corporate wallet is keyed by
+--      corporate_accounts.created_by, a real users.id), NOT because a
+--      client exercises it: the two corporate call sites
+--      (corporate.service.ts:55, wallet.service.ts:381) pass the CORPORATE
+--      ACCOUNT id, which wallet_accounts.user_id's FK to users(id) already
+--      rejects with 23503 today — a pre-existing bug, swallowed by the
+--      caller, tracked separately. The guard therefore distinguishes a DIRECT call
 --      (PostgREST RPC: a single PL/pgSQL frame in PG_CONTEXT) from a
 --      NESTED one (called from another PL/pgSQL function: 2+ frames),
 --      and only restricts the direct case. No app change needed.
@@ -66,7 +73,7 @@
 --      and service_role stay.
 --
 -- Rehearsed locally (Postgres 16, live bodies captured from prod,
--- 55 assertions: 26 red before / 55 green after, applied twice for
+-- 55 assertions: 27 red before / 55 green after, applied twice for
 -- idempotency). Rollback for any single function is the matching
 -- GRANT EXECUTE ... TO authenticated; for D, recreate the policy from
 -- 00197 (not recommended).
@@ -104,6 +111,33 @@ BEGIN
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', v_fn);
   END LOOP;
 END $lock$;
+
+-- Assert the outcome instead of trusting the loop. The names above are
+-- matched by exact signature, so a production function that drifted to a
+-- different argument list would make to_regprocedure() return NULL, raise a
+-- NOTICE nobody sees through apply_migration, and leave the hole open — the
+-- precise way 00531 reported success while changing nothing. This re-checks
+-- every overload that actually exists, by name, and fails the migration.
+DO $verify$
+DECLARE
+  v_fn text;
+BEGIN
+  FOR v_fn IN
+    SELECT p.oid::regprocedure::text
+    FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace
+      AND p.proname = ANY (ARRAY[
+        'revalue_anchored_wallets', 'recompute_cup_from_usd_prices', 'refund_rate_limit',
+        'get_ride_with_coords', 'get_driver_weekly_summary', 'check_fraud_signals',
+        'auto_offline_stale_drivers', 'notify_offline_drivers_for_searching_rides',
+        'recalc_ride_estimate_with_waypoints', 'check_rate_limit'])
+  LOOP
+    IF has_function_privilege('anon', v_fn::regprocedure, 'EXECUTE')
+       OR has_function_privilege('authenticated', v_fn::regprocedure, 'EXECUTE') THEN
+      RAISE EXCEPTION '00591: % is still executable by anon/authenticated — signature drift? (the REVOKE loop matches exact signatures)', v_fn;
+    END IF;
+  END LOOP;
+END $verify$;
 
 -- ------------------------------------------------------------
 -- C. ensure_wallet_account: direct-call guard, body otherwise identical
@@ -161,7 +195,7 @@ REVOKE ALL ON FUNCTION public.ensure_wallet_account(uuid, public.wallet_account_
 GRANT EXECUTE ON FUNCTION public.ensure_wallet_account(uuid, public.wallet_account_type) TO authenticated, service_role;
 
 COMMENT ON FUNCTION public.ensure_wallet_account(uuid, public.wallet_account_type) IS
-  '00591: idempotent wallet-row creator. Direct RPC calls are restricted to the caller''s own customer_cash/tricicoin/corporate_cash; internal (nested) callers and admins/service role are unrestricted.';
+  '00591: idempotent wallet-row creator. Direct RPC calls are restricted to the caller''s own customer_cash/tricicoin/corporate_cash; internal (nested) callers and admins/service role are unrestricted. TRUST BOUNDARY: the exemption is "called from another PL/pgSQL function", not "called by trusted code". Any function executable by authenticated that forwards caller-chosen (p_user_id, p_type) into this helper reopens the hole — validate the type at that call site. Today none does: send_gift whitelists its source type, and the cargo/referral/corporate callers pass fixed types.';
 
 -- ------------------------------------------------------------
 -- D. wallet_accounts: no direct INSERT for users (anchor-mint vector)
@@ -178,6 +212,25 @@ DECLARE
   v_marker constant text := $m$WHERE account_type = 'platform_fx_reserve' AND user_id = '00000000-0000-0000-0000-000000000001' LIMIT 1$m$;
   v_hits   integer;
 BEGIN
+  -- Checked on EVERY apply, before the short-circuit below, because pinning
+  -- the lookup makes the daily revaluation depend on this row's owner. If the
+  -- reserve belonged to anyone else, the pinned SELECT would find nothing and
+  -- revalue_anchored_wallets() would hit its `v_fx_account IS NULL -> RAISE
+  -- WARNING; RETURN 0` branch: a SILENT no-op, since the FX watchdog (00503)
+  -- only watches exchange_rates freshness. An absent reserve (fresh stack) is
+  -- fine — the function already handles that and 00443 creates it.
+  -- Residual, accepted: wallet_accounts.user_id is FK ... ON DELETE SET NULL,
+  -- so deleting the platform user would NULL this owner and silence the
+  -- revaluation. Before the pin, the LIMIT 1 lookup would still have found the
+  -- row. Deleting user …0001 ('TriciGo Platform', super_admin) breaks far more
+  -- than this, but see CLAUDE.md for the monitoring follow-up.
+  IF EXISTS (SELECT 1 FROM public.wallet_accounts WHERE account_type = 'platform_fx_reserve')
+     AND NOT EXISTS (SELECT 1 FROM public.wallet_accounts
+                     WHERE account_type = 'platform_fx_reserve'
+                       AND user_id = '00000000-0000-0000-0000-000000000001') THEN
+    RAISE EXCEPTION '00591: platform_fx_reserve exists but is not owned by the platform user — pinning the lookup would silently disable the daily revaluation';
+  END IF;
+
   SELECT pg_get_functiondef('public.revalue_anchored_wallets()'::regprocedure) INTO v_src;
 
   IF position(v_marker IN v_src) > 0 THEN
@@ -215,6 +268,17 @@ BEGIN
     END IF;
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon', v_fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated, service_role', v_fn);
+  END LOOP;
+
+  -- Same drift guard as the $verify$ block above: assert by name, not by the
+  -- exact signatures the loop matched.
+  FOR v_fn IN
+    SELECT p.oid::regprocedure::text FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'send_gift'
+  LOOP
+    IF has_function_privilege('anon', v_fn::regprocedure, 'EXECUTE') THEN
+      RAISE EXCEPTION '00591: % is still executable by anon — signature drift?', v_fn;
+    END IF;
   END LOOP;
 END $gift$;
 
