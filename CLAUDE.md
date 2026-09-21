@@ -2599,6 +2599,17 @@ Corolario: **`auto_explain` registra `duration: … ms plan:` con el plan VACÍO
 
 Y dos del propio banco de pruebas, que son la lección de "verificar la superficie correcta" otra vez: el mock devolvía **200 a cualquier POST**, así que el caso "canal roto" nunca estuvo roto; y un `python3 mock.py` viejo seguía **sosteniendo el puerto**, de modo que los reinicios morían al bindear y las pruebas corrían contra código anterior (`ss -lptn 'sport = :8799'` lo delata; y `pkill -f mock.py` **se mata a sí mismo** porque el patrón coincide con el propio comando — matar por PID). Si un chequeo de seguridad da "permitido", confirmá primero contra qué está hablando.
 
+**Confirmación independiente que ya estaba en el repo (y un tercer caso del mismo bug).** Los workflows programados de master fallan **exactamente** en los días de caída y pasan en los limpios — 6 de 6:
+
+| Día | `sync-osm-delta` | ¿Hubo caída? |
+|---|---|---|
+| 16, 17, 19 sept | success | no |
+| **18, 20, 21 sept** | **failure** (10:27 / 10:30 / 11:49 UTC, dentro de la ventana) | **sí** |
+
+Y la causa en el log es literal: `{"code":"PGRST002","message":"Could not query the database for the schema cache."}`. O sea que **GitHub Actions ya veía las caídas**; nadie leía esos fallos como tal. Es la prueba de que la sonda desde GitHub funciona, y sirve de evidencia cruzada para el ticket con Supabase.
+
+El tercer caso del bug: `sync-osm-delta.yml` y `sync-pois.yml` avisan de su propio fallo llamando a **`notify_ops_workflow_failure` en la base**, y se tragan el error (`|| echo "::warning::…"`). Cuando el workflow falla *porque* la base está caída, el aviso falla también. Queda cubierto de hecho por `supabase-uptime.yml` (la caída ahora se reporta por su cuenta), así que **no** se tocaron esos dos workflows: hacen syncs de datos de producción y el hueco efectivo ya está cerrado. Si algún día se quiere cerrar del todo, el patrón es el de `supabase-uptime.yml`: abrir un issue cuando la RPC no contesta, en vez de degradar a `::warning::`.
+
 **Lo que NO hay que hacer:** subir `dispatch_*`/timeouts, tocar las migraciones de retención (00576/00577 funcionaron: la base bajó de 2.141 MB a 775 MB), ni buscar la consulta culpable. No hay una.
 
 ### Los REVOKE de una migración de lockdown se verifican en prod, no se asumen (00531 → 00591, 2026-09-15)
