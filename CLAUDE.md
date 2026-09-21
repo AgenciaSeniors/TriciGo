@@ -2565,6 +2565,53 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 
 **Watchdog de salud (00577).** `check_database_health()` cada hora (muestra + alerta **solo en transición** ok↔warn↔critical, patrón 00503) y `send_db_health_digest()` diario a las 07:30 UTC al `business_notification_email`. Es SQL puro y no una Edge Function por la misma razón que 00503: si la base está por colapsar, la EF puede no conseguir conexión justo cuando hay que avisar. El aviso temprano real es la **proyección**: con 7 días de muestras calcula MB/día y pasa a `warn` cuando faltan ≤14 días para el umbral, *antes* de cruzarlo. `db_size_warn_mb`/`crit_mb` (6000/7500) son el **único número asumido y no medido** — Postgres no conoce el tamaño del disco que le dio Supabase; ajustar si el disco real es otro.
 
+### Toda alarma del proyecto vivía dentro de pg_cron, así que ninguna puede avisar de una caída de disco (verificado 2026-09-21, `ops/supabase-watchdog/`)
+
+**El incidente.** El 2026-09-21, de 09:24 a 12:28 UTC (~3 h), la capa de almacenamiento se atascó. PostgREST devolvió 503 en `/rest/v1/rides` (215), `platform_config` (126), `driver_heartbeat` y `find_nearby_vehicles`; la latencia media por hora llegó a **51 s** y hubo respuestas de **125 s**. **No salió una sola alerta**: el dueño lo descubrió usando la app y reinició el proyecto a mano. Ya había pasado igual el **18** y el **20 de septiembre**.
+
+**Por qué nadie avisó — y es estructural, no un olvido.** Las tres alarmas (`check_database_health` 00577, `check_exchange_rate_freshness` 00503, `check_cron_http_failures` 00507) las dispara **pg_cron**. Cuando el disco se atasca, pg_cron **no arranca sus workers** (98 × `cron job startup timeout` ese día) → ninguna corrió. `platform_config.db_health_status` quedó congelado en `'ok'` desde las 08:55 UTC. **Una alarma que vive dentro de lo que vigila no puede avisar que eso se cayó** — la misma clase que la ceguera de `cron.job_run_details`, un nivel más abajo: ahí el chequeo corría y miraba la señal equivocada; acá ni corre.
+
+**Cómo encontrar caídas pasadas sin ninguna herramienta nueva** — cada hueco en un cron de 1 minuto es una ventana de caída, y `cron.job_run_details` guarda 14 días:
+
+```sql
+WITH r AS (SELECT start_time, lag(start_time) OVER (ORDER BY start_time) AS prev
+           FROM cron.job_run_details WHERE jobid = 17)
+SELECT prev AS caida_desde, start_time AS recupero,
+       round(extract(epoch FROM start_time - prev)/60) AS minutos
+FROM r WHERE start_time - prev > interval '4 minutes' ORDER BY prev DESC LIMIT 25;
+```
+
+**Es el disco, no la base — cómo distinguirlo (y no perder horas).** Todo lo interno estaba impecable durante la caída: 775 MB y bajando −198 MB/día, 13–26/60 conexiones, cache hit **99.76 %**, 0 transacciones largas, 0 `idle in transaction`, 0 deadlocks, ningún `too many clients` ni `out of memory`. Las dos pruebas que sí señalan al almacenamiento:
+- **Checkpoints:** `wrote 118 buffers, total=11.9 s` (normal) contra **`wrote 9 buffers, total=265.4 s`**. Escribir 9 buffers en 4 minutos no es carga de base de datos.
+- **La misma función, 300× más lenta:** `cleanup_orphan_searching_rides` mide **240 ms** en `pg_stat_statements` y tardó **76.036 ms** durante el incidente, sin cambiar consulta ni datos.
+
+Corolario: **`auto_explain` registra `duration: … ms plan:` con el plan VACÍO** cuando el disco está así (8 consultas de 336–510 s ese día). Un plan truncado no es un misterio de la consulta: es la señal de que ni el logger podía escribir.
+
+**El arreglo (PR de esta sesión).** Dos watchdogs **fuera** de Supabase, porque el arreglo no puede vivir donde vive el bug:
+- **Principal:** `ops/supabase-watchdog/healthcheck.sh` + timer systemd de **2 min** en el VPS. Sondea `/rest/v1/platform_config` (el camino exacto de las apps, es el que decide) y `/functions/v1/health-check` (**sobrevive a una base muerta** — verificado: el runtime de EF siguió corriendo toda la caída — y dice qué capa rompió). Estado en archivo local, alertas **directo a Resend/D7**, nunca por las EF `send-email`/`send-sms` (escriben en `email_sends`/`sms_log` → necesitan la base caída). `--selftest` obligatorio antes de programarlo.
+- **Respaldo:** `.github/workflows/supabase-uptime.yml` cada 10 min desde GitHub, porque **el VPS es punto único de fallo**. Abre/cierra un issue y falla la corrida.
+- **`slow` cuenta como caída.** Con respuestas de 125 s, una sonda de arriba/abajo habría dicho "arriba".
+
+**Tres trampas que cazó la suite (`ops/supabase-watchdog/tests/run.sh`, 21 aserciones) y no la revisión:**
+1. **Nunca `source` un archivo de config de alertas.** `ALERT_EMAIL_TO=a@x.com, b@x.com` sin comillas es un **prefijo de comando** para bash: la variable **nunca queda seteada** y todo aviso por correo se salta en silencio — justo el fallo que el watchdog venía a eliminar. Parsear con whitelist, no sourcear (y de paso, un typo en la config no ejecuta nada como root).
+2. **`--selftest` imprimía "listo" sin enviar nada**, porque llamaba a `send_email` antes de su definición (en bash el orden es de ejecución). Un autotest que no verifica el envío es el bug que viene a cazar: ahora exige que un canal haya aceptado de verdad y sale ≠0 si no.
+3. **`tr -d '\000-\037'` borra los saltos de línea** en vez de escaparlos → el correo de alerta llega como un párrafo corrido de 19 líneas pegadas. Convertirlos a `\n` literal.
+
+Y dos del propio banco de pruebas, que son la lección de "verificar la superficie correcta" otra vez: el mock devolvía **200 a cualquier POST**, así que el caso "canal roto" nunca estuvo roto; y un `python3 mock.py` viejo seguía **sosteniendo el puerto**, de modo que los reinicios morían al bindear y las pruebas corrían contra código anterior (`ss -lptn 'sport = :8799'` lo delata; y `pkill -f mock.py` **se mata a sí mismo** porque el patrón coincide con el propio comando — matar por PID). Si un chequeo de seguridad da "permitido", confirmá primero contra qué está hablando.
+
+**Confirmación independiente que ya estaba en el repo (y un tercer caso del mismo bug).** Los workflows programados de master fallan **exactamente** en los días de caída y pasan en los limpios — 6 de 6:
+
+| Día | `sync-osm-delta` | ¿Hubo caída? |
+|---|---|---|
+| 16, 17, 19 sept | success | no |
+| **18, 20, 21 sept** | **failure** (10:27 / 10:30 / 11:49 UTC, dentro de la ventana) | **sí** |
+
+Y la causa en el log es literal: `{"code":"PGRST002","message":"Could not query the database for the schema cache."}`. O sea que **GitHub Actions ya veía las caídas**; nadie leía esos fallos como tal. Es la prueba de que la sonda desde GitHub funciona, y sirve de evidencia cruzada para el ticket con Supabase.
+
+El tercer caso del bug: `sync-osm-delta.yml` y `sync-pois.yml` avisan de su propio fallo llamando a **`notify_ops_workflow_failure` en la base**, y se tragan el error (`|| echo "::warning::…"`). Cuando el workflow falla *porque* la base está caída, el aviso falla también. Queda cubierto de hecho por `supabase-uptime.yml` (la caída ahora se reporta por su cuenta), así que **no** se tocaron esos dos workflows: hacen syncs de datos de producción y el hueco efectivo ya está cerrado. Si algún día se quiere cerrar del todo, el patrón es el de `supabase-uptime.yml`: abrir un issue cuando la RPC no contesta, en vez de degradar a `::warning::`.
+
+**Lo que NO hay que hacer:** subir `dispatch_*`/timeouts, tocar las migraciones de retención (00576/00577 funcionaron: la base bajó de 2.141 MB a 775 MB), ni buscar la consulta culpable. No hay una.
+
 ### Los REVOKE de una migración de lockdown se verifican en prod, no se asumen (00531 → 00591, 2026-09-15)
 
 **Bug verificado.** `00531_lock_down_ungated_public_rpcs.sql` (31-07) revocaba 9 RPCs SECURITY DEFINER sin gate; la auditoría de pagos del 2026-09-15 encontró que **8 de las 9 seguían ejecutables por `anon`/`authenticated` en prod**: la migración quedó en git y nunca se aplicó. Buscar su número en `schema_migrations` no sirve (los applies por MCP se registran por timestamp — ver § "Cómo se registra el `version`"); lo que decide es `has_function_privilege` contra prod. `00591` la re-aplica con guardas `to_regprocedure()` y cierra dos más de la misma clase (`check_rate_limit` ejecutable por `authenticated`, `ensure_wallet_account` sin guard).

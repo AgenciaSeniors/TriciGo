@@ -1,0 +1,125 @@
+# TriciGo — Supabase uptime probe, run from GitHub's infrastructure.
+#
+# This is the SECOND, independent watchdog. The primary one lives on the VPS
+# (ops/supabase-watchdog/) and probes every 2 minutes; this one exists because
+# the VPS is a single point of failure — if it is down, nobody is watching, and
+# nobody would be told about that either.
+#
+# It is deliberately outside both Supabase and the VPS. It signals by opening a
+# GitHub issue (which emails the repo watchers) and by failing the run, so the
+# outage is visible even if no email secret is configured.
+#
+# Background: on 2026-09-21 the database's storage stalled for ~3 h. Every
+# in-database watchdog (00503 / 00507 / 00577) is fired by pg_cron, and pg_cron
+# could not start its workers, so not one alert fired and the owner discovered
+# the outage by using the app. See ops/supabase-watchdog/README.md.
+name: Supabase uptime
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub delays scheduled runs under load, which is why
+    # this is the backstop and the 2-minute VPS timer is the primary.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+concurrency:
+  group: supabase-uptime
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://lqaufszburqvlslpcuac.supabase.co' }}
+      # The publishable key ships inside the apps; it is not a secret. Kept
+      # overridable so a key rotation does not need a code change.
+      SB_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc' }}
+      ISSUE_TITLE: '[uptime] Supabase no responde'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Probe PostgREST and the health-check function
+        id: probe
+        run: |
+          set -uo pipefail
+          # rest = the exact path the apps use. It is what decides.
+          t0=$(date +%s%3N)
+          rest=$(curl -s -o /tmp/rest.json -w '%{http_code}' --max-time 20 \
+            -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" \
+            "$SUPABASE_URL/rest/v1/platform_config?select=key&limit=1" || echo 000)
+          rest_ms=$(( $(date +%s%3N) - t0 ))
+          # ef = survives a dead database and says which layer broke.
+          ef=$(curl -s -o /tmp/ef.json -w '%{http_code}' --max-time 20 \
+            -H "apikey: $SB_KEY" "$SUPABASE_URL/functions/v1/health-check" || echo 000)
+
+          # A response slower than 10 s is an outage for a real user. On
+          # 2026-09-21 PostgREST answered in up to 125 s while still "working".
+          if [[ "$rest" =~ ^2 ]] && (( rest_ms <= 10000 )); then healthy=true; else healthy=false; fi
+
+          detail="rest=${rest} ${rest_ms}ms · ef=${ef}"
+          if [[ "$healthy" == "false" ]]; then
+            # These bodies come from Supabase and end up inside a shell heredoc
+            # and a gh --body. Drop backticks, $ and quotes so nothing in a
+            # remote error message can ever be evaluated or break quoting.
+            scrub() { head -c 250 "$1" | tr -d '\n' | tr -d '`$"'"'"'\\'; }
+            detail="$detail · rest_body=$(scrub /tmp/rest.json) · ef_body=$(scrub /tmp/ef.json)"
+          fi
+          echo "healthy=$healthy" >> "$GITHUB_OUTPUT"
+          echo "detail=$detail"   >> "$GITHUB_OUTPUT"
+          echo "$detail"
+
+      - name: Open an incident issue if it is down
+        if: steps.probe.outputs.healthy == 'false'
+        env:
+          DETAIL: ${{ steps.probe.outputs.detail }}
+        run: |
+          set -uo pipefail
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          body=$(cat <<EOF
+          La sonda externa no pudo leer la base de datos.
+
+          **Detectado:** $(date -u +%Y-%m-%dT%H:%M:%SZ) UTC
+          **Sonda:** \`$DETAIL\`
+
+          \`rest\` es el camino exacto que usan las apps. Si no es 2xx, los pasajeros
+          y conductores están viendo errores ahora mismo.
+
+          **Primer paso:** revisar **Disk IO** en el panel de Supabase. En los
+          incidentes del 18, 20 y 21 de septiembre de 2026 la base estaba sana por
+          dentro (tamaño, conexiones, cache al 99.76 %) y lo que se cayó fue el
+          almacenamiento: un checkpoint que normalmente escribe 118 buffers en
+          11.9 s tardó 242 s en escribir 9.
+
+          Detalle y runbook: \`ops/supabase-watchdog/README.md\`
+          EOF
+          )
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+            echo "commented on #$existing"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body "$body"
+          fi
+
+      - name: Close the incident issue once it recovers
+        if: steps.probe.outputs.healthy == 'true'
+        env:
+          DETAIL: ${{ steps.probe.outputs.detail }}
+        run: |
+          set -uo pipefail
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [[ -n "$existing" ]]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+              --comment "Recuperado $(date -u +%Y-%m-%dT%H:%M:%SZ) UTC — sonda: \`$DETAIL\`"
+          fi
+
+      - name: Fail the run so the outage is visible
+        if: steps.probe.outputs.healthy == 'false'
+        env:
+          DETAIL: ${{ steps.probe.outputs.detail }}
+        run: |
+          echo "::error::Supabase no responde — $DETAIL"
+          exit 1
