@@ -17,9 +17,14 @@ name: Supabase uptime
 
 on:
   schedule:
-    # Every 10 minutes. GitHub delays scheduled runs under load, which is why
-    # this is the backstop and the 2-minute VPS timer is the primary.
-    - cron: '*/10 * * * *'
+    # Every 10 minutes, on OFF-PEAK minutes. GitHub queues scheduled runs and
+    # sheds load at the start of every hour and on :00-aligned minutes, so a
+    # '*/10' cron competes with everyone else's and can go unscheduled for
+    # hours: after the first merge (2026-09-21 14:52 UTC) '*/10' had not
+    # produced a single run 2.5 h later. The offset minutes below sit outside
+    # that contention. This remains the backstop; the 2-minute VPS timer is
+    # the primary and does not depend on any scheduler.
+    - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch:
 
 permissions:
