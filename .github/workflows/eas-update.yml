@@ -85,13 +85,50 @@ jobs:
         env:
           # Mirror of eas.json build.base.env + production profile.
           # `eas update` does NOT read eas.json env — these MUST be set here.
+          # The guard at the top of `run` fails the job if this list drifts
+          # from eas.json (it already did once: #1003 added the proxy URL to
+          # eas.json only).
           EXPO_PUBLIC_SUPABASE_URL: https://lqaufszburqvlslpcuac.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc
           EXPO_PUBLIC_MAPBOX_TOKEN: pk.eyJ1IjoidHJpY2lnbyIsImEiOiJjbW1wbmlnemIwczI4MnNvcmdremJwaTRzIn0._lAOaQ1Eg9LfszmlcZ5GQg
           EXPO_PUBLIC_SENTRY_DSN: https://c2c4fdaaa1b31143a8c7d20798005334@o4511046478659584.ingest.us.sentry.io/4511046494519296
           EXPO_PUBLIC_POSTHOG_API_KEY: phc_bgHqti7yz10ZStiwKwPeoYprkQeT7bu00QDV1hVvmv9
+          EXPO_PUBLIC_EXPO_TOKEN_PROXY_URL: https://lqaufszburqvlslpcuac.supabase.co/functions/v1/expo-proxy/
           EXPO_PUBLIC_DEMO_MODE: 'false'
         run: |
+          # Drift guard. Every EXPO_PUBLIC_* the store build inlines (eas.json,
+          # production profile resolved through `extends`) must be set above
+          # with the SAME value. A missing one is not an error anywhere else:
+          # Metro inlines it as undefined and the bundle builds fine. That is
+          # how EXPO_PUBLIC_EXPO_TOKEN_PROXY_URL went missing — an OTA would
+          # have silently switched off push-token minting through our proxy
+          # (#1003) for every driver Expo refuses to answer from Cuba.
+          node -e '
+            const eas = require("./eas.json");
+            const resolve = (name, seen = new Set()) => {
+              const p = eas.build && eas.build[name];
+              if (!p || seen.has(name)) return {};
+              seen.add(name);
+              return { ...(p.extends ? resolve(p.extends, seen) : {}), ...(p.env || {}) };
+            };
+            const want = Object.entries(resolve("production")).filter(([k]) => k.startsWith("EXPO_PUBLIC_"));
+            let bad = want.length === 0;
+            if (bad) console.log("::error::No EXPO_PUBLIC_* in eas.json (production). Refusing to guess.");
+            for (const [k, v] of want) {
+              const got = process.env[k];
+              if (got === undefined) {
+                console.log(`::error::${k} is in eas.json (production) but not set in this workflow. The OTA would ship it EMPTY.`);
+                bad = true;
+              } else if (got !== String(v)) {
+                console.log(`::error::${k} differs between eas.json (production) and this workflow.`);
+                bad = true;
+              } else {
+                console.log(`  OK   ${k}`);
+              }
+            }
+            process.exit(bad ? 1 : 0);
+          '
+
           # --clear: never trust a warm Metro cache. Verified locally that a
           # warm cache reuses modules with a PREVIOUS run's env value already
           # inlined, which silently masks a missing variable.
@@ -123,6 +160,8 @@ jobs:
           }
           check "Supabase URL"  "lqaufszburqvlslpcuac.supabase.co"
           check "Mapbox token"  "pk.eyJ1IjoidHJpY2lnbyI"
+          # No source file hardcodes this path, so it can only come from env.
+          check "Expo token proxy URL" "functions/v1/expo-proxy/"
           if [ "$fail" -ne 0 ]; then
             exit 1
           fi
