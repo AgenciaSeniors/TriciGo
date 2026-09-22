@@ -2621,6 +2621,18 @@ El tercer caso del bug: `sync-osm-delta.yml` y `sync-pois.yml` avisan de su prop
 - **Cómo fechar el inicio real:** los huecos de `cron.job_run_details` lo subestiman (el 18 dieron 07:18 cuando las primeras líneas `duration:` de las consultas de monitoreo de Supabase —`pg_ls_archive_statusdir`, `pg_ls_waldir`, `pg_database_size`, la CTE sobre `pg_stat_statements`— ya pasaban de 10 s a las **06:36**). Corren cada minuto y son operaciones de filesystem: si tardan >10 s el disco está atascado, y marcan el minuto exacto.
 - **Trampa al leer checkpoints:** `write=` crece con los buffers porque `checkpoint_completion_target` duerme ~100 ms por buffer (61 buffers → 5,7 s y 282 → 28,6 s son NORMALES). La anomalía es un `total` muy por encima de 0,1 s × buffers (16 buffers / 33 s; 9 buffers / 265 s) o un `total − write − sync` de decenas de segundos.
 - **Decisión:** Micro ya (gratis) → mirar 3 días el gráfico de Disk IO Budget → si sigue bajando de ~50 %, Small (+$5/mes neto, 2 GB, otro 2× de baseline). Cada escalón Nano → Micro → Small → Medium duplica el baseline de disco (tabla t4g de AWS: 43 / 87 / 174 / 347 Mbps y 250 / 500 / 1.000 / 2.000 IOPS, ráfaga común de 2.085 Mbps; **no verificada desde el sandbox** porque supabase.com y docs.aws están bloqueados por el proxy: se ve en Settings → Compute and Disk).
+- **Micro aplicado el 2026-09-22 y verificado.** El usuario lo subió desde Settings → Compute and Disk. Mientras dura el cambio, `get_project` devuelve `RESIZING` y la base contesta `57P03 the database system is shutting down`. El corte que vieron las apps fue de **2 min 14 s** (23:46:59 → 23:49:13 UTC): 119 respuestas 520/521/522/525 de Cloudflare en `/rest/v1`, y un hueco de 3 min en el cron `jobid 17`. **Ningún conductor quedó fuera de línea**: los dos que estaban conectados volvieron a latir 7-10 s después del arranque.
+- **Cómo saber desde SQL en qué cómputo estás.** El sandbox no llega a `supabase.co` (el proxy responde 403), así que todo pasa por MCP. Supabase deriva la configuración de la RAM, y `effective_cache_size` = 0,75 × RAM es la huella más limpia. `pg_postmaster_start_time()` marca el reinicio. Si cambia el arranque y `effective_cache_size` no, fue un reinicio sin upgrade: tratarlo como posible caída.
+
+  | Setting | Nano (0,5 GB) | Micro (1 GB) |
+  |---|---|---|
+  | `effective_cache_size` | 384 MB | **768 MB** |
+  | `shared_buffers` | 224 MB | 256 MB |
+  | `work_mem` | 2184 kB | 3500 kB |
+  | `maintenance_work_mem` | 32 MB | 64 MB |
+  | `max_connections` | 60 | 60 |
+
+- **Pendiente:** seguir el gráfico de `Disk IO % consumed` tres días, hasta el 2026-09-25, y decidir Small con el criterio de la línea **Decisión** de arriba.
 
 ### Los REVOKE de una migración de lockdown se verifican en prod, no se asumen (00531 → 00591, 2026-09-15)
 
