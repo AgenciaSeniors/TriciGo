@@ -289,4 +289,111 @@ describe('createStorageAdapter', () => {
       expect(legacy.remove).not.toHaveBeenCalled();
     });
   });
+  // 2026-09-21, driver "Alexander solano": the app showed him signed in (UI
+  // rehydrated from the offline snapshot) while GoTrue held NO session, so every
+  // request left as role `anon` for 23 minutes — 32 of them 401, and "Conectarme"
+  // surfaced the raw `permission denied for function current_user_role`. His
+  // server session was intact the whole time (refreshed 13 min later). The
+  // adapter turns BOTH "the store threw" and "the store holds nothing" into
+  // null, so the apps could not tell a locked/failing keystore (keep the cached
+  // UI, retry) from a genuinely absent session (go to login). Nor did anyone
+  // learn WHY the read failed: the catch swallowed the error.
+  describe('telling an unreadable store apart from an empty one', () => {
+    it('reports no read failure after a clean "nothing stored" answer', async () => {
+      const adapter = createStorageAdapter({
+        get: async () => null,
+        set: vi.fn(async () => {}),
+        remove: vi.fn(async () => {}),
+      });
+
+      await expect(adapter.getItem('sb-auth-token')).resolves.toBeNull();
+      expect(adapter.lastReadFailed('sb-auth-token')).toBe(false);
+    });
+
+    it('remembers that the last read threw, and tells the app why', async () => {
+      const onReadError = vi.fn();
+      const adapter = createStorageAdapter(
+        {
+          get: lockedKeychain('getValueWithKeyAsync'),
+          set: vi.fn(async () => {}),
+          remove: vi.fn(async () => {}),
+        },
+        { onReadError },
+      );
+
+      await expect(adapter.getItem('sb-auth-token')).resolves.toBeNull();
+      expect(adapter.lastReadFailed('sb-auth-token')).toBe(true);
+      expect(onReadError).toHaveBeenCalledTimes(1);
+      expect(onReadError).toHaveBeenCalledWith(
+        'sb-auth-token',
+        expect.objectContaining({ message: expect.stringContaining('getValueWithKeyAsync') }),
+      );
+    });
+
+    it('clears the failure once a later read succeeds', async () => {
+      let locked = true;
+      const adapter = createStorageAdapter({
+        get: async () => {
+          if (locked) throw new Error("Calling the 'getValueWithKeyAsync' function has failed");
+          return 'session-json';
+        },
+        set: vi.fn(async () => {}),
+        remove: vi.fn(async () => {}),
+      });
+
+      await adapter.getItem('sb-auth-token');
+      expect(adapter.lastReadFailed('sb-auth-token')).toBe(true);
+
+      locked = false;
+      await expect(adapter.getItem('sb-auth-token')).resolves.toBe('session-json');
+      expect(adapter.lastReadFailed('sb-auth-token')).toBe(false);
+    });
+
+    it('counts a legacy-store read that threw as a failure, not as "nothing stored"', async () => {
+      const onReadError = vi.fn();
+      const adapter = createStorageAdapter(
+        { get: async () => null, set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
+        { legacy: { get: lockedKeychain('getValueWithKeyAsync'), remove: vi.fn(async () => {}) }, onReadError },
+      );
+
+      await expect(adapter.getItem('sb-auth-token')).resolves.toBeNull();
+      expect(adapter.lastReadFailed('sb-auth-token')).toBe(true);
+      expect(onReadError).toHaveBeenCalledTimes(1);
+    });
+
+    it('tracks failures per key', async () => {
+      const adapter = createStorageAdapter({
+        get: async (key) => {
+          if (key === 'broken') throw new Error('keystore');
+          return null;
+        },
+        set: vi.fn(async () => {}),
+        remove: vi.fn(async () => {}),
+      });
+
+      await adapter.getItem('broken');
+      await adapter.getItem('fine');
+      expect(adapter.lastReadFailed('broken')).toBe(true);
+      expect(adapter.lastReadFailed('fine')).toBe(false);
+      expect(adapter.lastReadFailed('never-read')).toBe(false);
+    });
+
+    it('never lets the onReadError hook itself break a read', async () => {
+      const adapter = createStorageAdapter(
+        {
+          get: lockedKeychain('getValueWithKeyAsync'),
+          set: vi.fn(async () => {}),
+          remove: vi.fn(async () => {}),
+        },
+        {
+          onReadError: () => {
+            throw new Error('sentry is down');
+          },
+        },
+      );
+
+      await expect(adapter.getItem('sb-auth-token')).resolves.toBeNull();
+      expect(adapter.lastReadFailed('sb-auth-token')).toBe(true);
+    });
+  });
 });

@@ -17,6 +17,15 @@ export interface StorageAdapter {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
   removeItem: (key: string) => Promise<void>;
+  /**
+   * True when the most recent getItem(key) resolved null because the store
+   * THREW (locked keychain, keystore failure), false when the store genuinely
+   * held nothing or the key was never read. GoTrue only ever sees the null;
+   * this is how the apps tell "keep the cached UI and retry" from "the session
+   * is gone, go to login" — the distinction the 2026-09-21 anonymous-driver
+   * incident was missing.
+   */
+  lastReadFailed: (key: string) => boolean;
 }
 
 export interface StorageAdapterOptions {
@@ -45,6 +54,13 @@ export interface StorageAdapterOptions {
     get: (key: string) => Promise<string | null>;
     remove: (key: string) => Promise<void>;
   };
+  /**
+   * Called whenever a read throws — the error GoTrue never sees. Report it: for
+   * 23 minutes on 2026-09-21 a driver's app ran as `anon` because this read
+   * failed, and nobody could say why, because the catch below swallowed it.
+   * A throwing hook is ignored; it can never break the read itself.
+   */
+  onReadError?: (key: string, error: unknown) => void;
 }
 
 export function createStorageAdapter(
@@ -55,13 +71,23 @@ export function createStorageAdapter(
   },
   options: StorageAdapterOptions = {},
 ): StorageAdapter {
-  const { legacy } = options;
+  const { legacy, onReadError } = options;
   // GoTrue does not serialize its storage calls on native (it installs a no-op
   // lock; navigatorLock is web-only), so reads and writes for the same key
   // genuinely overlap. `adopting` single-flights the adoption; `written` records
   // that a real write has landed, which always outranks an inherited value.
   const adopting = new Map<string, Promise<string | null>>();
   const written = new Set<string>();
+  // Keys whose most recent read threw. Cleared by the next read that answers.
+  const failedReads = new Set<string>();
+  const noteReadFailure = (key: string, error: unknown) => {
+    failedReads.add(key);
+    try {
+      onReadError?.(key, error);
+    } catch {
+      /* the hook must never break the read */
+    }
+  };
 
   return {
     // `await` inside try/catch so a native module that throws synchronously is
@@ -70,9 +96,11 @@ export function createStorageAdapter(
       let current: string | null = null;
       try {
         current = await impl.get(key);
-      } catch {
+      } catch (err) {
+        noteReadFailure(key, err);
         return null;
       }
+      failedReads.delete(key);
       if (current !== null || !legacy) return current;
 
       const inFlight = adopting.get(key);
@@ -82,7 +110,9 @@ export function createStorageAdapter(
         let inherited: string | null = null;
         try {
           inherited = await legacy.get(key);
-        } catch {
+        } catch (err) {
+          // Unreadable, not absent: the legacy copy may well be the only one.
+          noteReadFailure(key, err);
           return null;
         }
         if (inherited === null) return null;
@@ -139,5 +169,6 @@ export function createStorageAdapter(
         /* best effort */
       }
     },
+    lastReadFailed: (key) => failedReads.has(key),
   };
 }
