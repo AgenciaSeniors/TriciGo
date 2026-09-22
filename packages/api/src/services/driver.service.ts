@@ -29,6 +29,42 @@ import { uploadFileFromUri } from './_storage-upload';
 import { notificationService } from './notification.service';
 import { exchangeRateService } from './exchange-rate.service';
 
+/**
+ * Whether GoTrue currently holds a session. Session-only calls check this FIRST:
+ * without one, supabase-js sends the publishable key as the bearer (role `anon`)
+ * and RLS rejects the write with a message that means nothing to a driver —
+ * "permission denied for function current_user_role" in the "Conectarme" toast
+ * on 2026-09-21, while the server-side session was intact all along. When the
+ * SDK cannot even answer, let the request go and surface the real error.
+ */
+async function hasSession(supabase: ReturnType<typeof getSupabaseClient>): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return Boolean(data?.session);
+  } catch {
+    return true;
+  }
+}
+
+/** PostgREST surfaces an RLS/GRANT failure as SQLSTATE 42501. With a session, a
+ *  driver writing his own row never hits it; without one it is the symptom. */
+function isPermissionDenied(error: { code?: string; message?: string } | null | undefined): boolean {
+  return error?.code === '42501' || /permission denied/i.test(error?.message ?? '');
+}
+
+let warnedNoSession = false;
+/** Periodic pushes (heartbeat, position) simply skip without a session: the
+ *  background task fires every ~55 s and each anonymous attempt is a wasted
+ *  401 (25 of them in 23 minutes on 2026-09-21). Logged once per process. */
+async function skipWithoutSession(supabase: ReturnType<typeof getSupabaseClient>, what: string): Promise<boolean> {
+  if (await hasSession(supabase)) return false;
+  if (!warnedNoSession) {
+    warnedNoSession = true;
+    logger.warn(`[driver.service] ${what} skipped: no auth session in memory`);
+  }
+  return true;
+}
+
 import { transformRideCoordinates } from './_ride-coordinates';
 
 /**
@@ -323,6 +359,14 @@ export const driverService = {
   ): Promise<void> {
     const supabase = getSupabaseClient();
 
+    // No session → nothing below can succeed, and the RLS error it would
+    // produce is unreadable. Same code the zero-rows branch below throws, so
+    // the UI has ONE case to translate.
+    if (!(await hasSession(supabase))) {
+      logger.warn('[setOnlineStatus] no auth session; refusing to write as anon', { driverId, isOnline });
+      throw new Error('session_expired');
+    }
+
     // 00495: going online requires a registered active vehicle. The DB trigger
     // enforces this authoritatively; this pre-check surfaces a clean error
     // instead of the raw trigger exception (and avoids a wasted round-trip).
@@ -364,15 +408,11 @@ export const driverService = {
         // out, and PostgREST answers 200 with an EMPTY result and NO error. That
         // is an auth problem, not a missing vehicle — reporting it as "register
         // your vehicle" is exactly the false positive this fix exists to remove.
-        let hasSession = true;
-        try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          hasSession = Boolean(sessionData?.session);
-        } catch {
-          // Can't tell — assume authenticated and report the vehicle error.
-          hasSession = true;
-        }
-        if (!hasSession) {
+        // Re-checked here, not only at the top: the early check lets the
+        // request go when the SDK could not answer, and this is the point
+        // where a missing session becomes indistinguishable from a missing
+        // vehicle. Same helper: an unanswerable lookup reports the vehicle.
+        if (!(await hasSession(supabase))) {
           logger.warn('[setOnlineStatus] vehicle pre-check returned no rows with no session', {
             driverId,
           });
@@ -397,7 +437,14 @@ export const driverService = {
       .update(updates)
       .eq('id', driverId)
       .select('id');
-    if (error) throw error;
+    if (error) {
+      // Belt and braces for a stale in-memory session that still left as anon.
+      if (isPermissionDenied(error)) {
+        logger.warn('[setOnlineStatus] write rejected as anon', { driverId, isOnline, code: error.code });
+        throw new Error('session_expired');
+      }
+      throw error;
+    }
     if (!updated || updated.length === 0) {
       logger.warn('[setOnlineStatus] update affected zero rows', { driverId, isOnline });
       throw new Error('session_expired');
@@ -446,6 +493,7 @@ export const driverService = {
     rideId?: string;
   }): Promise<void> {
     const supabase = getSupabaseClient();
+    if (await skipWithoutSession(supabase, 'update_driver_position')) return;
     const { error } = await supabase.rpc('update_driver_position', {
       p_driver_id: params.driverId,
       p_latitude: params.latitude,
@@ -464,6 +512,7 @@ export const driverService = {
    */
   async sendHeartbeat(driverId: string): Promise<void> {
     const supabase = getSupabaseClient();
+    if (await skipWithoutSession(supabase, 'driver_heartbeat')) return;
     await supabase.rpc('driver_heartbeat', { p_driver_id: driverId });
   },
 

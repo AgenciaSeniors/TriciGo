@@ -799,6 +799,7 @@
     "today": "Hoy",
     "yesterday": "Ayer",
     "status_change_failed": "No se pudo cambiar el estado",
+    "session_unavailable": "Tu sesión no está disponible. Cierra la app por completo y vuelve a abrirla.",
     "ride_already_accepted": "Otro conductor ya aceptó este viaje",
     "driver_label": "Conductor",
     "home_tab": "Inicio",

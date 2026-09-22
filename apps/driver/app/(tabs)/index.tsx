@@ -1054,7 +1054,14 @@ function NativeDriverHomeScreen() {
         ? t('driver.online_needs_vehicle', {
             defaultValue: 'Registra tu vehículo antes de conectarte.',
           })
-        : rawMsg;
+        : /session_expired/.test(rawMsg)
+          // The app has no auth session in memory (the write would leave as
+          // anon). Restarting the app re-reads the keystore; only if that fails
+          // too is a fresh login needed.
+          ? t('common.session_unavailable', {
+              defaultValue: 'Tu sesión no está disponible. Cierra la app por completo y vuelve a abrirla.',
+            })
+          : rawMsg;
       Toast.show({
         type: 'error',
         text1: t('common.status_change_failed'),

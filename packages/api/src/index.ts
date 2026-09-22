@@ -21,7 +21,7 @@ export type { DocRejectionPreset } from './services/_driverDocRejectionPresets';
 export { queryKeys } from './queries/keys';
 export { createStorageAdapter } from './storage';
 export type { StorageAdapter, StorageAdapterOptions } from './storage';
-export { configureStorage } from './client';
+export { configureStorage, didAuthStorageReadFail, AUTH_STORAGE_KEY } from './client';
 export { uploadFileFromUri } from './services/_storage-upload';
 export { customerService } from './services/customer.service';
 export { chatService } from './services/chat.service';
