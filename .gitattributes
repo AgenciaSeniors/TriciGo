@@ -10,3 +10,6 @@ ops/squid/squid.conf text eol=lf
 ops/squid/logrotate-squid text eol=lf
 ops/squid/systemd/** text eol=lf
 ops/squid/fail2ban/** text eol=lf
+ops/supabase-watchdog/**.sh text eol=lf
+ops/supabase-watchdog/*.env.example text eol=lf
+ops/supabase-watchdog/systemd/** text eol=lf
