@@ -68,7 +68,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: these jobs install `eas-version: latest`, and eas-cli
+          # 24.7.0 pulls @oclif/plugin-autocomplete@3.3.0 (engines node >=22).
+          # On 20 the Setup Expo & EAS step dies before anything is built
+          # (OTA run #9, 2026-09-23).
+          node-version: 22
           cache: pnpm
 
       - name: Setup Expo & EAS
