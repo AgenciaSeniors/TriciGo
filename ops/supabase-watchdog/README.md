@@ -84,6 +84,11 @@ ssh root@187.77.214.236 'chmod 600 /etc/tricigo/supabase-health.env && chown roo
 # Editar y poner RESEND_API_KEY, ALERT_EMAIL_TO y (recomendado) D7_API_TOKEN + ALERT_SMS_TO:
 ssh root@187.77.214.236 'nano /etc/tricigo/supabase-health.env'
 
+# Desde Windows: un checkout con core.autocrlf=true copia el script con CRLF y
+# en Linux falla con "cannot execute: required file not found" (pasó con
+# ops/squid el 2026-07-02). Quitar los CR y comprobar; debe imprimir 0.
+ssh root@187.77.214.236 "sed -i 's/\r\$//' /etc/tricigo/supabase-healthcheck.sh /etc/tricigo/supabase-health.env && bash -n /etc/tricigo/supabase-healthcheck.sh && grep -c \$'\r' /etc/tricigo/supabase-healthcheck.sh"
+
 # 2. Probar ANTES de programarlo. Debe salir 0 y te tiene que llegar el aviso.
 ssh root@187.77.214.236 '/etc/tricigo/supabase-healthcheck.sh --selftest'
 
