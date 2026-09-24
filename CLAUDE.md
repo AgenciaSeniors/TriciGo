@@ -2685,6 +2685,26 @@ O sea que un wrapper SQL plano queda **denegado**, no exento: el riesgo va en la
 
 **Estado:** 00592 **aplicada a prod el 2026-09-22 18:12 UTC** por MCP tras el merge de #1009 (`schema_migrations` la registra por timestamp `20260922181201`; verificar por objeto: `is_admin` con `lanname = 'plpgsql'`, cuerpo md5 `22cb75e91980d512498034cd33e1eda2` = byte a byte el del archivo). Verificado en prod justo después del apply, en una sola petición multi-sentencia con `SET LOCAL ROLE`: como `anon`, `is_admin()` = false **sin error**, lectura de `blog_posts` publicados OK (3 filas) y UPDATE sobre `driver_profiles` = 0 filas sin error; admin → true, customer → false; `anon` sigue sin EXECUTE en `current_user_role()`. Con las APKs actuales el texto crudo de RLS ya no aparece (el servidor devuelve 0 filas y la app vieja lo reporta como `session_expired`); el login honesto y el heartbeat que se salta sin sesión requieren **rebuild de las dos apps**. Si a un conductor todavía le falla "Conectarme": cerrar la app por completo y reabrirla; si persiste, Perfil → Cerrar sesión → volver a entrar.
 
+### Tarifas: cómo se fijan y cómo cambiarlas (verificado 2026-09-24, mig 00593)
+
+**Modelo.** `pricing_rules` tiene 4 franjas por servicio (00–06, 06–12, 12–18, 18–24, hora del celular). Precio = `max(base + km × per_km + min × per_min, mínima)` (`calculateBaseFare`); los minutos salen de la duración neutra de OSRM, no de la del vehículo. El único recargo es el clima. **La fuente de verdad son las columnas `*_usd`**: `recompute_cup_from_usd_prices()` deriva los CUP con la tasa vigente y el cron de FX lo corre en cada cambio de tasa. Una migración que escriba solo CUP se revierte en el próximo cambio de tasa: escribir USD y llamar a `recompute_cup_from_usd_prices()`.
+
+**El piso que rompe viajes.** `tg_rides_validate_estimated_fare` rechaza todo viaje con precio menor que `service_type_configs.min_fare_cup`. Si bajás la mínima de una franja por debajo de ese piso, **bajá el piso en el mismo cambio** o todo viaje corto falla al pedirlo. `accept_ride_v2` lee esa config pero no la usa.
+
+| Migración | Qué hizo |
+|---|---|
+| 00441 | Precios de "la nave" × 0,9412, franjas 1 / 1 / 1,5 / 2 |
+| 00470 | La nave × 0,90, plano las 24 h |
+| 00501 | Noche y madrugada = tarifa publicada de La Nave (se subieron: hay pocos conductores a esas horas) |
+| 00569 (#965) | Tarde = La Nave exacto. **Aplicada en prod, PR sin mergear** |
+| **00593** | **Fase 1 contra Cinco**: mínimas de día (moto 580, triciclo 1.250, auto 1.450) + Confort = auto × 1,3 en todo |
+
+**Lo que se sabe de Cinco** (14 capturas, 22–24 sept): es más barato que La Nave en viaje corto. Tiene precio dinámico (el mismo viaje llegó a costar 2,4 veces más en un día) y muestra siempre un "−10 %" sobre un precio tachado. Sin recargo cobraba moto 585 y auto 1.480 CUP por un viaje corto en Centro Habana. **Esas capturas solo sirven para calibrar la mínima**: los viajes reales de TriciGo tienen mediana 4,8 km (solo 23 de 221 miden 2 km o menos). Para tocar la tarifa por km hacen falta capturas de ~5 y ~10 km sin recargo. El observatorio de #1004 lo automatiza.
+
+**Pendiente.** Fase 2, noche y madrugada, a decidir después de medir la fase 1: moto 810 / 1.040, triciclo 1.750 / 2.250, auto 2.030 / 2.610. **Anomalía de la tarde:** el triciclo cobra 1.070 + 119/km, así que un viaje de 4,7 km cuesta ~1.630 a las 12:00 contra 2.490 a las 11:59.
+
+**Probar un cambio de tarifas sin dejar nada en prod:** un `DO` que aplica los `UPDATE`, llama a `recompute`, verifica y termina con `RAISE EXCEPTION '<valores>'` (la excepción deshace todo y devuelve los valores en el mensaje). Para el piso: insertar dentro de otro `DO` que termina en excepción un viaje **programado** (`scheduled_at` futuro, no se despacha a nadie) con la mínima nueva, y otro un peso por debajo, que debe rechazarse.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
