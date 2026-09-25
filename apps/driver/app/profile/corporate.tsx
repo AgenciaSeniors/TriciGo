@@ -47,16 +47,22 @@ export default function CorporateScreen() {
       return;
     }
     try {
-      const [fleetMemberships, fleet] = await Promise.all([
+      const [membershipsResult, ownedFleetResult] = await Promise.allSettled([
         fleetService.getMembershipsForDriver(driverProfile.user_id),
         fleetService.getFleetByOwner(driverProfile.user_id),
       ]);
-      setMemberships(fleetMemberships);
-      setOwnedFleet(fleet);
-    } catch (err) {
-      // Keep the last good state: the membership lookup throws on failure
-      // rather than reporting "no fleet".
-      logger.warn('[Corporate] Failed to load fleet data', { error: String(err) });
+      // Apply each read on its own. A failed one keeps its last good value
+      // instead of showing up as "no fleet", and never discards the other.
+      if (membershipsResult.status === 'fulfilled') {
+        setMemberships(membershipsResult.value);
+      } else {
+        logger.warn('[Corporate] Failed to load fleet memberships', { error: String(membershipsResult.reason) });
+      }
+      if (ownedFleetResult.status === 'fulfilled') {
+        setOwnedFleet(ownedFleetResult.value);
+      } else {
+        logger.warn('[Corporate] Failed to load owned fleet', { error: String(ownedFleetResult.reason) });
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -109,14 +115,14 @@ export default function CorporateScreen() {
             </Text>
             <Text variant="bodySmall" color="secondary" className="mb-3">
               {inSeveralFleets
-                ? `Estás vinculado como conductor en ${memberships.length} flotas. `
-                : 'Estás vinculado como conductor. '}
+                ? `Estás vinculado como conductor en ${memberships.length} flotas.`
+                : 'Estás vinculado como conductor.'}{' '}
               Tus viajes corporativos aplicarán comisión reducida automáticamente — el pasajero paga menos y tú cobras lo mismo de siempre.
             </Text>
             <View className="gap-3">
               {memberships.map((m) => (
                 <View
-                  key={m.fleet_id}
+                  key={m.id}
                   className="flex-row items-center justify-between border-t border-neutral-100 dark:border-neutral-800 pt-3"
                 >
                   <View className="flex-1 mr-2">
