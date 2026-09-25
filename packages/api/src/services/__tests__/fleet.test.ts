@@ -125,6 +125,8 @@ describe('fleetService.getMembershipsForDriver', () => {
   it("asks for the driver's active or approved rows, latest signup first", async () => {
     await fleetService.getMembershipsForDriver(DRIVER);
     expect(mockFrom).toHaveBeenCalledWith('fleet_members');
+    // The member card reads driver_name, driver_phone and status.
+    expect(calls.select).toHaveBeenCalledWith('*');
     expect(calls.eq).toHaveBeenCalledWith('driver_id', DRIVER);
     expect(calls.in).toHaveBeenCalledWith('status', ['active', 'approved']);
     expect(calls.order.mock.calls).toEqual([
