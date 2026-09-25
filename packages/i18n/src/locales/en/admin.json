@@ -102,7 +102,8 @@
     "validation": "Validation",
     "logout": "Log out",
     "close_menu": "Close menu",
-    "open_menu": "Open menu"
+    "open_menu": "Open menu",
+    "competitors": "Competitors"
   },
   "referrals": {
     "title": "Referrals",
@@ -1312,7 +1313,13 @@
     "whatsapp_invite_confirm": "A push notification will be sent to every approved driver inviting them to the WhatsApp group. Continue?",
     "whatsapp_invite_sent": "Invitation sent to {{count}} driver(s).",
     "whatsapp_invite_none": "No approved drivers to invite.",
-    "whatsapp_invite_error": "Could not send the invitation."
+    "whatsapp_invite_error": "Could not send the invitation.",
+    "competitor_tracking_enabled_help": "Master switch for the competitor price observatory. false stops it.",
+    "competitor_tracking_interval_min_help": "Minimum minutes between capture cycles (self-skips if the cron runs more often).",
+    "competitor_tracking_stale_hours_help": "Hours without quotes before the watchdog alerts \"stopped\".",
+    "competitor_session_warn_hours_help": "Warn when a competitor session expires within this many hours.",
+    "competitor_quotes_retention_days_help": "Days of quote history to keep before pruning.",
+    "competitor_quotes_prune_batch_help": "Rows deleted per prune run (batched, avoids WAL spikes)."
   },
   "exchange_rate": {
     "title": "Exchange Rate",
@@ -2104,5 +2111,24 @@
     "section_experiments_desc": "Active A/B tests and results",
     "section_platform_config_title": "Platform configuration",
     "section_platform_config_desc": "Internal system values"
+  },
+  "competitors": {
+    "eyebrow": "Price intelligence",
+    "title": "Competitor prices",
+    "subtitle": "La Nave and CINCO quoted 24/7 over a fixed basket, compared to TriciGo’s price at the same instant.",
+    "filter_all": "All",
+    "col_route": "Route",
+    "col_competitor": "Competitor",
+    "col_them": "Them",
+    "col_us": "TriciGo",
+    "col_delta": "Δ",
+    "col_captured": "Captured",
+    "na": "n/a",
+    "hours": "h",
+    "kpi_cheaper": "Routes where we are cheaper",
+    "kpi_avg_delta": "Avg Δ (them − us)",
+    "kpi_freshness": "Age of latest data",
+    "empty_title": "No quotes yet",
+    "empty_body": "The observatory has not captured prices yet. Check that the competitor session is deposited and tracking is enabled."
   }
 }
