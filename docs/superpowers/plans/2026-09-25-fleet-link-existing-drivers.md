@@ -40,8 +40,11 @@ Run: `PGBIN=… PGPORT=5437 PYTHON=python bash supabase/tests/00598/run.sh none`
 Expected: every `S … is the prod body` check PASSES (the scaffold is faithful). FAIL, for the right reason:
 - A1–A7 and A13 (the invitation stays `approved:-`, the reported bug);
 - C1, C2 and C5 (no link after the phone is verified);
-- D1–D6 (the new functions and triggers do not exist).
-PASS as controls: A8–A12, B1–B3, C3, C4, C6, X1.
+- D1–D5 (the new functions and triggers do not exist).
+PASS as controls: A8–A12, B1–B3, C3, C4, C6, X1, D6.
+If B1/B2 fail with `approved:-`, the fixtures share the test's transaction: the signup trigger leaves
+`app.trusted_fleet_update = '1'` until commit, so the owner's writes skip the protect trigger. `tcase`
+commits the reset on its own for that reason.
 
 - [ ] **Step 4: Commit**
 
@@ -630,6 +633,10 @@ ok(){ echo "PASS  $1"; PASS=$((PASS+1)); }
 ko(){ echo "FAIL  $1  -- $2"; FAIL=$((FAIL+1)); }
 # val NAME SQL EXPECTED -> the statements must succeed; their printed rows, joined with ';', must equal EXPECTED
 val(){ local r; r=$($P -c "$2" </dev/null 2>&1 | tr -d '\r' | paste -sd';' -); if [ "$r" = "$3" ]; then ok "$1"; else ko "$1" "expected [$3], got [$r]"; fi; }
+# tcase NAME SQL EXPECTED -> val on fresh fixtures. The reset commits on its own: the signup trigger leaves
+# app.trusted_fleet_update = '1' for the rest of its transaction, and in prod that transaction is GoTrue's,
+# never the one of a later request. Sharing it here would let the owner's writes skip the protect trigger.
+tcase(){ if $P -c "$RESET" </dev/null >/dev/null 2>&1; then val "$1" "$2" "$3"; else ko "$1" "reset failed"; fi; }
 
 # People. auth.users holds phones the way GoTrue does (E.164 digits, no '+');
 # public.users gets them normalized by tg_users_normalize_phone.
@@ -710,7 +717,8 @@ bodies S
 if [ "$MIG" != "none" ]; then
   # State before the migration: one invitation approved for DRV's confirmed number (the backfill's case),
   # one for a number only in users.phone and one whose OTP was never confirmed (both must stay as they are).
-  $P -c "$RESET $(invite $FA '+5355551234' 'approved') $(invite $FA '+5355556666' 'approved') $(invite $FB '+5355557777' 'pending_signup')" >/dev/null || exit 1
+  $P -c "$RESET" >/dev/null || exit 1
+  $P -c "$(invite $FA '+5355551234' 'approved') $(invite $FA '+5355556666' 'approved') $(invite $FB '+5355557777' 'pending_signup')" >/dev/null || exit 1
   BEFORE=$($P -c "$ROWS" | tr -d '\r')
   # 1st pass in one transaction, the way `supabase db push` runs a file; 2nd in autocommit mode.
   echo "== apply migration (1st, one transaction, search_path = '') =="; $P -1 -c "SET search_path = ''" -f "$MIG" >/dev/null || { echo "migration failed"; exit 1; }
@@ -721,74 +729,74 @@ fi
 
 echo "== tests =="
 # A. the reported case: the admin approves, through RLS, like FleetReview does
-val "A1 existing driver with a confirmed number: the approval itself links them" \
-  "$RESET $(invite $FA '+5355551234' 'pending_review') $(approve $FA '+5355551234') $STATE
+tcase "A1 existing driver with a confirmed number: the approval itself links them" \
+  "$(invite $FA '+5355551234' 'pending_review') $(approve $FA '+5355551234') $STATE
    SELECT signed_up_at IS NOT NULL FROM public.fleet_members;" "active:DRV;t"
-val "A2 the owner typed the number as 8 digits: still linked" \
-  "$RESET $(invite $FA '55551234' 'pending_review') $(approve $FA '55551234') $STATE" "active:DRV"
-val "A3 invited by two fleets: each approval links its own invitation" \
-  "$RESET $(invite $FA '+5355551234' 'pending_review') $(invite $FB '5355551234' 'pending_review')
+tcase "A2 the owner typed the number as 8 digits: still linked" \
+  "$(invite $FA '55551234' 'pending_review') $(approve $FA '55551234') $STATE" "active:DRV"
+tcase "A3 invited by two fleets: each approval links its own invitation" \
+  "$(invite $FA '+5355551234' 'pending_review') $(invite $FB '5355551234' 'pending_review')
    $(approve $FA '+5355551234') $(approve $FB '5355551234') $STATE" "active:DRV,active:DRV"
-val "A4 a passenger-only account is linked too, as a signup would be" \
-  "$RESET $(invite $FA '+5355552222' 'pending_review') $(approve $FA '+5355552222') $STATE" "active:PAX"
-val "A5 an invitation inserted already approved (service role) is linked on insert" \
-  "$RESET $(invite $FA '+5355551234' 'approved') $STATE" "active:DRV"
-val "A6 rejected, then approved: linked when it becomes approved" \
-  "$RESET $(invite $FA '+5355551234' 'rejected') $(approve $FA '+5355551234') $STATE" "active:DRV"
-val "A7 the number two accounts share (prod: a seeded admin and a driver): linked to the one who confirmed it" \
-  "$RESET $(invite $FA '+5355553333' 'pending_review') $(approve $FA '+5355553333') $STATE" "active:DUP"
-val "A8 nothing is linked before the approval" \
-  "$RESET $(invite $FA '+5355551234' 'pending_review') $STATE" "pending_review:-"
-val "A9 a number that is only in users.phone, never confirmed by OTP: not linked" \
-  "$RESET $(invite $FA '+5355556666' 'pending_review') $(approve $FA '+5355556666') $STATE" "approved:-"
-val "A10 a deactivated account: not linked" \
-  "$RESET $(invite $FA '+5355554444' 'pending_review') $(approve $FA '+5355554444') $STATE" "approved:-"
-val "A11 a number in auth.users whose OTP was never confirmed: not linked" \
-  "$RESET $(invite $FA '+5355557777' 'pending_review') $(approve $FA '+5355557777') $STATE" "approved:-"
-val "A12 nobody has the number yet: stays approved, and the signup links it later (00595)" \
-  "$RESET $(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $STATE $(signup 5355559999) $STATE" "approved:-;active:NEWU"
-val "A13 an invitation inserted as pending_signup (service role) is linked on insert" \
-  "$RESET $(invite $FA '+5355551234' 'pending_signup') $STATE" "active:DRV"
+tcase "A4 a passenger-only account is linked too, as a signup would be" \
+  "$(invite $FA '+5355552222' 'pending_review') $(approve $FA '+5355552222') $STATE" "active:PAX"
+tcase "A5 an invitation inserted already approved (service role) is linked on insert" \
+  "$(invite $FA '+5355551234' 'approved') $STATE" "active:DRV"
+tcase "A6 rejected, then approved: linked when it becomes approved" \
+  "$(invite $FA '+5355551234' 'rejected') $(approve $FA '+5355551234') $STATE" "active:DRV"
+tcase "A7 the number two accounts share (prod: a seeded admin and a driver): linked to the one who confirmed it" \
+  "$(invite $FA '+5355553333' 'pending_review') $(approve $FA '+5355553333') $STATE" "active:DUP"
+tcase "A8 nothing is linked before the approval" \
+  "$(invite $FA '+5355551234' 'pending_review') $STATE" "pending_review:-"
+tcase "A9 a number that is only in users.phone, never confirmed by OTP: not linked" \
+  "$(invite $FA '+5355556666' 'pending_review') $(approve $FA '+5355556666') $STATE" "approved:-"
+tcase "A10 a deactivated account: not linked" \
+  "$(invite $FA '+5355554444' 'pending_review') $(approve $FA '+5355554444') $STATE" "approved:-"
+tcase "A11 a number in auth.users whose OTP was never confirmed: not linked" \
+  "$(invite $FA '+5355557777' 'pending_review') $(approve $FA '+5355557777') $STATE" "approved:-"
+tcase "A12 nobody has the number yet: stays approved, and the signup links it later (00595)" \
+  "$(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $STATE $(signup 5355559999) $STATE" "approved:-;active:NEWU"
+tcase "A13 an invitation inserted as pending_signup (service role) is linked on insert" \
+  "$(invite $FA '+5355551234' 'pending_signup') $STATE" "active:DRV"
 
 # B. the fleet owner cannot use it
-val "B1 the owner inserts an invitation as approved: forced to pending_review, not linked" \
-  "$RESET $(as $OWNER) INSERT INTO public.fleet_members (fleet_id, driver_name, driver_phone, status)
+tcase "B1 the owner inserts an invitation as approved: forced to pending_review, not linked" \
+  "$(as $OWNER) INSERT INTO public.fleet_members (fleet_id, driver_name, driver_phone, status)
           VALUES ('$FA', 'Carlos', '+5355551234', 'approved'); $NOJWT $STATE" "pending_review:-"
-val "B2 the owner approves their own invitation: reverted, not linked" \
-  "$RESET $(invite $FA '+5355551234' 'pending_review') $(as $OWNER) UPDATE public.fleet_members SET status = 'approved' WHERE fleet_id = '$FA';
+tcase "B2 the owner approves their own invitation: reverted, not linked" \
+  "$(invite $FA '+5355551234' 'pending_review') $(as $OWNER) UPDATE public.fleet_members SET status = 'approved' WHERE fleet_id = '$FA';
    $NOJWT $STATE" "pending_review:-"
-val "B3 the owner re-points an approved invitation at a driver's confirmed number, sending status along: not linked" \
-  "$RESET $(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999')
+tcase "B3 the owner re-points an approved invitation at a driver's confirmed number, sending status along: not linked" \
+  "$(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999')
    $(as $OWNER) UPDATE public.fleet_members SET driver_phone = '+5355551234', status = 'approved' WHERE fleet_id = '$FA'; $NOJWT
    SELECT status || ':' || coalesce(driver_id::text, '-') || '|' || driver_phone FROM public.fleet_members;" "approved:-|+5355551234"
 
 # C. the account verifies its phone after the approval (Google/Apple sign-in, then link-phone)
-val "C1 link-phone confirms the number in auth.users, the service role copies it to users.phone: linked" \
-  "$RESET $(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
+tcase "C1 link-phone confirms the number in auth.users, the service role copies it to users.phone: linked" \
+  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
    UPDATE auth.users SET phone = '5355558888', phone_confirmed_at = now() WHERE id = '$LATER';
    UPDATE public.users SET phone = '+5355558888' WHERE id = '$LATER'; $STATE" "active:LATER"
-val "C2 same, but the app writes users.phone under the account's own JWT: linked" \
-  "$RESET $(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
+tcase "C2 same, but the app writes users.phone under the account's own JWT: linked" \
+  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
    UPDATE auth.users SET phone = '5355558888', phone_confirmed_at = now() WHERE id = '$LATER';
    $(as $LATER) UPDATE public.users SET phone = '5355558888' WHERE id = '$LATER'; $NOJWT $STATE" "active:LATER"
-val "C3 a number written into users.phone without an OTP links nothing" \
-  "$RESET $(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
+tcase "C3 a number written into users.phone without an OTP links nothing" \
+  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
    $(as $LATER) UPDATE public.users SET phone = '+5355558888' WHERE id = '$LATER'; $NOJWT $STATE" "approved:-"
-val "C4 writing someone else's confirmed number into your own users.phone does not take their invitation" \
-  "$RESET $(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $(repoint $FA '+5355559999' '+5355551234')
+tcase "C4 writing someone else's confirmed number into your own users.phone does not take their invitation" \
+  "$(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $(repoint $FA '+5355559999' '+5355551234')
    $(as $LATER) UPDATE public.users SET phone = '+5355551234' WHERE id = '$LATER'; $NOJWT $STATE" "approved:-"
-val "C5 the trusted flag does not outlive the write that set it" \
-  "$RESET $(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
+tcase "C5 the trusted flag does not outlive the write that set it" \
+  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
    UPDATE auth.users SET phone = '5355558888', phone_confirmed_at = now() WHERE id = '$LATER';
    $(as $LATER) UPDATE public.users SET phone = '+5355558888' WHERE id = '$LATER';
    SELECT '[' || coalesce(current_setting('app.trusted_fleet_update', true), '') || ']'; $NOJWT $STATE" "[];active:LATER"
-val "C6 saving the same number again links nothing" \
-  "$RESET $(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $(repoint $FA '+5355559999' '+5355551234')
+tcase "C6 saving the same number again links nothing" \
+  "$(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $(repoint $FA '+5355559999' '+5355551234')
    $(as $DRV) UPDATE public.users SET phone = '5355551234' WHERE id = '$DRV'; $NOJWT $STATE" "approved:-"
 
 # X. the signup path (00595) is unchanged
-val "X1 invited by two fleets, then signs up: both linked" \
-  "$RESET $(invite $FA '+5355559999' 'approved') $(invite $FB '55559999' 'approved') $(signup 5355559999) $STATE" "active:NEWU,active:NEWU"
+tcase "X1 invited by two fleets, then signs up: both linked" \
+  "$(invite $FA '+5355559999' 'approved') $(invite $FB '55559999' 'approved') $(signup 5355559999) $STATE" "active:NEWU,active:NEWU"
 
 # D. contract
 for f in "_user_id_by_verified_phone(text)" "tg_fleet_members_set_driver_on_approval()" "auto_link_fleet_member_on_phone_verified()"; do
