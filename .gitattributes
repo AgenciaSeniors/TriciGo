@@ -14,10 +14,11 @@ ops/supabase-watchdog/**.sh text eol=lf
 ops/supabase-watchdog/*.env.example text eol=lf
 ops/supabase-watchdog/systemd/** text eol=lf
 
-# Migration rehearsals (supabase/tests/<n>/) must be LF too. From a CRLF checkout
-# (core.autocrlf=true on Windows) they still run and their behaviour tests pass,
-# but every CR in a .sql file lands inside the stored function bodies, so each
-# md5(prosrc) fidelity check fails and reads as drift against prod.
+# Migration rehearsals (supabase/tests/<dir>/) must be LF too. From a CRLF checkout
+# (core.autocrlf=true on Windows) Git Bash still runs them and their behaviour
+# tests pass, but each function body in a .sql file is stored with its CRs, so
+# every md5(prosrc) fidelity check fails and reads as drift against prod. A CRLF
+# .sh also fails outright under Linux or WSL bash.
 # Extension-specific so a future binary fixture is not forced to text.
 # `**/*.sh`, not `**.sh`: `**` crosses directories only as a whole path segment,
 # and every file here sits one directory down.
@@ -25,8 +26,8 @@ supabase/tests/**/*.sh text eol=lf
 supabase/tests/**/*.sql text eol=lf
 supabase/tests/**/*.psv text eol=lf
 
-# Migrations too: the rehearsals apply them, and a migration applied to prod from
-# a CRLF copy stores the CRs in its function bodies, so md5(prosrc) in prod stops
-# matching the file in git. Every migration is already LF in the index, so this
-# rule changes no content.
+# Migrations too: the rehearsals apply them, `pnpm check:poi-taxonomy` compares
+# one byte for byte, and a migration applied to prod from a CRLF copy stores the
+# CRs in its function bodies, so md5(prosrc) in prod stops matching the file in
+# git. Every migration is already LF in the index, so this changes no content.
 supabase/migrations/*.sql text eol=lf
