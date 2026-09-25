@@ -5,12 +5,15 @@ patches/**.patch text eol=lf
 # VPS shell scripts + squid/systemd configs must be LF — a CRLF shebang is
 # "cannot execute: required file not found" on Linux (hit during the 2026-07-02
 # proxy-observability rollout). Keep these LF regardless of core.autocrlf.
-ops/squid/**.sh text eol=lf
+# `**/*.sh` also covers nested scripts such as the watchdog's tests/run.sh
+# (`**.sh` acts as `*.sh`). tests/mock.py needs no rule: run.sh launches it
+# with python3, which reads CRLF source fine.
+ops/squid/**/*.sh text eol=lf
 ops/squid/squid.conf text eol=lf
 ops/squid/logrotate-squid text eol=lf
 ops/squid/systemd/** text eol=lf
 ops/squid/fail2ban/** text eol=lf
-ops/supabase-watchdog/**.sh text eol=lf
+ops/supabase-watchdog/**/*.sh text eol=lf
 ops/supabase-watchdog/*.env.example text eol=lf
 ops/supabase-watchdog/systemd/** text eol=lf
 
