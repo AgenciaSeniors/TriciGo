@@ -36,8 +36,8 @@
 -- The driver app does not: fleetService.getMembershipForDriver() reads with
 -- .maybeSingle(), gets an error for two rows and returns null, so the
 -- corporate screen offers to create a fleet instead of showing the
--- driver's own. That is a display problem in the app (a separate fix, which
--- needs a rebuild), and still better than a signup that fails.
+-- driver's own. That is a display problem, for a separate JS-only fix in
+-- the app, and still better than a signup that fails.
 --
 -- Fix: drop the RETURNING ... INTO and the variable it filled, which nothing
 -- read. No count is needed, so no GET DIAGNOSTICS either. Everything else is
