@@ -2346,6 +2346,29 @@ WHERE table_name='<tabla>' AND column_name='<col>';
 
 **Lo que lo cazó no fue la revisión de código sino el ensayo rolleado**: crear la función y **ejecutarla** dentro de `BEGIN … ROLLBACK` antes de aplicar. Vale la pena para cualquier función nueva con lógica no trivial — y es seguro incluso cuando manda correos, porque `net.http_post` encola en `net.http_request_queue`, que es transaccional (verificar después con `SELECT count(*) FROM cron_http_calls WHERE called_at > …`, que debe seguir sin la etiqueta nueva).
 
+### Trampa plpgsql: `DELETE/UPDATE … RETURNING … INTO` aborta con 2+ filas aunque no digas `STRICT` (verificado 2026-09-25, mig 00594)
+
+`SELECT … INTO` sin `STRICT` se queda con la primera fila. **Un `INSERT/UPDATE/DELETE … RETURNING … INTO` no**: si la sentencia toca 2 o más filas, plpgsql lanza `P0003 query returned more than one row`, con o sin `STRICT`.
+
+**Por qué engaña:** con 0 o 1 fila funciona, así que pasa la revisión, las primeras pruebas y meses en prod. El día que califican dos filas, la sentencia se revierte y **el trabajo ya no puede volver a andar nunca**: las filas que debía borrar quedan y el atraso solo crece. Caso real: `cleanup_auth_revocations()` (cron 28, 03:00 UTC) tenía `DELETE … RETURNING 1 INTO v_deleted` y falló **las 14 noches** que guarda `cron.job_run_details`. La tabla juntó 62 filas viejas. La más vieja era del 2026-07-09, y cualquier corrida exitosa desde el 07-11 la habría borrado, así que el cron **no anduvo ni una vez en dos meses y medio**.
+
+**Para contar filas afectadas**, cualquiera de estas dos:
+- `GET DIAGNOSTICS v = ROW_COUNT;` justo después de la sentencia, sin `RETURNING`.
+- `WITH d AS (DELETE … RETURNING 1) SELECT count(*) INTO v FROM d;` (lo usan `prune_old_ride_location_events`, `anonymize_old_rides` y `auto_offline_stale_drivers`).
+
+`RETURNING … INTO` solo es seguro cuando el `WHERE` va por una clave `PRIMARY KEY` o `UNIQUE`. En el barrido de prod del 2026-09-25, **19 funciones** usan la forma; 17 son seguras (clave única o el patrón CTE), una era este bug y la otra queda **latente**: `auto_link_fleet_member_on_signup` (`AFTER INSERT ON users`, sin `EXCEPTION`). `fleet_members` es único por `(fleet_id, driver_phone)` y el `UPDATE` compara el teléfono normalizado. Si dos invitaciones pendientes comparten teléfono (por ejemplo, de dos flotas), **el alta de esa persona falla**. Hoy no pasa porque `fleet_members` tiene 0 filas.
+
+**Ningún watchdog mira las corridas fallidas de los crons SQL.** `check_cron_http_failures` cubre solo los que llaman a una Edge Function. Por eso este cron falló dos semanas sin que nadie se enterara. Para ver fallas crónicas:
+
+```sql
+SELECT j.jobid, j.jobname, count(*) FILTER (WHERE d.status <> 'succeeded') AS fallidas, count(*) AS corridas
+FROM cron.job j JOIN cron.job_run_details d USING (jobid)
+WHERE d.start_time > now() - interval '14 days'
+GROUP BY 1, 2 HAVING count(*) FILTER (WHERE d.status <> 'succeeded') > 0 ORDER BY 3 DESC;
+```
+
+`job startup timeout` y `server restarted` son las caídas de septiembre y el paso a Micro, no bugs. **Un job con fallidas = corridas y un mensaje de error de SQL es un bug de código.**
+
 ### Aplicar migraciones pesadas por MCP: pg-meta corta la conexión a ~4 min y un `ADD COLUMN` + backfill deja a las apps en cola (verificado 2026-09-07, 00579)
 
 **Tres límites distintos, medidos aplicando 00579 (110.289 filas de `cuba_pois`) — el primer intento murió por el 2.º, el segundo por el 3.º, y ambos se revirtieron completos:**
