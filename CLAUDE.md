@@ -2638,8 +2638,8 @@ El tercer caso del bug: `sync-osm-delta.yml` y `sync-pois.yml` avisan de su prop
 #### Causa confirmada por Supabase (ticket SU-480720, 2026-09-21): saldo de I/O de EBS agotado en un cómputo **Nano**
 
 - **Soporte lo confirmó:** "your project went down due to EBS IO balance exhaustion". El proyecto seguía en **Nano**, herencia del plan Free (en Pro no se puede crear un Nano, pero no se auto-actualiza "por el downtime"). En Pro, Nano y Micro se facturan igual y el crédito de $10/mes cubre Micro entero: **subir a Micro es gratis**, con menos de 2 min de corte según la doc. La doc de Nano dice **"Max DB Size (Recommended) 500 MB" y la nuestra tiene 777 MB**; Micro es 2 núcleos ARM, 1 GB de RAM, hasta 10 GB.
-- **Mecánica** (doc "High Disk I/O"): de Nano a Medium el disco tiene un saldo de ráfaga (*Disk IO Budget*); agotado, la instancia cae a su baseline y "may become unresponsive". El gráfico vive en Reports → Database (`Disk IO % consumed`): >1 % ya significa que ese día se superó el baseline; 100 % es lo que nos pasó. **No se ve desde SQL.**
-- **Lo que la base SÍ deja medir** (`pg_stat_io`, PG17, 9 h tras el reinicio): 161 MB leídos, 131 MB escritos por el checkpointer, 44 MB de WAL, ~15 IOPS de promedio. **El consumo de Postgres es minúsculo: lo que drena el saldo no son nuestras consultas.** Los tres inicios (18: 06:36, 20: 09:46, 21: 09:23 UTC = 02:36 / 05:46 / 05:23 en La Habana) son madrugada sin usuarios. El candidato que Postgres no ve es el **swap** — la doc lo lista primero: "Every Supabase project has 1GB of disk allocated for swapping" — en una caja de 0,5 GB con `shared_buffers` = 224 MB y ~30 conexiones de servicios internos. Se confirma en Reports → Database (Memory / Swap), no desde SQL.
+- **Mecánica** (doc "High Disk I/O"): de Nano a Medium el disco tiene un saldo de ráfaga (*Disk IO Budget*); agotado, la instancia cae a su baseline y "may become unresponsive". El gráfico vive en Reports → Database (`Disk IO % consumed`): >1 % ya significa que ese día se superó el baseline; 100 % es lo que nos pasó. **El porcentaje del saldo no se ve desde SQL**: es una métrica de AWS que solo muestra el panel (no está entre las del endpoint de métricas). Los contadores de disco y memoria del servidor sí se ven (ver «Medir el disco y la memoria desde SQL», más abajo).
+- **Lo que la base SÍ deja medir** (`pg_stat_io`, PG17, 9 h tras el reinicio): 161 MB leídos, 131 MB escritos por el checkpointer, 44 MB de WAL, ~15 IOPS de promedio. **El consumo de Postgres es minúsculo: lo que drena el saldo no son nuestras consultas.** Los tres inicios (18: 06:36, 20: 09:46, 21: 09:23 UTC = 02:36 / 05:46 / 05:23 en La Habana) son madrugada sin usuarios. El candidato que Postgres no ve es el **swap** — la doc lo lista primero: "Every Supabase project has 1GB of disk allocated for swapping" — en una caja de 0,5 GB con `shared_buffers` = 224 MB y ~30 conexiones de servicios internos. En Micro quedó medido el 2026-09-25 (ver más abajo): hay swap en uso y el disco del sistema lee 34 veces más que el de la base. Lo de Nano ya no se puede medir, porque los contadores se reinician con el servidor.
 - **Descartados con timestamps:** el sync de OSM (GitHub retrasa el cron de 06:00 a ~10:00–11:50 y **arrancó después** del inicio de cada caída: falló porque la base ya estaba caída, no la provocó) y el backup físico diario (`checkpoint starting: immediate force wait` = `pg_backup_start`, **todos los días a las 12:03–12:08 UTC**, o sea al FINAL de las ventanas; el 21 corrió a las 12:32 y 12:37, un minuto después del reinicio, porque el de las 12:05 no pudo).
 - **Cómo fechar el inicio real:** los huecos de `cron.job_run_details` lo subestiman (el 18 dieron 07:18 cuando las primeras líneas `duration:` de las consultas de monitoreo de Supabase —`pg_ls_archive_statusdir`, `pg_ls_waldir`, `pg_database_size`, la CTE sobre `pg_stat_statements`— ya pasaban de 10 s a las **06:36**). Corren cada minuto y son operaciones de filesystem: si tardan >10 s el disco está atascado, y marcan el minuto exacto.
 - **Trampa al leer checkpoints:** `write=` crece con los buffers porque `checkpoint_completion_target` duerme ~100 ms por buffer (61 buffers → 5,7 s y 282 → 28,6 s son NORMALES). La anomalía es un `total` muy por encima de 0,1 s × buffers (16 buffers / 33 s; 9 buffers / 265 s) o un `total − write − sync` de decenas de segundos.
@@ -2655,7 +2655,42 @@ El tercer caso del bug: `sync-osm-delta.yml` y `sync-pois.yml` avisan de su prop
   | `maintenance_work_mem` | 32 MB | 64 MB |
   | `max_connections` | 60 | 60 |
 
-- **Pendiente:** seguir el gráfico de `Disk IO % consumed` tres días, hasta el 2026-09-25, y decidir Small con el criterio de la línea **Decisión** de arriba.
+- **Revisado el 2026-09-25, al cierre del plazo: por disco no hace falta Small.** Desde el paso a Micro el disco se usó en promedio a ~6 % del baseline, y no hubo un solo atasco. Lo que queda por vigilar es la memoria. Los números y cómo sacarlos, abajo.
+
+#### Medir el disco y la memoria desde SQL (verificado 2026-09-25)
+
+El sandbox no llega al panel, pero la base sí llega al endpoint de métricas del propio proyecto (`/customer/v1/privileged/metrics`, texto Prometheus con los contadores de node_exporter). Se pide con `pg_net` y la clave se arma dentro de la consulta, así que nunca queda escrita:
+
+```sql
+-- 1) Pedir las métricas. encode(..., 'base64') mete un salto de línea cada 76
+--    caracteres y un header HTTP no puede llevarlos: el replace() los saca.
+SELECT net.http_get(
+  url := 'https://lqaufszburqvlslpcuac.supabase.co/customer/v1/privileged/metrics',
+  headers := jsonb_build_object('Authorization', 'Basic ' || replace(
+    encode(convert_to('service_role:' || public.get_service_role_key(), 'UTF8'), 'base64'), E'\n', '')),
+  timeout_milliseconds := 20000) AS request_id;
+
+-- 2) Unos segundos después: ~400 KB de texto en net._http_response (se guarda 6 h).
+SELECT line FROM net._http_response r, regexp_split_to_table(r.content, E'\n') AS line
+WHERE r.id = <request_id>
+  AND line ~ '^node_(disk_(read|written)_bytes_total|disk_(reads|writes)_completed_total|memory_(MemAvailable|Swap(Total|Free))_bytes|vmstat_(pswpin|pswpout|pgmajfault))';
+```
+
+- **Qué hay:** `node_disk_*` por disco, `node_memory_*`, `node_vmstat_pswpin` / `pswpout` (páginas de swap) y `pgmajfault` (veces que hubo que ir al disco por una página que no estaba en memoria). **Qué no hay:** el saldo de I/O de EBS, que es de AWS y solo sale en el panel.
+- **Promedio:** los contadores arrancan con el servidor, así que se divide por el tiempo desde `pg_postmaster_start_time()` (la máquina arranca un par de minutos antes: el error es despreciable). **Uso actual:** dos pedidos separados por un minuto, y se resta.
+
+Línea base, medida 66,5 h después del reinicio de Micro:
+
+| Disco | Qué tiene | Leído | Escrito | Operaciones |
+|---|---|---|---|---|
+| `nvme0n1` → `/` (10,4 GB) | sistema, programas, swap | **110 GB** | 12 GB | 4,8 M |
+| `nvme1n1` → `/data` (8,4 GB) | Postgres | 3,2 GB | 38 GB | 0,6 M |
+
+- **Total: 0,68 MB/s y 23 operaciones/s de promedio**, ~6 % y ~5 % del baseline de Micro según la tabla de AWS de arriba (87 Mbps / 500 IOPS). En un minuto tranquilo de la tarde: 0,35 MB/s y 12 operaciones/s.
+- **El disco del sistema lee 34 veces más que el de Postgres, y todo apunta a falta de memoria.** El servidor tenía 948 MB en total y 455 MB disponibles, con 415 MB en swap, y había mandado 7,2 GB a swap desde el reinicio. De los 110 GB leídos, 6,8 GB son swap que vuelve. El resto, casi seguro, son archivos que el sistema saca de la memoria y vuelve a leer: hubo 1,21 M `pgmajfault`, cada uno una ida al disco por algo que no estaba en memoria. El swap vive en el disco del sistema: la doc de Supabase dice que es 1 GB de disco, y lo que volvió de swap ya es más que todo lo leído de `/data`. Es, con toda probabilidad, lo que en Nano, con la mitad de memoria, se comía el saldo.
+- **Casi todo lo escrito en `/data` es relleno de WAL.** Con `archive_timeout = 120 s`, Postgres cierra un segmento de 16 MB cada 2 minutos aunque casi no haya tráfico: se archivaron **2.001 segmentos (~33 GB) para 169 MB de WAL real** (`pg_stat_archiver` contra `pg_stat_wal`). Lo fija Supabase para el backup continuo: no está en el repo y no hay que perseguirlo.
+- **Sin atascos desde Micro:** el cron `jobid 17` corrió 3.986 veces con un hueco máximo de 61 s y cero `startup timeout`; el peor checkpoint de 24 h fue de 508 buffers en 50,8 s, o sea los 0,1 s por buffer normales; `cleanup_orphan_searching_rides` tarda como mucho 0,5 s (76 s durante la caída).
+- **Qué vigilar:** la memoria, no el disco. Si `SwapFree` se acerca a 0 o las lecturas de `nvme0n1` crecen mucho respecto de esta base, se está repitiendo lo de Nano, y el arreglo es Small (2 GB, el doble de memoria).
 
 ### Los REVOKE de una migración de lockdown se verifican en prod, no se asumen (00531 → 00591, 2026-09-15)
 
