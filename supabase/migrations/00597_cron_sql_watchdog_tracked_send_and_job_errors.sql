@@ -11,26 +11,38 @@
 --    It called send_db_health_email(), which uses net.http_post directly.
 --    net.http_post only queues the request and nothing read the responses to
 --    those, so an email that send-email rejected (401 without the vault key,
---    any 5xx) was lost without a trace. The repo rule is that cron-driven
---    calls to an Edge Function go through cron_http_post. Each recipient's
---    email is now cron_http_post('cron-sql-failure-alert', ...), and
---    check_cron_http_failures reports that label once 2 of its calls are
---    rejected in its 90-minute window (one alert to prod's 5 recipients is
---    enough). Recipients, subject, body, headers and guards are the ones
---    send_db_health_email used. That function is not touched:
---    check_database_health and the daily digest still use it.
+--    any 5xx, its 429 rate limit) was lost without a trace. The repo rule is
+--    that cron-driven calls to an Edge Function go through cron_http_post.
+--    Each recipient's email is now cron_http_post('cron-sql-failure-alert',
+--    ...). check_cron_http_failures reports the label when 2 or more of those
+--    calls are rejected inside its 90-minute window: one alert to prod's 5
+--    recipients is enough, a single rejected recipient is not. If the
+--    rejection is systemic (no vault key, send-email down), that watchdog's
+--    own emails fail the same way, so the trace to read is cron_http_calls
+--    (24 h), net._http_response (6 h) and platform_config.cron_http_health_*.
+--    Recipients, subject, body, headers and guards are the ones
+--    send_db_health_email used. The one difference is the HTTP timeout:
+--    cron_http_post waits 30 s where net.http_post's default is 5 s, which
+--    00509 found records calls that did succeed as timeouts.
+--    send_db_health_email itself is not touched: check_database_health and the
+--    daily digest still use it.
 --
 -- 2. cron_sql_failures_now() counts a failed run only when the job failed.
 --    It skipped exactly two messages, 'job startup timeout' and 'server
 --    restarted', and counted every other failed run as the job's. pg_cron runs
 --    in libpq mode here (cron.use_background_workers = off), and its source
---    (src/pg_cron.c) records more failures that never ran the job's SQL:
---    'connection failed', 'connection lost', 'job canceled'. Now a failed run
---    counts only if the job's SQL raised (return_message starts with 'ERROR:')
---    or pg_cron refused the job's command ('COPY not supported', the one
---    pg_cron message that is the job's fault). Every other failure is skipped,
---    the way 00596 skipped its two. The rest of 00596's rule is unchanged: 3
---    in a row, confirmed at two consecutive checks.
+--    (src/pg_cron.c) records more failures where it could not run the job or
+--    lost its connection while it ran: 'connection failed', 'connection lost',
+--    'job canceled'. Now a failed run counts only if the job's SQL raised
+--    (return_message starts with 'ERROR:', in libpq's format and in the
+--    background worker's) or pg_cron refused the job's command ('COPY not
+--    supported', the one pg_cron message that is the job's fault). Every other
+--    failure is skipped, the way 00596 skipped its two. The rest of 00596's
+--    rule is unchanged: 3 in a row, confirmed at two consecutive checks.
+--    Known gap, accepted: a job that dies at FATAL level on every run (its
+--    backend terminated, a transaction_timeout) or whose role or database no
+--    longer exists ('connection failed') is skipped too. Neither happens here,
+--    and in cron.job_run_details both look like the platform.
 --    On prod's 14 days of history (2026-09-25) every failed run is one of
 --    00596's two messages or starts with 'ERROR:', so today this changes no
 --    result. What it prevents is the next outage looking like a broken job.
@@ -49,8 +61,9 @@ $a_decl_old$;
 $a_cond_old$;
   v_a_cond_new text := $a_cond_new$      -- 00597: a failed run counts only if the job's SQL raised ('ERROR: ...') or
       -- pg_cron refused its command ('COPY not supported'). Any other failure is
-      -- pg_cron not running the job at all (job startup timeout, server
-      -- restarted, connection failed, connection lost, job canceled, no message).
+      -- pg_cron not being able to run the job, or losing its connection while it
+      -- ran (job startup timeout, server restarted, connection failed,
+      -- connection lost, job canceled).
       AND (d.status = 'succeeded'
            OR COALESCE(d.return_message, '') LIKE 'ERROR:%'
            OR d.return_message = 'COPY not supported')
@@ -102,6 +115,9 @@ BEGIN
     RAISE NOTICE '00597: cron_sql_failures_now() already patched';
   ELSIF (length(v_src) - length(replace(v_src, v_a_decl_old, ''))) / length(v_a_decl_old) <> 1
      OR (length(v_src) - length(replace(v_src, v_a_cond_old, ''))) / length(v_a_cond_old) <> 1 THEN
+    IF position(E'\r' IN v_a_decl_old) > 0 THEN
+      RAISE EXCEPTION '00597: this file was read with CRLF line endings, so its patch targets cannot match the function; apply it with LF';
+    END IF;
     RAISE EXCEPTION '00597: cron_sql_failures_now() is not the 00596 body this patches; not touching it';
   ELSE
     v_new := replace(replace(v_src, v_a_decl_old, ''), v_a_cond_old, v_a_cond_new);
@@ -113,6 +129,9 @@ BEGIN
   IF position($m$cron_http_post('cron-sql-failure-alert',$m$ IN v_src) > 0 THEN
     RAISE NOTICE '00597: check_cron_sql_failures() already patched';
   ELSIF (length(v_src) - length(replace(v_src, v_b_old, ''))) / length(v_b_old) <> 1 THEN
+    IF position(E'\r' IN v_b_old) > 0 THEN
+      RAISE EXCEPTION '00597: this file was read with CRLF line endings, so its patch targets cannot match the function; apply it with LF';
+    END IF;
     RAISE EXCEPTION '00597: check_cron_sql_failures() is not the 00596 body this patches; not touching it';
   ELSE
     EXECUTE replace(v_src, v_b_old, v_b_new);
@@ -161,7 +180,9 @@ BEGIN
     SELECT COALESCE(max(q.id), 0) INTO v_before FROM net.http_request_queue q;
     v_result := public.check_cron_sql_failures();
 
-    -- pg_net stores the request body as bytea.
+    -- pg_net stores the request body as bytea. Only this watchdog's emails
+    -- (its subjects all name "tareas programadas"): another session may queue
+    -- one of its own meanwhile.
     SELECT count(*),
            count(*) FILTER (WHERE c.jobname = 'cron-sql-failure-alert'),
            count(*) FILTER (WHERE btrim(COALESCE(convert_from(q.body, 'UTF8')::jsonb ->> 'template', '')) = '')
@@ -169,7 +190,8 @@ BEGIN
     FROM net.http_request_queue q
     LEFT JOIN public.cron_http_calls c ON c.request_id = q.id
     WHERE q.id > v_before
-      AND q.url LIKE '%/functions/v1/send-email';
+      AND q.url LIKE '%/functions/v1/send-email'
+      AND convert_from(q.body, 'UTF8')::jsonb ->> 'subject' ILIKE '%tarea%programada%';
     RAISE EXCEPTION '00597 self-test rollback';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> '00597 self-test rollback' THEN

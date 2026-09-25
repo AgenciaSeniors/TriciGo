@@ -709,6 +709,9 @@ INSERT INTO t.outage VALUES
 -- job's cadence, as they were in prod: 00596's rule depends on how many runs a
 -- job has in the window, so the replay must not make the outage look like the
 -- job's whole history.
+-- It assumes every :45 check ran; during those outages some probably failed to
+-- start themselves. That cannot change these results: at most one check ever
+-- sees the job as a candidate, and 00596 needs two in a row to confirm it.
 -- p_swap_s: log this message instead of 'job startup timeout', to ask how the
 -- same outage would have been judged if pg_cron had recorded it that way.
 CREATE FUNCTION t.replay_checks(p_tag text, p_swap_s text DEFAULT NULL)

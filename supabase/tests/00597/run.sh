@@ -41,6 +41,10 @@ fresh(){ local out
 apply(){ tr -d '\r' < "$1" | PGOPTIONS="-c client_min_messages=notice -c TimeZone=UTC" \
   $BIN/psql $CONN -d "${2:-$DB}" -qAt -v ON_ERROR_STOP=1 -1 -c "SET ROLE postgres" -c "SET search_path = ''" -f - 2>&1 | tr -d '\r'
   return "${PIPESTATUS[1]}"; }
+# raw_apply FILE DB -> the same, but psql reads the file exactly as it is on disk (CRs included)
+raw_apply(){ PGOPTIONS="-c client_min_messages=notice -c TimeZone=UTC" \
+  $BIN/psql $CONN -d "$2" -qAt -v ON_ERROR_STOP=1 -1 -c "SET ROLE postgres" -c "SET search_path = ''" -f "$1" 2>&1 | tr -d '\r'
+  return "${PIPESTATUS[0]}"; }
 
 RESET="SELECT FROM t.reset();"
 RUN="SELECT FROM public.check_cron_sql_failures();"      # one watchdog run, output discarded
@@ -169,6 +173,13 @@ val "T4 same emails as 00596 sent (recipients, subject, body, auth headers), for
    $T4_CLEAN $T4_SCENARIO $RUN $RUN $T4_RECOVER $RUN
    SELECT ((SELECT $T4_SIG FROM sent_00596) = (SELECT $T4_SIG FROM t.sent)) || '|' || (SELECT count(*) FROM sent_00596) || '|' || (SELECT count(DISTINCT subject) FROM sent_00596)" \
   'true|6|2'
+val "T6 the alert waits 30 s for send-email (cron_http_post's timeout); 00596's waited pg_net's default 5 s" \
+  "$RESET SELECT FROM t.seed('cleanup_auth_revocations', '0 3 * * *', repeat('E', 14), '1 day', '15 hours');
+   SELECT FROM t.check_cron_sql_failures_00596(); SELECT FROM t.check_cron_sql_failures_00596();
+   SELECT string_agg(DISTINCT timeout_milliseconds::text, ',') FROM net.http_request_queue;
+   $T4_CLEAN SELECT FROM t.seed('cleanup_auth_revocations', '0 3 * * *', repeat('E', 14), '1 day', '15 hours'); $RUN $RUN
+   SELECT string_agg(DISTINCT timeout_milliseconds::text, ',') FROM net.http_request_queue" \
+  '5000;30000'
 val "T5 no business_notification_email: nothing is sent" \
   "$RESET DELETE FROM public.platform_config WHERE key = 'business_notification_email';
    SELECT FROM t.seed('cleanup_auth_revocations', '0 3 * * *', repeat('E', 14), '1 day', '15 hours'); $RUN $ST $SENT" \
@@ -233,8 +244,25 @@ PYEOF
   catch "N4 C6 catches a watchdog that forgets 'COPY not supported'" 4 \
     " = 'COPY not supported')" " = 'COPY not supported' AND false)" \
     "$RESET SELECT FROM t.seed('copy_job', '0 * * * *', 'OPPP', '1 hour', '10 minutes'); $RUN $ST" 'failing|["copy_job"]|3'
+  # N5: check_cron_sql_failures() drifted: the migration aborts, and cron_sql_failures_now() is not
+  # patched either (both patches are in one DO block: all or nothing)
+  if fresh "${DB}n5" \
+     && $(mdb 5) -c "DO \$\$ BEGIN EXECUTE replace(pg_get_functiondef('public.check_cron_sql_failures()'::regprocedure), 'Shared ops mailer from 00577', 'Shared ops mailer (00577)'); END \$\$;" >/dev/null 2>&1 \
+     && [ "$(q "SELECT position('Shared ops mailer (00577)' IN prosrc) > 0 FROM pg_proc WHERE oid = 'public.check_cron_sql_failures()'::regprocedure" "$(mdb 5)")" = "t" ] \
+     && out=$(apply "$MIG" "${DB}n5"); then
+    ko "N5 a drifted check_cron_sql_failures() aborts the migration, and neither function is patched" "applied cleanly"
+  elif echo "$out" | grep -q "check_cron_sql_failures() is not the 00596 body this patches" \
+       && [ "$(q "SELECT position('00597:' IN prosrc) FROM pg_proc WHERE oid = 'public.cron_sql_failures_now()'::regprocedure" "$(mdb 5)")" = "0" ]; then
+    ok "N5 a drifted check_cron_sql_failures() aborts the migration, and neither function is patched"
+  else ko "N5 a drifted check_cron_sql_failures() aborts the migration, and neither function is patched" "$(echo "$out" | grep -m1 ERROR)"; fi
+  # N6: the file read with CRLF against LF bodies (prod's): the abort says so instead of claiming a drift
+  "$PY" -c "import sys; s = open(sys.argv[1], encoding='utf-8').read().replace('\r', ''); open(sys.argv[2], 'w', encoding='utf-8', newline='').write(s.replace('\n', '\r\n'))" "$MIG" "$TMPD/crlf.sql"
+  if fresh "${DB}n6" && out=$(raw_apply "$TMPD/crlf.sql" "${DB}n6"); then
+    ko "N6 applying the file with CRLF line endings aborts with a message that says so" "applied cleanly"
+  elif echo "$out" | grep -q "read with CRLF line endings"; then ok "N6 applying the file with CRLF line endings aborts with a message that says so"
+  else ko "N6 applying the file with CRLF line endings aborts with a message that says so" "$(echo "$out" | grep -m1 ERROR)"; fi
   rm -rf "$TMPD"
-  for n in 1 2 3 4; do $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}n$n" >/dev/null 2>&1; done
+  for n in 1 2 3 4 5 6; do $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}n$n" >/dev/null 2>&1; done
 fi
 
 echo "== summary: $PASS passed, $FAIL failed =="
