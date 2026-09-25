@@ -25,10 +25,19 @@
 -- user's phone matches any approved fleet_member, we link them"), and what
 -- relink_fleet_member_for_existing_driver(), the admin path for drivers who
 -- registered before their fleet was approved, has always done with the same
--- WHERE clause. Nothing needs a single membership: no constraint limits a
--- driver to one fleet, accept_ride_v2 and find_best_drivers test membership
--- with EXISTS per corporate account, and commission rates come from
--- corporate_accounts, never from fleet_members.
+-- WHERE clause. Linking only one would not avoid two memberships: that
+-- relink would link the rest later. Both matching statuses are set by an
+-- admin (tg_fleet_members_protect forces an owner's insert to
+-- pending_review), and 00246 says the admin should reject a phone that is
+-- already in another fleet. The server copes with two memberships: no
+-- constraint limits a driver to one fleet, accept_ride_v2 and
+-- find_best_drivers test membership with EXISTS per corporate account, and
+-- commission rates come from corporate_accounts, never from fleet_members.
+-- The driver app does not: fleetService.getMembershipForDriver() reads with
+-- .maybeSingle(), gets an error for two rows and returns null, so the
+-- corporate screen offers to create a fleet instead of showing the
+-- driver's own. That is a display problem in the app (a separate fix, which
+-- needs a rebuild), and still better than a signup that fails.
 --
 -- Fix: drop the RETURNING ... INTO and the variable it filled, which nothing
 -- read. No count is needed, so no GET DIAGNOSTICS either. Everything else is
@@ -74,8 +83,9 @@ GRANT EXECUTE ON FUNCTION public.auto_link_fleet_member_on_signup() TO service_r
 -- Firing the real trigger would need a users row, and users.id references
 -- auth.users. So the check reads the body just stored back from pg_proc and
 -- runs it as a temporary trigger function whose search_path resolves
--- fleet_members to a temporary copy of the table: two invitations for one
--- person, in two formats, then one signup; both must end up linked. The
+-- fleet_members to a temporary copy of the table (this relies on the body
+-- naming fleet_members without a schema, as it does): two invitations for
+-- one person, in two formats, then one signup; both must end up linked. The
 -- block is rolled back, trusted-fleet flag included. If the body still
 -- raised TOO_MANY_ROWS, that error is not the one caught here, so it would
 -- abort the migration.
@@ -92,6 +102,10 @@ BEGIN
   BEGIN
     CREATE TEMP TABLE fleet_members (LIKE public.fleet_members INCLUDING DEFAULTS);
     CREATE TEMP TABLE signups_00595 (id uuid, phone text);
+    -- pg_temp FIRST, the reverse of the live function's 'public', 'pg_temp'.
+    -- With pg_temp listed, its position decides, and this order is what
+    -- sends the body's fleet_members to the temp copy. The live order here
+    -- would run the test against the real table.
     EXECUTE pg_catalog.format(
       'CREATE FUNCTION pg_temp.auto_link_00595() RETURNS trigger LANGUAGE plpgsql '
       'SET search_path TO pg_temp, public AS %L', v_src);

@@ -8,7 +8,8 @@
 --   tg_fleet_members_protect          8b0d07aff7ab33142bfcec29304c01ed / 674  00435 minus its comment lines
 --   _normalize_cuban_phone            9f5227a3c108fa42f6aacdf01fb0ad86 / 451  identical to 00487
 --   tg_users_normalize_phone          c0491b42cf36767c3911fb8a3fda9f04 / 147  identical to 00461
--- Prod's three DDL event triggers are at the end of this file.
+-- The three prod event triggers that fire on the self-test's DDL are at the
+-- end of this file.
 -- Left out because none of it touches fleet_members: the FK users.id ->
 -- auth.users (a signup creates the auth row first), the other triggers on
 -- users (audit_users, users_ensure_tricicoin_wallet), the corporate_accounts
@@ -197,10 +198,13 @@ GRANT EXECUTE ON FUNCTION public.auto_link_fleet_member_on_signup() TO service_r
 CREATE TRIGGER auto_link_fleet_member_on_signup AFTER INSERT ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.auto_link_fleet_member_on_signup();
 
--- LIVE DDL event triggers, created last so they only see the migration and
--- the tests. The migration's self-test creates temp tables, a temp function
--- and a trigger, so each of these fires during the apply, as it will in
--- prod. Definitions read back from prod as base64; run.sh checks their
+-- LIVE event triggers: the three of prod's seven that fire on the
+-- self-test's CREATE TABLE, CREATE FUNCTION and CREATE TRIGGER, so they run
+-- during the apply here as they will in prod. The other four
+-- (issue_graphql_placeholder, issue_pg_cron_access, issue_pg_net_access,
+-- pgrst_drop_watch) fire only on CREATE EXTENSION, DROP EXTENSION or a
+-- DROP. Created last, so they only see the migration and the tests.
+-- Definitions read back from prod as base64; run.sh checks their
 -- md5(prosrc):
 --   rls_auto_enable          99be20677b456ea8d3be47bdd44fb369 / 953   (ensure_rls)
 --   grant_pg_graphql_access  dd3f3e2bb94cff45ef24b9cecb6af1c8 / 1357  (issue_pg_graphql_access)

@@ -11,14 +11,16 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 MIG="${1:-none}"
 BIN="${PG_BIN:-/usr/lib/postgresql/16/bin}"
 PY="${PYTHON:-python3}"
-CONN="-h 127.0.0.1 -p 5433 -U pgtest"
 DB=pr595
-P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
+# pg ARGS -> psql on the local cluster. P ARGS -> the same on $DB, quiet, stopping at the first error.
+# Functions, not strings, so a PG_BIN with spaces (C:/Program Files/...) is not split.
+pg(){ "$BIN/psql" -h 127.0.0.1 -p 5433 -U pgtest "$@"; }
+P(){ pg -d "$DB" -qAt -v ON_ERROR_STOP=1 "$@"; }
 PASS=0; FAIL=0
 ok(){ echo "PASS  $1"; PASS=$((PASS+1)); }
 ko(){ echo "FAIL  $1  -- $2"; FAIL=$((FAIL+1)); }
 # q SQL -> run the statements and print their rows (CRs dropped: psql on Windows ends lines with \r\n)
-q(){ $P -c "$1" 2>&1 | tr -d '\r'; }
+q(){ P -c "$1" 2>&1 | tr -d '\r'; }
 # val NAME SQL EXPECTED -> the statements must succeed; their printed rows, joined with ';', must equal EXPECTED
 val(){ local r; r=$(q "$2" | paste -sd';' -); if [ "$r" = "$3" ]; then ok "$1"; else ko "$1" "expected [$3], got [$r]"; fi; }
 
@@ -53,14 +55,15 @@ FINGERPRINT="SELECT md5(coalesce((SELECT string_agg(concat_ws('|', id, fleet_id,
   || '#' || coalesce((SELECT string_agg(concat_ws('|', id, phone), ',' ORDER BY id) FROM public.users), ''));"
 
 echo "== reset database =="
-$BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB" >/dev/null 2>&1 || exit 1
-OUT=$($P -f "$DIR/scaffold.sql" 2>&1) || { echo "$OUT"; echo "scaffold failed"; exit 1; }
+OUT=$(pg -d postgres -qAt -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB" 2>&1) \
+  || { echo "$OUT"; echo "could not recreate $DB: is the cluster up on 127.0.0.1:5433, and is nothing connected to $DB?"; exit 1; }
+OUT=$(P -f "$DIR/scaffold.sql" 2>&1) || { echo "$OUT"; echo "scaffold failed"; exit 1; }
 val "S0 scaffold carries the live prod bodies (md5/length of prosrc)" \
   "SELECT string_agg(proname || '=' || md5(prosrc) || '/' || length(prosrc), ',' ORDER BY proname COLLATE \"C\") FROM pg_proc
    WHERE pronamespace = 'public'::regnamespace
      AND proname IN ('auto_link_fleet_member_on_signup', 'tg_fleet_members_protect', '_normalize_cuban_phone', 'tg_users_normalize_phone')" \
   "_normalize_cuban_phone=9f5227a3c108fa42f6aacdf01fb0ad86/451,auto_link_fleet_member_on_signup=0b74fd48e33257ba39bd719376d1a732/494,tg_fleet_members_protect=8b0d07aff7ab33142bfcec29304c01ed/674,tg_users_normalize_phone=c0491b42cf36767c3911fb8a3fda9f04/147"
-val "S1 scaffold carries prod's DDL event triggers, which fire on the self-test's temp objects" \
+val "S1 scaffold carries the prod event triggers that fire on the self-test's temp objects" \
   "SELECT string_agg(e.evtname || '=' || md5(p.prosrc) || '/' || length(p.prosrc), ',' ORDER BY e.evtname COLLATE \"C\")
    FROM pg_event_trigger e JOIN pg_proc p ON p.oid = e.evtfoid" \
   "ensure_rls=99be20677b456ea8d3be47bdd44fb369/953,issue_pg_graphql_access=dd3f3e2bb94cff45ef24b9cecb6af1c8/1357,pgrst_ddl_watch=7f27b8118fea5c88b0164331292859e3/729"
@@ -69,17 +72,17 @@ if [ "$MIG" != "none" ]; then
   # Baseline rows first. Two are invitations for the phone the migration's self-test uses: if its
   # temporary copy of the function ever reached the real table, it would try to link them to a user
   # that does not exist, and the FK would fail the apply.
-  OUT=$($P -c "$(seed "$(inv 1 '+5351230595' pending_signup) $(inv 2 '51230595' approved) $(inv 3 '+5358888888' pending_signup)")
+  OUT=$(P -c "$(seed "$(inv 1 '+5351230595' pending_signup) $(inv 2 '51230595' approved) $(inv 3 '+5358888888' pending_signup)")
     CREATE SCHEMA rehearsal;
     CREATE TABLE rehearsal.live_src AS SELECT prosrc FROM pg_proc WHERE oid = $FN;" 2>&1) || { echo "$OUT"; echo "baseline failed"; exit 1; }
   BEFORE=$(q "$FINGERPRINT")
   # 1st pass in one transaction, the way `supabase db push` runs a file; 2nd in autocommit mode.
   echo "== apply migration (1st, one transaction, search_path = '') =="
-  OUT=$($P -1 -c "SET search_path = ''" -f "$MIG" 2>&1) || { echo "$OUT"; echo "migration failed"; exit 1; }
+  OUT=$(P -1 -c "SET search_path = ''" -f "$MIG" 2>&1) || { echo "$OUT"; echo "migration failed"; exit 1; }
   if echo "$OUT" | grep -q "00595: verified"; then ok "M0 the migration's self-test ran and passed"
   else ko "M0 the migration's self-test ran and passed" "no NOTICE in [$OUT]"; fi
   echo "== apply migration (2nd, idempotency, autocommit, search_path = '') =="
-  OUT=$($P -c "SET search_path = ''" -f "$MIG" 2>&1) || { echo "$OUT"; echo "migration NOT idempotent"; exit 1; }
+  OUT=$(P -c "SET search_path = ''" -f "$MIG" 2>&1) || { echo "$OUT"; echo "migration NOT idempotent"; exit 1; }
   val "M1 the migration leaves every row exactly as it was" "$FINGERPRINT" "$BEFORE"
   val "M2 the new body is the live one minus the RETURNING ... INTO and its variable, nothing else" \
     "SELECT (md5(p.prosrc) = md5(replace(replace(l.prosrc, E'DECLARE\n  v_member_id uuid;\n', ''), E'\n  RETURNING id INTO v_member_id', '')))
@@ -146,11 +149,14 @@ open(sys.argv[3], "w", encoding="utf-8", newline="").write(swallow)
 PYEOF
   then
     ok "N0 built two broken copies of the migration; the first restores prod's body byte for byte"
+    # N ARGS -> psql on the scratch database the negative proofs use
+    N(){ pg -d "${DB}n" -qAt -v ON_ERROR_STOP=1 "$@"; }
     # neg NAME FILE PATTERN -> on a fresh scaffold, applying FILE must abort with an error matching PATTERN
-    neg(){ local out N="$BIN/psql $CONN -d ${DB}n -qAt -v ON_ERROR_STOP=1"
-      $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}n" -c "CREATE DATABASE ${DB}n" >/dev/null 2>&1
-      $N -f "$DIR/scaffold.sql" >/dev/null 2>&1
-      if out=$($N -1 -c "SET search_path = ''" -f "$2" 2>&1); then ko "$1" "the migration went through"
+    neg(){ local out
+      if ! pg -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}n" -c "CREATE DATABASE ${DB}n" >/dev/null 2>&1; then
+        ko "$1" "could not recreate ${DB}n"; return; fi
+      N -f "$DIR/scaffold.sql" >/dev/null 2>&1 || { ko "$1" "the scaffold failed on ${DB}n"; return; }
+      if out=$(N -1 -c "SET search_path = ''" -f "$2" 2>&1); then ko "$1" "the migration went through"
       elif echo "$out" | grep -q "$3"; then ok "$1"
       else ko "$1" "wrong error: $(echo "$out" | tr -d '\r' | grep -m1 ERROR)"; fi; }
     neg "N1 the self-test aborts a migration that still carries the bug" "$BUGGY" "more than one row"
