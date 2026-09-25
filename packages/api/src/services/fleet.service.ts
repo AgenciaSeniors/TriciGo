@@ -125,20 +125,37 @@ export const fleetService = {
   },
 
   /**
-   * Driver-side query: when a driver opens the app, we check if their
-   * own user_id is associated with any fleet_members row. If yes, they
-   * are part of a fleet and the discounted commission applies.
+   * Driver-side query: the fleets the driver belongs to, one entry per
+   * fleet, active ones first. Never assumes a single row: the signup
+   * auto-link and the admin relink link every invitation that matches the
+   * driver's phone, and one fleet can hold the number twice in two formats
+   * (unique on the raw phone, matched on the normalized one). A fleet shows
+   * through its active row, else its latest signup. Throws when the lookup
+   * fails, so a failed read is never taken for "no fleet".
    */
-  async getMembershipForDriver(driverId: string): Promise<FleetMember | null> {
+  async getMembershipsForDriver(driverId: string): Promise<FleetMember[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('fleet_members')
       .select('*')
       .eq('driver_id', driverId)
       .in('status', ['active', 'approved'])
-      .maybeSingle();
-    if (error) return null;
-    return data as FleetMember | null;
+      .order('signed_up_at', { ascending: false, nullsFirst: false })
+      .order('added_at', { ascending: false })
+      .order('id', { ascending: true });
+    if (error) throw new Error(`Fleet membership lookup failed: ${error.message}`);
+
+    const rows = (data ?? []) as FleetMember[];
+    const activeFirst = [
+      ...rows.filter((m) => m.status === 'active'),
+      ...rows.filter((m) => m.status !== 'active'),
+    ];
+    const seenFleets = new Set<string>();
+    return activeFirst.filter((m) => {
+      if (seenFleets.has(m.fleet_id)) return false;
+      seenFleets.add(m.fleet_id);
+      return true;
+    });
   },
 
   /**
