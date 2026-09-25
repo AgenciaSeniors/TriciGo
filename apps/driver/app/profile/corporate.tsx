@@ -1,8 +1,8 @@
 // ============================================================
 // TriciGo Driver — Corporate / Fleet entry point (Phase 4)
 // Three states for the logged-in driver:
-//   1. Belongs to a fleet (auto-linked or manually added) → show
-//      membership card with status + commission info.
+//   1. Belongs to one or more fleets (auto-linked or manually added)
+//      → show one row per fleet with status + commission info.
 //   2. Is the fleet owner (registered the fleet themselves) →
 //      show fleet dashboard with members list + status.
 //   3. None of the above → show FleetRequestForm so the driver
@@ -20,6 +20,7 @@ import { SkeletonCard } from '@tricigo/ui/Skeleton';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { midnightEmber, cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { fleetService } from '@tricigo/api';
+import { logger } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import FleetRequestForm from '@/components/FleetRequestForm';
@@ -35,7 +36,7 @@ export default function CorporateScreen() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [membership, setMembership] = useState<FleetMember | null>(null);
+  const [memberships, setMemberships] = useState<FleetMember[]>([]);
   const [ownedFleet, setOwnedFleet] = useState<FleetWithMembers | null>(null);
   const [version, setVersion] = useState(0);
 
@@ -46,14 +47,22 @@ export default function CorporateScreen() {
       return;
     }
     try {
-      const [member, fleet] = await Promise.all([
-        fleetService.getMembershipForDriver(driverProfile.user_id),
+      const [membershipsResult, ownedFleetResult] = await Promise.allSettled([
+        fleetService.getMembershipsForDriver(driverProfile.user_id),
         fleetService.getFleetByOwner(driverProfile.user_id),
       ]);
-      setMembership(member);
-      setOwnedFleet(fleet);
-    } catch {
-      // silent — keep last good state
+      // Apply each read on its own. A failed one keeps its last good value
+      // instead of showing up as "no fleet", and never discards the other.
+      if (membershipsResult.status === 'fulfilled') {
+        setMemberships(membershipsResult.value);
+      } else {
+        logger.warn('[Corporate] Failed to load fleet memberships', { error: String(membershipsResult.reason) });
+      }
+      if (ownedFleetResult.status === 'fulfilled') {
+        setOwnedFleet(ownedFleetResult.value);
+      } else {
+        logger.warn('[Corporate] Failed to load owned fleet', { error: String(ownedFleetResult.reason) });
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -65,7 +74,8 @@ export default function CorporateScreen() {
   }, [fetchData, version]);
 
   const isOwner = !!ownedFleet;
-  const isMember = !!membership && !isOwner;
+  const isMember = memberships.length > 0 && !isOwner;
+  const inSeveralFleets = memberships.length > 1;
   const noLink = !loading && !isOwner && !isMember;
 
   return (
@@ -97,23 +107,35 @@ export default function CorporateScreen() {
           </View>
         )}
 
-        {/* Member view */}
+        {/* Member view: one row per fleet, since a driver can be in several */}
         {isMember && (
           <Card variant="outlined" padding="lg" className="mb-4">
-            <View className="flex-row items-center justify-between mb-3">
-              <Text variant="h4">Tu flota</Text>
-              <StatusBadge
-                label={membership!.status === 'active' ? 'Activo' : 'Pendiente'}
-                variant={membership!.status === 'active' ? 'success' : 'warning'}
-              />
-            </View>
-            <Text variant="bodySmall" color="secondary" className="mb-3">
-              Estás vinculado como conductor. Tus viajes corporativos aplicarán comisión reducida automáticamente — el pasajero paga menos y tú cobras lo mismo de siempre.
+            <Text variant="h4" className="mb-3">
+              {inSeveralFleets ? 'Tus flotas' : 'Tu flota'}
             </Text>
-            <View className="border-t border-neutral-100 dark:border-neutral-800 pt-3">
-              <Text variant="caption" color="secondary">Registrado como</Text>
-              <Text variant="body">{membership!.driver_name}</Text>
-              <Text variant="bodySmall" color="secondary">{membership!.driver_phone}</Text>
+            <Text variant="bodySmall" color="secondary" className="mb-3">
+              {inSeveralFleets
+                ? `Estás vinculado como conductor en ${memberships.length} flotas.`
+                : 'Estás vinculado como conductor.'}{' '}
+              Tus viajes corporativos aplicarán comisión reducida automáticamente — el pasajero paga menos y tú cobras lo mismo de siempre.
+            </Text>
+            <View className="gap-3">
+              {memberships.map((m) => (
+                <View
+                  key={m.id}
+                  className="flex-row items-center justify-between border-t border-neutral-100 dark:border-neutral-800 pt-3"
+                >
+                  <View className="flex-1 mr-2">
+                    <Text variant="caption" color="secondary">Registrado como</Text>
+                    <Text variant="body">{m.driver_name}</Text>
+                    <Text variant="bodySmall" color="secondary">{m.driver_phone}</Text>
+                  </View>
+                  <StatusBadge
+                    label={m.status === 'active' ? 'Activo' : 'Pendiente'}
+                    variant={m.status === 'active' ? 'success' : 'warning'}
+                  />
+                </View>
+              ))}
             </View>
           </Card>
         )}
