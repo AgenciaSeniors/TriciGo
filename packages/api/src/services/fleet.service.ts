@@ -6,6 +6,8 @@
 // ============================================================
 
 import type {
+  CorporateAccount,
+  CorporateAccountStatus,
   DriverFleet,
   FleetMember,
   FleetMemberInput,
@@ -13,16 +15,29 @@ import type {
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 
+type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent'>;
+
+// Which fleet an owner with several corporate accounts sees (lower first).
+const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
+  approved: 0,
+  pending: 1,
+  suspended: 2,
+  rejected: 3,
+};
+
 export const fleetService = {
   /**
-   * Submit a new fleet request from a corporate_account owner.
-   * Creates the driver_fleets row + N fleet_members rows in one
-   * call. Returns the fleet id so the caller can immediately upload
-   * license documents per member.
+   * Submit a fleet request from a corporate_account owner: the
+   * driver_fleets row + N fleet_members rows. Returns the fleet id so the
+   * caller can immediately upload license documents per member.
    *
-   * Caller must already own the corporate_account (RLS enforced).
-   * The corporate_account itself should already exist with
-   * is_fleet_owner = true and status = 'pending'.
+   * Caller must already own the corporate_account (RLS enforced). The
+   * account stays pending with is_fleet_owner = false: since 00418/00434
+   * only an admin can set that flag.
+   *
+   * The fleet is upserted on corporate_account_id (UNIQUE), so a retry on
+   * the same account after the drivers failed to save reuses the fleet the
+   * first attempt created instead of failing on the unique key.
    */
   async submitFleetRequest(params: {
     corporate_account_id: string;
@@ -40,17 +55,20 @@ export const fleetService = {
 
     const { data: fleet, error: fleetErr } = await supabase
       .from('driver_fleets')
-      .insert({
-        corporate_account_id: params.corporate_account_id,
-        name: params.name,
-        vehicle_count_estimate: params.vehicle_count_estimate ?? null,
-        vehicle_types: params.vehicle_types ?? [],
-        operating_zones: params.operating_zones ?? [],
-        estimated_rides_per_day_per_vehicle: params.estimated_rides_per_day_per_vehicle ?? null,
-        operating_hours_start: params.operating_hours_start ?? null,
-        operating_hours_end: params.operating_hours_end ?? null,
-        notes: params.notes ?? null,
-      })
+      .upsert(
+        {
+          corporate_account_id: params.corporate_account_id,
+          name: params.name,
+          vehicle_count_estimate: params.vehicle_count_estimate ?? null,
+          vehicle_types: params.vehicle_types ?? [],
+          operating_zones: params.operating_zones ?? [],
+          estimated_rides_per_day_per_vehicle: params.estimated_rides_per_day_per_vehicle ?? null,
+          operating_hours_start: params.operating_hours_start ?? null,
+          operating_hours_end: params.operating_hours_end ?? null,
+          notes: params.notes ?? null,
+        },
+        { onConflict: 'corporate_account_id' },
+      )
       .select('id')
       .single();
 
@@ -82,44 +100,66 @@ export const fleetService = {
   },
 
   /**
-   * Owner-side query: returns the fleet (with members) belonging to
-   * the corporate_account currently owned by the user. NULL if the
-   * user has no fleet.
+   * Owner-side query: the fleet (with members) of a corporate account the
+   * user created, or NULL when none of their accounts has a fleet.
+   *
+   * The driver_fleets row is what makes an account a fleet, not
+   * is_fleet_owner: since 00418/00434 only an admin can set that flag, so a
+   * request sent from the app never carries it. A user can hold several
+   * accounts (a corporate client request, a retried fleet request), so the
+   * fleet shown is the approved one, else pending, suspended, rejected; the
+   * newest wins within a status and the account id breaks a full tie.
+   * Throws when a lookup fails, so a failed read is never taken for "no fleet".
    */
   async getFleetByOwner(userId: string): Promise<FleetWithMembers | null> {
     const supabase = getSupabaseClient();
 
-    const { data: account, error: accountErr } = await supabase
+    const { data: accountRows, error: accountsErr } = await supabase
       .from('corporate_accounts')
-      .select('id, name, status, commission_percent, is_fleet_owner')
+      .select('id, name, status, commission_percent')
       .eq('created_by', userId)
-      .eq('is_fleet_owner', true)
-      .maybeSingle();
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true });
+    if (accountsErr) throw new Error(`Fleet owner lookup failed: ${accountsErr.message}`);
+    const accounts = (accountRows ?? []) as OwnerAccount[];
+    if (accounts.length === 0) return null;
 
-    if (accountErr || !account) return null;
-
-    const { data: fleet, error: fleetErr } = await supabase
+    const { data: fleetRows, error: fleetsErr } = await supabase
       .from('driver_fleets')
       .select('*')
-      .eq('corporate_account_id', account.id)
-      .maybeSingle();
+      .in('corporate_account_id', accounts.map((a) => a.id));
+    if (fleetsErr) throw new Error(`Fleet lookup failed: ${fleetsErr.message}`);
+    const fleetByAccount = new Map(
+      ((fleetRows ?? []) as DriverFleet[]).map((f) => [f.corporate_account_id, f]),
+    );
 
-    if (fleetErr || !fleet) return null;
+    // accounts come newest first, so the first one seen at each status is
+    // the one to keep; only a better status replaces it.
+    let owned: { account: OwnerAccount; fleet: DriverFleet } | null = null;
+    for (const account of accounts) {
+      const fleet = fleetByAccount.get(account.id);
+      if (!fleet) continue;
+      if (!owned || OWNER_STATUS_RANK[account.status] < OWNER_STATUS_RANK[owned.account.status]) {
+        owned = { account, fleet };
+      }
+    }
+    if (!owned) return null;
 
-    const { data: members } = await supabase
+    const { data: members, error: membersErr } = await supabase
       .from('fleet_members')
       .select('*')
-      .eq('fleet_id', fleet.id)
+      .eq('fleet_id', owned.fleet.id)
       .order('added_at', { ascending: true });
+    if (membersErr) throw new Error(`Fleet members lookup failed: ${membersErr.message}`);
 
     return {
-      fleet: fleet as DriverFleet,
+      fleet: owned.fleet,
       members: (members ?? []) as FleetMember[],
       account: {
-        id: account.id,
-        name: account.name,
-        status: account.status,
-        commission_percent: account.commission_percent,
+        id: owned.account.id,
+        name: owned.account.name,
+        status: owned.account.status,
+        commission_percent: owned.account.commission_percent,
       },
     };
   },
