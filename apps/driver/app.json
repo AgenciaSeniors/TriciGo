@@ -75,6 +75,8 @@
             "compileSdkVersion": 36,
             "targetSdkVersion": 36,
             "minSdkVersion": 24,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
             "manifestQueries": {
               "package": [
                 "com.waze",
@@ -91,6 +93,7 @@
       "./plugins/with-user-leave-hint-safe",
       "./plugins/with-large-screen-compat",
       "./plugins/with-large-heap",
+      "./plugins/with-proguard-rules",
       "expo-router",
       "expo-localization",
       "expo-apple-authentication",
