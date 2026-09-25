@@ -2356,7 +2356,22 @@ WHERE table_name='<tabla>' AND column_name='<col>';
 - `GET DIAGNOSTICS v = ROW_COUNT;` justo después de la sentencia, sin `RETURNING`.
 - `WITH d AS (DELETE … RETURNING 1) SELECT count(*) INTO v FROM d;` (lo usan `prune_old_ride_location_events`, `anonymize_old_rides` y `auto_offline_stale_drivers`).
 
-`RETURNING … INTO` solo es seguro cuando el `WHERE` va por una clave `PRIMARY KEY` o `UNIQUE`. En el barrido de prod del 2026-09-25, **19 funciones** usan la forma; 17 son seguras (clave única o el patrón CTE), una era este bug y la otra queda **latente**: `auto_link_fleet_member_on_signup` (`AFTER INSERT ON users`, sin `EXCEPTION`). `fleet_members` es único por `(fleet_id, driver_phone)` y el `UPDATE` compara el teléfono normalizado. Si dos invitaciones pendientes comparten teléfono (por ejemplo, de dos flotas), **el alta de esa persona falla**. Hoy no pasa porque `fleet_members` tiene 0 filas.
+`RETURNING … INTO` solo es seguro cuando el `WHERE` va por una clave `PRIMARY KEY` o `UNIQUE`. En el barrido de prod del 2026-09-25, **19 funciones** usan la forma: 17 son seguras (clave única o el patrón CTE), una era este bug y la otra estaba **latente**. Es `auto_link_fleet_member_on_signup` (`AFTER INSERT ON users`). `fleet_members` es único por `(fleet_id, driver_phone)` crudo, pero el `UPDATE` compara el teléfono normalizado, así que alcanza con dos invitaciones pendientes para el mismo número: de dos flotas, o de una sola con el número en dos formatos. En ese caso **el alta de esa persona fallaba entera**, porque ni el trigger ni `handle_new_user()` tienen `EXCEPTION`. Nunca pasó porque `fleet_members` tenía 0 filas. **00595 la arregla** (pendiente de aplicar): saca el `RETURNING … INTO` y el alta enlaza **todas** las invitaciones, como ya hacía `relink_fleet_member_for_existing_driver`. Queda un cabo suelto en la app del conductor: `getMembershipForDriver()` lee con `.maybeSingle()`, así que un conductor en dos flotas ve el formulario de "crear flota" en vez de la suya.
+
+**Cómo autoverificar un trigger cuyo caso real arrastra una cadena de FKs** (00595). No hace falta insertar en `users`, que cuelga de `auth.users`.
+1. Leer de `pg_proc` el cuerpo recién guardado y crearlo como función temporal: `EXECUTE format('CREATE FUNCTION pg_temp.f() RETURNS trigger LANGUAGE plpgsql SET search_path TO pg_temp, public AS %L', v_src)`. Con `pg_temp` primero, los nombres sin esquema del cuerpo apuntan a `CREATE TEMP TABLE <mismo nombre> (LIKE public.<tabla> INCLUDING DEFAULTS)`, que no tiene FKs.
+2. Colgarla como trigger de otra tabla temporal, dispararla y revertir el bloque con un `RAISE` centinela, como en 00594.
+
+Se prueba el cuerpo guardado sin tocar filas reales. Si por error llegara a la tabla real, choca con la FK y aborta. Dos condiciones:
+- El cuerpo tiene que nombrar la tabla **sin esquema**.
+- El orden `pg_temp, public` es **a propósito el inverso** al de la función viva. Cuando `pg_temp` está en el `search_path`, su posición decide. Si se copia el orden de la función viva, la prueba corre contra la tabla real.
+
+Tres event triggers de prod se disparan con ese DDL:
+- `ensure_rls` salta las tablas de `pg_temp`.
+- `issue_pg_graphql_access` solo actúa sobre la extensión pg_graphql.
+- `pgrst_ddl_watch` salta tablas y funciones de `pg_temp`, pero no el `CREATE TRIGGER`: `pg_event_trigger_ddl_commands()` lo reporta con `schema_name` NULL, así que encola un `NOTIFY pgrst`. Ese aviso se descarta al revertir el bloque.
+
+Los tres están copiados tal cual en `supabase/tests/00595/scaffold.sql`, para los ensayos que creen objetos.
 
 **Ningún watchdog mira las corridas fallidas de los crons SQL.** `check_cron_http_failures` cubre solo los que llaman a una Edge Function. Por eso este cron falló dos semanas sin que nadie se enterara. Para ver fallas crónicas:
 
@@ -2585,6 +2600,13 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 6. **Un helper de test que hace `IF NOT cond`** trata NULL como "no fallo" → imprime FAIL pero no lo contabiliza, y el resumen miente. Usar `IF cond IS NOT TRUE`.
 
 **Cómo probar migraciones SQL de verdad sin tocar prod (verificado acá).** El sandbox trae `psql` **y** los binarios de Postgres 16 en `/usr/lib/postgresql/16/bin`. Postgres no corre como root, así que hay que crear un usuario (`useradd -m pgtest`) y poner el datadir en **su home** (`/tmp` da `Permission denied` con `su`). Con un andamio de ~60 líneas (schemas `auth`/`cron`/`net`, `platform_config`, `get_platform_config_numeric`, `net.http_post` que INSERTA en una tabla en vez de mandar correos) se corre **la migración verbatim** y se le pasan tests de comportamiento. Así se encontró el bug del NULL. Ojo: no hay PostGIS ni pg_cron — simulá `cron.schedule`/`unschedule` y usá `text` donde prod tiene `geography` (válido cuando la columna se resta antes de comparar, o sea cuando su tipo no puede influir en el resultado).
+
+**En Windows, sin sandbox (verificado 2026-09-25, ensayo 00595).** La PC no trae `psql`, WSL ni Docker. Sirven los binarios portables de EnterpriseDB: `postgresql-16.14-1-windows-x64-binaries.zip`, 326 MB, de `get.enterprisedb.com`, sin firma Authenticode. Se descomprimen en el scratchpad sin pgAdmin, con `tar.exe -xf <zip> pgsql/bin pgsql/lib pgsql/share`.
+- **Cluster:** `initdb -D <dir> -U pgtest -A trust -E UTF8 --no-locale` y `pg_ctl -D <dir> -o "-p 5433 -c listen_addresses=127.0.0.1" -l <log> -w start`. Esa llamada a `pg_ctl` **no vuelve**, porque postgres hereda el pipe de la herramienta, y la herramienta la pasa a segundo plano. El servidor queda arriba igual; comprobarlo con `pg_ctl status`.
+- **Mensajes:** `--no-locale` deja `lc_messages=C`, así que los errores del servidor salen en inglés y los `grep` de los `run.sh` funcionan. psql igual traduce sus etiquetas (`SUGERENCIA`, `CONTEXTO`).
+- **Cómo correr:** `PG_BIN=<…>/pgsql/bin PYTHON=python bash supabase/tests/<n>/run.sh …`. El `run.sh` de 00595 toma esas dos variables (en Windows no hay `python3`) y descarta el `\r` que psql agrega al final de cada línea.
+- **Trampa CRLF:** con `core.autocrlf=true`, una copia de trabajo recién sacada tiene los `.sh` y `.sql` en CRLF. El bash de Git for Windows los corre igual y **las pruebas de comportamiento pasan**. Lo que falla es todo chequeo de md5, porque cada `\r` queda dentro del cuerpo guardado de la función, y el resultado **parece deriva contra prod cuando son solo finales de línea**. Pasa lo mismo si se aplica una migración a prod desde una copia así: la función anda, pero su md5 ya no es el del archivo en git. Antes de correr, comprobar que `git ls-files --eol supabase/tests/<n>/` diga `w/lf`.
+- **Al terminar:** `pg_ctl -D <dir> stop` y borrar la carpeta.
 
 **Watchdog de salud (00577).** `check_database_health()` cada hora (muestra + alerta **solo en transición** ok↔warn↔critical, patrón 00503) y `send_db_health_digest()` diario a las 07:30 UTC al `business_notification_email`. Es SQL puro y no una Edge Function por la misma razón que 00503: si la base está por colapsar, la EF puede no conseguir conexión justo cuando hay que avisar. El aviso temprano real es la **proyección**: con 7 días de muestras calcula MB/día y pasa a `warn` cuando faltan ≤14 días para el umbral, *antes* de cruzarlo. `db_size_warn_mb`/`crit_mb` (6000/7500) son el **único número asumido y no medido** — Postgres no conoce el tamaño del disco que le dio Supabase; ajustar si el disco real es otro.
 
