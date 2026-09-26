@@ -258,6 +258,9 @@ fire_alert=0; fire_recovery=0
 
 if [[ "$state" == "ok" ]]; then
   oks=$(( oks + 1 )); fails=0
+  # A blip that recovered before alerting was never an incident: forget its
+  # onset, or the next real outage would be reported as starting back then.
+  (( alerted == 0 )) && down_since=""
   if (( alerted == 1 )) && (( oks >= OKS_BEFORE_RECOVERY )); then
     fire_recovery=1; alerted=0
   fi
