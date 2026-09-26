@@ -249,7 +249,11 @@ export const fleetService = {
     return { storage_path: path };
   },
 
-  /** Admin: approve a single fleet member after reviewing their docs. */
+  /**
+   * Admin: approve a single fleet member after reviewing their docs. If an
+   * active account has already confirmed this phone by OTP, the database
+   * links it in this same update and the row comes back 'active' (00598).
+   */
   async approveMember(fleetMemberId: string, adminId: string): Promise<void> {
     const supabase = getSupabaseClient();
     const { error } = await supabase
@@ -315,9 +319,11 @@ export const fleetService = {
   },
 
   /**
-   * Manually trigger the auto-link RPC for a driver that was already
-   * registered before their fleet was approved. The DB has an INSERT
-   * trigger that handles new signups; this is the after-the-fact path.
+   * Manual fallback: link the approved invitations for `phone` to the given
+   * account. The database already links on its own at signup, at approval and
+   * when an account verifies its phone later (00595, 00598), always to the
+   * account whose number is OTP-confirmed; this is for an account whose number
+   * was never confirmed by OTP.
    */
   async relinkExistingDriver(driverId: string, phone: string): Promise<number> {
     const supabase = getSupabaseClient();
