@@ -1,0 +1,17 @@
+# TriciGo — run the VPS integrity alarm every 5 minutes.
+# Install to /etc/systemd/system/tricigo-integrity-check.timer
+# Enable: systemctl enable --now tricigo-integrity-check.timer
+# See ops/vps-integrity/README.md.
+[Unit]
+Description=Run the TriciGo VPS integrity alarm every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+# Persistent=false on purpose: a check missed while the VPS was down is not
+# worth replaying at boot — the next one compares against the same baseline.
+Persistent=false
+
+[Install]
+WantedBy=timers.target
