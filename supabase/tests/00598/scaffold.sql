@@ -26,12 +26,15 @@ GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
 
 CREATE TYPE public.user_role AS ENUM ('customer', 'driver', 'admin', 'super_admin');
 
--- GoTrue's table, trimmed. GoTrue stores phones as E.164 digits without '+'
--- (all 544 in prod are 53XXXXXXXX). No grant to anon/authenticated, as in prod.
+-- GoTrue's table, trimmed to what handle_new_user and the linking paths read.
+-- GoTrue stores phones as E.164 digits without '+' (all 544 in prod are
+-- 53XXXXXXXX). No grant to anon/authenticated, as in prod.
 CREATE TABLE auth.users (
   id                 uuid PRIMARY KEY,
+  email              character varying,
   phone              text DEFAULT NULL,
-  phone_confirmed_at timestamptz
+  phone_confirmed_at timestamptz,
+  raw_user_meta_data jsonb
 );
 CREATE UNIQUE INDEX users_phone_key ON auth.users USING btree (phone);
 
@@ -39,6 +42,8 @@ CREATE UNIQUE INDEX users_phone_key ON auth.users USING btree (phone);
 CREATE TABLE public.users (
   id                   uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   phone                text,
+  full_name            text NOT NULL DEFAULT ''::text,
+  email                text,
   role                 public.user_role NOT NULL DEFAULT 'customer',
   is_active            boolean NOT NULL DEFAULT true,
   level                text NOT NULL DEFAULT 'bronce',
@@ -217,6 +222,31 @@ REVOKE EXECUTE ON FUNCTION public.tg_users_protect_admin_fields() FROM PUBLIC, a
 GRANT EXECUTE ON FUNCTION public.tg_users_protect_admin_fields() TO service_role;
 CREATE TRIGGER trg_users_protect_admin_fields BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION tg_users_protect_admin_fields();
+
+-- LIVE (md5 c42fa89f…, 299): GoTrue's INSERT into auth.users creates the
+-- public.users row, copying the auth phone whether or not it is confirmed.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  INSERT INTO public.users (id, phone, full_name, email, role)
+  VALUES (
+    NEW.id,
+    NULLIF(NEW.phone, ''),
+    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    CASE WHEN NEW.email ~* '^phone_\d+@tricigo\.app$' THEN NULL ELSE NEW.email END,
+    'customer'
+  );
+  RETURN NEW;
+END;
+$function$;
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO service_role;
+CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
 -- LIVE users policies
 CREATE POLICY users_admin_select ON public.users FOR SELECT USING (is_admin());
