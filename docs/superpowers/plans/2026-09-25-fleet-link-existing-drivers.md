@@ -151,6 +151,24 @@ git commit -m "docs(claude): how fleet invitations get linked; users.phone is no
 - [ ] **Step 3:** `git push -u origin claude/fleet-link-existing-drivers`; `gh pr create --base master --body-file <scratchpad>/pr-body.md`. Body: problem, decisions, fix, rehearsal numbers, "not applied to production (MCP guard)", test plan.
 - [ ] **Step 4:** do not merge and do not apply the migration without explicit per-PR authorization.
 
+### Task 6: Revision after code review (owner decisions 4–6 in the spec)
+
+The review reproduced that the first "verified later" trigger, on `public.users`, could be re-fired
+without an OTP by setting `users.phone` away and back. The appendices below are the revised files.
+
+- [x] **Step 1:** tests first. Scaffold gains `handle_new_user` and its trigger on `auth.users`, so signups go
+  through an INSERT into `auth.users` as in prod. New cases: C5 (the away-and-back toggle), C6/X2 (GoTrue's own
+  phone signup: unconfirmed, then confirmed), C7 (re-confirmation), C8/X3 (a linking error never fails a
+  confirmation or a signup), C9, A15 (re-approval of a row that lost its account), A16 (NULL status), B2/C3
+  asserting that the write itself went through.
+- [x] **Step 2:** RED: 21 of 62 fail, each for its reason; the controls pass.
+- [x] **Step 3:** migration: confirmation trigger `on_auth_user_phone_confirmed` on `auth.users` (created last),
+  the signup trigger gated on the confirmed number, both error-contained; NULL-status guard; `lock_timeout`;
+  `CREATE OR REPLACE TRIGGER`; self-test covers approval, signup and confirmation; self-test account filter
+  `^53[56]`.
+- [x] **Step 4:** GREEN: 68/68, applied twice; N1–N4 abort.
+- [x] **Step 5:** `supabase/tests/00598/mutants.py` (Appendix D): 11 guards, each caught by its own test.
+
 ---
 
 ## Appendix A — `supabase/tests/00598/scaffold.sql`
@@ -184,12 +202,15 @@ GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
 
 CREATE TYPE public.user_role AS ENUM ('customer', 'driver', 'admin', 'super_admin');
 
--- GoTrue's table, trimmed. GoTrue stores phones as E.164 digits without '+'
--- (all 544 in prod are 53XXXXXXXX). No grant to anon/authenticated, as in prod.
+-- GoTrue's table, trimmed to what handle_new_user and the linking paths read.
+-- GoTrue stores phones as E.164 digits without '+' (all 544 in prod are
+-- 53XXXXXXXX). No grant to anon/authenticated, as in prod.
 CREATE TABLE auth.users (
   id                 uuid PRIMARY KEY,
+  email              character varying,
   phone              text DEFAULT NULL,
-  phone_confirmed_at timestamptz
+  phone_confirmed_at timestamptz,
+  raw_user_meta_data jsonb
 );
 CREATE UNIQUE INDEX users_phone_key ON auth.users USING btree (phone);
 
@@ -197,6 +218,8 @@ CREATE UNIQUE INDEX users_phone_key ON auth.users USING btree (phone);
 CREATE TABLE public.users (
   id                   uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   phone                text,
+  full_name            text NOT NULL DEFAULT ''::text,
+  email                text,
   role                 public.user_role NOT NULL DEFAULT 'customer',
   is_active            boolean NOT NULL DEFAULT true,
   level                text NOT NULL DEFAULT 'bronce',
@@ -375,6 +398,31 @@ REVOKE EXECUTE ON FUNCTION public.tg_users_protect_admin_fields() FROM PUBLIC, a
 GRANT EXECUTE ON FUNCTION public.tg_users_protect_admin_fields() TO service_role;
 CREATE TRIGGER trg_users_protect_admin_fields BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION tg_users_protect_admin_fields();
+
+-- LIVE (md5 c42fa89f…, 299): GoTrue's INSERT into auth.users creates the
+-- public.users row, copying the auth phone whether or not it is confirmed.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  INSERT INTO public.users (id, phone, full_name, email, role)
+  VALUES (
+    NEW.id,
+    NULLIF(NEW.phone, ''),
+    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    CASE WHEN NEW.email ~* '^phone_\d+@tricigo\.app$' THEN NULL ELSE NEW.email END,
+    'customer'
+  );
+  RETURN NEW;
+END;
+$function$;
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO service_role;
+CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
 -- LIVE users policies
 CREATE POLICY users_admin_select ON public.users FOR SELECT USING (is_admin());
@@ -614,9 +662,11 @@ GRANT EXECUTE ON FUNCTION public.relink_fleet_member_for_existing_driver(uuid, t
 #!/usr/bin/env bash
 # Rehearsal runner for migration 00598 (local Postgres 16, no Supabase stack needed).
 #   supabase/tests/00598/run.sh none
-#       -> scaffold + tests (RED: an approved invitation is never linked to an existing account)
+#       -> scaffold + tests (RED: an approved invitation is never linked to an existing account,
+#          and a signup links whatever number GoTrue gave the account, confirmed or not)
 #   supabase/tests/00598/run.sh supabase/migrations/00598_link_fleet_invitations_to_existing_accounts.sql
 #       -> scaffold + migration x2 (idempotency) + tests + negative proofs of the self-test (GREEN)
+#   supabase/tests/00598/mutants.py <migration>  -> the suite once per guard removed (see that file)
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
 # Elsewhere, PGBIN, PGPORT and PYTHON override the defaults, e.g. on Windows:
 #   PGBIN=<portable pgsql>/bin PGPORT=5437 PYTHON=python bash supabase/tests/00598/run.sh none
@@ -638,8 +688,8 @@ val(){ local r; r=$($P -c "$2" </dev/null 2>&1 | tr -d '\r' | paste -sd';' -); i
 # never the one of a later request. Sharing it here would let the owner's writes skip the protect trigger.
 tcase(){ if $P -c "$RESET" </dev/null >/dev/null 2>&1; then val "$1" "$2" "$3"; else ko "$1" "reset failed"; fi; }
 
-# People. auth.users holds phones the way GoTrue does (E.164 digits, no '+');
-# public.users gets them normalized by tg_users_normalize_phone.
+# People. auth.users holds phones the way GoTrue does (E.164 digits, no '+'); handle_new_user copies
+# them into public.users, where tg_users_normalize_phone adds the '+'.
 ADMIN=a0000000-0000-4000-8000-000000000001    # admin, the one approving
 OWNER=a0000000-0000-4000-8000-000000000002    # fleet owner (a driver)
 DRV=a0000000-0000-4000-8000-000000000003      # driver with a confirmed number: the reported case
@@ -660,13 +710,12 @@ PEOPLE="INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES
   ('$PAX', '5355552222', now()), ('$SEED', NULL, NULL), ('$DUP', '5355553333', now()),
   ('$LONE', NULL, NULL), ('$INACT', '5355554444', now()), ('$UNCONF', '5355557777', NULL), ('$LATER', NULL, NULL),
   ('$TWIN1', '5355550909', now()), ('$TWIN2', '+5355550909', now());
-INSERT INTO public.users (id, phone, role, is_active) VALUES
-  ('$ADMIN', '5355550001', 'admin', true), ('$OWNER', '5355550002', 'driver', true),
-  ('$DRV', '5355551234', 'driver', true), ('$PAX', '5355552222', 'customer', true),
-  ('$SEED', '+5355553333', 'admin', true), ('$DUP', '5355553333', 'driver', true),
-  ('$LONE', '+5355556666', 'customer', true), ('$INACT', '5355554444', 'driver', false),
-  ('$UNCONF', '5355557777', 'customer', true), ('$LATER', NULL, 'customer', true),
-  ('$TWIN1', '5355550909', 'driver', true), ('$TWIN2', '+5355550909', 'driver', true);"
+UPDATE public.users u SET role = p.role::public.user_role, is_active = p.active, phone = coalesce(p.phone, u.phone)
+FROM (VALUES ('$ADMIN'::uuid, 'admin', true, NULL::text), ('$OWNER'::uuid, 'driver', true, NULL), ('$DRV'::uuid, 'driver', true, NULL),
+  ('$PAX'::uuid, 'customer', true, NULL), ('$SEED'::uuid, 'admin', true, '+5355553333'), ('$DUP'::uuid, 'driver', true, NULL),
+  ('$LONE'::uuid, 'customer', true, '+5355556666'), ('$INACT'::uuid, 'driver', false, NULL), ('$UNCONF'::uuid, 'customer', true, NULL),
+  ('$LATER'::uuid, 'customer', true, NULL), ('$TWIN1'::uuid, 'driver', true, NULL), ('$TWIN2'::uuid, 'driver', true, NULL)) p(id, role, active, phone)
+WHERE u.id = p.id;"
 RESET="TRUNCATE public.fleet_members, public.driver_fleets, public.corporate_accounts;
 DELETE FROM auth.users;
 $PEOPLE
@@ -675,7 +724,7 @@ INSERT INTO public.corporate_accounts (id, name, contact_phone, created_by) VALU
 INSERT INTO public.driver_fleets (id, corporate_account_id, name) VALUES ('$FA', '$CA', 'Flota A'), ('$FB', '$CB', 'Flota B');"
 # as PERSON -> what follows runs the way PostgREST runs that person's call: role authenticated + JWT subject
 as(){ printf "SET ROLE authenticated; SET request.jwt.claim.sub = '%s';" "$1"; }
-# NOJWT -> back to a caller with no JWT (service role, migrations, GoTrue's triggers)
+# NOJWT -> back to a caller with no JWT (service role, migrations, GoTrue's connection)
 NOJWT="RESET ROLE; RESET request.jwt.claim.sub;"
 # invite FLEET PHONE STATUS -> an invitation written with no JWT (a fixture; the owner's own writes are in B)
 invite(){ printf "INSERT INTO public.fleet_members (fleet_id, driver_name, driver_phone, status) VALUES ('%s', 'Juan', '%s', '%s');" "$1" "$2" "$3"; }
@@ -683,17 +732,25 @@ invite(){ printf "INSERT INTO public.fleet_members (fleet_id, driver_name, drive
 approve(){ printf "%s UPDATE public.fleet_members SET status = 'approved', reviewed_at = now(), reviewed_by = '%s' WHERE fleet_id = '%s' AND driver_phone = '%s'; %s" "$(as "$ADMIN")" "$ADMIN" "$1" "$2" "$NOJWT"; }
 # repoint FLEET FROM TO -> fixture: change the number of an invitation without touching its status
 repoint(){ printf "UPDATE public.fleet_members SET driver_phone = '%s' WHERE fleet_id = '%s' AND driver_phone = '%s';" "$3" "$1" "$2"; }
-# signup PHONE -> a new account with that confirmed number (what GoTrue + handle_new_user write)
-signup(){ printf "INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('$NEWU', '%s', now()); INSERT INTO public.users (id, phone) VALUES ('$NEWU', '%s');" "$1" "$1"; }
+# signup PHONE -> GoTrue creates an account whose number is already confirmed (verify-otp's createUser);
+# handle_new_user creates its public.users row
+signup(){ printf "INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('$NEWU', '%s', now());" "$1"; }
+# signup_unconfirmed PHONE -> GoTrue's own phone signup: the account exists before its number is confirmed
+signup_unconfirmed(){ printf "INSERT INTO auth.users (id, phone) VALUES ('$NEWU', '%s');" "$1"; }
+# confirm PERSON PHONE -> what link-phone (or verify-otp's heal, or GoTrue's own OTP) writes in auth.users
+confirm(){ printf "UPDATE auth.users SET phone = '%s', phone_confirmed_at = now() WHERE id = '%s';" "$2" "$1"; }
+# BREAK_LINKS -> inside BEGIN … ROLLBACK: every link attempt now fails with a check violation
+BREAK_LINKS="ALTER TABLE public.fleet_members ADD CONSTRAINT t598_no_link CHECK (status <> 'active') NOT VALID; SET LOCAL client_min_messages = error;"
 # STATE -> every invitation as status:who, by fleet and phone ('-' = not linked)
 STATE="SELECT string_agg(fm.status || ':' || coalesce(p.who, '-'), ',' ORDER BY fm.fleet_id, fm.driver_phone)
 FROM public.fleet_members fm LEFT JOIN (VALUES ('$ADMIN'::uuid, 'ADMIN'), ('$OWNER'::uuid, 'OWNER'), ('$DRV'::uuid, 'DRV'),
   ('$PAX'::uuid, 'PAX'), ('$SEED'::uuid, 'SEED'), ('$DUP'::uuid, 'DUP'), ('$LONE'::uuid, 'LONE'), ('$INACT'::uuid, 'INACT'),
   ('$UNCONF'::uuid, 'UNCONF'), ('$LATER'::uuid, 'LATER'), ('$TWIN1'::uuid, 'TWIN1'), ('$TWIN2'::uuid, 'TWIN2'),
   ('$NEWU'::uuid, 'NEWU')) p(id, who) ON p.id = fm.driver_id;"
-# Bodies read from prod on 2026-09-25: signature|md5(prosrc)|length. The scaffold must carry them, and the migration must not change them.
-LIVE="auto_link_fleet_member_on_signup()|c4b25ab786f201ced8661633ff113e57|434
-tg_fleet_members_protect()|8b0d07aff7ab33142bfcec29304c01ed|674
+# Bodies read from prod on 2026-09-25: signature|md5(prosrc)|length. The scaffold must carry all of them;
+# the migration redefines only auto_link_fleet_member_on_signup and must leave the rest untouched.
+LIVE_SIGNUP="auto_link_fleet_member_on_signup()|c4b25ab786f201ced8661633ff113e57|434"
+UNTOUCHED="tg_fleet_members_protect()|8b0d07aff7ab33142bfcec29304c01ed|674
 relink_fleet_member_for_existing_driver(uuid,text)|87327e7eb782781d445804ae8b4a5a21|565
 _normalize_cuban_phone(text)|9f5227a3c108fa42f6aacdf01fb0ad86|451
 is_admin()|22cb75e91980d512498034cd33e1eda2|285
@@ -701,10 +758,11 @@ current_user_role()|cb4a7c12d4e21fe2997135833f141e25|103
 is_super_admin()|5655a4615e92e8b1e323d06c7566b058|105
 tg_users_normalize_phone()|c0491b42cf36767c3911fb8a3fda9f04|147
 tg_users_protect_admin_fields()|2907fccbd0f2ec2201b7c0ec61d434a3|1701
-tg_corporate_accounts_protect_insert()|16d3e41267fd99172c562f62e4e968fd|455"
+tg_corporate_accounts_protect_insert()|16d3e41267fd99172c562f62e4e968fd|455
+handle_new_user()|c42fa89f6155a50a1cc4198255dd9d77|299"
 bodies(){ while IFS='|' read -r sig md5 len; do
   val "$1 $sig is the prod body" "SELECT md5(prosrc) || '/' || length(prosrc) FROM pg_proc WHERE oid = 'public.$sig'::regprocedure" "$md5/$len"
-done <<< "$LIVE"; }
+done <<< "$2"; }
 # ROWS -> fingerprint of everything the self-test must leave alone (all but the backfilled invitation)
 ROWS="SELECT md5(coalesce((SELECT string_agg(id::text || coalesce(driver_id::text, '-') || status || driver_phone || coalesce(signed_up_at::text, '-'), ',' ORDER BY id)
                            FROM public.fleet_members WHERE driver_phone <> '+5355551234'), '')
@@ -717,7 +775,8 @@ echo "== reset database =="
 $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB" >/dev/null 2>&1 || exit 1
 $P -f "$DIR/scaffold.sql" >/dev/null 2>&1 || { echo "scaffold failed"; exit 1; }
 $P -c "$PEOPLE" >/dev/null || { echo "seed failed"; exit 1; }
-bodies S
+bodies S "$LIVE_SIGNUP
+$UNTOUCHED"
 
 if [ "$MIG" != "none" ]; then
   # State before the migration: one invitation approved for DRV's confirmed number (the backfill's case),
@@ -764,74 +823,102 @@ tcase "A13 an invitation inserted as pending_signup (service role) is linked on 
   "$(invite $FA '+5355551234' 'pending_signup') $STATE" "active:DRV"
 tcase "A14 two accounts confirmed the same number spelled two ways: nobody is linked" \
   "$(invite $FA '+5355550909' 'pending_review') $(approve $FA '+5355550909') $STATE" "approved:-"
+tcase "A15 an active invitation that lost its account (driver_id NULL), approved again: linked" \
+  "INSERT INTO public.fleet_members (fleet_id, driver_name, driver_phone, status) VALUES ('$FA', 'Juan', '+5355551234', 'active');
+   $(approve $FA '+5355551234') $STATE" "active:DRV"
+tcase "A16 a write that nulls the status is rejected, not turned into a link (the gate must not fail open)" \
+  "$(invite $FA '+5355551234' 'pending_review') CREATE TEMP TABLE t598_out (x text);
+   DO \$\$ BEGIN UPDATE public.fleet_members SET status = NULL; INSERT INTO t598_out VALUES ('accepted');
+   EXCEPTION WHEN not_null_violation THEN INSERT INTO t598_out VALUES ('rejected'); END \$\$;
+   SELECT x FROM t598_out;" "rejected"
 
 # B. the fleet owner cannot use it
 tcase "B1 the owner inserts an invitation as approved: forced to pending_review, not linked" \
   "$(as $OWNER) INSERT INTO public.fleet_members (fleet_id, driver_name, driver_phone, status)
           VALUES ('$FA', 'Carlos', '+5355551234', 'approved'); $NOJWT $STATE" "pending_review:-"
-tcase "B2 the owner approves their own invitation: reverted, not linked" \
-  "$(invite $FA '+5355551234' 'pending_review') $(as $OWNER) UPDATE public.fleet_members SET status = 'approved' WHERE fleet_id = '$FA';
-   $NOJWT $STATE" "pending_review:-"
+tcase "B2 the owner approves their own invitation: reverted, not linked (the write itself went through)" \
+  "$(invite $FA '+5355551234' 'pending_review')
+   $(as $OWNER) UPDATE public.fleet_members SET status = 'approved', driver_name = 'Carlos' WHERE fleet_id = '$FA'; $NOJWT
+   SELECT driver_name FROM public.fleet_members; $STATE" "Carlos;pending_review:-"
 tcase "B3 the owner re-points an approved invitation at a driver's confirmed number, sending status along: not linked" \
-  "$(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999')
+  "$(invite $FA '+5355554321' 'pending_review') $(approve $FA '+5355554321')
    $(as $OWNER) UPDATE public.fleet_members SET driver_phone = '+5355551234', status = 'approved' WHERE fleet_id = '$FA'; $NOJWT
    SELECT status || ':' || coalesce(driver_id::text, '-') || '|' || driver_phone FROM public.fleet_members;" "approved:-|+5355551234"
 
-# C. the account verifies its phone after the approval (Google/Apple sign-in, then link-phone)
-tcase "C1 link-phone confirms the number in auth.users, the service role copies it to users.phone: linked" \
+# C. the account confirms its phone after the approval (Google/Apple sign-in, then link-phone)
+tcase "C1 link-phone confirms the number in auth.users: that write links, before the app copies the number" \
+  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888') $(confirm $LATER 5355558888) $STATE" "active:LATER"
+tcase "C2 the app then copies the number to users.phone under its own JWT: still linked, nothing breaks" \
+  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888') $(confirm $LATER 5355558888)
+   $(as $LATER) UPDATE public.users SET phone = '5355558888' WHERE id = '$LATER'; $NOJWT
+   SELECT phone FROM public.users WHERE id = '$LATER'; $STATE" "+5355558888;active:LATER"
+tcase "C3 a number written into users.phone without an OTP links nothing (the write itself went through)" \
   "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
-   UPDATE auth.users SET phone = '5355558888', phone_confirmed_at = now() WHERE id = '$LATER';
-   UPDATE public.users SET phone = '+5355558888' WHERE id = '$LATER'; $STATE" "active:LATER"
-tcase "C2 same, but the app writes users.phone under the account's own JWT: linked" \
-  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
-   UPDATE auth.users SET phone = '5355558888', phone_confirmed_at = now() WHERE id = '$LATER';
-   $(as $LATER) UPDATE public.users SET phone = '5355558888' WHERE id = '$LATER'; $NOJWT $STATE" "active:LATER"
-tcase "C3 a number written into users.phone without an OTP links nothing" \
-  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
-   $(as $LATER) UPDATE public.users SET phone = '+5355558888' WHERE id = '$LATER'; $NOJWT $STATE" "approved:-"
+   $(as $LATER) UPDATE public.users SET phone = '+5355558888' WHERE id = '$LATER'; $NOJWT
+   SELECT phone FROM public.users WHERE id = '$LATER'; $STATE" "+5355558888;approved:-"
 tcase "C4 writing someone else's confirmed number into your own users.phone does not take their invitation" \
-  "$(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $(repoint $FA '+5355559999' '+5355551234')
-   $(as $LATER) UPDATE public.users SET phone = '+5355551234' WHERE id = '$LATER'; $NOJWT $STATE" "approved:-"
-tcase "C5 the trusted flag does not outlive the write that set it" \
-  "$(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888')
-   UPDATE auth.users SET phone = '5355558888', phone_confirmed_at = now() WHERE id = '$LATER';
-   $(as $LATER) UPDATE public.users SET phone = '+5355558888' WHERE id = '$LATER';
-   SELECT '[' || coalesce(current_setting('app.trusted_fleet_update', true), '') || ']'; $NOJWT $STATE" "[];active:LATER"
-tcase "C6 saving the same number again links nothing" \
-  "$(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $(repoint $FA '+5355559999' '+5355551234')
-   $(as $DRV) UPDATE public.users SET phone = '5355551234' WHERE id = '$DRV'; $NOJWT $STATE" "approved:-"
+  "$(invite $FA '+5355554321' 'pending_review') $(approve $FA '+5355554321') $(repoint $FA '+5355554321' '+5355551234')
+   $(as $LATER) UPDATE public.users SET phone = '+5355551234' WHERE id = '$LATER'; $NOJWT
+   SELECT phone FROM public.users WHERE id = '$LATER'; $STATE" "+5355551234;approved:-"
+tcase "C5 the owner re-points an approved invitation at DRV's number, DRV sets users.phone away and back: not linked" \
+  "$(invite $FA '+5355554321' 'pending_review') $(approve $FA '+5355554321')
+   $(as $OWNER) UPDATE public.fleet_members SET driver_phone = '+5355551234' WHERE fleet_id = '$FA'; $NOJWT
+   $(as $DRV) UPDATE public.users SET phone = '+5355550000' WHERE id = '$DRV'; UPDATE public.users SET phone = '+5355551234' WHERE id = '$DRV'; $NOJWT
+   SELECT driver_phone FROM public.fleet_members; $STATE" "+5355551234;approved:-"
+tcase "C6 GoTrue's own phone signup: the account exists before its number is confirmed, and the confirmation links it" \
+  "$(invite $FA '+5355557766' 'approved') $(signup_unconfirmed 5355557766) $STATE
+   UPDATE auth.users SET phone_confirmed_at = now() WHERE id = '$NEWU'; $STATE" "approved:-;active:NEWU"
+tcase "C7 confirming an already confirmed number again links nothing: only a newly confirmed number counts" \
+  "$(invite $FA '+5355554321' 'pending_review') $(approve $FA '+5355554321') $(repoint $FA '+5355554321' '+5355551234')
+   UPDATE auth.users SET phone_confirmed_at = now() WHERE id = '$DRV'; $STATE" "approved:-"
+tcase "C8 a failure while linking never fails the confirmation (it runs inside GoTrue's transaction)" \
+  "BEGIN; $(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888') $BREAK_LINKS $(confirm $LATER 5355558888)
+   SELECT phone_confirmed_at IS NOT NULL FROM auth.users WHERE id = '$LATER'; $STATE ROLLBACK;" "t;approved:-"
+tcase "C9 a deactivated account that confirms a new number is not linked" \
+  "$(invite $FA '+5355554545' 'pending_review') $(approve $FA '+5355554545') $(confirm $INACT 5355554545) $STATE" "approved:-"
 
-# X. the signup path (00595) is unchanged
-tcase "X1 invited by two fleets, then signs up: both linked" \
+# X. signup
+tcase "X1 invited by two fleets, then signs up with a confirmed number: both linked (00595)" \
   "$(invite $FA '+5355559999' 'approved') $(invite $FB '55559999' 'approved') $(signup 5355559999) $STATE" "active:NEWU,active:NEWU"
+tcase "X2 an account created with a number it never confirms (GoTrue's own phone signup) links nothing" \
+  "$(invite $FA '+5355559999' 'approved') $(signup_unconfirmed 5355559999)
+   SELECT phone FROM public.users WHERE id = '$NEWU'; $STATE" "+5355559999;approved:-"
+tcase "X3 a failure while linking never fails the signup (it runs inside GoTrue's transaction)" \
+  "BEGIN; $(invite $FA '+5355559999' 'approved') $BREAK_LINKS $(signup 5355559999)
+   SELECT count(*) FROM public.users WHERE id = '$NEWU'; $STATE ROLLBACK;" "1;approved:-"
 
 # D. contract
-for f in "_user_id_by_verified_phone(text)" "tg_fleet_members_set_driver_on_approval()" "auto_link_fleet_member_on_phone_verified()"; do
+for f in "_user_id_by_verified_phone(text)" "tg_fleet_members_set_driver_on_approval()" \
+         "auto_link_fleet_member_on_phone_confirmed()" "auto_link_fleet_member_on_signup()"; do
   val "D1 $f: execute anon no, authenticated no, service_role yes" \
     "SELECT has_function_privilege('anon', 'public.$f', 'EXECUTE') || '|' || has_function_privilege('authenticated', 'public.$f', 'EXECUTE')
             || '|' || has_function_privilege('service_role', 'public.$f', 'EXECUTE')" "false|false|true"
 done
-val "D2 the three new functions are SECURITY DEFINER with a pinned search_path" \
+val "D2 the linking functions are SECURITY DEFINER with a pinned search_path" \
   "SELECT string_agg(proname || ':' || prosecdef || ':' || array_to_string(proconfig, ','), ',' ORDER BY proname COLLATE \"C\") FROM pg_proc
-   WHERE pronamespace = 'public'::regnamespace AND proname IN ('_user_id_by_verified_phone', 'tg_fleet_members_set_driver_on_approval', 'auto_link_fleet_member_on_phone_verified')" \
-  "_user_id_by_verified_phone:true:search_path=public, pg_temp,auto_link_fleet_member_on_phone_verified:true:search_path=public, pg_temp,tg_fleet_members_set_driver_on_approval:true:search_path=public, pg_temp"
+   WHERE pronamespace = 'public'::regnamespace AND proname IN ('_user_id_by_verified_phone', 'tg_fleet_members_set_driver_on_approval',
+     'auto_link_fleet_member_on_phone_confirmed', 'auto_link_fleet_member_on_signup')" \
+  "_user_id_by_verified_phone:true:search_path=public, pg_temp,auto_link_fleet_member_on_phone_confirmed:true:search_path=public, pg_temp,auto_link_fleet_member_on_signup:true:search_path=public, pg_temp,tg_fleet_members_set_driver_on_approval:true:search_path=public, pg_temp"
 val "D3 on fleet_members the link trigger fires after the protect trigger (name order)" \
   "SELECT string_agg(tgname, ',' ORDER BY tgname COLLATE \"C\") FROM pg_trigger WHERE tgrelid = 'public.fleet_members'::regclass AND NOT tgisinternal" \
   "trg_fleet_members_protect,trg_fleet_members_set_driver_on_approval"
 val "D4 the approval trigger: BEFORE INSERT OR UPDATE OF status, per row" \
   "SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgrelid = 'public.fleet_members'::regclass AND tgname = 'trg_fleet_members_set_driver_on_approval'" \
   "CREATE TRIGGER trg_fleet_members_set_driver_on_approval BEFORE INSERT OR UPDATE OF status ON public.fleet_members FOR EACH ROW EXECUTE FUNCTION tg_fleet_members_set_driver_on_approval()"
-val "D5 the phone trigger: AFTER UPDATE OF phone, only when the number changes to a non-null one" \
-  "SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgrelid = 'public.users'::regclass AND tgname = 'auto_link_fleet_member_on_phone_verified'" \
-  "CREATE TRIGGER auto_link_fleet_member_on_phone_verified AFTER UPDATE OF phone ON public.users FOR EACH ROW WHEN (((new.phone IS NOT NULL) AND (new.phone IS DISTINCT FROM old.phone))) EXECUTE FUNCTION auto_link_fleet_member_on_phone_verified()"
+val "D5 the confirmation trigger on auth.users: AFTER UPDATE OF phone, phone_confirmed_at, only for a newly confirmed number" \
+  "SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgrelid = 'auth.users'::regclass AND tgname = 'on_auth_user_phone_confirmed'" \
+  "CREATE TRIGGER on_auth_user_phone_confirmed AFTER UPDATE OF phone, phone_confirmed_at ON auth.users FOR EACH ROW WHEN (((new.phone IS NOT NULL) AND (new.phone <> ''::text) AND (new.phone_confirmed_at IS NOT NULL) AND ((old.phone_confirmed_at IS NULL) OR (new.phone IS DISTINCT FROM old.phone)))) EXECUTE FUNCTION auto_link_fleet_member_on_phone_confirmed()"
 val "D6 the signup trigger is still there, AFTER INSERT per row" \
   "SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgrelid = 'public.users'::regclass AND tgname = 'auto_link_fleet_member_on_signup'" \
   "CREATE TRIGGER auto_link_fleet_member_on_signup AFTER INSERT ON public.users FOR EACH ROW EXECUTE FUNCTION auto_link_fleet_member_on_signup()"
-bodies "D7 unchanged:"
+val "D7 nothing on public.users links on a phone change: its only triggers are the signup one and the two BEFORE ones" \
+  "SELECT string_agg(tgname, ',' ORDER BY tgname COLLATE \"C\") FROM pg_trigger WHERE tgrelid = 'public.users'::regclass AND NOT tgisinternal" \
+  "auto_link_fleet_member_on_signup,tg_users_normalize_phone,trg_users_protect_admin_fields"
+bodies "D8 unchanged:" "$UNTOUCHED"
 
 # N. negative proofs: a copy of the migration with one defect must be aborted by its own assertions
 # mutate OLD NEW -> path of a copy of the migration with OLD (present exactly once) replaced by NEW
-mutate(){ local out; out="$(mktemp --suffix=.sql)"
+mutate(){ local out; out="$(mktemp)"
   OLD="$1" NEW="$2" "$PY" - "$MIG" "$out" <<'PYEOF' || { rm -f "$out"; return 1; }
 import os, sys
 src = open(sys.argv[1], newline='').read()
@@ -860,10 +947,14 @@ if [ "$MIG" != "none" ]; then
   negative "N1 the approval stops linking: the self-test aborts the migration" \
     "  v_driver := public._user_id_by_verified_phone(NEW.driver_phone);" "  v_driver := NULL;" \
     "approving an invitation for a verified account left it"
-  negative "N2 a verified phone stops linking: the self-test aborts the migration" \
-    "  SET driver_id = NEW.id," "  SET driver_id = NULL," \
-    "verifying the phone left its approved invitation"
-  negative "N3 the helper stays executable by clients: the ACL check aborts the migration" \
+  negative "N2 a signup with a confirmed number stops linking: the self-test aborts the migration" \
+    "    WHERE public._normalize_cuban_phone(driver_phone) = public._normalize_cuban_phone(NEW.phone)" \
+    "    WHERE public._normalize_cuban_phone(driver_name) = public._normalize_cuban_phone(NEW.phone)" \
+    "signing up with a verified number left the invitation"
+  negative "N3 a confirmed phone stops linking: the self-test aborts the migration" \
+    "public._normalize_cuban_phone(fm.driver_phone)" "public._normalize_cuban_phone(fm.driver_name)" \
+    "confirming the number left the approved invitation"
+  negative "N4 the helper stays executable by clients: the ACL check aborts the migration" \
     "REVOKE EXECUTE ON FUNCTION public._user_id_by_verified_phone(text) FROM PUBLIC, anon, authenticated;" "" \
     "is executable by anon or authenticated"
 fi
@@ -878,59 +969,78 @@ echo "== summary: $PASS passed, $FAIL failed =="
 -- ============================================================
 -- 00598: link fleet invitations to people who already have an account
 --
--- A fleet invitation (fleet_members) is linked to a driver only when that
--- person SIGNS UP: auto_link_fleet_member_on_signup() runs AFTER INSERT ON
+-- A fleet invitation (fleet_members) was linked to a driver only when that
+-- person SIGNED UP: auto_link_fleet_member_on_signup() runs AFTER INSERT ON
 -- public.users. When the admin approves an invitation for someone who already
 -- has an account, nothing looks for that account. The row stays 'approved'
 -- with driver_id NULL for good, the fleet's corporate rides never reach that
 -- driver (find_best_drivers and accept_ride_v2 require status 'active' and a
 -- driver_id), and the driver app shows the "create your own fleet" form. The
 -- admin path meant for this, relink_fleet_member_for_existing_driver(), has no
--- caller (fleetService.relinkExistingDriver is unused). An account that gets
--- its phone after the approval (Google/Apple sign-in, then link-phone) is
--- stuck the same way. Reproduced locally with the live bodies and RLS on.
--- fleet_members, driver_fleets and corporate_accounts had 0 rows in prod on
--- 2026-09-25, so nobody was hit.
+-- caller (fleetService.relinkExistingDriver is unused). An account that
+-- confirms its phone after the approval (Google/Apple sign-in, then
+-- link-phone) is stuck the same way. Reproduced locally with the live bodies
+-- and RLS on. fleet_members, driver_fleets and corporate_accounts had 0 rows
+-- in prod on 2026-09-25, so nobody was hit.
 --
--- Who gets linked (owner decision, 2026-09-25): the one ACTIVE account whose
--- number is confirmed by OTP in auth.users (phone_confirmed_at), not whoever
--- has it in public.users.phone. That column is writable by its owner through
--- PostgREST without an OTP (column UPDATE grant plus users_update_own, and
--- tg_users_protect_admin_fields does not cover it), and it is not unique.
--- auth.users.phone is unique (users_phone_key) and GoTrue keeps it as E.164
--- digits without '+'. On 2026-09-25, 544 of the 546 phones in public.users
+-- Rule (owner decisions, 2026-09-25): an invitation is linked to the one
+-- ACTIVE account whose number is confirmed by OTP in auth.users
+-- (phone_confirmed_at), at each moment that can make that true: approval,
+-- signup and confirmation. public.users.phone is not proof. Its owner can
+-- write any number there through PostgREST without an OTP (column UPDATE
+-- grant, users_update_own, and tg_users_protect_admin_fields does not cover
+-- it), and it is not unique. auth.users.phone is unique (users_phone_key),
+-- GoTrue keeps it as E.164 digits without '+', and users cannot write it.
+-- phone_autoconfirm is false in prod (/auth/v1/settings, 2026-09-25), and
+-- verify-otp and link-phone confirm a number with the admin API only after
+-- checking the D7 code. On 2026-09-25, 544 of the 546 phones in public.users
 -- equal (normalized) their confirmed auth phone; the other 2 belong to seeded
 -- admins with no auth phone. The one number two accounts share (an admin,
 -- unconfirmed, and a driver, confirmed) resolves to the driver. No driver
--- profile is required, same as signup: a passenger-only account is linked and
--- is already in the fleet when it registers as a driver.
+-- profile is required, same as signup: a passenger-only account is linked
+-- and is already in the fleet when it registers as a driver.
 --
 -- Fix:
---   1. _user_id_by_verified_phone(text) returns that account's id, or NULL.
---      It reads auth.users, so it is SECURITY DEFINER. It maps a number to an
---      account, so anon and authenticated cannot execute it.
---   2. trg_fleet_members_set_driver_on_approval, BEFORE INSERT OR UPDATE OF
---      status. When a write makes the invitation linkable (inserted as, or
---      moved into, approved / pending_signup, with no driver_id), it links the
---      row on NEW. It fires after trg_fleet_members_protect (triggers with the
---      same event and timing fire in name order), so an owner's change to
---      status has already been reverted when it looks. A row that was ALREADY
---      linkable is not looked at again: the owner can still edit driver_phone
---      after the review, and that edit must not link whoever owns the new number.
---   3. auto_link_fleet_member_on_phone_verified, AFTER UPDATE OF phone ON
---      public.users. When the new number is the one auth.users confirms for
---      this same account (link-phone confirms it there before copying it to
---      public.users), it links that account's approved invitations. The write
---      runs under app.trusted_fleet_update for the protect trigger, and the flag
---      is then put back so it does not outlive the write.
---   4. A one-time backfill for invitations already approved whose number a
+--   1. _user_id_by_verified_phone(text) returns that account's id, or NULL
+--      (never a guess between two). It reads auth.users, so it is SECURITY
+--      DEFINER; it maps a number to an account, so clients cannot execute it.
+--   2. Approval: trg_fleet_members_set_driver_on_approval, BEFORE INSERT OR
+--      UPDATE OF status ON fleet_members, links the row on NEW when the write
+--      makes it linkable (inserted as, or moved into, approved or
+--      pending_signup, with no driver_id). A row that already was linkable is
+--      not looked at again, so a later edit of an approved invitation (the
+--      owner can still change driver_phone after the review) links nobody
+--      here. It fires after trg_fleet_members_protect (same event and timing
+--      fire in name order) and so sees the row after an owner's change of
+--      status was reverted. That is defence in depth: the protect trigger
+--      reverts every field this one sets, whichever runs first.
+--   3. Signup: auto_link_fleet_member_on_signup now links only when the new
+--      account's number is confirmed. handle_new_user copies auth.users.phone
+--      whether or not it is, and GoTrue's own phone signup (the provider is
+--      on) inserts the account before its OTP. verify-otp creates accounts
+--      already confirmed, so the real flow is unchanged.
+--   4. Confirmation: on_auth_user_phone_confirmed, AFTER UPDATE OF phone,
+--      phone_confirmed_at ON auth.users, links an account's approved
+--      invitations when a number becomes confirmed for it (link-phone,
+--      verify-otp's heal, GoTrue's own OTP). Confirming an already confirmed
+--      number again does not count. Users cannot write auth.users, so unlike
+--      a trigger on public.users this one cannot be fired by setting a number
+--      without an OTP.
+--   5. The signup and confirmation functions run inside GoTrue's transaction.
+--      A failure to link is logged as a WARNING and never fails the signup or
+--      the confirmation.
+--   6. A one-time backfill for invitations already approved whose number a
 --      verified account holds (0 rows in prod).
--- The signup trigger, the relink RPC and the protect trigger are untouched.
--- The migration asserts its result instead of trusting CREATE (a plpgsql body
--- is only checked when it runs): a rolled-back self-test against a real
--- verified account, and the ACL of the new functions.
--- Rehearsal: supabase/tests/00598/run.sh.
+-- The relink RPC and the protect trigger are untouched.
+-- The migration asserts its result instead of trusting CREATE (a plpgsql
+-- body is only checked when it runs): a rolled-back self-test against a real
+-- verified account (approval, signup and confirmation each link it), and the
+-- ACL of the four functions. The trigger on auth.users is created last, so
+-- the lock it takes on that table is held for the shortest time.
+-- Rehearsal: supabase/tests/00598/run.sh and supabase/tests/00598/mutants.py.
 -- ============================================================
+
+SET lock_timeout = '5s';
 
 -- 1. The account that confirmed a number ---------------------------------------
 CREATE OR REPLACE FUNCTION public._user_id_by_verified_phone(p_phone text)
@@ -978,11 +1088,12 @@ AS $function$
 DECLARE
   v_driver uuid;
 BEGIN
-  IF NEW.driver_id IS NOT NULL OR NEW.status NOT IN ('approved', 'pending_signup') THEN
+  IF NEW.driver_id IS NOT NULL OR NEW.status IS NULL
+     OR NEW.status NOT IN ('approved', 'pending_signup') THEN
     RETURN NEW;
   END IF;
-  -- Only when this write makes the invitation linkable. A row that already was
-  -- is left alone: the owner can still edit driver_phone after the review.
+  -- Only when this write makes the invitation linkable. A row that already
+  -- was is left alone: a later edit of an approved invitation links nobody.
   IF TG_OP = 'UPDATE' THEN
     IF OLD.status IN ('approved', 'pending_signup') THEN
       RETURN NEW;
@@ -1003,57 +1114,89 @@ REVOKE EXECUTE ON FUNCTION public.tg_fleet_members_set_driver_on_approval() FROM
 GRANT EXECUTE ON FUNCTION public.tg_fleet_members_set_driver_on_approval() TO service_role;
 
 -- Fires after trg_fleet_members_protect: 'set_…' sorts after 'protect'.
-DROP TRIGGER IF EXISTS trg_fleet_members_set_driver_on_approval ON public.fleet_members;
-CREATE TRIGGER trg_fleet_members_set_driver_on_approval
+CREATE OR REPLACE TRIGGER trg_fleet_members_set_driver_on_approval
   BEFORE INSERT OR UPDATE OF status ON public.fleet_members
   FOR EACH ROW EXECUTE FUNCTION public.tg_fleet_members_set_driver_on_approval();
 
--- 3. Link when an account verifies its number later ------------------------------
-CREATE OR REPLACE FUNCTION public.auto_link_fleet_member_on_phone_verified()
+-- 3. Link at signup, only a confirmed number ------------------------------------
+-- Same trigger on public.users (AFTER INSERT) and same ACL as 00595; the body
+-- adds the confirmed-number check and never lets a failure reach the signup.
+CREATE OR REPLACE FUNCTION public.auto_link_fleet_member_on_signup()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
-DECLARE
-  v_prev_flag text;
 BEGIN
-  -- A number written into users.phone without an OTP links nothing: it has
-  -- to be the one auth.users confirms for this same account.
-  IF public._user_id_by_verified_phone(NEW.phone) IS DISTINCT FROM NEW.id THEN
+  IF NEW.phone IS NULL OR NEW.phone = '' THEN
     RETURN NEW;
   END IF;
 
-  -- The caller can be the account itself (the app copies the phone under its
-  -- own JWT), so tell tg_fleet_members_protect this write is trusted, then put
-  -- the flag back so it does not outlive this write.
-  v_prev_flag := current_setting('app.trusted_fleet_update', true);
-  PERFORM set_config('app.trusted_fleet_update', '1', true);
+  -- Runs inside GoTrue's signup transaction: failing to link must never fail
+  -- the signup.
+  BEGIN
+    -- Only a number this account confirmed by OTP. GoTrue's own phone signup
+    -- inserts the account before its OTP; on_auth_user_phone_confirmed links
+    -- it once the number is confirmed.
+    IF public._user_id_by_verified_phone(NEW.phone) IS DISTINCT FROM NEW.id THEN
+      RETURN NEW;
+    END IF;
 
-  UPDATE public.fleet_members
-  SET driver_id = NEW.id,
-      status = 'active',
-      signed_up_at = COALESCE(signed_up_at, now())
-  WHERE public._normalize_cuban_phone(driver_phone) = public._normalize_cuban_phone(NEW.phone)
-    AND status IN ('approved', 'pending_signup')
-    AND driver_id IS NULL;
+    PERFORM set_config('app.trusted_fleet_update', '1', true);
 
-  PERFORM set_config('app.trusted_fleet_update', COALESCE(v_prev_flag, ''), true);
+    UPDATE fleet_members
+    SET driver_id = NEW.id,
+        status = 'active',
+        signed_up_at = now()
+    WHERE public._normalize_cuban_phone(driver_phone) = public._normalize_cuban_phone(NEW.phone)
+      AND status IN ('approved', 'pending_signup')
+      AND driver_id IS NULL;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'auto_link_fleet_member_on_signup(%): % %', NEW.id, SQLSTATE, SQLERRM;
+  END;
+
   RETURN NEW;
 END;
 $function$;
 
-REVOKE EXECUTE ON FUNCTION public.auto_link_fleet_member_on_phone_verified() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.auto_link_fleet_member_on_phone_verified() TO service_role;
+REVOKE EXECUTE ON FUNCTION public.auto_link_fleet_member_on_signup() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.auto_link_fleet_member_on_signup() TO service_role;
 
-DROP TRIGGER IF EXISTS auto_link_fleet_member_on_phone_verified ON public.users;
-CREATE TRIGGER auto_link_fleet_member_on_phone_verified
-  AFTER UPDATE OF phone ON public.users
-  FOR EACH ROW
-  WHEN (NEW.phone IS NOT NULL AND NEW.phone IS DISTINCT FROM OLD.phone)
-  EXECUTE FUNCTION public.auto_link_fleet_member_on_phone_verified();
+-- 4. Link when an account confirms a number later ------------------------------
+CREATE OR REPLACE FUNCTION public.auto_link_fleet_member_on_phone_confirmed()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+  -- Runs inside GoTrue's transaction (link-phone, verify-otp, GoTrue's own
+  -- OTP): failing to link must never fail the confirmation. GoTrue's
+  -- connection carries no JWT, so tg_fleet_members_protect lets this through.
+  BEGIN
+    IF public._user_id_by_verified_phone(NEW.phone) IS DISTINCT FROM NEW.id THEN
+      RETURN NEW;
+    END IF;
 
--- 4. Invitations approved before this migration (0 rows in prod) ----------------
+    UPDATE public.fleet_members fm
+    SET driver_id = NEW.id,
+        status = 'active',
+        signed_up_at = COALESCE(fm.signed_up_at, now())
+    WHERE public._normalize_cuban_phone(fm.driver_phone) = public._normalize_cuban_phone(NEW.phone)
+      AND fm.status IN ('approved', 'pending_signup')
+      AND fm.driver_id IS NULL;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'auto_link_fleet_member_on_phone_confirmed(%): % %', NEW.id, SQLSTATE, SQLERRM;
+  END;
+
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE EXECUTE ON FUNCTION public.auto_link_fleet_member_on_phone_confirmed() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.auto_link_fleet_member_on_phone_confirmed() TO service_role;
+
+-- 5. Invitations approved before this migration (0 rows in prod) ----------------
 -- A migration runs with no JWT, so tg_fleet_members_protect lets it through.
 UPDATE public.fleet_members fm
 SET driver_id = m.user_id,
@@ -1068,29 +1211,31 @@ FROM (
 WHERE fm.id = m.id
   AND m.user_id IS NOT NULL;
 
--- 5. Assert the result ------------------------------------------------------------
+-- 6. Assert the result ------------------------------------------------------------
 -- Against a real account with a confirmed number: an invitation approved for it
--- is linked by the approval, and an approved invitation the approval could not
--- link (it carried no phone yet) is linked when the account's phone is updated
--- (the trigger function fired from a scratch table, so no real row changes).
--- Everything the block does is rolled back. A database with no verified
--- account has nobody to link, so the behaviour check is skipped there. The ACL
--- check always runs.
+-- is linked by the approval; two approved invitations the approval could not
+-- link (they carried no phone yet) are linked by a signup and by a
+-- confirmation of that number. The signup and confirmation functions are
+-- fired from scratch tables, so no account row is written, and everything the
+-- block does is rolled back. A database with no verified account has nobody
+-- to link, so the behaviour check is skipped there. The ACL check always runs.
 DO $$
 DECLARE
   v_user        uuid;
-  v_phone       text;
+  v_phone       text;   -- the confirmed number as GoTrue keeps it: 53 + 8 digits
   v_corp        uuid := gen_random_uuid();
   v_fleet       uuid := gen_random_uuid();
   v_approval    uuid := gen_random_uuid();
-  v_later       uuid := gen_random_uuid();
+  v_signup      uuid := gen_random_uuid();
+  v_confirm     uuid := gen_random_uuid();
   v_on_approval text;
-  v_on_phone    text;
+  v_on_signup   text;
+  v_on_confirm  text;
 BEGIN
   SELECT u.id, au.phone INTO v_user, v_phone
   FROM auth.users au
   JOIN public.users u ON u.id = au.id
-  WHERE au.phone ~ '^53[0-9]{8}$'
+  WHERE au.phone ~ '^53[56][0-9]{7}$'
     AND au.phone_confirmed_at IS NOT NULL
     AND u.is_active
   ORDER BY u.created_at, u.id
@@ -1112,18 +1257,30 @@ BEGIN
       SELECT status || ':' || coalesce((driver_id = v_user)::text, 'unlinked') INTO v_on_approval
       FROM public.fleet_members WHERE id = v_approval;
 
-      -- An approved invitation that had no phone when it was approved, then
-      -- the account's phone update.
+      -- Two approved invitations with no phone yet, so the approval links neither.
       INSERT INTO public.fleet_members (id, fleet_id, driver_name, driver_phone, status)
-      VALUES (v_later, v_fleet, '00598 self-test', '00598 self-test', 'approved');
-      UPDATE public.fleet_members SET driver_phone = '+' || v_phone WHERE id = v_later;
-      CREATE TEMP TABLE t00598_phone (id uuid, phone text);
-      CREATE TRIGGER t00598_phone AFTER UPDATE ON pg_temp.t00598_phone
-        FOR EACH ROW EXECUTE FUNCTION public.auto_link_fleet_member_on_phone_verified();
-      INSERT INTO pg_temp.t00598_phone (id, phone) VALUES (v_user, NULL);
-      UPDATE pg_temp.t00598_phone SET phone = '+' || v_phone;
-      SELECT status || ':' || coalesce((driver_id = v_user)::text, 'unlinked') INTO v_on_phone
-      FROM public.fleet_members WHERE id = v_later;
+      VALUES (v_signup, v_fleet, '00598 self-test', '00598 self-test signup', 'approved'),
+             (v_confirm, v_fleet, '00598 self-test', '00598 self-test confirmation', 'approved');
+
+      -- Signup: point the first one at the number, then fire the signup function.
+      UPDATE public.fleet_members SET driver_phone = v_phone WHERE id = v_signup;
+      CREATE TEMP TABLE t00598_signup (id uuid, phone text);
+      CREATE TRIGGER t00598_signup AFTER INSERT ON pg_temp.t00598_signup
+        FOR EACH ROW EXECUTE FUNCTION public.auto_link_fleet_member_on_signup();
+      INSERT INTO pg_temp.t00598_signup (id, phone) VALUES (v_user, '+' || v_phone);
+      SELECT status || ':' || coalesce((driver_id = v_user)::text, 'unlinked') INTO v_on_signup
+      FROM public.fleet_members WHERE id = v_signup;
+
+      -- Confirmation: point the second one at the number, then fire the
+      -- confirmation function as an update of the account's phone.
+      UPDATE public.fleet_members SET driver_phone = '+' || v_phone WHERE id = v_confirm;
+      CREATE TEMP TABLE t00598_auth (id uuid, phone text);
+      CREATE TRIGGER t00598_auth AFTER UPDATE ON pg_temp.t00598_auth
+        FOR EACH ROW EXECUTE FUNCTION public.auto_link_fleet_member_on_phone_confirmed();
+      INSERT INTO pg_temp.t00598_auth (id, phone) VALUES (v_user, NULL);
+      UPDATE pg_temp.t00598_auth SET phone = v_phone;
+      SELECT status || ':' || coalesce((driver_id = v_user)::text, 'unlinked') INTO v_on_confirm
+      FROM public.fleet_members WHERE id = v_confirm;
 
       RAISE EXCEPTION '00598 self-test rollback';
     EXCEPTION WHEN raise_exception THEN
@@ -1135,21 +1292,130 @@ BEGIN
     IF v_on_approval IS DISTINCT FROM 'active:true' THEN
       RAISE EXCEPTION '00598: approving an invitation for a verified account left it %', coalesce(v_on_approval, 'missing');
     END IF;
-    IF v_on_phone IS DISTINCT FROM 'active:true' THEN
-      RAISE EXCEPTION '00598: verifying the phone left its approved invitation %', coalesce(v_on_phone, 'missing');
+    IF v_on_signup IS DISTINCT FROM 'active:true' THEN
+      RAISE EXCEPTION '00598: signing up with a verified number left the invitation %', coalesce(v_on_signup, 'missing');
     END IF;
-    RAISE NOTICE '00598: verified, approval and phone verification both link the confirmed account';
+    IF v_on_confirm IS DISTINCT FROM 'active:true' THEN
+      RAISE EXCEPTION '00598: confirming the number left the approved invitation %', coalesce(v_on_confirm, 'missing');
+    END IF;
+    RAISE NOTICE '00598: verified, approval, signup and confirmation each link the confirmed account';
   END IF;
 
   IF EXISTS (
     SELECT 1
     FROM unnest(ARRAY['public._user_id_by_verified_phone(text)',
                       'public.tg_fleet_members_set_driver_on_approval()',
-                      'public.auto_link_fleet_member_on_phone_verified()']) AS f(sig),
+                      'public.auto_link_fleet_member_on_signup()',
+                      'public.auto_link_fleet_member_on_phone_confirmed()']) AS f(sig),
          unnest(ARRAY['anon', 'authenticated']) AS r(role_name)
     WHERE has_function_privilege(r.role_name, f.sig::regprocedure, 'EXECUTE')
   ) THEN
-    RAISE EXCEPTION '00598: a new function is executable by anon or authenticated';
+    RAISE EXCEPTION '00598: a fleet-linking function is executable by anon or authenticated';
   END IF;
 END $$;
+
+-- 7. The confirmation trigger, last: CREATE TRIGGER blocks writes to auth.users
+-- until this migration commits, so the window stays as short as possible.
+CREATE OR REPLACE TRIGGER on_auth_user_phone_confirmed
+  AFTER UPDATE OF phone, phone_confirmed_at ON auth.users
+  FOR EACH ROW
+  WHEN (NEW.phone IS NOT NULL AND NEW.phone <> '' AND NEW.phone_confirmed_at IS NOT NULL
+        AND (OLD.phone_confirmed_at IS NULL OR NEW.phone IS DISTINCT FROM OLD.phone))
+  EXECUTE FUNCTION public.auto_link_fleet_member_on_phone_confirmed();
+````
+
+## Appendix D — `supabase/tests/00598/mutants.py`
+
+````python
+#!/usr/bin/env python3
+"""Mutation check for migration 00598: remove one guard at a time; the test that owns it must fail.
+
+  supabase/tests/00598/mutants.py supabase/migrations/00598_link_fleet_invitations_to_existing_accounts.sql
+
+Runs run.sh once per mutant with the same environment (PGBIN, PGPORT, PYTHON), about a minute each.
+Every mutant here still applies: its migration self-test does not cover that guard. The guards the
+self-test does cover are proven by run.sh's own negative proofs (N1-N4).
+"""
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+RUN = os.path.join(HERE, "run.sh").replace("\\", "/")
+
+# (guard, text in the migration (exactly once), replacement, tests that must fail)
+MUTANTS = [
+    ("the approval re-evaluates rows that were already approved",
+     "  IF TG_OP = 'UPDATE' THEN\n    IF OLD.status IN ('approved', 'pending_signup') THEN\n"
+     "      RETURN NEW;\n    END IF;\n  END IF;\n",
+     "", ["B3"]),
+    ("an unconfirmed number counts as verified",
+     "    AND au.phone_confirmed_at IS NOT NULL\n    AND u.is_active;\n", "    AND u.is_active;\n",
+     ["A11", "X2", "C6"]),
+    ("a deactivated account counts as verified",
+     "    AND u.is_active;\n", ";\n", ["A10", "C9"]),
+    ("the helper guesses between two accounts",
+     "CASE WHEN count(*) = 1 THEN", "CASE WHEN count(*) >= 1 THEN", ["A14"]),
+    ("a NULL status slips through the approval gate",
+     "  IF NEW.driver_id IS NOT NULL OR NEW.status IS NULL\n     OR NEW.status NOT IN",
+     "  IF NEW.driver_id IS NOT NULL\n     OR NEW.status NOT IN", ["A16"]),
+    ("the approval trigger ignores INSERTs",
+     "  BEFORE INSERT OR UPDATE OF status ON public.fleet_members",
+     "  BEFORE UPDATE OF status ON public.fleet_members", ["A5", "A13"]),
+    ("the signup links a number the account never confirmed",
+     "    IF public._user_id_by_verified_phone(NEW.phone) IS DISTINCT FROM NEW.id THEN\n"
+     "      RETURN NEW;\n    END IF;\n\n    PERFORM set_config",
+     "    PERFORM set_config", ["X2", "C6"]),
+    ("a failure to link fails the signup",
+     "  EXCEPTION WHEN OTHERS THEN\n"
+     "    RAISE WARNING 'auto_link_fleet_member_on_signup(%): % %', NEW.id, SQLSTATE, SQLERRM;\n",
+     "", ["X3"]),
+    ("confirming an already confirmed number fires again",
+     "        AND (OLD.phone_confirmed_at IS NULL OR NEW.phone IS DISTINCT FROM OLD.phone))",
+     "        AND (OLD.phone_confirmed_at IS DISTINCT FROM NEW.phone_confirmed_at OR NEW.phone IS DISTINCT FROM OLD.phone))",
+     ["C7"]),
+    ("a failure to link fails the confirmation",
+     "  EXCEPTION WHEN OTHERS THEN\n"
+     "    RAISE WARNING 'auto_link_fleet_member_on_phone_confirmed(%): % %', NEW.id, SQLSTATE, SQLERRM;\n",
+     "", ["C8"]),
+    ("the confirmation links whichever account holds the number",
+     "    IF public._user_id_by_verified_phone(NEW.phone) IS DISTINCT FROM NEW.id THEN\n"
+     "      RETURN NEW;\n    END IF;\n\n    UPDATE public.fleet_members fm",
+     "    UPDATE public.fleet_members fm", ["C9"]),
+]
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print(__doc__)
+        return 2
+    src = open(sys.argv[1], encoding="utf-8", newline="").read()
+    all_caught = True
+    for guard, old, new, expected in MUTANTS:
+        found = src.count(old)
+        if found != 1:
+            print(f"BROKEN    {guard}: the anchor appears {found} times", flush=True)
+            all_caught = False
+            continue
+        fd, path = tempfile.mkstemp(suffix=".sql")
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(src.replace(old, new))
+        try:
+            out = subprocess.run(["bash", RUN, path], capture_output=True, text=True).stdout
+        finally:
+            os.remove(path)
+        failing = sorted(set(re.findall(r"^FAIL  (\S+)", out, re.M)))
+        applied = "migration failed" not in out
+        caught = applied and all(test in failing for test in expected)
+        all_caught &= caught
+        verdict = "CAUGHT" if caught else ("ABORTED" if not applied else "MISSED")
+        print(f"{verdict:8}  {guard}: expected {expected}, failing {failing}", flush=True)
+    print("ALL MUTANTS CAUGHT" if all_caught else "SOME MUTANT SURVIVED")
+    return 0 if all_caught else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 ````

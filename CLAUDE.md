@@ -1699,17 +1699,23 @@ SELECT EXISTS (
 
 **FK schema importante**: `fleet_members.driver_id` referencia `users.id`, NO `driver_profiles.id`. En el JOIN final, usar `fm.driver_id = dp.user_id` (NO `dp.id`).
 
-### Flotas: cómo queda vinculada una invitación (00595 + 00598, verificado 2026-09-25)
+### Flotas: cómo queda vinculada una invitación (00598, verificado 2026-09-25)
 
-Una fila de `fleet_members` pasa a `status='active'` con `driver_id` por tres caminos automáticos, todos por teléfono normalizado, y uno manual:
-1. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `users`). La cuenta nueva trae el número de GoTrue (`handle_new_user`), ya verificado.
-2. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Cuando la invitación **pasa a** `approved`/`pending_signup`, la vincula a la cuenta activa que confirmó ese número por OTP. Una fila que ya estaba aprobada no se vuelve a mirar: el dueño todavía puede cambiar `driver_phone` después de la revisión, y ese cambio no debe vincular a nadie.
-3. **Teléfono verificado después:** `auto_link_fleet_member_on_phone_verified` (AFTER UPDATE OF phone ON `users`). Solo vincula si `auth.users` confirma ese número para esa misma cuenta, que es lo que hace `link-phone` antes de copiarlo a `users`.
-4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin), para una cuenta cuyo número nunca pasó por OTP.
+**Regla:** una fila de `fleet_members` pasa a `status='active'` con `driver_id` solo hacia **la única cuenta activa que confirmó ese número por OTP** en `auth.users`. Se evalúa en los tres momentos que pueden volverlo cierto, siempre por teléfono normalizado:
+1. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `public.users`, que dispara `handle_new_user`). Solo si el número de la cuenta nueva ya viene confirmado, como en `verify-otp`, que crea la cuenta con `phone_confirm`.
+2. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Cuando la invitación **pasa a** `approved`/`pending_signup`. Una fila que ya estaba aprobada no se vuelve a mirar, así que editarla después no vincula a nadie por este camino.
+3. **Confirmación:** `on_auth_user_phone_confirmed` (AFTER UPDATE OF phone, phone_confirmed_at ON **`auth.users`**). Cuando un número queda recién confirmado para una cuenta: `link-phone`, el heal de `verify-otp` o el OTP propio de GoTrue. Reconfirmar el mismo número no cuenta.
+4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin; ninguna pantalla lo llama todavía). Cubre lo que la regla deja afuera: un número nunca confirmado, una cuenta reactivada después de aprobar, o dos cuentas con el mismo número.
 
-**`public.users.phone` no prueba que el número sea de esa persona.** Su dueño lo puede escribir por PostgREST sin OTP: tiene grant de columna, `users_update_own` lo permite y `tg_users_protect_admin_fields` no lo cubre. Además no es único. La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque sirve de oráculo número→cuenta.
+**`public.users.phone` no prueba nada.** Su dueño lo puede escribir por PostgREST sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubre), y no es único. Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`: en `public.users`, cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
 
-**Orden de triggers:** los del mismo evento y momento disparan en orden de nombre (strcmp). `trg_fleet_members_set_driver_on_approval` corre después de `trg_fleet_members_protect` a propósito (`s` > `p`), así ve la fila con los cambios del dueño ya revertidos. Renombrar cualquiera de los dos cambia ese orden.
+La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene el índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque es un oráculo número→cuenta.
+
+**Esto depende de `phone_autoconfirm = false` en prod** (se lee con `GET /auth/v1/settings` y la clave publicable; verificado 2026-09-25). Con autoconfirm, GoTrue confirmaría un `PUT /user {phone}` sin OTP. El `config.toml` local tiene `enable_confirmations = false`, pero es solo para desarrollo.
+
+**Todo trigger en `auth.users` corre dentro de la transacción de GoTrue:** un error ahí rompe el login o la confirmación. Por eso el cuerpo va envuelto en `EXCEPTION WHEN OTHERS → RAISE WARNING`, igual que el trigger de alta (la lección de 00595). Además, crearlo bloquea las escrituras a `auth.users` hasta el commit: usar `SET lock_timeout` y crearlo al final de la migración.
+
+**Orden de triggers:** los del mismo evento y momento disparan en orden de nombre (strcmp), así que el de aprobación corre después de `trg_fleet_members_protect` (`s` > `p`). Es defensa en profundidad, no algo de lo que dependa la corrección: el protect revierte todo lo que escribe el de aprobación, sin importar cuál corra primero.
 
 **Trampa al ensayar:** `auto_link_fleet_member_on_signup` deja `app.trusted_fleet_update = '1'` hasta el final de su transacción. En prod no importa, porque esa transacción es la de GoTrue. Pero un ensayo que siembra usuarios y prueba al dueño en la misma transacción ve que el protect deja pasar todo, y el test del dueño falla por culpa del arnés. Hay que sembrar en una transacción aparte (`tcase` en `supabase/tests/00598/run.sh`).
 

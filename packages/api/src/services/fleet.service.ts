@@ -252,7 +252,7 @@ export const fleetService = {
   /**
    * Admin: approve a single fleet member after reviewing their docs. If an
    * active account has already confirmed this phone by OTP, the database
-   * links it in this same update and the row comes back 'active' (00598).
+   * links it in this same update and the row ends up 'active' (00598).
    */
   async approveMember(fleetMemberId: string, adminId: string): Promise<void> {
     const supabase = getSupabaseClient();
@@ -320,10 +320,11 @@ export const fleetService = {
 
   /**
    * Manual fallback: link the approved invitations for `phone` to the given
-   * account. The database already links on its own at signup, at approval and
-   * when an account verifies its phone later (00595, 00598), always to the
-   * account whose number is OTP-confirmed; this is for an account whose number
-   * was never confirmed by OTP.
+   * account. The database already links on its own at signup, at approval
+   * and when an account confirms its phone later (00598), always to the one
+   * active account whose number is OTP-confirmed; this is for the cases that
+   * leaves out, such as a number that was never confirmed or an account
+   * reactivated after the approval. No screen calls it yet.
    */
   async relinkExistingDriver(driverId: string, phone: string): Promise<number> {
     const supabase = getSupabaseClient();
