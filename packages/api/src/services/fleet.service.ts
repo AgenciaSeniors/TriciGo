@@ -35,9 +35,12 @@ export const fleetService = {
    * account stays pending with is_fleet_owner = false: since 00418/00434
    * only an admin can set that flag.
    *
-   * The fleet is upserted on corporate_account_id (UNIQUE), so a retry on
-   * the same account after the drivers failed to save reuses the fleet the
-   * first attempt created instead of failing on the unique key.
+   * Both writes are safe to retry on the same account. The fleet is upserted
+   * on corporate_account_id (UNIQUE), so a retry reuses the fleet a previous
+   * attempt created and applies the new values. The drivers are inserted on
+   * (fleet_id, driver_phone) ignoring duplicates, so drivers already saved
+   * are kept as they are and only the missing ones are added. A phone listed
+   * twice is saved once.
    */
   async submitFleetRequest(params: {
     corporate_account_id: string;
@@ -87,9 +90,10 @@ export const fleetService = {
         status: 'pending_review' as const,
       }));
 
+      // A driver already saved on this fleet (same phone) is left as it is.
       const { error: membersErr } = await supabase
         .from('fleet_members')
-        .insert(memberRows);
+        .upsert(memberRows, { onConflict: 'fleet_id,driver_phone', ignoreDuplicates: true });
 
       if (membersErr) {
         throw new Error(`Fleet member insertion failed: ${membersErr.message}`);

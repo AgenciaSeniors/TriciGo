@@ -8,17 +8,28 @@ import type { DriverFleet, FleetMember } from '@tricigo/types';
 //    by the ORDER BY calls;
 //  - maybeSingle() over two or more rows resolves (does not throw) to error
 //    PGRST116 with data null, and single() does the same over zero rows;
-//  - driver_fleets is UNIQUE (corporate_account_id): a plain insert of a second
-//    fleet for one account fails with 23505, and an upsert on that column
-//    updates the existing row. An upsert on a column without a unique key fails
-//    with 42P10, as Postgres does.
+//  - driver_fleets is UNIQUE (corporate_account_id) and fleet_members is
+//    UNIQUE (fleet_id, driver_phone). A statement is atomic: an insert that
+//    hits a key, even one written earlier in the same statement, fails with
+//    23505 and writes nothing;
+//  - an upsert targets its onConflict columns, or the primary key when there
+//    are none (as PostgREST does), and fails with 42P10 on columns without a
+//    unique key. On a conflict it updates the existing row, or skips it with
+//    ignoreDuplicates (also within the statement). A merge upsert that hits
+//    the same key twice in one statement, which Postgres rejects, is not
+//    modelled.
 // RLS is not emulated: the service filters by created_by itself.
 type Table = 'corporate_accounts' | 'driver_fleets' | 'fleet_members';
 type Row = Record<string, unknown>;
 type QueryError = { code: string; message: string; details: string | null; hint: string | null };
 type Result = { data: unknown; error: QueryError | null };
 
-const UNIQUE_KEY: Partial<Record<Table, string>> = { driver_fleets: 'corporate_account_id' };
+// Unique keys besides the primary key (id), as in the live schema.
+const UNIQUE_KEYS: Record<Table, string[][]> = {
+  corporate_accounts: [],
+  driver_fleets: [['corporate_account_id']],
+  fleet_members: [['fleet_id', 'driver_phone']],
+};
 
 let db: Record<Table, Row[]> = { corporate_accounts: [], driver_fleets: [], fleet_members: [] };
 let failures: Partial<Record<Table, QueryError>> = {};
@@ -38,35 +49,63 @@ function queryError(code: string, message: string, details: string | null = null
   return { code, message, details, hint: null };
 }
 
+function keysOf(table: string): string[][] {
+  return [['id'], ...(UNIQUE_KEYS[table as Table] ?? [])];
+}
+
+function sameKey(row: Row, other: Row, columns: string[]): boolean {
+  return columns.every((column) => row[column] !== undefined && row[column] === other[column]);
+}
+
+function clashingKey(table: string, row: Row, rows: Row[]): string[] | undefined {
+  return keysOf(table).find((columns) => rows.some((other) => sameKey(row, other, columns)));
+}
+
+function duplicateKey(table: string, columns: string[]): QueryError {
+  return queryError('23505', `duplicate key value violates unique constraint "${table}_${columns.join('_')}_key"`);
+}
+
 function insertRows(table: string, input: Row | Row[]): Result {
-  const rows = Array.isArray(input) ? input : [input];
-  const key = UNIQUE_KEY[table as Table];
-  if (key && rows.some((row) => rowsOf(table).some((existing) => existing[key] === row[key]))) {
-    return {
-      data: null,
-      error: queryError('23505', `duplicate key value violates unique constraint "${table}_${key}_key"`),
-    };
+  const staged = rowsOf(table).map((row) => ({ ...row }));
+  const inserted: Row[] = [];
+  for (const row of Array.isArray(input) ? input : [input]) {
+    const clash = clashingKey(table, row, staged);
+    if (clash) return { data: null, error: duplicateKey(table, clash) };
+    const created = { id: `generated-${++generatedIds}`, ...row };
+    staged.push(created);
+    inserted.push(created);
   }
-  const inserted = rows.map((row) => ({ id: `generated-${++generatedIds}`, ...row }));
-  rowsOf(table).push(...inserted);
+  db[table as Table] = staged;
   return { data: inserted, error: null };
 }
 
-function upsertRows(table: string, input: Row | Row[], onConflict: string | undefined): Result {
-  if (!onConflict || onConflict !== UNIQUE_KEY[table as Table]) {
+function upsertRows(
+  table: string,
+  input: Row | Row[],
+  options: { onConflict?: string; ignoreDuplicates?: boolean },
+): Result {
+  const target = options.onConflict ? options.onConflict.split(',').map((column) => column.trim()) : ['id'];
+  if (!keysOf(table).some((columns) => columns.join() === target.join())) {
     return {
       data: null,
       error: queryError('42P10', 'there is no unique or exclusion constraint matching the ON CONFLICT specification'),
     };
   }
-  const rows = Array.isArray(input) ? input : [input];
-  const written = rows.map((row) => {
-    const existing = rowsOf(table).find((candidate) => candidate[onConflict] === row[onConflict]);
-    if (existing) return Object.assign(existing, row);
+  const staged = rowsOf(table).map((row) => ({ ...row }));
+  const written: Row[] = [];
+  for (const row of Array.isArray(input) ? input : [input]) {
+    const existing = staged.find((other) => sameKey(row, other, target));
+    if (existing) {
+      if (!options.ignoreDuplicates) written.push(Object.assign(existing, row));
+      continue;
+    }
+    const clash = clashingKey(table, row, staged);
+    if (clash) return { data: null, error: duplicateKey(table, clash) };
     const created = { id: `generated-${++generatedIds}`, ...row };
-    rowsOf(table).push(created);
-    return created;
-  });
+    staged.push(created);
+    written.push(created);
+  }
+  db[table as Table] = staged;
   return { data: written, error: null };
 }
 
@@ -125,8 +164,8 @@ function query(table: string) {
       write = () => insertRows(table, rows);
       return builder;
     },
-    upsert: (rows: Row | Row[], options?: { onConflict?: string }) => {
-      write = () => upsertRows(table, rows, options?.onConflict);
+    upsert: (rows: Row | Row[], options?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
+      write = () => upsertRows(table, rows, options ?? {});
       return builder;
     },
     single: () => Promise.resolve(one(false)),
@@ -410,6 +449,38 @@ describe('fleetService.submitFleetRequest', () => {
       expect.objectContaining({ id: FLEET_A, corporate_account_id: ACCOUNT_A, name: 'TaxiHabana', vehicle_count_estimate: 12 }),
     ]);
     expect(db.fleet_members).toEqual([expect.objectContaining({ fleet_id: FLEET_A, driver_phone: '+5351234567' })]);
+  });
+
+  it('adds only the drivers a previous attempt did not save, keeping the saved ones as they are', async () => {
+    // The previous attempt saved the fleet and Yoel, then lost the response.
+    const yoel = member({ driver_name: 'Yoel Pérez', driver_phone: '+5351234567' });
+    seed('driver_fleets', fleet({}));
+    seed('fleet_members', yoel);
+
+    await fleetService.submitFleetRequest({
+      ...request,
+      members: [
+        { driver_name: 'Yoel Pérez Díaz', driver_phone: '+5351234567' },
+        { driver_name: 'Ana Díaz', driver_phone: '+5358765432' },
+      ],
+    });
+
+    expect(db.fleet_members).toEqual([
+      yoel,
+      expect.objectContaining({ fleet_id: FLEET_A, driver_name: 'Ana Díaz', driver_phone: '+5358765432' }),
+    ]);
+  });
+
+  it('saves a driver listed twice in one request once', async () => {
+    await fleetService.submitFleetRequest({
+      ...request,
+      members: [
+        { driver_name: 'Yoel Pérez', driver_phone: '+5351234567' },
+        { driver_name: 'Yoel Pérez', driver_phone: '+5351234567' },
+      ],
+    });
+
+    expect(db.fleet_members).toEqual([expect.objectContaining({ driver_phone: '+5351234567' })]);
   });
 
   it('throws when the drivers cannot be saved, so the form can retry on the same account', async () => {
