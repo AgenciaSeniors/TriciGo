@@ -1,0 +1,22 @@
+# TriciGo — VPS integrity alarm (oneshot, driven by the .timer).
+# Install to /etc/systemd/system/tricigo-integrity-check.service
+# See ops/vps-integrity/README.md.
+[Unit]
+Description=TriciGo VPS integrity alarm (intrusion tripwire)
+# Deliberately NOT After= any of the services it watches: it must run even when
+# they are broken or gone.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/etc/tricigo/integrity-check.sh
+# Root on purpose: the snapshot reads /etc/shadow, every home's .ssh and every
+# /proc/<pid>/exe; config (/etc/tricigo/supabase-health.env) and state
+# (/var/lib/tricigo/integrity) are root-only.
+User=root
+# The SUID sweep walks the whole root filesystem: keep it behind the apps for
+# CPU and disk, and give it room on a busy disk.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=240

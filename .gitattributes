@@ -16,6 +16,8 @@ ops/squid/fail2ban/** text eol=lf
 ops/supabase-watchdog/**/*.sh text eol=lf
 ops/supabase-watchdog/*.env.example text eol=lf
 ops/supabase-watchdog/systemd/** text eol=lf
+ops/vps-integrity/**/*.sh text eol=lf
+ops/vps-integrity/systemd/** text eol=lf
 
 # Migration rehearsals (supabase/tests/<dir>/) must be LF too. From a CRLF checkout
 # (core.autocrlf=true on Windows) Git Bash still runs them and their behaviour
