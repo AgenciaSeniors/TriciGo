@@ -13,9 +13,9 @@ import { Button } from '@tricigo/ui/Button';
 import { Input } from '@tricigo/ui/Input';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
-import { corporateService, fleetService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import type { FleetMemberInput } from '@tricigo/types';
+import { createFleetRequestSubmission } from '@/services/fleetRequestSubmission';
 
 const VEHICLE_TYPES = [
   { id: 'triciclo_basico', label: 'Triciclo' },
@@ -56,6 +56,8 @@ export default function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted 
   ]);
 
   const [submitting, setSubmitting] = useState(false);
+  // Remembers the account a failed attempt created, so a retry reuses it.
+  const [submission] = useState(createFleetRequestSubmission);
 
   const toggleVehicleType = (id: string) => {
     setVehicleTypes((prev) =>
@@ -94,44 +96,35 @@ export default function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted 
     if (!ownerUserId) return;
     setSubmitting(true);
     try {
-      // 1. Create corporate_account with is_fleet_owner = true
-      const account = await corporateService.registerAccount({
-        name: fleetName.trim(),
-        contact_phone: ownerPhone,
-        contact_email: responsibleEmail.trim() || undefined,
-        tax_id: taxId.trim() || undefined,
-        created_by: ownerUserId,
-      });
-
-      // 2. Mark as fleet owner (the column is_fleet_owner defaults to false)
-      const supabase = (await import('@tricigo/api')).getSupabaseClient();
-      await supabase
-        .from('corporate_accounts')
-        .update({ is_fleet_owner: true })
-        .eq('id', account.id);
-
-      // 3. Submit fleet request (creates driver_fleets + fleet_members)
-      await fleetService.submitFleetRequest({
-        corporate_account_id: account.id,
-        name: fleetName.trim(),
-        vehicle_count_estimate: vehicleCount ? parseInt(vehicleCount, 10) : undefined,
-        vehicle_types: vehicleTypes,
-        operating_zones: zones
-          .split(',')
-          .map((z) => z.trim())
-          .filter(Boolean),
-        estimated_rides_per_day_per_vehicle: ridesPerDay ? parseInt(ridesPerDay, 10) : undefined,
-        operating_hours_start: hoursStart.trim() || undefined,
-        operating_hours_end: hoursEnd.trim() || undefined,
-        notes: responsibleName.trim() ? `Responsable: ${responsibleName.trim()}` : undefined,
-        members: validMembers.map((m) => ({
-          driver_name: m.driver_name.trim(),
-          driver_phone: m.driver_phone.trim(),
-          driver_email: m.driver_email?.trim() || undefined,
-          driver_license_number: m.driver_license_number?.trim() || undefined,
-          driver_id_number: m.driver_id_number?.trim() || undefined,
-        })),
-      });
+      await submission.submit(
+        {
+          name: fleetName.trim(),
+          contact_phone: ownerPhone,
+          contact_email: responsibleEmail.trim() || undefined,
+          tax_id: taxId.trim() || undefined,
+          created_by: ownerUserId,
+        },
+        {
+          name: fleetName.trim(),
+          vehicle_count_estimate: vehicleCount ? parseInt(vehicleCount, 10) : undefined,
+          vehicle_types: vehicleTypes,
+          operating_zones: zones
+            .split(',')
+            .map((z) => z.trim())
+            .filter(Boolean),
+          estimated_rides_per_day_per_vehicle: ridesPerDay ? parseInt(ridesPerDay, 10) : undefined,
+          operating_hours_start: hoursStart.trim() || undefined,
+          operating_hours_end: hoursEnd.trim() || undefined,
+          notes: responsibleName.trim() ? `Responsable: ${responsibleName.trim()}` : undefined,
+          members: validMembers.map((m) => ({
+            driver_name: m.driver_name.trim(),
+            driver_phone: m.driver_phone.trim(),
+            driver_email: m.driver_email?.trim() || undefined,
+            driver_license_number: m.driver_license_number?.trim() || undefined,
+            driver_id_number: m.driver_id_number?.trim() || undefined,
+          })),
+        },
+      );
 
       onSubmitted();
     } catch (err) {

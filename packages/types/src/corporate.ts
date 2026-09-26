@@ -32,6 +32,9 @@ export interface CorporateAccount {
   /**
    * 00235: when true, this corporate_account is a driver fleet (not a
    * regular corporate client). Drives admin UI + which sub-table to use.
+   * Only an admin or the service role can set it (00418/00434), so a
+   * fleet request sent from the app keeps it false; the driver app finds
+   * the owner's fleet by its driver_fleets row instead.
    */
   is_fleet_owner: boolean;
   created_at: string;
