@@ -36,6 +36,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -120,7 +121,7 @@ Deno.serve(async (req) => {
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, getCorsHeaders(req));
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const serviceRoleKey = getServiceKey();
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     if (!supabaseUrl || !serviceRoleKey || !anonKey) {
       console.error('[link-phone] missing SUPABASE_* env');

@@ -7,6 +7,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const SYSTEM_USER = '00000000-0000-0000-0000-000000000001';
@@ -21,7 +22,7 @@ function getCorsHeaders(req: Request) {
 }
 
 function getSupabase() {
-  return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  return createClient(Deno.env.get('SUPABASE_URL')!, getServiceKey());
 }
 
 async function getConfig(supabase: ReturnType<typeof getSupabase>): Promise<Record<string, string>> {
@@ -148,9 +149,8 @@ Deno.serve(async (req: Request) => {
 
   // BUG-199: apikey vs env.SUPABASE_SERVICE_ROLE_KEY (now sb_secret_*).
   // Leaked legacy service_role JWT in git no longer matches.
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const presented = req.headers.get('apikey') ?? '';
-  if (!serviceRoleKey || presented !== serviceRoleKey) {
+  if (!isServiceKeyToken(presented)) {
     return new Response(JSON.stringify({ error: 'Forbidden: auto-admin is internal-only' }),
       { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } });
   }

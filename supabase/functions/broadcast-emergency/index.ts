@@ -21,6 +21,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -72,7 +73,7 @@ Deno.serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = getServiceKey();
   if (!supabaseUrl || !serviceRoleKey) {
     return new Response(JSON.stringify({ error: 'Edge function misconfigured' }),
       { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } });

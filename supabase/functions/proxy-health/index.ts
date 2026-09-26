@@ -44,6 +44,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const NP_PROXY_URL = Deno.env.get('NETOPIA_NP_PROXY_URL') ?? 'https://tricigo.com/np-proxy/';
@@ -148,13 +149,13 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const isProbe = url.searchParams.get('probe') === '1';
   const alertSecret = Deno.env.get('PROXY_HEALTH_SECRET') ?? '';
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = getServiceKey();
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 
   // ── Auth: shared alert secret OR service-role apikey (pg_cron) ──
   const gotSecret = req.headers.get('x-proxy-alert-secret') ?? '';
   const gotApiKey = req.headers.get('apikey') ?? '';
-  const authed = (alertSecret && gotSecret === alertSecret) || (serviceRoleKey && gotApiKey === serviceRoleKey);
+  const authed = (alertSecret && gotSecret === alertSecret) || isServiceKeyToken(gotApiKey);
   if (!authed) return json(req, { ok: false, error: 'unauthorized' }, 401);
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);

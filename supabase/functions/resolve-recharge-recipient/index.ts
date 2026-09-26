@@ -6,6 +6,7 @@
 // re-resolves server-side so the client cannot forge the recipient).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -34,7 +35,7 @@ Deno.serve(async (req) => {
     if (!phone || typeof phone !== 'string' || phone.replace(/\D/g, '').length < 8) {
       return json(corsHeaders, 200, { found: false });
     }
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, getServiceKey());
     const { data, error } = await supabase.rpc('find_recipient_for_recharge', { p_phone: phone });
     if (error) {
       console.warn('[resolve-recipient] rpc error (treating as not found):', error.message);

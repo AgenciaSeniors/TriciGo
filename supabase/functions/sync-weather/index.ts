@@ -10,6 +10,7 @@
 // (now sb_secret_*, post legacy revocation). Leaked legacy JWT
 // would not match this string-equality check.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -88,9 +89,9 @@ Deno.serve(async (req) => {
 
   // BUG-199: apikey string-equality vs env var (which is sb_secret_*).
   // Leaked legacy JWT cannot match.
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = getServiceKey();
   const presented = req.headers.get('apikey') ?? '';
-  if (!serviceRoleKey || presented !== serviceRoleKey) {
+  if (!isServiceKeyToken(presented)) {
     return new Response(JSON.stringify({ error: 'Forbidden: sync-weather is internal-only' }),
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }

@@ -57,6 +57,7 @@ import {
   driverContractHtml,
   driverContractSubject,
 } from '../_shared/email-templates/driver_contract.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const ADMIN_EMAIL_FALLBACK = 'soporte@tricigo.com';
 const FROM_EMAIL = 'TriciGo <contratos@tricigo.com>';
@@ -157,7 +158,7 @@ Deno.serve(async (req) => {
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceRoleKey = getServiceKey();
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -168,7 +169,7 @@ Deno.serve(async (req) => {
     const apiKeyHeader = req.headers.get('apikey') ?? '';
     const authHeader = req.headers.get('Authorization') ?? '';
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-    const isInternal = apiKeyHeader === serviceRoleKey || bearer === serviceRoleKey;
+    const isInternal = isServiceKeyToken(apiKeyHeader) || isServiceKeyToken(bearer);
 
     if (!isInternal) {
       if (!bearer) return jsonResponse(req, { error: 'unauthorized' }, 401);
