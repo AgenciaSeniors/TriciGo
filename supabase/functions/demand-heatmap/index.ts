@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const GRID_PRECISION = 3; // ~100m grid cells
 const CACHE_TTL_S = 300; // 5 minutes
@@ -16,7 +17,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceKey = getServiceKey();
     const supabase = createClient(supabaseUrl, serviceKey);
 
     // Get rides from last 2 hours with status 'searching'

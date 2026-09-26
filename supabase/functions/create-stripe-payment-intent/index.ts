@@ -26,6 +26,7 @@ import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getStripe } from '../_shared/stripe.ts';
 import { realEmail } from '../_shared/email-guard.ts';
 import { getFreshFx, FX_UNAVAILABLE_DETAIL } from '../_shared/fx-freshness.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -88,7 +89,7 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceRoleKey = getServiceKey();
 
     // ── Auth: the caller must present a valid user JWT ──────────────
     const authHeader = req.headers.get('Authorization');

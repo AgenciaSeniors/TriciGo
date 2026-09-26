@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 // BUG-084: Restrict CORS to allowed origins instead of wildcard '*'
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -32,7 +33,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      getServiceKey(),
     );
     const { error } = await supabase.from('platform_config').select('key').limit(1);
     checks.database = error ? `error: ${error.message}` : 'ok';

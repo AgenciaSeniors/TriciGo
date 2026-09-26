@@ -19,6 +19,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { computeCacheKey, googlePlacesAutocomplete, type SearchBoxResult } from './_shared/google.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const DEFAULT_DAILY_CAP = 1000;
 
@@ -89,11 +90,11 @@ Deno.serve(async (req: Request) => {
 
   // ── Setup ──
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseServiceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const supabaseServiceRole = getServiceKey();
   const googleApiKey = Deno.env.get('GOOGLE_PLACES_API_KEY');
 
   if (!supabaseUrl || !supabaseServiceRole) {
-    console.error('[search-places-google] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    console.error('[search-places-google] Missing SUPABASE_URL or service key');
     return jsonResponse({ data: [], source: 'google', reason: 'google_error' }, 503);
   }
 

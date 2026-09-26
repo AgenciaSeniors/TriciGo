@@ -36,6 +36,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { decodeProtectedHeader, importX509 } from 'https://esm.sh/jose@5.9.6';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { translateNetopiaError } from '../_shared/netopia-errors.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -320,7 +321,7 @@ Deno.serve(async (req) => {
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceRoleKey = getServiceKey();
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // ── 1. Parse body ──
@@ -816,7 +817,7 @@ async function sendPaymentNotification(
     //   • category validation against VALID_CATEGORIES
     // Previously we called Expo's API directly and bypassed all three.
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceRoleKey = getServiceKey();
     await fetch(`${supabaseUrl}/functions/v1/send-push`, {
       method: 'POST',
       headers: {
@@ -853,7 +854,7 @@ async function sendRefundNotification(
     // Route through send-push EF (same reasoning as sendPaymentNotification):
     // dead token cleanup + inbox persistence + category validation.
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceRoleKey = getServiceKey();
     await fetch(`${supabaseUrl}/functions/v1/send-push`, {
       method: 'POST',
       headers: {
