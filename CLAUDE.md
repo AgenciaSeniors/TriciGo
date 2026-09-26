@@ -1699,6 +1699,20 @@ SELECT EXISTS (
 
 **FK schema importante**: `fleet_members.driver_id` referencia `users.id`, NO `driver_profiles.id`. En el JOIN final, usar `fm.driver_id = dp.user_id` (NO `dp.id`).
 
+### Flotas: cómo queda vinculada una invitación (00595 + 00598, verificado 2026-09-25)
+
+Una fila de `fleet_members` pasa a `status='active'` con `driver_id` por tres caminos automáticos, todos por teléfono normalizado, y uno manual:
+1. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `users`). La cuenta nueva trae el número de GoTrue (`handle_new_user`), ya verificado.
+2. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Cuando la invitación **pasa a** `approved`/`pending_signup`, la vincula a la cuenta activa que confirmó ese número por OTP. Una fila que ya estaba aprobada no se vuelve a mirar: el dueño todavía puede cambiar `driver_phone` después de la revisión, y ese cambio no debe vincular a nadie.
+3. **Teléfono verificado después:** `auto_link_fleet_member_on_phone_verified` (AFTER UPDATE OF phone ON `users`). Solo vincula si `auth.users` confirma ese número para esa misma cuenta, que es lo que hace `link-phone` antes de copiarlo a `users`.
+4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin), para una cuenta cuyo número nunca pasó por OTP.
+
+**`public.users.phone` no prueba que el número sea de esa persona.** Su dueño lo puede escribir por PostgREST sin OTP: tiene grant de columna, `users_update_own` lo permite y `tg_users_protect_admin_fields` no lo cubre. Además no es único. La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque sirve de oráculo número→cuenta.
+
+**Orden de triggers:** los del mismo evento y momento disparan en orden de nombre (strcmp). `trg_fleet_members_set_driver_on_approval` corre después de `trg_fleet_members_protect` a propósito (`s` > `p`), así ve la fila con los cambios del dueño ya revertidos. Renombrar cualquiera de los dos cambia ese orden.
+
+**Trampa al ensayar:** `auto_link_fleet_member_on_signup` deja `app.trusted_fleet_update = '1'` hasta el final de su transacción. En prod no importa, porque esa transacción es la de GoTrue. Pero un ensayo que siembra usuarios y prueba al dueño en la misma transacción ve que el protect deja pasar todo, y el test del dueño falla por culpa del arnés. Hay que sembrar en una transacción aparte (`tcase` en `supabase/tests/00598/run.sh`).
+
 ### Smoke test E2E paths cuando el rider OTP no funciona
 
 Verificado 2026-05-28 — cuando un test rider está en otro país (Lucía en Brasil) y no puede recibir OTP cubano, hay 3 alternativas:
