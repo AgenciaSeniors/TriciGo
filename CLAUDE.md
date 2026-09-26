@@ -1672,6 +1672,18 @@ END $patch$;
 
 Reglas: (1) **verificá que el target sea único ANTES** — `(length(prosrc)-length(replace(prosrc,'target','')))/length('target')` debe dar 1; (2) **idempotente** — agregá un guard `AND position('<marker-del-cambio>' IN v_src) = 0` para no re-aplicar; (3) escapá comillas simples en los literales (`''driver_cash''`); (4) el `EXCEPTION WHEN undefined_function` lo hace seguro en DBs frescas (la función la crea una migración anterior; el patch corre después por número). **Ventaja clave sobre el verbatim: no puede perder features** porque parte del cuerpo vivo. Ejemplos: `00408` (`complete_ride_and_pay` `driver_cash`→`tricicoin`; `find_best_drivers` + filtro de heartbeat).
 
+### Flotas: una invitación revisada queda congelada para su dueño (00600, verificado 2026-09-25)
+
+**Regla:** mientras una invitación de `fleet_members` está en `pending_review`, el dueño de la flota puede editarla. Cuando el admin ya la revisó (cualquier otro estado: `approved`, `pending_signup`, `rejected`, `active`, `inactive`), `tg_fleet_members_protect` le revierte al dueño lo que el admin revisó y la flota: `driver_phone`, `driver_name`, `driver_email`, `driver_license_number`, `driver_id_number`, `license_doc_path` y `fleet_id`. `rejected_reason` es texto del admin, así que el dueño no puede cambiarlo en ningún estado. Los admins, las llamadas sin JWT (service role, migraciones, GoTrue) y quienes escriben con `app.trusted_fleet_update` siguen como antes.
+
+**Por qué:** todos los caminos que vinculan una invitación a una cuenta (el alta, la confirmación del teléfono de la 00598, el relink del admin, el backfill) leen una fila aprobada y sin vincular como "el admin aprobó a esta persona con este número". Antes de la 00600, el dueño podía cambiar el número después de la aprobación, y el alta de ese número nuevo entraba a la flota sin que nadie lo revisara (reproducido con los cuerpos vivos).
+
+**Es silencioso, igual que con `status`:** el UPDATE del dueño responde OK y no cambia nada. Para cambiar a un conductor ya revisado, el dueño lo borra y lo invita de nuevo, y la fila nueva vuelve a revisión. Una pantalla futura de "editar conductor" tiene que ofrecer eso y no un UPDATE: con un UPDATE parecería que guarda y no guardaría.
+
+**Lo que no cubre (pendiente):** (1) la ventana *durante* la revisión: el dueño todavía puede editar entre que el admin abre FleetReview y aprieta Aprobar; el arreglo va en `approveMember`, que debería exigir los valores que el admin vio. (2) El archivo de la licencia: la Edge Function `storage-upload` deja al dueño sobrescribir `fleet-docs/<corp>/<miembro>/<archivo>` en cualquier estado.
+
+**Si hay que volver a tocar `tg_fleet_members_protect`:** partir del cuerpo vivo (`pg_get_functiondef`), no del texto de la 00435, que en prod no tiene los comentarios de git. Cuerpos conocidos: el previo a la 00600 (md5 `8b0d07af…`) y el de la 00600 (`5379b97b…`). La 00600 se niega a reemplazar un cuerpo que no conoce; conviene que la próxima migración haga lo mismo. Ensayo: `supabase/tests/00600/run.sh`.
+
 ### Fleet membership 3-way gate (corporate)
 
 **Verificado en migraciones 00336 + 00337.**
