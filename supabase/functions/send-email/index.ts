@@ -28,6 +28,7 @@ import {
   renderTemplate as renderRegistryTemplate,
   type TemplateKey,
 } from '../_shared/email-templates/index.ts';
+import { isServiceKeyToken } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -150,9 +151,8 @@ Deno.serve(async (req) => {
     const rl = await rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const callerKey = extractCallerKey(req);
-    if (callerKey !== serviceRoleKey) {
+    if (!isServiceKeyToken(callerKey)) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: send-email is internal-only' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

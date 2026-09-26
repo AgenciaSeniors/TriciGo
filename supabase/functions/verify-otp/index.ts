@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -23,7 +24,7 @@ function getCorsHeaders(req: Request) {
 // SIGNED_OUT. With a stable password, login is just signInWithPassword (which
 // does NOT revoke), so both app sessions coexist — same as email/OAuth users.
 async function deriveStablePassword(userId: string): Promise<string> {
-  const secret = Deno.env.get('OTP_PASSWORD_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const secret = Deno.env.get('OTP_PASSWORD_SECRET') ?? getServiceKey();
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
@@ -77,7 +78,7 @@ Deno.serve(async (req) => {
     // Supabase client (needed for both Cuba and user creation)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      getServiceKey(),
     );
 
     // ── Verify against otp_codes via verify_cuba_otp RPC (all phones, D7-only) ──

@@ -40,6 +40,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { mapboxCategoryToTricigo } from './_shared/mapbox-categories.ts';
 import { nextQueueState, clampDrainSize, type DrainOutcome } from '../_shared/poi-import-queue.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -221,13 +222,13 @@ interface QueueRow { id: number; name: string; lat: number; lng: number; attempt
 
 async function handleDrain(requested: unknown, authHeader: string): Promise<Response> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const serviceRole = getServiceKey();
   const mapboxToken = Deno.env.get('MAPBOX_ACCESS_TOKEN');
   if (!supabaseUrl || !serviceRole) {
     return jsonResponse({ imported: false, mapbox_found: false, reason: 'service_misconfigured' }, 503);
   }
   // Exact service-role match, same gate as send-sms: a user JWT never drains.
-  if (authHeader !== `Bearer ${serviceRole}`) {
+  if (!authHeader.startsWith('Bearer ') || !isServiceKeyToken(authHeader.slice('Bearer '.length))) {
     return jsonResponse({ imported: false, mapbox_found: false, reason: 'unauthenticated' }, 401);
   }
   if (!mapboxToken) {
@@ -350,7 +351,7 @@ Deno.serve(async (req: Request) => {
 
   // ── Env ──
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseServiceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const supabaseServiceRole = getServiceKey();
   const mapboxToken = Deno.env.get('MAPBOX_ACCESS_TOKEN');
   if (!supabaseUrl || !supabaseServiceRole) {
     console.error('[import-mapbox-poi] Missing SUPABASE_URL or SERVICE_ROLE');

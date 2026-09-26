@@ -4,6 +4,7 @@
 // server-side notifications. apikey === SUPABASE_SERVICE_ROLE_KEY.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { sendSmsViaD7 } from '../_shared/d7.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,9 +16,9 @@ interface SmsRequest { user_id?: string; phone: string; body: string; ride_id?: 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = getServiceKey();
   const presented = req.headers.get('apikey') ?? '';
-  if (!serviceRoleKey || presented !== serviceRoleKey) {
+  if (!isServiceKeyToken(presented)) {
     return new Response(JSON.stringify({ error: 'Forbidden: send-sms is internal-only' }),
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }

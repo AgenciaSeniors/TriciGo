@@ -9,6 +9,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 // ── CORS: restrict to allowed origins ──
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -43,9 +44,9 @@ Deno.serve(async (req) => {
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     // ── Auth: allow internal service-role calls or valid JWT ──
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceRoleKey = getServiceKey();
     const apiKey = req.headers.get('apikey') ?? '';
-    const isInternalCall = apiKey === serviceRoleKey;
+    const isInternalCall = isServiceKeyToken(apiKey);
     let callerUserId: string | null = null;
 
     if (!isInternalCall) {
@@ -76,7 +77,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      getServiceKey(),
     );
 
     const { check_id, driver_id } = (await req.json()) as VerifyRequest;

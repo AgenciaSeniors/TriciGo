@@ -6,6 +6,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey } from './service-key.ts';
 
 // --------------- In-memory fallback ---------------
 const localStore = new Map<string, { count: number; resetAt: number }>();
@@ -45,7 +46,7 @@ let _supabase: ReturnType<typeof createClient> | null = null;
 function getServiceClient() {
   if (!_supabase) {
     const url = Deno.env.get('SUPABASE_URL');
-    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const key = getServiceKey();
     if (!url || !key) return null;
     _supabase = createClient(url, key);
   }

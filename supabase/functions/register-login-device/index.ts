@@ -23,6 +23,7 @@
 // ../_shared/* deps) so it deploys as a single file.
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const serviceRoleKey = getServiceKey();
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const authHeader = req.headers.get('Authorization') ?? '';
 
