@@ -1,0 +1,37 @@
+# TriciGo — test suite of the VPS integrity alarm (ops/vps-integrity/), on Linux.
+#
+# The suite also runs in Git Bash on Windows, but NTFS cannot hold SUID bits,
+# backslashes in file names or POSIX modes, so those tests are skipped there.
+# Here every test must run: INTEGRITY_TEST_REQUIRE_ALL=1 turns a skip into a
+# failure, so a green run means the SUID sweep and the dpkg escaping were
+# actually exercised — not just that nothing failed.
+#
+# GitHub-hosted runner on purpose: the self-hosted runner lives on the very VPS
+# this alarm watches, and a test run there would show up in its snapshot.
+name: VPS integrity alarm tests
+
+on:
+  pull_request:
+    paths:
+      - 'ops/vps-integrity/**'
+      - '.github/workflows/vps-integrity-tests.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'ops/vps-integrity/**'
+      - '.github/workflows/vps-integrity-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the suite (every test must run)
+        env:
+          INTEGRITY_TEST_REQUIRE_ALL: '1'
+        run: bash ops/vps-integrity/tests/run.sh
