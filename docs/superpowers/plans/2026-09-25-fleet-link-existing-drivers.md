@@ -650,19 +650,23 @@ LONE=a0000000-0000-4000-8000-000000000007     # passenger whose number is only i
 INACT=a0000000-0000-4000-8000-000000000008    # deactivated account, confirmed number
 UNCONF=a0000000-0000-4000-8000-000000000009   # number in auth.users, OTP never confirmed
 LATER=a0000000-0000-4000-8000-00000000000a    # Google/Apple account, no phone yet
+TWIN1=a0000000-0000-4000-8000-00000000000b    # TWIN1 and TWIN2 confirmed the same number spelled two ways
+TWIN2=a0000000-0000-4000-8000-00000000000c    #   (with and without '+'): which one is it? Nobody is guessed.
 NEWU=b0000000-0000-4000-8000-000000000001     # someone who signs up during a test
 CA=c0000000-0000-4000-8000-00000000000a; CB=c0000000-0000-4000-8000-00000000000b
 FA=f0000000-0000-4000-8000-00000000000a; FB=f0000000-0000-4000-8000-00000000000b
 PEOPLE="INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES
   ('$ADMIN', '5355550001', now()), ('$OWNER', '5355550002', now()), ('$DRV', '5355551234', now()),
   ('$PAX', '5355552222', now()), ('$SEED', NULL, NULL), ('$DUP', '5355553333', now()),
-  ('$LONE', NULL, NULL), ('$INACT', '5355554444', now()), ('$UNCONF', '5355557777', NULL), ('$LATER', NULL, NULL);
+  ('$LONE', NULL, NULL), ('$INACT', '5355554444', now()), ('$UNCONF', '5355557777', NULL), ('$LATER', NULL, NULL),
+  ('$TWIN1', '5355550909', now()), ('$TWIN2', '+5355550909', now());
 INSERT INTO public.users (id, phone, role, is_active) VALUES
   ('$ADMIN', '5355550001', 'admin', true), ('$OWNER', '5355550002', 'driver', true),
   ('$DRV', '5355551234', 'driver', true), ('$PAX', '5355552222', 'customer', true),
   ('$SEED', '+5355553333', 'admin', true), ('$DUP', '5355553333', 'driver', true),
   ('$LONE', '+5355556666', 'customer', true), ('$INACT', '5355554444', 'driver', false),
-  ('$UNCONF', '5355557777', 'customer', true), ('$LATER', NULL, 'customer', true);"
+  ('$UNCONF', '5355557777', 'customer', true), ('$LATER', NULL, 'customer', true),
+  ('$TWIN1', '5355550909', 'driver', true), ('$TWIN2', '+5355550909', 'driver', true);"
 RESET="TRUNCATE public.fleet_members, public.driver_fleets, public.corporate_accounts;
 DELETE FROM auth.users;
 $PEOPLE
@@ -685,7 +689,8 @@ signup(){ printf "INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES 
 STATE="SELECT string_agg(fm.status || ':' || coalesce(p.who, '-'), ',' ORDER BY fm.fleet_id, fm.driver_phone)
 FROM public.fleet_members fm LEFT JOIN (VALUES ('$ADMIN'::uuid, 'ADMIN'), ('$OWNER'::uuid, 'OWNER'), ('$DRV'::uuid, 'DRV'),
   ('$PAX'::uuid, 'PAX'), ('$SEED'::uuid, 'SEED'), ('$DUP'::uuid, 'DUP'), ('$LONE'::uuid, 'LONE'), ('$INACT'::uuid, 'INACT'),
-  ('$UNCONF'::uuid, 'UNCONF'), ('$LATER'::uuid, 'LATER'), ('$NEWU'::uuid, 'NEWU')) p(id, who) ON p.id = fm.driver_id;"
+  ('$UNCONF'::uuid, 'UNCONF'), ('$LATER'::uuid, 'LATER'), ('$TWIN1'::uuid, 'TWIN1'), ('$TWIN2'::uuid, 'TWIN2'),
+  ('$NEWU'::uuid, 'NEWU')) p(id, who) ON p.id = fm.driver_id;"
 # Bodies read from prod on 2026-09-25: signature|md5(prosrc)|length. The scaffold must carry them, and the migration must not change them.
 LIVE="auto_link_fleet_member_on_signup()|c4b25ab786f201ced8661633ff113e57|434
 tg_fleet_members_protect()|8b0d07aff7ab33142bfcec29304c01ed|674
@@ -757,6 +762,8 @@ tcase "A12 nobody has the number yet: stays approved, and the signup links it la
   "$(invite $FA '+5355559999' 'pending_review') $(approve $FA '+5355559999') $STATE $(signup 5355559999) $STATE" "approved:-;active:NEWU"
 tcase "A13 an invitation inserted as pending_signup (service role) is linked on insert" \
   "$(invite $FA '+5355551234' 'pending_signup') $STATE" "active:DRV"
+tcase "A14 two accounts confirmed the same number spelled two ways: nobody is linked" \
+  "$(invite $FA '+5355550909' 'pending_review') $(approve $FA '+5355550909') $STATE" "approved:-"
 
 # B. the fleet owner cannot use it
 tcase "B1 the owner inserts an invitation as approved: forced to pending_review, not linked" \
