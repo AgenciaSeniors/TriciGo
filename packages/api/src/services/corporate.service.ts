@@ -13,7 +13,15 @@ import type {
   EmployeeReport,
   ServiceTypeSlug,
 } from '@tricigo/types';
+import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
+
+// PostgREST's signal that the database does not have the RPC. A generic
+// Postgres "function ... does not exist" (42883) is deliberately not matched:
+// it can come from inside the RPC body, and must surface.
+function isMissingFunctionError(error: { code?: string; message?: string }): boolean {
+  return error.code === 'PGRST202' || /could not find the function/i.test(error.message ?? '');
+}
 
 export const corporateService = {
   // ─────────────────────────── Registration & Lifecycle ───────────────────────────
@@ -27,8 +35,34 @@ export const corporateService = {
   }): Promise<CorporateAccount> {
     const supabase = getSupabaseClient();
 
-    // Create the corporate account
-    const { data, error } = await supabase
+    // 00598: the account, its creator's admin row and the corporate wallet in
+    // one transaction. Done step by step, a failure left an account its
+    // creator cannot delete, and a retry created another one.
+    const { data, error } = await supabase.rpc('register_corporate_account', {
+      p_created_by: params.created_by,
+      p_name: params.name,
+      p_contact_phone: params.contact_phone,
+      p_contact_email: params.contact_email ?? null,
+      p_tax_id: params.tax_id ?? null,
+    });
+    if (!error) return data as CorporateAccount;
+    // Any other failure may arrive after the server committed (a lost
+    // response), so the steps must not run again from here.
+    if (!isMissingFunctionError(error)) throw error;
+
+    logger.warn('register_corporate_account_missing', { hint: 'apply migration 00598' });
+
+    // Until 00598 is applied, the same steps from the client, wallet first:
+    // it does not depend on the account, so if it fails nothing is left
+    // behind. It is keyed by the account's creator because that is how every
+    // server path moving corporate money finds it (corporate_accounts.created_by).
+    const { error: walletError } = await supabase.rpc('ensure_wallet_account', {
+      p_user_id: params.created_by,
+      p_type: 'corporate_cash',
+    });
+    if (walletError) throw walletError;
+
+    const { data: created, error: accountError } = await supabase
       .from('corporate_accounts')
       .insert({
         name: params.name,
@@ -39,23 +73,19 @@ export const corporateService = {
       })
       .select()
       .single();
-    if (error) throw error;
+    if (accountError) throw accountError;
 
-    const account = data as CorporateAccount;
+    const account = created as CorporateAccount;
 
-    // Add creator as corporate admin employee
-    await supabase.from('corporate_employees').insert({
+    // The creator's admin row: the corporate_accounts UPDATE policy and
+    // getMyAccounts depend on it.
+    const { error: employeeError } = await supabase.from('corporate_employees').insert({
       corporate_account_id: account.id,
       user_id: params.created_by,
       role: 'admin',
       added_by: params.created_by,
     });
-
-    // Create corporate wallet account
-    await supabase.rpc('ensure_wallet_account', {
-      p_user_id: account.id,
-      p_type: 'corporate_cash',
-    });
+    if (employeeError) throw employeeError;
 
     return account;
   },
