@@ -593,7 +593,10 @@ export default function CorporatePage() {
                       fontSize: '0.75rem', fontWeight: 600, padding: '0.2rem 0.6rem', borderRadius: '999px',
                       background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
                     }}>
-                      {acc.status === 'approved' ? t('status_active', { defaultValue: 'Activa' }) : acc.status === 'suspended' ? t('status_suspended', { defaultValue: 'Suspendida' }) : acc.status}
+                      {acc.status === 'approved' ? t('status_active', { defaultValue: 'Activa' })
+                        : acc.status === 'suspended' ? t('status_suspended', { defaultValue: 'Suspendida' })
+                        : acc.status === 'rejected' ? t('status_rejected', { defaultValue: 'Rechazada' })
+                        : t('status_pending', { defaultValue: 'En revisión' })}
                     </span>
                   </div>
                 </div>
