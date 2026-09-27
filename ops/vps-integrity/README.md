@@ -66,8 +66,19 @@ verifica en cada correo y en cada línea de log.
     reinician y las conexiones se cierran todo el tiempo.
 - **Un correo por cambio nuevo.** Mientras un cambio sigue pendiente no se
   repite. Si encima aparece otro, llega un correo nuevo con todo lo pendiente y
-  lo nuevo marcado `<- NUEVO`. Cuando el servidor vuelve a coincidir con la
-  línea base se borra esa memoria: si el cambio reaparece, se avisa otra vez.
+  lo nuevo marcado `<- NUEVO`.
+- **Si un cambio se va y vuelve**, depende de la categoría:
+  - **Configuración:** cuando el servidor vuelve a coincidir con la línea base
+    se borra la memoria de lo avisado. Si el cambio reaparece, se avisa otra vez.
+  - **`listen`, `proc` y `outbound`:** lo que ya avisó **no** se repite hasta
+    el próximo `--accept`, aunque desaparezca y vuelva. Un proceso que sale
+    hacia afuera un instante (el `curl` del watchdog de Supabase, que `ss`
+    agarra solo cuando los dos timers caen en el mismo segundo) avisa una vez,
+    no cada vez que se lo vuelve a ver. Sigue apareciendo en `--show` mientras
+    esté activo y queda pendiente hasta `--accept`. Una entrada distinta sí
+    avisa. Lo mismo vale para un proceso sospechoso que ya avisó: por eso,
+    después de una intrusión real la alarma se reinicia borrando su directorio
+    de estado entero (ver abajo), que también borra esta memoria.
 - **Si Resend falla** (respuesta que no es 2xx) no se registra nada y la
   siguiente ejecución lo reintenta. El servicio termina con código 1, así que
   también se ve en `systemctl --failed`.
