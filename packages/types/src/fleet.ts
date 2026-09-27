@@ -51,6 +51,29 @@ export interface FleetMember {
 }
 
 /**
+ * The fleet_members columns an admin reviews before deciding on an
+ * invitation. The owner may still edit them while the invitation is
+ * pending_review, so fleetService.approveMember and rejectMember only act on
+ * a row that still holds every value the admin was shown. Once the invitation
+ * is reviewed, tg_fleet_members_protect freezes the same columns for the owner
+ * (migration 00600); keep both lists equal.
+ */
+export const FLEET_MEMBER_REVIEWED_FIELDS = [
+  'fleet_id',
+  'driver_name',
+  'driver_phone',
+  'driver_email',
+  'driver_license_number',
+  'driver_id_number',
+  'license_doc_path',
+] as const satisfies readonly (keyof FleetMember)[];
+
+export type FleetMemberReviewedField = (typeof FLEET_MEMBER_REVIEWED_FIELDS)[number];
+
+/** A fleet invitation as the admin saw it: its id and every reviewed column. */
+export type ReviewedFleetMember = Pick<FleetMember, 'id' | FleetMemberReviewedField>;
+
+/**
  * Owner-supplied data for a single fleet member when submitting a
  * fleet request (Phase 4 form). License document is uploaded
  * separately, after the row is created (so we can store the storage
