@@ -234,12 +234,13 @@ export const fleetService = {
    * storage-upload Edge Function. The path includes the corporate account
    * so the EF can enforce ownership (creator / active corp admin).
    *
-   * For the owner, the new path only sticks while the member is
-   * pending_review. Once the admin has reviewed it, the database keeps the
-   * reviewed license_doc_path (00600), but the upload above still goes
-   * through: under the same file name it replaces the reviewed file, under
-   * another it leaves an object nothing points to. To replace a reviewed
-   * member's licence, delete the member and invite again.
+   * For the owner, a licence can only be added while the member is
+   * pending_review. Once the admin has reviewed it, the EF refuses the
+   * upload (409 member_reviewed) and the database keeps the reviewed
+   * license_doc_path (00600). The EF never replaces a file under fleet-docs/,
+   * so each upload gets a name of its own (the time, then the original
+   * name). To replace a reviewed member's licence, delete the member and
+   * invite again.
    */
   async uploadMemberLicense(params: {
     fleet_member_id: string;
@@ -249,7 +250,7 @@ export const fleetService = {
     mime_type: string;
   }): Promise<{ storage_path: string }> {
     const supabase = getSupabaseClient();
-    const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${params.file_name}`;
+    const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${Date.now()}-${params.file_name}`;
 
     // A6-01: the old code uploaded straight to a 'driver-docs' BUCKET that
     // doesn't exist in prod ('driver-docs' is a path PREFIX inside the
@@ -262,7 +263,7 @@ export const fleetService = {
     formData.append('file', params.file, params.file_name);
     formData.append('bucket', 'driver-documents');
     formData.append('path', path);
-    formData.append('upsert', 'true');
+    formData.append('upsert', 'false');
     formData.append('contentType', params.mime_type);
 
     const { data, error: uploadErr } = await supabase.functions.invoke('storage-upload', {
