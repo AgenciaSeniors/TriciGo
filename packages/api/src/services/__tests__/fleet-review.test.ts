@@ -9,7 +9,8 @@ import type { FleetMember } from '@tricigo/types';
 //  - an update applies to every row that passes all the filters at once, as
 //    one statement does; without select() it resolves data null, with it the
 //    updated rows, [] when the filters matched none.
-// RLS and the protect trigger are not emulated: an admin passes both.
+// RLS and the protect trigger are not emulated: an admin passes both. The
+// admin's session is what auth.getSession() resolves.
 // supabase/tests/fleet-review/run.sh runs the same updates against the live
 // policies and trigger, concurrent owner edits included.
 type Row = Record<string, unknown>;
@@ -18,6 +19,7 @@ type Result = { data: unknown; error: QueryError | null };
 
 let members: Row[] = [];
 let failure: QueryError | null = null;
+let session: { access_token: string } | null = null;
 
 function query(table: string) {
   if (table !== 'fleet_members') throw new Error(`The test double has no table ${table}`);
@@ -58,12 +60,15 @@ function query(table: string) {
 }
 
 vi.mock('../../client', () => ({
-  getSupabaseClient: () => ({ from: (table: string) => query(table) }),
+  getSupabaseClient: () => ({
+    from: (table: string) => query(table),
+    auth: { getSession: () => Promise.resolve({ data: { session }, error: null }) },
+  }),
 }));
 
 // Import after the mock is set up.
 import { fleetService } from '../fleet.service';
-import { AppError } from '../../errors';
+import { AppError, AuthError } from '../../errors';
 
 const ADMIN = '00000000-0000-4000-8000-000000000061';
 const OTHER_ADMIN = '00000000-0000-4000-8000-000000000062';
@@ -139,6 +144,7 @@ function change(patch: Partial<FleetMember>): void {
 beforeEach(() => {
   members = [];
   failure = null;
+  session = { access_token: 'admin-jwt' };
 });
 
 // The review must fail as a changed invitation and leave the row exactly as it was.
@@ -207,6 +213,18 @@ describe('fleetService.approveMember', () => {
     expect(error).not.toBeInstanceOf(AppError);
     expect((error as Error).message).toContain('connection failure');
   });
+
+  // Without a session the request goes out as anon, RLS hides the row and the
+  // update matches nothing: that must not read as a changed invitation.
+  it('writes nothing without a session and says so, instead of reporting a changed invitation', async () => {
+    const shown = load();
+    session = null;
+
+    const error = await fleetService.approveMember(shown, ADMIN).then(() => null, (e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AuthError);
+    expect(members).toEqual([shown]);
+  });
 });
 
 describe('fleetService.rejectMember', () => {
@@ -249,5 +267,15 @@ describe('fleetService.rejectMember', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(AppError);
     expect((error as Error).message).toContain('connection failure');
+  });
+
+  it('writes nothing without a session and says so, instead of reporting a changed invitation', async () => {
+    const shown = load();
+    session = null;
+
+    const error = await fleetService.rejectMember(shown, ADMIN, 'Licencia vencida').then(() => null, (e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AuthError);
+    expect(members).toEqual([shown]);
   });
 });

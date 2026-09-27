@@ -16,7 +16,7 @@ import type {
 } from '@tricigo/types';
 import { FLEET_MEMBER_REVIEWED_FIELDS } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
-import { AppError } from '../errors';
+import { AppError, AuthError } from '../errors';
 
 type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent'>;
 
@@ -29,6 +29,23 @@ const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
 };
 
 /**
+ * Whether the client holds a session. Without one supabase-js sends the
+ * publishable key as the bearer, RLS hides every fleet_members row and an
+ * update matches nothing, which would read as a changed invitation. The admin
+ * panel copies its cookie session into this client on a best-effort basis
+ * (useAdminUser), so the case is real. Same rule as driver.service: when the
+ * SDK cannot even answer, let the request go and surface the real error.
+ */
+async function hasSession(supabase: ReturnType<typeof getSupabaseClient>): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return Boolean(data?.session);
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Records an admin decision on a fleet invitation only while the row is still
  * what the admin reviewed: pending_review, with every reviewed column equal to
  * the value shown. The owner may edit a pending invitation, so matching on the
@@ -36,9 +53,10 @@ const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
  * is matched with is(), because eq(column, null) compares against the text
  * "null". When the update waits on the row lock, READ COMMITTED re-checks this
  * WHERE on the version the owner committed, so a concurrent edit also leaves it
- * matching nothing (supabase/tests/fleet-review/run.sh). Throws AppError
- * FLEET_MEMBER_CHANGED when nothing matched: the invitation changed, was
- * reviewed or was removed since it was loaded.
+ * matching nothing (supabase/tests/fleet-review/run.sh). Throws AuthError
+ * without a session, and AppError FLEET_MEMBER_CHANGED when nothing matched:
+ * the invitation changed, was reviewed or was removed since it was loaded (or
+ * the caller is no longer an admin, since RLS hides the row from anyone else).
  */
 async function reviewShownMember(
   shown: ReviewedFleetMember,
@@ -46,6 +64,8 @@ async function reviewShownMember(
   failure: string,
 ): Promise<void> {
   const supabase = getSupabaseClient();
+  if (!(await hasSession(supabase))) throw new AuthError(`${failure}: no auth session`);
+
   let update = supabase
     .from('fleet_members')
     .update({ ...decision, reviewed_at: new Date().toISOString() })
