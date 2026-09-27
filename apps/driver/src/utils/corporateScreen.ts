@@ -75,13 +75,15 @@ export type CorporateView =
       memberships: FleetMember[];
       /** The driver's fleet request when every one of them was rejected. */
       rejectedRequest: FleetWithMembers | null;
-      /** FleetRequestForm. */
+      /** FleetRequestForm: no fleet at all, or a rejected request to send again. */
       showRequestForm: boolean;
     };
 
 export function deriveCorporateView(state: CorporateState): CorporateView {
   const { memberships, ownedFleet } = state;
-  if (ownedFleet) {
+  // getFleetByOwner ranks approved > pending > suspended > rejected, so a
+  // rejected fleet comes back only when every fleet of the driver was rejected.
+  if (ownedFleet && ownedFleet.account.status !== 'rejected') {
     // The dashboard needs only this read: it hides the member card.
     return { kind: 'ready', ownerFleet: ownedFleet, memberships: [], rejectedRequest: null, showRequestForm: false };
   }
@@ -89,11 +91,18 @@ export function deriveCorporateView(state: CorporateState): CorporateView {
   if (ownedFleet === undefined || memberships === undefined) {
     return state.load === null ? { kind: 'error' } : { kind: 'loading' };
   }
+  const rejectedRequest = ownedFleet; // null, or a fleet that was rejected
   return {
     kind: 'ready',
     ownerFleet: null,
     memberships,
-    rejectedRequest: null,
-    showRequestForm: memberships.length === 0,
+    rejectedRequest,
+    showRequestForm: rejectedRequest !== null || memberships.length === 0,
   };
+}
+
+/** The admin's reason for rejecting a request, or null when they wrote none. */
+export function rejectionReason(suspendedReason: string | null): string | null {
+  const reason = suspendedReason?.trim();
+  return reason ? reason : null;
 }

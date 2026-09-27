@@ -824,6 +824,9 @@
   },
   "fleet": {
     "load_error_title": "Não foi possível carregar suas informações corporativas",
-    "load_error_body": "Verifique sua conexão com a internet e tente novamente."
+    "load_error_body": "Verifique sua conexão com a internet e tente novamente.",
+    "rejected_title": "Solicitação recusada",
+    "rejected_reason": "Motivo: {{reason}}",
+    "rejected_resubmit": "Você pode corrigir os dados e enviar a solicitação novamente."
   }
 }

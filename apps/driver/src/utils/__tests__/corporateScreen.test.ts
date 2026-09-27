@@ -4,6 +4,7 @@ import {
   corporateReducer,
   deriveCorporateView,
   initialCorporateState,
+  rejectionReason,
   type CorporateState,
 } from '../corporateScreen';
 
@@ -213,5 +214,59 @@ describe('deriveCorporateView', () => {
     const errored = load(initialCorporateState, 0, failed, failed);
 
     expect(deriveCorporateView(corporateReducer(errored, { type: 'load_started', load: 1 }))).toEqual({ kind: 'loading' });
+  });
+
+  describe('when every fleet request of the driver was rejected', () => {
+    // getFleetByOwner ranks rejected last, so it returns a rejected fleet
+    // only when the driver has no approved, pending or suspended one.
+    it('shows the rejected request and the form to send it again, not a dashboard', () => {
+      const rejected = owned('rejected', 'Faltan las licencias de los conductores');
+
+      expect(deriveCorporateView(load(initialCorporateState, 0, ok([]), ok(rejected)))).toEqual({
+        kind: 'ready',
+        ownerFleet: null,
+        memberships: [],
+        rejectedRequest: rejected,
+        showRequestForm: true,
+      });
+    });
+
+    it('lists the fleets the driver drives for above the rejected request and its form', () => {
+      const m = member();
+
+      expect(deriveCorporateView(load(initialCorporateState, 0, ok([m]), ok(owned('rejected'))))).toEqual({
+        kind: 'ready',
+        ownerFleet: null,
+        memberships: [m],
+        rejectedRequest: owned('rejected'),
+        showRequestForm: true,
+      });
+    });
+
+    it('shows an error when the memberships could not be read', () => {
+      expect(deriveCorporateView(load(initialCorporateState, 0, failed, ok(owned('rejected'))))).toEqual({ kind: 'error' });
+    });
+  });
+
+  it('keeps a suspended fleet as the dashboard', () => {
+    expect(deriveCorporateView(load(initialCorporateState, 0, ok([]), ok(owned('suspended'))))).toMatchObject({
+      kind: 'ready',
+      ownerFleet: owned('suspended'),
+      rejectedRequest: null,
+      showRequestForm: false,
+    });
+  });
+});
+
+describe('rejectionReason', () => {
+  it('returns the reason the admin wrote, trimmed', () => {
+    expect(rejectionReason('  Faltan las licencias de los conductores\n')).toBe('Faltan las licencias de los conductores');
+  });
+
+  it('returns null when the admin wrote no reason', () => {
+    // The admin's reject dialog does not require one.
+    expect(rejectionReason(null)).toBeNull();
+    expect(rejectionReason('')).toBeNull();
+    expect(rejectionReason('   ')).toBeNull();
   });
 });

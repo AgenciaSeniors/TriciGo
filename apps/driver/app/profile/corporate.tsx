@@ -7,14 +7,17 @@
 //      show fleet dashboard with members list + status.
 //   3. None of the above → show FleetRequestForm so the driver
 //      can submit a new fleet request.
-// Until both reads have succeeded once, the screen shows a skeleton
-// or an error with retry, never the form: see
-// src/utils/corporateScreen.ts.
+// A fleet that was rejected is not a dashboard: when every request of
+// the driver was rejected, the admin's reason and the form to apply
+// again show below any fleets they drive for. Until both reads have
+// succeeded once, the screen shows a skeleton or an error with retry,
+// never the form: see src/utils/corporateScreen.ts.
 // ============================================================
 
 import React, { useState, useEffect, useCallback, useReducer, useRef } from 'react';
 import { View, RefreshControl, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -34,6 +37,7 @@ import {
   corporateReducer,
   deriveCorporateView,
   initialCorporateState,
+  rejectionReason,
   type CorporateAction,
 } from '@/utils/corporateScreen';
 
@@ -96,7 +100,9 @@ export default function CorporateScreen() {
   const ready = view.kind === 'ready' ? view : null;
   const memberships = ready?.memberships ?? [];
   const ownerFleet = ready?.ownerFleet ?? null;
+  const rejectedRequest = ready?.rejectedRequest ?? null;
   const inSeveralFleets = memberships.length > 1;
+  const reason = rejectedRequest ? rejectionReason(rejectedRequest.account.suspended_reason) : null;
 
   return (
     <Screen
@@ -210,7 +216,29 @@ export default function CorporateScreen() {
           </>
         )}
 
-        {/* Empty → form */}
+        {/* Every request was rejected: the admin's reason, then the form to apply again */}
+        {rejectedRequest && (
+          <Card variant="filled" padding="lg" className="mb-3 bg-error-light dark:bg-error/20">
+            <View className="flex-row items-center gap-2 mb-2">
+              <Ionicons name="close-circle-outline" size={20} color={colors.error.DEFAULT} />
+              <Text variant="h4" color="error">
+                {t('fleet.rejected_title', { defaultValue: 'Solicitud rechazada' })}
+              </Text>
+            </View>
+            {reason && (
+              <Text variant="bodySmall" color="secondary">
+                {t('fleet.rejected_reason', { defaultValue: 'Motivo: {{reason}}', reason })}
+              </Text>
+            )}
+            <Text variant="bodySmall" color="secondary" className="mt-2">
+              {t('fleet.rejected_resubmit', {
+                defaultValue: 'Puedes corregir los datos y volver a enviar la solicitud.',
+              })}
+            </Text>
+          </Card>
+        )}
+
+        {/* No fleet, or a rejected request → form */}
         {ready?.showRequestForm && userId && (
           <FleetRequestForm
             ownerUserId={userId}
