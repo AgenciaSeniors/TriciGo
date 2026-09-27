@@ -53,9 +53,12 @@
 #     connections close). --accept adds to them and never removes.
 #   * Every other category is a CONFIG category: additions AND removals alert.
 #   * One email per new change: a change already emailed is not re-sent while
-#     it persists. Back at the baseline, that memory is cleared, so if the same
-#     change comes back it is emailed again. A failed send records nothing, so
-#     the next run retries it.
+#     it persists. Back at the baseline, that memory is cleared for CONFIG
+#     changes, so one that comes back is emailed again. A RUNTIME addition
+#     already emailed is not re-sent until the next --accept, even if it goes
+#     away and comes back: ss catches a short-lived process such as the Supabase
+#     watchdog's curl only now and then, and each catch would be a new email.
+#     A failed send records nothing, so the next run retries it.
 #
 # Usage:
 #   integrity-check.sh             one check (what the timer runs)
@@ -574,10 +577,14 @@ runtime_additions() {   # $1 = diff file -> the runtime lines it adds, without "
     if (index(rt, " " c " ")) print l
   }' "$1"
 }
+runtime_alerted_lines() {   # $RUNTIME_ALERTED as the "+lines" a diff shows, runtime categories only
+  [[ -f "$RUNTIME_ALERTED" ]] || return 0
+  awk -v rt="$RUNTIME_CATS" 'index(rt, " " $1 " ") { print "+" $0 }' "$RUNTIME_ALERTED"
+}
 
-# Groups a diff by category for the email. Lines not in $2 (the ones already
-# emailed) get a "<- NUEVO" marker, but only when some lines were emailed before.
-render_diff() {   # $1 = diff file, $2 = already-notified file (may not exist)
+# Groups a diff by category for the email. Lines not in $2 (the ones of this
+# diff already emailed) get a "<- NUEVO" marker, but only when $2 has any.
+render_diff() {   # $1 = diff file, $2 = its already-emailed lines (may not exist)
   awk -v known="$2" -v max=300 '
     BEGIN {
       n = split("ssh_key ssh_keyfile sudoers account unit unit_unpackaged cron boot listen proc outbound suid_unpackaged", ord, " ")
@@ -664,7 +671,7 @@ alert_body() {   # $1 = total lines, $2 = new lines
   fi
   [[ -n "$apt" ]] && printf 'Último apt: %s — si coincide con el cambio, probablemente es una actualización de paquetes.\n' "$apt"
   printf '\n'
-  render_diff "$TMPD/diff" "$NOTIFIED"
+  render_diff "$TMPD/diff" "$TMPD/known"
   cat <<EOF
 "+" = apareció, "-" = desapareció, respecto de la línea base. Los grupos "solo
 altas" (listen, proc, outbound) son listas de permitidos: lo nuevo avisa; lo que
@@ -681,7 +688,8 @@ Qué hacer:
    de este aviso aunque ya no estén activos.
 
 Mientras este mismo cambio siga pendiente no se vuelve a avisar: solo llega otro
-correo si aparece algo nuevo.
+correo si aparece algo nuevo. Hasta el próximo --accept, los puertos, procesos y
+conexiones salientes de este aviso tampoco se repiten si desaparecen y vuelven.
 
 Alarma de integridad del VPS · journalctl -t $TAG -n 50
 EOF
@@ -709,7 +717,7 @@ EOF
 
 # ── modes ─────────────────────────────────────────────────
 do_check() {
-  local rc=0 total new hash l alert_hash="" alert_at="" alert_lines=""
+  local rc=0 total new again hash l alert_hash="" alert_at="" alert_lines=""
   if ! load_config; then
     log "config: $CONFIG_FILE missing or unreadable — the integrity alarm could not tell anyone, exiting"
     return 2
@@ -750,7 +758,7 @@ do_check() {
   if (( total == 0 )); then
     if [[ -s "$NOTIFIED" || -f "$ALERT_STATE" ]]; then
       rm -f "$NOTIFIED" "$ALERT_STATE"
-      log "back to baseline — the changes emailed earlier are gone; if they come back they will be emailed again"
+      log "back to baseline — the changes emailed earlier are gone; a config change that comes back is emailed again, a runtime entry already emailed is not until --accept"
     else
       log "ok: no changes against the baseline ($(count "$BASELINE") lines, snapshot ${SNAP_SECS}s)"
     fi
@@ -758,12 +766,27 @@ do_check() {
   fi
 
   [[ -f "$NOTIFIED" ]] || : > "$NOTIFIED"
-  comm -23 "$TMPD/diff" "$NOTIFIED" > "$TMPD/new"
+  # The lines of this diff that were already emailed: those of the pending alert
+  # ($NOTIFIED) and the runtime additions emailed since the last --accept
+  # ($RUNTIME_ALERTED). Only the second set survives a return to the baseline,
+  # so a transient process that ss catches now and then (the watchdog's curl) is
+  # emailed once, not on every catch, while a config change that comes back is
+  # emailed again.
+  { cat "$NOTIFIED"; runtime_alerted_lines; } | sort -u > "$TMPD/emailed"
+  comm -12 "$TMPD/diff" "$TMPD/emailed" > "$TMPD/known"
+  comm -23 "$TMPD/diff" "$TMPD/known" > "$TMPD/new"
   new="$(count "$TMPD/new")"
   hash="$(sha256sum < "$TMPD/diff")"; hash="${hash%% *}"
   if (( new == 0 )); then
-    load_kv "$ALERT_STATE" "$STATE_KEYS" || true
-    log "no email: same changes as the last alert (${total} lines, diff ${hash:0:12}, emailed ${alert_at:-earlier}) — --show to see them, --accept to approve them"
+    comm -23 "$TMPD/known" "$NOTIFIED" > "$TMPD/again"
+    again="$(count "$TMPD/again")"
+    if (( again )); then
+      log "no email: ${total} line(s) differ from the baseline (diff ${hash:0:12}), all emailed before; ${again} of them are runtime entries emailed since the last --accept that went away and came back, which are not re-sent — --show to see them, --accept to allow them"
+      while IFS= read -r l; do log "  seen again: $l"; done < "$TMPD/again"
+    else
+      load_kv "$ALERT_STATE" "$STATE_KEYS" || true
+      log "no email: same changes as the last alert (${total} lines, diff ${hash:0:12}, emailed ${alert_at:-earlier}) — --show to see them, --accept to approve them"
+    fi
     return "$rc"
   fi
 
