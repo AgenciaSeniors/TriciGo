@@ -47,9 +47,11 @@ export function ServiceTypeCard({
       <Card
         variant="outlined"
         padding="md"
+        // `!` keeps the selected border orange in dark mode too: NativeWind breaks
+        // ties by stylesheet order, and Card's dark:border-white/[0.12] comes later.
         className={`items-center ${
           selected
-            ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/15'
+            ? '!border-primary-500 bg-primary-50 dark:bg-primary-500/15'
             : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-800'
         }`}
       >

@@ -11,12 +11,14 @@ export interface CardProps extends ViewProps {
   theme?: 'light' | 'dark' | 'auto';
 }
 
+// Tailwind's opacity modifiers only come in steps of 5, so `white/6` and
+// `white/12` compiled to nothing; the arbitrary values match forceDarkStyles.
 const variantClasses = {
-  elevated: 'bg-white dark:bg-neutral-800 rounded-2xl shadow-lg border border-transparent dark:border-white/6',
-  outlined: 'bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-white/12',
+  elevated: 'bg-white dark:bg-neutral-800 rounded-2xl shadow-lg border border-transparent dark:border-white/[0.06]',
+  outlined: 'bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-white/[0.12]',
   filled: 'bg-neutral-50 dark:bg-neutral-800 rounded-2xl',
   /** Dark premium surface card with subtle border */
-  surface: 'bg-neutral-100 dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-white/6',
+  surface: 'bg-neutral-100 dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-white/[0.06]',
 } as const;
 
 /** Inline dark styles for forceDark mode (bypasses NativeWind class system) */
