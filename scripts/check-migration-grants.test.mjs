@@ -103,6 +103,20 @@ describe('tables that are correctly granted', () => {
     assert.deepEqual(r.problems, []);
   });
 
+  test('a GRANT run through a dollar-quoted EXECUTE counts, grantee included', () => {
+    const r = analyzeMigrationSql(`
+      CREATE TABLE public.a (id int);
+      DO $d$ BEGIN EXECUTE $g$GRANT ALL ON public.a TO service_role$g$; END $d$;`);
+    assert.deepEqual(names(r), ['public.a']);
+    assert.deepEqual(r.problems, []);
+  });
+
+  test('a quoted "public" grantee is PUBLIC, as PostgreSQL reads it', () => {
+    const r = analyzeMigrationSql('CREATE TABLE public.a (id int);\nGRANT SELECT ON public.a TO "public";');
+    assert.deepEqual(names(r), ['public.a']);
+    assert.deepEqual(r.problems, []);
+  });
+
   test('CREATE TABLE ... AS SELECT and UNLOGGED tables are checked like any table', () => {
     const r = analyzeMigrationSql(`
       CREATE UNLOGGED TABLE public.cache (k text PRIMARY KEY);
@@ -134,6 +148,16 @@ describe('things that are not new public relations', () => {
       /* CREATE TABLE ghost2 (id int);
          /* nested */ CREATE VIEW ghost3 AS SELECT 1; */
       SELECT 1;`);
+    assert.deepEqual(names(r), []);
+  });
+
+  test('names built with dynamic SQL are skipped, not misread as another table', () => {
+    const r = analyzeMigrationSql(`
+      DO $$ BEGIN
+        EXECUTE format('CREATE TABLE IF NOT EXISTS public.%I (id int)', 'x');
+        EXECUTE format('CREATE TABLE audit.%I (id int)', 'y');
+        EXECUTE format('CREATE TABLE %I (id int)', 'z');
+      END $$;`);
     assert.deepEqual(names(r), []);
   });
 
@@ -197,6 +221,51 @@ describe('tables missing grants fail', () => {
     const r = analyzeMigrationSql('CREATE TABLE public.ok (id int);\nGRANT ALL ON public.ok TO service_role;\nCREATE TABLE public.missing (id int);');
     assert.deepEqual(codes(r), ['no-grant:public.missing']);
     assert.equal(r.problems[0].line, 3);
+  });
+});
+
+describe('dollar-quoted text does not desynchronise the comment masking', () => {
+  // 00597 has exactly this idiom: an apostrophe inside a $m$...$m$ literal. Before the
+  // lexer tracked dollar quotes, that apostrophe opened a "string" that swallowed the
+  // rest of the file, so a commented-out GRANT further down counted as a real one.
+  const MARKER_GUARD = `
+DO $patch$
+DECLARE v_src text;
+BEGIN
+  v_src := pg_get_functiondef('public.check_cron_sql_failures()'::regprocedure);
+  IF position($m$a failed run counts only if the job's SQL raised$m$ IN v_src) = 0 THEN
+    RAISE EXCEPTION '00598: watchdog body is not the expected one';
+  END IF;
+END $patch$;
+`;
+
+  test('an apostrophe in a $tag$ literal does not turn a commented-out GRANT into a real one', () => {
+    const r = analyzeMigrationSql(`CREATE TABLE IF NOT EXISTS public.cron_alert_log (id uuid PRIMARY KEY);
+${MARKER_GUARD}
+-- GRANT SELECT, INSERT ON public.cron_alert_log TO service_role;   -- enable once the EF ships
+`);
+    assert.deepEqual(codes(r), ['no-grant:public.cron_alert_log']);
+  });
+
+  test('an apostrophe in a $tag$ literal does not turn a commented-out CREATE into a real one', () => {
+    const r = analyzeMigrationSql(`DO $d$ BEGIN PERFORM $n$it's fine$n$; END $d$;
+-- CREATE TABLE public.ghost (id int);
+`);
+    assert.deepEqual(names(r), []);
+  });
+
+  test('comments and strings inside a function body are still handled', () => {
+    const r = analyzeMigrationSql(`
+      CREATE OR REPLACE FUNCTION public.f() RETURNS void LANGUAGE plpgsql AS $function$
+      BEGIN
+        -- CREATE TABLE public.ghost_in_body (id int);
+        RAISE NOTICE 'it''s -- not a comment';
+        CREATE TABLE IF NOT EXISTS public.made_at_runtime (id int);
+      END;
+      $function$;
+      GRANT ALL ON public.made_at_runtime TO service_role;`);
+    assert.deepEqual(names(r), ['public.made_at_runtime']);
+    assert.deepEqual(r.problems, []);
   });
 });
 
@@ -336,19 +405,17 @@ describe('explicit exemptions', () => {
 });
 
 describe('which migrations are checked', () => {
-  test('the threshold is the first number after the last table-creating migration on master', () => {
-    assert.equal(FIRST_CHECKED_MIGRATION, 587);
-  });
-
   test('migrationNumber reads the leading digits', () => {
     assert.equal(migrationNumber('00598_new_table.sql'), 598);
     assert.equal(migrationNumber('00059b_wait_charge_in_complete_ride.sql'), 59);
     assert.equal(migrationNumber('README.md'), null);
   });
 
-  test('only .sql files at or above the threshold are selected', () => {
+  test('only .sql files numbered 00587 or above are selected', () => {
+    // 00587 is the lowest hole reserved by an open PR that creates tables (#1004).
+    assert.equal(FIRST_CHECKED_MIGRATION, 587);
     assert.deepEqual(
-      selectMigrationsToCheck(['00586_old.sql', '00587_reserved_hole.sql', '00600_new.sql', 'notes.md', '00601_x.txt']),
+      selectMigrationsToCheck(['00569_old_hole.sql', '00586_old.sql', '00587_reserved_hole.sql', '00600_new.sql', 'notes.md', '00601_x.txt']),
       ['00587_reserved_hole.sql', '00600_new.sql'],
     );
   });

@@ -17,25 +17,39 @@
 //   2. A serial / DEFAULT nextval() column: every role granted INSERT on the table
 //      also needs USAGE on that sequence (a table grant does not cover it).
 //      GENERATED ... AS IDENTITY needs no sequence grant (measured on PG16).
-//   3. Escape hatch for a relation that must have no API access at all:
-//      a line `-- grants-exempt: public.<name> <reason>` in the same file.
-// Not covered: names built with dynamic SQL (EXECUTE format('... %I ...')).
+//   3. Escape hatch, for a relation that must have no API access at all or for a
+//      false positive of this parser: a line `-- grants-exempt: public.<name> <reason>`
+//      in the same file.
+// Known false positives (they fail loudly; use the escape hatch): CREATE OR REPLACE
+// VIEW of a view that already exists (PostgreSQL keeps its grants), a staging table
+// dropped or renamed in the same file, a partition of a granted parent, "create
+// table" prose inside a string, a nextval() default on a sequence created earlier.
+// Not seen (a GRANT is missing and the check passes): names built with dynamic SQL
+// (skipped on purpose), SELECT ... INTO, ALTER TABLE ... ADD COLUMN serial or
+// SET DEFAULT nextval() on an existing table, a REVOKE after the GRANT, a GRANT
+// that only appears inside a string.
 //
 // The command line lives in scripts/check-migration-grants.mjs
 // (pnpm check:migration-grants; tests: pnpm test:migration-grants).
 // ============================================================
 
-// The first number that no migration on master used when this check landed
-// (master ended at 00597, and 00587-00597 create no tables). It is below the
-// newest file on purpose: the holes 00587-00590 and 00593 are reserved by open
-// PRs (#1004 creates four tables there) and must be checked when they merge.
+// When this check landed, no migration on master numbered 00587 or above created
+// a table (00591-00597 don't), and 00587-00590 and 00593 were holes reserved by
+// open PRs: #1004 creates four tables in 00587, so it gets checked when it merges.
+// The older holes (00071, 00111, 00489, 00569) stay below the threshold; the only
+// PR holding one, #965 (00569), just updates rows.
 export const FIRST_CHECKED_MIGRATION = 587;
 
 const IDENT = String.raw`(?:"(?:[^"]|"")+"|[A-Za-z_\u0080-\uffff][\w$\u0080-\uffff]*)`;
 const QUALIFIED = String.raw`${IDENT}(?:\s*\.\s*${IDENT})?`;
+const IDENT_CHAR = /[\w$\u0080-\uffff]/;
+const DOLLAR_TAG = /\$(?:[A-Za-z_\u0080-\uffff][\w\u0080-\uffff]*)?\$/y;
 const CREATE_RE = new RegExp(
   String.raw`\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:GLOBAL|LOCAL)\s+)?(TEMP\s+|TEMPORARY\s+|UNLOGGED\s+)?` +
-    String.raw`(?:RECURSIVE\s+)?(MATERIALIZED\s+VIEW|TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?(${QUALIFIED})`,
+    String.raw`(?:RECURSIVE\s+)?(MATERIALIZED\s+VIEW|TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+|(?!IF\s+NOT\s+EXISTS\b))` +
+    // The lookahead rejects a name that continues past what IDENT can read, so
+    // format('CREATE TABLE public.%I ...') is skipped instead of read as public.public.
+    String.raw`(${QUALIFIED})(?![\w$\u0080-\uffff"]|\s*\.)`,
   'gi',
 );
 const GRANT_RE = /\bGRANT\s+([^;]+?)\s+ON\s+([^;]+?)\s+TO\s+([^;]+?)\s*(?=;|$)/gi;
@@ -67,45 +81,67 @@ export function serialSequenceName(table, column) {
   return `${table.slice(0, n1)}_${column.slice(0, n2)}_seq`;
 }
 
-/** Blank out -- and (nested) block comments, keeping offsets and newlines; strings stay intact. */
+/**
+ * Blank out -- and (nested) block comments, keeping offsets and newlines; strings stay intact.
+ * Dollar-quoted text ($$...$$, $function$...$function$) is lexed as code, because DO blocks
+ * and function bodies are code, but no string, identifier or comment may run past the
+ * closing tag of the innermost open quote. Without that bound, the apostrophe in a literal
+ * like $m$the job's SQL$m$ (00597 has one) opened a "string" that swallowed the rest of
+ * the file, and a commented-out GRANT further down counted as a real one.
+ */
 function maskComments(sql) {
   const out = sql.split('');
   const blank = (from, to) => {
     for (let k = from; k < to; k++) if (out[k] !== '\n') out[k] = ' ';
   };
+  const open = []; // dollar-quote tags currently open, innermost last
+  const closer = (from) => {
+    if (open.length === 0) return sql.length;
+    const at = sql.indexOf(open[open.length - 1], from);
+    return at === -1 ? sql.length : at;
+  };
   let i = 0;
   while (i < sql.length) {
     const c = sql[i];
     const next = sql[i + 1];
-    if (c === '-' && next === '-') {
+    if (c === '$' && !IDENT_CHAR.test(sql[i - 1] ?? '')) {
+      DOLLAR_TAG.lastIndex = i;
+      const tag = DOLLAR_TAG.exec(sql)?.[0];
+      if (!tag) { i++; continue; }
+      // A tag that is already open closes it, and anything opened inside it: PostgreSQL
+      // ends a dollar quote at the first repeat of its tag, whatever lies in between.
+      const level = open.lastIndexOf(tag);
+      if (level === -1) open.push(tag);
+      else open.length = level;
+      i += tag.length;
+    } else if (c === '-' && next === '-') {
       const end = sql.indexOf('\n', i);
-      const stop = end === -1 ? sql.length : end;
+      const stop = Math.min(end === -1 ? sql.length : end, closer(i));
       blank(i, stop);
       i = stop;
     } else if (c === '/' && next === '*') {
+      const limit = closer(i);
       let depth = 0;
       let j = i;
-      while (j < sql.length) {
+      while (j < limit) {
         if (sql[j] === '/' && sql[j + 1] === '*') { depth++; j += 2; }
         else if (sql[j] === '*' && sql[j + 1] === '/') { depth--; j += 2; if (depth === 0) break; }
         else j++;
       }
+      j = Math.min(j, limit);
       blank(i, j);
       i = j;
-    } else if (c === "'") {
-      const backslashEscapes = /[eE]/.test(sql[i - 1] ?? '') && !/[\w$]/.test(sql[i - 2] ?? '');
+    } else if (c === "'" || c === '"') {
+      const limit = closer(i + 1);
+      const backslashEscapes = c === "'" && /[eE]/.test(sql[i - 1] ?? '') && !IDENT_CHAR.test(sql[i - 2] ?? '');
       let j = i + 1;
-      while (j < sql.length) {
+      while (j < limit) {
         if (backslashEscapes && sql[j] === '\\') j += 2;
-        else if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
-        else if (sql[j] === "'") break;
+        else if (sql[j] === c && sql[j + 1] === c) j += 2;
+        else if (sql[j] === c) break;
         else j++;
       }
-      i = j + 1;
-    } else if (c === '"') {
-      let j = i + 1;
-      while (j < sql.length && !(sql[j] === '"' && sql[j + 1] !== '"')) j += sql[j] === '"' ? 2 : 1;
-      i = j + 1;
+      i = j < limit ? j + 1 : limit;
     } else {
       i++;
     }
@@ -181,13 +217,14 @@ function parseGrant(match, text) {
       .filter(Boolean),
   );
   const grantees = new Set(
-    match[3].split("'")[0]
+    match[3].split(/'|\$(?:[A-Za-z_\u0080-\uffff][\w\u0080-\uffff]*)?\$/)[0]
       .replace(/\s+WITH\s+GRANT\s+OPTION[\s\S]*$/i, '')
       .replace(/\s+GRANTED\s+BY[\s\S]*$/i, '')
       .split(',')
       .map((g) => g.trim().replace(/^GROUP\s+/i, ''))
       .filter((g) => new RegExp(String.raw`^${IDENT}$`).test(g))
-      .map((g) => (/^public$/i.test(g) ? 'PUBLIC' : normIdent(g))),
+      .map(normIdent)
+      .map((g) => (g === 'public' ? 'PUBLIC' : g)), // PostgreSQL reads "public" quoted as PUBLIC too
   );
   const base = { offset: match.index, privileges, grantees };
 

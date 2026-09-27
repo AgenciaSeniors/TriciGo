@@ -46,7 +46,9 @@ Data API roles. Declare the grants in the same migration that creates the relati
   GRANT SELECT, INSERT, UPDATE, DELETE ON public.<t> TO service_role;   -- always (Edge Functions, scripts)
 A serial column also needs  GRANT USAGE, SELECT ON SEQUENCE public.<seq> TO <every role that INSERTs>;
 (or use GENERATED ALWAYS AS IDENTITY, which needs no sequence grant).
-No API access at all, on purpose: add  -- grants-exempt: public.<t> <reason>  to the migration.
+No API access at all on purpose, or a false positive of this check (for example
+CREATE OR REPLACE VIEW of a view that already exists, which keeps its grants):
+add  -- grants-exempt: public.<t> <reason>  to the migration.
 Rule and background: CLAUDE.md, section "Tablas nuevas en public: GRANT explícito".
 `);
     process.exit(1);
