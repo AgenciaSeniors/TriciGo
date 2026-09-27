@@ -300,42 +300,6 @@ export const fleetService = {
     if (error) throw new Error(`Reject member failed: ${error.message}`);
   },
 
-  /** Admin: list all fleets pending review (queue for /admin/businesses?fleet=pending). */
-  async listPendingFleets(): Promise<FleetWithMembers[]> {
-    const supabase = getSupabaseClient();
-    const { data: accounts, error } = await supabase
-      .from('corporate_accounts')
-      .select('id, name, status, commission_percent, is_fleet_owner')
-      .eq('is_fleet_owner', true)
-      .in('status', ['pending', 'approved']);
-    if (error || !accounts) return [];
-
-    const out: FleetWithMembers[] = [];
-    for (const account of accounts) {
-      const { data: fleet } = await supabase
-        .from('driver_fleets')
-        .select('*')
-        .eq('corporate_account_id', account.id)
-        .maybeSingle();
-      if (!fleet) continue;
-      const { data: members } = await supabase
-        .from('fleet_members')
-        .select('*')
-        .eq('fleet_id', fleet.id);
-      out.push({
-        fleet: fleet as DriverFleet,
-        members: (members ?? []) as FleetMember[],
-        account: {
-          id: account.id,
-          name: account.name,
-          status: account.status,
-          commission_percent: account.commission_percent,
-        },
-      });
-    }
-    return out;
-  },
-
   /**
    * Manually trigger the auto-link RPC for a driver that was already
    * registered before their fleet was approved. The DB has an INSERT
