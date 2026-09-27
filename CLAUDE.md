@@ -1682,7 +1682,7 @@ Reglas: (1) **verificá que el target sea único ANTES** — `(length(prosrc)-le
 
 **Lo que no cubre (pendiente):**
 1. La ventana *durante* la revisión: el dueño todavía puede editar entre que el admin abre FleetReview y aprieta Aprobar. El arreglo va en `approveMember`, que debería exigir los valores que el admin vio.
-2. El archivo de la licencia: la Edge Function `storage-upload` deja al dueño sobrescribir `fleet-docs/<corp>/<miembro>/<archivo>` en cualquier estado.
+2. El archivo de la licencia. **Cerrado por #1032 (2026-09-27):** `storage-upload` solo deja subir a `fleet-docs/<corp>/<miembro>/…` a los gestores de la cuenta mientras el miembro está en `pending_review` (después responde `409 member_reviewed`), y bajo ese prefijo nunca reemplaza un archivo, para nadie. Ver el guardrail (4) de la sección de Storage.
 3. Mover la flota entera a otra empresa del mismo dueño (`driver_fleets.corporate_account_id`): la política no tiene `WITH CHECK` y la tabla no tiene trigger de protección, así que la flota se lleva con ella a todos los miembros revisados.
 
 **Si hay que volver a tocar `tg_fleet_members_protect`:** partir del cuerpo vivo (`pg_get_functiondef`), no del texto de la 00435, que en prod no tiene los comentarios de git. Cuerpos conocidos: el previo a la 00600 (md5 `8b0d07af…`) y el de la 00600 (`2b65b4b8…`). La 00600 se niega a reemplazar un cuerpo que no conoce; conviene que la próxima migración haga lo mismo. Ensayo: `supabase/tests/00600/run.sh`. Si la 00598 está en el checkout, o si se pasa `M598=<ruta>`, también corre la prueba combinada en los dos órdenes.
