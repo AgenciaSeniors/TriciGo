@@ -7,9 +7,12 @@
 //      show fleet dashboard with members list + status.
 //   3. None of the above → show FleetRequestForm so the driver
 //      can submit a new fleet request.
+// Until both reads have succeeded once, the screen shows a skeleton
+// or an error with retry, never the form: see
+// src/utils/corporateScreen.ts.
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useReducer, useRef } from 'react';
 import { View, RefreshControl, useColorScheme } from 'react-native';
 import { router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
@@ -17,66 +20,83 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
 import { SkeletonCard } from '@tricigo/ui/Skeleton';
+import { ErrorState } from '@tricigo/ui/ErrorState';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { midnightEmber, cubanLight, cubanDark, colors } from '@tricigo/theme';
 import { fleetService } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import { logger } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import FleetRequestForm from '@/components/FleetRequestForm';
 import FleetMembersList from '@/components/FleetMembersList';
-import type { FleetMember, FleetWithMembers } from '@tricigo/types';
+import {
+  corporateReducer,
+  deriveCorporateView,
+  initialCorporateState,
+  type CorporateAction,
+} from '@/utils/corporateScreen';
 
 export default function CorporateScreen() {
+  const { t } = useTranslation('driver');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
   const driverProfile = useDriverStore((s) => s.profile);
   const authUser = useAuthStore((s) => s.user);
+  const userId = driverProfile?.user_id;
 
-  const [loading, setLoading] = useState(true);
+  const [state, dispatch] = useReducer(corporateReducer, initialCorporateState);
   const [refreshing, setRefreshing] = useState(false);
-  const [memberships, setMemberships] = useState<FleetMember[]>([]);
-  const [ownedFleet, setOwnedFleet] = useState<FleetWithMembers | null>(null);
-  const [version, setVersion] = useState(0);
+  const nextLoad = useRef(0);
 
-  const fetchData = useCallback(async () => {
-    if (!driverProfile?.user_id) {
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-    try {
-      const [membershipsResult, ownedFleetResult] = await Promise.allSettled([
-        fleetService.getMembershipsForDriver(driverProfile.user_id),
-        fleetService.getFleetByOwner(driverProfile.user_id),
+  // Reads both lookups as a numbered load. A failed read keeps its last
+  // value, and only the latest load applies, so a slow older one cannot
+  // overwrite a newer result.
+  const runLoad = useCallback(
+    async (start: (load: number) => CorporateAction) => {
+      if (!userId) {
+        setRefreshing(false);
+        return;
+      }
+      const load = nextLoad.current++;
+      dispatch(start(load));
+      const [memberships, ownedFleet] = await Promise.allSettled([
+        fleetService.getMembershipsForDriver(userId),
+        fleetService.getFleetByOwner(userId),
       ]);
-      // Apply each read on its own. A failed one keeps its last good value
-      // instead of showing up as "no fleet", and never discards the other.
-      if (membershipsResult.status === 'fulfilled') {
-        setMemberships(membershipsResult.value);
-      } else {
-        logger.warn('[Corporate] Failed to load fleet memberships', { error: String(membershipsResult.reason) });
+      if (memberships.status === 'rejected') {
+        logger.warn('[Corporate] Failed to load fleet memberships', { error: String(memberships.reason) });
       }
-      if (ownedFleetResult.status === 'fulfilled') {
-        setOwnedFleet(ownedFleetResult.value);
-      } else {
-        logger.warn('[Corporate] Failed to load owned fleet', { error: String(ownedFleetResult.reason) });
+      if (ownedFleet.status === 'rejected') {
+        logger.warn('[Corporate] Failed to load owned fleet', { error: String(ownedFleet.reason) });
       }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [driverProfile?.user_id]);
+      dispatch({ type: 'load_settled', load, memberships, ownedFleet });
+    },
+    [userId],
+  );
+
+  const fetchData = useCallback(() => runLoad((load) => ({ type: 'load_started', load })), [runLoad]);
+
+  // The request exists now, so "no fleet" is no longer known: read it back.
+  const handleRequestSubmitted = useCallback(() => {
+    void runLoad((load) => ({ type: 'request_submitted', load }));
+  }, [runLoad]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData, version]);
+    void fetchData();
+  }, [fetchData]);
 
-  const isOwner = !!ownedFleet;
-  const isMember = memberships.length > 0 && !isOwner;
+  // The pull-to-refresh spinner stops once no load is running.
+  useEffect(() => {
+    if (state.load === null) setRefreshing(false);
+  }, [state.load]);
+
+  const view = deriveCorporateView(state);
+  const ready = view.kind === 'ready' ? view : null;
+  const memberships = ready?.memberships ?? [];
+  const ownerFleet = ready?.ownerFleet ?? null;
   const inSeveralFleets = memberships.length > 1;
-  const noLink = !loading && !isOwner && !isMember;
 
   return (
     <Screen
@@ -87,7 +107,7 @@ export default function CorporateScreen() {
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={() => { setRefreshing(true); fetchData(); }}
+          onRefresh={() => { setRefreshing(true); void fetchData(); }}
           tintColor={colors.brand.orange}
         />
       }
@@ -100,15 +120,25 @@ export default function CorporateScreen() {
           backAccessibilityLabel="Atrás"
         />
 
-        {loading && (
+        {view.kind === 'loading' && (
           <View className="gap-3">
             <SkeletonCard />
             <SkeletonCard />
           </View>
         )}
 
+        {/* A read never succeeded, so "no fleet" is unknown: retry, never the form */}
+        {view.kind === 'error' && (
+          <ErrorState
+            title={t('fleet.load_error_title', { defaultValue: 'No pudimos cargar tu información corporativa' })}
+            description={t('fleet.load_error_body', { defaultValue: 'Revisa tu conexión a internet e inténtalo de nuevo.' })}
+            retryLabel={t('common:retry', { defaultValue: 'Reintentar' })}
+            onRetry={() => { void fetchData(); }}
+          />
+        )}
+
         {/* Member view: one row per fleet, since a driver can be in several */}
-        {isMember && (
+        {memberships.length > 0 && (
           <Card variant="outlined" padding="lg" className="mb-4">
             <Text variant="h4" className="mb-3">
               {inSeveralFleets ? 'Tus flotas' : 'Tu flota'}
@@ -141,31 +171,31 @@ export default function CorporateScreen() {
         )}
 
         {/* Owner dashboard */}
-        {isOwner && (
+        {ownerFleet && (
           <>
             <Card variant="outlined" padding="lg" className="mb-4">
               <View className="flex-row items-center justify-between mb-3">
-                <Text variant="h4">{ownedFleet!.fleet.name}</Text>
+                <Text variant="h4">{ownerFleet.fleet.name}</Text>
                 <StatusBadge
-                  label={ownedFleet!.account.status}
+                  label={ownerFleet.account.status}
                   variant={
-                    ownedFleet!.account.status === 'approved'
+                    ownerFleet.account.status === 'approved'
                       ? 'success'
-                      : ownedFleet!.account.status === 'rejected' || ownedFleet!.account.status === 'suspended'
+                      : ownerFleet.account.status === 'rejected' || ownerFleet.account.status === 'suspended'
                       ? 'error'
                       : 'warning'
                   }
                 />
               </View>
-              {ownedFleet!.account.status === 'pending' && (
+              {ownerFleet.account.status === 'pending' && (
                 <Text variant="bodySmall" color="secondary" className="mb-3">
                   Tu flota está en revisión. Recibirás una notificación cuando el equipo TriciGo la apruebe. Los conductores listados serán vinculados automáticamente cuando se registren con su número de teléfono.
                 </Text>
               )}
-              {ownedFleet!.account.status === 'approved' && ownedFleet!.account.commission_percent !== null && (
+              {ownerFleet.account.status === 'approved' && ownerFleet.account.commission_percent !== null && (
                 <View className="border-t border-neutral-100 dark:border-neutral-800 pt-3 mb-2">
                   <Text variant="caption" color="secondary">Comisión asignada</Text>
-                  <Text variant="h4" color="accent">{ownedFleet!.account.commission_percent}%</Text>
+                  <Text variant="h4" color="accent">{ownerFleet.account.commission_percent}%</Text>
                   <Text variant="caption" color="secondary">
                     Reducida vs. el {15}% estándar — pasajeros pagan menos.
                   </Text>
@@ -175,17 +205,17 @@ export default function CorporateScreen() {
 
             <Text variant="label" color="secondary" className="mb-2 ml-1">Conductores</Text>
             <Card variant="outlined" padding="lg" className="mb-4">
-              <FleetMembersList members={ownedFleet!.members} />
+              <FleetMembersList members={ownerFleet.members} />
             </Card>
           </>
         )}
 
         {/* Empty → form */}
-        {noLink && driverProfile?.user_id && (
+        {ready?.showRequestForm && userId && (
           <FleetRequestForm
-            ownerUserId={driverProfile.user_id}
+            ownerUserId={userId}
             ownerPhone={authUser?.phone ?? ''}
-            onSubmitted={() => setVersion((v) => v + 1)}
+            onSubmitted={handleRequestSubmitted}
           />
         )}
       </View>

@@ -821,5 +821,9 @@
     "prompt_body": "Allow TriciGo to appear over other apps: when a ride arrives, the app will open by itself even if you're using another app, and you'll see a floating button to jump back quickly.",
     "prompt_enable": "Enable",
     "prompt_later": "Not now"
+  },
+  "fleet": {
+    "load_error_title": "We couldn't load your corporate information",
+    "load_error_body": "Check your internet connection and try again."
   }
 }

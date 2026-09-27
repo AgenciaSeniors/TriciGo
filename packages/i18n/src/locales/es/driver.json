@@ -821,5 +821,9 @@
     "prompt_body": "Permite que TriciGo aparezca sobre otras apps: cuando llegue un viaje, la app se abrirá sola aunque estés usando otra aplicación, y verás un botón flotante para volver rápido.",
     "prompt_enable": "Activar",
     "prompt_later": "Ahora no"
+  },
+  "fleet": {
+    "load_error_title": "No pudimos cargar tu información corporativa",
+    "load_error_body": "Revisa tu conexión a internet e inténtalo de nuevo."
   }
 }
