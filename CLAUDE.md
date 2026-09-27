@@ -1956,7 +1956,7 @@ Apagar: `... -e command exit` + `settings put global sysui_demo_allowed 0`. **Li
 
 **5. Colocar + commitear** por nombre estable (`01-login`…`05-*`). El usuario sube manual a la consola (el repo es backup/control de versión).
 
-### Publicar una versión en las tiendas: qué funcionó y qué no (release 1.7.3, verificado 2026-09-25)
+### Publicar una versión en las tiendas: qué funcionó y qué no (release 1.7.3, verificado 2026-09-25/27)
 
 **Reparto que resultó más rápido.** Claude hace lo de terminal: verificar los builds, armar iOS y subirlo a App Store Connect con `eas submit`. El usuario hace lo de las consolas web: en Play Console subir el `.aab`, cargar las novedades y enviar a revisión; en App Store Connect crear la versión, elegir el build, cargar las novedades y enviar a revisión. Manejar Play Console con la extensión de Chrome costó más de lo que ahorró (ver abajo). Para que todo salga en un comando falta la API de Play (último punto).
 
@@ -1965,11 +1965,16 @@ Apagar: `... -e command exit` + `settings put global sysui_demo_allowed 0`. **Li
 cd apps/client && npx eas-cli@latest build:view <build-id-android> --json   # gitCommitHash, appVersion, appBuildVersion
 git diff --stat <gitCommitHash> HEAD -- apps/client apps/driver packages pnpm-lock.yaml package.json patches
 ```
-Si el diff sale vacío, iOS se puede armar desde `HEAD`. En 1.7.3 los `.aab` salieron de `c08b68c3` (pasajero vc37, conductor vc47) y después entró a master #1022 (flotas, en `apps/driver` y `packages/api`). iOS se armó desde `50395fb8`, que tenía el mismo código de app; #1022 y lo que siguió van en la próxima versión, en las dos plataformas.
+Si el diff sale vacío, iOS se puede armar desde `HEAD`.
+
+**1b. Justo antes de enviar a revisión, volver a mirar master.** Los `.aab` de 1.7.3 se armaron el 23/09 desde `c08b68c3` y en los días siguientes entraron **14 merges que tocan las apps** (flotas, cuentas de empresa, colores de tarjetas). La primera tanda (Android vc37/vc47, iOS 41/45) se descartó y se rearmaron las cuatro desde `c48b7604`. Chequeo: `git log --oneline <gitCommitHash>..origin/master -- apps/client apps/driver packages`. Si hay merges que importan:
+- **El número de versión se reusa** mientras nada de esa versión esté en revisión: en ASC no había versión 1.7.3 creada y en Play estaba solo el borrador, al que se le cambia el app bundle.
+- **Confirmar en prod las migraciones de las que depende el código nuevo** antes de compilar: grep de `rpc('…')` y `from('…')` en el diff de `packages/api/src/services` y buscar cada objeto en `pg_proc` / `information_schema.columns`. En 1.7.3 eran 00598–00602, todas aplicadas. Compararlo contra un marcador del cuerpo de la migración, no contra un nombre adivinado (así salió un falso negativo con 00599).
+- **Armar desde el commit exacto sin reinstalar:** si `git diff --quiet <viejo> origin/master -- pnpm-lock.yaml` da igual, `git checkout --detach origin/master`, lanzar los cuatro `eas build … --no-wait` uno tras otro y volver a la rama recién cuando terminó el último (cada uno sube el árbol de trabajo en ese momento). Tardaron unos 15 min en EAS.
 
 **2. `pnpm install --frozen-lockfile` antes de cualquier comando `eas`.** Sin `node_modules` en el worktree falla hasta `eas build:view`, con `expo config --json exited with non-zero code: 1`: Node busca hacia arriba y usa el `expo` del checkout principal. En esta PC tardó 10 min.
 
-**3. Armar iOS en local:** `cd apps/<app> && npx eas-cli@latest build -p ios --profile production --non-interactive --no-wait`. Usa las credenciales guardadas en EAS (el certificado y los perfiles vencen el 24-jun-2027) y no hace falta GitHub Actions. El número de build lo sube EAS solo: en 1.7.3 quedaron **41** el pasajero y **45** el conductor.
+**3. Armar iOS en local:** `cd apps/<app> && npx eas-cli@latest build -p ios --profile production --non-interactive --no-wait`. Usa las credenciales guardadas en EAS (el certificado y los perfiles vencen el 24-jun-2027) y no hace falta GitHub Actions. El número de build lo sube EAS solo. La 1.7.3 final quedó: iOS **42** pasajero y **46** conductor; Android vc**38** y vc**48**. Los 41 y 45 de la primera tanda quedaron sin usar en ASC: al elegir el build, fijarse en el número.
 
 **4. Subir iOS a App Store Connect.** Agregar en local, **sin commitear**, en `apps/<app>/eas.json` → `submit.production.ios`: `"ascApiKeyPath": "C:/Users/Eduardo/Downloads/AuthKey_4842VLU5R9.p8"`, `"ascApiKeyIssuerId": "f19c9b1b-da82-4a06-9d67-12d8ed947440"` y `"ascApiKeyId": "4842VLU5R9"`. Después correr `npx eas-cli@latest submit -p ios --profile production --id <buildId> --non-interactive` y deshacer el cambio con `git checkout -- apps/client/eas.json apps/driver/eas.json`.
 
