@@ -2,8 +2,8 @@
 
 // ============================================================
 // TriciGo Admin — Fleet review panel (Phase 5)
-// Shown inside /businesses/[id] for accounts where
-// is_fleet_owner = true. Lists fleet_members with status badges
+// Shown inside /businesses/[id] for fleet accounts: a driver_fleets
+// row or is_fleet_owner = true. Lists fleet_members with status badges
 // and approve/reject buttons per row, plus the high-level fleet
 // metadata (vehicle types, zones, hours).
 // ============================================================

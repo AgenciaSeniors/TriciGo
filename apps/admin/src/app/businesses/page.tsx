@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2 } from 'lucide-react';
-import { corporateService } from '@tricigo/api';
+import { corporateService, fleetService } from '@tricigo/api';
 import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { CorporateAccount, CorporateAccountStatus } from '@tricigo/types';
@@ -19,6 +19,7 @@ export default function BusinessesPage() {
   const { t } = useTranslation('admin');
   const [tab, setTab] = useState<Filter>('all');
   const [accounts, setAccounts] = useState<CorporateAccount[]>([]);
+  const [fleetAccountIds, setFleetAccountIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -40,9 +41,14 @@ export default function BusinessesPage() {
         page,
         PAGE_SIZE,
       );
+      // A fleet request sent from the app is only flagged is_fleet_owner once
+      // approved; until then its driver_fleets row is what marks it.
+      const withFleet = await fleetService.getAccountIdsWithFleet(data.map((a) => a.id));
       setAccounts(data);
+      setFleetAccountIds(withFleet);
     } catch (err) {
       setAccounts([]);
+      setFleetAccountIds(new Set());
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
@@ -60,7 +66,7 @@ export default function BusinessesPage() {
       cell: (a) => (
         <span className="font-medium text-ink inline-flex items-center gap-2">
           {a.name}
-          {a.is_fleet_owner && (
+          {(a.is_fleet_owner || fleetAccountIds.has(a.id)) && (
             <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
               Flota
             </span>

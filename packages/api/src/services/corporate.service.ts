@@ -14,6 +14,7 @@ import type {
   ServiceTypeSlug,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { fleetService } from './fleet.service';
 
 export const corporateService = {
   // ─────────────────────────── Registration & Lifecycle ───────────────────────────
@@ -102,11 +103,25 @@ export const corporateService = {
 
   // ─────────────────────────── Admin Approval ───────────────────────────
 
+  /**
+   * Approves the account. A fleet request (an account with a driver_fleets
+   * row) also gets is_fleet_owner = true in the same UPDATE: the driver app
+   * cannot set that flag (00418/00434), and approval is when an admin vouches
+   * for the fleet. With the flag, dispatch offers the rides billed to the
+   * account only to its active fleet drivers, once it has one (00336/00337).
+   * An account with no fleet keeps whatever flag it had. Throws, approving
+   * nothing, when the fleet lookup fails.
+   */
   async approveAccount(accountId: string, adminId: string): Promise<void> {
     const supabase = getSupabaseClient();
+    const hasFleet = (await fleetService.getAccountIdsWithFleet([accountId])).has(accountId);
     const { error } = await supabase
       .from('corporate_accounts')
-      .update({ status: 'approved', approved_at: new Date().toISOString() })
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        ...(hasFleet ? { is_fleet_owner: true } : {}),
+      })
       .eq('id', accountId);
     if (error) throw error;
 
@@ -575,9 +590,17 @@ export const corporateService = {
   },
 
   /**
-   * Returns the user's most recent corporate request (any status). Used
-   * by the client app to render the right state on /profile/corporate:
-   * form, "in review", "rejected — resubmit", or full dashboard.
+   * Returns the user's most recent corporate client request (any status).
+   * Used by the client app and the web to render the right state on
+   * /profile/corporate: form, "in review", "rejected — resubmit", or full
+   * dashboard.
+   *
+   * A fleet request is not a client request. The driver app sends it as an
+   * account plus its driver_fleets row, and only an admin can set
+   * is_fleet_owner (00418/00434), so an account with either one is skipped.
+   * Without the row check a pending fleet showed here as a client request in
+   * review, and a rejected one offered the client form to send it again.
+   * Returns null when a lookup fails; both screens treat that as no request.
    */
   async getRequestStatus(userId: string): Promise<CorporateAccount | null> {
     const supabase = getSupabaseClient();
@@ -587,10 +610,16 @@ export const corporateService = {
       .eq('created_by', userId)
       .eq('is_fleet_owner', false)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('id', { ascending: true });
     if (error) return null;
-    return data as CorporateAccount | null;
+    const accounts = (data ?? []) as CorporateAccount[];
+    if (accounts.length === 0) return null;
+
+    const withFleet = await fleetService
+      .getAccountIdsWithFleet(accounts.map((a) => a.id))
+      .catch(() => null);
+    if (!withFleet) return null;
+    return accounts.find((a) => !withFleet.has(a.id)) ?? null;
   },
 
   /**

@@ -1,27 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { DriverFleet, FleetMember } from '@tricigo/types';
 
-// In-memory stand-in for corporate_accounts, driver_fleets and fleet_members.
-// It follows postgrest-js 2.99.1 and the live schema on the points this suite
-// depends on:
+// In-memory stand-in for corporate_accounts, driver_fleets, fleet_members and
+// admin_actions. It follows postgrest-js 2.99.1 and the live schema on the
+// points this suite depends on:
 //  - awaiting a read resolves every row that passes the eq/in filters, sorted
-//    by the ORDER BY calls;
+//    by the ORDER BY calls and cut by limit();
 //  - a select() with a column list returns only those columns, a NULL one as
 //    null, so a column the service forgets to select comes back missing;
 //  - maybeSingle() over two or more rows resolves (does not throw) to error
 //    PGRST116 with data null, and single() does the same over zero rows;
 //  - driver_fleets is UNIQUE (corporate_account_id) and fleet_members is
-//    UNIQUE (fleet_id, driver_phone). A statement is atomic: an insert that
-//    hits a key, even one written earlier in the same statement, fails with
-//    23505 and writes nothing;
+//    UNIQUE (fleet_id, driver_phone). A statement is atomic: an insert or
+//    update that hits a key, even one written earlier in the same statement,
+//    fails with 23505 and writes nothing;
 //  - an upsert targets its onConflict columns, or the primary key when there
 //    are none (as PostgREST does), and fails with 42P10 on columns without a
 //    unique key. On a conflict it updates the existing row, or skips it with
 //    ignoreDuplicates (also within the statement). A merge upsert that hits
 //    the same key twice in one statement, which Postgres rejects, is not
-//    modelled.
-// RLS is not emulated: the service filters by created_by itself.
-type Table = 'corporate_accounts' | 'driver_fleets' | 'fleet_members';
+//    modelled;
+//  - an update without select() resolves data null, whatever it changed.
+// RLS and triggers are not emulated: the service filters by created_by
+// itself, and the protect triggers of 00418/00434 let an admin write every
+// column (only an admin approves an account).
+type Table = 'corporate_accounts' | 'driver_fleets' | 'fleet_members' | 'admin_actions';
 type Row = Record<string, unknown>;
 type QueryError = { code: string; message: string; details: string | null; hint: string | null };
 type Result = { data: unknown; error: QueryError | null };
@@ -31,9 +34,10 @@ const UNIQUE_KEYS: Record<Table, string[][]> = {
   corporate_accounts: [],
   driver_fleets: [['corporate_account_id']],
   fleet_members: [['fleet_id', 'driver_phone']],
+  admin_actions: [],
 };
 
-let db: Record<Table, Row[]> = { corporate_accounts: [], driver_fleets: [], fleet_members: [] };
+let db: Record<Table, Row[]> = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [] };
 let failures: Partial<Record<Table, QueryError>> = {};
 let generatedIds = 0;
 
@@ -111,9 +115,22 @@ function upsertRows(
   return { data: written, error: null };
 }
 
+function updateRows(table: string, values: Row, matches: (row: Row) => boolean): Result {
+  const staged = rowsOf(table).map((row) => ({ ...row }));
+  const updated = staged.filter(matches);
+  for (const row of updated) Object.assign(row, values);
+  for (const row of updated) {
+    const clash = clashingKey(table, row, staged.filter((other) => other !== row));
+    if (clash) return { data: null, error: duplicateKey(table, clash) };
+  }
+  db[table as Table] = staged;
+  return { data: null, error: null };
+}
+
 function query(table: string) {
   const filters: Array<(row: Row) => boolean> = [];
   const orderBy: Array<{ column: string; ascending: boolean }> = [];
+  let limitTo: number | null = null;
   let write: (() => Result) | null = null;
   let columns: string[] | null = null; // null: select('*'), or no select() at all
 
@@ -125,7 +142,10 @@ function query(table: string) {
     if (failure) return { data: null, error: failure };
     if (write) {
       const written = write();
-      return written.error ? written : { data: (written.data as Row[]).map(project), error: null };
+      // An update without select() resolves data null: no rows to project.
+      return written.error || written.data === null
+        ? written
+        : { data: (written.data as Row[]).map(project), error: null };
     }
     const rows = rowsOf(table).filter((row) => filters.every((keep) => keep(row)));
     rows.sort((a, b) => {
@@ -136,7 +156,8 @@ function query(table: string) {
       }
       return 0;
     });
-    return { data: rows.map(project), error: null };
+    const kept = limitTo === null ? rows : rows.slice(0, limitTo);
+    return { data: kept.map(project), error: null };
   };
 
   const one = (allowNone: boolean): Result => {
@@ -172,8 +193,16 @@ function query(table: string) {
       orderBy.push({ column, ascending: options?.ascending ?? true });
       return builder;
     },
+    limit: (count: number) => {
+      limitTo = count;
+      return builder;
+    },
     insert: (rows: Row | Row[]) => {
       write = () => insertRows(table, rows);
+      return builder;
+    },
+    update: (values: Row) => {
+      write = () => updateRows(table, values, (row) => filters.every((keep) => keep(row)));
       return builder;
     },
     upsert: (rows: Row | Row[], options?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
@@ -194,9 +223,11 @@ vi.mock('../../client', () => ({
 
 // Import after the mock is set up.
 import { fleetService } from '../fleet.service';
+import { corporateService } from '../corporate.service';
 
 const OWNER = '00000000-0000-4000-8000-000000000011';
 const OTHER_USER = '00000000-0000-4000-8000-000000000012';
+const ADMIN = '00000000-0000-4000-8000-000000000061';
 const ACCOUNT_A = '00000000-0000-4000-8000-0000000000a1';
 const ACCOUNT_B = '00000000-0000-4000-8000-0000000000b1';
 const ACCOUNT_C = '00000000-0000-4000-8000-0000000000c1';
@@ -266,7 +297,7 @@ function member(overrides: Partial<FleetMember>): FleetMember {
 const CONNECTION_LOST = queryError('08006', 'connection failure');
 
 beforeEach(() => {
-  db = { corporate_accounts: [], driver_fleets: [], fleet_members: [] };
+  db = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [] };
   failures = {};
   generatedIds = 0;
 });
@@ -513,5 +544,159 @@ describe('fleetService.submitFleetRequest', () => {
   it('throws when the drivers cannot be saved, so the form can retry on the same account', async () => {
     failures.fleet_members = CONNECTION_LOST;
     await expect(fleetService.submitFleetRequest(request)).rejects.toThrow('connection failure');
+  });
+});
+
+describe('fleetService.getAccountIdsWithFleet', () => {
+  it('returns the accounts that have a fleet row, a request sent from the app included', async () => {
+    seed(
+      'corporate_accounts',
+      account({ id: ACCOUNT_A }),
+      account({ id: ACCOUNT_B, name: 'Transportes Vedado' }),
+    );
+    seed('driver_fleets', fleet({ corporate_account_id: ACCOUNT_A }));
+
+    expect(await fleetService.getAccountIdsWithFleet([ACCOUNT_A, ACCOUNT_B])).toEqual(new Set([ACCOUNT_A]));
+  });
+
+  it('answers an empty list without reading the fleets', async () => {
+    failures.driver_fleets = CONNECTION_LOST;
+    expect(await fleetService.getAccountIdsWithFleet([])).toEqual(new Set());
+  });
+
+  it('throws instead of reporting no fleet when the fleets cannot be read', async () => {
+    seed('driver_fleets', fleet({}));
+    failures.driver_fleets = CONNECTION_LOST;
+    await expect(fleetService.getAccountIdsWithFleet([ACCOUNT_A])).rejects.toThrow('connection failure');
+  });
+});
+
+describe('corporateService.approveAccount', () => {
+  it('flags a fleet request sent from the app as fleet owner when it approves it', async () => {
+    seed('corporate_accounts', account({}));
+    seed('driver_fleets', fleet({}));
+
+    await corporateService.approveAccount(ACCOUNT_A, ADMIN);
+
+    expect(db.corporate_accounts).toEqual([
+      expect.objectContaining({ id: ACCOUNT_A, status: 'approved', is_fleet_owner: true, approved_at: expect.any(String) }),
+    ]);
+    expect(db.admin_actions).toEqual([
+      expect.objectContaining({ admin_id: ADMIN, action: 'approve_corporate', target_id: ACCOUNT_A }),
+    ]);
+  });
+
+  it('approves a corporate client request without flagging it', async () => {
+    seed('corporate_accounts', account({}));
+
+    await corporateService.approveAccount(ACCOUNT_A, ADMIN);
+
+    expect(db.corporate_accounts).toEqual([
+      expect.objectContaining({ id: ACCOUNT_A, status: 'approved', is_fleet_owner: false }),
+    ]);
+  });
+
+  it('keeps the flag of an account an admin flagged before it had a fleet row', async () => {
+    seed('corporate_accounts', account({ is_fleet_owner: true }));
+
+    await corporateService.approveAccount(ACCOUNT_A, ADMIN);
+
+    expect(db.corporate_accounts).toEqual([
+      expect.objectContaining({ id: ACCOUNT_A, status: 'approved', is_fleet_owner: true }),
+    ]);
+  });
+
+  it('flags only the account it approves', async () => {
+    seed('corporate_accounts', account({ id: ACCOUNT_A }), account({ id: ACCOUNT_B }));
+    seed(
+      'driver_fleets',
+      fleet({ id: FLEET_A, corporate_account_id: ACCOUNT_A }),
+      fleet({ id: FLEET_B, corporate_account_id: ACCOUNT_B }),
+    );
+
+    await corporateService.approveAccount(ACCOUNT_A, ADMIN);
+
+    expect(db.corporate_accounts).toEqual([
+      expect.objectContaining({ id: ACCOUNT_A, status: 'approved', is_fleet_owner: true }),
+      expect.objectContaining({ id: ACCOUNT_B, status: 'pending', is_fleet_owner: false }),
+    ]);
+  });
+
+  it('approves nothing when it cannot tell whether the account has a fleet', async () => {
+    seed('corporate_accounts', account({}));
+    seed('driver_fleets', fleet({}));
+    failures.driver_fleets = CONNECTION_LOST;
+
+    await expect(corporateService.approveAccount(ACCOUNT_A, ADMIN)).rejects.toThrow('connection failure');
+    expect(db.corporate_accounts).toEqual([
+      expect.objectContaining({ id: ACCOUNT_A, status: 'pending', is_fleet_owner: false }),
+    ]);
+    expect(db.admin_actions).toEqual([]);
+  });
+});
+
+describe('corporateService.getRequestStatus', () => {
+  // A corporate client request (client app or web) is an account with no fleet.
+  const clientRequest = (overrides: Row) =>
+    account({ id: ACCOUNT_B, name: 'Hotel Vedado', status: 'rejected', ...overrides });
+
+  it('returns null when the only request is a fleet request sent from the app', async () => {
+    seed('corporate_accounts', account({}));
+    seed('driver_fleets', fleet({}));
+
+    expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
+  });
+
+  it('returns the corporate client request, skipping a newer fleet request', async () => {
+    seed(
+      'corporate_accounts',
+      account({ id: ACCOUNT_A, created_at: '2026-09-21T14:00:00+00:00' }),
+      clientRequest({ created_at: '2026-09-20T14:00:00+00:00' }),
+    );
+    seed('driver_fleets', fleet({ corporate_account_id: ACCOUNT_A }));
+
+    expect((await corporateService.getRequestStatus(OWNER))?.id).toBe(ACCOUNT_B);
+  });
+
+  it('skips an account an admin flagged as fleet owner', async () => {
+    seed('corporate_accounts', account({ status: 'approved', is_fleet_owner: true }));
+
+    expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
+  });
+
+  it('returns the newest of two corporate client requests', async () => {
+    seed(
+      'corporate_accounts',
+      clientRequest({ id: ACCOUNT_B, created_at: '2026-09-20T14:00:00+00:00' }),
+      clientRequest({ id: ACCOUNT_C, status: 'pending', created_at: '2026-09-22T14:00:00+00:00' }),
+    );
+
+    expect((await corporateService.getRequestStatus(OWNER))?.id).toBe(ACCOUNT_C);
+  });
+
+  it('breaks a tie on the account id, so every load shows the same request', async () => {
+    const sameInstant = '2026-09-20T14:00:00+00:00';
+    seed(
+      'corporate_accounts',
+      clientRequest({ id: ACCOUNT_C, created_at: sameInstant }),
+      clientRequest({ id: ACCOUNT_B, created_at: sameInstant }),
+    );
+
+    expect((await corporateService.getRequestStatus(OWNER))?.id).toBe(ACCOUNT_B);
+  });
+
+  it('returns null instead of a fleet request when the fleets cannot be read', async () => {
+    seed('corporate_accounts', account({}));
+    seed('driver_fleets', fleet({}));
+    failures.driver_fleets = CONNECTION_LOST;
+
+    expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
+  });
+
+  it('returns null when the accounts cannot be read', async () => {
+    seed('corporate_accounts', clientRequest({}));
+    failures.corporate_accounts = CONNECTION_LOST;
+
+    expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
   });
 });
