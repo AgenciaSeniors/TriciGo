@@ -22,15 +22,20 @@
 -- write any number there through PostgREST without an OTP (column UPDATE
 -- grant, users_update_own, and tg_users_protect_admin_fields does not cover
 -- it), and it is not unique. auth.users.phone is unique (users_phone_key),
--- GoTrue keeps it as E.164 digits without '+', and users cannot write it.
+-- GoTrue keeps it as E.164 digits without '+', and no end user can write it.
 -- phone_autoconfirm is false in prod (/auth/v1/settings, 2026-09-25), and
 -- verify-otp and link-phone confirm a number with the admin API only after
--- checking the D7 code. On 2026-09-25, 544 of the 546 phones in public.users
--- equal (normalized) their confirmed auth phone; the other 2 belong to seeded
--- admins with no auth phone. The one number two accounts share (an admin,
--- unconfirmed, and a driver, confirmed) resolves to the driver. No driver
--- profile is required, same as signup: a passenger-only account is linked
--- and is already in the fleet when it registers as a driver.
+-- checking the D7 code. That is an invariant to keep: every admin-API write
+-- that sets phone_confirm must follow an OTP of that number. (GoTrue's
+-- updateUserById confirms before it sets the new phone, so an account whose
+-- current number was never confirmed would have that number counted too; no
+-- account with a session has an unconfirmed number today.) On 2026-09-25,
+-- 544 of the 546 phones in public.users equal (normalized) their confirmed
+-- auth phone; the other 2 belong to seeded admins with no auth phone. The one
+-- number two accounts share (an admin, unconfirmed, and a driver, confirmed)
+-- resolves to the driver. No driver profile is required, same as signup: a
+-- passenger-only account is linked and is already in the fleet when it
+-- registers as a driver.
 --
 -- Fix:
 --   1. _user_id_by_verified_phone(text) returns that account's id, or NULL
@@ -46,22 +51,31 @@
 --      fire in name order) and so sees the row after an owner's change of
 --      status was reverted. That is defence in depth: the protect trigger
 --      reverts every field this one sets, whichever runs first.
---   3. Signup: auto_link_fleet_member_on_signup now links only when the new
---      account's number is confirmed. handle_new_user copies auth.users.phone
---      whether or not it is, and GoTrue's own phone signup (the provider is
---      on) inserts the account before its OTP. verify-otp creates accounts
---      already confirmed, so the real flow is unchanged.
---   4. Confirmation: on_auth_user_phone_confirmed, AFTER UPDATE OF phone,
---      phone_confirmed_at ON auth.users, links an account's approved
---      invitations when a number becomes confirmed for it (link-phone,
---      verify-otp's heal, GoTrue's own OTP). Confirming an already confirmed
---      number again does not count. Users cannot write auth.users, so unlike
---      a trigger on public.users this one cannot be fired by setting a number
---      without an OTP.
+--   3. Confirmation: on_auth_user_phone_confirmed, AFTER UPDATE ON auth.users,
+--      links an account's approved invitations when a number becomes
+--      confirmed for it: its first confirmation, or a new number on an
+--      account already confirmed. That is where new accounts get linked in
+--      practice: verify-otp's createUser INSERTs the account and confirms the
+--      number in a second statement, and link-phone and verify-otp's heal call
+--      updateUserById, which confirms first and sets the phone after.
+--      Re-confirming the same number does not count. The trigger names no
+--      column and has no WHEN, so GoTrue can still alter phone or
+--      phone_confirmed_at; the function returns at once for any other update.
+--      postgres does not own auth.users and cannot drop or disable a trigger
+--      on it: to switch this one off, replace the function body with
+--      RETURN NEW.
+--   4. Signup: auto_link_fleet_member_on_signup now links only a confirmed
+--      number. handle_new_user copies auth.users.phone whether or not it is,
+--      and GoTrue's own phone signup (the provider is on) inserts the account
+--      before its OTP. Since GoTrue inserts before it confirms, this path only
+--      links an account inserted already confirmed; step 3 links the rest.
 --   5. The signup and confirmation functions run inside GoTrue's transaction.
---      A failure to link is logged as a WARNING and never fails the signup or
---      the confirmation.
---   6. A one-time backfill for invitations already approved whose number a
+--      A failure to link, including a lock wait over 2s, becomes a WARNING
+--      plus a row in rpc_attempt_log (outcome 'link_failed'), and never fails
+--      the signup, the login or the confirmation.
+--   6. Numbers outside Cuba: GoTrue stores them without '+', so both
+--      functions put the '+' back before they look the number up.
+--   7. A one-time backfill for invitations already approved whose number a
 --      verified account holds (0 rows in prod).
 -- The relink RPC and the protect trigger are untouched.
 -- The migration asserts its result instead of trusting CREATE (a plpgsql
@@ -158,19 +172,23 @@ CREATE OR REPLACE FUNCTION public.auto_link_fleet_member_on_signup()
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
+ SET lock_timeout TO '2s'
 AS $function$
+DECLARE
+  v_phone text;
 BEGIN
   IF NEW.phone IS NULL OR NEW.phone = '' THEN
     RETURN NEW;
   END IF;
 
   -- Runs inside GoTrue's signup transaction: failing to link must never fail
-  -- the signup.
+  -- the signup. lock_timeout turns a lock wait into an error caught here.
   BEGIN
-    -- Only a number this account confirmed by OTP. GoTrue's own phone signup
-    -- inserts the account before its OTP; on_auth_user_phone_confirmed links
-    -- it once the number is confirmed.
-    IF public._user_id_by_verified_phone(NEW.phone) IS DISTINCT FROM NEW.id THEN
+    -- Only a number this account confirmed by OTP. GoTrue inserts accounts
+    -- before confirming them, so in practice on_auth_user_phone_confirmed
+    -- links them; this covers an account inserted already confirmed.
+    v_phone := '+' || ltrim(NEW.phone, '+');
+    IF public._user_id_by_verified_phone(v_phone) IS DISTINCT FROM NEW.id THEN
       RETURN NEW;
     END IF;
 
@@ -180,11 +198,13 @@ BEGIN
     SET driver_id = NEW.id,
         status = 'active',
         signed_up_at = now()
-    WHERE public._normalize_cuban_phone(driver_phone) = public._normalize_cuban_phone(NEW.phone)
+    WHERE public._normalize_cuban_phone(driver_phone) = public._normalize_cuban_phone(v_phone)
       AND status IN ('approved', 'pending_signup')
       AND driver_id IS NULL;
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'auto_link_fleet_member_on_signup(%): % %', NEW.id, SQLSTATE, SQLERRM;
+    PERFORM public.log_rpc_attempt('auto_link_fleet_member_on_signup', NULL, NEW.id, 'link_failed',
+      jsonb_build_object('sqlstate', SQLSTATE, 'error', SQLERRM));
   END;
 
   RETURN NEW;
@@ -194,19 +214,32 @@ $function$;
 REVOKE EXECUTE ON FUNCTION public.auto_link_fleet_member_on_signup() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.auto_link_fleet_member_on_signup() TO service_role;
 
--- 4. Link when an account confirms a number later ------------------------------
+-- 4. Link when an account confirms a number ------------------------------------
 CREATE OR REPLACE FUNCTION public.auto_link_fleet_member_on_phone_confirmed()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
+ SET lock_timeout TO '2s'
 AS $function$
+DECLARE
+  v_phone text;
 BEGIN
+  -- Fires on every update of auth.users. Only a number that just became
+  -- confirmed for this account counts: its first confirmation, or a new
+  -- number on an account already confirmed.
+  IF NEW.phone IS NULL OR NEW.phone = '' OR NEW.phone_confirmed_at IS NULL
+     OR NOT (OLD.phone_confirmed_at IS NULL OR NEW.phone IS DISTINCT FROM OLD.phone) THEN
+    RETURN NEW;
+  END IF;
+
   -- Runs inside GoTrue's transaction (link-phone, verify-otp, GoTrue's own
-  -- OTP): failing to link must never fail the confirmation. GoTrue's
+  -- OTP): failing to link must never fail the login or the confirmation.
+  -- lock_timeout turns a lock wait into an error caught here. GoTrue's
   -- connection carries no JWT, so tg_fleet_members_protect lets this through.
   BEGIN
-    IF public._user_id_by_verified_phone(NEW.phone) IS DISTINCT FROM NEW.id THEN
+    v_phone := '+' || ltrim(NEW.phone, '+');   -- GoTrue keeps E.164 without '+'
+    IF public._user_id_by_verified_phone(v_phone) IS DISTINCT FROM NEW.id THEN
       RETURN NEW;
     END IF;
 
@@ -214,11 +247,13 @@ BEGIN
     SET driver_id = NEW.id,
         status = 'active',
         signed_up_at = COALESCE(fm.signed_up_at, now())
-    WHERE public._normalize_cuban_phone(fm.driver_phone) = public._normalize_cuban_phone(NEW.phone)
+    WHERE public._normalize_cuban_phone(fm.driver_phone) = public._normalize_cuban_phone(v_phone)
       AND fm.status IN ('approved', 'pending_signup')
       AND fm.driver_id IS NULL;
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'auto_link_fleet_member_on_phone_confirmed(%): % %', NEW.id, SQLSTATE, SQLERRM;
+    PERFORM public.log_rpc_attempt('auto_link_fleet_member_on_phone_confirmed', NULL, NEW.id, 'link_failed',
+      jsonb_build_object('sqlstate', SQLSTATE, 'error', SQLERRM));
   END;
 
   RETURN NEW;
@@ -304,13 +339,13 @@ BEGIN
       FROM public.fleet_members WHERE id = v_signup;
 
       -- Confirmation: point the second one at the number, then fire the
-      -- confirmation function as an update of the account's phone.
+      -- confirmation function as the update that confirms the account's number.
       UPDATE public.fleet_members SET driver_phone = '+' || v_phone WHERE id = v_confirm;
-      CREATE TEMP TABLE t00598_auth (id uuid, phone text);
+      CREATE TEMP TABLE t00598_auth (id uuid, phone text, phone_confirmed_at timestamptz);
       CREATE TRIGGER t00598_auth AFTER UPDATE ON pg_temp.t00598_auth
         FOR EACH ROW EXECUTE FUNCTION public.auto_link_fleet_member_on_phone_confirmed();
-      INSERT INTO pg_temp.t00598_auth (id, phone) VALUES (v_user, NULL);
-      UPDATE pg_temp.t00598_auth SET phone = v_phone;
+      INSERT INTO pg_temp.t00598_auth (id, phone, phone_confirmed_at) VALUES (v_user, v_phone, NULL);
+      UPDATE pg_temp.t00598_auth SET phone_confirmed_at = now();
       SELECT status || ':' || coalesce((driver_id = v_user)::text, 'unlinked') INTO v_on_confirm
       FROM public.fleet_members WHERE id = v_confirm;
 
@@ -347,10 +382,10 @@ BEGIN
 END $$;
 
 -- 7. The confirmation trigger, last: CREATE TRIGGER blocks writes to auth.users
--- until this migration commits, so the window stays as short as possible.
+-- until this migration commits, so the window stays as short as possible. No
+-- column list and no WHEN: they would stop GoTrue from altering those columns.
 CREATE OR REPLACE TRIGGER on_auth_user_phone_confirmed
-  AFTER UPDATE OF phone, phone_confirmed_at ON auth.users
-  FOR EACH ROW
-  WHEN (NEW.phone IS NOT NULL AND NEW.phone <> '' AND NEW.phone_confirmed_at IS NOT NULL
-        AND (OLD.phone_confirmed_at IS NULL OR NEW.phone IS DISTINCT FROM OLD.phone))
-  EXECUTE FUNCTION public.auto_link_fleet_member_on_phone_confirmed();
+  AFTER UPDATE ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.auto_link_fleet_member_on_phone_confirmed();
+
+RESET lock_timeout;
