@@ -15,7 +15,7 @@ import type {
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 
-type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent'>;
+type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent' | 'suspended_reason'>;
 
 // Which fleet an owner with several corporate accounts sees (lower first).
 const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
@@ -112,7 +112,8 @@ export const fleetService = {
    * request sent from the app never carries it. A user can hold several
    * accounts (a corporate client request, a retried fleet request), so the
    * fleet shown is the approved one, else pending, suspended, rejected; the
-   * newest wins within a status and the account id breaks a full tie.
+   * newest wins within a status and the account id breaks a full tie. The
+   * account carries the admin's reason when it was rejected or suspended.
    * Throws when a lookup fails, so a failed read is never taken for "no fleet".
    */
   async getFleetByOwner(userId: string): Promise<FleetWithMembers | null> {
@@ -120,7 +121,7 @@ export const fleetService = {
 
     const { data: accountRows, error: accountsErr } = await supabase
       .from('corporate_accounts')
-      .select('id, name, status, commission_percent')
+      .select('id, name, status, commission_percent, suspended_reason')
       .eq('created_by', userId)
       .order('created_at', { ascending: false })
       .order('id', { ascending: true });
@@ -164,6 +165,7 @@ export const fleetService = {
         name: owned.account.name,
         status: owned.account.status,
         commission_percent: owned.account.commission_percent,
+        suspended_reason: owned.account.suspended_reason,
       },
     };
   },
@@ -283,7 +285,7 @@ export const fleetService = {
     const supabase = getSupabaseClient();
     const { data: accounts, error } = await supabase
       .from('corporate_accounts')
-      .select('id, name, status, commission_percent, is_fleet_owner')
+      .select('id, name, status, commission_percent, is_fleet_owner, suspended_reason')
       .eq('is_fleet_owner', true)
       .in('status', ['pending', 'approved']);
     if (error || !accounts) return [];
@@ -308,6 +310,7 @@ export const fleetService = {
           name: account.name,
           status: account.status,
           commission_percent: account.commission_percent,
+          suspended_reason: account.suspended_reason,
         },
       });
     }
