@@ -62,6 +62,7 @@ Si un plugin no está instalado, ignora su sección y continúa con los que sí 
 
 ### Supabase
 - Row Level Security (RLS) en TODAS las tablas sin excepción
+- GRANT explícito en toda tabla o vista nueva de `public`, en la misma migración y siempre con `service_role` incluido: desde el 30-oct-2026 Supabase ya no los da solo. Lo chequea CI (`pnpm check:migration-grants`). Detalle en § "Tablas nuevas en public: GRANT explícito"
 - Usar el cliente tipado generado con `supabase gen types`
 - Migraciones versionadas, nunca cambios manuales en producción
 - Funciones Edge para lógica server-side compleja
@@ -347,6 +348,59 @@ Elegir el siguiente número libre y confirmar antes de escribir el archivo. Si l
 2. Leer la **última** versión (la que está en prod hoy).
 3. Si tu cambio toca el header/wiring (auth, params), conservar el cuerpo del case statement de la última versión.
 4. PR review: incluir un diff entre el cuerpo de la versión NUEVA y la anterior para que el reviewer detecte regresiones.
+
+### Tablas nuevas en public: GRANT explícito (Data API, desde el 30-oct-2026)
+
+**Qué cambia.** Aviso de Supabase del 2026-09-23 ([discusión](https://github.com/orgs/supabase/discussions/45329)): desde el **30 de octubre de 2026**, los objetos NUEVOS de `public` (tablas, vistas, vistas materializadas y las secuencias de las columnas `serial`) ya no reciben permisos automáticos para `anon`, `authenticated` y `service_role`. Sin GRANT, la Data API (PostgREST, supabase-js, GraphQL) no los ve: las apps **y las Edge Functions** reciben `42501 permission denied for table x`. Las tablas que ya existen conservan sus permisos. También afecta a proyectos nuevos, preview branches y `supabase db reset`.
+
+**Estado de prod medido el 2026-09-27 (solo lectura).** `pg_default_acl` todavía da todo (`arwdDxtm` en tablas, `rwU` en secuencias) a los tres roles en cada objeto nuevo de `public`, tanto con `postgres` como con `supabase_admin` de grantor. Por eso las migraciones nunca escribían GRANT: `driver_heartbeat_log` (00576) no tiene ninguno y en prod los tres roles tienen todo. De los 142 objetos de `public`, 134 tienen todos los permisos para los tres roles. Los otros 8 (`partner_places`, `rpc_attempt_log`, `push_registration_status`, `sms_log`, `ride_offers`, `driver_churn_risk`, `eligible_drivers`, `driver_push_reachability`) tienen REVOKE deliberados de 00120, 00123, 00215/00286, 00350, 00532 y 00585.
+
+**La regla.** Toda migración que cree una tabla, vista o vista materializada en `public`, con o sin el prefijo `public.`, lleva en el mismo archivo:
+
+```sql
+CREATE TABLE public.<tabla> (...);
+ALTER TABLE public.<tabla> ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ... ON public.<tabla> ...;                                  -- la RLS decide qué FILAS
+GRANT SELECT ON public.<tabla> TO anon;                                   -- solo si se lee sin sesión
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<tabla> TO authenticated;  -- solo lo que usan las apps
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<tabla> TO service_role;   -- SIEMPRE
+```
+
+- **`service_role` va siempre.** Lo usan las Edge Functions (webhooks de pago, crons) y los scripts. Se saltea la RLS pero **no** los GRANT: medido en PG16 sin permisos automáticos, un INSERT como `service_role` da `permission denied for table`. El historial muestra la trampa: de las 7 tablas o vistas que alguna vez recibieron GRANT en su propia migración, 6 se los daban solo a `anon`/`authenticated` y dependían del automático para `service_role` (00436, 00532, 00544, 00579 ×2, 00585). La única que no: `push_registration_status` (00585).
+- **Tablas-candado** (RLS sin policies; solo las tocan funciones SECURITY DEFINER, pg_cron o Edge Functions, como `rate_limits`, `otp_codes` o `driver_reactivation_pushes`): solo `service_role`. Una función SECURITY DEFINER corre como su dueño (`postgres`) y no necesita GRANT de los roles de la API.
+- **Vistas:** igual que las tablas (`GRANT SELECT`), con `security_invoker = true` (patrón 00294). `GRANT ... ON ALL TABLES IN SCHEMA public` también cubre vistas y vistas materializadas, pero no secuencias.
+- **Secuencias.** Con `serial`/`bigserial` o `DEFAULT nextval(...)`, cada rol con INSERT necesita además `GRANT USAGE, SELECT ON SEQUENCE public.<tabla>_<col>_seq`: un GRANT sobre la tabla no cubre su secuencia. En una base sin permisos por defecto (proyecto nuevo, branch) el INSERT falla con `permission denied for sequence`. En prod puede que no falle: el SQL que publicó Supabase solo quita `USAGE, SELECT` de las secuencias y deja `UPDATE`, que alcanza para `nextval` (medido en PG16). Supabase igual recomienda el GRANT y el chequeo lo exige. Es mejor usar `bigint GENERATED ALWAYS AS IDENTITY` o `uuid DEFAULT gen_random_uuid()`, que no necesitan permiso de secuencia (medido en PG16). Agregar una columna `serial` a una tabla existente crea una secuencia sin permisos que el chequeo no detecta.
+- **Hasta el 30/10, prod sigue abriendo todo** a las tablas nuevas. Si una tabla NO debe ser visible para `anon`, además de los GRANT hace falta `REVOKE ALL ON public.<tabla> FROM anon;` (patrón 00585). Después del 30/10 ese REVOKE no hace nada y no molesta.
+- **No crear tablas fuera de migraciones** (dashboard, `execute_sql` suelto, scripts): después del 30/10 nacen sin permisos, y además quedan fuera del historial (ver abajo).
+
+**El chequeo de CI.** `pnpm check:migration-grants` corre en el paso "Check migration grants" de `ci.yml`, después de sus 48 tests (`pnpm test:migration-grants`). Revisa las migraciones con número **≥ 00587** y falla en tres casos:
+1. Una tabla o vista nueva no tiene ningún GRANT en la misma migración.
+2. Los GRANT no incluyen a `service_role` (o a `PUBLIC`).
+3. Un rol con INSERT no tiene USAGE sobre la secuencia de una columna `serial` o `nextval`.
+
+El umbral es 00587 porque al entrar la regla ninguna migración de master numerada desde 00587 creaba tablas (00591–00597 no crean). No se eligió 00598 a propósito: los huecos 00587–00590 y 00593 están reservados por PRs abiertos, y **#1004 crea 4 tablas en 00587 sin GRANT**. Su CI va a fallar hasta que los agregue, que es lo que tiene que pasar. Los huecos más viejos (00071, 00111, 00489, 00569) quedan por debajo; el único PR que ocupa uno, #965 (00569), solo actualiza filas.
+
+Para una tabla que a propósito no debe tener ningún acceso por API, o para un falso positivo del chequeo, se agrega `-- grants-exempt: public.<tabla> <motivo>` en la migración. Falsos positivos conocidos: `CREATE OR REPLACE VIEW` de una vista que ya existe (conserva sus permisos; no re-otorgar a `anon` lo que se le había quitado), una tabla temporal de trabajo creada y borrada en el mismo archivo, y la partición de una tabla ya otorgada. El chequeo saltea el SQL dinámico (`EXECUTE format('... %I ...')`) y no ve `SELECT ... INTO`, `ALTER TABLE ... SET DEFAULT nextval(...)` ni un `REVOKE` posterior al GRANT.
+
+Calibrado contra las 609 migraciones del historial: encuentra 117 tablas y vistas, ninguna con nombre falso, y coinciden una por una con prod (salvo 3 borradas y los objetos creados a mano). Se lo vio fallar con una migración de prueba sin GRANT en el directorio real, y pasar al completarla. Un subagente de revisión encontró un falso negativo que se corrigió: un apóstrofo dentro de un literal `$m$...$m$` (00597 tiene uno) desincronizaba el enmascarado de comentarios, y un GRANT comentado más abajo contaba como real. El parser ahora sigue los delimitadores `$tag$`.
+
+**Bases reconstruidas desde cero (branches, `db reset`): riesgo aceptado (decisión 2026-09-27).** No se agregó una migración de "paridad de permisos". Motivos medidos:
+- **Hoy nada reconstruye la base desde el historial.** `list_branches` solo devuelve `main`, así que no hay preview branches, y los PR que tocan migraciones solo corren el CI del repo (ej. #1015). El CI nunca reaplica migraciones (ver el comentario al final de `ci.yml`), y los ensayos locales usan andamios (`supabase/tests/*/scaffold.sql`), no el historial.
+- **El historial ya no puede recrear prod, con o sin permisos.** `cms_content`, `blog_posts`, `driver_quests`, `driver_quest_progress`, `influencers_campaign` y la vista `ride_audit_log` se crearon a mano: ninguna migración las crea, aunque 00294, 00380 y 00438 las modifican. Un replay desde cero muere a más tardar en `00156_seed_cms_terms_privacy.sql` (`INSERT INTO cms_content`), así que una migración de paridad en 00598 nunca llegaría a correr.
+- **Si algún día hacen falta branches o `db reset`**, el arreglo es un baseline: un volcado del esquema de prod que reemplace al historial para las bases nuevas. `pg_dump --schema-only` incluye los GRANT y REVOKE de cada tabla, salvo que se pase `--no-privileges`. Antes de usarlo, comparar `information_schema.role_table_grants` del baseline contra prod.
+- **Descartado: volver al comportamiento viejo** con `ALTER DEFAULT PRIVILEGES ... GRANT ... ON TABLES TO anon, authenticated, service_role`. Va contra el cambio, porque toda tabla nueva vuelve a nacer abierta a `anon` y una sin RLS queda expuesta. Además esconde el bug: en una base que regala permisos, una migración sin GRANT anda en la prueba y falla en prod.
+- **Opcional, a decidir (es un cambio en prod y requiere autorización):** adelantar el cambio con `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM anon, authenticated, service_role;`, más lo mismo con `REVOKE USAGE, SELECT ON SEQUENCES`. Es el SQL que publicó Supabase: deja `TRUNCATE`, `REFERENCES`, `TRIGGER` y `MAINTAIN` en las tablas y `UPDATE` en las secuencias, así que no reproduce la falla de secuencias de una base nueva. A favor: la transición ocurre cuando se elige y no el 30/10, y las tablas nuevas dejan de nacer abiertas a `anon`. En contra: toda tabla creada fuera de migraciones, o un PR sin GRANT (hoy #1004), falla desde ese momento.
+
+**Diagnóstico si después del 30/10 aparece `42501 permission denied for table x`:** a esa tabla nueva le falta el GRANT.
+
+```sql
+SELECT grantee, string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privs
+FROM information_schema.role_table_grants
+WHERE table_schema = 'public' AND table_name = '<tabla>'
+GROUP BY grantee;
+```
+
+Se arregla con una migración nueva que tenga el GRANT, no a mano en prod. `permission denied for sequence <tabla>_id_seq` es el mismo problema con la secuencia.
 
 ### MCP migration guard
 
