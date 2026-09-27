@@ -248,6 +248,33 @@ GRANT EXECUTE ON FUNCTION public.handle_new_user() TO service_role;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
+-- LIVE rpc_attempt_log and log_rpc_attempt (md5 0a902c34…, 203): the forensic log
+-- the linking functions write to when they swallow a failure.
+CREATE TABLE public.rpc_attempt_log (
+  id         bigserial PRIMARY KEY,
+  rpc_name   text NOT NULL,
+  caller_uid uuid,
+  target_id  uuid,
+  outcome    text NOT NULL,
+  metadata   jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE OR REPLACE FUNCTION public.log_rpc_attempt(p_rpc_name text, p_caller_uid uuid, p_target_id uuid, p_outcome text, p_metadata jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  INSERT INTO rpc_attempt_log (rpc_name, caller_uid, target_id, outcome, metadata)
+  VALUES (p_rpc_name, p_caller_uid, p_target_id, p_outcome, p_metadata);
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END;
+$function$;
+REVOKE EXECUTE ON FUNCTION public.log_rpc_attempt(text, uuid, uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.log_rpc_attempt(text, uuid, uuid, text, jsonb) TO service_role;
+
 -- LIVE users policies
 CREATE POLICY users_admin_select ON public.users FOR SELECT USING (is_admin());
 CREATE POLICY users_insert_own ON public.users FOR INSERT WITH CHECK (id = ( SELECT auth.uid() AS uid));
