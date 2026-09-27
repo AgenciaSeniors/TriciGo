@@ -618,6 +618,61 @@ hasnt "no ESC in the journal"            "$(cat "$WORK/syslog" 2>/dev/null)" "$E
 hasnt "no ESC in the state"              "$(cat "$WORK"/state/* 2>/dev/null)" "$ESC"
 sed -i '/pid=8888/d' "$FX/ss-established"; run --accept
 
+echo "S. a runtime entry emailed once is not re-sent when it comes back; a config change is"
+# The Supabase watchdog's curl lives for a moment every 2 min, and ss catches it
+# only when both timers fire on the same second: it comes and goes. Between two
+# catches the box is back at the baseline. Emailing it again on every catch sent
+# the same alert to every recipient every few hours until someone ran --accept.
+CERT='0      0        10.0.0.5:54100   93.184.216.34:443  users:(("certbot",pid=7100,fd=5))'
+WGET='0      0        10.0.0.5:54200   93.184.216.34:443  users:(("wget",pid=7200,fd=5))'
+echo "$CERT" >> "$FX/ss-established"
+e0=$(emails); run
+chk "a transient outbound process: one email" "$(new_emails)" "1"
+hasrow "names it"                        "$TXT" "+ certbot"
+sed -i '/"certbot"/d' "$FX/ss-established"
+e0=$(emails); run
+chk "it goes away: no email"             "$(new_emails)" "0"
+has "it goes away: back to baseline"     "$OUT" "back to baseline"
+echo "$CERT" >> "$FX/ss-established"
+e0=$(emails); run
+chk "it comes back: NOT emailed again"   "$(new_emails)" "0"
+chk "it comes back: exit 0"              "$RC" "0"
+has "it comes back: says why"            "$OUT" "not re-sent"
+run --show
+hasline "it comes back: --show still lists it" "$OUT" "+ outbound certbot"
+echo "$WGET" >> "$FX/ss-established"
+e0=$(emails); run
+chk "a different new runtime entry: email" "$(new_emails)" "1"
+chk "the new one is marked"              "$(grep -F '+ wget' <<<"$TXT" | grep -c 'NUEVO')" "1"
+chk "the one emailed before is listed, unmarked" "$(grep -F '+ certbot' <<<"$TXT" | grep -vc 'NUEVO')" "1"
+has "counts only the new one as new"     "$TXT" "(1 nuevo desde el último aviso"
+sed -i '/"certbot"/d; /"wget"/d' "$FX/ss-established"
+printf 'd\n' > "$R/etc/cron.d/x4"
+e0=$(emails); run
+chk "a config change: email"             "$(new_emails)" "1"
+hasnt "nothing else pending: no marker"  "$TXT" "NUEVO"
+rm -f "$R/etc/cron.d/x4"
+e0=$(emails); run
+chk "config change undone: no email"     "$(new_emails)" "0"
+has "config change undone: back to baseline" "$OUT" "back to baseline"
+printf 'd\n' > "$R/etc/cron.d/x4"; echo "$CERT" >> "$FX/ss-established"
+e0=$(emails); run
+chk "the config change comes back: emailed again" "$(new_emails)" "1"
+chk "the config change is marked new"    "$(grep -F '/etc/cron.d/x4' <<<"$TXT" | grep -c 'NUEVO')" "1"
+chk "the runtime entry is listed as pending, unmarked" "$(grep -F '+ certbot' <<<"$TXT" | grep -vc 'NUEVO')" "1"
+has "counts only the config change as new" "$TXT" "(1 nuevo desde el último aviso"
+rm -f "$R/etc/cron.d/x4"; sed -i '/"certbot"/d' "$FX/ss-established"
+e0=$(emails); run
+chk "all gone: no email"                 "$(new_emails)" "0"
+run --accept
+has "--accept keeps the runtime entries emailed since the last one" "$OUT" "outbound wget"
+chk "--accept clears that memory"        "$(yn test -e "$WORK/state/runtime-alerted")" "n"
+echo "$CERT" >> "$FX/ss-established"
+e0=$(emails); run
+chk "after --accept it is allowed: no email" "$(new_emails)" "0"
+has "after --accept: ok"                 "$OUT" "ok: no changes"
+sed -i '/"certbot"/d' "$FX/ss-established"
+
 echo "P. nothing secret ever leaves the box (all emails, all logs)"
 SENT="$(cat "$MOCK/attempts.jsonl" 2>/dev/null)"; LOGS="$(cat "$ALL_OUT" "$WORK/syslog" 2>/dev/null)"
 secret_names=("the shadow hash" "the owner's key body" "the intruder's key body" "the Resend key" "an unrelated config value (D7 token)")

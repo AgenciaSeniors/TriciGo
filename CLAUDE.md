@@ -1672,6 +1672,21 @@ END $patch$;
 
 Reglas: (1) **verificá que el target sea único ANTES** — `(length(prosrc)-length(replace(prosrc,'target','')))/length('target')` debe dar 1; (2) **idempotente** — agregá un guard `AND position('<marker-del-cambio>' IN v_src) = 0` para no re-aplicar; (3) escapá comillas simples en los literales (`''driver_cash''`); (4) el `EXCEPTION WHEN undefined_function` lo hace seguro en DBs frescas (la función la crea una migración anterior; el patch corre después por número). **Ventaja clave sobre el verbatim: no puede perder features** porque parte del cuerpo vivo. Ejemplos: `00408` (`complete_ride_and_pay` `driver_cash`→`tricicoin`; `find_best_drivers` + filtro de heartbeat).
 
+### Flotas: una invitación revisada queda congelada para su dueño (00600, verificado 2026-09-25)
+
+**Regla:** mientras una invitación de `fleet_members` está en `pending_review`, el dueño de la flota puede editarla. Cuando el admin ya la revisó (cualquier otro estado: `approved`, `pending_signup`, `rejected`, `active`, `inactive`), `tg_fleet_members_protect` le revierte al dueño lo que el admin revisó y la flota: `driver_phone`, `driver_name`, `driver_email`, `driver_license_number`, `driver_id_number`, `license_doc_path` y `fleet_id`. `rejected_reason` es texto del admin, así que el dueño no puede cambiarlo en ningún estado. Los admins, las llamadas sin JWT (service role, migraciones, GoTrue) y quienes escriben con `app.trusted_fleet_update` siguen como antes.
+
+**Por qué:** todos los caminos que vinculan una invitación a una cuenta (el alta, la confirmación del teléfono de la 00598, el relink del admin, el backfill) leen una fila aprobada y sin vincular como "el admin aprobó a esta persona con este número". Antes de la 00600, el dueño podía cambiar el número después de la aprobación, y el alta de ese número nuevo entraba a la flota sin que nadie lo revisara (reproducido con los cuerpos vivos).
+
+**Es silencioso, igual que con `status`:** el UPDATE del dueño responde OK y no cambia nada. Para cambiar a un conductor ya revisado, el dueño lo borra y lo invita de nuevo, y la fila nueva vuelve a revisión. Una pantalla futura de "editar conductor" tiene que ofrecer eso y no un UPDATE: con un UPDATE parecería que guarda y no guardaría. Hoy ese camino tampoco existe en la app: `fleetService` no tiene método para borrar un miembro, y `submitFleetRequest` ignora un teléfono que la flota ya tiene. Otro efecto: mover una fila revisada a una flota que no es del dueño antes daba error de RLS; ahora responde OK y no cambia nada.
+
+**Lo que no cubre (pendiente):**
+1. La ventana *durante* la revisión: el dueño todavía puede editar entre que el admin abre FleetReview y aprieta Aprobar. El arreglo va en `approveMember`, que debería exigir los valores que el admin vio.
+2. El archivo de la licencia: la Edge Function `storage-upload` deja al dueño sobrescribir `fleet-docs/<corp>/<miembro>/<archivo>` en cualquier estado.
+3. Mover la flota entera a otra empresa del mismo dueño (`driver_fleets.corporate_account_id`): la política no tiene `WITH CHECK` y la tabla no tiene trigger de protección, así que la flota se lleva con ella a todos los miembros revisados.
+
+**Si hay que volver a tocar `tg_fleet_members_protect`:** partir del cuerpo vivo (`pg_get_functiondef`), no del texto de la 00435, que en prod no tiene los comentarios de git. Cuerpos conocidos: el previo a la 00600 (md5 `8b0d07af…`) y el de la 00600 (`2b65b4b8…`). La 00600 se niega a reemplazar un cuerpo que no conoce; conviene que la próxima migración haga lo mismo. Ensayo: `supabase/tests/00600/run.sh`. Si la 00598 está en el checkout, o si se pasa `M598=<ruta>`, también corre la prueba combinada en los dos órdenes.
+
 ### Fleet membership 3-way gate (corporate)
 
 **Verificado en migraciones 00336 + 00337.**
@@ -1698,6 +1713,39 @@ SELECT EXISTS (
 **Falsos negativos defensivos**: si el corp NO es fleet_owner, o NO tiene members activos, la gate se desactiva silenciosamente. Esto evita romper service mid-setup (corp recién creada sin drivers asignados todavía).
 
 **FK schema importante**: `fleet_members.driver_id` referencia `users.id`, NO `driver_profiles.id`. En el JOIN final, usar `fm.driver_id = dp.user_id` (NO `dp.id`).
+
+### Flotas: cómo queda vinculada una invitación (00598, verificado 2026-09-25)
+
+**Regla:** una fila de `fleet_members` pasa a `status='active'` con `driver_id` solo hacia **la única cuenta activa que confirmó ese número por OTP** en `auth.users`. Se evalúa en los tres momentos que pueden volverlo cierto, siempre por teléfono normalizado:
+1. **Confirmación:** `on_auth_user_phone_confirmed` (AFTER UPDATE ON **`auth.users`**). Actúa cuando un número queda recién confirmado para una cuenta: la primera confirmación, o un número nuevo en una cuenta que ya estaba confirmada. Reconfirmar el mismo número no cuenta. **Acá se vinculan en la práctica las cuentas nuevas:** el `createUser` de `verify-otp` hace el INSERT sin confirmar y confirma en un UPDATE aparte. `link-phone` y el heal de `verify-otp` llaman a `updateUserById`, que ejecuta `ConfirmPhone` **antes** que `SetPhone` (`supabase/auth`, `internal/api/admin.go`).
+2. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `public.users`, disparado por `handle_new_user`). Solo vincula si el número ya viene confirmado en el INSERT. Como GoTrue inserta antes de confirmar, este camino casi nunca vincula; está para que el alta no vincule un número sin confirmar.
+3. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Actúa cuando la invitación **pasa a** `approved`/`pending_signup`. Una fila que ya estaba aprobada no se vuelve a mirar, así que editarla después no vincula a nadie por este camino.
+4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin; ninguna pantalla lo llama todavía, así que por ahora es solo SQL). Cubre lo que la regla deja afuera: un número nunca confirmado, una cuenta reactivada después de aprobar, o dos cuentas con el mismo número.
+
+Los tres caminos automáticos solo tocan invitaciones `approved`/`pending_signup` que no tienen `driver_id`. Una invitación sin revisar, rechazada o que ya nombra a otra persona no se toca.
+
+Los ensayos repiten las escrituras de GoTrue sentencia por sentencia (INSERT y después UPDATE; `ConfirmPhone` y después `SetPhone`). Un UPDATE único que haga las dos cosas deja sin probar el camino del que depende `link-phone`.
+
+**`public.users.phone` no prueba nada.** Su dueño lo puede escribir por PostgREST sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubre), y no es único. Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`: en `public.users`, cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
+
+La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene el índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque es un oráculo número→cuenta.
+
+**Esto depende de dos cosas:**
+- **`phone_autoconfirm = false` en prod.** Se lee con `GET /auth/v1/settings` y la clave publicable (verificado el 2026-09-25). Con autoconfirm, GoTrue confirmaría un `PUT /user {phone}` sin OTP. El `config.toml` local tiene `enable_confirmations = false`, pero es solo para desarrollo.
+- **Un invariante de las escrituras con la API admin:** todo `phone_confirm` tiene que venir después de un OTP de ese número. Como `updateUserById` confirma antes de poner el número nuevo, una cuenta cuyo número actual nunca se confirmó quedaría con ese número dado por confirmado. Hoy ninguna cuenta con sesión tiene un número sin confirmar. Por lo mismo, `phone_confirmed_at` es por cuenta y no por número: si alguien cambia el teléfono desde el Dashboard sin `phone_confirm`, el número nuevo hereda la fecha de confirmación del anterior.
+
+**Todo trigger en `auth.users` corre dentro de la transacción de GoTrue:** un error ahí rompe el login o la confirmación.
+- **Errores contenidos:** el cuerpo va envuelto en `EXCEPTION WHEN OTHERS`, igual que el trigger de alta (la lección de 00595). Un vínculo que falla deja un WARNING y una fila en `rpc_attempt_log` (`outcome = 'link_failed'`); ahí es donde hay que buscar una invitación que quedó `approved` sin razón.
+- **Sin esperas largas:** `SET lock_timeout TO '2s'` en la definición de la función convierte una espera de lock en un error que ese bloque atrapa. `WHEN OTHERS` no atrapa `query_canceled`, así que sin ese límite una espera terminaría cortada por `statement_timeout`, y ese error sí rompe el login.
+- **Sin columnas en la definición:** el trigger no tiene lista de columnas ni `WHEN`, porque eso le impediría a GoTrue hacer `ALTER COLUMN TYPE` sobre esas columnas. La función filtra adentro y vuelve enseguida en cualquier otro UPDATE.
+- **Cómo apagarlo:** `postgres` no es dueño de `auth.users`, así que no puede hacer `DROP` ni `DISABLE` de un trigger ahí. Para apagarlo, reemplazar el cuerpo de la función por `RETURN NEW`.
+- **Cómo crearlo:** crear el trigger bloquea las escrituras a `auth.users` hasta el commit. Usar `SET lock_timeout` (con `RESET` al final) y dejarlo para el final de la migración.
+
+Los números fuera de Cuba quedan en GoTrue sin `+` y `_normalize_cuban_phone` no los toca, así que las funciones les agregan el `+` antes de buscarlos.
+
+**Orden de triggers:** los del mismo evento y momento disparan en orden de nombre (strcmp), así que el de aprobación corre después de `trg_fleet_members_protect` (`s` > `p`). Es defensa en profundidad, no algo de lo que dependa la corrección: el protect revierte todo lo que escribe el de aprobación, sin importar cuál corra primero.
+
+**Trampa al ensayar:** `auto_link_fleet_member_on_signup` deja `app.trusted_fleet_update = '1'` hasta el final de su transacción. En prod no importa, porque esa transacción es la de GoTrue. Pero un ensayo que siembra usuarios y prueba al dueño en la misma transacción ve que el protect deja pasar todo, y el test del dueño falla por culpa del arnés. Hay que sembrar en una transacción aparte (`tcase` en `supabase/tests/00598/run.sh`).
 
 ### Smoke test E2E paths cuando el rider OTP no funciona
 
@@ -2610,8 +2658,9 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 
 **En Windows, sin sandbox (verificado 2026-09-25 con el ensayo de 00595 del #1018, que no entró a master).** La PC no trae `psql`, WSL ni Docker. Sirven los binarios portables de EnterpriseDB: `postgresql-16.14-1-windows-x64-binaries.zip`, 326 MB, de `get.enterprisedb.com`, sin firma Authenticode. Se descomprimen en el scratchpad sin pgAdmin, con `tar.exe -xf <zip> pgsql/bin pgsql/lib pgsql/share`.
 - **Cluster:** `initdb -D <dir> -U pgtest -A trust -E UTF8 --no-locale` y `pg_ctl -D <dir> -o "-p 5433 -c listen_addresses=127.0.0.1" -l <log> -w start`. Esa llamada a `pg_ctl` **no vuelve**, porque postgres hereda el pipe de la herramienta, y la herramienta la pasa a segundo plano. El servidor queda arriba igual; comprobarlo con `pg_ctl status`.
+- **El puerto puede ser del cluster de otra sesión** (verificado 2026-09-26). Varias sesiones levantan su Postgres en paralelo: el 5437 y el 5441 ya estaban tomados. `pg_ctl start` falló por el puerto, pero el `psql` siguiente respondió igual, porque le contestaba el cluster de otra sesión, y un `run.sh` ahí le habría borrado las bases. Antes de arrancar, elegir un puerto que no aparezca en `netstat -ano | grep LISTENING`; después, confirmar que el PID que escucha en ese puerto es el de la primera línea de `<datadir>/postmaster.pid`.
 - **Mensajes:** `--no-locale` deja `lc_messages=C`, así que los errores del servidor salen en inglés y los `grep` de los `run.sh` funcionan. psql igual traduce sus etiquetas (`SUGERENCIA`, `CONTEXTO`).
-- **Los `run.sh` de master no corren tal cual.** Fijan `BIN=/usr/lib/postgresql/16/bin`, llaman a `python3` (en Windows el ejecutable es `python`) y comparan la salida de psql, que en Windows termina cada línea en `\r\n`. El ensayo del #1018 corrió con esas tres cosas resueltas: `BIN` apuntando a `pgsql/bin`, `python`, y un `tr -d '\r'` sobre cada salida de psql. Para correr uno de master, usar una copia en el scratchpad con los mismos tres cambios.
+- **Los `run.sh` de master no corren tal cual.** Fijan `BIN=/usr/lib/postgresql/16/bin`, llaman a `python3` (en Windows el ejecutable es `python`) y comparan la salida de psql, que en Windows termina cada línea en `\r\n`. El ensayo del #1018 corrió con esas tres cosas resueltas: `BIN` apuntando a `pgsql/bin`, `python`, y un `tr -d '\r'` sobre cada salida de psql. Para correr uno de master, usar una copia en el scratchpad con los mismos tres cambios. La excepción es `supabase/tests/00599/run.sh`, que toma `PGBIN`, `PGPORT` y `PYTHON` del entorno y quita el `\r` él mismo: `PGBIN=<scratchpad>/pgsql/bin PGPORT=<puerto> PYTHON=python bash supabase/tests/00599/run.sh ...`.
 - **Trampa CRLF (copias sacadas antes de #1021):** con `core.autocrlf=true`, esas copias tienen los `.sh` y `.sql` de `supabase/` en CRLF. El bash de Git for Windows los corre igual y **las pruebas de comportamiento pasan**. Lo que falla es todo chequeo de md5, porque los `\r` que caen dentro del cuerpo de cada función se guardan con él, y el resultado **parece deriva contra prod cuando son solo finales de línea**. Pasa lo mismo si se aplica una migración a prod desde una copia así: la función anda, pero su md5 ya no es el del archivo en git. También falla en falso `pnpm check:poi-taxonomy`: dice que el mapper de 00581 difiere y pide una migración nueva que no hace falta.
   - **Desde #1021** (verificado 2026-09-25), `.gitattributes` fuerza LF en `supabase/tests/**/*.{sh,sql,psv}` y `supabase/migrations/*.sql`, así que un worktree nuevo ya sale bien.
   - **Una copia vieja no se corrige sola.** `git status` sigue limpio, y `git checkout --` o `git restore` no reescriben los archivos que no cambiaron. Si no hay cambios sin commitear en esas carpetas, borrar los archivos rastreados y volver a sacarlos: `git ls-files -z supabase/tests supabase/migrations | xargs -0 rm --` y después `git checkout -- supabase/tests supabase/migrations`.
@@ -2755,6 +2804,25 @@ O sea que un wrapper SQL plano queda **denegado**, no exento: el riesgo va en la
 **Ensayo local reproducible:** `supabase/tests/00591/run.sh none` (RED: 27 fallos, incluida la acuñación) / `run.sh supabase/migrations/00591_*.sql` (GREEN: 58/58, aplicada dos veces). El andamio lleva los cuerpos VIVOS de prod y sus ACLs, no los de git. Las dos aserciones de arriba tienen **pruebas negativas propias** (G1/G2: se rompe el invariante en una base desechable y se exige que la migración aborte) — una verificación que nunca se vio fallar no es una verificación.
 
 **Trampa de método en la que caí verificando esto:** probé el guard contra la base del ensayo que había quedado del baseline **RED**, o sea sin el guard aplicado, y concluí que un wrapper SQL plano lo evadía. Todo pasaba porque no había nada que evadir. Si un probe de seguridad da "permitido", confirmá primero contra qué base estás hablando.
+
+### `users.phone` no prueba que el número sea del usuario (00599, 2026-09-26)
+
+**El agujero.** Hasta 00599 cualquier usuario con sesión podía escribir cualquier número en `public.users.phone` por PostgREST, sin OTP: `authenticated` tiene UPDATE sobre la columna, `users_update_own` no tiene `WITH CHECK` y `tg_users_protect_admin_fields` no cubría `phone`. Las dos búsquedas de dinero confiaban en esa columna con `LIMIT 1` sin `ORDER BY`: `find_user_by_phone` (regalos, dividir tarifa) y `find_recipient_for_recharge` (recargas de la diáspora). Reproducido en local con los cuerpos vivos: un número que nadie había registrado resolvía siempre a quien se lo había puesto, y un número ajeno pasaba a resolver al atacante en cuanto se reescribía la fila del dueño (su siguiente viaje).
+
+**Regla desde 00599:**
+- El número que prueba propiedad es `auth.users.phone` con `phone_confirmed_at` (único por `users_phone_key`; GoTrue lo guarda como dígitos E.164 **sin `+`**). Toda búsqueda "por número" que decida algo (dinero, vincular cuentas) resuelve contra esa fuente, **nunca** contra `users.phone`: la cuenta activa que lo confirmó, o nadie si hay cero o más de una. Es la misma regla que usa `_user_id_by_verified_phone` (00598), aunque las dos parsean distinto lo que reciben; cuando estén las dos en master, conviene que las búsquedas usen un solo helper.
+- `users.phone` igual puede tener un número sin confirmar: `handle_new_user` copia `auth.users.phone` al alta, esté confirmado o no, y el alta por teléfono de GoTrue está abierta (`external.phone = true`, sin auto-confirmación). Son cuentas que no pueden iniciar sesión (0 al 2026-09-26), pero por eso ninguna decisión se toma leyendo `users.phone`. Todo esto depende de que `phone_autoconfirm` siga en `false` (se ve en `/auth/v1/settings`). Y `phone_confirmed_at` es de la **cuenta**, no del número: si un operador cambia `auth.users.phone` desde el Dashboard sin `phone_confirm`, queda la fecha vieja y el número nuevo cuenta como confirmado.
+- Un JWT que no es admin solo puede escribir en `users.phone` el número que SU cuenta confirmó, y queda guardado en E.164. Cualquier otro valor se revierte en silencio, como role/level, y deja una fila en `rpc_attempt_log` (`rpc_name = 'users_phone_guard'`, `metadata.reason` = `not_the_verified_phone` / `no_verified_phone` / `cleared`, sin el número). Sin JWT (el espejo service-role de `link-phone`, triggers, cron) y los admins no tienen límite.
+- Una pantalla nueva que cambie el teléfono lo confirma primero con `link-phone` (OTP): el `updateProfile({ phone })` de después pasa porque escribe el mismo número.
+
+**Diagnóstico — "cambié mi número y no se guardó":**
+```sql
+SELECT caller_uid, target_id, metadata->>'reason' AS reason, created_at
+FROM rpc_attempt_log WHERE rpc_name = 'users_phone_guard' ORDER BY created_at DESC LIMIT 20;
+```
+`no_verified_phone` = la cuenta no tiene número confirmado en `auth.users` (se escribió sin pasar por `link-phone`, o `link-phone` falló). Varias `not_the_verified_phone` seguidas desde el mismo `caller_uid` = alguien intentando quedarse con un número ajeno.
+
+**Ensayo:** `supabase/tests/00599/run.sh none` (RED: 23 fallos) / `run.sh supabase/migrations/00599_users_phone_guard_and_verified_lookups.sql` (51/51, aplicada dos veces, más dos pruebas negativas del autotest).
 
 ### Sesión fantasma: la app pide como `anon` y la RLS revienta con `permission denied for function current_user_role` (verificado 2026-09-22, mig 00592)
 
