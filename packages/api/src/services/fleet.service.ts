@@ -91,7 +91,8 @@ export const fleetService = {
    *
    * Caller must already own the corporate_account (RLS enforced). The
    * account stays pending with is_fleet_owner = false: since 00418/00434
-   * only an admin can set that flag.
+   * only an admin can set that flag, and corporateService.approveAccount
+   * sets it when it approves the fleet.
    *
    * Both writes are safe to retry on the same account. The fleet is upserted
    * on corporate_account_id (UNIQUE), so a retry reuses the fleet a previous
@@ -167,11 +168,12 @@ export const fleetService = {
    *
    * The driver_fleets row is what makes an account a fleet, not
    * is_fleet_owner: since 00418/00434 only an admin can set that flag, so a
-   * request sent from the app never carries it. A user can hold several
-   * accounts (a corporate client request, a retried fleet request), so the
-   * fleet shown is the approved one, else pending, suspended, rejected; the
-   * newest wins within a status and the account id breaks a full tie. The
-   * account carries the admin's reason when it was rejected or suspended.
+   * request sent from the app carries it only once approved. A user can hold
+   * several accounts (a corporate client request, a retried fleet request),
+   * so the fleet shown is the approved one, else pending, suspended,
+   * rejected; the newest wins within a status and the account id breaks a
+   * full tie. The account carries the admin's reason when it was rejected
+   * or suspended.
    * Throws when a lookup fails, so a failed read is never taken for "no fleet".
    */
   async getFleetByOwner(userId: string): Promise<FleetWithMembers | null> {
@@ -229,6 +231,28 @@ export const fleetService = {
   },
 
   /**
+   * The ids, among accountIds, of the corporate accounts that have a
+   * driver_fleets row. That row is what tells a fleet request sent from the
+   * driver app from a corporate client request until an admin approves it:
+   * the app cannot set is_fleet_owner (00418/00434). RLS shows a fleet row
+   * only to an admin and to the account's creator, the two callers this
+   * serves; for anyone else a missing id proves nothing. Throws when the
+   * lookup fails, so a failed read is never taken for "not a fleet".
+   */
+  async getAccountIdsWithFleet(accountIds: string[]): Promise<Set<string>> {
+    if (accountIds.length === 0) return new Set();
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_fleets')
+      .select('corporate_account_id')
+      .in('corporate_account_id', accountIds);
+    if (error) throw new Error(`Fleet lookup failed: ${error.message}`);
+    return new Set(
+      ((data ?? []) as Pick<DriverFleet, 'corporate_account_id'>[]).map((f) => f.corporate_account_id),
+    );
+  },
+
+  /**
    * Driver-side query: the fleets the driver belongs to, one entry per
    * fleet, active ones first. Never assumes a single row: the signup
    * auto-link and the admin relink link every invitation that matches the
@@ -268,12 +292,13 @@ export const fleetService = {
    * storage-upload Edge Function. The path includes the corporate account
    * so the EF can enforce ownership (creator / active corp admin).
    *
-   * For the owner, the new path only sticks while the member is
-   * pending_review. Once the admin has reviewed it, the database keeps the
-   * reviewed license_doc_path (00600), but the upload above still goes
-   * through: under the same file name it replaces the reviewed file, under
-   * another it leaves an object nothing points to. To replace a reviewed
-   * member's licence, delete the member and invite again.
+   * For the owner, a licence can only be added while the member is
+   * pending_review. Once the admin has reviewed it, the EF refuses the
+   * upload (409 member_reviewed) and the database keeps the reviewed
+   * license_doc_path (00600). The EF never replaces a file under fleet-docs/,
+   * so each upload gets a name of its own (the time, then the original
+   * name). To replace a reviewed member's licence, delete the member and
+   * invite again.
    */
   async uploadMemberLicense(params: {
     fleet_member_id: string;
@@ -283,7 +308,7 @@ export const fleetService = {
     mime_type: string;
   }): Promise<{ storage_path: string }> {
     const supabase = getSupabaseClient();
-    const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${params.file_name}`;
+    const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${Date.now()}-${params.file_name}`;
 
     // A6-01: the old code uploaded straight to a 'driver-docs' BUCKET that
     // doesn't exist in prod ('driver-docs' is a path PREFIX inside the
@@ -296,7 +321,7 @@ export const fleetService = {
     formData.append('file', params.file, params.file_name);
     formData.append('bucket', 'driver-documents');
     formData.append('path', path);
-    formData.append('upsert', 'true');
+    formData.append('upsert', 'false');
     formData.append('contentType', params.mime_type);
 
     const { data, error: uploadErr } = await supabase.functions.invoke('storage-upload', {
@@ -337,43 +362,6 @@ export const fleetService = {
       { status: 'rejected', reviewed_by: adminId, rejected_reason: reason },
       'Reject member failed',
     );
-  },
-
-  /** Admin: list all fleets pending review (queue for /admin/businesses?fleet=pending). */
-  async listPendingFleets(): Promise<FleetWithMembers[]> {
-    const supabase = getSupabaseClient();
-    const { data: accounts, error } = await supabase
-      .from('corporate_accounts')
-      .select('id, name, status, commission_percent, is_fleet_owner, suspended_reason')
-      .eq('is_fleet_owner', true)
-      .in('status', ['pending', 'approved']);
-    if (error || !accounts) return [];
-
-    const out: FleetWithMembers[] = [];
-    for (const account of accounts) {
-      const { data: fleet } = await supabase
-        .from('driver_fleets')
-        .select('*')
-        .eq('corporate_account_id', account.id)
-        .maybeSingle();
-      if (!fleet) continue;
-      const { data: members } = await supabase
-        .from('fleet_members')
-        .select('*')
-        .eq('fleet_id', fleet.id);
-      out.push({
-        fleet: fleet as DriverFleet,
-        members: (members ?? []) as FleetMember[],
-        account: {
-          id: account.id,
-          name: account.name,
-          status: account.status,
-          commission_percent: account.commission_percent,
-          suspended_reason: account.suspended_reason,
-        },
-      });
-    }
-    return out;
   },
 
   /**
