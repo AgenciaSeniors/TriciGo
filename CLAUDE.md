@@ -1816,7 +1816,7 @@ Los tres caminos automáticos solo tocan invitaciones `approved`/`pending_signup
 
 Los ensayos repiten las escrituras de GoTrue sentencia por sentencia (INSERT y después UPDATE; `ConfirmPhone` y después `SetPhone`). Un UPDATE único que haga las dos cosas deja sin probar el camino del que depende `link-phone`.
 
-**`public.users.phone` no prueba nada.** Su dueño lo puede escribir por PostgREST sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubre), y no es único. Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`: en `public.users`, cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
+**`public.users.phone` no prueba nada.** No es único, y puede tener un número que nadie confirmó: `handle_new_user` lo copia de `auth.users` al alta, esté confirmado o no. Hasta la 00599, además, su dueño lo podía escribir por PostgREST sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubría). Desde la 00599, un JWT que no es admin solo puede escribir ahí el número que su cuenta confirmó (ver "`users.phone` no prueba que el número sea del usuario"). Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`: cuando se diseñó, en `public.users` cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
 
 La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene el índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque es un oráculo número→cuenta.
 
