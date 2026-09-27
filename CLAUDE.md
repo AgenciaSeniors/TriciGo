@@ -656,6 +656,27 @@ Los 5 `SECURITY_AUDIT_*.md` (CLIENT, DRIVER, ADMIN, WEB, MASTER) tienen `.gitign
 
 ---
 
+### Credenciales en el repo: es PÚBLICO y lo barren bots (verificado 2026-09-27)
+
+`AgenciaSeniors/TriciGo` es **público**. `scripts/run_migrations.js` y `scripts/run_seeds.js` (commit `b8db356a`, 2026-03-10) tenían la cadena de conexión de prod **con la contraseña del rol `postgres`**, y estuvo ~6,5 meses expuesta. Se borraron los dos scripts, que eran código muerto (solo listaban 00001-00014 y ningún paquete depende de `pg`), y la contraseña se reseteó desde el Dashboard.
+
+- **Ninguna credencial en el código, ni siquiera "temporal".** Se lee de `process.env` / `Deno.env` y el programa falla si falta, sin valor por defecto. Borrarla de HEAD no la saca del historial ni de los clones: el arreglo es **rotarla**.
+- **Hay bots probando lo que se filtra.** El 2026-09-26 una IP externa llamó a `GET /auth/v1/admin/users?per_page=1` con el JWT `service_role` legacy, que sigue commiteado en migraciones viejas. Recibió 401 solo porque las claves legacy están deshabilitadas: **no reactivarlas nunca**.
+- **Primero se rota la contraseña de la base, y recién después la clave de servicio y los tokens de `platform_config`.** El rol `postgres` lee `vault.decrypted_secrets`, que guarda `service_role_key`, y también `platform_config`. Si se rota al revés, quien tenga la contraseña vieja lee la clave nueva.
+- **Se resetea desde el Dashboard, nunca con `ALTER ROLE`.** El panel y el MCP se conectan como `postgres` (`application_name='mgmt-api'`) con la credencial que guarda Supabase. Por SQL, además, la contraseña nueva quedaría en texto plano en la conversación y en los logs. Resetearla no corta las sesiones abiertas, así que después hay que revisar `pg_stat_activity`: como `postgres` solo tiene que quedar `mgmt-api`.
+- **Para buscar un secreto sin imprimirlo,** leerlo a una variable dentro del mismo comando (`PW=$(sed -nE '…' archivo)`) y buscar con `git grep -F -e "$PW"` o `git log -S"$PW"`. Para enmascarar la salida: `sed -E 's#(postgres(ql)?://[^:@/ ]+:)[^@ ]+@#\1***@#g'`. El clon del sandbox es superficial (50 commits): correr `git fetch --unshallow origin master` antes de buscar en el historial.
+- **Quién prueba claves legacy** (`query_logs`, últimas 24 h):
+  ```sql
+  select timestamp, event_message, log_attributes['request.headers.cf_connecting_ip'] as ip
+  from logs where source = 'edge_logs'
+    and log_attributes['request.sb.jwt.authorization.payload.algorithm'] = 'HS256'
+  order by timestamp desc limit 20
+  ```
+  Un HS256 con `role=supabase_admin` y user-agent `@supabase-infra/mgmt-api` es de Supabase. Un `service_role` o `anon` HS256 desde otra IP es alguien probando una clave filtrada.
+- **No encontrar rastro no prueba que no hubo uso.** Los logs cubren 24 h y las conexiones directas a Postgres no aparecen en ellos. `pgbouncer_logs` sí registra los logins del pooler dedicado (`login attempt: db=… user=…`).
+
+---
+
 ### Universal links + Expo Router: el `pathPrefix` del intent filter debe tener ruta interna que matchee
 
 **Bug crítico verificado 2026-05-24 (PR #190).** Después de un pago NETOPIA exitoso desde el dev client del driver, el WebBrowser interno mostraba **"404 / Página no encontrada / Volver al inicio"** en dark theme dentro de la app driver (NO en CustomTabs). El pago se completó OK server-side (wallet acreditada), pero la pantalla de retorno se rompía.
