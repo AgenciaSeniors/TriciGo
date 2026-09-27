@@ -21,6 +21,8 @@ export interface DriverFleet {
   id: string;
   corporate_account_id: string;
   name: string;
+  /** 00602: main city / municipality from the request form. NULL on older requests. */
+  city: string | null;
   vehicle_count_estimate: number | null;
   vehicle_types: string[];
   operating_zones: string[];
