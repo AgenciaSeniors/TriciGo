@@ -6,6 +6,8 @@ import type { DriverFleet, FleetMember } from '@tricigo/types';
 // points this suite depends on:
 //  - awaiting a read resolves every row that passes the eq/in filters, sorted
 //    by the ORDER BY calls and cut by limit();
+//  - a select() with a column list returns only those columns, a NULL one as
+//    null, so a column the service forgets to select comes back missing;
 //  - maybeSingle() over two or more rows resolves (does not throw) to error
 //    PGRST116 with data null, and single() does the same over zero rows;
 //  - driver_fleets is UNIQUE (corporate_account_id) and fleet_members is
@@ -130,11 +132,21 @@ function query(table: string) {
   const orderBy: Array<{ column: string; ascending: boolean }> = [];
   let limitTo: number | null = null;
   let write: (() => Result) | null = null;
+  let columns: string[] | null = null; // null: select('*'), or no select() at all
+
+  const project = (row: Row): Row =>
+    columns ? Object.fromEntries(columns.map((column) => [column, row[column] ?? null])) : { ...row };
 
   const run = (): Result => {
     const failure = failures[table as Table];
     if (failure) return { data: null, error: failure };
-    if (write) return write();
+    if (write) {
+      const written = write();
+      // An update without select() resolves data null: no rows to project.
+      return written.error || written.data === null
+        ? written
+        : { data: (written.data as Row[]).map(project), error: null };
+    }
     const rows = rowsOf(table).filter((row) => filters.every((keep) => keep(row)));
     rows.sort((a, b) => {
       for (const { column, ascending } of orderBy) {
@@ -145,7 +157,7 @@ function query(table: string) {
       return 0;
     });
     const kept = limitTo === null ? rows : rows.slice(0, limitTo);
-    return { data: kept.map((row) => ({ ...row })), error: null };
+    return { data: kept.map(project), error: null };
   };
 
   const one = (allowNone: boolean): Result => {
@@ -165,7 +177,10 @@ function query(table: string) {
   };
 
   const builder = {
-    select: () => builder,
+    select: (list = '*') => {
+      columns = list.trim() === '*' ? null : list.split(',').map((column) => column.trim());
+      return builder;
+    },
     eq: (column: string, value: unknown) => {
       filters.push((row) => row[column] === value);
       return builder;
@@ -232,6 +247,7 @@ function account(overrides: Row): Row {
     contact_phone: '+5351234567',
     status: 'pending',
     commission_percent: null,
+    suspended_reason: null,
     is_fleet_owner: false,
     created_by: OWNER,
     created_at: '2026-09-20T14:00:00+00:00',
@@ -300,7 +316,21 @@ describe('fleetService.getFleetByOwner', () => {
     expect(await fleetService.getFleetByOwner(OWNER)).toEqual({
       fleet: fleet({}),
       members: [m],
-      account: { id: ACCOUNT_A, name: 'TaxiHabana', status: 'pending', commission_percent: null },
+      account: { id: ACCOUNT_A, name: 'TaxiHabana', status: 'pending', commission_percent: null, suspended_reason: null },
+    });
+  });
+
+  it("returns the admin's reason with a rejected fleet", async () => {
+    // corporateService.rejectAccount stores the reason in suspended_reason.
+    seed('corporate_accounts', account({ status: 'rejected', suspended_reason: 'Faltan las licencias de los conductores' }));
+    seed('driver_fleets', fleet({}));
+
+    expect((await fleetService.getFleetByOwner(OWNER))?.account).toEqual({
+      id: ACCOUNT_A,
+      name: 'TaxiHabana',
+      status: 'rejected',
+      commission_percent: null,
+      suspended_reason: 'Faltan las licencias de los conductores',
     });
   });
 

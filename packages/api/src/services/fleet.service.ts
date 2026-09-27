@@ -15,7 +15,7 @@ import type {
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 
-type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent'>;
+type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent' | 'suspended_reason'>;
 
 // Which fleet an owner with several corporate accounts sees (lower first).
 const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
@@ -114,7 +114,8 @@ export const fleetService = {
    * several accounts (a corporate client request, a retried fleet request),
    * so the fleet shown is the approved one, else pending, suspended,
    * rejected; the newest wins within a status and the account id breaks a
-   * full tie.
+   * full tie. The account carries the admin's reason when it was rejected
+   * or suspended.
    * Throws when a lookup fails, so a failed read is never taken for "no fleet".
    */
   async getFleetByOwner(userId: string): Promise<FleetWithMembers | null> {
@@ -122,7 +123,7 @@ export const fleetService = {
 
     const { data: accountRows, error: accountsErr } = await supabase
       .from('corporate_accounts')
-      .select('id, name, status, commission_percent')
+      .select('id, name, status, commission_percent, suspended_reason')
       .eq('created_by', userId)
       .order('created_at', { ascending: false })
       .order('id', { ascending: true });
@@ -166,6 +167,7 @@ export const fleetService = {
         name: owned.account.name,
         status: owned.account.status,
         commission_percent: owned.account.commission_percent,
+        suspended_reason: owned.account.suspended_reason,
       },
     };
   },

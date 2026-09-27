@@ -77,5 +77,7 @@ export interface FleetWithMembers {
     name: string;
     status: 'pending' | 'approved' | 'suspended' | 'rejected';
     commission_percent: number | null;
+    /** Why an admin rejected or suspended the account, as they wrote it. */
+    suspended_reason: string | null;
   };
 }
