@@ -59,12 +59,14 @@ const darkModePlugin = {
           if (typeof raw !== 'string') return;
           const surface = raw.match(LIGHT_SURFACE);
           // Accept a dark sibling under any stacked variant — `dark:bg-*`,
-          // `dark:hover:bg-*`, `dark:focus:bg-*`, etc.
-          if (surface && !/\bdark:(?:[\w-]+:)*bg-/.test(raw)) {
+          // `dark:hover:bg-*`, `dark:focus:bg-*`, etc. — and with Tailwind's
+          // important modifier, which sits right before the utility
+          // (`dark:!bg-*`).
+          if (surface && !/\bdark:(?:[\w-]+:)*!?bg-/.test(raw)) {
             context.report({ node, messageId: 'surface', data: { cls: surface[1] } });
           }
           const text = raw.match(DARK_TEXT);
-          if (text && !/\bdark:(?:[\w-]+:)*text-/.test(raw)) {
+          if (text && !/\bdark:(?:[\w-]+:)*!?text-/.test(raw)) {
             context.report({ node, messageId: 'text', data: { cls: text[0] } });
           }
         };
