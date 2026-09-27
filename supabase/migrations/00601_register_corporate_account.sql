@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 00598: register_corporate_account — create a corporate
+-- Migration 00601: register_corporate_account — create a corporate
 -- account, its creator's admin row and the corporate wallet in one
 -- transaction.
 --
@@ -54,7 +54,7 @@
 -- when PostgREST reports it missing (PGRST202), runs the same steps itself
 -- (wallet, account, admin row), checking every error.
 --
--- Rehearsed locally with supabase/tests/00598/run.sh (Postgres 16; the
+-- Rehearsed locally with supabase/tests/00601/run.sh (Postgres 16; the
 -- triggers, policies and helpers it touches are live bodies captured from
 -- production). Idempotent: CREATE OR REPLACE plus REVOKE/GRANT.
 -- Rollback: DROP FUNCTION public.register_corporate_account(uuid, text,
@@ -98,7 +98,7 @@ END;
 $function$;
 
 COMMENT ON FUNCTION public.register_corporate_account(uuid, text, text, text, text) IS
-  '00598: creates a corporate account for auth.uid() (p_created_by must match), its creator''s admin row and the creator''s corporate_cash wallet, in one transaction. Returns the account row as jsonb.';
+  '00601: creates a corporate account for auth.uid() (p_created_by must match), its creator''s admin row and the creator''s corporate_cash wallet, in one transaction. Returns the account row as jsonb.';
 
 REVOKE ALL ON FUNCTION public.register_corporate_account(uuid, text, text, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.register_corporate_account(uuid, text, text, text, text) TO authenticated, service_role;
@@ -111,16 +111,16 @@ DECLARE
   v_fn regprocedure := to_regprocedure('public.register_corporate_account(uuid,text,text,text,text)');
 BEGIN
   IF v_fn IS NULL THEN
-    RAISE EXCEPTION '00598: register_corporate_account(uuid,text,text,text,text) does not exist';
+    RAISE EXCEPTION '00601: register_corporate_account(uuid,text,text,text,text) does not exist';
   END IF;
   IF NOT (SELECT p.prosecdef FROM pg_catalog.pg_proc p WHERE p.oid = v_fn) THEN
-    RAISE EXCEPTION '00598: register_corporate_account must be SECURITY DEFINER';
+    RAISE EXCEPTION '00601: register_corporate_account must be SECURITY DEFINER';
   END IF;
   IF pg_catalog.has_function_privilege('anon', v_fn, 'EXECUTE') THEN
-    RAISE EXCEPTION '00598: anon can execute register_corporate_account';
+    RAISE EXCEPTION '00601: anon can execute register_corporate_account';
   END IF;
   IF NOT pg_catalog.has_function_privilege('authenticated', v_fn, 'EXECUTE') THEN
-    RAISE EXCEPTION '00598: authenticated cannot execute register_corporate_account';
+    RAISE EXCEPTION '00601: authenticated cannot execute register_corporate_account';
   END IF;
 END
 $check$;

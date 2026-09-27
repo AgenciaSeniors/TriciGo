@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00598 (local Postgres 16, no Supabase stack needed).
-#   supabase/tests/00598/run.sh none -> scaffold + tests (RED: register_corporate_account does not exist)
-#   supabase/tests/00598/run.sh supabase/migrations/00598_register_corporate_account.sql
+# Rehearsal runner for migration 00601 (local Postgres 16, no Supabase stack needed).
+#   supabase/tests/00601/run.sh none -> scaffold + tests (RED: register_corporate_account does not exist)
+#   supabase/tests/00601/run.sh supabase/migrations/00601_register_corporate_account.sql
 #                                    -> scaffold + migration x2 (idempotency) + tests (GREEN)
 # Cluster setup (sandbox/CI): same as supabase/tests/00591/run.sh, i.e.
 #   useradd -m pgtest; su pgtest -c "/usr/lib/postgresql/16/bin/initdb -D ~/pgdata -U pgtest --auth=trust"
@@ -11,7 +11,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 MIG="${1:-none}"
 BIN=/usr/lib/postgresql/16/bin
 CONN="-h 127.0.0.1 -p 5433 -U pgtest"
-P="$BIN/psql $CONN -d pr598 -qAt -v ON_ERROR_STOP=1"
+P="$BIN/psql $CONN -d pr601 -qAt -v ON_ERROR_STOP=1"
 PASS=0; FAIL=0
 ok(){ echo "PASS  $1"; PASS=$((PASS+1)); }
 ko(){ echo "FAIL  $1  -- $2"; FAIL=$((FAIL+1)); }
@@ -35,7 +35,7 @@ FN="public.register_corporate_account(uuid,text,text,text,text)"
 ALICE_ACC="(SELECT id FROM corporate_accounts WHERE created_by = '$ALICE' ORDER BY created_at, id LIMIT 1)"
 
 echo "== reset database =="
-$BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS pr598" -c "CREATE DATABASE pr598" >/dev/null || exit 1
+$BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS pr601" -c "CREATE DATABASE pr601" >/dev/null || exit 1
 $P -f "$DIR/scaffold.sql" >/dev/null || { echo "scaffold failed"; exit 1; }
 
 if [ "$MIG" != "none" ]; then
@@ -91,7 +91,7 @@ q "S2 two accounts, Alice admin of both" \
 q "S3 still ONE corporate_cash wallet: the server keys it by user, not by account" \
   "SELECT count(*) = 1 FROM wallet_accounts WHERE user_id = '$ALICE' AND account_type = 'corporate_cash'"
 
-# --- F. the client-side steps registerAccount runs while 00598 is missing ---
+# --- F. the client-side steps registerAccount runs while 00601 is missing ---
 expect_ok  "F1 step 1: Dave creates his own corporate_cash wallet" "$(as_user $DAVE "SELECT ensure_wallet_account('$DAVE', 'corporate_cash')")"
 expect_ok  "F2 step 2: Dave inserts the account and reads it back" "$(as_user $DAVE "INSERT INTO corporate_accounts (id, name, contact_phone, created_by) VALUES ('$DAVE_ACC', 'Flota Dave', '+5354444444', '$DAVE') RETURNING id")"
 expect_ok  "F3 step 3: Dave adds himself as its admin" "$(as_user $DAVE "INSERT INTO corporate_employees (corporate_account_id, user_id, role, added_by) VALUES ('$DAVE_ACC', '$DAVE', 'admin', '$DAVE')")"
@@ -100,7 +100,7 @@ expect_err "F4 the old key, the account id, is refused" "$(as_user $DAVE "SELECT
 # --- G. the migration's own checks, seen failing: each mutant must abort it ---
 # mutant NAME SED_EXPR EXPECTED_ERROR -> the migration edited by SED_EXPR must fail with EXPECTED_ERROR
 mutant(){
-  local db=pr598g mig out
+  local db=pr601g mig out
   mig=$(mktemp); sed "$2" "$MIG" > "$mig"
   if cmp -s "$mig" "$MIG"; then ko "$1" "the edit did not change the migration"; rm -f "$mig"; return; fi
   $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db" >/dev/null 2>&1

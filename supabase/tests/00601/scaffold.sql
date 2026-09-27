@@ -1,4 +1,4 @@
--- Local rehearsal scaffold for migration 00598 (register_corporate_account).
+-- Local rehearsal scaffold for migration 00601 (register_corporate_account).
 -- Minimal prod-shaped schema. Everything marked LIVE is a verbatim copy of
 -- pg_get_functiondef() / pg_policies captured from production on 2026-09-27,
 -- and the function ACLs reproduce what has_function_privilege() reported that

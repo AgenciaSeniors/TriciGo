@@ -43,7 +43,7 @@ let registerRpcApplied: boolean;
 let rpcCalls: Array<{ fn: string; args: Row }>;
 let tablesWritten: string[];
 
-// The row register_corporate_account returns when it exists (00598).
+// The row register_corporate_account returns when it exists (00601).
 const serverAccount = {
   id: ACCOUNT,
   name: 'Clínica Sol',
@@ -193,7 +193,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
-describe('corporateService.registerAccount with register_corporate_account (00598)', () => {
+describe('corporateService.registerAccount with register_corporate_account (00601)', () => {
   it('creates the account, its admin row and the wallet in one server call', async () => {
     const account = await corporateService.registerAccount(request);
 
@@ -235,7 +235,7 @@ describe('corporateService.registerAccount with register_corporate_account (0059
   });
 });
 
-describe('corporateService.registerAccount before 00598 is applied', () => {
+describe('corporateService.registerAccount before 00601 is applied', () => {
   beforeEach(() => {
     registerRpcApplied = false;
   });

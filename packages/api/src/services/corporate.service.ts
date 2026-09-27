@@ -35,7 +35,7 @@ export const corporateService = {
   }): Promise<CorporateAccount> {
     const supabase = getSupabaseClient();
 
-    // 00598: the account, its creator's admin row and the corporate wallet in
+    // 00601: the account, its creator's admin row and the corporate wallet in
     // one transaction. Done step by step, a failure left an account its
     // creator cannot delete, and a retry created another one.
     const { data, error } = await supabase.rpc('register_corporate_account', {
@@ -50,9 +50,9 @@ export const corporateService = {
     // response), so the steps must not run again from here.
     if (!isMissingFunctionError(error)) throw error;
 
-    logger.warn('register_corporate_account_missing', { hint: 'apply migration 00598' });
+    logger.warn('register_corporate_account_missing', { hint: 'apply migration 00601' });
 
-    // Until 00598 is applied, the same steps from the client, wallet first:
+    // Until 00601 is applied, the same steps from the client, wallet first:
     // it does not depend on the account, so if it fails nothing is left
     // behind. It is keyed by the account's creator because that is how every
     // server path moving corporate money finds it (corporate_accounts.created_by).
