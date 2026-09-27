@@ -207,6 +207,11 @@ export const fleetService = {
    * 'driver-documents' bucket under the fleet-docs/ prefix, via the
    * storage-upload Edge Function. The path includes the corporate account
    * so the EF can enforce ownership (creator / active corp admin).
+   *
+   * The EF never replaces a file under fleet-docs/ and refuses the owner
+   * once the admin reviewed the member, so the file behind a reviewed
+   * license_doc_path cannot change. Each upload therefore gets a name of
+   * its own (the time, then the original name).
    */
   async uploadMemberLicense(params: {
     fleet_member_id: string;
@@ -216,7 +221,7 @@ export const fleetService = {
     mime_type: string;
   }): Promise<{ storage_path: string }> {
     const supabase = getSupabaseClient();
-    const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${params.file_name}`;
+    const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${Date.now()}-${params.file_name}`;
 
     // A6-01: the old code uploaded straight to a 'driver-docs' BUCKET that
     // doesn't exist in prod ('driver-docs' is a path PREFIX inside the
@@ -229,7 +234,7 @@ export const fleetService = {
     formData.append('file', params.file, params.file_name);
     formData.append('bucket', 'driver-documents');
     formData.append('path', path);
-    formData.append('upsert', 'true');
+    formData.append('upsert', 'false');
     formData.append('contentType', params.mime_type);
 
     const { data, error: uploadErr } = await supabase.functions.invoke('storage-upload', {
