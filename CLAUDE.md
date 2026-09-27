@@ -1651,7 +1651,7 @@ Ejemplo concreto: Eduardo Admin tiene `tricicoin=80,905` (visible) Y `driver_cas
 
 1. **Drivers**: usar `tricicoin` para earnings y commission. NUNCA `driver_cash` (excepto insurance que sigue ahí por legacy — referencia el código del ELSE branch en `complete_ride_and_pay`).
 2. **Customers**: usar `customer_cash` para saldo TC.
-3. **Corporate**: `corporate_cash` para wallet de empresa (necesita `admin_adjust_wallet` extended desde 00338 para acreditar via RPC oficial).
+3. **Corporate**: `corporate_cash` para wallet de empresa (necesita `admin_adjust_wallet` extended desde 00338 para acreditar via RPC oficial). **Se asocia al CREADOR de la cuenta (`corporate_accounts.created_by`), nunca al id de la cuenta**: así la buscan `handle_corporate_ride_completion` (el cobro real; la rama corporativa de `complete_ride_and_pay` es un `NULL`), `process_recharge_payment`/`_refund` y `admin_adjust_wallet`. El id de la cuenta no es un `users.id`: choca con la FK y con la verja de 00591 (42501). El cliente usaba la clave vieja de la 00086 y falló en silencio hasta 00601 (`register_corporate_account`, que crea cuenta, fila de admin y billetera en una transacción). Los lectores `getCorporateBalance` (corporate y wallet service) siguen con la clave vieja y muestran 0 (pendiente aparte). Consecuencia del diseño: un creador con dos cuentas corporativas comparte UNA billetera.
 4. **Platform**: `platform_revenue` para commissions/insurance.
 
 **Si encontrás un RPC que credita `driver_cash` para earnings**: es bug silencioso. Verificar con SQL `SELECT prosrc FROM pg_proc WHERE proname='X'` y buscar `'driver_cash'`. Fix patrón: change `ensure_wallet_account(_, 'driver_cash')` → `'tricicoin'` para el path del driver.
@@ -1806,22 +1806,24 @@ SELECT EXISTS (
 
 ### Flotas: cómo queda vinculada una invitación (00598, verificado 2026-09-25)
 
+**Estado:** aplicada en prod el 2026-09-27, después de la 00599, la 00600 y la 00601, y ninguna de ellas redefine nada de la 00598. Los cuatro cuerpos de prod coinciden byte a byte con git. La prueba combinada de `supabase/tests/00600/run.sh` pasa en los dos órdenes.
+
 **Regla:** una fila de `fleet_members` pasa a `status='active'` con `driver_id` solo hacia **la única cuenta activa que confirmó ese número por OTP** en `auth.users`. Se evalúa en los tres momentos que pueden volverlo cierto, siempre por teléfono normalizado:
 1. **Confirmación:** `on_auth_user_phone_confirmed` (AFTER UPDATE ON **`auth.users`**). Actúa cuando un número queda recién confirmado para una cuenta: la primera confirmación, o un número nuevo en una cuenta que ya estaba confirmada. Reconfirmar el mismo número no cuenta. **Acá se vinculan en la práctica las cuentas nuevas:** el `createUser` de `verify-otp` hace el INSERT sin confirmar y confirma en un UPDATE aparte. `link-phone` y el heal de `verify-otp` llaman a `updateUserById`, que ejecuta `ConfirmPhone` **antes** que `SetPhone` (`supabase/auth`, `internal/api/admin.go`).
 2. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `public.users`, disparado por `handle_new_user`). Solo vincula si el número ya viene confirmado en el INSERT. Como GoTrue inserta antes de confirmar, este camino casi nunca vincula; está para que el alta no vincule un número sin confirmar.
-3. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Actúa cuando la invitación **pasa a** `approved`/`pending_signup`. Una fila que ya estaba aprobada no se vuelve a mirar, así que editarla después no vincula a nadie por este camino.
+3. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Actúa cuando la invitación **pasa a** `approved`/`pending_signup`. Una fila que ya estaba aprobada no se vuelve a mirar, así que editarla después no vincula a nadie por este camino. Además, desde la 00600 el dueño de la flota no puede cambiar una invitación que el admin ya revisó; un admin sí.
 4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin; ninguna pantalla lo llama todavía, así que por ahora es solo SQL). Cubre lo que la regla deja afuera: un número nunca confirmado, una cuenta reactivada después de aprobar, o dos cuentas con el mismo número.
 
 Los tres caminos automáticos solo tocan invitaciones `approved`/`pending_signup` que no tienen `driver_id`. Una invitación sin revisar, rechazada o que ya nombra a otra persona no se toca.
 
 Los ensayos repiten las escrituras de GoTrue sentencia por sentencia (INSERT y después UPDATE; `ConfirmPhone` y después `SetPhone`). Un UPDATE único que haga las dos cosas deja sin probar el camino del que depende `link-phone`.
 
-**`public.users.phone` no prueba nada.** Su dueño lo puede escribir por PostgREST sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubre), y no es único. Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`: en `public.users`, cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
+**`public.users.phone` no prueba nada.** No es único, y hasta la 00599 su dueño podía escribir ahí cualquier número por PostgREST, sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubría). Desde la 00599 solo puede poner el número que su cuenta confirmó, pero `handle_new_user` sigue copiando el de `auth.users` al crear la cuenta, esté confirmado o no. Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`. En `public.users`, antes de la 00599, cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
 
 La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene el índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque es un oráculo número→cuenta.
 
 **Esto depende de dos cosas:**
-- **`phone_autoconfirm = false` en prod.** Se lee con `GET /auth/v1/settings` y la clave publicable (verificado el 2026-09-25). Con autoconfirm, GoTrue confirmaría un `PUT /user {phone}` sin OTP. El `config.toml` local tiene `enable_confirmations = false`, pero es solo para desarrollo.
+- **`phone_autoconfirm = false` en prod.** Se lee con `GET /auth/v1/settings` y la clave publicable (verificado el 2026-09-25 y de nuevo el 2026-09-27). Con autoconfirm, GoTrue confirmaría un `PUT /user {phone}` sin OTP. El `config.toml` local tiene `enable_confirmations = false`, pero es solo para desarrollo.
 - **Un invariante de las escrituras con la API admin:** todo `phone_confirm` tiene que venir después de un OTP de ese número. Como `updateUserById` confirma antes de poner el número nuevo, una cuenta cuyo número actual nunca se confirmó quedaría con ese número dado por confirmado. Hoy ninguna cuenta con sesión tiene un número sin confirmar. Por lo mismo, `phone_confirmed_at` es por cuenta y no por número: si alguien cambia el teléfono desde el Dashboard sin `phone_confirm`, el número nuevo hereda la fecha de confirmación del anterior.
 
 **Todo trigger en `auth.users` corre dentro de la transacción de GoTrue:** un error ahí rompe el login o la confirmación.
