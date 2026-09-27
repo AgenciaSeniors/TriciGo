@@ -213,8 +213,10 @@ export default function CorporateScreen() {
         )}
 
         {/* Every request was rejected: the admin's reason, then the form to apply again */}
+        {/* A plain View, not a Card: NativeWind resolves conflicting classes by
+            stylesheet order, and Card's own bg-neutral-* comes after bg-error-*. */}
         {rejectedRequest && (
-          <Card variant="filled" padding="lg" className="mb-3 bg-error-light dark:bg-error/20">
+          <View accessible accessibilityRole="summary" className="mb-3 rounded-2xl p-6 bg-error-light dark:bg-error/20">
             <View className="flex-row items-center gap-2 mb-2">
               <Ionicons name="close-circle-outline" size={20} color={colors.error.DEFAULT} />
               <Text variant="h4" color="error">
@@ -231,7 +233,7 @@ export default function CorporateScreen() {
                 defaultValue: 'Puedes corregir los datos y volver a enviar la solicitud.',
               })}
             </Text>
-          </Card>
+          </View>
         )}
 
         {/* No fleet, or a rejected request → form */}

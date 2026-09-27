@@ -129,6 +129,14 @@ describe('corporateReducer', () => {
     });
   });
 
+  it('shows an error, not the form it just submitted, when the read-back fails', () => {
+    let state = load(initialCorporateState, 0, ok([]), ok(null));
+    state = corporateReducer(state, { type: 'request_submitted', load: 1 });
+    state = corporateReducer(state, { type: 'load_settled', load: 1, memberships: ok([]), ownedFleet: failed });
+
+    expect(deriveCorporateView(state)).toEqual({ kind: 'error' });
+  });
+
   it('does not let a load that started before the submission bring the form back', () => {
     let state = load(initialCorporateState, 0, ok([]), ok(null));
     state = corporateReducer(state, { type: 'load_started', load: 1 });
