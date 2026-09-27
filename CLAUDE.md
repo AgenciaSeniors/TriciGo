@@ -1678,11 +1678,14 @@ Reglas: (1) **verificá que el target sea único ANTES** — `(length(prosrc)-le
 
 **Por qué:** todos los caminos que vinculan una invitación a una cuenta (el alta, la confirmación del teléfono de la 00598, el relink del admin, el backfill) leen una fila aprobada y sin vincular como "el admin aprobó a esta persona con este número". Antes de la 00600, el dueño podía cambiar el número después de la aprobación, y el alta de ese número nuevo entraba a la flota sin que nadie lo revisara (reproducido con los cuerpos vivos).
 
-**Es silencioso, igual que con `status`:** el UPDATE del dueño responde OK y no cambia nada. Para cambiar a un conductor ya revisado, el dueño lo borra y lo invita de nuevo, y la fila nueva vuelve a revisión. Una pantalla futura de "editar conductor" tiene que ofrecer eso y no un UPDATE: con un UPDATE parecería que guarda y no guardaría.
+**Es silencioso, igual que con `status`:** el UPDATE del dueño responde OK y no cambia nada. Para cambiar a un conductor ya revisado, el dueño lo borra y lo invita de nuevo, y la fila nueva vuelve a revisión. Una pantalla futura de "editar conductor" tiene que ofrecer eso y no un UPDATE: con un UPDATE parecería que guarda y no guardaría. Hoy ese camino tampoco existe en la app: `fleetService` no tiene método para borrar un miembro, y `submitFleetRequest` ignora un teléfono que la flota ya tiene. Otro efecto: mover una fila revisada a una flota que no es del dueño antes daba error de RLS; ahora responde OK y no cambia nada.
 
-**Lo que no cubre (pendiente):** (1) la ventana *durante* la revisión: el dueño todavía puede editar entre que el admin abre FleetReview y aprieta Aprobar; el arreglo va en `approveMember`, que debería exigir los valores que el admin vio. (2) El archivo de la licencia: la Edge Function `storage-upload` deja al dueño sobrescribir `fleet-docs/<corp>/<miembro>/<archivo>` en cualquier estado.
+**Lo que no cubre (pendiente):**
+1. La ventana *durante* la revisión: el dueño todavía puede editar entre que el admin abre FleetReview y aprieta Aprobar. El arreglo va en `approveMember`, que debería exigir los valores que el admin vio.
+2. El archivo de la licencia: la Edge Function `storage-upload` deja al dueño sobrescribir `fleet-docs/<corp>/<miembro>/<archivo>` en cualquier estado.
+3. Mover la flota entera a otra empresa del mismo dueño (`driver_fleets.corporate_account_id`): la política no tiene `WITH CHECK` y la tabla no tiene trigger de protección, así que la flota se lleva con ella a todos los miembros revisados.
 
-**Si hay que volver a tocar `tg_fleet_members_protect`:** partir del cuerpo vivo (`pg_get_functiondef`), no del texto de la 00435, que en prod no tiene los comentarios de git. Cuerpos conocidos: el previo a la 00600 (md5 `8b0d07af…`) y el de la 00600 (`5379b97b…`). La 00600 se niega a reemplazar un cuerpo que no conoce; conviene que la próxima migración haga lo mismo. Ensayo: `supabase/tests/00600/run.sh`.
+**Si hay que volver a tocar `tg_fleet_members_protect`:** partir del cuerpo vivo (`pg_get_functiondef`), no del texto de la 00435, que en prod no tiene los comentarios de git. Cuerpos conocidos: el previo a la 00600 (md5 `8b0d07af…`) y el de la 00600 (`2b65b4b8…`). La 00600 se niega a reemplazar un cuerpo que no conoce; conviene que la próxima migración haga lo mismo. Ensayo: `supabase/tests/00600/run.sh`. Si la 00598 está en el checkout, o si se pasa `M598=<ruta>`, también corre la prueba combinada en los dos órdenes.
 
 ### Fleet membership 3-way gate (corporate)
 

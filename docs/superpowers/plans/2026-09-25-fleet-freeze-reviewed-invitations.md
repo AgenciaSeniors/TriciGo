@@ -22,7 +22,7 @@
 
 Local cluster (Windows): portable Postgres 16 in the scratchpad, started with
 `pg_ctl -D <scratchpad>/pgdata -o "-p 5441 -c listen_addresses=127.0.0.1" -l <scratchpad>/pg.log -w start`.
-Runner env on Windows: `PGBIN=<scratchpad>/pgsql/bin PGPORT=5441 PYTHON=python`.
+Runner env on Windows: `PG_BIN=<scratchpad>/pgsql/bin PG_PORT=5441 PYTHON=python` (the 00597 names; `PGPORT` is libpq's own variable). `M598=<path>` runs the combined 00598 cases when 00598 is not in the checkout.
 
 ---
 
@@ -34,8 +34,8 @@ Runner env on Windows: `PGBIN=<scratchpad>/pgsql/bin PGPORT=5441 PYTHON=python`.
 - [ ] **Step 2:** write the runner.
 - [ ] **Step 3: run RED**
 
-Run: `PGBIN=… PGPORT=5441 PYTHON=python bash supabase/tests/00600/run.sh none`
-Expected: every `S … is the prod body` PASSES (the scaffold is faithful). The owner-after-review cases FAIL for the right reason: A1, A3–A6 and A9–A10 show the owner's values; A2 links the new number; A7–A8 show the owner's rejection text. PASS as controls: B1–B9 and D1–D4.
+Run: `PG_BIN=… PG_PORT=5441 PYTHON=python bash supabase/tests/00600/run.sh none`
+Expected: every `S …` check PASSES (the scaffold is faithful, bodies and prod's ACL). The owner-after-review cases FAIL for the right reason: A1, A3–A6 and A9–A10 show the owner's values; A2 links the new number; A7–A8 show the owner's rejection text. PASS as controls: B1–B9 and D1–D4.
 
 - [ ] **Step 4: commit**
 
@@ -56,11 +56,11 @@ git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort 
 for pr in $(gh pr list --state open --json number --jq '.[].number'); do gh pr view $pr --json files --jq '.files[].path' | grep supabase/migrations; done
 ```
 
-- [ ] **Step 2:** write the migration. The function body is the live one plus the `-- 00600:` block at the end of the UPDATE branch. The drift guard accepts three md5s: the live body, 00435's text in git, and the new body (a re-run).
+- [ ] **Step 2:** write the migration. The function body is the live one plus the `-- 00600:` block at the end of the UPDATE branch. The drift guard accepts three md5s: the live body, 00435's text in git, and the new body (a re-run). The gate uses `IS DISTINCT FROM` so it fails closed; the self-test checks the trigger's attachment first, sets `request.jwt.claims` like PostgREST, and requires each write to hit one row.
 - [ ] **Step 3: run GREEN**
 
-Run: `PGBIN=… PGPORT=5441 PYTHON=python bash supabase/tests/00600/run.sh supabase/migrations/00600_freeze_reviewed_fleet_invitations.sql`
-Expected: `summary: N passed, 0 failed`, including M1–M2, D5 (fidelity), G1 (a database built from git) and N1–N6.
+Run: `PG_BIN=… PG_PORT=5441 PYTHON=python bash supabase/tests/00600/run.sh supabase/migrations/00600_freeze_reviewed_fleet_invitations.sql`
+Expected: `summary: 51 passed, 0 failed`, including M1–M3, D5 (fidelity), G1 (a database built from git) and N1–N8. With `M598=<00598 file>`: `59 passed`, adding C0–C3 in both orders.
 
 - [ ] **Step 4:** check line endings: `git ls-files --eol` shows `w/lf` for the new files after `git add`.
 - [ ] **Step 5: commit**
@@ -114,17 +114,23 @@ git commit -m "docs(claude): a reviewed fleet invitation is frozen for its owner
 -- byte the one running in prod: run.sh checks md5(prosrc) and length against
 -- the values read there, and each function keeps its prod ACL. auth.users and
 -- public.users keep only the columns these paths read. RLS is on, so the tests
--- run each call as `authenticated` with a JWT subject, the way PostgREST does.
+-- run each call as `authenticated` with JWT claims, the way PostgREST does.
+-- Everything is owned by a role `postgres` that is NOT a superuser and has
+-- BYPASSRLS, as in prod: run.sh applies the migration as that role, and the
+-- ACLs read exactly like prod's.
 -- fleet_members, driver_fleets and corporate_accounts had 0 rows in prod.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN CREATE ROLE postgres NOLOGIN BYPASSRLS; END IF;
 END $$;
-GRANT anon, authenticated, service_role TO pgtest;
+GRANT anon, authenticated, service_role, postgres TO pgtest;
 
 CREATE SCHEMA IF NOT EXISTS auth;
 GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
+GRANT USAGE, CREATE ON SCHEMA public, auth TO postgres;
+SET ROLE postgres;
 
 -- LIVE (md5 cdef18c6…, 176)
 CREATE OR REPLACE FUNCTION auth.uid()
@@ -457,6 +463,7 @@ END;
 $function$;
 REVOKE EXECUTE ON FUNCTION public.relink_fleet_member_for_existing_driver(uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.relink_fleet_member_for_existing_driver(uuid, text) TO authenticated, service_role;
+RESET ROLE;
 ````
 
 ## Appendix B — `supabase/tests/00600/run.sh`
@@ -467,31 +474,49 @@ GRANT EXECUTE ON FUNCTION public.relink_fleet_member_for_existing_driver(uuid, t
 #   supabase/tests/00600/run.sh none
 #       -> scaffold + tests (RED: the fleet owner rewrites an invitation the admin already reviewed)
 #   supabase/tests/00600/run.sh supabase/migrations/00600_freeze_reviewed_fleet_invitations.sql
-#       -> scaffold + migration x2 (idempotency) + tests + fidelity + a database built from git + negative proofs (GREEN)
+#       -> scaffold + migration x2 (idempotency) + tests + fidelity + a database built from git
+#          + negative proofs + 00598 in both orders when it is in the checkout (GREEN)
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
-# Elsewhere, PGBIN, PGPORT and PYTHON override the defaults, e.g. on Windows:
-#   PGBIN=<portable pgsql>/bin PGPORT=5441 PYTHON=python bash supabase/tests/00600/run.sh none
+# PG_BIN, PG_PORT and PYTHON override the binaries directory, the port and the python, e.g. on Windows:
+#   PG_BIN=/c/.../pgsql/bin PG_PORT=5441 PYTHON=python supabase/tests/00600/run.sh <migration>
+# M598 points at a 00598 migration outside the checkout (by default: supabase/migrations/00598_*.sql).
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 MIG="${1:-none}"
-BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
-PY="${PYTHON:-python3}"
-CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
+BIN="${PG_BIN:-/usr/lib/postgresql/16/bin}"
+CONN="-h 127.0.0.1 -p ${PG_PORT:-5433} -U pgtest"
 DB=pr600
+PY="${PYTHON:-$(command -v python3 || command -v python)}"   # Windows has no python3
+# Notices off so a DO block's chatter never lands in a compared value; untranslated messages and
+# UTF-8 so that psql on Windows prints the same bytes as on Linux.
+export PGOPTIONS="-c client_min_messages=warning" PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
-ERRF="$(mktemp)"; trap 'rm -f "$ERRF"' EXIT
 PASS=0; FAIL=0
 ok(){ echo "PASS  $1"; PASS=$((PASS+1)); }
 ko(){ echo "FAIL  $1  -- $2"; FAIL=$((FAIL+1)); }
 # val NAME SQL EXPECTED -> the statements must succeed; their printed rows, joined with ';', must equal EXPECTED
 val(){ local r; r=$($P -c "$2" </dev/null 2>&1 | tr -d '\r' | paste -sd';' -); if [ "$r" = "$3" ]; then ok "$1"; else ko "$1" "expected [$3], got [$r]"; fi; }
+# SQL files reach psql with their CRs stripped: a Windows checkout with core.autocrlf=true may have
+# them in CRLF, and every CR would end up inside the function bodies and break the md5 checks.
+# fresh NAME -> a database with the scaffold and the people, nothing else
+fresh(){ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $1" -c "CREATE DATABASE $1" >/dev/null 2>&1 \
+  && tr -d '\r' < "$DIR/scaffold.sql" | $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -f - >/dev/null 2>&1 \
+  && $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -c "$PEOPLE" >/dev/null 2>&1; }
+# apply FILE [DB] [MODE] -> run a migration as role postgres (prod's owner: no superuser, BYPASSRLS)
+# with an empty search_path, in one transaction unless MODE is "autocommit"; prints psql's output,
+# notices included
+apply(){ local one="-1"; [ "${3:-}" = autocommit ] && one=""
+  tr -d '\r' < "$1" | PGOPTIONS="-c client_min_messages=notice" \
+    $BIN/psql $CONN -d "${2:-$DB}" -qAt -v ON_ERROR_STOP=1 $one -c "SET ROLE postgres" -c "SET search_path = ''" -f - 2>&1 | tr -d '\r'
+  return "${PIPESTATUS[1]}"; }
 
 ADMIN=a0000000-0000-4000-8000-000000000001    # admin, the one reviewing
 OWNER=a0000000-0000-4000-8000-000000000002    # fleet owner (a driver)
 DRV=a0000000-0000-4000-8000-000000000003      # a driver already linked to the fleet
 NEWU=b0000000-0000-4000-8000-000000000001     # someone who signs up during a test
 NEWU2=b0000000-0000-4000-8000-000000000002    # someone else who signs up during a test
+LATER=b0000000-0000-4000-8000-000000000003    # a Google/Apple account with no phone yet (00598 cases)
 CA=c0000000-0000-4000-8000-00000000000a; CB=c0000000-0000-4000-8000-00000000000b
 FA=f0000000-0000-4000-8000-00000000000a; FB=f0000000-0000-4000-8000-00000000000b
 # auth.users keeps phones the way GoTrue does (E.164 digits, no '+'); public.users has them normalized.
@@ -501,14 +526,14 @@ INSERT INTO public.users (id, phone, role) VALUES
   ('$ADMIN', '+5355550001', 'admin'), ('$OWNER', '+5355550002', 'driver'), ('$DRV', '+5355551234', 'driver');"
 # RESET -> no invitations, no one signed up during a test, the owner's two fleets
 RESET="TRUNCATE public.fleet_members, public.driver_fleets, public.corporate_accounts;
-DELETE FROM auth.users WHERE id IN ('$NEWU', '$NEWU2');
+DELETE FROM auth.users WHERE id IN ('$NEWU', '$NEWU2', '$LATER');
 INSERT INTO public.corporate_accounts (id, name, contact_phone, created_by) VALUES
   ('$CA', 'Flota A', '+5355550002', '$OWNER'), ('$CB', 'Flota B', '+5355550002', '$OWNER');
 INSERT INTO public.driver_fleets (id, corporate_account_id, name) VALUES ('$FA', '$CA', 'Flota A'), ('$FB', '$CB', 'Flota B');"
-# as PERSON -> what follows runs the way PostgREST runs that person's call: role authenticated + JWT subject
-as(){ printf "SET ROLE authenticated; SET request.jwt.claim.sub = '%s';" "$1"; }
+# as PERSON -> what follows runs the way PostgREST runs that person's call: role authenticated + JWT claims
+as(){ printf "SET ROLE authenticated; SET request.jwt.claims = '{\"sub\": \"%s\", \"role\": \"authenticated\"}';" "$1"; }
 # NOJWT -> back to a caller with no JWT (service role, migrations, GoTrue's triggers)
-NOJWT="RESET ROLE; RESET request.jwt.claim.sub;"
+NOJWT="RESET ROLE; RESET request.jwt.claims;"
 # invite FLEET PHONE STATUS -> a fixture invitation, written with no JWT so it keeps STATUS
 invite(){ printf "INSERT INTO public.fleet_members (fleet_id, driver_name, driver_phone, driver_email, driver_license_number, driver_id_number, license_doc_path, status) VALUES ('%s', 'Juan', '%s', 'juan@x.cu', 'L1', 'I1', 'd1.jpg', '%s');" "$1" "$2" "$3"; }
 # linked FLEET STATUS -> a fixture invitation already linked to DRV
@@ -521,7 +546,7 @@ REWRITE="$(as "$OWNER") UPDATE public.fleet_members SET driver_phone = '+5355559
   driver_license_number = 'L9', driver_id_number = 'I9', license_doc_path = 'd9.jpg', fleet_id = '$FB' WHERE fleet_id = '$FA'; $NOJWT"
 # signup ID PHONE -> a new account with that confirmed number (what GoTrue + handle_new_user write, no JWT)
 signup(){ printf "INSERT INTO auth.users (id, phone, phone_confirmed_at) VALUES ('%s', '%s', now()); INSERT INTO public.users (id, phone) VALUES ('%s', '%s');" "$1" "${2#+}" "$1" "$2"; }
-WHO="LEFT JOIN (VALUES ('$DRV'::uuid, 'DRV'), ('$NEWU'::uuid, 'NEWU'), ('$NEWU2'::uuid, 'NEWU2')) p(id, who) ON p.id = fm.driver_id"
+WHO="LEFT JOIN (VALUES ('$DRV'::uuid, 'DRV'), ('$NEWU'::uuid, 'NEWU'), ('$NEWU2'::uuid, 'NEWU2'), ('$LATER'::uuid, 'LATER')) p(id, who) ON p.id = fm.driver_id"
 # ROW -> fleet|status|who|phone|name|email|licence|id|doc|reason for every invitation ('-' = not linked / NULL)
 ROW="SELECT string_agg(CASE fm.fleet_id WHEN '$FA' THEN 'A' WHEN '$FB' THEN 'B' END || '|' || fm.status || '|' || coalesce(p.who, '-')
   || '|' || fm.driver_phone || '|' || fm.driver_name || '|' || coalesce(fm.driver_email, '-') || '|' || coalesce(fm.driver_license_number, '-')
@@ -549,30 +574,33 @@ bodies(){ while IFS='|' read -r sig md5 len; do
   [ "$sig" = "${2:-}" ] && continue
   val "$1 $sig is the prod body" "SELECT md5(prosrc) || '/' || length(prosrc) FROM pg_proc WHERE oid = '$sig'::regprocedure" "$md5/$len"
 done <<< "$LIVE"; }
-# fresh NAME -> a database with the scaffold and the people, nothing else
-fresh(){ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $1" -c "CREATE DATABASE $1" >/dev/null 2>&1 \
-  && $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -f "$DIR/scaffold.sql" >/dev/null 2>&1 \
-  && $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -c "$PEOPLE" >/dev/null 2>&1; }
+PROD_ACL="{=X/postgres,postgres=X/postgres,service_role=X/postgres}"   # tg_fleet_members_protect() in prod
+ACL="SELECT proacl::text FROM pg_proc WHERE oid = 'public.tg_fleet_members_protect()'::regprocedure"
 
 echo "== reset database =="
-fresh $DB || { echo "scaffold or seed failed"; exit 1; }
+fresh $DB || { echo "scaffold or seed failed (is the cluster up on port ${PG_PORT:-5433}?)"; exit 1; }
 bodies S
-ACL_BEFORE=$($P -c "SELECT proacl::text FROM pg_proc WHERE oid = 'public.tg_fleet_members_protect()'::regprocedure" | tr -d '\r')
+val "S the protect function has prod's ACL" "$ACL" "$PROD_ACL"
 
 if [ "$MIG" != "none" ]; then
   # State before the migration: invitations the self-test must leave exactly as they are.
   $P -c "$RESET $(invite $FA '+5355551111' 'approved') $(invite $FA '+5355552222' 'pending_review') $(linked $FB 'active')" >/dev/null || exit 1
   BEFORE=$($P -c "$FINGERPRINT" | tr -d '\r')
   # 1st pass in one transaction, the way `supabase db push` runs a file; 2nd in autocommit mode.
-  echo "== apply migration (1st, one transaction, search_path = '') =="
-  if ! CLAIM=$($P -1 -c "SET search_path = ''" -f "$MIG" -c "SELECT '[' || coalesce(current_setting('request.jwt.claim.sub', true), '') || ']'" 2>"$ERRF"); then
-    echo "migration failed:"; grep -m3 ERROR "$ERRF"; exit 1
-  fi
-  echo "== apply migration (2nd, idempotency, autocommit, search_path = '') =="
-  $P -c "SET search_path = ''" -f "$MIG" >/dev/null 2>"$ERRF" || { echo "migration NOT idempotent:"; grep -m3 ERROR "$ERRF"; exit 1; }
+  echo "== apply migration (1st, one transaction, as postgres, search_path = '') =="
+  if ! OUT=$(apply "$MIG"); then echo "migration failed:"; echo "$OUT" | grep -m3 ERROR; exit 1; fi
+  echo "== apply migration (2nd, idempotency, autocommit, as postgres, search_path = '') =="
+  if ! OUT2=$(apply "$MIG" "$DB" autocommit); then echo "migration NOT idempotent:"; echo "$OUT2" | grep -m3 ERROR; exit 1; fi
   val "M1 the self-test leaves every row exactly as it was" "$FINGERPRINT" "$BEFORE"
-  if [ "$(printf '%s' "$CLAIM" | tr -d '\r')" = "[]" ]; then ok "M2 the self-test's JWT claim does not outlive the migration"
-  else ko "M2 the self-test's JWT claim does not outlive the migration" "got [$CLAIM]"; fi
+  if echo "$OUT" | grep -q "00600: verified, the owner cannot change a reviewed invitation"; then
+    ok "M2 the self-test ran (it did not skip) and passed"
+  else
+    ko "M2 the self-test ran (it did not skip) and passed" "$(echo "$OUT" | grep -m1 NOTICE)"
+  fi
+  CLAIMS=$(tr -d '\r' < "$MIG" | $BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1 -1 -c "SET ROLE postgres" -c "SET search_path = ''" -f - \
+    -c "SELECT '[' || coalesce(current_setting('request.jwt.claim.sub', true), '') || '|' || coalesce(current_setting('request.jwt.claims', true), '') || ']'" 2>/dev/null | tr -d '\r')
+  if [ "$CLAIMS" = "[|]" ]; then ok "M3 the self-test's JWT claims do not outlive the migration"
+  else ko "M3 the self-test's JWT claims do not outlive the migration" "got [$CLAIMS]"; fi
 fi
 
 echo "== tests =="
@@ -586,7 +614,7 @@ val "A2 after the attempt, the new number's signup links nothing and the reviewe
 val "A3 pending_signup: the rewrite is discarded" \
   "$RESET $(invite $FA '+5355551111' 'pending_signup') $REWRITE $ROW" \
   "A|pending_signup|-|+5355551111|Juan|juan@x.cu|L1|I1|d1.jpg|-"
-val "A4 rejected: the rewrite is discarded, so a later approval covers what the admin rejected" \
+val "A4 rejected: the rewrite is discarded" \
   "$RESET $(invite $FA '+5355551111' 'pending_review') $(reject $FA '+5355551111' 'Licencia vencida') $REWRITE $ROW" \
   "A|rejected|-|+5355551111|Juan|juan@x.cu|L1|I1|d1.jpg|Licencia vencida"
 val "A5 active: the rewrite is discarded and the driver stays linked" \
@@ -654,17 +682,17 @@ val "B9 an owner update that changes nothing raises nothing" \
 val "D1 the trigger is the same: BEFORE INSERT OR UPDATE, every column, per row" \
   "SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgrelid = 'public.fleet_members'::regclass AND tgname = 'trg_fleet_members_protect'" \
   "CREATE TRIGGER trg_fleet_members_protect BEFORE INSERT OR UPDATE ON public.fleet_members FOR EACH ROW EXECUTE FUNCTION tg_fleet_members_protect()"
-val "D2 same signature, SECURITY DEFINER, same pinned search_path" \
-  "SELECT pg_get_function_identity_arguments(oid) || '|' || pg_get_function_result(oid) || '|' || prosecdef || '|' || array_to_string(proconfig, ',')
-   FROM pg_proc WHERE oid = 'public.tg_fleet_members_protect()'::regprocedure" "|trigger|true|search_path=public, pg_catalog"
-val "D3 the ACL is the same" "SELECT proacl::text FROM pg_proc WHERE oid = 'public.tg_fleet_members_protect()'::regprocedure" "$ACL_BEFORE"
+val "D2 same signature, SECURITY DEFINER, same pinned search_path, still owned by postgres" \
+  "SELECT pg_get_function_identity_arguments(oid) || '|' || pg_get_function_result(oid) || '|' || prosecdef || '|' || array_to_string(proconfig, ',') || '|' || pg_get_userbyid(proowner)
+   FROM pg_proc WHERE oid = 'public.tg_fleet_members_protect()'::regprocedure" "|trigger|true|search_path=public, pg_catalog|postgres"
+val "D3 the ACL is prod's" "$ACL" "$PROD_ACL"
 bodies "D4 unchanged:" "public.tg_fleet_members_protect()"
 
 if [ "$MIG" != "none" ]; then
   # D5. fidelity: the new body is the live one plus the 00600 block, and nothing else
   FIDQ="$("$PY" - "$MIG" <<'PYEOF'
 import sys
-src = open(sys.argv[1], encoding='utf-8', newline='').read()
+src = open(sys.argv[1], encoding='utf-8', newline='').read().replace('\r', '')
 fn = src.index('CREATE OR REPLACE FUNCTION public.tg_fleet_members_protect()')
 start = src.index('    -- 00600:', fn)
 end = src.index('    END IF;\n', start) + len('    END IF;\n')
@@ -686,7 +714,7 @@ PYEOF
   GIT="$(mktemp --suffix=.sql)"
   "$PY" - "$ROOT/supabase/migrations/00435_round7_fleet_sched_hardening.sql" "$GIT" <<'PYEOF'
 import sys
-src = open(sys.argv[1], encoding='utf-8', newline='').read()
+src = open(sys.argv[1], encoding='utf-8', newline='').read().replace('\r', '')
 start = src.index('CREATE OR REPLACE FUNCTION public.tg_fleet_members_protect()')
 end = src.index('$function$;', start) + len('$function$;')
 open(sys.argv[2], 'w', encoding='utf-8', newline='').write(src[start:end] + '\n')
@@ -696,8 +724,8 @@ PYEOF
   $G -f "$GIT" >/dev/null 2>&1
   if [ "$($G -c "SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.tg_fleet_members_protect()'::regprocedure" | tr -d '\r')" != "9d34552cc0598d60952239a2680129fd" ]; then
     ko "G1 a database built from git accepts the migration and freezes the reviewed invitation" "could not load 00435's text"
-  elif ! $G -1 -c "SET search_path = ''" -f "$MIG" >/dev/null 2>"$ERRF"; then
-    ko "G1 a database built from git accepts the migration and freezes the reviewed invitation" "$(tr -d '\r' < "$ERRF" | grep -m1 ERROR)"
+  elif ! OUT=$(apply "$MIG" ${DB}g); then
+    ko "G1 a database built from git accepts the migration and freezes the reviewed invitation" "$(echo "$OUT" | grep -m1 ERROR)"
   else
     P_MAIN="$P"; P="$G"
     val "G1 a database built from git accepts the migration and freezes the reviewed invitation" \
@@ -706,12 +734,13 @@ PYEOF
   fi
   rm -f "$GIT"
 
-  # N. negative proofs: a copy of the migration with one defect must be aborted by its own assertions
+  # N. negative proofs: a copy of the migration with one defect, or a database that is not what the
+  # migration expects, must be refused by the migration's own assertions
   # mutate OLD NEW -> path of a copy of the migration with OLD (present exactly once) replaced by NEW
   mutate(){ local out; out="$(mktemp --suffix=.sql)"
     OLD="$1" NEW="$2" "$PY" - "$MIG" "$out" <<'PYEOF' || { rm -f "$out"; return 1; }
 import os, sys
-src = open(sys.argv[1], encoding='utf-8', newline='').read()
+src = open(sys.argv[1], encoding='utf-8', newline='').read().replace('\r', '')
 old, new = os.environ['OLD'], os.environ['NEW']
 assert src.count(old) == 1, f"expected the anchor once, found {src.count(old)}"
 out = src.replace(old, new)
@@ -722,14 +751,14 @@ PYEOF
   # expect_abort NAME ERROR FILE [PREP_SQL] -> FILE, applied to a fresh scaffold (after PREP_SQL), must fail with ERROR
   expect_abort(){ local out
     fresh ${DB}n
-    local N="$BIN/psql $CONN -d ${DB}n -qAt -v ON_ERROR_STOP=1"
-    if [ -n "${4:-}" ] && ! $N -c "$4" >/dev/null 2>"$ERRF"; then ko "$1" "setup failed: $(tr -d '\r' < "$ERRF" | grep -m1 ERROR)"; return; fi
-    if out=$($N -1 -c "SET search_path = ''" -f "$3" 2>&1); then
+    if [ -n "${4:-}" ] && ! out=$($BIN/psql $CONN -d ${DB}n -qAt -v ON_ERROR_STOP=1 -c "$4" 2>&1); then
+      ko "$1" "setup failed: $(echo "$out" | tr -d '\r' | grep -m1 ERROR)"; return; fi
+    if out=$(apply "$3" ${DB}n); then
       ko "$1" "the migration applied with the defect in place"
     elif echo "$out" | grep -q "$2"; then
       ok "$1"
     else
-      ko "$1" "wrong error: $(echo "$out" | tr -d '\r' | grep -m1 ERROR)"
+      ko "$1" "wrong error: $(echo "$out" | grep -m1 ERROR)"
     fi; }
   # negative NAME OLD NEW ERROR -> the copy with OLD replaced by NEW must be aborted with ERROR
   negative(){ local buggy
@@ -743,7 +772,7 @@ PYEOF
     "      NEW.fleet_id              := OLD.fleet_id;
 " "" "the owner changed an invitation the admin had reviewed"
   negative "N3 an invitation in review is frozen too: the self-test aborts the migration" \
-    "    IF OLD.status <> 'pending_review' THEN" "    IF true THEN" \
+    "    IF OLD.status IS DISTINCT FROM 'pending_review' THEN" "    IF true THEN" \
     "the owner could not edit an invitation still in review"
   negative "N4 the rejection reason is left writable: the self-test aborts the migration" \
     "    NEW.rejected_reason := OLD.rejected_reason;
@@ -753,9 +782,45 @@ PYEOF
     "DO \$d\$ BEGIN EXECUTE replace(pg_get_functiondef('public.tg_fleet_members_protect()'::regprocedure),
        E'    RETURN NEW;\n  END IF;\nEND;', E'    NEW.added_at := OLD.added_at;\n    RETURN NEW;\n  END IF;\nEND;'); END \$d\$;"
   expect_abort "N6 the trigger lost its INSERT event: the migration refuses" \
-    "is not attached to fleet_members as BEFORE INSERT OR UPDATE" "$MIG" \
+    "is not attached to fleet_members as an enabled BEFORE INSERT OR UPDATE" "$MIG" \
     "DROP TRIGGER trg_fleet_members_protect ON public.fleet_members;
      CREATE TRIGGER trg_fleet_members_protect BEFORE UPDATE ON public.fleet_members FOR EACH ROW EXECUTE FUNCTION tg_fleet_members_protect();"
+  expect_abort "N7 the trigger only fires on some columns (UPDATE OF): the migration refuses" \
+    "is not attached to fleet_members as an enabled BEFORE INSERT OR UPDATE" "$MIG" \
+    "DROP TRIGGER trg_fleet_members_protect ON public.fleet_members;
+     CREATE TRIGGER trg_fleet_members_protect BEFORE INSERT OR UPDATE OF fleet_id, driver_name, driver_phone, driver_email,
+       driver_license_number, driver_id_number, license_doc_path, rejected_reason
+       ON public.fleet_members FOR EACH ROW EXECUTE FUNCTION tg_fleet_members_protect();"
+  expect_abort "N8 the trigger is disabled: the migration refuses" \
+    "is not attached to fleet_members as an enabled BEFORE INSERT OR UPDATE" "$MIG" \
+    "ALTER TABLE public.fleet_members DISABLE TRIGGER trg_fleet_members_protect;"
+
+  # C. together with 00598 (links on approval and on a confirmed number), in both orders, when it is in the checkout
+  M598="${M598:-$(ls "$ROOT"/supabase/migrations/00598_*.sql 2>/dev/null | head -1)}"
+  if [ -z "$M598" ] || [ ! -f "$M598" ]; then
+    echo "SKIP  C (00598 is not in this checkout; set M598 to run it)"
+  else
+    for order in "598 600" "600 598"; do
+      fresh ${DB}c
+      first="$MIG"; second="$M598"; [ "$order" = "598 600" ] && { first="$M598"; second="$MIG"; }
+      if ! OUT=$(apply "$first" ${DB}c) || ! OUT=$(apply "$second" ${DB}c); then
+        ko "C0 [$order] both migrations apply" "$(echo "$OUT" | grep -m1 ERROR)"; continue
+      fi
+      ok "C0 [$order] both migrations apply"
+      P_MAIN="$P"; P="$BIN/psql $CONN -d ${DB}c -qAt -v ON_ERROR_STOP=1"
+      LATER_ACCT="INSERT INTO auth.users (id) VALUES ('$LATER'); INSERT INTO public.users (id, role) VALUES ('$LATER', 'customer');"
+      CONFIRM="UPDATE auth.users SET phone = '5355558888', phone_confirmed_at = now() WHERE id = '$LATER';"
+      val "C1 [$order] the owner re-points an approved invitation at a number confirmed later: nobody is linked" \
+        "$RESET $LATER_ACCT $(invite $FA '+5355551111' 'pending_review') $(approve $FA '+5355551111')
+         $(as $OWNER) UPDATE public.fleet_members SET driver_phone = '+5355558888'; $NOJWT $CONFIRM
+         SELECT status || '|' || coalesce(driver_id::text, '-') || '|' || driver_phone FROM public.fleet_members;" "approved|-|+5355551111"
+      val "C2 [$order] control: an approved invitation for that number is linked when it is confirmed" \
+        "$RESET $LATER_ACCT $(invite $FA '+5355558888' 'pending_review') $(approve $FA '+5355558888') $CONFIRM $LINKS" "active:LATER"
+      val "C3 [$order] the reviewed number's signup still links it" \
+        "$RESET $(invite $FA '+5355551111' 'pending_review') $(approve $FA '+5355551111') $REWRITE $(signup $NEWU '+5355551111') $LINKS" "active:NEWU"
+      P="$P_MAIN"
+    done
+  fi
 fi
 
 echo "== summary: $PASS passed, $FAIL failed =="
@@ -772,11 +837,11 @@ echo "== summary: $PASS passed, $FAIL failed =="
 -- reviewed it. The owner's UPDATE policy, fleet_members_owner_or_admin_update,
 -- has no WITH CHECK; `authenticated` can UPDATE every column; and
 -- tg_fleet_members_protect() only reverts status, driver_id, signed_up_at,
--- reviewed_at and reviewed_by for the owner. The number, the name, the
--- licence, the ID, the licence document, the fleet and the admin's rejection
--- reason all stay writable. Every path that links an invitation to an account
--- (auto_link_fleet_member_on_signup, the admin relink RPC, and the 00598
--- triggers and backfill) reads an approved, unlinked row as "the admin
+-- reviewed_at and reviewed_by for the owner. The number, the name, the email,
+-- the licence, the ID, the licence document, the fleet and the admin's
+-- rejection reason all stay writable. Every path that links an invitation to
+-- an account (auto_link_fleet_member_on_signup, the admin relink RPC, and the
+-- 00598 triggers and backfill) reads an approved, unlinked row as "the admin
 -- approved this person at this number". So an owner can point an approved
 -- invitation at someone else's number. When that person signs up, or has the
 -- number confirmed later (00598), they are linked to the fleet under a name
@@ -802,24 +867,30 @@ echo "== summary: $PASS passed, $FAIL failed =="
 -- 8b0d07af..., 674 chars, no comments; the 00435 file in git has the same
 -- logic with comments) and gains one block at the end of the owner's UPDATE
 -- branch. Only the owner's path changes. Admins, callers with no JWT (the
--- service role, migrations, GoTrue) and the trusted writers (the signup link,
--- the relink RPC, the 00598 triggers) return before that block, and none of
--- them writes these columns. The trigger itself (name, timing, events) and
--- the function's ACL are untouched, so the trigger still fires before
--- 00598's approval trigger.
+-- service role, migrations, GoTrue) and the writers that set
+-- app.trusted_fleet_update (the signup link, the relink RPC and 00598's
+-- confirmation link) return before that block, and none of them writes these
+-- columns. 00598's approval trigger is a separate trigger that fires after
+-- this one, on the admin's approval. The trigger itself (name, timing,
+-- events) and the function's ACL are untouched, so that order stays.
 --
 -- The migration refuses to replace a body it was not written against: if
 -- someone changed the function after 2026-09-25, replacing it would silently
 -- drop that change. It also asserts its own result instead of trusting
--- CREATE, since plpgsql only checks a body when it runs: a rolled-back
--- self-test acts as a real non-admin account.
+-- CREATE, since plpgsql only checks a body when it runs: after checking that
+-- the trigger is still attached as before, a rolled-back self-test acts as a
+-- real non-admin account.
 --
 -- Not covered here, flagged separately: an owner edit while the invitation
--- is still in review, between the admin opening it and approving it; and the
+-- is still in review, between the admin opening it and approving it; the
 -- licence file itself, which the storage-upload function lets the owner
--- overwrite under the same path.
+-- overwrite under the same path; and moving a whole fleet to another company
+-- of the same owner (driver_fleets.corporate_account_id), which carries every
+-- reviewed member with it.
 -- Rehearsal: supabase/tests/00600/run.sh.
 -- ============================================================
+
+SET lock_timeout = '5s';
 
 -- 1. Only replace a body this migration knows ---------------------------------
 DO $$
@@ -835,7 +906,7 @@ BEGIN
   -- the migrations), or the body below (this migration already ran).
   IF v_md5 NOT IN ('8b0d07aff7ab33142bfcec29304c01ed',
                    '9d34552cc0598d60952239a2680129fd',
-                   '5379b97b1e22509ba322e960e31cca26') THEN
+                   '2b65b4b84e3a2ce323197501e5742c1a') THEN
     RAISE EXCEPTION '00600: tg_fleet_members_protect() is not the body this migration was written against (md5 %). Transcribe it again from pg_get_functiondef and keep what changed.', v_md5;
   END IF;
 END $$;
@@ -870,7 +941,7 @@ BEGIN
     -- reviewed the invitation, what they reviewed and the fleet it is for
     -- stay as reviewed; to change them, the owner deletes it and invites again.
     NEW.rejected_reason := OLD.rejected_reason;
-    IF OLD.status <> 'pending_review' THEN
+    IF OLD.status IS DISTINCT FROM 'pending_review' THEN
       NEW.fleet_id              := OLD.fleet_id;
       NEW.driver_name           := OLD.driver_name;
       NEW.driver_phone          := OLD.driver_phone;
@@ -888,17 +959,20 @@ COMMENT ON FUNCTION public.tg_fleet_members_protect() IS
   'BEFORE INSERT OR UPDATE on fleet_members. For the fleet owner (a JWT that is not an admin, without app.trusted_fleet_update), an insert always starts in pending_review, unlinked and unreviewed. An update never changes status, driver_id, signed_up_at, reviewed_at, reviewed_by or rejected_reason, and once the invitation has left pending_review it does not change the reviewed fields (driver_phone, driver_name, driver_email, driver_license_number, driver_id_number, license_doc_path) or fleet_id either (00600). The owner''s write succeeds with those values kept; to change a reviewed member, delete it and invite again.';
 
 -- 3. Assert the result ---------------------------------------------------------------
--- Acting as a real non-admin account (its id in the JWT claim, the way
--- PostgREST sets it), the block rewrites an approved invitation (all seven
--- reviewed fields), rewrites an admin's rejection reason and edits an
--- invitation still in review. The first two must be kept, the third must go
--- through. Everything the block does is rolled back, the claim included. A
--- database with no non-admin account has nobody to act as, so the behaviour
--- check is skipped there. The trigger check always runs.
+-- First, the trigger must still be attached as before; without it nothing
+-- below holds. Then, acting as a real non-admin account (its id in the JWT
+-- claims, the way PostgREST sets them), the block rewrites an approved
+-- invitation (all seven reviewed fields), rewrites an admin's rejection
+-- reason and edits an invitation still in review. Each write must hit its
+-- row; the first two must be kept and the third must go through. Everything
+-- the block does is rolled back, the claims included. A database with no
+-- non-admin account has nobody to act as, so the behaviour check is skipped
+-- there.
 DO $$
 DECLARE
   v_owner          uuid;
-  v_claim          text := current_setting('request.jwt.claim.sub', true);
+  v_claim_sub      text := current_setting('request.jwt.claim.sub', true);
+  v_claims         text := current_setting('request.jwt.claims', true);
   v_corp_a         uuid := gen_random_uuid();
   v_corp_b         uuid := gen_random_uuid();
   v_fleet_a        uuid := gen_random_uuid();
@@ -906,77 +980,12 @@ DECLARE
   v_reviewed       uuid := gen_random_uuid();
   v_rejected       uuid := gen_random_uuid();
   v_pending        uuid := gen_random_uuid();
+  v_rows           integer;
   v_after_reviewed text;
   v_after_rejected text;
   v_after_pending  text;
   v_expected       text := concat_ws('|', 'fleet a', 'Reviewed', '+5355500601', 'reviewed@00600.test', 'L-1', 'I-1', 'doc-1');
 BEGIN
-  SELECT u.id INTO v_owner
-  FROM public.users u
-  WHERE u.role NOT IN ('admin', 'super_admin')
-  ORDER BY u.created_at, u.id
-  LIMIT 1;
-
-  IF v_owner IS NULL THEN
-    RAISE NOTICE '00600: no non-admin account yet, behaviour self-test skipped';
-  ELSE
-    BEGIN
-      -- Fixtures, written with no JWT, so the trigger lets them through as they are.
-      PERFORM set_config('request.jwt.claim.sub', '', true);
-      PERFORM set_config('request.jwt.claims', '', true);
-      PERFORM set_config('app.trusted_fleet_update', '', true);
-      INSERT INTO public.corporate_accounts (id, name, contact_phone, created_by) VALUES
-        (v_corp_a, '00600 self-test A', '+5355500600', v_owner),
-        (v_corp_b, '00600 self-test B', '+5355500600', v_owner);
-      INSERT INTO public.driver_fleets (id, corporate_account_id, name) VALUES
-        (v_fleet_a, v_corp_a, '00600 self-test A'),
-        (v_fleet_b, v_corp_b, '00600 self-test B');
-      INSERT INTO public.fleet_members (id, fleet_id, driver_name, driver_phone, driver_email,
-                                        driver_license_number, driver_id_number, license_doc_path,
-                                        status, rejected_reason) VALUES
-        (v_reviewed, v_fleet_a, 'Reviewed', '+5355500601', 'reviewed@00600.test', 'L-1', 'I-1', 'doc-1', 'approved', NULL),
-        (v_rejected, v_fleet_a, 'Rejected', '+5355500602', NULL, NULL, NULL, NULL, 'rejected', 'admin reason'),
-        (v_pending,  v_fleet_a, 'Pending',  '+5355500603', NULL, NULL, NULL, NULL, 'pending_review', NULL);
-
-      -- The owner's writes, with the owner's id in the claim.
-      PERFORM set_config('request.jwt.claim.sub', v_owner::text, true);
-      UPDATE public.fleet_members
-         SET fleet_id = v_fleet_b, driver_name = 'Other', driver_phone = '+5355500699',
-             driver_email = 'other@00600.test', driver_license_number = 'L-9',
-             driver_id_number = 'I-9', license_doc_path = 'doc-9'
-       WHERE id = v_reviewed;
-      UPDATE public.fleet_members SET rejected_reason = 'owner text' WHERE id = v_rejected;
-      UPDATE public.fleet_members SET driver_phone = '+5355500698' WHERE id = v_pending;
-      PERFORM set_config('request.jwt.claim.sub', '', true);
-
-      SELECT concat_ws('|', CASE fleet_id WHEN v_fleet_a THEN 'fleet a' WHEN v_fleet_b THEN 'fleet b' END,
-                       driver_name, driver_phone, driver_email, driver_license_number, driver_id_number, license_doc_path)
-        INTO v_after_reviewed FROM public.fleet_members WHERE id = v_reviewed;
-      SELECT rejected_reason INTO v_after_rejected FROM public.fleet_members WHERE id = v_rejected;
-      SELECT driver_phone INTO v_after_pending FROM public.fleet_members WHERE id = v_pending;
-
-      RAISE EXCEPTION '00600 self-test rollback';
-    EXCEPTION WHEN raise_exception THEN
-      IF SQLERRM <> '00600 self-test rollback' THEN
-        RAISE;
-      END IF;
-    END;
-
-    IF v_after_reviewed IS DISTINCT FROM v_expected THEN
-      RAISE EXCEPTION '00600: the owner changed an invitation the admin had reviewed: % (expected %)', coalesce(v_after_reviewed, 'missing'), v_expected;
-    END IF;
-    IF v_after_rejected IS DISTINCT FROM 'admin reason' THEN
-      RAISE EXCEPTION '00600: the owner rewrote the admin''s rejection reason: %', coalesce(v_after_rejected, 'NULL');
-    END IF;
-    IF v_after_pending IS DISTINCT FROM '+5355500698' THEN
-      RAISE EXCEPTION '00600: the owner could not edit an invitation still in review: %', coalesce(v_after_pending, 'missing');
-    END IF;
-    IF coalesce(current_setting('request.jwt.claim.sub', true), '') <> coalesce(v_claim, '') THEN
-      RAISE EXCEPTION '00600: the self-test left the JWT claim set';
-    END IF;
-    RAISE NOTICE '00600: verified, the owner cannot change a reviewed invitation and can still edit one in review';
-  END IF;
-
   IF NOT EXISTS (
     SELECT 1 FROM pg_trigger t
     WHERE t.tgrelid = 'public.fleet_members'::regclass
@@ -986,7 +995,89 @@ BEGIN
       AND t.tgenabled = 'O'
       AND cardinality(t.tgattr::int2[]) = 0    -- every column, not UPDATE OF
   ) THEN
-    RAISE EXCEPTION '00600: trg_fleet_members_protect is not attached to fleet_members as BEFORE INSERT OR UPDATE FOR EACH ROW';
+    RAISE EXCEPTION '00600: trg_fleet_members_protect is not attached to fleet_members as an enabled BEFORE INSERT OR UPDATE FOR EACH ROW trigger';
   END IF;
+
+  SELECT u.id INTO v_owner
+  FROM public.users u
+  WHERE u.role NOT IN ('admin', 'super_admin')
+  ORDER BY u.created_at, u.id
+  LIMIT 1;
+
+  IF v_owner IS NULL THEN
+    RAISE NOTICE '00600: no non-admin account yet, behaviour self-test skipped';
+    RETURN;
+  END IF;
+
+  BEGIN
+    -- Fixtures, written with no JWT, so the trigger lets them through as they are.
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+    PERFORM set_config('app.trusted_fleet_update', '', true);
+    INSERT INTO public.corporate_accounts (id, name, contact_phone, created_by) VALUES
+      (v_corp_a, '00600 self-test A', '+5355500600', v_owner),
+      (v_corp_b, '00600 self-test B', '+5355500600', v_owner);
+    INSERT INTO public.driver_fleets (id, corporate_account_id, name) VALUES
+      (v_fleet_a, v_corp_a, '00600 self-test A'),
+      (v_fleet_b, v_corp_b, '00600 self-test B');
+    INSERT INTO public.fleet_members (id, fleet_id, driver_name, driver_phone, driver_email,
+                                      driver_license_number, driver_id_number, license_doc_path,
+                                      status, rejected_reason) VALUES
+      (v_reviewed, v_fleet_a, 'Reviewed', '+5355500601', 'reviewed@00600.test', 'L-1', 'I-1', 'doc-1', 'approved', NULL),
+      (v_rejected, v_fleet_a, 'Rejected', '+5355500602', NULL, NULL, NULL, NULL, 'rejected', 'admin reason'),
+      (v_pending,  v_fleet_a, 'Pending',  '+5355500603', NULL, NULL, NULL, NULL, 'pending_review', NULL);
+
+    -- The owner's writes, with the owner's id in the JWT claims.
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_owner, 'role', 'authenticated')::text, true);
+    UPDATE public.fleet_members
+       SET fleet_id = v_fleet_b, driver_name = 'Other', driver_phone = '+5355500699',
+           driver_email = 'other@00600.test', driver_license_number = 'L-9',
+           driver_id_number = 'I-9', license_doc_path = 'doc-9'
+     WHERE id = v_reviewed;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    IF v_rows <> 1 THEN
+      RAISE EXCEPTION '00600: the self-test rewrite of the approved invitation hit % rows', v_rows;
+    END IF;
+    UPDATE public.fleet_members SET rejected_reason = 'owner text' WHERE id = v_rejected;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    IF v_rows <> 1 THEN
+      RAISE EXCEPTION '00600: the self-test rewrite of the rejection reason hit % rows', v_rows;
+    END IF;
+    UPDATE public.fleet_members SET driver_phone = '+5355500698' WHERE id = v_pending;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    IF v_rows <> 1 THEN
+      RAISE EXCEPTION '00600: the self-test edit of the invitation in review hit % rows', v_rows;
+    END IF;
+    PERFORM set_config('request.jwt.claims', '', true);
+
+    SELECT concat_ws('|', CASE fleet_id WHEN v_fleet_a THEN 'fleet a' WHEN v_fleet_b THEN 'fleet b' END,
+                     driver_name, driver_phone, driver_email, driver_license_number, driver_id_number, license_doc_path)
+      INTO v_after_reviewed FROM public.fleet_members WHERE id = v_reviewed;
+    SELECT rejected_reason INTO v_after_rejected FROM public.fleet_members WHERE id = v_rejected;
+    SELECT driver_phone INTO v_after_pending FROM public.fleet_members WHERE id = v_pending;
+
+    RAISE EXCEPTION '00600 self-test rollback';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> '00600 self-test rollback' THEN
+      RAISE;
+    END IF;
+  END;
+
+  IF v_after_reviewed IS DISTINCT FROM v_expected THEN
+    RAISE EXCEPTION '00600: the owner changed an invitation the admin had reviewed: % (expected %)', coalesce(v_after_reviewed, 'missing'), v_expected;
+  END IF;
+  IF v_after_rejected IS DISTINCT FROM 'admin reason' THEN
+    RAISE EXCEPTION '00600: the owner rewrote the admin''s rejection reason: %', coalesce(v_after_rejected, 'NULL');
+  END IF;
+  IF v_after_pending IS DISTINCT FROM '+5355500698' THEN
+    RAISE EXCEPTION '00600: the owner could not edit an invitation still in review: %', coalesce(v_after_pending, 'missing');
+  END IF;
+  IF coalesce(current_setting('request.jwt.claim.sub', true), '') <> coalesce(v_claim_sub, '')
+     OR coalesce(current_setting('request.jwt.claims', true), '') <> coalesce(v_claims, '') THEN
+    RAISE EXCEPTION '00600: the self-test left a JWT claim set';
+  END IF;
+  RAISE NOTICE '00600: verified, the owner cannot change a reviewed invitation and can still edit one in review';
 END $$;
+
+RESET lock_timeout;
 ````
