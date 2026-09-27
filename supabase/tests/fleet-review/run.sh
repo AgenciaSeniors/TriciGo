@@ -12,19 +12,22 @@
 #  C. that holds under concurrency: READ COMMITTED (prod's default) re-checks
 #     the WHERE on the row version the owner committed.
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
+# PG_BIN and PG_PORT override the binaries directory and the port, e.g. on Windows:
+#   PG_BIN=/c/.../pgsql/bin PG_PORT=5435 supabase/tests/fleet-review/run.sh
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
-BIN=/usr/lib/postgresql/16/bin
-CONN="-h 127.0.0.1 -p 5433 -U pgtest"
+BIN="${PG_BIN:-/usr/lib/postgresql/16/bin}"
+CONN="-h 127.0.0.1 -p ${PG_PORT:-5433} -U pgtest"
 DB=fleetreview
 P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
 PASS=0; FAIL=0
 ok(){ echo "PASS  $1"; PASS=$((PASS+1)); }
 ko(){ echo "FAIL  $1  -- $2"; FAIL=$((FAIL+1)); }
 # val NAME SQL EXPECTED -> the statements must succeed; their printed rows, joined with ';', must equal EXPECTED
-val(){ local r; r=$($P -c "$2" 2>&1 | paste -sd';' -); if [ "$r" = "$3" ]; then ok "$1"; else ko "$1" "expected [$3], got [$r]"; fi; }
+# (psql on Windows ends lines with \r\n, hence the tr)
+val(){ local r; r=$($P -c "$2" 2>&1 | tr -d '\r' | paste -sd';' -); if [ "$r" = "$3" ]; then ok "$1"; else ko "$1" "expected [$3], got [$r]"; fi; }
 # wait_for SQL -> poll for up to 10 s until SQL prints t
-wait_for(){ local _; for _ in $(seq 1 100); do [ "$($P -c "$1" 2>/dev/null)" = "t" ] && return 0; sleep 0.1; done; return 1; }
+wait_for(){ local _; for _ in $(seq 1 100); do [ "$($P -c "$1" 2>/dev/null | tr -d '\r')" = "t" ] && return 0; sleep 0.1; done; return 1; }
 
 OWNER=a0000000-0000-4000-8000-000000000001          # the fleet owner (a driver)
 ADMIN=a0000000-0000-4000-8000-000000000002          # the admin reviewing the fleet
@@ -87,14 +90,14 @@ race(){
     waited=yes
   fi
   wait "$first_pid" "$second_pid"
-  echo "$waited|$(paste -sd' ' "$TMPD/second.out")|$($P -c "$STATE")"
+  echo "$waited|$(tr -d '\r' < "$TMPD/second.out" | paste -sd' ' -)|$($P -c "$STATE" | tr -d '\r')"
 }
 # vrace NAME FIRST SECOND_SQL EXPECTED
 vrace(){ local r; r=$(race "$2" "$3"); if [ "$r" = "$4" ]; then ok "$1"; else ko "$1" "expected [$4], got [$r]"; fi; }
 
 echo "== reset database =="
 $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB" >/dev/null 2>&1 \
-  || { echo "cannot reset $DB: is the pgtest cluster up on port 5433?"; exit 1; }
+  || { echo "cannot reset $DB: is the pgtest cluster up on port ${PG_PORT:-5433}?"; exit 1; }
 $P -f "$DIR/scaffold.sql" >/dev/null 2>&1 || { echo "scaffold failed"; exit 1; }
 md5of(){ printf "SELECT md5(prosrc) || '/' || length(prosrc) FROM pg_proc WHERE oid = '%s'::regprocedure" "$1"; }
 val "S0 the scaffold carries the live fleet_members protect trigger (md5 of prosrc)" \

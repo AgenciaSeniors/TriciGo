@@ -52,9 +52,9 @@ export interface FleetMember {
  * The fleet_members columns an admin reviews before deciding on an
  * invitation. The owner may still edit them while the invitation is
  * pending_review, so fleetService.approveMember and rejectMember only act on
- * a row that still holds every value the admin was shown. Migration 00600
- * freezes the same columns for the owner once the invitation is reviewed;
- * keep both lists equal.
+ * a row that still holds every value the admin was shown. Once the invitation
+ * is reviewed, tg_fleet_members_protect freezes the same columns for the owner
+ * (migration 00600); keep both lists equal.
  */
 export const FLEET_MEMBER_REVIEWED_FIELDS = [
   'fleet_id',
