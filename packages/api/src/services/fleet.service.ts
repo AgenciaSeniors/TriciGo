@@ -12,8 +12,11 @@ import type {
   FleetMember,
   FleetMemberInput,
   FleetWithMembers,
+  ReviewedFleetMember,
 } from '@tricigo/types';
+import { FLEET_MEMBER_REVIEWED_FIELDS } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { AppError } from '../errors';
 
 type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent'>;
 
@@ -24,6 +27,41 @@ const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
   suspended: 2,
   rejected: 3,
 };
+
+/**
+ * Records an admin decision on a fleet invitation only while the row is still
+ * what the admin reviewed: pending_review, with every reviewed column equal to
+ * the value shown. The owner may edit a pending invitation, so matching on the
+ * id alone would record the decision against data the admin never saw. A NULL
+ * is matched with is(), because eq(column, null) compares against the text
+ * "null". When the update waits on the row lock, READ COMMITTED re-checks this
+ * WHERE on the version the owner committed, so a concurrent edit also leaves it
+ * matching nothing (supabase/tests/fleet-review/run.sh). Throws AppError
+ * FLEET_MEMBER_CHANGED when nothing matched: the invitation changed, was
+ * reviewed or was removed since it was loaded.
+ */
+async function reviewShownMember(
+  shown: ReviewedFleetMember,
+  decision: { status: 'approved' | 'rejected'; reviewed_by: string; rejected_reason?: string },
+  failure: string,
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  let update = supabase
+    .from('fleet_members')
+    .update({ ...decision, reviewed_at: new Date().toISOString() })
+    .eq('id', shown.id)
+    .eq('status', 'pending_review');
+  for (const field of FLEET_MEMBER_REVIEWED_FIELDS) {
+    const value = shown[field];
+    update = value === null ? update.is(field, null) : update.eq(field, value);
+  }
+
+  const { data, error } = await update.select('id');
+  if (error) throw new Error(`${failure}: ${error.message}`);
+  if (!data || data.length === 0) {
+    throw new AppError(`${failure}: fleet member ${shown.id} changed since it was loaded`, 'FLEET_MEMBER_CHANGED', 409);
+  }
+}
 
 export const fleetService = {
   /**
@@ -249,33 +287,25 @@ export const fleetService = {
     return { storage_path: path };
   },
 
-  /** Admin: approve a single fleet member after reviewing their docs. */
-  async approveMember(fleetMemberId: string, adminId: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('fleet_members')
-      .update({
-        status: 'approved',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: adminId,
-      })
-      .eq('id', fleetMemberId);
-    if (error) throw new Error(`Approve member failed: ${error.message}`);
+  /**
+   * Admin: approve a fleet invitation as the admin saw it. Approves nothing
+   * and throws AppError FLEET_MEMBER_CHANGED when the invitation changed, was
+   * reviewed or was removed since it was loaded.
+   */
+  async approveMember(shown: ReviewedFleetMember, adminId: string): Promise<void> {
+    await reviewShownMember(shown, { status: 'approved', reviewed_by: adminId }, 'Approve member failed');
   },
 
-  /** Admin: reject a single fleet member with a reason for the owner to see. */
-  async rejectMember(fleetMemberId: string, adminId: string, reason: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('fleet_members')
-      .update({
-        status: 'rejected',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: adminId,
-        rejected_reason: reason,
-      })
-      .eq('id', fleetMemberId);
-    if (error) throw new Error(`Reject member failed: ${error.message}`);
+  /**
+   * Admin: reject a fleet invitation as the admin saw it, with a reason for
+   * the owner. Throws AppError FLEET_MEMBER_CHANGED like approveMember.
+   */
+  async rejectMember(shown: ReviewedFleetMember, adminId: string, reason: string): Promise<void> {
+    await reviewShownMember(
+      shown,
+      { status: 'rejected', reviewed_by: adminId, rejected_reason: reason },
+      'Reject member failed',
+    );
   },
 
   /** Admin: list all fleets pending review (queue for /admin/businesses?fleet=pending). */

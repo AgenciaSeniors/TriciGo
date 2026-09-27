@@ -37,14 +37,23 @@ const STATUS_LABELS: Record<FleetMemberStatus, string> = {
   inactive: 'Inactivo',
 };
 
+// fleetService recorded nothing: the invitation changed, was reviewed or was
+// removed after this list loaded it.
+function invitationChanged(e: unknown): boolean {
+  return (e as { code?: string } | null)?.code === 'FLEET_MEMBER_CHANGED';
+}
+
 export function FleetReview({ corporateAccountId, adminUserId }: Props) {
   const { showToast } = useToast();
   const [fleet, setFleet] = useState<DriverFleet | null>(null);
   const [members, setMembers] = useState<FleetMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  // The row as it was shown when the admin opened the reject dialog.
+  const [rejecting, setRejecting] = useState<FleetMember | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  // Rows whose decision was refused because they changed under the admin.
+  const [changedIds, setChangedIds] = useState<ReadonlySet<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -74,30 +83,56 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  const approve = async (id: string) => {
-    setActionId(id);
+  const setChanged = (id: string, changed: boolean) => {
+    setChangedIds((prev) => {
+      if (prev.has(id) === changed) return prev;
+      const next = new Set(prev);
+      if (changed) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  // Show the invitation as it is now and say why nothing was saved.
+  const reloadChanged = async (id: string) => {
+    setChanged(id, true);
+    showToast('warning', 'La invitación cambió o ya no está pendiente, así que no se guardó tu decisión. Revisa los datos actualizados.');
+    await fetchData();
+  };
+
+  // m is the row as rendered: the service only approves it if it still holds those values.
+  const approve = async (m: FleetMember) => {
+    setActionId(m.id);
     try {
-      await fleetService.approveMember(id, adminUserId);
+      await fleetService.approveMember(m, adminUserId);
+      setChanged(m.id, false);
       showToast('success', 'Conductor aprobado');
       await fetchData();
     } catch (e) {
-      showToast('error', e instanceof Error ? e.message : 'Error al aprobar');
+      if (invitationChanged(e)) await reloadChanged(m.id);
+      else showToast('error', e instanceof Error ? e.message : 'Error al aprobar');
     } finally {
       setActionId(null);
     }
   };
 
-  const reject = async (id: string) => {
+  const reject = async (m: FleetMember) => {
     if (!rejectReason.trim()) return;
-    setActionId(id);
+    setActionId(m.id);
     try {
-      await fleetService.rejectMember(id, adminUserId, rejectReason.trim());
+      await fleetService.rejectMember(m, adminUserId, rejectReason.trim());
+      setChanged(m.id, false);
       showToast('success', 'Conductor rechazado');
-      setRejectingId(null);
+      setRejecting(null);
       setRejectReason('');
       await fetchData();
     } catch (e) {
-      showToast('error', e instanceof Error ? e.message : 'Error al rechazar');
+      if (invitationChanged(e)) {
+        setRejecting(null);
+        await reloadChanged(m.id);
+      } else {
+        showToast('error', e instanceof Error ? e.message : 'Error al rechazar');
+      }
     } finally {
       setActionId(null);
     }
@@ -163,20 +198,25 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
                     {m.rejected_reason && (
                       <div className="text-[11px] text-red-600 mt-1">{m.rejected_reason}</div>
                     )}
+                    {changedIds.has(m.id) && (
+                      <div className="text-[11px] text-amber-700 mt-1">
+                        Cambió mientras la revisabas: estos son los datos actuales.
+                      </div>
+                    )}
                   </td>
                   <td className="py-2 pr-2">
                     {m.status === 'pending_review' && (
                       <div className="flex gap-2 justify-end">
                         <button
                           className="px-3 py-1 bg-green-600 text-white rounded text-xs disabled:opacity-50"
-                          onClick={() => approve(m.id)}
+                          onClick={() => approve(m)}
                           disabled={actionId === m.id}
                         >
                           Aprobar
                         </button>
                         <button
                           className="px-3 py-1 bg-red-600 text-white rounded text-xs disabled:opacity-50"
-                          onClick={() => { setRejectingId(m.id); setRejectReason(''); }}
+                          onClick={() => { setRejecting(m); setRejectReason(''); }}
                           disabled={actionId === m.id}
                         >
                           Rechazar
@@ -192,7 +232,7 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
       </div>
 
       {/* Reject modal */}
-      {rejectingId && (
+      {rejecting && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center overflow-y-auto p-4">
           <div role="dialog" aria-modal="true" className="bg-surface-elevated rounded-xl p-6 w-full max-w-md my-auto max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">Rechazar conductor</h3>
@@ -206,14 +246,14 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
             <div className="flex gap-2 justify-end">
               <button
                 className="px-4 py-2 text-sm bg-surface-sunken text-ink rounded-lg"
-                onClick={() => { setRejectingId(null); setRejectReason(''); }}
+                onClick={() => { setRejecting(null); setRejectReason(''); }}
               >
                 Cancelar
               </button>
               <button
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg disabled:opacity-50"
-                onClick={() => reject(rejectingId)}
-                disabled={!rejectReason.trim() || actionId === rejectingId}
+                onClick={() => reject(rejecting)}
+                disabled={!rejectReason.trim() || actionId === rejecting.id}
               >
                 Rechazar
               </button>
