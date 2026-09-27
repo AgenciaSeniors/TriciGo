@@ -38,6 +38,7 @@ function owned(status: FleetWithMembers['account']['status'], suspendedReason: s
       id: '00000000-0000-4000-8000-0000000001b1',
       corporate_account_id: '00000000-0000-4000-8000-0000000000b1',
       name: 'TaxiHabana',
+      city: 'La Habana',
       vehicle_count_estimate: 12,
       vehicle_types: ['triciclo_basico'],
       operating_zones: ['Vedado'],

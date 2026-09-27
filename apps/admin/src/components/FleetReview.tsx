@@ -179,7 +179,9 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
   return (
     <div className="space-y-5">
       {/* Fleet meta */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 text-sm">
+        {/* city is missing from the row while 00602 is not applied */}
+        <Meta label="Ciudad" value={fleet.city || '—'} />
         <Meta label="Vehículos" value={fleet.vehicle_count_estimate ?? '—'} />
         <Meta label="Tipos" value={fleet.vehicle_types.join(', ') || '—'} />
         <Meta label="Zonas" value={fleet.operating_zones.join(', ') || '—'} />

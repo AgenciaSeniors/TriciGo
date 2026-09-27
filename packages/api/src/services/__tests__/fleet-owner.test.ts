@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { DriverFleet, FleetMember } from '@tricigo/types';
 
 // In-memory stand-in for corporate_accounts, driver_fleets, fleet_members and
@@ -20,7 +20,10 @@ import type { DriverFleet, FleetMember } from '@tricigo/types';
 //    ignoreDuplicates (also within the statement). A merge upsert that hits
 //    the same key twice in one statement, which Postgres rejects, is not
 //    modelled;
-//  - an update without select() resolves data null, whatever it changed.
+//  - an update without select() resolves data null, whatever it changed;
+//  - an upsert naming a column the table does not have (missingColumns, a
+//    migration not applied yet) fails with PGRST204 and writes nothing, even
+//    when the value is null: PostgREST checks the keys, not the values.
 // RLS and triggers are not emulated: the service filters by created_by
 // itself, and the protect triggers of 00418/00434 let an admin write every
 // column (only an admin approves an account).
@@ -39,6 +42,7 @@ const UNIQUE_KEYS: Record<Table, string[][]> = {
 
 let db: Record<Table, Row[]> = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [] };
 let failures: Partial<Record<Table, QueryError>> = {};
+let missingColumns: Partial<Record<Table, string[]>> = {};
 let generatedIds = 0;
 
 function rowsOf(table: string): Row[] {
@@ -90,6 +94,16 @@ function upsertRows(
   input: Row | Row[],
   options: { onConflict?: string; ignoreDuplicates?: boolean },
 ): Result {
+  const missing = missingColumns[table as Table] ?? [];
+  for (const row of Array.isArray(input) ? input : [input]) {
+    const column = Object.keys(row).find((key) => missing.includes(key));
+    if (column) {
+      return {
+        data: null,
+        error: queryError('PGRST204', `Could not find the '${column}' column of '${table}' in the schema cache`),
+      };
+    }
+  }
   const target = options.onConflict ? options.onConflict.split(',').map((column) => column.trim()) : ['id'];
   if (!keysOf(table).some((columns) => columns.join() === target.join())) {
     return {
@@ -260,6 +274,7 @@ function fleet(overrides: Partial<DriverFleet>): DriverFleet {
     id: FLEET_A,
     corporate_account_id: ACCOUNT_A,
     name: 'TaxiHabana',
+    city: 'La Habana',
     vehicle_count_estimate: 12,
     vehicle_types: ['triciclo_basico'],
     operating_zones: ['Vedado'],
@@ -299,6 +314,7 @@ const CONNECTION_LOST = queryError('08006', 'connection failure');
 beforeEach(() => {
   db = { corporate_accounts: [], driver_fleets: [], fleet_members: [], admin_actions: [] };
   failures = {};
+  missingColumns = {};
   generatedIds = 0;
 });
 
@@ -544,6 +560,57 @@ describe('fleetService.submitFleetRequest', () => {
   it('throws when the drivers cannot be saved, so the form can retry on the same account', async () => {
     failures.fleet_members = CONNECTION_LOST;
     await expect(fleetService.submitFleetRequest(request)).rejects.toThrow('connection failure');
+  });
+
+  it('saves the city the owner typed on the fleet', async () => {
+    await fleetService.submitFleetRequest({ ...request, city: 'La Habana' });
+
+    expect(db.driver_fleets).toEqual([expect.objectContaining({ corporate_account_id: ACCOUNT_A, city: 'La Habana' })]);
+  });
+
+  it('replaces the city a failed attempt saved with the one of the retry', async () => {
+    seed('driver_fleets', fleet({ id: FLEET_A, city: 'Matanzas' }));
+
+    await fleetService.submitFleetRequest({ ...request, city: 'La Habana' });
+
+    expect(db.driver_fleets).toEqual([expect.objectContaining({ id: FLEET_A, city: 'La Habana' })]);
+  });
+
+  it('stores no city when the request has none (an app built before the field was sent)', async () => {
+    await fleetService.submitFleetRequest(request);
+
+    expect(db.driver_fleets).toEqual([expect.objectContaining({ city: null })]);
+  });
+
+  describe('while 00602 is not applied (driver_fleets has no city column)', () => {
+    let warn: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      missingColumns.driver_fleets = ['city'];
+      warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    it('saves the fleet and its drivers without the city instead of failing the request', async () => {
+      const { fleet_id } = await fleetService.submitFleetRequest({ ...request, city: 'La Habana' });
+
+      expect(db.driver_fleets).toEqual([expect.objectContaining({ id: fleet_id, name: 'TaxiHabana' })]);
+      expect(db.driver_fleets[0]).not.toHaveProperty('city');
+      expect(db.fleet_members).toEqual([expect.objectContaining({ fleet_id, driver_phone: '+5351234567' })]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('00602'));
+    });
+
+    it('still fails when the missing column is another one', async () => {
+      missingColumns.driver_fleets = ['operating_zones'];
+
+      await expect(fleetService.submitFleetRequest({ ...request, city: 'La Habana' })).rejects.toThrow(
+        "Could not find the 'operating_zones' column",
+      );
+      expect(db.driver_fleets).toEqual([]);
+    });
   });
 });
 

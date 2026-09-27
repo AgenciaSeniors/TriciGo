@@ -20,6 +20,12 @@ import { AppError, AuthError } from '../errors';
 
 type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent' | 'suspended_reason'>;
 
+/** PostgREST's "column does not exist" for exactly driver_fleets.city (00602). */
+function isMissingCityColumn(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err || err.code !== 'PGRST204') return false;
+  return /\bcity\b/.test(err.message ?? '');
+}
+
 // Which fleet an owner with several corporate accounts sees (lower first).
 const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
   approved: 0,
@@ -100,10 +106,15 @@ export const fleetService = {
    * (fleet_id, driver_phone) ignoring duplicates, so drivers already saved
    * are kept as they are and only the missing ones are added. A phone listed
    * twice is saved once.
+   *
+   * While 00602 is not applied driver_fleets has no city column, and the
+   * fleet is saved without it rather than failing the request.
    */
   async submitFleetRequest(params: {
     corporate_account_id: string;
     name: string;
+    /** 00602: main city / municipality. */
+    city?: string;
     vehicle_count_estimate?: number;
     vehicle_types?: string[];
     operating_zones?: string[];
@@ -115,24 +126,31 @@ export const fleetService = {
   }): Promise<{ fleet_id: string }> {
     const supabase = getSupabaseClient();
 
-    const { data: fleet, error: fleetErr } = await supabase
-      .from('driver_fleets')
-      .upsert(
-        {
-          corporate_account_id: params.corporate_account_id,
-          name: params.name,
-          vehicle_count_estimate: params.vehicle_count_estimate ?? null,
-          vehicle_types: params.vehicle_types ?? [],
-          operating_zones: params.operating_zones ?? [],
-          estimated_rides_per_day_per_vehicle: params.estimated_rides_per_day_per_vehicle ?? null,
-          operating_hours_start: params.operating_hours_start ?? null,
-          operating_hours_end: params.operating_hours_end ?? null,
-          notes: params.notes ?? null,
-        },
-        { onConflict: 'corporate_account_id' },
-      )
-      .select('id')
-      .single();
+    const fleetRow: Record<string, unknown> = {
+      corporate_account_id: params.corporate_account_id,
+      name: params.name,
+      city: params.city ?? null,
+      vehicle_count_estimate: params.vehicle_count_estimate ?? null,
+      vehicle_types: params.vehicle_types ?? [],
+      operating_zones: params.operating_zones ?? [],
+      estimated_rides_per_day_per_vehicle: params.estimated_rides_per_day_per_vehicle ?? null,
+      operating_hours_start: params.operating_hours_start ?? null,
+      operating_hours_end: params.operating_hours_end ?? null,
+      notes: params.notes ?? null,
+    };
+    const upsertFleet = (row: Record<string, unknown>) =>
+      supabase
+        .from('driver_fleets')
+        .upsert(row, { onConflict: 'corporate_account_id' })
+        .select('id')
+        .single();
+
+    let { data: fleet, error: fleetErr } = await upsertFleet(fleetRow);
+    if (fleetErr && isMissingCityColumn(fleetErr)) {
+      console.warn('[fleetService] driver_fleets.city missing (00602 not applied) — saving the fleet without the city');
+      const { city: _city, ...withoutCity } = fleetRow;
+      ({ data: fleet, error: fleetErr } = await upsertFleet(withoutCity));
+    }
 
     if (fleetErr || !fleet) {
       throw new Error(`Fleet creation failed: ${fleetErr?.message ?? 'unknown'}`);

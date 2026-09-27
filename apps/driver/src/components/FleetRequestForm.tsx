@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { getErrorMessage } from '@tricigo/utils';
 import type { FleetMemberInput } from '@tricigo/types';
-import { createFleetRequestSubmission } from '@/services/fleetRequestSubmission';
+import { buildFleetRequest, createFleetRequestSubmission } from '@/services/fleetRequestSubmission';
 
 const VEHICLE_TYPES = [
   { id: 'triciclo_basico', label: 'Triciclo' },
@@ -96,35 +96,23 @@ export default function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted 
     if (!ownerUserId) return;
     setSubmitting(true);
     try {
-      await submission.submit(
-        {
-          name: fleetName.trim(),
-          contact_phone: ownerPhone,
-          contact_email: responsibleEmail.trim() || undefined,
-          tax_id: taxId.trim() || undefined,
-          created_by: ownerUserId,
-        },
-        {
-          name: fleetName.trim(),
-          vehicle_count_estimate: vehicleCount ? parseInt(vehicleCount, 10) : undefined,
-          vehicle_types: vehicleTypes,
-          operating_zones: zones
-            .split(',')
-            .map((z) => z.trim())
-            .filter(Boolean),
-          estimated_rides_per_day_per_vehicle: ridesPerDay ? parseInt(ridesPerDay, 10) : undefined,
-          operating_hours_start: hoursStart.trim() || undefined,
-          operating_hours_end: hoursEnd.trim() || undefined,
-          notes: responsibleName.trim() ? `Responsable: ${responsibleName.trim()}` : undefined,
-          members: validMembers.map((m) => ({
-            driver_name: m.driver_name.trim(),
-            driver_phone: m.driver_phone.trim(),
-            driver_email: m.driver_email?.trim() || undefined,
-            driver_license_number: m.driver_license_number?.trim() || undefined,
-            driver_id_number: m.driver_id_number?.trim() || undefined,
-          })),
-        },
-      );
+      const { account, fleet } = buildFleetRequest({
+        ownerUserId,
+        ownerPhone,
+        fleetName,
+        taxId,
+        city,
+        responsibleName,
+        responsibleEmail,
+        vehicleTypes,
+        vehicleCount,
+        zones,
+        hoursStart,
+        hoursEnd,
+        ridesPerDay,
+        members: validMembers,
+      });
+      await submission.submit(account, fleet);
 
       onSubmitted();
     } catch (err) {
@@ -162,7 +150,13 @@ export default function FleetRequestForm({ ownerUserId, ownerPhone, onSubmitted 
         <View className="h-3" />
         <Input label="RUC / Tax ID" value={taxId} onChangeText={setTaxId} />
         <View className="h-3" />
-        <Input label="Ciudad / municipio principal *" value={city} onChangeText={setCity} placeholder="Ej: La Habana" />
+        <Input
+          label="Ciudad / municipio principal *"
+          value={city}
+          onChangeText={setCity}
+          placeholder="Ej: La Habana"
+          maxLength={120}
+        />
         <View className="h-3" />
         <Input label="Responsable (nombre)" value={responsibleName} onChangeText={setResponsibleName} />
         <View className="h-3" />
