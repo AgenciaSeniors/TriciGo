@@ -6,17 +6,23 @@
 -- byte the one running in prod: run.sh checks md5(prosrc) and length against
 -- the values read there, and each function keeps its prod ACL. auth.users and
 -- public.users keep only the columns these paths read. RLS is on, so the tests
--- run each call as `authenticated` with a JWT subject, the way PostgREST does.
+-- run each call as `authenticated` with JWT claims, the way PostgREST does.
+-- Everything is owned by a role `postgres` that is NOT a superuser and has
+-- BYPASSRLS, as in prod: run.sh applies the migration as that role, and the
+-- ACLs read exactly like prod's.
 -- fleet_members, driver_fleets and corporate_accounts had 0 rows in prod.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN CREATE ROLE postgres NOLOGIN BYPASSRLS; END IF;
 END $$;
-GRANT anon, authenticated, service_role TO pgtest;
+GRANT anon, authenticated, service_role, postgres TO pgtest;
 
 CREATE SCHEMA IF NOT EXISTS auth;
 GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
+GRANT USAGE, CREATE ON SCHEMA public, auth TO postgres;
+SET ROLE postgres;
 
 -- LIVE (md5 cdef18c6…, 176)
 CREATE OR REPLACE FUNCTION auth.uid()
@@ -349,3 +355,4 @@ END;
 $function$;
 REVOKE EXECUTE ON FUNCTION public.relink_fleet_member_for_existing_driver(uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.relink_fleet_member_for_existing_driver(uuid, text) TO authenticated, service_role;
+RESET ROLE;
