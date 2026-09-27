@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { corporateService, paymentService, invoiceService } from '@tricigo/api';
 import CorporateRequestForm from '@/components/CorporateRequestForm';
+import { corporateStatusBadge } from '@/utils/corporateStatus';
 import { useNetopiaCheckout } from '@/components/NetopiaCheckout';
 import * as Sharing from 'expo-sharing';
 import Toast from 'react-native-toast-message';
@@ -538,7 +539,10 @@ export default function CorporateProfileScreen() {
           {/* Rejected — allow resubmit */}
           {requestStatus?.status === 'rejected' && (
             <View className="mt-6">
-              <Card variant="filled" padding="lg" className="mb-3 bg-error-50 dark:bg-error-900/20">
+              {/* `!` is load-bearing: NativeWind resolves same-specificity classes by
+                  CSS order, and Tailwind emits bg-error-* before the filled
+                  variant's bg-neutral-*, so without it the card stays neutral. */}
+              <Card variant="filled" padding="lg" className="mb-3 !bg-error-light dark:!bg-error/20">
                 <View className="flex-row items-center gap-2 mb-2">
                   <Ionicons name="close-circle-outline" size={20} color={colors.error.DEFAULT} />
                   <Text variant="h4" color="error">Solicitud rechazada</Text>
@@ -576,17 +580,14 @@ export default function CorporateProfileScreen() {
 
       {accounts.map((acc) => {
         const isAdmin = roleMap[acc.id] === 'admin';
+        const statusBadge = corporateStatusBadge(acc.status);
         return (
         <Card key={acc.id} variant="outlined" padding="lg" className="mb-4 mt-4">
           <View className="flex-row items-center justify-between mb-3">
             <Text variant="h4">{acc.name}</Text>
             <StatusBadge
-              label={acc.status}
-              /* Bugfix: compared against 'active' but CorporateAccountStatus
-                 is 'pending' | 'approved' | 'suspended' | 'rejected' —
-                 so the success variant never triggered and approved
-                 accounts silently rendered as yellow "warning". */
-              variant={acc.status === 'approved' ? 'success' : acc.status === 'suspended' || acc.status === 'rejected' ? 'error' : 'warning'}
+              label={t(statusBadge.labelKey, { defaultValue: statusBadge.label })}
+              variant={statusBadge.variant}
             />
           </View>
 
