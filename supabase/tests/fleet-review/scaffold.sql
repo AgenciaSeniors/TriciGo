@@ -1,13 +1,21 @@
 -- Scaffold for the fleet review race rehearsal (supabase/tests/fleet-review/run.sh).
 -- The LIVE production shapes of users, corporate_accounts, driver_fleets and
--- fleet_members, with their RLS policies, table grants and triggers, and the
--- functions the review path runs, transcribed on 2026-09-27 from pg_policy,
--- pg_trigger, information_schema.role_table_grants and pg_get_functiondef.
--- The bodies of tg_fleet_members_protect() (00435), is_admin() (00592),
+-- fleet_members, with their RLS policies and table grants, the triggers on the
+-- paths the rehearsal runs, and the functions those paths call, transcribed on
+-- 2026-09-27 from pg_policy, pg_trigger, information_schema.role_table_grants
+-- and pg_get_functiondef, and re-checked the same day after 00600 was applied.
+-- Left out, since nothing here fires them: the updated_at triggers on
+-- corporate_accounts and driver_fleets, and
+-- trg_corporate_accounts_protect_admin_fields (no corporate_accounts UPDATE).
+-- 00598 (the approval link) is not in prod yet and is not here: it only fires
+-- on a row the approve's WHERE already matched, so it cannot change a count.
+-- The bodies of tg_fleet_members_protect() (00600), is_admin() (00592),
 -- current_user_role() and tg_corporate_accounts_protect_insert() are byte for
--- byte the ones running in prod; run.sh asserts their md5(prosrc). Only the
--- columns these paths read are kept on public.users, and corporate_employees
--- carries just what the corporate_accounts policies look up (it is empty).
+-- byte the ones running in prod; run.sh asserts their md5(prosrc), and the
+-- policies of the three fleet tables as prod deparses them. Only the columns
+-- these paths read are kept on public.users, with its two SELECT policies (no
+-- client writes it here), and corporate_employees carries just what the
+-- corporate_accounts policies look up (it is empty).
 -- All three fleet tables had 0 rows in prod.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
@@ -243,7 +251,8 @@ CREATE POLICY fleet_members_owner_or_self_select ON public.fleet_members FOR SEL
      JOIN corporate_accounts ca ON ((ca.id = df.corporate_account_id)))
   WHERE (ca.created_by = auth.uid())))));
 
--- LIVE (00435): identity columns are NOT frozen for the owner; 00600 adds that.
+-- LIVE (00600, applied in prod on 2026-09-27): the owner may edit an invitation
+-- while it is pending_review; once reviewed, the reviewed columns and fleet_id stay.
 CREATE OR REPLACE FUNCTION public.tg_fleet_members_protect()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -269,6 +278,19 @@ BEGIN
     NEW.signed_up_at := OLD.signed_up_at;
     NEW.reviewed_at  := OLD.reviewed_at;
     NEW.reviewed_by  := OLD.reviewed_by;
+    -- 00600: the rejection reason is the admin's text. Once the admin has
+    -- reviewed the invitation, what they reviewed and the fleet it is for
+    -- stay as reviewed; to change them, the owner deletes it and invites again.
+    NEW.rejected_reason := OLD.rejected_reason;
+    IF OLD.status IS DISTINCT FROM 'pending_review' THEN
+      NEW.fleet_id              := OLD.fleet_id;
+      NEW.driver_name           := OLD.driver_name;
+      NEW.driver_phone          := OLD.driver_phone;
+      NEW.driver_email          := OLD.driver_email;
+      NEW.driver_license_number := OLD.driver_license_number;
+      NEW.driver_id_number      := OLD.driver_id_number;
+      NEW.license_doc_path      := OLD.license_doc_path;
+    END IF;
     RETURN NEW;
   END IF;
 END;

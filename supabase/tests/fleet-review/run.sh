@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rehearsal for the fleet invitation review race (no migration; local Postgres 16, no Supabase stack).
 #   supabase/tests/fleet-review/run.sh
-# Against the live fleet_members RLS policies and protect trigger it shows that:
+# Against the live fleet_members RLS policies and protect trigger (00600) it shows that:
 #  A. the owner may still edit an invitation while it is pending_review, so an
 #     approve that filters on the id alone (fleetService.approveMember before
 #     this change) approves a phone the admin never saw, also when the owner's
@@ -10,7 +10,9 @@
 #     shown for plus every reviewed column in the WHERE, a NULL one with IS NULL)
 #     update 0 rows in those cases and 1 row when nothing the admin saw changed;
 #  C. that holds under concurrency: READ COMMITTED (prod's default) re-checks
-#     the WHERE on the row version the owner committed.
+#     the WHERE on the row version the owner committed. And when the approve
+#     commits first, 00600 keeps the owner's waiting edit off the reviewed
+#     columns, so the invitation stays as approved on both sides of the review.
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
 # PG_BIN and PG_PORT override the binaries directory and the port, e.g. on Windows:
 #   PG_BIN=/c/.../pgsql/bin PG_PORT=5435 supabase/tests/fleet-review/run.sh
@@ -100,8 +102,8 @@ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DAT
   || { echo "cannot reset $DB: is the pgtest cluster up on port ${PG_PORT:-5433}?"; exit 1; }
 $P -f "$DIR/scaffold.sql" >/dev/null 2>&1 || { echo "scaffold failed"; exit 1; }
 md5of(){ printf "SELECT md5(prosrc) || '/' || length(prosrc) FROM pg_proc WHERE oid = '%s'::regprocedure" "$1"; }
-val "S0 the scaffold carries the live fleet_members protect trigger (md5 of prosrc)" \
-  "$(md5of 'public.tg_fleet_members_protect()')" "8b0d07aff7ab33142bfcec29304c01ed/674"
+val "S0 the scaffold carries the live fleet_members protect trigger, 00600 (md5 of prosrc)" \
+  "$(md5of 'public.tg_fleet_members_protect()')" "2b65b4b84e3a2ce323197501e5742c1a/1405"
 val "S1 the scaffold carries the live is_admin() (md5 of prosrc)" \
   "$(md5of 'public.is_admin()')" "22cb75e91980d512498034cd33e1eda2/285"
 val "S2 the scaffold carries the live current_user_role() (md5 of prosrc)" \
@@ -111,6 +113,12 @@ val "S3 the scaffold carries the live corporate_accounts insert protect trigger 
 val "S4 the owner's invitation lands pending_review whatever status it asks for (live protect trigger)" \
   "$RESET $(as $OWNER "INSERT INTO public.fleet_members (id, fleet_id, driver_name, driver_phone, status) VALUES ('$M', '$FA', 'Juan Pérez', '$X', 'approved');") $STATE" \
   "pending_review|$X|-"
+# Every policy of the three fleet tables, as prod deparses it (pg_policies on 2026-09-27, after 00600).
+POLICIES="SELECT tablename || '.' || policyname || ' ' || cmd || ' ' || array_to_string(roles, ',') || ' '
+  || md5(coalesce(qual, '') || '|' || coalesce(with_check, '')) FROM pg_policies
+  WHERE schemaname = 'public' AND tablename IN ('fleet_members', 'driver_fleets', 'corporate_accounts') ORDER BY 1"
+val "S5 the scaffold carries the live policies of the three fleet tables (md5 of USING|WITH CHECK)" "$POLICIES" \
+  "corporate_accounts.corporate_accounts_admin_read SELECT authenticated b573f6a5aec4a0bb12543a8cd6395f09;corporate_accounts.corporate_accounts_admin_update UPDATE authenticated b573f6a5aec4a0bb12543a8cd6395f09;corporate_accounts.corporate_accounts_corp_admin_update UPDATE authenticated 258a22e7dd47680387b3fa87d0c68460;corporate_accounts.corporate_accounts_creator_read SELECT authenticated 4bf77061fb2835233a959d8ac01d2b83;corporate_accounts.corporate_accounts_employee_read SELECT authenticated 4289d24b97bd0f806a79fe8c497b3dff;corporate_accounts.corporate_accounts_insert INSERT authenticated bca855a3b2b850161dccad59f6144fd5;driver_fleets.driver_fleets_admin_delete DELETE public 4ca46077787eba5fc57ee1de8f83e663;driver_fleets.driver_fleets_owner_insert INSERT public 1671d6707f4d115bcf405418cbb2b6c5;driver_fleets.driver_fleets_owner_select SELECT public f1b99fb8643ae61c5dab9eb65a347a32;driver_fleets.driver_fleets_owner_update UPDATE public f1b99fb8643ae61c5dab9eb65a347a32;fleet_members.fleet_members_owner_delete DELETE public c74dcb3d63747d4e156cc4a57cb40fe7;fleet_members.fleet_members_owner_insert INSERT public 119d8d82e373001f7ed084fa9cd4d4b1;fleet_members.fleet_members_owner_or_admin_update UPDATE public c74dcb3d63747d4e156cc4a57cb40fe7;fleet_members.fleet_members_owner_or_self_select SELECT public ee6edfc3dddcb4b77b20ce2b29b9fcf5"
 
 echo "== A. the race =="
 val "A1 the owner may edit an invitation that is still pending_review" \
@@ -155,10 +163,10 @@ vrace "C1 BUG: the id-only approve waits, then approves the owner's $Y" owner "$
 vrace "C2 the bound approve waits, re-checks its WHERE on the owner's committed row and updates 0 rows" owner \
   "$(approve "$SHOWN")" "yes|0|pending_review|$Y|-"
 vrace "C3 the bound reject does the same" owner "$(reject "$SHOWN")" "yes|0|pending_review|$Y|-"
-# Not this change's job: once approved, only 00600 (tg_fleet_members_protect freezing the reviewed
-# identity) stops the owner. Printed for the record, not asserted.
-echo "INFO  C4 approve first, the owner's edit waits and then lands on the approved row (live trigger, pre-00600): $(race admin \
-  "WITH u AS (UPDATE public.fleet_members SET driver_phone = '$Y' WHERE id = '$M' RETURNING id) SELECT count(*) FROM u;")"
+# The other order is 00600's job, not this change's: its trigger reverts the reviewed columns for the owner.
+vrace "C4 approve first: the owner's edit waits, hits the approved row, and 00600 keeps the approved $X" admin \
+  "WITH u AS (UPDATE public.fleet_members SET driver_phone = '$Y' WHERE id = '$M' RETURNING id) SELECT count(*) FROM u;" \
+  "yes|1|approved|$X|$ADMIN"
 
 echo "== summary: $PASS passed, $FAIL failed =="
 [ "$FAIL" -eq 0 ]
