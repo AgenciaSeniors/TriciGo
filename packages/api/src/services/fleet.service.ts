@@ -322,8 +322,8 @@ export const fleetService = {
    * Manual fallback: link the approved invitations for `phone` to the given
    * account. The database already links on its own at signup, at approval
    * and when an account confirms its phone later (00598), always to the one
-   * active account whose number is OTP-confirmed; this is for the cases that
-   * leaves out, such as a number that was never confirmed or an account
+   * active account whose number is OTP-confirmed. This is for the cases that
+   * rule leaves out, such as a number that was never confirmed or an account
    * reactivated after the approval. No screen calls it yet.
    */
   async relinkExistingDriver(driverId: string, phone: string): Promise<number> {

@@ -1702,18 +1702,31 @@ SELECT EXISTS (
 ### Flotas: cómo queda vinculada una invitación (00598, verificado 2026-09-25)
 
 **Regla:** una fila de `fleet_members` pasa a `status='active'` con `driver_id` solo hacia **la única cuenta activa que confirmó ese número por OTP** en `auth.users`. Se evalúa en los tres momentos que pueden volverlo cierto, siempre por teléfono normalizado:
-1. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `public.users`, que dispara `handle_new_user`). Solo si el número de la cuenta nueva ya viene confirmado, como en `verify-otp`, que crea la cuenta con `phone_confirm`.
-2. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Cuando la invitación **pasa a** `approved`/`pending_signup`. Una fila que ya estaba aprobada no se vuelve a mirar, así que editarla después no vincula a nadie por este camino.
-3. **Confirmación:** `on_auth_user_phone_confirmed` (AFTER UPDATE OF phone, phone_confirmed_at ON **`auth.users`**). Cuando un número queda recién confirmado para una cuenta: `link-phone`, el heal de `verify-otp` o el OTP propio de GoTrue. Reconfirmar el mismo número no cuenta.
-4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin; ninguna pantalla lo llama todavía). Cubre lo que la regla deja afuera: un número nunca confirmado, una cuenta reactivada después de aprobar, o dos cuentas con el mismo número.
+1. **Confirmación:** `on_auth_user_phone_confirmed` (AFTER UPDATE ON **`auth.users`**). Actúa cuando un número queda recién confirmado para una cuenta: la primera confirmación, o un número nuevo en una cuenta que ya estaba confirmada. Reconfirmar el mismo número no cuenta. **Acá se vinculan en la práctica las cuentas nuevas:** el `createUser` de `verify-otp` hace el INSERT sin confirmar y confirma en un UPDATE aparte. `link-phone` y el heal de `verify-otp` llaman a `updateUserById`, que ejecuta `ConfirmPhone` **antes** que `SetPhone` (`supabase/auth`, `internal/api/admin.go`).
+2. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `public.users`, disparado por `handle_new_user`). Solo vincula si el número ya viene confirmado en el INSERT. Como GoTrue inserta antes de confirmar, este camino casi nunca vincula; está para que el alta no vincule un número sin confirmar.
+3. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Actúa cuando la invitación **pasa a** `approved`/`pending_signup`. Una fila que ya estaba aprobada no se vuelve a mirar, así que editarla después no vincula a nadie por este camino.
+4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin; ninguna pantalla lo llama todavía, así que por ahora es solo SQL). Cubre lo que la regla deja afuera: un número nunca confirmado, una cuenta reactivada después de aprobar, o dos cuentas con el mismo número.
+
+Los tres caminos automáticos solo tocan invitaciones `approved`/`pending_signup` que no tienen `driver_id`. Una invitación sin revisar, rechazada o que ya nombra a otra persona no se toca.
+
+Los ensayos repiten las escrituras de GoTrue sentencia por sentencia (INSERT y después UPDATE; `ConfirmPhone` y después `SetPhone`). Un UPDATE único que haga las dos cosas deja sin probar el camino del que depende `link-phone`.
 
 **`public.users.phone` no prueba nada.** Su dueño lo puede escribir por PostgREST sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubre), y no es único. Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`: en `public.users`, cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
 
 La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene el índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque es un oráculo número→cuenta.
 
-**Esto depende de `phone_autoconfirm = false` en prod** (se lee con `GET /auth/v1/settings` y la clave publicable; verificado 2026-09-25). Con autoconfirm, GoTrue confirmaría un `PUT /user {phone}` sin OTP. El `config.toml` local tiene `enable_confirmations = false`, pero es solo para desarrollo.
+**Esto depende de dos cosas:**
+- **`phone_autoconfirm = false` en prod.** Se lee con `GET /auth/v1/settings` y la clave publicable (verificado el 2026-09-25). Con autoconfirm, GoTrue confirmaría un `PUT /user {phone}` sin OTP. El `config.toml` local tiene `enable_confirmations = false`, pero es solo para desarrollo.
+- **Un invariante de las escrituras con la API admin:** todo `phone_confirm` tiene que venir después de un OTP de ese número. Como `updateUserById` confirma antes de poner el número nuevo, una cuenta cuyo número actual nunca se confirmó quedaría con ese número dado por confirmado. Hoy ninguna cuenta con sesión tiene un número sin confirmar. Por lo mismo, `phone_confirmed_at` es por cuenta y no por número: si alguien cambia el teléfono desde el Dashboard sin `phone_confirm`, el número nuevo hereda la fecha de confirmación del anterior.
 
-**Todo trigger en `auth.users` corre dentro de la transacción de GoTrue:** un error ahí rompe el login o la confirmación. Por eso el cuerpo va envuelto en `EXCEPTION WHEN OTHERS → RAISE WARNING`, igual que el trigger de alta (la lección de 00595). Además, crearlo bloquea las escrituras a `auth.users` hasta el commit: usar `SET lock_timeout` y crearlo al final de la migración.
+**Todo trigger en `auth.users` corre dentro de la transacción de GoTrue:** un error ahí rompe el login o la confirmación.
+- **Errores contenidos:** el cuerpo va envuelto en `EXCEPTION WHEN OTHERS`, igual que el trigger de alta (la lección de 00595). Un vínculo que falla deja un WARNING y una fila en `rpc_attempt_log` (`outcome = 'link_failed'`); ahí es donde hay que buscar una invitación que quedó `approved` sin razón.
+- **Sin esperas largas:** `SET lock_timeout TO '2s'` en la definición de la función convierte una espera de lock en un error que ese bloque atrapa. `WHEN OTHERS` no atrapa `query_canceled`, así que sin ese límite una espera terminaría cortada por `statement_timeout`, y ese error sí rompe el login.
+- **Sin columnas en la definición:** el trigger no tiene lista de columnas ni `WHEN`, porque eso le impediría a GoTrue hacer `ALTER COLUMN TYPE` sobre esas columnas. La función filtra adentro y vuelve enseguida en cualquier otro UPDATE.
+- **Cómo apagarlo:** `postgres` no es dueño de `auth.users`, así que no puede hacer `DROP` ni `DISABLE` de un trigger ahí. Para apagarlo, reemplazar el cuerpo de la función por `RETURN NEW`.
+- **Cómo crearlo:** crear el trigger bloquea las escrituras a `auth.users` hasta el commit. Usar `SET lock_timeout` (con `RESET` al final) y dejarlo para el final de la migración.
+
+Los números fuera de Cuba quedan en GoTrue sin `+` y `_normalize_cuban_phone` no los toca, así que las funciones les agregan el `+` antes de buscarlos.
 
 **Orden de triggers:** los del mismo evento y momento disparan en orden de nombre (strcmp), así que el de aprobación corre después de `trg_fleet_members_protect` (`s` > `p`). Es defensa en profundidad, no algo de lo que dependa la corrección: el protect revierte todo lo que escribe el de aprobación, sin importar cuál corra primero.
 
