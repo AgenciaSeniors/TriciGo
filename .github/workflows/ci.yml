@@ -78,6 +78,18 @@ jobs:
       - name: Check POI taxonomy parity
         run: pnpm check:poi-taxonomy
 
+      # Guardrail: from 2026-10-30 Supabase stops granting new public tables,
+      # views and serial sequences to anon/authenticated/service_role
+      # (github.com/orgs/supabase/discussions/45329). A migration that creates one
+      # without explicit GRANTs ships a table the apps AND the Edge Functions
+      # cannot reach (42501 permission denied). Checks migrations >= 00587 and
+      # requires service_role among the grantees. The script's own tests run
+      # first, so a broken parser cannot pass silently.
+      - name: Check migration grants (Data API, 2026-10-30)
+        run: |
+          pnpm test:migration-grants
+          pnpm check:migration-grants
+
       - name: Type check
         run: pnpm check-types
 

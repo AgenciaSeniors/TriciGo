@@ -62,6 +62,7 @@ Si un plugin no está instalado, ignora su sección y continúa con los que sí 
 
 ### Supabase
 - Row Level Security (RLS) en TODAS las tablas sin excepción
+- GRANT explícito en toda tabla o vista nueva de `public`, en la misma migración y siempre con `service_role` incluido: desde el 30-oct-2026 Supabase ya no los da solo. Lo chequea CI (`pnpm check:migration-grants`). Detalle en § "Tablas nuevas en public: GRANT explícito"
 - Usar el cliente tipado generado con `supabase gen types`
 - Migraciones versionadas, nunca cambios manuales en producción
 - Funciones Edge para lógica server-side compleja
@@ -347,6 +348,59 @@ Elegir el siguiente número libre y confirmar antes de escribir el archivo. Si l
 2. Leer la **última** versión (la que está en prod hoy).
 3. Si tu cambio toca el header/wiring (auth, params), conservar el cuerpo del case statement de la última versión.
 4. PR review: incluir un diff entre el cuerpo de la versión NUEVA y la anterior para que el reviewer detecte regresiones.
+
+### Tablas nuevas en public: GRANT explícito (Data API, desde el 30-oct-2026)
+
+**Qué cambia.** Aviso de Supabase del 2026-09-23 ([discusión](https://github.com/orgs/supabase/discussions/45329)): desde el **30 de octubre de 2026**, los objetos NUEVOS de `public` (tablas, vistas, vistas materializadas y las secuencias de las columnas `serial`) ya no reciben permisos automáticos para `anon`, `authenticated` y `service_role`. Sin GRANT, la Data API (PostgREST, supabase-js, GraphQL) no los ve: las apps **y las Edge Functions** reciben `42501 permission denied for table x`. Las tablas que ya existen conservan sus permisos. También afecta a proyectos nuevos, preview branches y `supabase db reset`.
+
+**Estado de prod medido el 2026-09-27 (solo lectura).** `pg_default_acl` todavía da todo (`arwdDxtm` en tablas, `rwU` en secuencias) a los tres roles en cada objeto nuevo de `public`, tanto con `postgres` como con `supabase_admin` de grantor. Por eso las migraciones nunca escribían GRANT: `driver_heartbeat_log` (00576) no tiene ninguno y en prod los tres roles tienen todo. De los 142 objetos de `public`, 134 tienen todos los permisos para los tres roles. Los otros 8 (`partner_places`, `rpc_attempt_log`, `push_registration_status`, `sms_log`, `ride_offers`, `driver_churn_risk`, `eligible_drivers`, `driver_push_reachability`) tienen REVOKE deliberados de 00120, 00123, 00215/00286, 00350, 00532 y 00585.
+
+**La regla.** Toda migración que cree una tabla, vista o vista materializada en `public`, con o sin el prefijo `public.`, lleva en el mismo archivo:
+
+```sql
+CREATE TABLE public.<tabla> (...);
+ALTER TABLE public.<tabla> ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ... ON public.<tabla> ...;                                  -- la RLS decide qué FILAS
+GRANT SELECT ON public.<tabla> TO anon;                                   -- solo si se lee sin sesión
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<tabla> TO authenticated;  -- solo lo que usan las apps
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<tabla> TO service_role;   -- SIEMPRE
+```
+
+- **`service_role` va siempre.** Lo usan las Edge Functions (webhooks de pago, crons) y los scripts. Se saltea la RLS pero **no** los GRANT: medido en PG16 sin permisos automáticos, un INSERT como `service_role` da `permission denied for table`. El historial muestra la trampa: de las 7 tablas o vistas que alguna vez recibieron GRANT en su propia migración, 6 se los daban solo a `anon`/`authenticated` y dependían del automático para `service_role` (00436, 00532, 00544, 00579 ×2, 00585). La única que no: `push_registration_status` (00585).
+- **Tablas-candado** (RLS sin policies; solo las tocan funciones SECURITY DEFINER, pg_cron o Edge Functions, como `rate_limits`, `otp_codes` o `driver_reactivation_pushes`): solo `service_role`. Una función SECURITY DEFINER corre como su dueño (`postgres`) y no necesita GRANT de los roles de la API.
+- **Vistas:** igual que las tablas (`GRANT SELECT`), con `security_invoker = true` (patrón 00294). `GRANT ... ON ALL TABLES IN SCHEMA public` también cubre vistas y vistas materializadas, pero no secuencias.
+- **Secuencias.** Con `serial`/`bigserial` o `DEFAULT nextval(...)`, cada rol con INSERT necesita además `GRANT USAGE, SELECT ON SEQUENCE public.<tabla>_<col>_seq`: un GRANT sobre la tabla no cubre su secuencia. En una base sin permisos por defecto (proyecto nuevo, branch) el INSERT falla con `permission denied for sequence`. En prod puede que no falle: el SQL que publicó Supabase solo quita `USAGE, SELECT` de las secuencias y deja `UPDATE`, que alcanza para `nextval` (medido en PG16). Supabase igual recomienda el GRANT y el chequeo lo exige. Es mejor usar `bigint GENERATED ALWAYS AS IDENTITY` o `uuid DEFAULT gen_random_uuid()`, que no necesitan permiso de secuencia (medido en PG16). Agregar una columna `serial` a una tabla existente crea una secuencia sin permisos que el chequeo no detecta.
+- **Hasta el 30/10, prod sigue abriendo todo** a las tablas nuevas. Si una tabla NO debe ser visible para `anon`, además de los GRANT hace falta `REVOKE ALL ON public.<tabla> FROM anon;` (patrón 00585). Después del 30/10 ese REVOKE no hace nada y no molesta.
+- **No crear tablas fuera de migraciones** (dashboard, `execute_sql` suelto, scripts): después del 30/10 nacen sin permisos, y además quedan fuera del historial (ver abajo).
+
+**El chequeo de CI.** `pnpm check:migration-grants` corre en el paso "Check migration grants" de `ci.yml`, después de sus 48 tests (`pnpm test:migration-grants`). Revisa las migraciones con número **≥ 00587** y falla en tres casos:
+1. Una tabla o vista nueva no tiene ningún GRANT en la misma migración.
+2. Los GRANT no incluyen a `service_role` (o a `PUBLIC`).
+3. Un rol con INSERT no tiene USAGE sobre la secuencia de una columna `serial` o `nextval`.
+
+El umbral es 00587 porque al entrar la regla ninguna migración de master numerada desde 00587 creaba tablas (00591–00597 no crean). No se eligió 00598 a propósito: los huecos 00587–00590 y 00593 están reservados por PRs abiertos, y **#1004 crea 4 tablas en 00587 sin GRANT**. Su CI va a fallar hasta que los agregue, que es lo que tiene que pasar. Los huecos más viejos (00071, 00111, 00489, 00569) quedan por debajo; el único PR que ocupa uno, #965 (00569), solo actualiza filas.
+
+Para una tabla que a propósito no debe tener ningún acceso por API, o para un falso positivo del chequeo, se agrega `-- grants-exempt: public.<tabla> <motivo>` en la migración. Falsos positivos conocidos: `CREATE OR REPLACE VIEW` de una vista que ya existe (conserva sus permisos; no re-otorgar a `anon` lo que se le había quitado), una tabla temporal de trabajo creada y borrada en el mismo archivo, y la partición de una tabla ya otorgada. El chequeo saltea el SQL dinámico (`EXECUTE format('... %I ...')`) y no ve `SELECT ... INTO`, `ALTER TABLE ... SET DEFAULT nextval(...)` ni un `REVOKE` posterior al GRANT.
+
+Calibrado contra las 609 migraciones del historial: encuentra 117 tablas y vistas, ninguna con nombre falso, y coinciden una por una con prod (salvo 3 borradas y los objetos creados a mano). Se lo vio fallar con una migración de prueba sin GRANT en el directorio real, y pasar al completarla. Un subagente de revisión encontró un falso negativo que se corrigió: un apóstrofo dentro de un literal `$m$...$m$` (00597 tiene uno) desincronizaba el enmascarado de comentarios, y un GRANT comentado más abajo contaba como real. El parser ahora sigue los delimitadores `$tag$`.
+
+**Bases reconstruidas desde cero (branches, `db reset`): riesgo aceptado (decisión 2026-09-27).** No se agregó una migración de "paridad de permisos". Motivos medidos:
+- **Hoy nada reconstruye la base desde el historial.** `list_branches` solo devuelve `main`, así que no hay preview branches, y los PR que tocan migraciones solo corren el CI del repo (ej. #1015). El CI nunca reaplica migraciones (ver el comentario al final de `ci.yml`), y los ensayos locales usan andamios (`supabase/tests/*/scaffold.sql`), no el historial.
+- **El historial ya no puede recrear prod, con o sin permisos.** `cms_content`, `blog_posts`, `driver_quests`, `driver_quest_progress`, `influencers_campaign` y la vista `ride_audit_log` se crearon a mano: ninguna migración las crea, aunque 00294, 00380 y 00438 las modifican. Un replay desde cero muere a más tardar en `00156_seed_cms_terms_privacy.sql` (`INSERT INTO cms_content`), así que una migración de paridad en 00598 nunca llegaría a correr.
+- **Si algún día hacen falta branches o `db reset`**, el arreglo es un baseline: un volcado del esquema de prod que reemplace al historial para las bases nuevas. `pg_dump --schema-only` incluye los GRANT y REVOKE de cada tabla, salvo que se pase `--no-privileges`. Antes de usarlo, comparar `information_schema.role_table_grants` del baseline contra prod.
+- **Descartado: volver al comportamiento viejo** con `ALTER DEFAULT PRIVILEGES ... GRANT ... ON TABLES TO anon, authenticated, service_role`. Va contra el cambio, porque toda tabla nueva vuelve a nacer abierta a `anon` y una sin RLS queda expuesta. Además esconde el bug: en una base que regala permisos, una migración sin GRANT anda en la prueba y falla en prod.
+- **Opcional, a decidir (es un cambio en prod y requiere autorización):** adelantar el cambio con `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM anon, authenticated, service_role;`, más lo mismo con `REVOKE USAGE, SELECT ON SEQUENCES`. Es el SQL que publicó Supabase: deja `TRUNCATE`, `REFERENCES`, `TRIGGER` y `MAINTAIN` en las tablas y `UPDATE` en las secuencias, así que no reproduce la falla de secuencias de una base nueva. A favor: la transición ocurre cuando se elige y no el 30/10, y las tablas nuevas dejan de nacer abiertas a `anon`. En contra: toda tabla creada fuera de migraciones, o un PR sin GRANT (hoy #1004), falla desde ese momento.
+
+**Diagnóstico si después del 30/10 aparece `42501 permission denied for table x`:** a esa tabla nueva le falta el GRANT.
+
+```sql
+SELECT grantee, string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privs
+FROM information_schema.role_table_grants
+WHERE table_schema = 'public' AND table_name = '<tabla>'
+GROUP BY grantee;
+```
+
+Se arregla con una migración nueva que tenga el GRANT, no a mano en prod. `permission denied for sequence <tabla>_id_seq` es el mismo problema con la secuencia.
 
 ### MCP migration guard
 
@@ -1677,6 +1731,21 @@ END $patch$;
 
 Reglas: (1) **verificá que el target sea único ANTES** — `(length(prosrc)-length(replace(prosrc,'target','')))/length('target')` debe dar 1; (2) **idempotente** — agregá un guard `AND position('<marker-del-cambio>' IN v_src) = 0` para no re-aplicar; (3) escapá comillas simples en los literales (`''driver_cash''`); (4) el `EXCEPTION WHEN undefined_function` lo hace seguro en DBs frescas (la función la crea una migración anterior; el patch corre después por número). **Ventaja clave sobre el verbatim: no puede perder features** porque parte del cuerpo vivo. Ejemplos: `00408` (`complete_ride_and_pay` `driver_cash`→`tricicoin`; `find_best_drivers` + filtro de heartbeat).
 
+### Flotas: una invitación revisada queda congelada para su dueño (00600, verificado 2026-09-25)
+
+**Regla:** mientras una invitación de `fleet_members` está en `pending_review`, el dueño de la flota puede editarla. Cuando el admin ya la revisó (cualquier otro estado: `approved`, `pending_signup`, `rejected`, `active`, `inactive`), `tg_fleet_members_protect` le revierte al dueño lo que el admin revisó y la flota: `driver_phone`, `driver_name`, `driver_email`, `driver_license_number`, `driver_id_number`, `license_doc_path` y `fleet_id`. `rejected_reason` es texto del admin, así que el dueño no puede cambiarlo en ningún estado. Los admins, las llamadas sin JWT (service role, migraciones, GoTrue) y quienes escriben con `app.trusted_fleet_update` siguen como antes.
+
+**Por qué:** todos los caminos que vinculan una invitación a una cuenta (el alta, la confirmación del teléfono de la 00598, el relink del admin, el backfill) leen una fila aprobada y sin vincular como "el admin aprobó a esta persona con este número". Antes de la 00600, el dueño podía cambiar el número después de la aprobación, y el alta de ese número nuevo entraba a la flota sin que nadie lo revisara (reproducido con los cuerpos vivos).
+
+**Es silencioso, igual que con `status`:** el UPDATE del dueño responde OK y no cambia nada. Para cambiar a un conductor ya revisado, el dueño lo borra y lo invita de nuevo, y la fila nueva vuelve a revisión. Una pantalla futura de "editar conductor" tiene que ofrecer eso y no un UPDATE: con un UPDATE parecería que guarda y no guardaría. Hoy ese camino tampoco existe en la app: `fleetService` no tiene método para borrar un miembro, y `submitFleetRequest` ignora un teléfono que la flota ya tiene. Otro efecto: mover una fila revisada a una flota que no es del dueño antes daba error de RLS; ahora responde OK y no cambia nada.
+
+**Lo que no cubre (pendiente):**
+1. La ventana *durante* la revisión: el dueño todavía puede editar entre que el admin abre FleetReview y aprieta Aprobar. El arreglo va en `approveMember`, que debería exigir los valores que el admin vio.
+2. El archivo de la licencia: la Edge Function `storage-upload` deja al dueño sobrescribir `fleet-docs/<corp>/<miembro>/<archivo>` en cualquier estado.
+3. Mover la flota entera a otra empresa del mismo dueño (`driver_fleets.corporate_account_id`): la política no tiene `WITH CHECK` y la tabla no tiene trigger de protección, así que la flota se lleva con ella a todos los miembros revisados.
+
+**Si hay que volver a tocar `tg_fleet_members_protect`:** partir del cuerpo vivo (`pg_get_functiondef`), no del texto de la 00435, que en prod no tiene los comentarios de git. Cuerpos conocidos: el previo a la 00600 (md5 `8b0d07af…`) y el de la 00600 (`2b65b4b8…`). La 00600 se niega a reemplazar un cuerpo que no conoce; conviene que la próxima migración haga lo mismo. Ensayo: `supabase/tests/00600/run.sh`. Si la 00598 está en el checkout, o si se pasa `M598=<ruta>`, también corre la prueba combinada en los dos órdenes.
+
 ### Fleet membership 3-way gate (corporate)
 
 **Verificado en migraciones 00336 + 00337.**
@@ -1703,6 +1772,39 @@ SELECT EXISTS (
 **Falsos negativos defensivos**: si el corp NO es fleet_owner, o NO tiene members activos, la gate se desactiva silenciosamente. Esto evita romper service mid-setup (corp recién creada sin drivers asignados todavía).
 
 **FK schema importante**: `fleet_members.driver_id` referencia `users.id`, NO `driver_profiles.id`. En el JOIN final, usar `fm.driver_id = dp.user_id` (NO `dp.id`).
+
+### Flotas: cómo queda vinculada una invitación (00598, verificado 2026-09-25)
+
+**Regla:** una fila de `fleet_members` pasa a `status='active'` con `driver_id` solo hacia **la única cuenta activa que confirmó ese número por OTP** en `auth.users`. Se evalúa en los tres momentos que pueden volverlo cierto, siempre por teléfono normalizado:
+1. **Confirmación:** `on_auth_user_phone_confirmed` (AFTER UPDATE ON **`auth.users`**). Actúa cuando un número queda recién confirmado para una cuenta: la primera confirmación, o un número nuevo en una cuenta que ya estaba confirmada. Reconfirmar el mismo número no cuenta. **Acá se vinculan en la práctica las cuentas nuevas:** el `createUser` de `verify-otp` hace el INSERT sin confirmar y confirma en un UPDATE aparte. `link-phone` y el heal de `verify-otp` llaman a `updateUserById`, que ejecuta `ConfirmPhone` **antes** que `SetPhone` (`supabase/auth`, `internal/api/admin.go`).
+2. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `public.users`, disparado por `handle_new_user`). Solo vincula si el número ya viene confirmado en el INSERT. Como GoTrue inserta antes de confirmar, este camino casi nunca vincula; está para que el alta no vincule un número sin confirmar.
+3. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Actúa cuando la invitación **pasa a** `approved`/`pending_signup`. Una fila que ya estaba aprobada no se vuelve a mirar, así que editarla después no vincula a nadie por este camino.
+4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin; ninguna pantalla lo llama todavía, así que por ahora es solo SQL). Cubre lo que la regla deja afuera: un número nunca confirmado, una cuenta reactivada después de aprobar, o dos cuentas con el mismo número.
+
+Los tres caminos automáticos solo tocan invitaciones `approved`/`pending_signup` que no tienen `driver_id`. Una invitación sin revisar, rechazada o que ya nombra a otra persona no se toca.
+
+Los ensayos repiten las escrituras de GoTrue sentencia por sentencia (INSERT y después UPDATE; `ConfirmPhone` y después `SetPhone`). Un UPDATE único que haga las dos cosas deja sin probar el camino del que depende `link-phone`.
+
+**`public.users.phone` no prueba nada.** Su dueño lo puede escribir por PostgREST sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubre), y no es único. Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`: en `public.users`, cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
+
+La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene el índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque es un oráculo número→cuenta.
+
+**Esto depende de dos cosas:**
+- **`phone_autoconfirm = false` en prod.** Se lee con `GET /auth/v1/settings` y la clave publicable (verificado el 2026-09-25). Con autoconfirm, GoTrue confirmaría un `PUT /user {phone}` sin OTP. El `config.toml` local tiene `enable_confirmations = false`, pero es solo para desarrollo.
+- **Un invariante de las escrituras con la API admin:** todo `phone_confirm` tiene que venir después de un OTP de ese número. Como `updateUserById` confirma antes de poner el número nuevo, una cuenta cuyo número actual nunca se confirmó quedaría con ese número dado por confirmado. Hoy ninguna cuenta con sesión tiene un número sin confirmar. Por lo mismo, `phone_confirmed_at` es por cuenta y no por número: si alguien cambia el teléfono desde el Dashboard sin `phone_confirm`, el número nuevo hereda la fecha de confirmación del anterior.
+
+**Todo trigger en `auth.users` corre dentro de la transacción de GoTrue:** un error ahí rompe el login o la confirmación.
+- **Errores contenidos:** el cuerpo va envuelto en `EXCEPTION WHEN OTHERS`, igual que el trigger de alta (la lección de 00595). Un vínculo que falla deja un WARNING y una fila en `rpc_attempt_log` (`outcome = 'link_failed'`); ahí es donde hay que buscar una invitación que quedó `approved` sin razón.
+- **Sin esperas largas:** `SET lock_timeout TO '2s'` en la definición de la función convierte una espera de lock en un error que ese bloque atrapa. `WHEN OTHERS` no atrapa `query_canceled`, así que sin ese límite una espera terminaría cortada por `statement_timeout`, y ese error sí rompe el login.
+- **Sin columnas en la definición:** el trigger no tiene lista de columnas ni `WHEN`, porque eso le impediría a GoTrue hacer `ALTER COLUMN TYPE` sobre esas columnas. La función filtra adentro y vuelve enseguida en cualquier otro UPDATE.
+- **Cómo apagarlo:** `postgres` no es dueño de `auth.users`, así que no puede hacer `DROP` ni `DISABLE` de un trigger ahí. Para apagarlo, reemplazar el cuerpo de la función por `RETURN NEW`.
+- **Cómo crearlo:** crear el trigger bloquea las escrituras a `auth.users` hasta el commit. Usar `SET lock_timeout` (con `RESET` al final) y dejarlo para el final de la migración.
+
+Los números fuera de Cuba quedan en GoTrue sin `+` y `_normalize_cuban_phone` no los toca, así que las funciones les agregan el `+` antes de buscarlos.
+
+**Orden de triggers:** los del mismo evento y momento disparan en orden de nombre (strcmp), así que el de aprobación corre después de `trg_fleet_members_protect` (`s` > `p`). Es defensa en profundidad, no algo de lo que dependa la corrección: el protect revierte todo lo que escribe el de aprobación, sin importar cuál corra primero.
+
+**Trampa al ensayar:** `auto_link_fleet_member_on_signup` deja `app.trusted_fleet_update = '1'` hasta el final de su transacción. En prod no importa, porque esa transacción es la de GoTrue. Pero un ensayo que siembra usuarios y prueba al dueño en la misma transacción ve que el protect deja pasar todo, y el test del dueño falla por culpa del arnés. Hay que sembrar en una transacción aparte (`tcase` en `supabase/tests/00598/run.sh`).
 
 ### Smoke test E2E paths cuando el rider OTP no funciona
 
@@ -2605,8 +2707,9 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 
 **En Windows, sin sandbox (verificado 2026-09-25 con el ensayo de 00595 del #1018, que no entró a master).** La PC no trae `psql`, WSL ni Docker. Sirven los binarios portables de EnterpriseDB: `postgresql-16.14-1-windows-x64-binaries.zip`, 326 MB, de `get.enterprisedb.com`, sin firma Authenticode. Se descomprimen en el scratchpad sin pgAdmin, con `tar.exe -xf <zip> pgsql/bin pgsql/lib pgsql/share`.
 - **Cluster:** `initdb -D <dir> -U pgtest -A trust -E UTF8 --no-locale` y `pg_ctl -D <dir> -o "-p 5433 -c listen_addresses=127.0.0.1" -l <log> -w start`. Esa llamada a `pg_ctl` **no vuelve**, porque postgres hereda el pipe de la herramienta, y la herramienta la pasa a segundo plano. El servidor queda arriba igual; comprobarlo con `pg_ctl status`.
+- **El puerto puede ser del cluster de otra sesión** (verificado 2026-09-26). Varias sesiones levantan su Postgres en paralelo: el 5437 y el 5441 ya estaban tomados. `pg_ctl start` falló por el puerto, pero el `psql` siguiente respondió igual, porque le contestaba el cluster de otra sesión, y un `run.sh` ahí le habría borrado las bases. Antes de arrancar, elegir un puerto que no aparezca en `netstat -ano | grep LISTENING`; después, confirmar que el PID que escucha en ese puerto es el de la primera línea de `<datadir>/postmaster.pid`.
 - **Mensajes:** `--no-locale` deja `lc_messages=C`, así que los errores del servidor salen en inglés y los `grep` de los `run.sh` funcionan. psql igual traduce sus etiquetas (`SUGERENCIA`, `CONTEXTO`).
-- **Los `run.sh` de master no corren tal cual.** Fijan `BIN=/usr/lib/postgresql/16/bin`, llaman a `python3` (en Windows el ejecutable es `python`) y comparan la salida de psql, que en Windows termina cada línea en `\r\n`. El ensayo del #1018 corrió con esas tres cosas resueltas: `BIN` apuntando a `pgsql/bin`, `python`, y un `tr -d '\r'` sobre cada salida de psql. Para correr uno de master, usar una copia en el scratchpad con los mismos tres cambios.
+- **Los `run.sh` de master no corren tal cual.** Fijan `BIN=/usr/lib/postgresql/16/bin`, llaman a `python3` (en Windows el ejecutable es `python`) y comparan la salida de psql, que en Windows termina cada línea en `\r\n`. El ensayo del #1018 corrió con esas tres cosas resueltas: `BIN` apuntando a `pgsql/bin`, `python`, y un `tr -d '\r'` sobre cada salida de psql. Para correr uno de master, usar una copia en el scratchpad con los mismos tres cambios. La excepción es `supabase/tests/00599/run.sh`, que toma `PGBIN`, `PGPORT` y `PYTHON` del entorno y quita el `\r` él mismo: `PGBIN=<scratchpad>/pgsql/bin PGPORT=<puerto> PYTHON=python bash supabase/tests/00599/run.sh ...`.
 - **Trampa CRLF (copias sacadas antes de #1021):** con `core.autocrlf=true`, esas copias tienen los `.sh` y `.sql` de `supabase/` en CRLF. El bash de Git for Windows los corre igual y **las pruebas de comportamiento pasan**. Lo que falla es todo chequeo de md5, porque los `\r` que caen dentro del cuerpo de cada función se guardan con él, y el resultado **parece deriva contra prod cuando son solo finales de línea**. Pasa lo mismo si se aplica una migración a prod desde una copia así: la función anda, pero su md5 ya no es el del archivo en git. También falla en falso `pnpm check:poi-taxonomy`: dice que el mapper de 00581 difiere y pide una migración nueva que no hace falta.
   - **Desde #1021** (verificado 2026-09-25), `.gitattributes` fuerza LF en `supabase/tests/**/*.{sh,sql,psv}` y `supabase/migrations/*.sql`, así que un worktree nuevo ya sale bien.
   - **Una copia vieja no se corrige sola.** `git status` sigue limpio, y `git checkout --` o `git restore` no reescriben los archivos que no cambiaron. Si no hay cambios sin commitear en esas carpetas, borrar los archivos rastreados y volver a sacarlos: `git ls-files -z supabase/tests supabase/migrations | xargs -0 rm --` y después `git checkout -- supabase/tests supabase/migrations`.
@@ -2750,6 +2853,25 @@ O sea que un wrapper SQL plano queda **denegado**, no exento: el riesgo va en la
 **Ensayo local reproducible:** `supabase/tests/00591/run.sh none` (RED: 27 fallos, incluida la acuñación) / `run.sh supabase/migrations/00591_*.sql` (GREEN: 58/58, aplicada dos veces). El andamio lleva los cuerpos VIVOS de prod y sus ACLs, no los de git. Las dos aserciones de arriba tienen **pruebas negativas propias** (G1/G2: se rompe el invariante en una base desechable y se exige que la migración aborte) — una verificación que nunca se vio fallar no es una verificación.
 
 **Trampa de método en la que caí verificando esto:** probé el guard contra la base del ensayo que había quedado del baseline **RED**, o sea sin el guard aplicado, y concluí que un wrapper SQL plano lo evadía. Todo pasaba porque no había nada que evadir. Si un probe de seguridad da "permitido", confirmá primero contra qué base estás hablando.
+
+### `users.phone` no prueba que el número sea del usuario (00599, 2026-09-26)
+
+**El agujero.** Hasta 00599 cualquier usuario con sesión podía escribir cualquier número en `public.users.phone` por PostgREST, sin OTP: `authenticated` tiene UPDATE sobre la columna, `users_update_own` no tiene `WITH CHECK` y `tg_users_protect_admin_fields` no cubría `phone`. Las dos búsquedas de dinero confiaban en esa columna con `LIMIT 1` sin `ORDER BY`: `find_user_by_phone` (regalos, dividir tarifa) y `find_recipient_for_recharge` (recargas de la diáspora). Reproducido en local con los cuerpos vivos: un número que nadie había registrado resolvía siempre a quien se lo había puesto, y un número ajeno pasaba a resolver al atacante en cuanto se reescribía la fila del dueño (su siguiente viaje).
+
+**Regla desde 00599:**
+- El número que prueba propiedad es `auth.users.phone` con `phone_confirmed_at` (único por `users_phone_key`; GoTrue lo guarda como dígitos E.164 **sin `+`**). Toda búsqueda "por número" que decida algo (dinero, vincular cuentas) resuelve contra esa fuente, **nunca** contra `users.phone`: la cuenta activa que lo confirmó, o nadie si hay cero o más de una. Es la misma regla que usa `_user_id_by_verified_phone` (00598), aunque las dos parsean distinto lo que reciben; cuando estén las dos en master, conviene que las búsquedas usen un solo helper.
+- `users.phone` igual puede tener un número sin confirmar: `handle_new_user` copia `auth.users.phone` al alta, esté confirmado o no, y el alta por teléfono de GoTrue está abierta (`external.phone = true`, sin auto-confirmación). Son cuentas que no pueden iniciar sesión (0 al 2026-09-26), pero por eso ninguna decisión se toma leyendo `users.phone`. Todo esto depende de que `phone_autoconfirm` siga en `false` (se ve en `/auth/v1/settings`). Y `phone_confirmed_at` es de la **cuenta**, no del número: si un operador cambia `auth.users.phone` desde el Dashboard sin `phone_confirm`, queda la fecha vieja y el número nuevo cuenta como confirmado.
+- Un JWT que no es admin solo puede escribir en `users.phone` el número que SU cuenta confirmó, y queda guardado en E.164. Cualquier otro valor se revierte en silencio, como role/level, y deja una fila en `rpc_attempt_log` (`rpc_name = 'users_phone_guard'`, `metadata.reason` = `not_the_verified_phone` / `no_verified_phone` / `cleared`, sin el número). Sin JWT (el espejo service-role de `link-phone`, triggers, cron) y los admins no tienen límite.
+- Una pantalla nueva que cambie el teléfono lo confirma primero con `link-phone` (OTP): el `updateProfile({ phone })` de después pasa porque escribe el mismo número.
+
+**Diagnóstico — "cambié mi número y no se guardó":**
+```sql
+SELECT caller_uid, target_id, metadata->>'reason' AS reason, created_at
+FROM rpc_attempt_log WHERE rpc_name = 'users_phone_guard' ORDER BY created_at DESC LIMIT 20;
+```
+`no_verified_phone` = la cuenta no tiene número confirmado en `auth.users` (se escribió sin pasar por `link-phone`, o `link-phone` falló). Varias `not_the_verified_phone` seguidas desde el mismo `caller_uid` = alguien intentando quedarse con un número ajeno.
+
+**Ensayo:** `supabase/tests/00599/run.sh none` (RED: 23 fallos) / `run.sh supabase/migrations/00599_users_phone_guard_and_verified_lookups.sql` (51/51, aplicada dos veces, más dos pruebas negativas del autotest).
 
 ### Sesión fantasma: la app pide como `anon` y la RLS revienta con `permission denied for function current_user_role` (verificado 2026-09-22, mig 00592)
 
