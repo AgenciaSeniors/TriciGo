@@ -14,6 +14,7 @@ import type {
   ServiceTypeSlug,
 } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { fleetService } from './fleet.service';
 
 export const corporateService = {
   // ─────────────────────────── Registration & Lifecycle ───────────────────────────
@@ -102,11 +103,25 @@ export const corporateService = {
 
   // ─────────────────────────── Admin Approval ───────────────────────────
 
+  /**
+   * Approves the account. A fleet request (an account with a driver_fleets
+   * row) also gets is_fleet_owner = true in the same UPDATE: the driver app
+   * cannot set that flag (00418/00434), and approval is when an admin vouches
+   * for the fleet. With the flag, dispatch offers the rides billed to the
+   * account only to its active fleet drivers, once it has one (00336/00337).
+   * An account with no fleet keeps whatever flag it had. Throws, approving
+   * nothing, when the fleet lookup fails.
+   */
   async approveAccount(accountId: string, adminId: string): Promise<void> {
     const supabase = getSupabaseClient();
+    const hasFleet = (await fleetService.getAccountIdsWithFleet([accountId])).has(accountId);
     const { error } = await supabase
       .from('corporate_accounts')
-      .update({ status: 'approved', approved_at: new Date().toISOString() })
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        ...(hasFleet ? { is_fleet_owner: true } : {}),
+      })
       .eq('id', accountId);
     if (error) throw error;
 

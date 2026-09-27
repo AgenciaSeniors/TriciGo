@@ -33,7 +33,8 @@ export const fleetService = {
    *
    * Caller must already own the corporate_account (RLS enforced). The
    * account stays pending with is_fleet_owner = false: since 00418/00434
-   * only an admin can set that flag.
+   * only an admin can set that flag, and corporateService.approveAccount
+   * sets it when it approves the fleet.
    *
    * Both writes are safe to retry on the same account. The fleet is upserted
    * on corporate_account_id (UNIQUE), so a retry reuses the fleet a previous
@@ -109,10 +110,11 @@ export const fleetService = {
    *
    * The driver_fleets row is what makes an account a fleet, not
    * is_fleet_owner: since 00418/00434 only an admin can set that flag, so a
-   * request sent from the app never carries it. A user can hold several
-   * accounts (a corporate client request, a retried fleet request), so the
-   * fleet shown is the approved one, else pending, suspended, rejected; the
-   * newest wins within a status and the account id breaks a full tie.
+   * request sent from the app carries it only once approved. A user can hold
+   * several accounts (a corporate client request, a retried fleet request),
+   * so the fleet shown is the approved one, else pending, suspended,
+   * rejected; the newest wins within a status and the account id breaks a
+   * full tie.
    * Throws when a lookup fails, so a failed read is never taken for "no fleet".
    */
   async getFleetByOwner(userId: string): Promise<FleetWithMembers | null> {
@@ -166,6 +168,26 @@ export const fleetService = {
         commission_percent: owned.account.commission_percent,
       },
     };
+  },
+
+  /**
+   * The ids, among accountIds, of the corporate accounts that have a
+   * driver_fleets row. That row is what tells a fleet request sent from the
+   * driver app from a corporate client request until an admin approves it:
+   * the app cannot set is_fleet_owner (00418/00434). Throws when the lookup
+   * fails, so a failed read is never taken for "not a fleet".
+   */
+  async getAccountIdsWithFleet(accountIds: string[]): Promise<Set<string>> {
+    if (accountIds.length === 0) return new Set();
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_fleets')
+      .select('corporate_account_id')
+      .in('corporate_account_id', accountIds);
+    if (error) throw new Error(`Fleet lookup failed: ${error.message}`);
+    return new Set(
+      ((data ?? []) as Pick<DriverFleet, 'corporate_account_id'>[]).map((f) => f.corporate_account_id),
+    );
   },
 
   /**
