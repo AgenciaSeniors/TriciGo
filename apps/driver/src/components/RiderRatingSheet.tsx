@@ -124,7 +124,7 @@ export function RiderRatingSheet({
   }
 
   return (
-    <Card forceDark variant="filled" padding="md" className="w-full bg-neutral-800">
+    <Card forceDark variant="filled" padding="md" className="w-full">
       {/* Rider avatar + name */}
       <View className="items-center mb-4">
         <Avatar uri={riderAvatarUrl} size={64} name={riderName} />

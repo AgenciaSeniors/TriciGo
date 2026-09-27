@@ -10,6 +10,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { lostItemService } from '@tricigo/api';
 import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { TintedCard } from '@/components/TintedCard';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@tricigo/theme';
 import { formatCUP } from '@tricigo/utils';
@@ -299,11 +300,11 @@ export default function DriverLostItemScreen() {
 
         {/* Resolved status */}
         {isResolved && (
-          <Card theme="light" variant="filled" padding="md" className="bg-green-50 border border-green-200 mb-4">
+          <TintedCard className="bg-green-50 border border-green-200 shadow-sm mb-4">
             <Text variant="body" color="primary" className="font-semibold">
               ✓ {t(`lost_found.status_${item.status}`)}
             </Text>
-          </Card>
+          </TintedCard>
         )}
       </View>
     </Screen>
