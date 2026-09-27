@@ -209,6 +209,13 @@ export const fleetService = {
    * 'driver-documents' bucket under the fleet-docs/ prefix, via the
    * storage-upload Edge Function. The path includes the corporate account
    * so the EF can enforce ownership (creator / active corp admin).
+   *
+   * For the owner, the new path only sticks while the member is
+   * pending_review. Once the admin has reviewed it, the database keeps the
+   * reviewed license_doc_path (00600), but the upload above still goes
+   * through: under the same file name it replaces the reviewed file, under
+   * another it leaves an object nothing points to. To replace a reviewed
+   * member's licence, delete the member and invite again.
    */
   async uploadMemberLicense(params: {
     fleet_member_id: string;
