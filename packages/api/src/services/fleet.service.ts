@@ -174,8 +174,10 @@ export const fleetService = {
    * The ids, among accountIds, of the corporate accounts that have a
    * driver_fleets row. That row is what tells a fleet request sent from the
    * driver app from a corporate client request until an admin approves it:
-   * the app cannot set is_fleet_owner (00418/00434). Throws when the lookup
-   * fails, so a failed read is never taken for "not a fleet".
+   * the app cannot set is_fleet_owner (00418/00434). RLS shows a fleet row
+   * only to an admin and to the account's creator, the two callers this
+   * serves; for anyone else a missing id proves nothing. Throws when the
+   * lookup fails, so a failed read is never taken for "not a fleet".
    */
   async getAccountIdsWithFleet(accountIds: string[]): Promise<Set<string>> {
     if (accountIds.length === 0) return new Set();
