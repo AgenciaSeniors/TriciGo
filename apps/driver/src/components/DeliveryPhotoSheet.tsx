@@ -193,7 +193,7 @@ export function DeliveryPhotoSheet({
   const canConfirm = !!photoUri && (!requiresOtp || otpValidated);
 
   return (
-    <Card forceDark variant="filled" padding="lg" className="bg-neutral-800 mb-4">
+    <Card forceDark variant="filled" padding="lg" className="mb-4">
       {/* Delivery context */}
       {(recipientName || specialInstructions) && (
         <View className="mb-3">

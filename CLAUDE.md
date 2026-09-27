@@ -1272,6 +1272,16 @@ También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`
   ```
 - **Diagnóstico decisivo** cuando un flex-row "no llena el ancho": pintá el contenedor y los hijos con `backgroundColor` temporales + reload **limpio** (no fast-refresh: los cambios de layout en caliente no recalculan bien). Si el contenedor llena pero los hijos no → sospechar de la función-estilo. Un `console.log` de las dimensiones leído en el log de Metro confirma si los valores llegan correctos pero no se aplican.
 
+### Un `Card` no se tiñe por `className`: NativeWind no respeta el orden en que se escriben las clases (verificado 2026-09-27)
+
+**Síntoma:** `<Card theme="light" className="bg-orange-50 …">` se ve blanca; `<Card variant="filled" className="bg-error-light …">` se ve gris. Sin error ni warning: el tinte simplemente no aparece. Pasó en 5 tarjetas del driver (disputa, objeto perdido x2, reclamo, flota rechazada).
+
+**Causa (medida con el compilador real, no deducida):** `react-native-css-interop` aplica las reglas que matchean ordenadas por especificidad y después por **orden en la hoja compilada** (`specificityCompare` en `dist/runtime/native/native-interop.js`); gana la última. Tailwind ordena las utilidades de un mismo plugin **alfabéticamente**, sin importar el orden del `className` ni del contenido escaneado. `Card` mete su propio fondo en el mismo `className` (`bg-white` en `theme="light"`, `bg-neutral-50` / `dark:bg-neutral-800` en `filled`…), así que un tinte solo gana si su nombre ordena después (`bg-primary-50` sí, `bg-orange-50` no). Un `dark:` pesa más que cualquier clase sin `dark:` en modo oscuro. Con `forceDark` / `theme="dark"`, `Card` pone el fondo como **estilo inline**, que le gana a toda clase.
+
+**Regla:** una tarjeta con color propio es un `TintedCard` (`apps/driver/src/components/TintedCard.tsx`: la forma de `Card` sin fondo), nunca un `Card` con `bg-*` en `className`. `apps/driver/src/__tests__/cardTints.test.ts` compila cada `<Card>` y `<TintedCard>` del driver con NativeWind y falla si un color de `className` pierde o no existe en el tema. El cliente no tiene ese guard todavía.
+
+**Trampa hermana:** una opacidad fuera de la escala de Tailwind no genera nada. `dark:border-white/12` y `/6` (los bordes oscuros de `Card` en `outlined`/`elevated`/`surface`) no existen en la hoja compilada; `/10` sí. Para chequear si una clase existe, compilarla: `postcss([tailwindcss({...config, content:[{raw:'<clases>', extension:'html'}]})]).process('@tailwind utilities;')`.
+
 ---
 
 ### Search de direcciones — estado canónico (Tier 1.5–1.7 · fuzzy 2026-06-01 · campaña de precisión 2026-08-04/05 · huella de landmarks 2026-08-21)
