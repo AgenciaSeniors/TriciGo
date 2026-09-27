@@ -12,7 +12,7 @@ vi.mock('@tricigo/api', () => ({
   fleetService: { submitFleetRequest: api.submitFleetRequest },
 }));
 
-import { createFleetRequestSubmission } from '../fleetRequestSubmission';
+import { buildFleetRequest, createFleetRequestSubmission } from '../fleetRequestSubmission';
 
 const OWNER = '00000000-0000-4000-8000-000000000011';
 const ACCOUNT_1 = '00000000-0000-4000-8000-0000000000a1';
@@ -21,6 +21,7 @@ const ACCOUNT_2 = '00000000-0000-4000-8000-0000000000a2';
 const accountRequest = { name: 'TaxiHabana', contact_phone: '+5351234567', created_by: OWNER };
 const fleetRequest = {
   name: 'TaxiHabana',
+  city: 'La Habana',
   vehicle_types: ['triciclo_basico'],
   members: [{ driver_name: 'Yoel Pérez', driver_phone: '+5351234567' }],
 };
@@ -63,7 +64,7 @@ describe('createFleetRequestSubmission', () => {
 
     await submission.submit(
       { ...accountRequest, name: 'Taxi Habana', contact_email: 'flota@taxihabana.cu' },
-      { ...fleetRequest, name: 'Taxi Habana' },
+      { ...fleetRequest, name: 'Taxi Habana', city: 'Matanzas' },
     );
 
     expect(api.updateAccount).toHaveBeenCalledTimes(1);
@@ -72,6 +73,12 @@ describe('createFleetRequestSubmission', () => {
       contact_phone: '+5351234567',
       contact_email: 'flota@taxihabana.cu',
       tax_id: null,
+    });
+    expect(api.submitFleetRequest).toHaveBeenLastCalledWith({
+      ...fleetRequest,
+      name: 'Taxi Habana',
+      city: 'Matanzas',
+      corporate_account_id: ACCOUNT_1,
     });
     const updateOrder = api.updateAccount.mock.invocationCallOrder[0] ?? Infinity;
     const retryFleetOrder = api.submitFleetRequest.mock.invocationCallOrder[1] ?? -Infinity;
@@ -91,5 +98,90 @@ describe('createFleetRequestSubmission', () => {
     expect(api.updateAccount).not.toHaveBeenCalled();
     expect(api.submitFleetRequest).toHaveBeenCalledTimes(1);
     expect(api.submitFleetRequest).toHaveBeenCalledWith({ ...fleetRequest, corporate_account_id: ACCOUNT_2 });
+  });
+});
+
+describe('buildFleetRequest', () => {
+  // What the form holds when the owner taps "Enviar solicitud de flota".
+  const form = {
+    ownerUserId: OWNER,
+    ownerPhone: '+5351234567',
+    fleetName: '  TaxiHabana ',
+    taxId: '',
+    city: '  La Habana ',
+    responsibleName: ' Ana Díaz ',
+    responsibleEmail: '',
+    vehicleTypes: ['triciclo_basico', 'moto_standard'],
+    vehicleCount: '12',
+    zones: 'Vedado, Habana Vieja, ,Miramar',
+    hoursStart: '06:00',
+    hoursEnd: '22:00',
+    ridesPerDay: '8',
+    members: [
+      {
+        driver_name: ' Yoel Pérez ',
+        driver_phone: ' +5351234567 ',
+        driver_email: '',
+        driver_license_number: 'L-123',
+        driver_id_number: '',
+      },
+    ],
+  };
+
+  it('sends the city the owner typed with the fleet', () => {
+    // The form requires it, and it used to be dropped on submit.
+    expect(buildFleetRequest(form).fleet.city).toBe('La Habana');
+  });
+
+  it('builds the account and the fleet from every field of the form', () => {
+    expect(buildFleetRequest(form)).toEqual({
+      account: {
+        name: 'TaxiHabana',
+        contact_phone: '+5351234567',
+        contact_email: undefined,
+        tax_id: undefined,
+        created_by: OWNER,
+      },
+      fleet: {
+        name: 'TaxiHabana',
+        city: 'La Habana',
+        vehicle_count_estimate: 12,
+        vehicle_types: ['triciclo_basico', 'moto_standard'],
+        operating_zones: ['Vedado', 'Habana Vieja', 'Miramar'],
+        estimated_rides_per_day_per_vehicle: 8,
+        operating_hours_start: '06:00',
+        operating_hours_end: '22:00',
+        notes: 'Responsable: Ana Díaz',
+        members: [
+          {
+            driver_name: 'Yoel Pérez',
+            driver_phone: '+5351234567',
+            driver_email: undefined,
+            driver_license_number: 'L-123',
+            driver_id_number: undefined,
+          },
+        ],
+      },
+    });
+  });
+
+  it('leaves out the optional fields the owner did not fill in', () => {
+    const { account, fleet } = buildFleetRequest({
+      ...form,
+      responsibleName: '  ',
+      vehicleCount: '',
+      zones: '',
+      hoursStart: ' ',
+      hoursEnd: '',
+      ridesPerDay: '',
+    });
+
+    expect(account.contact_email).toBeUndefined();
+    expect(fleet).toMatchObject({ operating_zones: [] });
+    expect(fleet.notes).toBeUndefined();
+    expect(fleet.vehicle_count_estimate).toBeUndefined();
+    expect(fleet.estimated_rides_per_day_per_vehicle).toBeUndefined();
+    expect(fleet.operating_hours_start).toBeUndefined();
+    expect(fleet.operating_hours_end).toBeUndefined();
   });
 });
