@@ -36,6 +36,7 @@ import FleetMembersList from '@/components/FleetMembersList';
 import {
   corporateReducer,
   deriveCorporateView,
+  fleetStatusBadge,
   initialCorporateState,
   rejectionReason,
   type CorporateAction,
@@ -102,6 +103,7 @@ export default function CorporateScreen() {
   const ownerFleet = ready?.ownerFleet ?? null;
   const rejectedRequest = ready?.rejectedRequest ?? null;
   const inSeveralFleets = memberships.length > 1;
+  const ownerBadge = ownerFleet ? fleetStatusBadge(ownerFleet.account.status) : null;
   const reason = rejectedRequest ? rejectionReason(rejectedRequest.account.suspended_reason) : null;
 
   return (
@@ -177,20 +179,14 @@ export default function CorporateScreen() {
         )}
 
         {/* Owner dashboard */}
-        {ownerFleet && (
+        {ownerFleet && ownerBadge && (
           <>
             <Card variant="outlined" padding="lg" className="mb-4">
               <View className="flex-row items-center justify-between mb-3">
                 <Text variant="h4">{ownerFleet.fleet.name}</Text>
                 <StatusBadge
-                  label={ownerFleet.account.status}
-                  variant={
-                    ownerFleet.account.status === 'approved'
-                      ? 'success'
-                      : ownerFleet.account.status === 'rejected' || ownerFleet.account.status === 'suspended'
-                      ? 'error'
-                      : 'warning'
-                  }
+                  label={t(ownerBadge.labelKey, { defaultValue: ownerBadge.label })}
+                  variant={ownerBadge.variant}
                 />
               </View>
               {ownerFleet.account.status === 'pending' && (

@@ -11,7 +11,7 @@
 // Plain TypeScript, so the driver's vitest setup can test it.
 // ============================================================
 
-import type { FleetMember, FleetWithMembers } from '@tricigo/types';
+import type { CorporateAccountStatus, FleetMember, FleetWithMembers } from '@tricigo/types';
 
 export interface CorporateState {
   /** Fleets the driver drives for; `undefined` until a read succeeds. */
@@ -99,6 +99,27 @@ export function deriveCorporateView(state: CorporateState): CorporateView {
     rejectedRequest,
     showRequestForm: rejectedRequest !== null || memberships.length === 0,
   };
+}
+
+export interface FleetStatusBadge {
+  /** Key in the driver namespace; `label` is its Spanish default. */
+  labelKey: string;
+  label: string;
+  variant: 'success' | 'warning' | 'error';
+}
+
+// Feminine, like "la flota" next to it. The status column only takes these
+// four values (a CHECK on corporate_accounts).
+const FLEET_STATUS_BADGES: Record<CorporateAccountStatus, FleetStatusBadge> = {
+  pending: { labelKey: 'fleet.status.pending', label: 'En revisión', variant: 'warning' },
+  approved: { labelKey: 'fleet.status.approved', label: 'Aprobada', variant: 'success' },
+  suspended: { labelKey: 'fleet.status.suspended', label: 'Suspendida', variant: 'error' },
+  rejected: { labelKey: 'fleet.status.rejected', label: 'Rechazada', variant: 'error' },
+};
+
+/** The owner dashboard's badge for the status of the fleet's account. */
+export function fleetStatusBadge(status: CorporateAccountStatus): FleetStatusBadge {
+  return FLEET_STATUS_BADGES[status];
 }
 
 /** The admin's reason for rejecting a request, or null when they wrote none. */

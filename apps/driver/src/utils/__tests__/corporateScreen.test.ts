@@ -3,6 +3,7 @@ import type { FleetMember, FleetWithMembers } from '@tricigo/types';
 import {
   corporateReducer,
   deriveCorporateView,
+  fleetStatusBadge,
   initialCorporateState,
   rejectionReason,
   type CorporateState,
@@ -255,6 +256,18 @@ describe('deriveCorporateView', () => {
       rejectedRequest: null,
       showRequestForm: false,
     });
+  });
+});
+
+describe('fleetStatusBadge', () => {
+  // Feminine, like "la flota" next to it, instead of the raw account status.
+  it.each([
+    ['pending', 'En revisión', 'warning'],
+    ['approved', 'Aprobada', 'success'],
+    ['suspended', 'Suspendida', 'error'],
+    ['rejected', 'Rechazada', 'error'],
+  ] as const)('labels the %s status "%s"', (status, label, variant) => {
+    expect(fleetStatusBadge(status)).toEqual({ labelKey: `fleet.status.${status}`, label, variant });
   });
 });
 
