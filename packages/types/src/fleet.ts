@@ -3,8 +3,8 @@
 // Tables: driver_fleets + fleet_members (migration 00235).
 // A fleet is the operational extension of a corporate_account:
 // the account's driver_fleets row. Only an admin can set
-// is_fleet_owner (00418/00434), so the app finds a fleet by that
-// row, not by the flag.
+// is_fleet_owner (00418/00434), which approving the fleet does, so
+// the apps and the admin find a fleet by that row, not by the flag.
 // ============================================================
 
 export type FleetMemberStatus =
