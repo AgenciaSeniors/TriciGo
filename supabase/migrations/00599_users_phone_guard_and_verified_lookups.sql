@@ -1,5 +1,6 @@
 -- ============================================================
--- 00599: users.phone only holds the number its account confirmed by OTP
+-- 00599: a user can only move users.phone to the number its account
+-- confirmed by OTP, and the money lookups stop trusting users.phone
 --
 -- A signed-in user can write any number to public.users.phone: PostgREST
 -- grants UPDATE on the column, users_update_own lets the owner update its
@@ -25,13 +26,27 @@
 -- number; the other 2 belong to admins without one. One of them repeats the
 -- confirmed number of a driver account of the same person (Luis Manuel
 -- Calero). It is left as is (owner decision, 2026-09-25): the lookups below
--- send that number to the driver account.
+-- send that number to the driver account. Also checked on 2026-09-26: every
+-- phone in auth.users is already in canonical digits, no auth.users row
+-- lacks its public.users row, and no auth.users phone is unconfirmed.
+--
+-- This relies on GoTrue's phone_autoconfirm staying false (it is, per
+-- /auth/v1/settings on 2026-09-27). With auto-confirm on, updateUser({ phone })
+-- would confirm a number without an OTP, and both the guard and the lookups
+-- would accept it. Also, phone_confirmed_at belongs to the account, not to the
+-- number: an operator edit of auth.users.phone (Dashboard, service role)
+-- without phone_confirm keeps the old timestamp, so it is trusted like any
+-- other service-role write.
+--
+-- Not covered here: handle_new_user still copies auth.users.phone on INSERT,
+-- confirmed or not, and GoTrue's own phone sign-up is open. Such an account
+-- cannot sign in, and the lookups below ignore it (0 of them today).
 --
 -- Fix:
 --   1. tg_users_protect_admin_fields: a caller with a JWT that is not an
 --      admin may only write the number its account confirmed, and it is
---      stored as E.164. Another number, one never confirmed, or NULL is put
---      back like the other protected fields (the rest of a multi-field save
+--      stored as E.164. Another number, one never confirmed, or an empty value
+--      is put back like the other protected fields (the rest of a multi-field save
 --      goes through) and logged to rpc_attempt_log as users_phone_guard, with
 --      a reason and without the number. It runs before the trusted tier and
 --      cancel branches, so they cannot open it. Callers without a JWT
@@ -50,6 +65,9 @@
 -- DECLARE and the block marked 00599; the rehearsal checks that byte for byte.
 -- Rehearsal: supabase/tests/00599/run.sh.
 -- ============================================================
+
+-- The self-test writes one real account's row: fail fast instead of waiting on it.
+SET lock_timeout = '5s';
 
 -- 1. Write guard -----------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.tg_users_protect_admin_fields()
@@ -84,7 +102,7 @@ BEGIN
       ELSE
         PERFORM log_rpc_attempt('users_phone_guard', auth.uid(), OLD.id, 'reverted',
           jsonb_build_object('reason', CASE
-            WHEN NEW.phone IS NULL THEN 'cleared'
+            WHEN btrim(coalesce(NEW.phone, '')) = '' THEN 'cleared'
             WHEN coalesce(v_verified, '') = '' THEN 'no_verified_phone'
             ELSE 'not_the_verified_phone'
           END));
@@ -168,8 +186,10 @@ BEGIN
   END IF;
 
   -- 00599: through the account that confirmed the number by OTP, never
-  -- through users.phone. GoTrue keeps E.164 digits without '+'; both
-  -- spellings use users_phone_key. More than one match would be a guess.
+  -- through users.phone. GoTrue keeps E.164 digits without '+'; the other
+  -- two spellings (a '+', a Cuban number without its country code) are the
+  -- ones the write guard also accepts. All three use users_phone_key.
+  -- More than one match would be a guess.
   v_digits := regexp_replace(public._normalize_cuban_phone(p_phone), '\D', '', 'g');
   IF v_digits IS NULL OR v_digits = '' THEN
     RETURN;
@@ -180,7 +200,8 @@ BEGIN
       SELECT u.id, u.full_name
       FROM auth.users au
       JOIN users u ON u.id = au.id
-      WHERE au.phone IN (v_digits, '+' || v_digits)
+      WHERE au.phone IN (v_digits, '+' || v_digits,
+                         CASE WHEN v_digits ~ '^53[56]\d{7}$' THEN substr(v_digits, 3) END)
         AND au.phone_confirmed_at IS NOT NULL
         AND u.is_active = true
     )
@@ -209,7 +230,8 @@ AS $function$
   ), m AS (
     SELECT u.id, u.full_name
     FROM n
-    JOIN auth.users au ON au.phone IN (n.digits, '+' || n.digits)
+    JOIN auth.users au ON au.phone IN (n.digits, '+' || n.digits,
+                                       CASE WHEN n.digits ~ '^53[56]\d{7}$' THEN substr(n.digits, 3) END)
     JOIN users u ON u.id = au.id
     WHERE n.digits <> ''
       AND au.phone_confirmed_at IS NOT NULL

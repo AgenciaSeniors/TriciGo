@@ -3,7 +3,7 @@
 #   supabase/tests/00599/run.sh none
 #       -> scaffold + tests (RED: a user's own JWT writes any number to users.phone,
 #          and the gift / recharge lookups hand that number's money to whoever wrote it)
-#   supabase/tests/00599/run.sh supabase/migrations/00599_users_phone_only_verified_number.sql
+#   supabase/tests/00599/run.sh supabase/migrations/00599_users_phone_guard_and_verified_lookups.sql
 #       -> scaffold + migration x2 (idempotency) + tests + negative proofs of the self-test (GREEN)
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
 # Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00599/run.sh ...
@@ -46,7 +46,8 @@ SHARE="UPDATE public.users SET phone = '+5355550002' WHERE id = '$CAROL'; UPDATE
 ROWS="SELECT md5(coalesce((SELECT string_agg(u::text, ',' ORDER BY u.id) FROM public.users u), '')
           || coalesce((SELECT string_agg(a::text, ',' ORDER BY a.id) FROM auth.users a), '')
           || coalesce((SELECT string_agg(d::text, ',' ORDER BY d.id) FROM public.driver_profiles d), '')
-          || coalesce((SELECT string_agg(l::text, ',' ORDER BY l.id) FROM public.rpc_attempt_log l), ''))"
+          || coalesce((SELECT string_agg(l::text, ',' ORDER BY l.id) FROM public.rpc_attempt_log l), '')
+          || coalesce((SELECT string_agg(k::text, ',' ORDER BY k::text) FROM public.rate_limit_calls k), ''))"
 
 echo "== reset database =="
 $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB" >/dev/null 2>&1 || exit 1
@@ -59,6 +60,16 @@ val "S0 scaffold carries the live prod bodies (md5/length of prosrc)" \
   "_normalize_cuban_phone:9f5227a3c108fa42f6aacdf01fb0ad86/451,find_recipient_for_recharge:b7fd2c337019b168f81094baf08bb757/169,find_user_by_phone:18b575b1a8eddaf734c3ec2644f065ca/577,is_admin:22cb75e91980d512498034cd33e1eda2/285,log_rpc_attempt:0a902c34a1148dac5686403a7c941bc0/203,tg_users_normalize_phone:c0491b42cf36767c3911fb8a3fda9f04/147,tg_users_protect_admin_fields:2907fccbd0f2ec2201b7c0ec61d434a3/1701"
 
 if [ "$MIG" != "none" ]; then
+  # A fresh environment (local stack, branch) has no accounts yet: the self-test must skip, not fail.
+  $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}e" -c "CREATE DATABASE ${DB}e" >/dev/null 2>&1
+  E="$BIN/psql $CONN -d ${DB}e -qAt -v ON_ERROR_STOP=1"
+  $E -f "$DIR/scaffold.sql" >/dev/null 2>&1
+  if out=$($E -1 -c "SET search_path = ''" -f "$MIG" 2>&1); then
+    if echo "$out" | grep -q "00599 self-test skipped"; then ok "M0 on a database with no accounts the migration applies and its self-test skips"
+    else ko "M0 on a database with no accounts the migration applies and its self-test skips" "applied, but no skip notice"; fi
+  else
+    ko "M0 on a database with no accounts the migration applies and its self-test skips" "$(echo "$out" | tr -d '\r' | grep -m1 ERROR)"
+  fi
   BEFORE=$($P -c "$ROWS" | tr -d '\r')
   # 1st pass in one transaction, the way `supabase db push` runs a file; 2nd in autocommit mode.
   echo "== apply migration (1st, one transaction, search_path = '') =="; $P -1 -c "SET search_path = ''" -f "$MIG" >/dev/null || { echo "migration failed"; exit 1; }
@@ -102,6 +113,11 @@ val "A10 a confirmed non-Cuban number is accepted in any spelling and stored as 
    $(as $GRACE "UPDATE public.users SET phone = '55 11 99999-0007' WHERE id = '$GRACE';") $(phone $GRACE)" "+5511999990007"
 val "A11 ...and another non-Cuban number is put back" \
   "$SEED $(as $GRACE "UPDATE public.users SET phone = '+5511888880000' WHERE id = '$GRACE';") $(phone $GRACE)" "+5511999990007"
+val "A12 an upsert (INSERT ... ON CONFLICT DO UPDATE) is guarded too" \
+  "$SEED $(as $ALICE "INSERT INTO public.users (id, full_name, phone) VALUES ('$ALICE', 'Alice', '+5355550002') ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone;") $(phone $ALICE)" "+5355550001"
+val "A13 a JWT carried only in request.jwt.claims is guarded too" \
+  "$SEED SET request.jwt.claims = '{\"sub\":\"$ALICE\",\"role\":\"authenticated\"}'; SET ROLE authenticated;
+   UPDATE public.users SET phone = '+5355550002' WHERE id = '$ALICE'; RESET ROLE; RESET request.jwt.claims; $(phone $ALICE)" "+5355550001"
 
 # T. callers the guard does not limit, and trusted contexts that must not open it
 val "T1 no JWT (link-phone's service-role mirror, triggers, cron) writes any number" \
@@ -143,6 +159,10 @@ val "L2 the reason tells no confirmed number, a never-confirmed one and clearing
    $(as $FRANK "UPDATE public.users SET phone = '+5355550006' WHERE id = '$FRANK';")
    $(as $ALICE "UPDATE public.users SET phone = NULL WHERE id = '$ALICE';") $LOG" \
   "users_phone_guard:reverted:no_verified_phone,users_phone_guard:reverted:no_verified_phone,users_phone_guard:reverted:cleared"
+val "L4 an empty or blank number is logged as cleared, and put back" \
+  "$SEED $(as $ALICE "UPDATE public.users SET phone = '' WHERE id = '$ALICE';")
+   $(as $ALICE "UPDATE public.users SET phone = '   ' WHERE id = '$ALICE';") $(phone $ALICE) $LOG" \
+  "+5355550001;users_phone_guard:reverted:cleared,users_phone_guard:reverted:cleared"
 val "L3 no phone number ever reaches the log" \
   "$SEED $(as $ALICE "UPDATE public.users SET phone = '+5355550002' WHERE id = '$ALICE';")
    SELECT count(*) FROM public.rpc_attempt_log WHERE metadata::text ~ '[0-9]{7}';" "0"
@@ -165,6 +185,10 @@ val "B9 two confirmed accounts behind one number (both spellings in auth): no gu
    INSERT INTO public.users (id, full_name) VALUES ('a0000000-0000-4000-8000-000000000008', 'Henry');
    $(gift 55550002) $(recharge 55550002)" "nobody;nobody"
 val "B10 a number nobody holds goes to nobody" "$SEED $(gift 55551111) $(recharge 55551111)" "nobody;nobody"
+val "B14 a confirmed number GoTrue kept without its country code: the guard and both lookups agree on it" \
+  "$SEED UPDATE auth.users SET phone = '55550009', phone_confirmed_at = now() WHERE id = '$ERIN';
+   $(as $ERIN "UPDATE public.users SET phone = '55550009' WHERE id = '$ERIN';") $(phone $ERIN) $(gift +5355550009) $(recharge 55550009)" \
+  "+5355550009;Erin|+5355550009;Erin"
 val "B11 the gift lookup still refuses a caller without a session" \
   "$SEED CREATE TEMP TABLE r (v text);
    DO \$d\$ BEGIN
