@@ -449,8 +449,12 @@ export default function RideDetailScreen() {
         </Card>
 
         {/* Dispute status card */}
+        {/* The `!` on these three cards is load-bearing: NativeWind breaks ties by
+            stylesheet order, and Tailwind emits most of these colors before the
+            Card variant's own bg-white / bg-neutral-* / border-neutral-*. Keep light
+            and dark paired: an unpaired `!` light class also wins in dark mode. */}
         {dispute && (
-          <Card variant="outlined" padding="md" className="mb-4 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/30">
+          <Card variant="outlined" padding="md" className="mb-4 !border-orange-200 dark:!border-orange-800 !bg-orange-50 dark:!bg-orange-900/30">
             <Text variant="label" className="mb-1">{t('dispute.your_dispute')}</Text>
             <View className="flex-row items-center justify-between">
               <Text variant="bodySmall" color="secondary">
@@ -488,7 +492,7 @@ export default function RideDetailScreen() {
 
         {/* Lost item status card */}
         {lostItem && (
-          <Card variant="outlined" padding="md" className="mb-4 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30">
+          <Card variant="outlined" padding="md" className="mb-4 !border-amber-200 dark:!border-amber-800 !bg-amber-50 dark:!bg-amber-900/30">
             <Text variant="label" className="mb-1">{t('lost_found.title')}</Text>
             <View className="flex-row items-center justify-between">
               <Text variant="bodySmall" color="secondary">
@@ -517,7 +521,7 @@ export default function RideDetailScreen() {
 
         {/* Prominent action CTAs for completed rides */}
         {isCompleted && (disputesEnabled || lostFoundEnabled) && (!dispute || !lostItem) && (
-          <Card variant="elevated" padding="lg" className="mb-4 bg-neutral-50 dark:bg-neutral-800">
+          <Card variant="elevated" padding="lg" className="mb-4 !bg-neutral-50 dark:!bg-neutral-800">
             <View className="gap-3">
               {disputesEnabled && !dispute && (
                 <Pressable
