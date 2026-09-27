@@ -590,9 +590,17 @@ export const corporateService = {
   },
 
   /**
-   * Returns the user's most recent corporate request (any status). Used
-   * by the client app to render the right state on /profile/corporate:
-   * form, "in review", "rejected — resubmit", or full dashboard.
+   * Returns the user's most recent corporate client request (any status).
+   * Used by the client app and the web to render the right state on
+   * /profile/corporate: form, "in review", "rejected — resubmit", or full
+   * dashboard.
+   *
+   * A fleet request is not a client request. The driver app sends it as an
+   * account plus its driver_fleets row, and only an admin can set
+   * is_fleet_owner (00418/00434), so an account with either one is skipped.
+   * Without the row check a pending fleet showed here as a client request in
+   * review, and a rejected one offered the client form to send it again.
+   * Returns null when a lookup fails; both screens treat that as no request.
    */
   async getRequestStatus(userId: string): Promise<CorporateAccount | null> {
     const supabase = getSupabaseClient();
@@ -602,10 +610,16 @@ export const corporateService = {
       .eq('created_by', userId)
       .eq('is_fleet_owner', false)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('id', { ascending: true });
     if (error) return null;
-    return data as CorporateAccount | null;
+    const accounts = (data ?? []) as CorporateAccount[];
+    if (accounts.length === 0) return null;
+
+    const withFleet = await fleetService
+      .getAccountIdsWithFleet(accounts.map((a) => a.id))
+      .catch(() => null);
+    if (!withFleet) return null;
+    return accounts.find((a) => !withFleet.has(a.id)) ?? null;
   },
 
   /**

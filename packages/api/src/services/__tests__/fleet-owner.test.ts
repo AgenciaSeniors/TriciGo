@@ -604,3 +604,69 @@ describe('corporateService.approveAccount', () => {
     expect(db.admin_actions).toEqual([]);
   });
 });
+
+describe('corporateService.getRequestStatus', () => {
+  // A corporate client request (client app or web) is an account with no fleet.
+  const clientRequest = (overrides: Row) =>
+    account({ id: ACCOUNT_B, name: 'Hotel Vedado', status: 'rejected', ...overrides });
+
+  it('returns null when the only request is a fleet request sent from the app', async () => {
+    seed('corporate_accounts', account({}));
+    seed('driver_fleets', fleet({}));
+
+    expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
+  });
+
+  it('returns the corporate client request, skipping a newer fleet request', async () => {
+    seed(
+      'corporate_accounts',
+      account({ id: ACCOUNT_A, created_at: '2026-09-21T14:00:00+00:00' }),
+      clientRequest({ created_at: '2026-09-20T14:00:00+00:00' }),
+    );
+    seed('driver_fleets', fleet({ corporate_account_id: ACCOUNT_A }));
+
+    expect((await corporateService.getRequestStatus(OWNER))?.id).toBe(ACCOUNT_B);
+  });
+
+  it('skips an account an admin flagged as fleet owner', async () => {
+    seed('corporate_accounts', account({ status: 'approved', is_fleet_owner: true }));
+
+    expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
+  });
+
+  it('returns the newest of two corporate client requests', async () => {
+    seed(
+      'corporate_accounts',
+      clientRequest({ id: ACCOUNT_B, created_at: '2026-09-20T14:00:00+00:00' }),
+      clientRequest({ id: ACCOUNT_C, status: 'pending', created_at: '2026-09-22T14:00:00+00:00' }),
+    );
+
+    expect((await corporateService.getRequestStatus(OWNER))?.id).toBe(ACCOUNT_C);
+  });
+
+  it('breaks a tie on the account id, so every load shows the same request', async () => {
+    const sameInstant = '2026-09-20T14:00:00+00:00';
+    seed(
+      'corporate_accounts',
+      clientRequest({ id: ACCOUNT_C, created_at: sameInstant }),
+      clientRequest({ id: ACCOUNT_B, created_at: sameInstant }),
+    );
+
+    expect((await corporateService.getRequestStatus(OWNER))?.id).toBe(ACCOUNT_B);
+  });
+
+  it('returns null instead of a fleet request when the fleets cannot be read', async () => {
+    seed('corporate_accounts', account({}));
+    seed('driver_fleets', fleet({}));
+    failures.driver_fleets = CONNECTION_LOST;
+
+    expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
+  });
+
+  it('returns null when the accounts cannot be read', async () => {
+    seed('corporate_accounts', clientRequest({}));
+    failures.corporate_accounts = CONNECTION_LOST;
+
+    expect(await corporateService.getRequestStatus(OWNER)).toBeNull();
+  });
+});
