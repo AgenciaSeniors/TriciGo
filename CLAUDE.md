@@ -1704,7 +1704,7 @@ Se midió la cascada de verdad (rama descartable, revertida): `supabase gen type
 1. **RPC args vs firma real.** Extraé toda `.rpc('fn', {keys})` del repo (parser que captura el 1er string literal + las top-level keys del 2º arg objeto, depth-aware). Por cada `fn`, traé `pg_get_function_arguments(oid)` + `pronargs`/`pronargdefaults` de prod. Reglas PostgREST: (a) **arg extra** del cliente que NO está en los params → la función no resuelve (PGRST202); (b) **param requerido** (los primeros `pronargs − pronargdefaults`, los defaults van trailing en PG) que ningún call site provee → falla. El union de keys cross-call-site hace el check (a) conservador (caza cualquier site).
 2. **Columnas write/filter vs schema.** Extraé `.from(t).insert/update/upsert({...})` (keys del payload) + columnas de `.eq/.neq/.gt/.gte/.lt/.lte/.like/.ilike/.is/.in/.order/.contains('col',…)`. **CRÍTICO: acotá el chain a UN solo statement** — desde el `.from(` hasta el **primer `;`** (terminador; los method-chains no tienen `;` top-level) o el siguiente `.from(`, lo que venga antes. Sin esto, columnas de statements adyacentes **sangran** (bleed) y generás decenas de falsos positivos. Después emití los pares `(tabla, columna, kind)` a un `WITH client_refs(...) AS (VALUES …) … LEFT JOIN information_schema.columns … WHERE column_name IS NULL AND tbl IN (tablas de prod)` (excluí buckets de storage: `avatars/receipts/driver-documents/delivery-photos/dispute-evidence/driver-contracts` — son `storage.from()`, no tablas).
 3. **Verificá cada candidato con grep/Read del source** antes de afirmarlo (puede quedar 1 bleed residual; y distinguí método muerto vs. live path con `grep` de callers).
-4. **Advisors de Supabase** (`get_advisors security|performance`) en la misma pasada: output gigante → parsealo con un script Node (`j.result.lints`, campos `name/level/metadata.{schema,name,type}/detail`). Ruido conocido a descartar: ERROR `spatial_ref_sys` (PostGIS, no se le puede poner RLS); `rls_enabled_no_policy` en tablas-candado intencionales (`otp_codes`, `rate_limits`, caches, counters — incl. `email_sends`, `google_directions_cache`, `google_directions_daily_counter`, `poi_sync_state`) + las `zzz_backup_*`; `anon/authenticated_security_definer_function_executable` mayormente intencional (share links por token, config/geo públicos, fns de trigger inocuas); `rls_policy_always_true` ×3 en `influencers_campaign` (tabla huérfana de marketing creada a mano en prod, **riesgo aceptado explícitamente por el usuario 2026-07-01 — NO tocar ni re-alertar**); performance (initplan/multi-permissive/FK sin índice) = higiene-a-escala, **no** bloqueante de lanzamiento (varios counts inflados tras un wipe).
+4. **Advisors de Supabase** (`get_advisors security|performance`) en la misma pasada: output gigante → parsealo con un script Node (`j.result.lints`, campos `name/level/metadata.{schema,name,type}/detail`). Ruido conocido a descartar: ERROR `spatial_ref_sys` (PostGIS, no se le puede poner RLS — pero su `rls_disabled_in_public` **no es del todo inofensivo**: ver § «`spatial_ref_sys`: el advisor es ruido, los GRANT de `anon` no»); `rls_enabled_no_policy` en tablas-candado intencionales (`otp_codes`, `rate_limits`, caches, counters — incl. `email_sends`, `google_directions_cache`, `google_directions_daily_counter`, `poi_sync_state`) + las `zzz_backup_*`; `anon/authenticated_security_definer_function_executable` mayormente intencional (share links por token, config/geo públicos, fns de trigger inocuas); `rls_policy_always_true` ×3 en `influencers_campaign` (tabla huérfana de marketing creada a mano en prod, **riesgo aceptado explícitamente por el usuario 2026-07-01 — NO tocar ni re-alertar**); performance (initplan/multi-permissive/FK sin índice) = higiene-a-escala, **no** bloqueante de lanzamiento (varios counts inflados tras un wipe).
 
 Resultado del 1er sweep (PR #517): 99 RPCs + 489 refs de columna → **3 bugs reales** (param de RPC en método muerto, `sitemap` filtrando `blog_posts.status` inexistente → blog fuera del sitemap, toggle admin escribiendo `reviews.is_featured` inexistente → mig 00416). Resto del contrato **sano**.
 
@@ -2829,6 +2829,13 @@ El tercer caso del bug: `sync-osm-delta.yml` y `sync-pois.yml` avisan de su prop
   | `max_connections` | 60 | 60 |
 
 - **Revisado el 2026-09-25, al cierre del plazo: por disco no hace falta Small.** Desde el paso a Micro el disco se usó en promedio a ~6 % del baseline, y no hubo un solo atasco. Lo que queda por vigilar es la memoria. Los números y cómo sacarlos, abajo.
+- **Respuesta de soporte del 2026-10-01 (Lindsay Moss): mecanismo confirmado, más tres datos que la base no puede dar.**
+  - Confirmó con métricas de AWS que durante las tres caídas `nvme0n1` era el root y `nvme1n1` el data, y que **el root tuvo muchísimo más I/O que `/data`** ("compared to your data volume 🦗🦗"). O sea que lo que drenaba el saldo era el swap y el page cache, no Postgres: confirma lo que ya se había medido en Micro.
+  - **El saldo se agota de forma cíclica y se recarga cada 24 h.** No existe una "hora de inicio" de la caída de cada día: el consumo estaba sostenidamente por encima del baseline y el saldo simplemente llegaba a 0. Por eso las tres caídas caen en la misma ventana de la mañana sin que haya nada agendado ahí — no hay que seguir buscando el disparador.
+  - **Baselines exactos de Micro: 500 IOPS y 11 MB/s**, contra la suma de lectura + escritura de los DOS discos. Es el número que faltaba para que los contadores `node_disk_*` sean un chequeo y no una curiosidad. La tabla por tier está en una nota interna que mandaron (`app.notion.com/p/supabase/Understanding-IO-Utilization-3eb5004b775f80ae9a52ea7637e04a9c`).
+  - **El saldo de EBS no está expuesto en ninguna API** — ni el endpoint de métricas ni la Management API; dijeron que lo están discutiendo internamente, y quedó pedido formalmente en el ticket el 2026-10-03. Mientras tanto el proxy es IOPS y MB/s contra el baseline. Para los gráficos que mandaron: la integración de Grafana (`grafana.com/integrations/supabase/monitor`) o los partners de la Metrics API.
+  - **Qué vigilar en memoria según ellos: `node_memory_Committed_AS_bytes`.** Hay picos de memoria prometida (algún proceso potencialmente caro) sin nada preocupante, pero es el gráfico que delata un crecimiento con el tiempo. Medido el 2026-10-03: **1,54 GB = 162 % de la RAM**.
+  - Errata del correo, para no confundirse al releerlo: dice "much better than they were on the Micro" donde quiere decir **Nano**.
 
 #### Medir el disco y la memoria desde SQL (verificado 2026-09-25)
 
@@ -2864,6 +2871,52 @@ Línea base, medida 66,5 h después del reinicio de Micro:
 - **Casi todo lo escrito en `/data` es relleno de WAL.** Con `archive_timeout = 120 s`, Postgres cierra un segmento de 16 MB cada 2 minutos aunque casi no haya tráfico: se archivaron **2.001 segmentos (~33 GB) para 169 MB de WAL real** (`pg_stat_archiver` contra `pg_stat_wal`). Lo fija Supabase para el backup continuo: no está en el repo y no hay que perseguirlo.
 - **Sin atascos desde Micro:** el cron `jobid 17` corrió 3.986 veces con un hueco máximo de 61 s y cero `startup timeout`; el peor checkpoint de 24 h fue de 508 buffers en 50,8 s, o sea los 0,1 s por buffer normales; `cleanup_orphan_searching_rides` tarda como mucho 0,5 s (76 s durante la caída).
 - **Qué vigilar:** la memoria, no el disco. Si `SwapFree` se acerca a 0 o las lecturas de `nvme0n1` crecen mucho respecto de esta base, se está repitiendo lo de Nano, y el arreglo es Small (2 GB, el doble de memoria).
+
+**Re-medido a los 10 días (241,5 h de uptime, 2026-10-03): la tasa no se degrada y Micro sigue sobrado.**
+
+| Disco | Leído | Escrito |
+|---|---|---|
+| `nvme0n1` → `/` (sistema + swap) | **407 GiB** | 50 GiB |
+| `nvme1n1` → `/data` (Postgres) | 8,6 GiB | 129 GiB |
+
+- **Combinado: 0,74 MB/s y 27 IOPS**, o sea **6,7 %** de los 11 MB/s y **5,5 %** de los 500 IOPS de Micro.
+- **Lo que importa es la tendencia, no el total:** las lecturas del root promediaron 0,49 MB/s en las primeras 66 h y 0,51 MB/s desde entonces. La firma de falta de memoria sigue igual (el root lee **47×** lo que lee `/data`) pero **estable**: `pgmajfault` pasó de 1,21 M a 6,24 M creciendo lineal, no acelerando. Memoria: 427 MB disponibles de 948, y 472 MB de swap en uso de 1 GB (33 GiB mandados a swap, 34 GiB traídos). Por eso se descartó Small otra vez.
+- **`pg_stat_checkpointer` es el chequeo más barato de "¿está atascado el disco?"** — un solo SELECT, sin depender del servicio de logs (que falla seguido). Desde el arranque: 2.892 checkpoints, 323.162 buffers, **95,6 ms de `write_time` por buffer** = exactamente la siesta de ~100 ms que hace Postgres por buffer, o sea sano. Durante la caída del 09-21 hubo checkpoints de **~27.000 ms por buffer**. `stats_reset` dice desde cuándo mide: se resetea con el servidor, así que el promedio cubre justo el período post-upgrade.
+
+```sql
+SELECT num_timed, buffers_written,
+       round((write_time / NULLIF(buffers_written,0))::numeric, 1) AS ms_por_buffer,
+       stats_reset
+FROM pg_stat_checkpointer;
+```
+
+> Trampa: `round(double precision, integer)` no existe en Postgres — hay que castear a `::numeric` o da `42883`.
+
+### `spatial_ref_sys`: el advisor es ruido, los GRANT de `anon` no (verificado 2026-10-03)
+
+El correo semanal **"Action required: security vulnerabilities detected in your projects"** trae un **Critical `rls_disabled_in_public`** y no nombra la tabla. Medido: la **única** tabla de `public` sin RLS es `spatial_ref_sys` (PostGIS, 8.500 filas de definiciones EPSG, 7 MB). Esa parte es el falso positivo conocido — no se le puede habilitar RLS porque su dueño es `supabase_admin`.
+
+**Lo que sí es real y no estaba medido:** `anon` y `authenticated` tienen `arwdDxtm` sobre ella (todo, escritura incluida), otorgado por `supabase_admin`:
+
+```
+{supabase_admin=arwdDxtm/supabase_admin, postgres=arwdDxtm/supabase_admin,
+ anon=arwdDxtm/supabase_admin, authenticated=arwdDxtm/supabase_admin,
+ service_role=arwdDxtm/supabase_admin, =r/supabase_admin}
+```
+
+Está en `public`, así que la Data API la expone: cualquiera con la clave publicable puede UPDATE o DELETE. No hay datos nuestros ahí, pero **borrar la fila del SRID 4326 rompe todo `::geography`** — el search de calles, el reverse geocode y el matching de conductores dependen de ella. Probabilidad baja, impacto total.
+
+**No lo podemos revocar nosotros.** El grant lo dio `supabase_admin`: `postgres` no es miembro suyo (`pg_has_role(current_user,'supabase_admin','MEMBER')` = false) y tiene los privilegios **sin** GRANT OPTION (no hay `*` en el ACL), y solo el dueño o el otorgante pueden revocar. Pedido a soporte en el ticket SU-480720 el 2026-10-03: revocar INSERT/UPDATE/DELETE a `anon` y `authenticated` conservando SELECT, y dejar de reportar un Critical que el cliente no puede accionar. **Hasta que lo hagan no hay mitigación de nuestro lado.**
+
+**La regla operativa**, que convierte ese correo semanal en algo útil en vez de ruido:
+
+```sql
+SELECT c.relname, pg_get_userbyid(c.relowner) AS dueno, c.relacl::text
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND NOT c.relrowsecurity;
+```
+
+Si devuelve **solo** `spatial_ref_sys`, el Critical es el falso positivo de siempre y se archiva. Si devuelve **cualquier otra cosa**, el Critical es nuestro: a esa tabla le falta `ENABLE ROW LEVEL SECURITY` y hay que arreglarlo con una migración.
 
 ### Los REVOKE de una migración de lockdown se verifican en prod, no se asumen (00531 → 00591, 2026-09-15)
 
