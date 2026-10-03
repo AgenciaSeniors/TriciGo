@@ -464,6 +464,12 @@ verify_jwt = false
 verify_jwt = false
 [functions.link-phone]
 verify_jwt = false
+# Competitor price observatory. Cron-only; authenticates via apikey===service_role inside.
+[functions.track-competitor-prices]
+verify_jwt = false
+# Owner's phone deposits a competitor session credential; does its own auth.getUser + admin check inside.
+[functions.deposit-competitor-session]
+verify_jwt = false
 # Mints a short-lived HMAC proxy credential; does its own auth.getUser inside.
 [functions.mint-netopia-proxy-credential]
 verify_jwt = false

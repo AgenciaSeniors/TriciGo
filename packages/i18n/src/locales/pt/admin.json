@@ -102,7 +102,8 @@
     "validation": "Validação",
     "logout": "Sair",
     "close_menu": "Fechar menu",
-    "open_menu": "Abrir menu"
+    "open_menu": "Abrir menu",
+    "competitors": "Concorrência"
   },
   "referrals": {
     "title": "Indicações",
@@ -1312,7 +1313,13 @@
     "whatsapp_invite_confirm": "Uma notificação push será enviada a todos os motoristas aprovados convidando-os ao grupo de WhatsApp. Continuar?",
     "whatsapp_invite_sent": "Convite enviado a {{count}} motorista(s).",
     "whatsapp_invite_none": "Não há motoristas aprovados para convidar.",
-    "whatsapp_invite_error": "Não foi possível enviar o convite."
+    "whatsapp_invite_error": "Não foi possível enviar o convite.",
+    "competitor_tracking_enabled_help": "Interruptor mestre do observatório de preços da concorrência. false o interrompe.",
+    "competitor_tracking_interval_min_help": "Minutos mínimos entre ciclos de captura (auto-pula se o cron rodar com mais frequência).",
+    "competitor_tracking_stale_hours_help": "Horas sem cotações antes de o watchdog alertar \"parado\".",
+    "competitor_session_warn_hours_help": "Avisar quando a sessão de um concorrente vence dentro destas horas.",
+    "competitor_quotes_retention_days_help": "Dias de histórico de cotações a manter antes de podar.",
+    "competitor_quotes_prune_batch_help": "Linhas apagadas por execução de poda (em lotes, evita picos de WAL)."
   },
   "exchange_rate": {
     "title": "Taxa de câmbio",
@@ -2104,5 +2111,24 @@
     "section_experiments_desc": "Testes A/B ativos e resultados",
     "section_platform_config_title": "Configuração da plataforma",
     "section_platform_config_desc": "Valores internos do sistema"
+  },
+  "competitors": {
+    "eyebrow": "Inteligência de preços",
+    "title": "Preços da concorrência",
+    "subtitle": "La Nave e CINCO cotados 24/7 sobre uma cesta fixa, comparados com o preço da TriciGo no mesmo instante.",
+    "filter_all": "Todos",
+    "col_route": "Rota",
+    "col_competitor": "Concorrente",
+    "col_them": "Eles",
+    "col_us": "TriciGo",
+    "col_delta": "Δ",
+    "col_captured": "Capturado",
+    "na": "n/d",
+    "hours": "h",
+    "kpi_cheaper": "Rotas onde somos mais baratos",
+    "kpi_avg_delta": "Δ médio (eles − nós)",
+    "kpi_freshness": "Idade do último dado",
+    "empty_title": "Sem cotações ainda",
+    "empty_body": "O observatório ainda não capturou preços. Verifique se a sessão do concorrente está depositada e o rastreamento ativo."
   }
 }
