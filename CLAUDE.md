@@ -2096,6 +2096,51 @@ Apagar: `... -e command exit` + `settings put global sysui_demo_allowed 0`. **Li
 
 **5. Colocar + commitear** por nombre estable (`01-login`…`05-*`). El usuario sube manual a la consola (el repo es backup/control de versión).
 
+### Publicar una versión en las tiendas: qué funcionó y qué no (release 1.7.3, verificado 2026-09-25/27)
+
+**Reparto que resultó más rápido.** Claude hace lo de terminal: verificar los builds, armar iOS y subirlo a App Store Connect con `eas submit`. El usuario hace lo de las consolas web: en Play Console subir el `.aab`, cargar las novedades y enviar a revisión; en App Store Connect crear la versión, elegir el build, cargar las novedades y enviar a revisión. Manejar Play Console con la extensión de Chrome costó más de lo que ahorró (ver abajo). Para que todo salga en un comando falta la API de Play (último punto).
+
+**1. Paridad antes de armar iOS.** Si Android ya está armado, iOS tiene que salir del mismo código de app:
+```bash
+cd apps/client && npx eas-cli@latest build:view <build-id-android> --json   # gitCommitHash, appVersion, appBuildVersion
+git diff --stat <gitCommitHash> HEAD -- apps/client apps/driver packages pnpm-lock.yaml package.json patches
+```
+Si el diff sale vacío, iOS se puede armar desde `HEAD`.
+
+**1b. Justo antes de enviar a revisión, volver a mirar master.** Los `.aab` de 1.7.3 se armaron el 23/09 desde `c08b68c3` y en los días siguientes entraron **14 merges que tocan las apps** (flotas, cuentas de empresa, colores de tarjetas). La primera tanda (Android vc37/vc47, iOS 41/45) se descartó y se rearmaron las cuatro desde `c48b7604`. Chequeo: `git log --oneline <gitCommitHash>..origin/master -- apps/client apps/driver packages`. Si hay merges que importan:
+- **El número de versión se reusa** mientras nada de esa versión esté en revisión: en ASC no había versión 1.7.3 creada y en Play estaba solo el borrador, al que se le cambia el app bundle.
+- **Confirmar en prod las migraciones de las que depende el código nuevo** antes de compilar: grep de `rpc('…')` y `from('…')` en el diff de `packages/api/src/services` y buscar cada objeto en `pg_proc` / `information_schema.columns`. En 1.7.3 eran 00598–00602, todas aplicadas. Compararlo contra un marcador del cuerpo de la migración, no contra un nombre adivinado (así salió un falso negativo con 00599).
+- **Armar desde el commit exacto sin reinstalar:** si `git diff --quiet <viejo> origin/master -- pnpm-lock.yaml` da igual, `git checkout --detach origin/master`, lanzar los cuatro `eas build … --no-wait` uno tras otro y volver a la rama recién cuando terminó el último (cada uno sube el árbol de trabajo en ese momento). Tardaron unos 15 min en EAS.
+
+**2. `pnpm install --frozen-lockfile` antes de cualquier comando `eas`.** Sin `node_modules` en el worktree falla hasta `eas build:view`, con `expo config --json exited with non-zero code: 1`: Node busca hacia arriba y usa el `expo` del checkout principal. En esta PC tardó 10 min.
+
+**3. Armar iOS en local:** `cd apps/<app> && npx eas-cli@latest build -p ios --profile production --non-interactive --no-wait`. Usa las credenciales guardadas en EAS (el certificado y los perfiles vencen el 24-jun-2027) y no hace falta GitHub Actions. El número de build lo sube EAS solo. La 1.7.3 final quedó: iOS **42** pasajero y **46** conductor; Android vc**38** y vc**48**. Los 41 y 45 de la primera tanda quedaron sin usar en ASC: al elegir el build, fijarse en el número.
+
+**4. Subir iOS a App Store Connect.** Agregar en local, **sin commitear**, en `apps/<app>/eas.json` → `submit.production.ios`: `"ascApiKeyPath": "C:/Users/Eduardo/Downloads/AuthKey_4842VLU5R9.p8"`, `"ascApiKeyIssuerId": "f19c9b1b-da82-4a06-9d67-12d8ed947440"` y `"ascApiKeyId": "4842VLU5R9"`. Después correr `npx eas-cli@latest submit -p ios --profile production --id <buildId> --non-interactive` y deshacer el cambio con `git checkout -- apps/client/eas.json apps/driver/eas.json`.
+
+**5. Bajar los `.aab` para que el usuario los suba.** Tamaño real con `curl -sIL <url> | grep -i content-length`; descarga con `curl -L --fail --retry 5 --retry-all-errors -o <archivo> <url>`; verificación con el tamaño exacto y `zipfile.ZipFile(p).testzip()` en Python. Un `.aab` truncado da en Play el error genérico "No se ha podido subir". Trampa de bash: en `mkdir X && cd X && (curl 1) & (curl 2) & wait`, el `&` corta la cadena y el segundo curl corre en la carpeta anterior.
+
+**Lo que no funcionó (no repetir):**
+- **`eas submit -p android`.** `eas.json` pide `./google-service-account.json`, que no existe en ningún checkout, y en expo.dev (Credentials → Android) solo está la clave FCM V1, no la de "Play Store Submissions".
+- **Subir el `.aab` con la extensión de Chrome.** `file_upload` acepta como mucho 10 MB y cada `.aab` pesa unos 126 MB. Lo tiene que arrastrar el usuario.
+- **Manejar Play Console con la extensión.** El grupo de pestañas de Claude vive en una ventana de Chrome aparte. Si esa ventana no se ve (minimizada, tapada, PC bloqueada), `document.visibilityState` es `hidden` y la SPA de Play Console deja de responder: los clics, reales o por JavaScript, no hacen nada, la lista de versiones no se dibuja y las capturas fallan con "Script injection timed out". Abrir una ventana nueva no lo arregla. Antes de empezar, mirar `document.visibilityState` con `javascript_tool`; si da `hidden`, pasarle esa parte al usuario en vez de insistir.
+- **Cuenta.** Play Console de TriciGo está en `/console/u/1/`; en `u/0` aparece "Agencia Señores", de otra cuenta de Google. IDs: desarrollador `8713585500555905623`, pasajero `4974704460419492250`, conductor `4974821218433551452`.
+
+**Datos de las fichas:**
+- Play: las novedades van solo en **es-419** (idioma predeterminado), hasta 500 caracteres. La 1.7.2 salió al 100 % en Producción, con la publicación gestionada **desactivada**: se publica sola cuando Google la aprueba.
+- App Store Connect: las dos apps tienen una sola localización, **es-ES**, y `releaseType` = `AFTER_APPROVAL` (también se publican solas). Como `app.json` trae `ITSAppUsesNonExemptEncryption: false`, al elegir el build no pregunta por cifrado.
+- Con las dos tiendas publicadas, subir `client_latest_version` y `driver_latest_version` en el admin (Settings → Platform Config) para que salga el aviso de actualización.
+
+**Para que sea un comando la próxima vez:**
+- **App Store Connect ya se puede, y así se envió la 1.7.3 (2026-09-28, unos 2 min por app).** La misma `.p8` firma la API. Pasos que funcionaron:
+  1. `POST /v1/appStoreVersions` con `platform`, `versionString`, `releaseType: AFTER_APPROVAL` y el build en `relationships.build` (una sola llamada). La versión nueva hereda de la anterior la descripción, los datos de contacto y la cuenta demo del revisor.
+  2. `PATCH` de `whatsNew` en su `appStoreVersionLocalizations` (única localización: es-ES), con el cuerpo leído de un archivo JSON UTF-8, y leerlo de vuelta para comparar.
+  3. Antes de enviar: `GET /v1/reviewSubmissions?filter[app]=…&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,UNRESOLVED_ISSUES,…` vacío, y la `ageRatingDeclaration` del appInfo nuevo sin campos obligatorios en `null`.
+  4. `POST /v1/reviewSubmissions` → `POST /v1/reviewSubmissionItems` → `PATCH {submitted:true}`, de a una app y cortando al primer error. Queda `WAITING_FOR_REVIEW`.
+
+  El JWT es ES256 con `node:crypto` (`dsaEncoding: 'ieee-p1363'`) y `iat` 60 s atrasado, o da 401. **Trampa de Git Bash:** un argumento que empieza con `/v1/…` sin `?` se convierte en ruta de Windows y el host queda `api.appstoreconnect.apple.comc` (`ENOTFOUND`). Exportar `MSYS_NO_PATHCONV=1` antes de llamar. Si un envío falla a medias, leer las trampas de la memoria `project_apple_ios_launch`: la lista de envíos miente, y un envío huérfano solo se borra desde la web.
+- **Para Play falta una service account.** Crearla en Google Cloud, invitarla en Play Console (Usuarios y permisos) con permiso para gestionar versiones de las dos apps y guardar su JSON como `apps/<app>/google-service-account.json` (ya está en `.gitignore`). Con eso, `eas submit -p android --id <buildId>` sube el `.aab` sin descargarlo. Ojo: por defecto va al track `internal` con `releaseStatus: completed`; para producción sin enviar a revisión, poner `"track": "production", "releaseStatus": "draft"` en el perfil de submit. `eas submit` no carga notas de versión: eso se hace con la API de Play (`edits.tracks.update` con `releaseNotes`).
+
 ### Worktrees compartidos: sesiones paralelas pueden cambiar tu rama (verificado 2026-06-04)
 
 Un worktree (`.claude/worktrees/<x>`) puede estar en uso por **varias sesiones**. Una sesión paralela puede hacer **checkout de otra rama** en tu worktree detrás tuyo: tu commit queda en la rama vieja, el working tree salta de rama, y tus cambios sin commitear cuelgan en la rama equivocada. **Antes de commitear/pushear SIEMPRE `git branch --show-current` + `git log -1`.**
