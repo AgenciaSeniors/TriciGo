@@ -1280,7 +1280,7 @@ También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`
 
 **Regla:** una tarjeta con color propio es un `TintedCard` (`apps/driver/src/components/TintedCard.tsx`: la forma de `Card` sin fondo), nunca un `Card` con `bg-*` en `className`. `apps/driver/src/__tests__/cardTints.test.ts` compila cada `<Card>` y `<TintedCard>` del driver con NativeWind y falla si un color de `className` pierde o no existe en el tema. El cliente no tiene ese guard todavía.
 
-**Trampa hermana:** una opacidad fuera de la escala de Tailwind no genera nada. `dark:border-white/12` y `/6` (los bordes oscuros de `Card` en `outlined`/`elevated`/`surface`) no existen en la hoja compilada; `/10` sí. Para chequear si una clase existe, compilarla: `postcss([tailwindcss({...config, content:[{raw:'<clases>', extension:'html'}]})]).process('@tailwind utilities;')`.
+**Trampa hermana:** una opacidad fuera de la escala de Tailwind (pasos de 5) no genera nada: `/10` existe, `/6` y `/12` no. Así estuvieron los bordes oscuros de `Card` (`dark:border-white/12` y `/6`) hasta #1048, que los pasó a `/[0.12]` y `/[0.06]`. Con esas clases por fin generadas, un `border-*` sin `dark:` que se le pase a un `Card` pierde en modo oscuro (por eso `ServiceTypeCard` usa `!border-primary-500`). Todavía quedan `/6` y `/12` en `MenuRow` y en el login del conductor. Para chequear si una clase existe, compilarla: `postcss([tailwindcss({...config, content:[{raw:'<clases>', extension:'html'}]})]).process('@tailwind utilities;')`.
 
 ---
 
