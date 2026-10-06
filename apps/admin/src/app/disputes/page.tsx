@@ -412,7 +412,7 @@ export default function DisputesPage() {
                   <button
                     type="button"
                     onClick={handleAssignToMe}
-                    className="rounded-full border border-primary-500/30 bg-primary-500/10 px-3 py-1.5 text-[12px] font-medium text-primary-600 hover:bg-primary-500/15 dark:text-primary-400"
+                    className="rounded-full border border-primary-500/30 bg-primary-500/10 px-3 py-1.5 text-[12px] font-medium text-primary-700 hover:bg-primary-500/15 dark:text-primary-400"
                   >
                     {t('disputes.assign_to_me', { defaultValue: 'Asignármela' })}
                   </button>

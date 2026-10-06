@@ -46,7 +46,7 @@ type Props<TId extends string> = {
 
 const TONE_CLASS: Record<StatusTone, string> = {
   default: 'text-ink',
-  primary: 'text-primary-600 dark:text-primary-400',
+  primary: 'text-primary-700 dark:text-primary-400',
   success: 'text-emerald-600 dark:text-emerald-400',
   warning: 'text-amber-600 dark:text-amber-400',
   danger: 'text-red-600 dark:text-red-400',
@@ -154,7 +154,7 @@ export function FilterBar<TId extends string = string>({
             aria-expanded={expanded}
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
               activeFilterCount > 0
-                ? 'border-primary-500/40 bg-primary-500/10 text-primary-600 dark:text-primary-400'
+                ? 'border-primary-500/40 bg-primary-500/10 text-primary-700 dark:text-primary-400'
                 : 'border-line bg-surface text-ink-muted hover:text-ink'
             }`}
           >

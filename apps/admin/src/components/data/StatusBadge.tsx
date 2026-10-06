@@ -13,7 +13,7 @@ type Props = {
 
 const TONE_CLASS: Record<StatusTone, string> = {
   default: 'bg-surface-sunken text-ink-muted',
-  primary: 'bg-primary-500/10 text-primary-600 dark:text-primary-400',
+  primary: 'bg-primary-500/10 text-primary-700 dark:text-primary-400',
   success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   danger: 'bg-red-500/10 text-red-600 dark:text-red-400',
