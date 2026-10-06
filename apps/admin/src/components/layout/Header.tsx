@@ -34,6 +34,8 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   content: 'Contenido',
   blog: 'Bitácora',
   'live-map': 'Mapa en vivo',
+  'launch-pulse': 'Pulso del lanzamiento',
+  'incomplete-drivers': 'Choferes sin terminar',
   businesses: 'Aliados',
   quests: 'Misiones',
   audit: 'Auditoría',

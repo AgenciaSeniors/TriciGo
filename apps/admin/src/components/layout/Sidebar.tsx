@@ -37,6 +37,8 @@ import {
   PanelLeftOpen,
   Sparkles,
   Ticket,
+  Rocket,
+  UserRoundX,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
@@ -66,6 +68,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/', labelKey: 'sidebar.dashboard', defaultLabel: 'Pulso general', icon: LayoutDashboard },
       { href: '/live-map', labelKey: 'sidebar.live_map', defaultLabel: 'Mapa en vivo', icon: MapPin },
+      { href: '/launch-pulse', labelKey: 'sidebar.launch_pulse', defaultLabel: 'Pulso del lanzamiento', icon: Rocket },
     ],
   },
   {
@@ -90,6 +93,12 @@ const NAV_GROUPS: NavGroup[] = [
     defaultTitle: 'Gente',
     items: [
       { href: '/drivers', labelKey: 'sidebar.drivers', defaultLabel: 'Conductores', icon: Car },
+      {
+        href: '/incomplete-drivers',
+        labelKey: 'sidebar.incomplete_drivers',
+        defaultLabel: 'Choferes sin terminar',
+        icon: UserRoundX,
+      },
       { href: '/users', labelKey: 'sidebar.users', defaultLabel: 'Pasajeros', icon: Users },
       { href: '/wallet', labelKey: 'sidebar.wallet', defaultLabel: 'Billeteras', icon: Wallet },
       { href: '/wallet/receipts', labelKey: 'sidebar.wallet_receipts', defaultLabel: 'Comprobantes', icon: Receipt },

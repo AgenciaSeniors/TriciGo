@@ -921,7 +921,7 @@ export default function LaunchPulsePage() {
                                       : t('launch_pulse.not_measured_title', { defaultValue: 'Sin medición esa semana' })
                                     : undefined
                                 }
-                                className={`whitespace-nowrap px-3 py-2.5 text-right font-mono ${w.is_current ? 'bg-surface-sunken/60' : ''} ${
+                                className={`whitespace-nowrap px-3 py-2.5 text-right font-mono ${w.is_current ? 'bg-surface-sunken' : ''} ${
                                   c.groupStart ? 'border-l border-line' : ''
                                 } ${last ? '' : 'border-b border-line'} ${
                                   muted ? 'text-ink-subtle' : c.strong ? 'font-semibold text-ink' : 'text-ink'
