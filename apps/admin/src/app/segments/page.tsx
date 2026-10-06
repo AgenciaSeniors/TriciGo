@@ -30,6 +30,8 @@ type SegmentUser = {
   rides_count: number;
   last_ride_date: string | null;
   city_name: string | null;
+  // mig 00616 — null = never asked about marketing messages.
+  marketing_opt_in: boolean | null;
 };
 
 type City = { id: string; name: string; slug: string };
@@ -204,7 +206,7 @@ export default function SegmentsPage() {
 
         const { data: profiles } = await supabase
           .from('users')
-          .select('id, full_name, email, phone, city_id')
+          .select('id, full_name, email, phone, city_id, marketing_opt_in')
           .in('id', userIds);
 
         const { data: rides } = await supabase
@@ -238,6 +240,7 @@ export default function SegmentsPage() {
           rides_count: rideStats[p.id]?.count ?? 0,
           last_ride_date: rideStats[p.id]?.lastRide ?? null,
           city_name: p.city_id ? cityMap[p.city_id] ?? null : null,
+          marketing_opt_in: p.marketing_opt_in ?? null,
         }));
 
         setUsers(result);
@@ -289,6 +292,7 @@ export default function SegmentsPage() {
       t('segments.csv_rides', { defaultValue: 'Viajes' }),
       t('segments.csv_last_ride', { defaultValue: 'Último viaje' }),
       t('segments.csv_city', { defaultValue: 'Ciudad' }),
+      t('segments.csv_marketing', { defaultValue: 'Acepta novedades' }),
     ];
     const rows = users.map((u) => [
       u.full_name ?? '',
@@ -297,6 +301,11 @@ export default function SegmentsPage() {
       String(u.rides_count),
       u.last_ride_date ? new Date(u.last_ride_date).toISOString().split('T')[0] : '',
       u.city_name ?? '',
+      u.marketing_opt_in === true
+        ? t('segments.csv_yes', { defaultValue: 'Sí' })
+        : u.marketing_opt_in === false
+          ? t('segments.csv_no', { defaultValue: 'No' })
+          : t('segments.csv_unknown', { defaultValue: 'Sin respuesta' }),
     ]);
     const csv = [headers.join(','), ...rows.map((r) => r.map((v) => `"${v}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

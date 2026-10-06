@@ -67,6 +67,7 @@ import { useCorporateAccounts } from '@/hooks/useCorporateAccounts';
 import { rideService } from '@tricigo/api/services/ride';
 import { reverseGeocode, isPlaceholderAddress } from '@tricigo/utils';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
+import { MarketingConsentSheet } from '@/components/MarketingConsentSheet';
 import { UpdateAvailableSheet } from '@/components/UpdateAvailableSheet';
 import { OnboardingOverlay } from '@/components/OnboardingOverlay';
 import { useRiderLocationSharing } from '@/hooks/useRiderLocationSharing';
@@ -1898,6 +1899,9 @@ function NativeHomeScreen() {
       </Animated.View>
       {/* Notification permission prompt (shows once on first visit) */}
       <NotificationPermissionSheet />
+      {/* Marketing-consent question for users never asked (once, skips
+          sessions where the push prompt is on screen or just answered) */}
+      <MarketingConsentSheet />
       {/* Update-available prompt (shows when a newer store version exists) */}
       <UpdateAvailableSheet />
       {/* Onboarding tutorial (shows once on first app launch) */}

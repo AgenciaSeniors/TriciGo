@@ -128,6 +128,17 @@ export default function UsersPage() {
         { key: 'role', label: t('users.col_role', { defaultValue: 'Rol' }) },
         { key: 'is_active', label: t('users.col_active', { defaultValue: 'Activo' }), format: (v) => (v ? t('users.yes', { defaultValue: 'Sí' }) : t('users.no', { defaultValue: 'No' })) },
         { key: 'created_at', label: t('users.col_registered', { defaultValue: 'Registrado' }) },
+        // mig 00616 — null/absent = never asked about marketing messages.
+        {
+          key: 'marketing_opt_in',
+          label: t('users.csv_marketing', { defaultValue: 'Acepta novedades' }),
+          format: (v) =>
+            v === true
+              ? t('users.yes', { defaultValue: 'Sí' })
+              : v === false
+                ? t('users.no', { defaultValue: 'No' })
+                : t('users.csv_unknown', { defaultValue: 'Sin respuesta' }),
+        },
       ],
       'users',
     );

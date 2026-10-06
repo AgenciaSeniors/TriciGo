@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getSupabaseClient, notificationService, customerService } from '@tricigo/api';
+import { getSupabaseClient, notificationService, customerService, authService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import type { CustomerProfile, PaymentMethod } from '@tricigo/types';
 
@@ -27,6 +27,10 @@ export default function SettingsPage() {
   const [darkMode, setDarkMode] = useState<'light' | 'dark' | 'system'>('system');
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  // Marketing consent (mig 00616). `undefined` = the profile row has no such
+  // column (or isn't loaded yet) → the row stays hidden; `null` = never asked.
+  const [marketingOptIn, setMarketingOptIn] = useState<boolean | null | undefined>(undefined);
+  const [marketingSaving, setMarketingSaving] = useState(false);
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(({ data: { session } }) => {
@@ -83,6 +87,15 @@ export default function SettingsPage() {
     }).catch(() => {});
   }, [userId]);
 
+  // Load the public.users row — `user` above is the auth session user, which
+  // doesn't carry the marketing consent columns.
+  useEffect(() => {
+    if (!userId) return;
+    authService.getUserById(userId).then((profile) => {
+      setMarketingOptIn(profile?.marketing_opt_in);
+    }).catch(() => {});
+  }, [userId]);
+
   async function handleSelectPayment(method: PaymentMethod) {
     if (!customerProfile || method === paymentMethod) return;
     const prev = paymentMethod;
@@ -119,6 +132,23 @@ export default function SettingsPage() {
     setSmsNotifications(newVal);
     if (userId) {
       notificationService.updateSmsPreference(userId, newVal).catch(() => setSmsNotifications(!newVal));
+    }
+  }
+
+  async function handleToggleMarketing() {
+    if (!userId || marketingSaving) return;
+    const prev = marketingOptIn;
+    const newVal = !prev;
+    setMarketingOptIn(newVal); // optimistic
+    setMarketingSaving(true);
+    try {
+      const updated = await authService.setMarketingOptIn(userId, newVal, 'settings');
+      // null = the consent columns don't exist yet → nothing was saved.
+      if (!updated) setMarketingOptIn(prev);
+    } catch {
+      setMarketingOptIn(prev); // revert on failure
+    } finally {
+      setMarketingSaving(false);
     }
   }
 
@@ -362,6 +392,7 @@ export default function SettingsPage() {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '1rem 1.25rem',
+            borderBottom: marketingOptIn !== undefined ? '1px solid var(--border-light)' : 'none',
           }}>
             <div>
               <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.sms', { defaultValue: 'SMS' })}</p>
@@ -371,6 +402,24 @@ export default function SettingsPage() {
               <div style={toggleKnobStyle(smsNotifications)} />
             </button>
           </div>
+
+          {/* Marketing consent (WhatsApp, SMS and email outside the app) */}
+          {marketingOptIn !== undefined && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '1rem 1.25rem',
+            }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('profile.marketing_settings_title', { defaultValue: 'Novedades por WhatsApp, SMS y correo' })}</p>
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('profile.marketing_settings_subtitle', { defaultValue: 'Promociones y avisos de TriciGo fuera de la app' })}</p>
+              </div>
+              <button onClick={handleToggleMarketing} disabled={marketingSaving} style={toggleStyle(marketingOptIn === true)}>
+                <div style={toggleKnobStyle(marketingOptIn === true)} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

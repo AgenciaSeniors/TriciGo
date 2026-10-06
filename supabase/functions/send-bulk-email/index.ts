@@ -95,7 +95,9 @@ Deno.serve(async (req) => {
       .from('users')
       .select('id, email, full_name')
       .in('id', user_ids)
-      .not('email', 'is', null);
+      .not('email', 'is', null)
+      // Consent (mig 00616): marketing email only goes to users who opted in.
+      .eq('marketing_opt_in', true);
     if (error) throw error;
 
     const recipients = (users ?? []).filter((u) => u.email && u.email.includes('@'));

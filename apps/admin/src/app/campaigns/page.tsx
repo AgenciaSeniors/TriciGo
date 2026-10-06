@@ -347,7 +347,10 @@ export default function CampaignsPage() {
             const emailSent = Number(json.sent ?? 0);
             sentCount = Math.max(sentCount, emailSent);
             if (emailSent === 0) {
-              warnings.push(t('campaigns.warn_email_zero', { defaultValue: 'Guardada, pero el correo no se entregó (sin direcciones válidas en el segmento).' }));
+              // send-bulk-email only targets users with a valid address who
+              // accepted marketing messages (mig 00616), so a zero no longer
+              // means "no valid addresses" alone.
+              warnings.push(t('campaigns.warn_email_zero_consent', { defaultValue: 'Guardada, pero el correo no se entregó: nadie del segmento tiene un correo válido y aceptó recibir novedades.' }));
             }
           } catch (err) {
             warnings.push(t('campaigns.warn_email_failed', { defaultValue: 'Guardada, pero falló el envío de correo: {{error}}', error: getErrorMessage(err) }));
@@ -549,6 +552,11 @@ export default function CampaignsPage() {
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
+              {(formChannel === 'email' || formChannel === 'both') && (
+                <span className="text-[11px] text-ink-muted">
+                  {t('campaigns.email_consent_note', { defaultValue: 'El correo solo llega a quienes aceptaron recibir novedades.' })}
+                </span>
+              )}
             </FormField>
 
             <FormField
