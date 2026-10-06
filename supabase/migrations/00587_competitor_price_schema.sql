@@ -23,6 +23,17 @@
 -- Scope guardrails baked into the design: PRICES ONLY. No driver names, phones,
 -- or plates — the adapters trim `raw` before persisting. No real rides are ever
 -- requested; only the fare-estimate endpoint (which dispatches no one).
+--
+-- Grants. From 2026-10-30 Supabase stops granting new public tables to the Data
+-- API roles (CLAUDE.md, "Tablas nuevas en public: GRANT explícito"), so each table
+-- declares its own. Only service_role reaches these four tables through the API:
+-- the Edge Functions track-competitor-prices and deposit-competitor-session. The
+-- admin panel reads through the SECURITY DEFINER RPCs of 00589, which run as the
+-- table owner, so authenticated needs no table grant and anon gets nothing. Each
+-- table first REVOKEs what prod's default privileges still hand out to all three
+-- roles until 2026-10-30 (a GRANT alone does not take them back: 00585 granted
+-- authenticated SELECT, INSERT, UPDATE and it kept arwdDxtm), so the ACL comes out
+-- the same whenever this is applied.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. competitor_routes — the FIXED basket
@@ -52,8 +63,10 @@ COMMENT ON TABLE public.competitor_routes IS
 
 ALTER TABLE public.competitor_routes ENABLE ROW LEVEL SECURITY;
 
--- Admin read (the panel). Writes: super_admin / SECURITY DEFINER only — the
--- basket is curated by a human, not the bot.
+-- Admin read. Writes: super_admin / SECURITY DEFINER only — the basket is curated
+-- by a human, not the bot. authenticated has no table grant today (the panel goes
+-- through the 00589 RPCs), so these policies only take effect if a future panel
+-- feature grants it.
 DROP POLICY IF EXISTS competitor_routes_admin_read ON public.competitor_routes;
 CREATE POLICY competitor_routes_admin_read
   ON public.competitor_routes FOR SELECT USING (public.is_admin());
@@ -62,6 +75,10 @@ DROP POLICY IF EXISTS competitor_routes_super_admin_write ON public.competitor_r
 CREATE POLICY competitor_routes_super_admin_write
   ON public.competitor_routes FOR ALL
   USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
+
+-- track-competitor-prices reads the basket.
+REVOKE ALL ON public.competitor_routes FROM anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.competitor_routes TO service_role;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. competitor_category_map — which of their categories ↔ which TriciGo type
@@ -93,6 +110,11 @@ DROP POLICY IF EXISTS competitor_category_map_super_admin_write ON public.compet
 CREATE POLICY competitor_category_map_super_admin_write
   ON public.competitor_category_map FOR ALL
   USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
+
+-- track-competitor-prices reads the active pairs. Same policies-vs-grants note as
+-- competitor_routes.
+REVOKE ALL ON public.competitor_category_map FROM anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.competitor_category_map TO service_role;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. competitor_quotes — the captured time series
@@ -127,12 +149,19 @@ CREATE INDEX IF NOT EXISTS competitor_quotes_captured_at_idx
 
 ALTER TABLE public.competitor_quotes ENABLE ROW LEVEL SECURITY;
 
--- Admin read (the panel). NO write policy → tamper-proof; only the EF via
--- service_role (which bypasses RLS) inserts. A FOR SELECT policy does not grant
--- writes.
+-- Admin read. NO write policy → tamper-proof; only the EF via service_role (which
+-- bypasses RLS) inserts. A FOR SELECT policy does not grant writes. The panel reads
+-- through the 00589 RPCs, so authenticated has no table grant today.
 DROP POLICY IF EXISTS competitor_quotes_admin_read ON public.competitor_quotes;
 CREATE POLICY competitor_quotes_admin_read
   ON public.competitor_quotes FOR SELECT USING (public.is_admin());
+
+-- track-competitor-prices reads the newest captured_at and inserts the quotes. The
+-- id is an IDENTITY column, so INSERT needs no sequence grant; its sequence only
+-- gets the REVOKE, for the same reason as the tables.
+REVOKE ALL ON public.competitor_quotes FROM anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.competitor_quotes TO service_role;
+REVOKE ALL ON SEQUENCE public.competitor_quotes_id_seq FROM anon, authenticated, service_role;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 4. competitor_sessions — the deposited session credential, one row per competitor
@@ -157,6 +186,11 @@ COMMENT ON TABLE public.competitor_sessions IS
 
 ALTER TABLE public.competitor_sessions ENABLE ROW LEVEL SECURITY;
 -- No policies on purpose. service_role bypasses RLS; everyone else sees nothing.
+
+-- Lock table: service_role only. track-competitor-prices reads the credential and
+-- updates status / last_ok_at; deposit-competitor-session upserts it.
+REVOKE ALL ON public.competitor_sessions FROM anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.competitor_sessions TO service_role;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 5. Seed the category map from PR #965 observations
