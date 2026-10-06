@@ -9,6 +9,10 @@
 // un "callback que marca email_verified_at" que nunca se construyó, así que el
 // flag quedaba NULL para siempre (auditoría del PR #960, 2026-08-17).
 //
+// Desde 2026-10-06 también es el ÚNICO lugar que escribe el correo en
+// auth.users (add-email-with-verification ya no lo hace): así GoTrue nunca
+// tiene por confirmado un correo que su dueño no confirmó.
+//
 // Deliberadamente NO mintea sesión: el click solo prueba posesión del buzón.
 // Si el correo era un typo y lo recibe otra persona, lo peor que puede hacer
 // con este endpoint es confirmar el flag — nunca entrar a la cuenta.
@@ -81,6 +85,19 @@ Deno.serve(async (req) => {
       return json({ error: 'invalid_or_expired' }, 400);
     }
 
+    // Recién ahora el correo pasa a la cuenta de autenticación, confirmado.
+    // Si mientras tanto otra cuenta lo tomó, GoTrue lo rechaza y el token sigue
+    // sin usar. Repetirlo con dos clicks a la vez es inofensivo (mismo valor).
+    const { error: authErr } = await supaAdmin.auth.admin
+      .updateUserById(row.user_id, { email: row.email, email_confirm: true });
+    if (authErr) {
+      if (/already|registered|exists/i.test(authErr.message)) {
+        return json({ error: 'email_already_taken' }, 409);
+      }
+      console.error('[confirm-email] auth email update failed:', authErr.message);
+      return json({ error: 'internal' }, 500);
+    }
+
     // Un solo uso: marcar gastado ANTES de estampar, con guard de carrera (dos
     // clicks simultáneos → uno solo pasa).
     const { data: claimed } = await supaAdmin
@@ -102,13 +119,6 @@ Deno.serve(async (req) => {
       console.error('[confirm-email] stamp failed:', stampErr.message);
       return json({ error: 'internal' }, 500);
     }
-
-    // Best-effort: alinear el flag nativo de GoTrue para que la Estrategia A de
-    // verify-otp (signInWithPassword) no tropiece si el proyecto exige correo
-    // confirmado. Nunca fatal: nuestro gate es email_verified_at, no este.
-    await supaAdmin.auth.admin
-      .updateUserById(row.user_id, { email_confirm: true })
-      .catch((e) => console.warn('[confirm-email] email_confirm sync failed (non-fatal):', e?.message));
 
     await supaAdmin.from('security_audit_log').insert({
       action: 'email_verified',
