@@ -662,6 +662,7 @@ Los 5 `SECURITY_AUDIT_*.md` (CLIENT, DRIVER, ADMIN, WEB, MASTER) tienen `.gitign
 
 - **Ninguna credencial en el código, ni siquiera "temporal".** Se lee de `process.env` / `Deno.env` y el programa falla si falta, sin valor por defecto. Borrarla de HEAD no la saca del historial ni de los clones: el arreglo es **rotarla**.
 - **Hay bots probando lo que se filtra.** El 2026-09-26 una IP externa llamó a `GET /auth/v1/admin/users?per_page=1` con el JWT `service_role` legacy, que sigue commiteado en migraciones viejas. Recibió 401 solo porque las claves legacy están deshabilitadas: **no reactivarlas nunca**.
+- **Hay bases ajenas que corren nuestros crons contra nuestras funciones** (medido 2026-10-06). Dos Postgres que no son de esta organización (`pg_net/0.20.3`; el nuestro es 0.19.5), uno desde AWS India (`3.108.168.46`) y otro desde AWS Suecia (`13.62.211.38`), llaman a `auto-admin`, `sync-weather`, `sync-exchange-rate` y `behavioral-emails` con nuestros mismos horarios: ~800 llamadas por día. Son bases armadas con nuestro historial de migraciones: 00056, 00061, 00074 y 00214 escriben dentro del cron la URL del proyecto y el JWT `service_role` legacy (la de Suecia lo usa), y la 00219 el `anon` legacy (la de India). Todas reciben `401 UNAUTHORIZED_LEGACY_JWT`. Si las claves legacy se reactivaran, la de Suecia correría `auto-admin` y los correos con permisos de servicio. **Esos 401 no son fallas de nuestros crons**: los nuestros salen de `44.234.196.74` con `pg_net/0.19.5` y la clave `sb_secret_`. Para separarlos, en `function_edge_logs` agrupar por `request.headers.cf_connecting_ip` y `request.headers.user_agent`.
 - **Primero se rota la contraseña de la base, y recién después la clave de servicio y los tokens de `platform_config`.** El rol `postgres` lee `vault.decrypted_secrets`, que guarda `service_role_key`, y también `platform_config`. Si se rota al revés, quien tenga la contraseña vieja lee la clave nueva.
 - **Se resetea desde el Dashboard, nunca con `ALTER ROLE`.** El panel y el MCP se conectan como `postgres` (`application_name='mgmt-api'`) con la credencial que guarda Supabase. Por SQL, además, la contraseña nueva quedaría en texto plano en la conversación y en los logs. Resetearla no corta las sesiones abiertas, así que después hay que revisar `pg_stat_activity`: como `postgres` solo tiene que quedar `mgmt-api`.
 - **Para buscar un secreto sin imprimirlo,** leerlo a una variable dentro del mismo comando (`PW=$(sed -nE '…' archivo)`) y buscar con `git grep -F -e "$PW"` o `git log -S"$PW"`. Para enmascarar la salida: `sed -E 's#(postgres(ql)?://[^:@/ ]+:)[^@ ]+@#\1***@#g'`. El clon del sandbox es superficial (50 commits): correr `git fetch --unshallow origin master` antes de buscar en el historial.
@@ -2970,6 +2971,25 @@ O sea que un wrapper SQL plano queda **denegado**, no exento: el riesgo va en la
 **Ensayo local reproducible:** `supabase/tests/00591/run.sh none` (RED: 27 fallos, incluida la acuñación) / `run.sh supabase/migrations/00591_*.sql` (GREEN: 58/58, aplicada dos veces). El andamio lleva los cuerpos VIVOS de prod y sus ACLs, no los de git. Las dos aserciones de arriba tienen **pruebas negativas propias** (G1/G2: se rompe el invariante en una base desechable y se exige que la migración aborte) — una verificación que nunca se vio fallar no es una verificación.
 
 **Trampa de método en la que caí verificando esto:** probé el guard contra la base del ensayo que había quedado del baseline **RED**, o sea sin el guard aplicado, y concluí que un wrapper SQL plano lo evadía. Todo pasaba porque no había nada que evadir. Si un probe de seguridad da "permitido", confirmá primero contra qué base estás hablando.
+
+### Una función SECURITY DEFINER se salta la RLS de la tabla que lee (verificado 2026-10-06, mig 00608)
+
+La 00517 ocultó las claves secretas de `platform_config` con la política `pc_select`, pero `get_platform_config_text` y `get_platform_config_numeric` son SECURITY DEFINER: leen la tabla como su dueño, sin RLS. La 00348 las había dejado ejecutables por `anon` cuando la tabla todavía era pública. Medido como `anon`: un SELECT de `openweather_api_key` en la tabla devolvía 0 filas, y la función devolvía la clave. Con la clave publicable, cualquiera podía leer por `POST /rest/v1/rpc/get_platform_config_text` el token de elToque, la clave de OpenWeather y las firmas de NETOPIA. La 00608 les quita EXECUTE a `PUBLIC`, `anon` y `authenticated`.
+
+- **Cuando una RLS esconde filas, buscar las funciones SECURITY DEFINER que leen esa tabla y que un cliente puede ejecutar**: para ellas la política no existe.
+  ```sql
+  SELECT p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_x,
+         has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_x
+  FROM pg_proc p
+  WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef
+    AND p.prosrc ~* 'from\s+(public\.)?<tabla>'
+    AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'));
+  ```
+- **Un helper que solo llaman otras funciones SECURITY DEFINER no necesita EXECUTE para los clientes**: la llamada interna corre como el dueño. El ensayo lo prueba (K2: `get_weather_surge()` como `anon` sigue leyendo su multiplicador).
+- **Una función nueva nace con EXECUTE para `PUBLIC`**, y `anon` lo hereda. `refresh_cuba_landmask` (00575) quedó así, y cualquiera podía vaciar y reconstruir `cuba_landmask`.
+- **Revocar no deshace lo que ya se leyó.** Esas claves no se rotaron desde marzo (elToque, OpenWeather) y junio (NETOPIA live); se rotan a mano en cada proveedor.
+
+Ensayo: `supabase/tests/00608/run.sh none` (RED: fallan las 7 pruebas de la fuga) / `run.sh supabase/migrations/00608_*.sql` (GREEN 21/21, con 4 pruebas negativas de sus aserciones).
 
 ### `users.phone` no prueba que el número sea del usuario (00599, 2026-09-26)
 
