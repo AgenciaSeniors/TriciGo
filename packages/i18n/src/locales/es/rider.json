@@ -323,6 +323,8 @@
     "split_you": "Tú",
     "split_paid": "Pagado",
     "split_decline_failed": "No se pudo rechazar la invitación. Inténtalo de nuevo.",
+    "split_accept_failed": "No se pudo aceptar la invitación. Inténtalo de nuevo.",
+    "split_invite_gone": "Esta invitación ya no está disponible: el viaje terminó o quien te invitó la retiró.",
     "split_already_accepted": "Ya aceptaste esta invitación: pagarás tu parte al terminar el viaje.",
     "safety_button": "Seguridad",
     "insurance_toggle": "Seguro de viaje",

@@ -9,31 +9,24 @@ import { useEffect, useState, useCallback } from 'react';
 import { rideService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { formatTRC, splitAmountTrc } from '@tricigo/utils';
-import type { RideSplit } from '@tricigo/types';
-
-interface PendingInvite extends RideSplit {
-  // getMySplitInvites joins the ride via `rides!inner(...)`
-  rides?: {
-    status?: string;
-    pickup_address?: string;
-    dropoff_address?: string;
-    estimated_fare_trc?: number | null;
-  };
-}
+import type { SplitInvite } from '@tricigo/types';
 
 const POLL_MS = 20_000;
+const NOTICE_MS = 8_000;
 
 export function SplitInviteBanner({ userId }: { userId: string | null | undefined }) {
   const { t } = useTranslation('web');
-  const [invites, setInvites] = useState<PendingInvite[]>([]);
+  const [invites, setInvites] = useState<SplitInvite[]>([]);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [failed, setFailed] = useState<Record<string, boolean>>({});
+  // Which action did not go through, per invite (the invite is still there).
+  const [failed, setFailed] = useState<Record<string, 'accept' | 'decline' | undefined>>({});
+  // An accepted invite that no longer existed: the ride ended or it was withdrawn.
+  const [goneNotice, setGoneNotice] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
     try {
-      const data = await rideService.getMySplitInvites(userId);
-      setInvites(data as PendingInvite[]);
+      setInvites(await rideService.getMySplitInvites(userId));
     } catch {
       /* silent — no pending invites */
     }
@@ -46,23 +39,37 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
     return () => clearInterval(id);
   }, [userId, load]);
 
-  const handleAccept = async (invite: PendingInvite) => {
+  useEffect(() => {
+    if (!goneNotice) return;
+    const id = setTimeout(() => setGoneNotice(false), NOTICE_MS);
+    return () => clearTimeout(id);
+  }, [goneNotice]);
+
+  const handleAccept = async (invite: SplitInvite) => {
     if (!userId) return;
     setBusy((p) => ({ ...p, [invite.id]: true }));
+    setFailed((p) => ({ ...p, [invite.id]: undefined }));
     try {
       await rideService.acceptSplitInvite(invite.id, userId);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
-    } catch {
-      /* keep in list on error */
+    } catch (err) {
+      if ((err as { code?: string } | null)?.code === 'SPLIT_INVITE_GONE') {
+        // Nothing left to accept: drop the card and say why.
+        setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+        setGoneNotice(true);
+      } else {
+        // The invite is still there: keep it and say the accept did not go through.
+        setFailed((p) => ({ ...p, [invite.id]: 'accept' }));
+      }
     } finally {
       setBusy((p) => ({ ...p, [invite.id]: false }));
     }
   };
 
-  const handleDecline = async (invite: PendingInvite) => {
+  const handleDecline = async (invite: SplitInvite) => {
     if (!userId) return;
     setBusy((p) => ({ ...p, [invite.id]: true }));
-    setFailed((p) => ({ ...p, [invite.id]: false }));
+    setFailed((p) => ({ ...p, [invite.id]: undefined }));
     try {
       await rideService.declineSplitInvite(invite.id, userId);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
@@ -72,17 +79,24 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
         setInvites((prev) => prev.filter((i) => i.id !== invite.id));
       } else {
         // The invite is still there: keep it and say the decline did not go through.
-        setFailed((p) => ({ ...p, [invite.id]: true }));
+        setFailed((p) => ({ ...p, [invite.id]: 'decline' }));
       }
     } finally {
       setBusy((p) => ({ ...p, [invite.id]: false }));
     }
   };
 
-  if (invites.length === 0) return null;
+  if (invites.length === 0 && !goneNotice) return null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+      {goneNotice && (
+        <p role="status" style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+          {t('split.invite_gone', {
+            defaultValue: 'Esa invitación ya no está disponible: el viaje terminó o quien te invitó la retiró.',
+          })}
+        </p>
+      )}
       {invites.map((invite) => {
         const isBusy = busy[invite.id] ?? false;
         const fareTrc = invite.rides?.estimated_fare_trc ?? null;
@@ -150,7 +164,9 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
             </div>
             {failed[invite.id] && (
               <p role="alert" style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--error, #dc2626)' }}>
-                {t('split.decline_failed', { defaultValue: 'No se pudo rechazar la invitación. Inténtalo de nuevo.' })}
+                {failed[invite.id] === 'accept'
+                  ? t('split.accept_failed', { defaultValue: 'No se pudo aceptar la invitación. Inténtalo de nuevo.' })
+                  : t('split.decline_failed', { defaultValue: 'No se pudo rechazar la invitación. Inténtalo de nuevo.' })}
               </p>
             )}
           </div>

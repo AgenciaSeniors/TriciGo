@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
@@ -9,64 +9,70 @@ import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api';
 import { formatTRC, splitAmountTrc } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { colors } from '@tricigo/theme';
-import type { RideSplit } from '@tricigo/types';
+import type { SplitInvite } from '@tricigo/types';
 
 interface SplitInviteCardProps {
   /** Called after accepting or declining so parent can refresh */
   onAction?: () => void;
 }
 
-interface PendingInvite extends RideSplit {
-  // getMySplitInvites joins the ride via `rides!inner(...)`
-  rides?: {
-    pickup_address?: string;
-    estimated_fare_trc?: number | null;
-  };
-  inviter_name?: string;
-}
-
 function SplitInviteCardInner({ onAction }: SplitInviteCardProps) {
   const { t } = useTranslation('rider');
   const userId = useAuthStore((s) => s.user?.id);
-  const [invites, setInvites] = useState<PendingInvite[]>([]);
+  const [invites, setInvites] = useState<SplitInvite[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-
-    const loadInvites = async () => {
-      try {
-        const data = await rideService.getMySplitInvites(userId);
-        if (!cancelled) setInvites(data as PendingInvite[]);
-      } catch {
-        // silent — no pending invites
-      }
-    };
-
-    loadInvites();
-
-    return () => {
-      cancelled = true;
-    };
+  // Reloads on focus and when the app comes back: the home tab stays mounted,
+  // and an invite can arrive, or its ride end, while the rider is elsewhere.
+  const loadInvites = useCallback(async () => {
+    if (!userId) {
+      setInvites([]);
+      return;
+    }
+    try {
+      setInvites(await rideService.getMySplitInvites(userId));
+    } catch {
+      // silent — keep what is shown
+    }
   }, [userId]);
+  useEffect(() => { void loadInvites(); }, [loadInvites]);
+  useRefreshOnFocus(loadInvites);
 
-  const handleAccept = async (invite: PendingInvite) => {
+  const handleAccept = async (invite: SplitInvite) => {
     if (!userId) return;
     setLoading((prev) => ({ ...prev, [invite.id]: true }));
     try {
       await rideService.acceptSplitInvite(invite.id, userId);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
       onAction?.();
-    } catch {
-      // keep in list on error
+    } catch (err) {
+      if ((err as { code?: string } | null)?.code === 'SPLIT_INVITE_GONE') {
+        // The ride ended or the requester withdrew the invite: nothing left to accept.
+        setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+        onAction?.();
+        Toast.show({
+          type: 'info',
+          text1: t('ride.split_invite_gone', {
+            defaultValue: 'Esta invitación ya no está disponible: el viaje terminó o quien te invitó la retiró.',
+          }),
+        });
+      } else {
+        // The invite is still there: keep the card so the rider can try again.
+        Toast.show({
+          type: 'error',
+          text1: t('ride.split_accept_failed', {
+            defaultValue: 'No se pudo aceptar la invitación. Inténtalo de nuevo.',
+          }),
+        });
+      }
     } finally {
       setLoading((prev) => ({ ...prev, [invite.id]: false }));
     }
   };
 
-  const handleDecline = async (invite: PendingInvite) => {
+  const handleDecline = async (invite: SplitInvite) => {
     if (!userId) return;
     setLoading((prev) => ({ ...prev, [invite.id]: true }));
     try {

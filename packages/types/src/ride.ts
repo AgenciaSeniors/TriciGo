@@ -60,6 +60,21 @@ export interface RideSplit {
   created_at: string;
 }
 
+/**
+ * A split invite as the invitee's card shows it: the caller's own unanswered
+ * invite of a ride still in progress (get_my_split_invites, migration 00616).
+ */
+export interface SplitInvite extends RideSplit {
+  /** Name of who sent the invite; absent if that account is inactive */
+  inviter_name?: string;
+  rides: {
+    status: RideStatus;
+    pickup_address: string;
+    dropoff_address: string;
+    estimated_fare_trc: number | null;
+  };
+}
+
 export interface Ride {
   id: string;
   customer_id: string;
