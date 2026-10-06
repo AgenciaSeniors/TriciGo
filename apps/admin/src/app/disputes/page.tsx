@@ -266,7 +266,7 @@ export default function DisputesPage() {
                 onClick={() => handleSelect(d)}
                 aria-current={active ? 'true' : undefined}
                 className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${
-                  active ? 'bg-primary-500/8' : 'hover:bg-surface-sunken'
+                  active ? 'bg-primary-500/[0.08]' : 'hover:bg-surface-sunken'
                 }`}
               >
                 <span
