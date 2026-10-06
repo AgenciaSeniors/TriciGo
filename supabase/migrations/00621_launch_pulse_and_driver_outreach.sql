@@ -302,10 +302,11 @@ CREATE POLICY driver_outreach_log_admin_insert ON public.driver_outreach_log
   FOR INSERT TO authenticated
   WITH CHECK ((SELECT public.is_admin()));
 
+-- Until 2026-10-30 prod still grants every new table to anon and authenticated by
+-- default. Take that back, so the log is append-only by grants and not only by RLS.
+REVOKE ALL ON public.driver_outreach_log FROM anon, authenticated;
 GRANT SELECT, INSERT ON public.driver_outreach_log TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.driver_outreach_log TO service_role;
--- Until 2026-10-30 prod still grants new tables to anon by default.
-REVOKE ALL ON public.driver_outreach_log FROM anon;
 
 -- Who and when come from the session, not from the client.
 CREATE OR REPLACE FUNCTION public.tg_driver_outreach_log_stamp()

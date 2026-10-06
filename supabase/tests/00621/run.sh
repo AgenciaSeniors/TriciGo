@@ -177,6 +177,8 @@ has "O6 the log is append-only for the admin (no update)" \
   "$(as $ADMIN "UPDATE public.driver_outreach_log SET note = 'x';")" "permission denied"
 has "O7 the log is append-only for the admin (no delete)" \
   "$(as $ADMIN "DELETE FROM public.driver_outreach_log;")" "permission denied"
+has "O7b nor truncate it (TRUNCATE ignores RLS, so only the grants stop it)" \
+  "$(as $ADMIN "TRUNCATE public.driver_outreach_log;")" "permission denied"
 has "O8 anon cannot read the log" "$(anon "SELECT count(*) FROM public.driver_outreach_log;")" "permission denied"
 has "O9 a non-admin cannot list the drivers" "$(as $R1 "SELECT count(*) FROM $I;")" "Admin only"
 has "O10 anon cannot list the drivers" "$(anon "SELECT count(*) FROM $I;")" "permission denied"

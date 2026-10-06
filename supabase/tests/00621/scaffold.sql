@@ -139,4 +139,9 @@ CREATE TABLE public.referrals (
   rewarded_at timestamptz
 );
 
+-- Prod until 2026-10-30: every new public table is granted to the API roles by
+-- default. The migration must take back what it does not want them to have.
+ALTER DEFAULT PRIVILEGES FOR ROLE tricigo_owner IN SCHEMA public
+  GRANT ALL ON TABLES TO anon, authenticated, service_role;
+
 RESET ROLE;
