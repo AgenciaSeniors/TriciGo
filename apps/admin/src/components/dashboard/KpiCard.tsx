@@ -19,6 +19,13 @@ type Props = {
   hint?: string;
   /** Delta percentage; positive = up, negative = down, null = unknown, 0 = flat */
   delta?: number | null;
+  /**
+   * How the delta is printed: a relative change ('percent', "+12.5%") or a
+   * difference between two percentages ('points', "+3.2 pp"). Default 'percent'.
+   */
+  deltaUnit?: 'percent' | 'points';
+  /** A rise is bad news (e.g. % of requests with no driver): up turns red, down green. */
+  deltaInverse?: boolean;
   /** Series used for sparkline */
   trend?: number[];
   loading?: boolean;
@@ -64,7 +71,15 @@ const TONE_ACCENTS: Record<Tone, { text: string; ring: string; spark: string; fi
   },
 };
 
-function DeltaBadge({ delta }: { delta: number | null | undefined }) {
+function DeltaBadge({
+  delta,
+  unit = 'percent',
+  inverse = false,
+}: {
+  delta: number | null | undefined;
+  unit?: 'percent' | 'points';
+  inverse?: boolean;
+}) {
   if (delta === null || delta === undefined) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2 py-0.5 font-mono text-[10px] text-ink-subtle">
@@ -77,16 +92,19 @@ function DeltaBadge({ delta }: { delta: number | null | undefined }) {
   const down = delta < 0;
   const flat = delta === 0;
   const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
-  const classes = up
+  const good = inverse ? down : up;
+  const bad = inverse ? up : down;
+  const classes = good
     ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-    : down
+    : bad
       ? 'bg-red-500/10 text-red-700 dark:text-red-400'
       : 'bg-surface-sunken text-ink-subtle';
+  const suffix = unit === 'points' ? ' pp' : '%';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] ${classes}`}>
       <Icon className="h-3 w-3" />
       <span data-tabular>
-        {flat ? '0%' : `${up ? '+' : ''}${delta.toFixed(1)}%`}
+        {flat ? `0${suffix}` : `${up ? '+' : ''}${delta.toFixed(1)}${suffix}`}
       </span>
     </span>
   );
@@ -101,6 +119,8 @@ export function KpiCard({
   icon: Icon,
   hint,
   delta,
+  deltaUnit,
+  deltaInverse,
   trend,
   loading,
   className = '',
@@ -134,7 +154,7 @@ export function KpiCard({
           )}
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">{label}</p>
         </div>
-        <DeltaBadge delta={delta} />
+        <DeltaBadge delta={delta} unit={deltaUnit} inverse={deltaInverse} />
       </div>
 
       <div className="relative flex items-end justify-between gap-4">
