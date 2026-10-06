@@ -22,11 +22,13 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getStripe } from '../_shared/stripe.ts';
 import { realEmail } from '../_shared/email-guard.ts';
 import { getFreshFx, FX_UNAVAILABLE_DETAIL } from '../_shared/fx-freshness.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { corporateFundingVerdict, type CorporateFundingVerdict } from '../_shared/corporate-funding.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -61,6 +63,28 @@ interface CreateIntentRequest {
   corporate_account_id?: string;
   device_fingerprint?: string;
   return_url_base?: string;
+}
+
+
+/** Loads what corporateFundingVerdict needs. Any lookup error counts as "not found". */
+async function checkCorporateFunding(
+  supabase: SupabaseClient,
+  accountId: string,
+  callerId: string,
+  callerIsPlatformAdmin: boolean,
+): Promise<CorporateFundingVerdict> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(accountId)) return 'not_found';
+  const [{ data: account }, { data: membership }] = await Promise.all([
+    supabase.from('corporate_accounts').select('status, created_by').eq('id', accountId).maybeSingle(),
+    supabase.from('corporate_employees').select('id')
+      .eq('corporate_account_id', accountId).eq('user_id', callerId)
+      .eq('role', 'admin').eq('is_active', true).limit(1).maybeSingle(),
+  ]);
+  return corporateFundingVerdict(callerId, {
+    account: account ? { status: String(account.status), createdBy: (account.created_by as string | null) ?? null } : null,
+    callerIsActiveCorpAdmin: !!membership,
+    callerIsPlatformAdmin,
+  });
 }
 
 Deno.serve(async (req) => {
@@ -127,6 +151,16 @@ Deno.serve(async (req) => {
     const isAdmin = roleRow && ['admin', 'super_admin'].includes(roleRow.role as string);
     if (!isAdmin && user.id !== user_id) {
       return J(403, { ok: false, error: 'forbidden', detail: 'can only recharge your own account' });
+    }
+
+    // ── Corporate recharges: only for an approved account the caller manages ──
+    // The corporate path lifts the cap to $10,000 and skips the velocity check,
+    // so it must not be open to anyone who types an account id.
+    if (isCorporate) {
+      const verdict = await checkCorporateFunding(supabase, corporate_account_id!, user.id, !!isAdmin);
+      if (verdict !== 'allowed') {
+        return J(verdict === 'not_found' ? 404 : 403, { ok: false, error: 'corporate_account_not_allowed', reason: verdict });
+      }
     }
 
     // ── Provider gate: OFF until KYC + live keys ────────────────────
