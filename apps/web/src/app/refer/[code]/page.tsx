@@ -11,7 +11,7 @@ import { useTranslation } from '@tricigo/i18n';
 // survives an OAuth round-trip.
 const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
 
-type Status = 'idle' | 'applying' | 'applied' | 'failed' | 'guest';
+type Status = 'idle' | 'applying' | 'applied' | 'source' | 'failed' | 'guest';
 
 /**
  * Web landing page for referral deep links.
@@ -75,8 +75,10 @@ export default function ReferralLandingPage() {
         // the rider knows why no bonus was credited.
         setStatus('applying');
         try {
-          await referralService.applyReferralCode(uid, code);
-          setStatus('applied');
+          // applyInviteCode (00619) also takes an acquisition code
+          // (influencer, QR bag, ...), which only records the source.
+          const result = await referralService.applyInviteCode(uid, code);
+          setStatus(result.kind === 'source' ? 'source' : 'applied');
           // Brief pause so the success state is readable, then route
           // to /book where the rider will likely act next.
           setTimeout(() => router.replace('/book'), 1800);
@@ -91,8 +93,10 @@ export default function ReferralLandingPage() {
     })();
   }, [code, router, t]);
 
+  // 'source': an acquisition code (influencer, QR bag, ...) was recorded.
+  const succeeded = status === 'applied' || status === 'source';
   const iconBg =
-    status === 'applied'
+    succeeded
       ? 'rgba(34, 197, 94, 0.12)'
       : status === 'failed'
         ? 'rgba(239, 68, 68, 0.12)'
@@ -142,12 +146,14 @@ export default function ReferralLandingPage() {
           }}
         >
           <span style={{ fontSize: '2.25rem', lineHeight: 1 }}>
-            {status === 'applied' ? '✓' : status === 'failed' ? '!' : '🎁'}
+            {succeeded ? '✓' : status === 'failed' ? '!' : '🎁'}
           </span>
         </div>
 
         <h2 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 var(--space-sm)' }}>
-          {status === 'applied'
+          {status === 'source'
+            ? t('profile.invite_code_source_applied', { ns: 'common', defaultValue: '¡Gracias! Ya sabemos cómo nos conociste.' })
+            : status === 'applied'
             ? t('refer.applied_title', { defaultValue: '¡Código aplicado!' })
             : status === 'failed'
               ? t('refer.failed_title', { defaultValue: 'No se pudo aplicar' })
@@ -155,7 +161,9 @@ export default function ReferralLandingPage() {
         </h2>
 
         <p style={{ color: 'var(--text-secondary)', margin: '0 0 var(--space-sm)', lineHeight: 1.5 }}>
-          {status === 'applied'
+          {status === 'source'
+            ? t('refer.source_desc', { defaultValue: 'Ya puedes pedir tu primer viaje.' })
+            : status === 'applied'
             ? t('refer.applied_desc', { defaultValue: 'Tu invitador recibirá su bono cuando completes tu primer viaje.' })
             : status === 'failed'
               ? (errorMsg ?? t('refer.failed_desc', { defaultValue: 'Inténtalo de nuevo más tarde.' }))
@@ -196,7 +204,7 @@ export default function ReferralLandingPage() {
             the native app — Universal Links handle the mobile case;
             on desktop the link is a no-op fallback under the visible
             web actions. */}
-        {status === 'applied' && (
+        {succeeded && (
           <Link href="/book" className="btn-base btn-primary-solid" style={primaryCtaStyle}>
             {t('refer.cta_book', { defaultValue: 'Pedir mi primer viaje' })}
           </Link>

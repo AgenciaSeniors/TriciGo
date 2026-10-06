@@ -125,7 +125,9 @@ export default function LoginPage() {
     } catch { /* ignore */ }
   }, [searchParams]);
 
-  // Apply a pending referral once the user has a session. Best-effort:
+  // Apply a pending referral once the user has a session — an influencer /
+  // channel code records the signup source, anything else goes through the
+  // friend-referral path (referralService.applyInviteCode). Best-effort:
   // failure (invalid code, self-referral, already-applied) is logged
   // and the redirect proceeds anyway, so a bad code never blocks
   // login. The stored value is cleared either way.
@@ -136,9 +138,9 @@ export default function LoginPage() {
     } catch { return; }
     if (!code) return;
     try {
-      await referralService.applyReferralCode(uid, code);
+      await referralService.applyInviteCode(uid, code);
     } catch (err) {
-      console.warn('[login] applyReferralCode failed:', err);
+      console.warn('[login] applyInviteCode failed:', err);
     } finally {
       try { sessionStorage.removeItem(PENDING_REFERRAL_KEY); } catch { /* ignore */ }
     }

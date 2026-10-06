@@ -8,9 +8,16 @@
  */
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { authService, getSupabaseClient } from '@tricigo/api';
+import { authService, getSupabaseClient, referralService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuth } from '../providers';
+
+// Mirror of LoginPage's PENDING_REFERRAL_KEY (a /refer/CODE or ?ref=CODE
+// link stashed before login).
+const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
+// What referralService.applyInviteCode throws for a code that matches
+// neither an acquisition code nor a referral code.
+const INVALID_REFERRAL_CODE_MESSAGE = 'Código de referido inválido';
 
 export default function CompleteProfilePage() {
   const router = useRouter();
@@ -21,6 +28,10 @@ export default function CompleteProfilePage() {
   const [email, setEmail] = useState('');
   // Marketing consent — unchecked by default (product decision); never gates signup.
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  // Optional "Código de invitación": an influencer/channel code or a
+  // friend's referral code (referralService.applyInviteCode decides).
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,6 +39,15 @@ export default function CompleteProfilePage() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) router.replace('/login');
   }, [isLoading, isAuthenticated, router]);
+
+  // Prefill from a pending referral/influencer link, if login has not
+  // already consumed it. Never overwrite something the user typed.
+  useEffect(() => {
+    let pending: string | null = null;
+    try { pending = sessionStorage.getItem(PENDING_REFERRAL_KEY); } catch { return; }
+    const code = pending?.trim().toUpperCase();
+    if (code) setInviteCode((current) => current || code);
+  }, []);
 
   // If the profile is already complete, don't strand the user here.
   useEffect(() => {
@@ -56,6 +76,25 @@ export default function CompleteProfilePage() {
         full_name: trimmed,
         ...(email.trim() ? { email: email.trim() } : {}),
       });
+      // Optional invite code. Only a code that does not exist keeps the user
+      // here (the name is already saved, so Continue can simply run again);
+      // any other failure (own code, already used, network) never blocks
+      // signup.
+      const code = inviteCode.trim();
+      if (code) {
+        try {
+          await referralService.applyInviteCode(uid, code);
+          try { sessionStorage.removeItem(PENDING_REFERRAL_KEY); } catch { /* ignore */ }
+        } catch (err) {
+          if (err instanceof Error && err.message === INVALID_REFERRAL_CODE_MESSAGE) {
+            setInviteError(t('profile.invite_code_invalid', {
+              defaultValue: 'Ese código no existe. Revísalo o deja el campo vacío.',
+            }));
+            return;
+          }
+          console.warn('[complete-profile] applyInviteCode failed', err);
+        }
+      }
       // Record the consent answer best-effort: a failure here must never
       // block signup (the user can still change it later in Settings).
       try {
@@ -121,6 +160,36 @@ export default function CompleteProfilePage() {
               className="input-base"
               style={{ width: '100%' }}
             />
+          </div>
+
+          <div>
+            <label htmlFor="cp-invite" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+              {t('profile.invite_code_label', { defaultValue: 'Código de invitación (opcional)' })}
+            </label>
+            <input
+              id="cp-invite"
+              type="text"
+              value={inviteCode}
+              onChange={(e) => { setInviteCode(e.target.value); setInviteError(null); }}
+              placeholder={t('profile.invite_code_placeholder', { defaultValue: 'Ej.: MOTORENKO' })}
+              className="input-base"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={inviteError ? true : undefined}
+              aria-describedby="cp-invite-msg"
+              style={{ width: '100%' }}
+            />
+            {inviteError ? (
+              <p id="cp-invite-msg" role="alert" style={{ fontSize: '0.72rem', color: 'var(--error)', margin: '0.25rem 0 0' }}>
+                {inviteError}
+              </p>
+            ) : (
+              <p id="cp-invite-msg" style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', margin: '0.25rem 0 0' }}>
+                {t('profile.invite_code_hint', { defaultValue: '¿Te lo dio un amigo o lo viste en redes? Escríbelo aquí.' })}
+              </p>
+            )}
           </div>
 
           <div>

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import Toast from 'react-native-toast-message';
 import { referralService, getSupabaseClient } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
 import { logger } from '@tricigo/utils';
@@ -15,10 +16,14 @@ const PENDING_PROMO_KEY = 'pending_promo_code';
  * the user was authenticated. After login, this hook picks them up
  * and applies them automatically.
  *
- * - Referral codes: applied via referralService.applyReferralCode()
+ * - Referral / invite codes: applied via referralService.applyInviteCode(),
+ *   which records an influencer/channel code as the signup source or applies
+ *   a friend's referral code (app/(auth)/complete-profile.tsx prefills its
+ *   invite field from the same key and removes it once it used the code)
  * - Promo codes: saved to ride store for the next ride
  */
 export function useDeepLinkHandler() {
+  const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const setPromoCode = useRideStore((s) => s.setPromoCode);
@@ -38,15 +43,24 @@ export function useDeepLinkHandler() {
         if (pendingReferral) {
           await AsyncStorage.removeItem(PENDING_REFERRAL_KEY);
           try {
-            await referralService.applyReferralCode(userId!, pendingReferral);
-            Toast.show({
-              type: 'success',
-              text1: '¡Código de referido aplicado!',
-              text2: 'Tu bono ha sido acreditado.',
-            });
+            const result = await referralService.applyInviteCode(userId!, pendingReferral);
+            if (result.kind === 'source') {
+              Toast.show({
+                type: 'success',
+                text1: t('profile.invite_code_source_applied', {
+                  defaultValue: '¡Gracias! Ya sabemos cómo nos conociste.',
+                }),
+              });
+            } else {
+              Toast.show({
+                type: 'success',
+                text1: '¡Código de referido aplicado!',
+                text2: 'Tu bono ha sido acreditado.',
+              });
+            }
           } catch (err) {
             // Silently fail — user can apply manually later
-            logger.warn('[DeepLink] Failed to apply referral:', { error: String(err) });
+            logger.warn('[DeepLink] Failed to apply invite code:', { error: String(err) });
           }
         }
       } catch {
@@ -71,7 +85,8 @@ export function useDeepLinkHandler() {
     }
 
     processPendingLinks();
-  }, [isAuthenticated, userId, setPromoCode]);
+    // `t` only changes with the language; `processed` keeps this one-shot.
+  }, [isAuthenticated, userId, setPromoCode, t]);
 
   // Handle tricigo://auth/callback — OAuth redirect from Google/Apple sign-in
   useEffect(() => {
