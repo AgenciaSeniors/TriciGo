@@ -3,7 +3,7 @@
 // Phone-based OTP authentication via Supabase Auth
 // ============================================================
 
-import type { User } from '@tricigo/types';
+import type { MarketingOptInSource, User } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { uploadFileFromUri } from './_storage-upload';
 
@@ -198,6 +198,30 @@ export const authService = {
       .select()
       .single();
     if (error) throw error;
+    return data as User;
+  },
+
+  /**
+   * Record the user's consent to marketing by WhatsApp, SMS and email (00618).
+   * The database stamps the time. Returns `null` while the consent columns do
+   * not exist yet, so a signup never fails on it: the user is asked again later.
+   */
+  async setMarketingOptIn(
+    userId: string,
+    optIn: boolean,
+    source: MarketingOptInSource,
+  ): Promise<User | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('users')
+      .update({ marketing_opt_in: optIn, marketing_opt_in_source: source })
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) {
+      if (error.code === 'PGRST204' && /marketing_opt_in/.test(error.message ?? '')) return null;
+      throw error;
+    }
     return data as User;
   },
 

@@ -54,6 +54,12 @@ export default function ReviewScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  // Optional marketing consent. Unchecked for anyone who never answered
+  // (null/undefined). A person who already answered — in the client app,
+  // which shares this users row, or on an earlier submission of this form
+  // after a rejection — sees their recorded choice, so submitting the form
+  // never silently flips it to "no".
+  const [marketingOptIn, setMarketingOptIn] = useState(() => user?.marketing_opt_in === true);
 
   // Submit gates on REQUIRED docs only — optional ones (drivers_license) never
   // block. (Also why we never compare against a hardcoded count: CC-04 reduced
@@ -101,6 +107,18 @@ export default function ReviewScreen() {
         email: personalInfo.email || null,
         phone: personalInfo.phone || undefined,
       });
+
+      // 1b. Marketing consent (optional). Written only when it differs from
+      // what is on record, so an unchanged answer keeps its original date
+      // and source. Its own try/catch: a failure here must never block the
+      // submission — a driver left at null is asked again in-app later.
+      if (user.marketing_opt_in !== marketingOptIn) {
+        try {
+          await authService.setMarketingOptIn(user.id, marketingOptIn, 'signup');
+        } catch (err) {
+          console.warn('Onboarding marketing consent error:', err);
+        }
+      }
 
       // 2. Save personal identity info to driver_profiles
       await driverService.updatePersonalInfo(driverProfileId, {
@@ -339,6 +357,44 @@ export default function ReviewScreen() {
                   {t('onboarding.read_terms', { defaultValue: 'Leer los Términos y Condiciones' })}
                 </Text>
               </Pressable>
+            </View>
+          </Pressable>
+        </Card>
+
+        {/* Optional marketing consent (WhatsApp, SMS, email). Unchecked by
+            default and never gates Submit — it is saved alongside the
+            profile in handleSubmit and can be changed later in Settings. */}
+        <Card forceDark variant="surface" padding="md" className="mb-4">
+          <Pressable
+            onPress={() => setMarketingOptIn((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: marketingOptIn }}
+            accessibilityLabel={t('profile.marketing_opt_in_label', {
+              ns: 'common',
+              defaultValue: 'Quiero recibir novedades y promociones de TriciGo por WhatsApp, SMS y correo.',
+            })}
+            hitSlop={8}
+            className="flex-row items-start gap-2"
+          >
+            <Ionicons
+              name={marketingOptIn ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={marketingOptIn ? midnightEmber.accent[500] : midnightEmber.map.text.tertiary}
+              style={{ marginTop: 1 }}
+            />
+            <View className="flex-1">
+              <Text variant="bodySmall" color="inverse">
+                {t('profile.marketing_opt_in_label', {
+                  ns: 'common',
+                  defaultValue: 'Quiero recibir novedades y promociones de TriciGo por WhatsApp, SMS y correo.',
+                })}
+              </Text>
+              <Text variant="caption" style={{ color: midnightEmber.map.text.secondary, marginTop: 4 }}>
+                {t('profile.marketing_opt_in_hint', {
+                  ns: 'common',
+                  defaultValue: 'Puedes cambiarlo cuando quieras en Ajustes.',
+                })}
+              </Text>
             </View>
           </Pressable>
         </Card>

@@ -110,6 +110,11 @@ export default function DriverSettingsScreen() {
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
   const userId = useAuthStore((s) => s.user?.id);
+  // Marketing consent (WhatsApp, SMS, email). `undefined` = cached user or a
+  // database without the column yet: the row stays hidden. `null` (never
+  // asked) shows as off until the driver chooses.
+  const marketingOptIn = useAuthStore((s) => s.user?.marketing_opt_in);
+  const setUser = useAuthStore((s) => s.setUser);
 
   // Existing state
   // Bumped on every category toggle; a load that started before the bump
@@ -119,6 +124,8 @@ export default function DriverSettingsScreen() {
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, boolean>>({});
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsLoading, setSmsLoading] = useState(false);
+  const [marketingEnabled, setMarketingEnabled] = useState(marketingOptIn === true);
+  const [marketingLoading, setMarketingLoading] = useState(false);
   const currentLang = i18n.language ?? 'es';
 
   // Matching preferences — these live in `driver_profiles.preferences`
@@ -360,6 +367,28 @@ export default function DriverSettingsScreen() {
     }
   };
 
+  // Follow the store when the answer changes elsewhere (the one-time prompt,
+  // a fresh profile fetch) — and after a save below, which setUser()s it.
+  useEffect(() => {
+    setMarketingEnabled(marketingOptIn === true);
+  }, [marketingOptIn]);
+
+  const handleMarketingToggle = async (enabled: boolean) => {
+    if (!userId) return;
+    setMarketingEnabled(enabled);
+    setMarketingLoading(true);
+    try {
+      const updated = await authService.setMarketingOptIn(userId, enabled, 'settings');
+      if (updated && useAuthStore.getState().user?.id === updated.id) setUser(updated);
+    } catch (err) {
+      // Same feedback as the SMS switch: it snaps back.
+      setMarketingEnabled(!enabled);
+      logger.warn('[DriverSettings] Failed to save marketing consent', { error: String(err) });
+    } finally {
+      setMarketingLoading(false);
+    }
+  };
+
   const handleDeleteAccount = () => {
     // BUG-Store-Readiness-Driver (DD1): invoke the shared `delete-account`
     // edge function (introduced in PR #160 for the client app). The edge
@@ -538,6 +567,38 @@ export default function DriverSettingsScreen() {
               </View>
             )}
           </Card>
+
+          {/* Marketing consent (WhatsApp, SMS, email). Its own card, not a
+              notification category: it is not push, and turning
+              notifications off must not hide it. */}
+          {!!userId && marketingOptIn !== undefined && (
+            <Card theme="light" variant="surface" padding="md" className="mt-3">
+              <SettingsRow
+                icon="megaphone-outline"
+                title={t('profile.marketing_settings_title', {
+                  defaultValue: 'Novedades por WhatsApp, SMS y correo',
+                })}
+                subtitle={t('profile.marketing_settings_subtitle', {
+                  defaultValue: 'Promociones y avisos de TriciGo fuera de la app',
+                })}
+                right={
+                  <Switch
+                    value={marketingEnabled}
+                    disabled={marketingLoading}
+                    onValueChange={handleMarketingToggle}
+                    trackColor={SWITCH_TRACK}
+                    accessibilityLabel={t('profile.marketing_settings_title', {
+                      defaultValue: 'Novedades por WhatsApp, SMS y correo',
+                    })}
+                    accessibilityState={{
+                      checked: marketingEnabled,
+                      disabled: marketingLoading,
+                    }}
+                  />
+                }
+              />
+            </Card>
+          )}
 
           {/* Overlay permission (Android): auto-launch on offer + floating bubble.
               Gated on module presence — on an old APK (OTA JS) the row would

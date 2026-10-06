@@ -19,6 +19,8 @@ export default function CompleteProfilePage() {
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  // Marketing consent — unchecked by default (product decision); never gates signup.
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +56,13 @@ export default function CompleteProfilePage() {
         full_name: trimmed,
         ...(email.trim() ? { email: email.trim() } : {}),
       });
+      // Record the consent answer best-effort: a failure here must never
+      // block signup (the user can still change it later in Settings).
+      try {
+        await authService.setMarketingOptIn(uid, marketingOptIn, 'signup');
+      } catch (err) {
+        console.warn('[complete-profile] setMarketingOptIn failed', err);
+      }
       router.push('/book');
     } catch {
       setError(t('errors.generic', { defaultValue: 'Algo salió mal. Intenta de nuevo.' }));
@@ -112,6 +121,23 @@ export default function CompleteProfilePage() {
               className="input-base"
               style={{ width: '100%' }}
             />
+          </div>
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={marketingOptIn}
+                onChange={(e) => setMarketingOptIn(e.target.checked)}
+                style={{ marginTop: '0.2rem', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                {t('profile.marketing_opt_in_label', { defaultValue: 'Quiero recibir novedades y promociones de TriciGo por WhatsApp, SMS y correo.' })}
+              </span>
+            </label>
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', margin: '0.25rem 0 0', paddingLeft: '1.5rem' }}>
+              {t('profile.marketing_opt_in_hint', { defaultValue: 'Puedes cambiarlo cuando quieras en Ajustes.' })}
+            </p>
           </div>
 
           {error && <p role="alert" aria-live="assertive" style={{ color: 'var(--error)', fontSize: '0.875rem', textAlign: 'center' }}>{error}</p>}

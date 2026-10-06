@@ -52,6 +52,12 @@ export default function SettingsScreen() {
   const [categoryPrefs, setCategoryPrefs] = useState<Partial<Record<ServerNotifPref, boolean>>>({});
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsLoading, setSmsLoading] = useState(false);
+  // Optimistic override for the marketing-consent switch while a save is in
+  // flight; null = show what the profile in the store says.
+  const [marketingPending, setMarketingPending] = useState<boolean | null>(null);
+  // `undefined` = cached profile or a DB without the column: hide the row.
+  const showMarketingRow = !!user && user.marketing_opt_in !== undefined;
+  const marketingEnabled = marketingPending ?? (user?.marketing_opt_in === true);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const currentLang = (i18n.language ?? 'es') as Language;
@@ -214,6 +220,21 @@ export default function SettingsScreen() {
     // switch on: useNotificationSetup retries on the next foreground.
   };
 
+  const handleMarketingToggle = async (enabled: boolean) => {
+    if (!user) return;
+    setMarketingPending(enabled);
+    try {
+      const updated = await authService.setMarketingOptIn(user.id, enabled, 'settings');
+      if (updated) setUser(updated);
+    } catch (err) {
+      // Same feedback as the SMS switch: it flips back. Clearing the
+      // override below shows the stored value again.
+      logger.warn('[Settings] Failed to update marketing consent:', { error: String(err) });
+    } finally {
+      setMarketingPending(null);
+    }
+  };
+
   const handleCategoryToggle = useCallback(async (key: ServerNotifPref, enabled: boolean) => {
     // Invalidate any load already in flight — its data predates this choice.
     prefsGenerationRef.current += 1;
@@ -323,7 +344,7 @@ export default function SettingsScreen() {
             tint="#FF4D00"
             label={t('profile.notif_sms')}
             subtitle={t('profile.notif_sms_desc')}
-            isLast
+            isLast={!showMarketingRow}
             right={
               <Switch
                 value={smsEnabled}
@@ -346,6 +367,28 @@ export default function SettingsScreen() {
               />
             }
           />
+          {/* Marketing consent (WhatsApp, SMS, email) */}
+          {showMarketingRow && (
+            <ProfileRow
+              icon="megaphone-outline"
+              tint="#FF4D00"
+              label={t('profile.marketing_settings_title', { defaultValue: 'Novedades por WhatsApp, SMS y correo' })}
+              subtitle={t('profile.marketing_settings_subtitle', {
+                defaultValue: 'Promociones y avisos de TriciGo fuera de la app',
+              })}
+              isLast
+              right={
+                <Switch
+                  value={marketingEnabled}
+                  disabled={marketingPending !== null}
+                  onValueChange={handleMarketingToggle}
+                  trackColor={{ false: tokens.line, true: tokens.accent.orange }}
+                  thumbColor="#FFFFFF"
+                  ios_backgroundColor={tokens.line}
+                />
+              }
+            />
+          )}
         </ProfileSection>
 
         {/* Privacy & safety */}

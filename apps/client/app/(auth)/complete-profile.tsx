@@ -11,6 +11,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
+import { logger } from '@tricigo/utils';
 import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
@@ -43,6 +44,9 @@ export default function CompleteProfileScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
+  // Marketing consent starts UNCHECKED: it must be an active choice, and it
+  // never gates the Continue button.
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
 
   // Recovery: if Android killed the app while the avatar camera/gallery was
   // open (common on low-RAM devices — the user sees the app "go back"), pick
@@ -150,8 +154,18 @@ export default function CompleteProfileScreen() {
         full_name: trimmed,
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       });
+      // Record the answer either way, so a "no" here is not asked again by
+      // the in-app prompt. Best-effort: a failure (or a DB without the
+      // columns, which returns null) must never block sign-up — the user is
+      // then simply asked later, in-app.
+      let withConsent: typeof updated | null = null;
+      try {
+        withConsent = await authService.setMarketingOptIn(user.id, marketingOptIn, 'signup');
+      } catch (err) {
+        logger.warn('[CompleteProfile] Failed to save marketing consent', { error: String(err) });
+      }
       // Update store — the auth guard in _layout.tsx will redirect to (tabs)
-      setUser(updated);
+      setUser(withConsent ?? updated);
     } catch {
       Alert.alert(t('error'), t('errors.generic'));
     } finally {
@@ -225,6 +239,36 @@ export default function CompleteProfileScreen() {
               {t('profile.name_min_hint', { defaultValue: 'Necesitamos al menos 2 letras para identificarte.' })}
             </Text>
           )}
+
+          {/* Marketing consent (WhatsApp, SMS, email). Optional and
+              unchecked by default — it does not gate Continue. */}
+          <Pressable
+            onPress={() => setMarketingOptIn((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: marketingOptIn }}
+            accessibilityLabel={t('profile.marketing_opt_in_label', {
+              defaultValue: 'Quiero recibir novedades y promociones de TriciGo por WhatsApp, SMS y correo.',
+            })}
+            hitSlop={8}
+            className="flex-row items-start gap-2 mt-4"
+          >
+            <Ionicons
+              name={marketingOptIn ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={marketingOptIn ? colors.brand.orange : isDark ? darkColors.text.secondary : colors.neutral[400]}
+              style={{ marginTop: 1 }}
+            />
+            <View className="flex-1">
+              <Text variant="bodySmall">
+                {t('profile.marketing_opt_in_label', {
+                  defaultValue: 'Quiero recibir novedades y promociones de TriciGo por WhatsApp, SMS y correo.',
+                })}
+              </Text>
+              <Text variant="caption" color="tertiary" className="mt-1">
+                {t('profile.marketing_opt_in_hint', { defaultValue: 'Puedes cambiarlo cuando quieras en Ajustes.' })}
+              </Text>
+            </View>
+          </Pressable>
 
           <Button
             title={t('continue', { defaultValue: 'Continuar' })}
