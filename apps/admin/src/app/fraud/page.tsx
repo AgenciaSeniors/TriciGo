@@ -15,8 +15,8 @@ import { formatAdminDate } from '@/lib/formatDate';
 type Filter = 'unresolved' | 'all';
 
 const SEVERITY_CLASS: Record<string, string> = {
-  low: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  low: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
+  medium: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
   high: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
   critical: 'bg-red-600 text-white',
 };
@@ -120,11 +120,11 @@ export default function FraudAlertsPage() {
         header: t('fraud.col_status', { defaultValue: 'Estado' }),
         cell: (a) =>
           a.resolved ? (
-            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
               {t('fraud.status_resolved', { defaultValue: 'Resuelta' })}
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+            <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-400">
               {t('fraud.status_pending', { defaultValue: 'Pendiente' })}
             </span>
           ),

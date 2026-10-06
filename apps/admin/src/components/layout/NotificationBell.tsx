@@ -131,7 +131,7 @@ export function NotificationBell() {
                 role="menuitem"
                 className="flex items-start gap-2.5 border-b border-line/60 px-3 py-2.5 hover:bg-surface-sunken"
               >
-                <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
+                <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-700 dark:text-red-400">
                   <Siren className="h-3.5 w-3.5" strokeWidth={2.2} />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -153,7 +153,7 @@ export function NotificationBell() {
                 role="menuitem"
                 className="flex items-center gap-2.5 border-b border-line/60 px-3 py-2.5 hover:bg-surface-sunken"
               >
-                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
+                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-700 dark:text-red-400">
                   <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -164,7 +164,7 @@ export function NotificationBell() {
                     {t('notifications_bell.incidents_body', { defaultValue: 'Requieren revisión' })}
                   </p>
                 </div>
-                <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-600 dark:text-red-400">
+                <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:text-red-400">
                   {metrics.open_incidents}
                 </span>
               </Link>
@@ -178,7 +178,7 @@ export function NotificationBell() {
                 role="menuitem"
                 className="flex items-center gap-2.5 border-b border-line/60 px-3 py-2.5 hover:bg-surface-sunken"
               >
-                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400">
                   <UserCheck className="h-3.5 w-3.5" strokeWidth={2} />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -189,7 +189,7 @@ export function NotificationBell() {
                     {t('notifications_bell.pending_drivers_body', { defaultValue: 'Esperan aprobación' })}
                   </p>
                 </div>
-                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
                   {metrics.pending_verifications}
                 </span>
               </Link>

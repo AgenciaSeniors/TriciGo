@@ -25,9 +25,9 @@ function questState(q: Quest): QuestState {
 }
 
 const STATE_CLASS: Record<QuestState, string> = {
-  active: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  active: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
   expired: 'bg-surface-sunken text-ink-muted',
-  inactive: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  inactive: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
 };
 
 export default function QuestsPage() {
@@ -182,7 +182,7 @@ export default function QuestsPage() {
         id: 'quest_type',
         header: t('quests.col_type', { defaultValue: 'Tipo' }),
         cell: (q) => (
-          <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
+          <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-400">
             {questTypeLabel(q.quest_type)}
           </span>
         ),

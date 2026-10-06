@@ -17,8 +17,8 @@ type Filter = TicketStatus | 'all';
 
 const PRIORITY_CLASS: Record<string, string> = {
   low: 'bg-surface-sunken text-ink-muted',
-  normal: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  high: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  normal: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
+  high: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
   urgent: 'bg-red-600 text-white',
 };
 
@@ -298,7 +298,7 @@ export default function SupportPage() {
                     {selected.status !== 'resolved' && (
                       <button
                         onClick={() => void handleStatusChange(selected.id, 'resolved')}
-                        className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400"
+                        className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-400"
                       >
                         {t('support.btn_resolve', { defaultValue: 'Resolver' })}
                       </button>

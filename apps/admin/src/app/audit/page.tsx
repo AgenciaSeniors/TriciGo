@@ -68,7 +68,7 @@ export default function AuditPage() {
         id: 'action',
         header: t('audit.col_action', { defaultValue: 'Acción' }),
         cell: (a) => (
-          <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400">
+          <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-400">
             {actionLabel(a.action)}
           </span>
         ),

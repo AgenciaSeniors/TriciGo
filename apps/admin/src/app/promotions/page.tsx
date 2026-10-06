@@ -413,7 +413,7 @@ export default function PromotionsAdminPage() {
         header: t('promotions.col_status', { defaultValue: 'Estado' }),
         cell: (p) =>
           p.is_active ? (
-            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
               {t('promotions.status_active', { defaultValue: 'Activa' })}
             </span>
           ) : (

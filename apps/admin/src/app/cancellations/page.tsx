@@ -40,16 +40,16 @@ function riskLevel(score: number): RiskLevel {
 
 const RISK_CLASS: Record<RiskLevel, string> = {
   critical: 'bg-red-600 text-white',
-  high: 'bg-red-500/10 text-red-600 dark:text-red-400',
-  medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  high: 'bg-red-500/10 text-red-700 dark:text-red-400',
+  medium: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
   low: 'bg-surface-sunken text-ink-muted',
 };
 
 const STATUS_CLASS: Record<string, string> = {
-  pending: 'bg-red-500/10 text-red-600 dark:text-red-400',
-  reviewed: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  sanctioned: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  dismissed: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  pending: 'bg-red-500/10 text-red-700 dark:text-red-400',
+  reviewed: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
+  sanctioned: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  dismissed: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
 };
 
 export default function CancellationReviewsPage() {

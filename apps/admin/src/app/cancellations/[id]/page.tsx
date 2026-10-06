@@ -226,7 +226,7 @@ export default function CancellationReviewDetailPage() {
                       : t('cancellations.reason_none', { defaultValue: 'sin motivo' })}
                   </span>
                   {r.driver_gps_status && r.driver_gps_status !== 'active' && (
-                    <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">GPS: {r.driver_gps_status}</span>
+                    <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-700 dark:text-amber-400">GPS: {r.driver_gps_status}</span>
                   )}
                 </div>
                 <span className="text-xs text-ink-subtle">{formatAdminDate(r.canceled_at)}</span>

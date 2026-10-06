@@ -369,8 +369,8 @@ function ItemDetail({
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                   item.driver_found
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                    : 'bg-red-500/10 text-red-700 dark:text-red-400'
                 }`}
               >
                 {item.driver_found ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
