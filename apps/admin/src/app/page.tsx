@@ -425,7 +425,7 @@ export default function DashboardPage() {
 function toneBadge(tone: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'info') {
   switch (tone) {
     case 'primary':
-      return 'bg-primary-500/10 text-primary-600 dark:text-primary-400';
+      return 'bg-primary-500/10 text-primary-700 dark:text-primary-400';
     case 'success':
       return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
     case 'warning':
