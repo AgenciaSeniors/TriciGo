@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { View, Alert, Pressable, ActionSheetIOS, Platform, KeyboardAvoidingView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Alert, Pressable, ActionSheetIOS, Platform, KeyboardAvoidingView, ScrollView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +11,7 @@ import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
-import { authService } from '@tricigo/api';
+import { authService, referralService } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
 import { colors, darkColors } from '@tricigo/theme';
 import { useAuthStore } from '@/stores/auth.store';
@@ -25,6 +26,12 @@ import {
 } from '@/lib/cameraRecovery';
 
 const RECOVERY_FLOW = 'avatar-complete';
+// Written by app/refer/[code].tsx when a referral/influencer link opens
+// before login; useDeepLinkHandler applies it after auth.
+const PENDING_REFERRAL_KEY = 'pending_referral_code';
+// What referralService.applyInviteCode throws for a code that matches
+// neither an acquisition code nor a referral code.
+const INVALID_REFERRAL_CODE_MESSAGE = 'Código de referido inválido';
 
 interface PendingCrop {
   uri: string;
@@ -47,6 +54,29 @@ export default function CompleteProfileScreen() {
   // Marketing consent starts UNCHECKED: it must be an active choice, and it
   // never gates the Continue button.
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  // Optional "Código de invitación": an influencer/channel code or a
+  // friend's referral code (referralService.applyInviteCode decides).
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  // The pending deep-link code the field was prefilled with, if any.
+  const pendingInviteRef = useRef<string | null>(null);
+
+  // Prefill from a deep link opened before login (tricigo.com/refer/CODE).
+  // The key is NOT removed here: useDeepLinkHandler owns it, and this
+  // screen only removes it once it has used (or dropped) the code itself.
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(PENDING_REFERRAL_KEY)
+      .then((pending) => {
+        const code = pending?.trim().toUpperCase();
+        if (cancelled || !code) return;
+        pendingInviteRef.current = code;
+        // Never overwrite something the user already typed.
+        setInviteCode((current) => current || code);
+      })
+      .catch(() => { /* non-critical: the field just starts empty */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Recovery: if Android killed the app while the avatar camera/gallery was
   // open (common on low-RAM devices — the user sees the app "go back"), pick
@@ -154,6 +184,31 @@ export default function CompleteProfileScreen() {
         full_name: trimmed,
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       });
+      // Optional invite code. Only a code that does not exist keeps the user
+      // here (the name is already saved, so Continue can simply run again);
+      // any other failure (own code, already used, network) never blocks
+      // sign-up.
+      const code = inviteCode.trim();
+      if (code) {
+        try {
+          await referralService.applyInviteCode(user.id, code);
+          // Used here, so the post-login deep-link handler must not apply
+          // a stored code again on a later launch.
+          AsyncStorage.removeItem(PENDING_REFERRAL_KEY).catch(() => {});
+        } catch (err) {
+          if (err instanceof Error && err.message === INVALID_REFERRAL_CODE_MESSAGE) {
+            setInviteError(t('profile.invite_code_invalid', {
+              defaultValue: 'Ese código no existe. Revísalo o deja el campo vacío.',
+            }));
+            return;
+          }
+          logger.warn('[CompleteProfile] Failed to apply invite code', { error: String(err) });
+        }
+      } else if (pendingInviteRef.current) {
+        // The user cleared the prefilled code: respect that, instead of the
+        // deep-link handler applying it on the next launch.
+        AsyncStorage.removeItem(PENDING_REFERRAL_KEY).catch(() => {});
+      }
       // Record the answer either way, so a "no" here is not asked again by
       // the in-app prompt. Best-effort: a failure (or a DB without the
       // columns, which returns null) must never block sign-up — the user is
@@ -187,7 +242,13 @@ export default function CompleteProfileScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
-        <View className="flex-1 justify-center px-6">
+        {/* Scrollable so the Continue button stays reachable on short screens
+            with the keyboard open (the invite-code field made it taller). */}
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* Welcome icon */}
           <View
             className="w-20 h-20 rounded-full items-center justify-center mb-6"
@@ -240,6 +301,22 @@ export default function CompleteProfileScreen() {
             </Text>
           )}
 
+          {/* Optional invite code (influencer, channel or a friend's
+              referral). The hint gives way to the error when the code
+              does not exist. */}
+          <Input
+            label={t('profile.invite_code_label', { defaultValue: 'Código de invitación (opcional)' })}
+            placeholder={t('profile.invite_code_placeholder', { defaultValue: 'Ej.: MOTORENKO' })}
+            value={inviteCode}
+            onChangeText={(v) => { setInviteCode(v); setInviteError(null); }}
+            hint={t('profile.invite_code_hint', { defaultValue: '¿Te lo dio un amigo o lo viste en redes? Escríbelo aquí.' })}
+            error={inviteError ?? undefined}
+            leftIcon={<Ionicons name="gift-outline" size={20} color={isDark ? darkColors.text.secondary : colors.neutral[400]} />}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            className="mt-2"
+          />
+
           {/* Marketing consent (WhatsApp, SMS, email). Optional and
               unchecked by default — it does not gate Continue. */}
           <Pressable
@@ -286,7 +363,7 @@ export default function CompleteProfileScreen() {
               the form (irreversible: name gets bound to current account)
               or reinstall the app. */}
           <SwitchAccountFooter />
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
 
       <AvatarCropModal

@@ -191,6 +191,79 @@ describe('referralService', () => {
     });
   });
 
+  describe('applyInviteCode', () => {
+    function mockReferralFetch(referral: Record<string, unknown>) {
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: referral, error: null }),
+          }),
+        }),
+        insert: mockInsert,
+      });
+    }
+
+    it('records an acquisition code and does not touch referrals', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'applied', error: null });
+
+      const result = await referralService.applyInviteCode('user-1', '  motorenko ');
+
+      expect(result).toEqual({ kind: 'source', code: 'MOTORENKO', alreadySet: false });
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockRpc).toHaveBeenCalledWith('apply_signup_code', { p_code: 'MOTORENKO' });
+    });
+
+    it('reports an acquisition code that was already set', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'already_set', error: null });
+
+      await expect(referralService.applyInviteCode('user-1', 'BOLSAS-VEDADO')).resolves.toEqual({
+        kind: 'source',
+        code: 'BOLSAS-VEDADO',
+        alreadySet: true,
+      });
+    });
+
+    it("falls back to a friend's referral code when it is not an acquisition code", async () => {
+      const referral = { id: 'ref-1', referrer_id: 'friend', referee_id: 'user-1', code: 'CAFE1234', status: 'pending' };
+      mockRpc
+        .mockResolvedValueOnce({ data: 'not_found', error: null })
+        .mockResolvedValueOnce({ data: 'ref-1', error: null });
+      mockReferralFetch(referral);
+
+      const result = await referralService.applyInviteCode('user-1', 'cafe1234');
+
+      expect(mockRpc).toHaveBeenNthCalledWith(1, 'apply_signup_code', { p_code: 'CAFE1234' });
+      expect(mockRpc).toHaveBeenNthCalledWith(2, 'apply_referral_code', { p_code: 'CAFE1234' });
+      expect(result).toEqual({ kind: 'referral', referral });
+    });
+
+    it('keeps the referral error messages when the code is neither', async () => {
+      mockRpc
+        .mockResolvedValueOnce({ data: 'not_found', error: null })
+        .mockResolvedValueOnce({ data: null, error: { code: 'P0001', message: 'Codigo de referido invalido' } });
+
+      await expect(referralService.applyInviteCode('user-1', 'NOPE')).rejects.toThrow('Código de referido inválido');
+    });
+
+    it('treats the code as a referral while apply_signup_code does not exist yet (00619 not applied)', async () => {
+      const referral = { id: 'ref-2', referrer_id: 'friend', referee_id: 'user-1', code: 'CAFE1234', status: 'pending' };
+      mockRpc
+        .mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.apply_signup_code(p_code)' } })
+        .mockResolvedValueOnce({ data: 'ref-2', error: null });
+      mockReferralFetch(referral);
+
+      await expect(referralService.applyInviteCode('user-1', 'CAFE1234')).resolves.toEqual({ kind: 'referral', referral });
+    });
+
+    it('throws any other error from apply_signup_code', async () => {
+      const err = { code: '28000', message: 'Authentication required' };
+      mockRpc.mockResolvedValueOnce({ data: null, error: err });
+
+      await expect(referralService.applyInviteCode('user-1', 'MOTORENKO')).rejects.toEqual(err);
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('getReferralHistory', () => {
     it('returns referrals where user is referrer', async () => {
       const mockHistory = [

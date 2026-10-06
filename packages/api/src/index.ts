@@ -34,6 +34,15 @@ export { matchingService } from './services/matching.service';
 export { fraudService } from './services/fraud.service';
 export { supportService } from './services/support.service';
 export { referralService } from './services/referral.service';
+export type { InviteCodeResult } from './services/referral.service';
+export { acquisitionCodeService, ACQUISITION_CODE_PATTERN, normalizeAcquisitionCode } from './services/acquisition-code.service';
+export type {
+  AcquisitionCode,
+  AcquisitionCodeStats,
+  AcquisitionChannel,
+  AcquisitionAudience,
+  NewAcquisitionCode,
+} from './services/acquisition-code.service';
 export { deliveryService, DELIVERY_OTP_LOCKOUT_SECONDS } from './services/delivery.service';
 export type { DeliveryDetails, PublicDeliveryView, ValidateOtpResult, CreateDeliveryParams } from './services/delivery.service';
 export { nearbyService } from './services/nearby.service';

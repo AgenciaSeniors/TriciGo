@@ -7,7 +7,8 @@ import { registerWebLoginDevice } from '@/lib/webDevice';
 
 // Mirror of LoginPage's PENDING_REFERRAL_KEY — the referral code may
 // have been stashed before the OAuth round-trip, and now (with a
-// session in hand) is the right time to redeem it.
+// session in hand) is the right time to redeem it. applyInviteCode
+// also accepts influencer / channel codes (records the signup source).
 const PENDING_REFERRAL_KEY = 'tricigo_pending_referral';
 
 // Mirror of LoginPage's RETURN_TO_KEY: the OAuth round-trip must land the
@@ -30,9 +31,9 @@ async function applyPendingReferralIfAny(uid: string): Promise<void> {
   try { code = sessionStorage.getItem(PENDING_REFERRAL_KEY); } catch { return; }
   if (!code) return;
   try {
-    await referralService.applyReferralCode(uid, code);
+    await referralService.applyInviteCode(uid, code);
   } catch (err) {
-    console.warn('[auth/callback] applyReferralCode failed:', err);
+    console.warn('[auth/callback] applyInviteCode failed:', err);
   } finally {
     try { sessionStorage.removeItem(PENDING_REFERRAL_KEY); } catch { /* ignore */ }
   }

@@ -14,6 +14,7 @@ import { useDriverStore } from '@/stores/driver.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useLogout } from '@/hooks/useLogout';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
+import { inviteCodeErrorMessage } from '@/utils/inviteCode';
 
 // Central support contact. Update here if ops phone/whatsapp changes.
 const SUPPORT_WHATSAPP = '+5356621636'; // Support contact (WhatsApp / phone)
@@ -58,10 +59,13 @@ export default function PendingScreen() {
   // in personal-info / vehicle-info / documents / review.
   const doLogout = useLogout();
 
-  // Referral reminder (marketing audit 2026-07-02): the reward trigger only
-  // fires on the transition to 'approved' — a code applied after approval
-  // stays pending forever. This is the driver's LAST chance to apply it, so
-  // surface an inline entry while they wait. Hidden once a code is applied.
+  // Invite code reminder (marketing audit 2026-07-02, 00619): the same
+  // optional "Código de invitación" as the personal-info step — an
+  // acquisition code (influencer, QR bag, driver group) or a friend's
+  // referral code. Since 00615 the driver-referral bonus pays on the driver's
+  // FIRST COMPLETED RIDE, and a code applied after the driver has already
+  // completed rides never pays, so the wait for approval is a good last
+  // moment to ask. Hidden once a code is applied.
   const [hasReferral, setHasReferral] = useState(true); // assume yes until checked (avoids flicker)
   const [referralInput, setReferralInput] = useState('');
   const [referralApplying, setReferralApplying] = useState(false);
@@ -79,18 +83,34 @@ export default function PendingScreen() {
     if (!user?.id || !referralInput.trim() || referralApplying) return;
     setReferralApplying(true);
     try {
-      await referralService.applyReferralCode(user.id, referralInput.trim());
+      const result = await referralService.applyInviteCode(user.id, referralInput.trim());
       setHasReferral(true);
-      Toast.show({
-        type: 'success',
-        text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
-        text2: t('onboarding.referral_applied_body', { defaultValue: 'El bono se acreditará cuando completes tu primer viaje.' }),
-      });
+      Toast.show(
+        result.kind === 'source'
+          ? {
+              type: 'success',
+              text1: t('profile.invite_code_source_applied', {
+                ns: 'common',
+                defaultValue: '¡Gracias! Ya sabemos cómo nos conociste.',
+              }),
+            }
+          : {
+              type: 'success',
+              text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
+              text2: t('onboarding.referral_applied_body', { defaultValue: 'El bono se acreditará cuando completes tu primer viaje.' }),
+            },
+      );
     } catch (err) {
       Toast.show({
         type: 'error',
         text1: t('onboarding.referral_error', { defaultValue: 'No se pudo aplicar el código' }),
-        text2: err instanceof Error ? err.message : undefined,
+        text2: inviteCodeErrorMessage(
+          err,
+          t('profile.invite_code_invalid', {
+            ns: 'common',
+            defaultValue: 'Ese código no existe. Revísalo o deja el campo vacío.',
+          }),
+        ),
       });
     } finally {
       setReferralApplying(false);
@@ -271,23 +291,23 @@ export default function PendingScreen() {
           {t('onboarding.checking_status', { defaultValue: 'Verificando estado automaticamente...' })}
         </Text>
 
-        {/* Last-chance referral entry — the bonus only pays if the code is
-             applied BEFORE approval (trigger fires on the status transition). */}
+        {/* Invite code entry — a friend's referral only pays if the code is
+             applied before the driver's first completed ride (00615). */}
         {!hasReferral && (
           <View
             className="w-full mt-6 rounded-xl px-4 py-3"
             style={{ backgroundColor: midnightEmber.map.bg.surface }}
           >
             <Text variant="bodySmall" color="inverse">
-              {t('onboarding.referral_title', { defaultValue: '¿Te invitó alguien? (opcional)' })}
+              {t('profile.invite_code_label', { ns: 'common', defaultValue: 'Código de invitación (opcional)' })}
             </Text>
             <Text variant="caption" className="mt-1 opacity-60" style={{ color: midnightEmber.map.text.secondary }}>
-              {t('onboarding.referral_pending_hint', { defaultValue: 'Aplica el código de referido ahora — después de tu primer viaje ya no suma el bono.' })}
+              {t('profile.invite_code_hint', { ns: 'common', defaultValue: '¿Te lo dio un amigo o lo viste en redes? Escríbelo aquí.' })}
             </Text>
             <View className="mt-2">
               <Input
                 label=""
-                placeholder={t('onboarding.referral_placeholder', { defaultValue: 'Código de referido' })}
+                placeholder={t('profile.invite_code_placeholder', { ns: 'common', defaultValue: 'Ej.: MOTORENKO' })}
                 value={referralInput}
                 onChangeText={setReferralInput}
                 autoCapitalize="characters"

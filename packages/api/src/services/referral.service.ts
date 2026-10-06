@@ -31,6 +31,11 @@ function isMissingFunctionError(error: { code?: string; message?: string } | nul
   return !!error.message && /could not find the function/i.test(error.message);
 }
 
+/** What an invite code turned out to be (see applyInviteCode). */
+export type InviteCodeResult =
+  | { kind: 'source'; code: string; alreadySet: boolean }
+  | { kind: 'referral'; referral: Referral };
+
 export const referralService = {
   /**
    * Get or generate a referral code for the user.
@@ -103,6 +108,28 @@ export const referralService = {
     }
 
     throw new Error('Código de referido inválido');
+  },
+
+  /**
+   * Apply the optional "Código de invitación" typed at signup (00619). It is
+   * either an acquisition code created in the admin (an influencer, a QR bag,
+   * a driver group), which only records where the user came from, or a
+   * friend's referral code, which keeps paying its bonus. Acquisition codes
+   * are checked first; anything else goes through applyReferralCode and keeps
+   * its error messages. While 00619 is not applied, every code is a referral.
+   */
+  async applyInviteCode(userId: string, code: string): Promise<InviteCodeResult> {
+    const supabase = getSupabaseClient();
+    const normalizedCode = code.trim().toUpperCase();
+
+    const { data, error } = await supabase.rpc('apply_signup_code', { p_code: normalizedCode });
+    if (error && !isMissingFunctionError(error)) throw error;
+    if (!error && (data === 'applied' || data === 'already_set')) {
+      return { kind: 'source', code: normalizedCode, alreadySet: data === 'already_set' };
+    }
+
+    const referral = await referralService.applyReferralCode(userId, normalizedCode);
+    return { kind: 'referral', referral };
   },
 
   /**

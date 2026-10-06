@@ -7,8 +7,10 @@ import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { referralService } from '@tricigo/api';
+import type { InviteCodeResult } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { midnightEmber } from '@tricigo/theme';
+import { inviteCodeErrorMessage } from '@/utils/inviteCode';
 
 // Same storage key the onboarding personal-info step reads (duplicated
 // there — route files shouldn't be imported from).
@@ -20,7 +22,11 @@ const PENDING_REFERRAL_KEY = 'pending_referral_code';
  * links opened as 404 for driver candidates).
  * URL: tricigo-driver://refer/{code} or https://tricigo.com/refer/{code}
  *
- * If authenticated: applies the referral code immediately.
+ * The code goes through referralService.applyInviteCode (00619), so the same
+ * link works for a friend's referral code and for an acquisition code
+ * (influencer, QR bag, driver group).
+ *
+ * If authenticated: applies the code immediately.
  * If not: stashes the code in AsyncStorage; the onboarding personal-info
  * step picks it up and applies it after login.
  */
@@ -29,7 +35,7 @@ export default function ReferralDeepLinkScreen() {
   const { t } = useTranslation('common');
   const userId = useAuthStore((s) => s.user?.id);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const [applied, setApplied] = useState(false);
+  const [applied, setApplied] = useState<InviteCodeResult['kind'] | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -48,14 +54,17 @@ export default function ReferralDeepLinkScreen() {
 
     async function apply() {
       try {
-        await referralService.applyReferralCode(userId!, code!);
+        const result = await referralService.applyInviteCode(userId!, code!);
         if (!cancelled) {
-          setApplied(true);
+          setApplied(result.kind);
           setTimeout(() => router.replace('/(tabs)'), 2000);
         }
       } catch (err) {
         if (!cancelled) {
-          const msg = err instanceof Error ? err.message : t('profile.referral_error');
+          const msg = inviteCodeErrorMessage(
+            err,
+            t('profile.invite_code_invalid', { defaultValue: 'Ese código no existe. Revísalo o deja el campo vacío.' }),
+          ) ?? t('profile.referral_error');
           setError(msg);
         }
       }
@@ -72,12 +81,20 @@ export default function ReferralDeepLinkScreen() {
           <View className="w-20 h-20 rounded-full bg-success items-center justify-center mb-4">
             <Text variant="h1" color="inverse">✓</Text>
           </View>
-          <Text variant="h3" color="inverse" className="mb-2">
-            {t('profile.referral_success_title', { defaultValue: '¡Código aplicado!' })}
-          </Text>
-          <Text variant="body" color="secondary" className="text-center" style={{ color: midnightEmber.map.text.secondary }}>
-            {t('profile.referral_success_message', { defaultValue: 'Tu bono de referido ha sido aplicado.' })}
-          </Text>
+          {applied === 'source' ? (
+            <Text variant="h3" color="inverse" className="mb-2 text-center">
+              {t('profile.invite_code_source_applied', { defaultValue: '¡Gracias! Ya sabemos cómo nos conociste.' })}
+            </Text>
+          ) : (
+            <>
+              <Text variant="h3" color="inverse" className="mb-2">
+                {t('profile.referral_success_title', { defaultValue: '¡Código aplicado!' })}
+              </Text>
+              <Text variant="body" color="secondary" className="text-center" style={{ color: midnightEmber.map.text.secondary }}>
+                {t('profile.referral_success_message', { defaultValue: 'Tu bono de referido ha sido aplicado.' })}
+              </Text>
+            </>
+          )}
         </View>
       </Screen>
     );

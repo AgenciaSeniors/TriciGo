@@ -147,6 +147,7 @@
     "failed_title": "Could not apply",
     "invited_title": "You've been invited to TriciGo!",
     "applied_desc": "Your inviter will receive their bonus when you complete your first ride.",
+    "source_desc": "You can book your first ride now.",
     "failed_desc": "Please try again later.",
     "applying": "Applying code...",
     "invited_desc": "When you complete your first ride, your inviter will receive a TriciCoins bonus.",

@@ -14,10 +14,12 @@ import { AnimatedCard } from '@tricigo/ui/AnimatedCard';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { authService, isRateLimitError, referralService } from '@tricigo/api';
+import type { InviteCodeResult } from '@tricigo/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
 import { SwitchAccountFooter } from '@/components/onboarding/SwitchAccountFooter';
+import { inviteCodeErrorMessage } from '@/utils/inviteCode';
 import { isValidEmail, sanitizeText, isValidCubanId, isValidCubanPhone, normalizeCubanPhone, isValidOTP, CUBA_PROVINCES, CUBA_MUNICIPALITIES, realEmail } from '@tricigo/utils';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 
@@ -163,13 +165,19 @@ export default function PersonalInfoScreen() {
   const [hasCriminalRecord, setHasCriminalRecord] = useState(personalInfo.has_criminal_record || false);
   const [criminalDetails, setCriminalDetails] = useState(personalInfo.criminal_record_details || '');
 
-  // Referral capture (marketing audit 2026-07-02): a referred driver must
-  // apply the code BEFORE approval — the reward trigger only fires on the
-  // transition to 'approved', so a code applied later stays pending forever.
-  // This optional field closes that window during onboarding.
-  const [referralCode, setReferralCode] = useState('');
-  const [referralApplied, setReferralApplied] = useState(false);
-  const [referralApplying, setReferralApplying] = useState(false);
+  // Optional "Código de invitación" (00619): either an acquisition code
+  // (influencer, QR bag, driver group), which only records how the driver
+  // found us, or a friend's referral code. A referral pays its bonus on the
+  // driver's first completed ride (00615), and a code applied after the driver
+  // has already completed rides never pays, so onboarding is where to ask.
+  // Leaving the field empty never blocks the step.
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteApplied, setInviteApplied] = useState<InviteCodeResult['kind'] | null>(null);
+  const [inviteApplying, setInviteApplying] = useState(false);
+
+  const inviteSourceAppliedText = tc('profile.invite_code_source_applied', {
+    defaultValue: '¡Gracias! Ya sabemos cómo nos conociste.',
+  });
 
   useEffect(() => {
     if (!user?.id) return;
@@ -178,7 +186,7 @@ export default function PersonalInfoScreen() {
       try {
         const referred = await referralService.hasBeenReferred(user.id);
         if (referred) {
-          if (!cancelled) setReferralApplied(true);
+          if (!cancelled) setInviteApplied('referral');
           return;
         }
         // Deferred deep link: tricigo-driver://refer/<code> stashed by
@@ -187,17 +195,19 @@ export default function PersonalInfoScreen() {
         if (!pending || cancelled) return;
         await AsyncStorage.removeItem('pending_referral_code');
         try {
-          await referralService.applyReferralCode(user.id, pending);
+          const result = await referralService.applyInviteCode(user.id, pending);
           if (!cancelled) {
-            setReferralApplied(true);
+            setInviteApplied(result.kind);
             Toast.show({
               type: 'success',
-              text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
+              text1: result.kind === 'source'
+                ? inviteSourceAppliedText
+                : t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
             });
           }
         } catch {
           // Invalid/duplicate stash — surface it in the field so they can fix it.
-          if (!cancelled) setReferralCode(pending.toUpperCase());
+          if (!cancelled) setInviteCode(pending.toUpperCase());
         }
       } catch {
         /* best-effort — the field still works manually */
@@ -207,25 +217,32 @@ export default function PersonalInfoScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const handleApplyReferral = async () => {
-    if (!user?.id || !referralCode.trim() || referralApplying) return;
-    setReferralApplying(true);
+  const handleApplyInviteCode = async () => {
+    if (!user?.id || !inviteCode.trim() || inviteApplying) return;
+    setInviteApplying(true);
     try {
-      await referralService.applyReferralCode(user.id, referralCode.trim());
-      setReferralApplied(true);
-      Toast.show({
-        type: 'success',
-        text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
-        text2: t('onboarding.referral_applied_body', { defaultValue: 'El bono se acreditará cuando completes tu primer viaje.' }),
-      });
+      const result = await referralService.applyInviteCode(user.id, inviteCode.trim());
+      setInviteApplied(result.kind);
+      Toast.show(
+        result.kind === 'source'
+          ? { type: 'success', text1: inviteSourceAppliedText }
+          : {
+              type: 'success',
+              text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
+              text2: t('onboarding.referral_applied_body', { defaultValue: 'El bono se acreditará cuando completes tu primer viaje.' }),
+            },
+      );
     } catch (err) {
       Toast.show({
         type: 'error',
         text1: tc('error', { defaultValue: 'Ocurrió un error' }),
-        text2: err instanceof Error ? err.message : undefined,
+        text2: inviteCodeErrorMessage(
+          err,
+          tc('profile.invite_code_invalid', { defaultValue: 'Ese código no existe. Revísalo o deja el campo vacío.' }),
+        ),
       });
     } finally {
-      setReferralApplying(false);
+      setInviteApplying(false);
     }
   };
 
@@ -678,7 +695,7 @@ export default function PersonalInfoScreen() {
               </Card>
             </AnimatedCard>
 
-            {/* ─── Referral code (optional) ─── */}
+            {/* ─── Invite code (optional) ─── */}
             <AnimatedCard delay={550} duration={400}>
               <Card
                 forceDark
@@ -687,39 +704,41 @@ export default function PersonalInfoScreen() {
                 className="mb-5"
                 style={{ backgroundColor: midnightEmber.map.bg.surface }}
               >
-                {referralApplied ? (
+                {inviteApplied ? (
                   <View className="flex-row items-center">
                     <Ionicons name="checkmark-circle" size={20} color={midnightEmber.state.success} />
                     <Text variant="bodySmall" color="inverse" className="ml-2 flex-1">
-                      {t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' })}
+                      {inviteApplied === 'source'
+                        ? inviteSourceAppliedText
+                        : t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' })}
                     </Text>
                   </View>
                 ) : (
                   <>
                     <Text variant="body" color="inverse">
-                      {t('onboarding.referral_title', { defaultValue: '¿Te invitó alguien? (opcional)' })}
+                      {tc('profile.invite_code_label', { defaultValue: 'Código de invitación (opcional)' })}
                     </Text>
                     <Text variant="caption" color="secondary" className="mt-1" style={{ color: midnightEmber.map.text.secondary }}>
-                      {t('onboarding.referral_hint', { defaultValue: 'Ingresa el código de referido de quien te invitó. Aplícalo antes de tu primer viaje.' })}
+                      {tc('profile.invite_code_hint', { defaultValue: '¿Te lo dio un amigo o lo viste en redes? Escríbelo aquí.' })}
                     </Text>
                     <View className="mt-3">
                       <Input
                         label=""
-                        placeholder={tc('profile.referral_enter_code', { defaultValue: 'Ingresa el código' })}
-                        value={referralCode}
-                        onChangeText={setReferralCode}
+                        placeholder={tc('profile.invite_code_placeholder', { defaultValue: 'Ej.: MOTORENKO' })}
+                        value={inviteCode}
+                        onChangeText={setInviteCode}
                         autoCapitalize="characters"
                         variant="dark"
                       />
-                      {referralCode.trim().length > 0 && (
+                      {inviteCode.trim().length > 0 && (
                         <Button
                           title={tc('profile.referral_apply', { defaultValue: 'Aplicar código' })}
                           variant="outline"
                           size="sm"
                           forceDark
-                          onPress={handleApplyReferral}
-                          loading={referralApplying}
-                          disabled={referralApplying}
+                          onPress={handleApplyInviteCode}
+                          loading={inviteApplying}
+                          disabled={inviteApplying}
                           className="mt-2"
                         />
                       )}
