@@ -20,6 +20,7 @@ import type {
 import type { GeoPoint } from '@tricigo/utils';
 import { logger, deliveryVehicleToSlug } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
+import { upsertSplit } from './rideSplits';
 
 const STATUS_NOTIFICATION_KEYS: Partial<Record<RideStatus, { title: string; body: string }>> = {
   accepted: { title: 'rider:notifications.driver_assigned', body: 'rider:notifications.driver_assigned_body' },
@@ -510,7 +511,7 @@ export const useRideStore = create<RideState>((set, get) => ({
     })),
 
   setSplits: (splits) => set({ splits }),
-  addSplit: (split) => set((s) => ({ splits: [...s.splits, split] })),
+  addSplit: (split) => set((s) => ({ splits: upsertSplit(s.splits, split) })),
   removeSplit: (splitId) => set((s) => ({ splits: s.splits.filter((sp) => sp.id !== splitId) })),
   updateSplit: (split) => set((s) => ({ splits: s.splits.map((sp) => sp.id === split.id ? { ...sp, ...split } : sp) })),
 

@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { rideService, walletService } from '@tricigo/api';
-import { formatTRC, getErrorMessage } from '@tricigo/utils';
+import { formatTRC, getErrorMessage, equalSplitSharePct, requesterShareTrc } from '@tricigo/utils';
 import type { RideSplit } from '@tricigo/types';
 
 interface Props {
@@ -27,8 +27,8 @@ export function FareSplitCard({ rideId, userId, estimatedFareTrc }: Props) {
 
   useEffect(() => { loadSplits(); }, [loadSplits]);
 
-  const totalParticipants = splits.length + 1; // +1 = requester
-  const yourShare = estimatedFareTrc > 0 ? Math.round(estimatedFareTrc / totalParticipants) : 0;
+  // The fare minus every invitee's part, with the shares the server set (00613).
+  const yourShare = requesterShareTrc(estimatedFareTrc, splits);
 
   const handleInvite = async () => {
     if (!phone.trim()) return;
@@ -39,8 +39,9 @@ export function FareSplitCard({ rideId, userId, estimatedFareTrc }: Props) {
       if (!found) { setError('Usuario no encontrado'); return; }
       if (found.id === userId) { setError('No puedes invitarte a ti mismo'); return; }
       if (splits.some((s) => s.user_id === found.id)) { setError('Ese usuario ya está invitado'); return; }
-      // Equal split across requester + existing + the new invitee.
-      const newPct = Math.round(10000 / (splits.length + 2)) / 100;
+      // The server gives everyone an equal part and lowers the earlier
+      // invites to it (00613); this is the share it will pick.
+      const newPct = equalSplitSharePct(splits.length + 2);
       await rideService.createSplitInvite(rideId, found.id, userId, newPct);
       setPhone('');
       loadSplits();
