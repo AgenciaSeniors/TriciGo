@@ -43,6 +43,14 @@ export type {
   AcquisitionAudience,
   NewAcquisitionCode,
 } from './services/acquisition-code.service';
+export { launchPulseService, driverOutreachService } from './services/launch-pulse.service';
+export type {
+  LaunchPulse,
+  LaunchPulseWeek,
+  LaunchPulseNow,
+  IncompleteDriverSignup,
+  OutreachChannel,
+} from './services/launch-pulse.service';
 export { deliveryService, DELIVERY_OTP_LOCKOUT_SECONDS } from './services/delivery.service';
 export type { DeliveryDetails, PublicDeliveryView, ValidateOtpResult, CreateDeliveryParams } from './services/delivery.service';
 export { nearbyService } from './services/nearby.service';

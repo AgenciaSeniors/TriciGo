@@ -178,3 +178,5 @@ export type { PushPermissionState, PushPermissionSnapshot, PushRegistrationOutco
 export { SEARCH_TYPICAL_WAIT_S, SEARCH_LONG_WAIT_S, searchWaitStage, searchWaitView } from './searchWait';
 export { equalSplitSharePct, splitAmountTrc, requesterShareTrc } from './fareSplit';
 export type { SearchWaitStage, SearchWaitInput, SearchWaitView } from './searchWait';
+export { REQUIRED_DRIVER_DOCS, driverDocLabel, whatsAppDigits, waMeLink, incompleteSignupMessage } from './driverOutreach';
+export type { IncompleteSignupMessageInput } from './driverOutreach';
