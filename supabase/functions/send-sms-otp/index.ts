@@ -174,10 +174,11 @@ Deno.serve(async (req) => {
     // misconfig / DB error) so a user who never received a code isn't locked
     // out of retrying. Windows MUST match the rateLimit() calls above/below.
     const isForeign = !normalizedPhone.startsWith('+53');
+    let foreignCapped = isForeign; // narrowed below, before any refund can run
     const refundOtpBudget = async () => {
       await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
       await refundRateLimit(`send-sms-otp:${clientIP}`, IP_WINDOW_MS);
-      if (isForeign) await refundRateLimit(FOREIGN_KEY, FOREIGN_WINDOW_MS);
+      if (foreignCapped) await refundRateLimit(FOREIGN_KEY, FOREIGN_WINDOW_MS);
     };
 
     // BUG-186: per-phone rate limit. Caps OTP-spam of one victim number
@@ -185,7 +186,27 @@ Deno.serve(async (req) => {
     const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_MAX, PHONE_WINDOW_MS);
     if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
 
+    // Numbers an account already holds CONFIRMED skip the shared foreign
+    // budget (still bound by the per-phone and per-IP limits): pumping bots use
+    // fresh premium numbers, and a flood of them must not lock real users
+    // abroad out of logging in. Confirmed, because GoTrue's open phone signup
+    // can leave an account with any number unconfirmed. Any lookup error
+    // counts as "no account" (fail closed).
     if (isForeign) {
+      try {
+        const { data: owner } = await supabase.rpc('lookup_auth_user_by_contact', {
+          p_email: null,
+          p_phone: normalizedPhone,
+        });
+        if (typeof owner === 'string') {
+          const { data: acct } = await supabase.auth.admin.getUserById(owner);
+          foreignCapped = !acct?.user?.phone_confirmed_at;
+        }
+      } catch (e) {
+        console.warn('[send-sms-otp] foreign owner lookup failed:', e instanceof Error ? e.message : String(e));
+      }
+    }
+    if (foreignCapped) {
       const rlForeign = await rateLimit(FOREIGN_KEY, FOREIGN_DAILY_MAX, FOREIGN_WINDOW_MS);
       if (!rlForeign.allowed) {
         console.warn('[send-sms-otp] daily budget for foreign numbers used up');
