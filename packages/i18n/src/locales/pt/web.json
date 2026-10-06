@@ -137,7 +137,9 @@
     "your_share": "Sua parte: {{pct}}%",
     "decline": "Recusar",
     "accept": "Aceitar",
-    "decline_failed": "Não foi possível recusar o convite. Tente novamente."
+    "decline_failed": "Não foi possível recusar o convite. Tente novamente.",
+    "accept_failed": "Não foi possível aceitar o convite. Tente novamente.",
+    "invite_gone": "Esse convite não está mais disponível: a viagem terminou ou quem convidou você o retirou."
   },
   "refer": {
     "invalid_code": "Código de indicação inválido.",

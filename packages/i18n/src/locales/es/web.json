@@ -63,7 +63,9 @@
     "your_share": "Tu parte: {{pct}}%",
     "decline": "Rechazar",
     "accept": "Aceptar",
-    "decline_failed": "No se pudo rechazar la invitación. Inténtalo de nuevo."
+    "decline_failed": "No se pudo rechazar la invitación. Inténtalo de nuevo.",
+    "accept_failed": "No se pudo aceptar la invitación. Inténtalo de nuevo.",
+    "invite_gone": "Esa invitación ya no está disponible: el viaje terminó o quien te invitó la retiró."
   },
   "refer": {
     "invalid_code": "Código de referido inválido.",
