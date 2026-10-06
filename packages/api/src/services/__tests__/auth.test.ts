@@ -235,7 +235,7 @@ describe('authService', () => {
       expect(result).toEqual(updated);
     });
 
-    it('returns null while the consent columns do not exist yet (migration 00616 not applied)', async () => {
+    it('returns null while the consent columns do not exist yet (migration 00617 not applied)', async () => {
       mockUsersUpdate({
         data: null,
         error: { code: 'PGRST204', message: "Could not find the 'marketing_opt_in' column of 'users' in the schema cache" },

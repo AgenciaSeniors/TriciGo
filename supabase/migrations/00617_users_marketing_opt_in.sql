@@ -1,4 +1,4 @@
--- 00616: record each user's consent to marketing messages (WhatsApp, SMS, email).
+-- 00617: record each user's consent to marketing messages (WhatsApp, SMS, email).
 --
 -- Why: the launch plan for 2026-10-15 writes one by one by WhatsApp to every
 -- registered user and sends campaign emails, and its own compliance section asks
@@ -20,7 +20,7 @@
 -- stamps the time itself and keeps time and source untouched unless the choice
 -- changes, so neither can be backdated or rewritten from a client.
 --
--- Rehearsal: supabase/tests/00616/run.sh
+-- Rehearsal: supabase/tests/00617/run.sh
 
 SET lock_timeout = '5s';
 
@@ -36,7 +36,7 @@ ALTER TABLE public.users ADD CONSTRAINT users_marketing_opt_in_source_chk
 RESET lock_timeout;
 
 COMMENT ON COLUMN public.users.marketing_opt_in IS
-  '00616: consent to marketing by WhatsApp, SMS and email. NULL = never asked.';
+  '00617: consent to marketing by WhatsApp, SMS and email. NULL = never asked.';
 
 CREATE OR REPLACE FUNCTION public.tg_users_marketing_opt_in()
  RETURNS trigger

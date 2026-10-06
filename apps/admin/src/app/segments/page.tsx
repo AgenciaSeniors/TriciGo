@@ -30,7 +30,7 @@ type SegmentUser = {
   rides_count: number;
   last_ride_date: string | null;
   city_name: string | null;
-  // mig 00616 — null = never asked about marketing messages.
+  // mig 00617 — null = never asked about marketing messages.
   marketing_opt_in: boolean | null;
 };
 

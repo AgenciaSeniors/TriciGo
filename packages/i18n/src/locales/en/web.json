@@ -137,7 +137,9 @@
     "your_share": "Your share: {{pct}}%",
     "decline": "Decline",
     "accept": "Accept",
-    "decline_failed": "Couldn't decline the invitation. Try again."
+    "decline_failed": "Couldn't decline the invitation. Try again.",
+    "accept_failed": "Couldn't accept the invitation. Try again.",
+    "invite_gone": "That invitation is no longer available: the ride ended or the person who invited you withdrew it."
   },
   "refer": {
     "invalid_code": "Invalid referral code.",

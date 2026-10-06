@@ -323,6 +323,8 @@
     "split_you": "Você",
     "split_paid": "Pago",
     "split_decline_failed": "Não foi possível recusar o convite. Tente novamente.",
+    "split_accept_failed": "Não foi possível aceitar o convite. Tente novamente.",
+    "split_invite_gone": "Este convite não está mais disponível: a viagem terminou ou quem convidou você o retirou.",
     "split_already_accepted": "Você já aceitou este convite: vai pagar sua parte no fim da viagem.",
     "safety_button": "Segurança",
     "insurance_toggle": "Seguro de viagem",

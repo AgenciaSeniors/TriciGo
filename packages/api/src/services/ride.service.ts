@@ -23,6 +23,7 @@ import type {
   CancellationRatingImpact,
   Waypoint,
   RideSplit,
+  SplitInvite,
   SharedRideView,
   SharedTripState,
 } from '@tricigo/types';
@@ -148,6 +149,20 @@ function dedupe<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
     }
   }
   return promise;
+}
+
+/** One row of the get_my_split_invites RPC (migration 00616). */
+interface SplitInviteRow {
+  id: string;
+  ride_id: string;
+  share_pct: number | string;
+  invited_by: string;
+  inviter_name: string | null;
+  created_at: string;
+  ride_status: RideStatus;
+  pickup_address: string;
+  dropoff_address: string;
+  estimated_fare_trc: number | null;
 }
 
 export const rideService = {
@@ -2204,16 +2219,37 @@ export const rideService = {
 
   /**
    * Accept a split invite (invited user accepts their share).
+   *
+   * Resolves when the invite is accepted, including when it already was (from
+   * another device). Throws an AppError when it was not: SPLIT_INVITE_GONE if
+   * the invite no longer exists (the requester withdrew it, or the ride ended
+   * and migration 00616 removed it), SPLIT_ACCEPT_FAILED if the server kept it
+   * unanswered (a 0-row UPDATE answers OK with no error).
    */
   async acceptSplitInvite(splitId: string, userId: string): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('ride_splits')
       .update({ accepted_at: new Date().toISOString() })
       .eq('id', splitId)
       .eq('user_id', userId)
-      .is('accepted_at', null);
+      .is('accepted_at', null)
+      .select('id');
     if (error) throw error;
+    if (data && data.length > 0) return;
+
+    const { data: kept, error: readError } = await supabase
+      .from('ride_splits')
+      .select('id, accepted_at')
+      .eq('id', splitId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (kept?.accepted_at) return;
+    if (!kept) {
+      throw new AppError('acceptSplitInvite: the invite no longer exists', 'SPLIT_INVITE_GONE', 409);
+    }
+    throw new AppError('acceptSplitInvite: the invite was not accepted', 'SPLIT_ACCEPT_FAILED', 409);
   },
 
   /**
@@ -2263,19 +2299,42 @@ export const rideService = {
   },
 
   /**
-   * Get pending split invites for a user.
+   * The caller's open split invites (unanswered, unpaid, on rides still in
+   * progress), as the invitee's card shows them.
+   *
+   * Reads them through the get_my_split_invites RPC (migration 00616): rides
+   * RLS hides the ride from the invitee, so a `rides!inner(...)` embed dropped
+   * every invite and the card never showed anything. Before 00616 is applied
+   * the RPC is missing and the card stays empty, as it always was.
    */
-  async getMySplitInvites(userId: string): Promise<RideSplit[]> {
+  async getMySplitInvites(userId: string): Promise<SplitInvite[]> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('ride_splits')
-      .select('*, rides!inner(status, pickup_address, dropoff_address, estimated_fare_trc)')
-      .eq('user_id', userId)
-      .eq('payment_status', 'pending')
-      .is('accepted_at', null)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data ?? [];
+    const { data, error } = await supabase.rpc('get_my_split_invites');
+    if (error) {
+      if (error.code === 'PGRST202' || /could not find the function/i.test(error.message ?? '')) {
+        return [];
+      }
+      throw error;
+    }
+    return ((data ?? []) as SplitInviteRow[]).map((row) => ({
+      id: row.id,
+      ride_id: row.ride_id,
+      user_id: userId,
+      share_pct: Number(row.share_pct),
+      amount_trc: null,
+      payment_status: 'pending',
+      invited_by: row.invited_by,
+      accepted_at: null,
+      paid_at: null,
+      created_at: row.created_at,
+      inviter_name: row.inviter_name ?? undefined,
+      rides: {
+        status: row.ride_status,
+        pickup_address: row.pickup_address,
+        dropoff_address: row.dropoff_address,
+        estimated_fare_trc: row.estimated_fare_trc,
+      },
+    }));
   },
 
   // ============================================================

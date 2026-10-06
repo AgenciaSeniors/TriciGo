@@ -465,30 +465,159 @@ describe('rideService.acceptSplitInvite', () => {
     vi.clearAllMocks();
   });
 
-  it('updates accepted_at for the split', async () => {
-    const mockIs = vi.fn().mockResolvedValue({ error: null });
-    const mockEqUser = vi.fn().mockReturnValue({ is: mockIs });
-    const mockEqId = vi.fn().mockReturnValue({ eq: mockEqUser });
-    const mockUpdate = vi.fn().mockReturnValue({ eq: mockEqId });
+  /** from('ride_splits').update().eq().eq().is().select() resolving to `result` */
+  function updateChain(result: { data: unknown; error: unknown }) {
+    const select = vi.fn().mockResolvedValue(result);
+    const is = vi.fn().mockReturnValue({ select });
+    const eqUser = vi.fn().mockReturnValue({ is });
+    const eqId = vi.fn().mockReturnValue({ eq: eqUser });
+    const update = vi.fn().mockReturnValue({ eq: eqId });
+    return { chain: { update }, update, eqId, eqUser, is, select };
+  }
 
-    mockFrom.mockReturnValue({ update: mockUpdate });
+  /** from('ride_splits').select().eq().eq().maybeSingle() resolving to `result` */
+  function readChain(result: { data: unknown; error: unknown }) {
+    const maybeSingle = vi.fn().mockResolvedValue(result);
+    const eqUser = vi.fn().mockReturnValue({ maybeSingle });
+    const eqId = vi.fn().mockReturnValue({ eq: eqUser });
+    const select = vi.fn().mockReturnValue({ eq: eqId });
+    return { chain: { select }, select, eqId, eqUser, maybeSingle };
+  }
+
+  it("accepts only the caller's own unanswered invite", async () => {
+    const u = updateChain({ data: [{ id: 'split-1' }], error: null });
+    mockFrom.mockReturnValueOnce(u.chain);
 
     await rideService.acceptSplitInvite('split-1', 'u-2');
-    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ accepted_at: expect.any(String) }));
-    expect(mockEqId).toHaveBeenCalledWith('id', 'split-1');
-    expect(mockEqUser).toHaveBeenCalledWith('user_id', 'u-2');
-    expect(mockIs).toHaveBeenCalledWith('accepted_at', null);
+
+    expect(u.update).toHaveBeenCalledWith(expect.objectContaining({ accepted_at: expect.any(String) }));
+    expect(u.eqId).toHaveBeenCalledWith('id', 'split-1');
+    expect(u.eqUser).toHaveBeenCalledWith('user_id', 'u-2');
+    expect(u.is).toHaveBeenCalledWith('accepted_at', null);
+    expect(u.select).toHaveBeenCalledWith('id');
+    // An updated row is the whole answer: no second read
+    expect(mockFrom).toHaveBeenCalledTimes(1);
   });
 
-  it('throws when update fails', async () => {
-    const mockIs = vi.fn().mockResolvedValue({ error: { message: 'RLS denied' } });
-    const mockEqUser = vi.fn().mockReturnValue({ is: mockIs });
-    const mockEqId = vi.fn().mockReturnValue({ eq: mockEqUser });
-    const mockUpdate = vi.fn().mockReturnValue({ eq: mockEqId });
+  it('says the invite is gone when nothing was updated and the row no longer exists', async () => {
+    // Migration 00616 deletes unanswered invites when the ride ends; the requester can also withdraw one.
+    mockFrom
+      .mockReturnValueOnce(updateChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(readChain({ data: null, error: null }).chain);
 
-    mockFrom.mockReturnValue({ update: mockUpdate });
+    await expect(rideService.acceptSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      code: 'SPLIT_INVITE_GONE',
+    });
+  });
 
-    await expect(rideService.acceptSplitInvite('split-1', 'u-2')).rejects.toBeDefined();
+  it('succeeds when the invite was already accepted (from another device)', async () => {
+    const r = readChain({ data: { id: 'split-1', accepted_at: '2026-10-06T12:00:00Z' }, error: null });
+    mockFrom
+      .mockReturnValueOnce(updateChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(r.chain);
+
+    await expect(rideService.acceptSplitInvite('split-1', 'u-2')).resolves.toBeUndefined();
+    expect(r.eqId).toHaveBeenCalledWith('id', 'split-1');
+    expect(r.eqUser).toHaveBeenCalledWith('user_id', 'u-2');
+  });
+
+  it('fails instead of pretending when the server kept the invite unanswered (0 rows, no error)', async () => {
+    mockFrom
+      .mockReturnValueOnce(updateChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(readChain({ data: { id: 'split-1', accepted_at: null }, error: null }).chain);
+
+    await expect(rideService.acceptSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      code: 'SPLIT_ACCEPT_FAILED',
+    });
+  });
+
+  it('throws the update error', async () => {
+    mockFrom.mockReturnValueOnce(updateChain({ data: null, error: { message: 'RLS denied' } }).chain);
+
+    await expect(rideService.acceptSplitInvite('split-1', 'u-2')).rejects.toMatchObject({ message: 'RLS denied' });
+  });
+
+  it('throws when the follow-up read fails', async () => {
+    mockFrom
+      .mockReturnValueOnce(updateChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(readChain({ data: null, error: { message: 'read failed' } }).chain);
+
+    await expect(rideService.acceptSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      message: 'read failed',
+    });
+  });
+});
+
+describe('rideService.getMySplitInvites', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const row = {
+    id: 'split-1',
+    ride_id: 'ride-1',
+    share_pct: 50,
+    invited_by: 'u-1',
+    inviter_name: 'Ana',
+    created_at: '2026-10-06T12:00:00Z',
+    ride_status: 'accepted',
+    pickup_address: 'Calle 23 e/ L y M',
+    dropoff_address: 'Obispo 101',
+    estimated_fare_trc: 1500,
+  };
+
+  it('reads the open invites through get_my_split_invites (the invitee cannot read rides)', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [row], error: null });
+
+    const invites = await rideService.getMySplitInvites('u-2');
+
+    expect(mockRpc).toHaveBeenCalledWith('get_my_split_invites');
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(invites).toEqual([
+      {
+        id: 'split-1',
+        ride_id: 'ride-1',
+        user_id: 'u-2',
+        share_pct: 50,
+        amount_trc: null,
+        payment_status: 'pending',
+        invited_by: 'u-1',
+        accepted_at: null,
+        paid_at: null,
+        created_at: '2026-10-06T12:00:00Z',
+        inviter_name: 'Ana',
+        rides: {
+          status: 'accepted',
+          pickup_address: 'Calle 23 e/ L y M',
+          dropoff_address: 'Obispo 101',
+          estimated_fare_trc: 1500,
+        },
+      },
+    ]);
+  });
+
+  it('reads share_pct as a number and leaves out a missing inviter name', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [{ ...row, share_pct: '33.33', inviter_name: null }], error: null });
+
+    const [invite] = await rideService.getMySplitInvites('u-2');
+
+    expect(invite!.share_pct).toBe(33.33);
+    expect(invite!.inviter_name).toBeUndefined();
+  });
+
+  it('shows no invites when migration 00616 is not applied yet', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST202', message: 'Could not find the function public.get_my_split_invites' },
+    });
+
+    await expect(rideService.getMySplitInvites('u-2')).resolves.toEqual([]);
+  });
+
+  it('throws any other error', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: '57014', message: 'timeout' } });
+
+    await expect(rideService.getMySplitInvites('u-2')).rejects.toMatchObject({ message: 'timeout' });
   });
 });
 

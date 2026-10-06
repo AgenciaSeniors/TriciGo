@@ -1,4 +1,4 @@
--- Scaffold for the 00616 rehearsal: public.users with the RLS policies and grants that let
+-- Scaffold for the 00617 rehearsal: public.users with the RLS policies and grants that let
 -- a signed-in user update their own row in prod (table-level UPDATE for authenticated,
 -- users_update_own without WITH CHECK), and auth.uid() reading request.jwt.claim.sub like
 -- PostgREST (LIVE body, from the 00612 scaffold). Only the columns the tests touch.

@@ -323,6 +323,8 @@
     "split_you": "You",
     "split_paid": "Paid",
     "split_decline_failed": "Couldn't decline the invitation. Try again.",
+    "split_accept_failed": "Couldn't accept the invitation. Try again.",
+    "split_invite_gone": "This invitation is no longer available: the ride ended or the person who invited you withdrew it.",
     "split_already_accepted": "You already accepted this invitation: you'll pay your share when the trip ends.",
     "safety_button": "Safety",
     "insurance_toggle": "Trip insurance",

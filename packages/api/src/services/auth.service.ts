@@ -202,7 +202,7 @@ export const authService = {
   },
 
   /**
-   * Record the user's consent to marketing by WhatsApp, SMS and email (00616).
+   * Record the user's consent to marketing by WhatsApp, SMS and email (00617).
    * The database stamps the time. Returns `null` while the consent columns do
    * not exist yet, so a signup never fails on it: the user is asked again later.
    */
