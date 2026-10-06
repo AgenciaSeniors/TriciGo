@@ -2761,6 +2761,19 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 
 **Watchdog de salud (00577).** `check_database_health()` cada hora (muestra + alerta **solo en transición** ok↔warn↔critical, patrón 00503) y `send_db_health_digest()` diario a las 07:30 UTC al `business_notification_email`. Es SQL puro y no una Edge Function por la misma razón que 00503: si la base está por colapsar, la EF puede no conseguir conexión justo cuando hay que avisar. El aviso temprano real es la **proyección**: con 7 días de muestras calcula MB/día y pasa a `warn` cuando faltan ≤14 días para el umbral, *antes* de cruzarlo. `db_size_warn_mb`/`crit_mb` (6000/7500) son el **único número asumido y no medido** — Postgres no conoce el tamaño del disco que le dio Supabase; ajustar si el disco real es otro.
 
+### Tercera tabla de historial sin retención: `admin_actions` (verificado 2026-10-06, mig 00606)
+
+**Síntoma:** el inicio del panel daba 500 de vez en cuando (`PostgREST; error=57014`, tiempo agotado) en `admin_actions?admin_id=eq.<plataforma>&order=created_at.desc&limit=6`. La página se traga el error y muestra la lista vacía, así que solo se ve en `edge_logs` (`response.headers.proxy_status`).
+
+**Causa:** `tg_platform_config_audit` (00603) guarda una fila por cada UPDATE de `platform_config`, y los vigilantes guardan ahí su "última revisión" (`*_at`, `*_detail`) en cada corrida. Eran 168.881 filas, el 99 % latidos a nombre de la cuenta de plataforma (el respaldo cuando no hay JWT), unas 2.000 por día, sin más índice que la PK. Además `aa_select` evaluaba `is_admin()` (plpgsql desde 00592) una vez por fila: 3,3 s en caliente.
+
+**Arreglo (00606):** el trigger no audita un UPDATE automático (sin JWT) sobre una clave de telemetría (`_platform_config_is_telemetry`: termina en `_at` o `_detail`, o es `weather_last_check`). Lo que escribe una persona y todo INSERT o DELETE se siguen auditando. Además se borraron los latidos guardados, hay índices `(admin_id, created_at DESC)` y `(created_at DESC)`, y `aa_select` usa `(SELECT is_admin())`. Ensayo: `supabase/tests/00606/run.sh`.
+
+**Reglas:**
+- Un vigilante nuevo que guarde su estado en `platform_config` nombra sus claves de latido con `_at` o `_detail`, así no se auditan. Una configuración que se edita a mano no lleva esos sufijos.
+- Toda política RLS que llame a una función va envuelta en `(SELECT …)`, para que se evalúe una vez por consulta y no una vez por fila. Con `is_admin()` en plpgsql la diferencia es grande.
+- Para encontrar la próxima tabla de este tipo: `SELECT relname, n_live_tup, pg_size_pretty(pg_total_relation_size(relid)) FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 10` y preguntar, por cada una, quién la poda.
+
 ### Toda alarma del proyecto vivía dentro de pg_cron, así que ninguna puede avisar de una caída de disco (verificado 2026-09-21, `ops/supabase-watchdog/`)
 
 **El incidente.** El 2026-09-21, de 09:24 a 12:28 UTC (~3 h), la capa de almacenamiento se atascó. PostgREST devolvió 503 en `/rest/v1/rides` (215), `platform_config` (126), `driver_heartbeat` y `find_nearby_vehicles`; la latencia media por hora llegó a **51 s** y hubo respuestas de **125 s**. **No salió una sola alerta**: el dueño lo descubrió usando la app y reinició el proyecto a mano. Ya había pasado igual el **18** y el **20 de septiembre**.
