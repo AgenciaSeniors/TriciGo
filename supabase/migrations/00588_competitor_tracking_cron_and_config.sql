@@ -16,12 +16,16 @@
 -- staggered so they don't contend either.
 
 -- ── Tunables ────────────────────────────────────────────────────────────────
+-- Retention is 90 days, not a year: a full basket writes ~10,700 rows a day
+-- (14 routes × 4 pairs × 2 competitors × 96 cycles), roughly 0.8-1 GB a year with
+-- its indexes, on a database of ~775 MB on the Micro instance. Raise it in the
+-- admin panel if a longer series is ever needed.
 INSERT INTO public.platform_config (key, value) VALUES
   ('competitor_tracking_enabled',        to_jsonb(true)),
   ('competitor_tracking_interval_min',   to_jsonb(15)),
   ('competitor_tracking_stale_hours',    to_jsonb(2)),
   ('competitor_session_warn_hours',      to_jsonb(24)),
-  ('competitor_quotes_retention_days',   to_jsonb(365)),
+  ('competitor_quotes_retention_days',   to_jsonb(90)),
   ('competitor_quotes_prune_batch',      to_jsonb(20000))
 ON CONFLICT (key) DO NOTHING;
 

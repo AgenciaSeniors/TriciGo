@@ -179,7 +179,7 @@ COMMENT ON TABLE public.competitor_sessions IS
   '00587: session credential the owner''s phone deposits per competitor, so the EF '
   'can quote as a logged-in user. LOCK TABLE: RLS on, ZERO policies — nobody reads it '
   'via PostgREST, not even admin. The EF reads it with service_role; the phone deposits '
-  'via deposit-competitor-session (admin-authenticated). '
+  'via deposit-competitor-session (super_admin only). '
   'DELIBERATELY NOT stored in platform_config: platform_config_is_secret() (mig 00517) '
   'classifies secrets by NAME SUFFIX (_token/_secret/…); a credential there under the '
   'wrong name would be served to anon. A dedicated lock table is immune to that.';
