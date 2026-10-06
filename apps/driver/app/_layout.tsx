@@ -35,6 +35,7 @@ import '@/services/locationBackgroundTask';
 // defineTask must be registered before FCM can fire the background task.
 import '@/tasks/rideOfferLaunchTask';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
+import { useReportAppOpen } from '@/hooks/useReportAppOpen';
 import { Platform } from 'react-native';
 import '../global.css';
 
@@ -122,6 +123,9 @@ function RootNavigator() {
 
   // Handle OAuth deep link callbacks (tricigo-driver://auth/callback)
   useAuthDeepLink();
+
+  // Report this open with the app version (who still runs which build).
+  useReportAppOpen();
 
   // Dark mode: sync NativeWind color scheme with theme store
   // Driver app uses forced dark backgrounds (Screen bg="dark") with light NativeWind

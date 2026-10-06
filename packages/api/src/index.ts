@@ -28,7 +28,7 @@ export { chatService } from './services/chat.service';
 export { incidentService } from './services/incident.service';
 export { notificationService } from './services/notification.service';
 export { deviceService } from './services/device.service';
-export type { RegisterLoginDeviceInput, KnownDevice } from './services/device.service';
+export type { RegisterLoginDeviceInput, KnownDevice, ReportAppOpenInput, ReportAppOpenOutcome } from './services/device.service';
 export { locationService } from './services/location.service';
 export { matchingService } from './services/matching.service';
 export { fraudService } from './services/fraud.service';
