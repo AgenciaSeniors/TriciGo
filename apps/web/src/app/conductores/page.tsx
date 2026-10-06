@@ -85,7 +85,7 @@ const FAQ = [
   },
   {
     q: 'Me invitó otro conductor, ¿qué hago con su código?',
-    a: 'Ingrésalo en el paso de datos personales del registro (o en Perfil → Referidos antes de que aprueben tu cuenta). Así quien te invitó recibe su bono.',
+    a: 'Ingrésalo en el paso de datos personales del registro (o en Perfil → Referidos antes de tu primer viaje). Quien te invitó recibe su bono cuando completas tu primer viaje.',
   },
 ];
 
