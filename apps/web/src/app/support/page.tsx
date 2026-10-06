@@ -158,11 +158,10 @@ export default function SupportPage() {
       {/* Contacto directo — parity con el hub de contacto del /support móvil
           (WhatsApp + correo). El FAQ vive en /help. */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem' }}>
-        {/* Canonical support WhatsApp — the old value was the +53 5555 5555
-            placeholder (invalid). Same target the mobile hubs use
-            (apps/client/app/support.tsx). */}
+        {/* Canonical support WhatsApp (Cuban number). Same target the
+            mobile hubs use (apps/client/app/support.tsx). */}
         <a
-          href="https://wa.me/5545998622511"
+          href="https://wa.me/5356621636"
           target="_blank"
           rel="noopener noreferrer"
           style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, padding: '0.9rem 1rem', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: '0.85rem', textDecoration: 'none', color: 'var(--text-primary)' }}

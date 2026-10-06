@@ -17,7 +17,7 @@ import type { SupportTicket, TicketCategory } from '@tricigo/types';
 // Same contact details the onboarding screen already links to
 // (apps/driver/app/onboarding/pending.tsx:18).
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
-const SUPPORT_PHONE = '+5545998622511';
+const SUPPORT_PHONE = '+5356621636';
 
 const FAQ_KEYS = ['faq_q1', 'faq_q2', 'faq_q3'] as const;
 

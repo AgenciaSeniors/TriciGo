@@ -23,7 +23,7 @@ import type { SupportTicket, TicketCategory } from '@tricigo/types';
 
 // Same contact details support.tsx already links to (support.tsx:30,37).
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
-const SUPPORT_PHONE = '+5545998622511';
+const SUPPORT_PHONE = '+5356621636';
 
 const FAQ_KEYS = [
   'faq_q1', 'faq_q2', 'faq_q3', 'faq_q4', 'faq_q5',
