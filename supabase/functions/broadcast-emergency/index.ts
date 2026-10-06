@@ -6,22 +6,29 @@
 //   2. Lee `trusted_contacts` con `auto_share=true` del usuario.
 //   3. Por cada contacto, llama internamente a `send-sms` (que es
 //      service-role only) con un mensaje preformateado que incluye:
-//        · Nombre del que pidió ayuda
+//        · Nombre del que pidió ayuda (de users, no del request)
 //        · Maps URL con la ubicación reportada
-//        · Datos del conductor (nombre/placa) si vienen en el ride
-//        · Ride ID para referencia en soporte
+//        · Conductor y placa, solo si el que pide ayuda es el pasajero del
+//          viaje (de la base, no del request)
+//        · Ride ID para referencia, solo si el que pide ayuda es parte del viaje
 //   4. Devuelve un resumen `{ contacts_notified, sms_sids }`.
 //
 // La razón para esta función dedicada (en vez de llamar send-sms desde
 // el cliente) es que send-sms requiere el service role key — el cliente
 // nunca debería tenerlo. Esta función actúa de proxy con auth checks.
 //
-// Rate-limited por user_id: 1 broadcast cada 60s. Evita doble-tap o
-// scripts maliciosos vaciando el budget de SMS (D7 Networks).
+// Rate-limited por user_id: 1 broadcast cada 60s y 10 por día. Evita
+// doble-tap o scripts vaciando el budget de SMS (D7 Networks).
+//
+// 2026-10-06: el texto del SMS ya no toma nada del request. Antes la app
+// mandaba rider_name / driver_name / vehicle_plate y se pegaban tal cual, así
+// que cualquier cuenta podía mandar SMS con texto propio, firmados "TriciGo",
+// a los números que pusiera en sus contactos de confianza.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { buildSosSmsBody, cleanSmsField, validCoordinates } from '../_shared/sos-message.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -39,32 +46,13 @@ interface BroadcastBody {
   /** Reported location (rider's GPS). Both lat AND lng required. */
   latitude: number;
   longitude: number;
-  /** Optional driver context for the SMS body. */
+  /** IGNORED since 2026-10-06: the SMS takes names and plate from the database.
+   *  Still accepted so installed apps that send them keep working. */
   driver_name?: string | null;
   vehicle_plate?: string | null;
-  /** Optional rider display name (used in SMS to identify who called). */
   rider_name?: string | null;
   /** UI locale for the SMS body. Defaults to 'es' (Cuba). */
   locale?: 'es' | 'en' | 'pt';
-}
-
-function buildSmsBody(params: BroadcastBody, locale: 'es' | 'en' | 'pt'): string {
-  const mapsUrl = `https://maps.google.com/?q=${params.latitude},${params.longitude}`;
-  const riderName = params.rider_name?.trim() || 'Un usuario de TriciGo';
-  const driverInfo = params.driver_name || params.vehicle_plate
-    ? ` Conductor: ${[params.driver_name, params.vehicle_plate].filter(Boolean).join(' / ')}.`
-    : '';
-  const rideRef = params.ride_id ? ` Ride: ${params.ride_id.slice(0, 8)}.` : '';
-
-  // No leading emoji: carriers silently filter 🚨-led alert SMS even with a
-  // 'delivered' DLR (A/B verified 2026-07-02; see migration 00475).
-  if (locale === 'en') {
-    return `EMERGENCY: ${riderName} sent an SOS via TriciGo. Location: ${mapsUrl}${driverInfo}${rideRef}`;
-  }
-  if (locale === 'pt') {
-    return `EMERGÊNCIA: ${riderName} enviou um SOS pelo TriciGo. Local: ${mapsUrl}${driverInfo}${rideRef}`;
-  }
-  return `EMERGENCIA: ${riderName} envió un SOS desde TriciGo. Ubicación: ${mapsUrl}${driverInfo}${rideRef}`;
 }
 
 Deno.serve(async (req) => {
@@ -95,13 +83,18 @@ Deno.serve(async (req) => {
         { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
 
-    // ─── Rate limit (per user, 1/min) ───
+    // ─── Rate limit (per user, 1/min and 10/day) ───
+    // The daily cap bounds what one account can spend on SMS: each SOS texts
+    // up to 5 contacts. A real emergency is also covered by the incident
+    // report trigger, which texts the same contacts from the database.
     const rl = await rateLimit(`broadcast-emergency:${user.id}`, 1, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+    const rlDay = await rateLimit(`broadcast-emergency:day:${user.id}`, 10, 24 * 60 * 60 * 1000);
+    if (!rlDay.allowed) return rateLimitResponse(rlDay.retryAfterMs);
 
     // ─── Validate body ───
     const body = (await req.json()) as BroadcastBody;
-    if (!Number.isFinite(body.latitude) || !Number.isFinite(body.longitude)) {
+    if (!validCoordinates(body.latitude, body.longitude)) {
       return new Response(JSON.stringify({ error: 'latitude and longitude are required' }),
         { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
@@ -126,8 +119,51 @@ Deno.serve(async (req) => {
       }), { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
 
+    // ─── Names and plate from the database, never from the request ───
+    const { data: caller } = await admin
+      .from('users').select('full_name').eq('id', user.id).maybeSingle();
+    let driverName: string | null = null;
+    let vehiclePlate: string | null = null;
+    let rideRef: string | null = null;
+    let rideId: string | undefined;
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof body.ride_id === 'string' && UUID_RE.test(body.ride_id)) {
+      const { data: ride } = await admin
+        .from('rides').select('id, customer_id, driver_id').eq('id', body.ride_id).maybeSingle();
+      let driverUserId: string | null = null;
+      if (ride?.driver_id) {
+        const { data: dp } = await admin
+          .from('driver_profiles').select('user_id').eq('id', ride.driver_id).maybeSingle();
+        driverUserId = dp?.user_id ?? null;
+      }
+      const isPassenger = !!ride && ride.customer_id === user.id;
+      const isDriver = !!driverUserId && driverUserId === user.id;
+      if (ride && (isPassenger || isDriver)) {
+        rideId = ride.id;
+        rideRef = ride.id.slice(0, 8);
+        // The passenger's contacts need to know who is driving. The driver's
+        // contacts get the driver's own name as the sender, as before.
+        if (isPassenger && ride.driver_id && driverUserId) {
+          const [{ data: du }, { data: veh }] = await Promise.all([
+            admin.from('users').select('full_name').eq('id', driverUserId).maybeSingle(),
+            admin.from('vehicles').select('plate_number').eq('driver_id', ride.driver_id)
+              .eq('is_active', true).limit(1).maybeSingle(),
+          ]);
+          driverName = cleanSmsField(du?.full_name, 40);
+          vehiclePlate = cleanSmsField(veh?.plate_number, 15);
+        }
+      }
+    }
+
     // ─── Build SMS body once and broadcast in parallel ───
-    const smsBody = buildSmsBody(body, locale);
+    const smsBody = buildSosSmsBody({
+      latitude: body.latitude,
+      longitude: body.longitude,
+      riderName: cleanSmsField(caller?.full_name, 40),
+      driverName,
+      vehiclePlate,
+      rideRef,
+    }, locale);
     const sendSmsUrl = `${supabaseUrl}/functions/v1/send-sms`;
 
     const sids: Array<{ contact_id: string; sid: string | null; ok: boolean; error?: string }> = [];
@@ -144,7 +180,7 @@ Deno.serve(async (req) => {
             user_id: user.id,
             phone: c.phone,
             body: smsBody,
-            ride_id: body.ride_id ?? undefined,
+            ride_id: rideId,
             event_type: 'emergency_broadcast',
           }),
         });
