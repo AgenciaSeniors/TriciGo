@@ -452,15 +452,15 @@ function EmptyState({
 }) {
   const bg =
     tone === 'success'
-      ? 'bg-emerald-500/10 text-emerald-500'
+      ? 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400'
       : tone === 'danger'
-        ? 'bg-red-500/10 text-red-500'
+        ? 'bg-red-500/10 text-red-500 dark:text-red-400'
         : tone === 'warning'
-          ? 'bg-amber-500/10 text-amber-500'
+          ? 'bg-amber-500/10 text-amber-500 dark:text-amber-400'
           : tone === 'info'
-            ? 'bg-sky-500/10 text-sky-500'
+            ? 'bg-sky-500/10 text-sky-500 dark:text-sky-400'
             : tone === 'primary'
-              ? 'bg-primary-500/10 text-primary-500'
+              ? 'bg-primary-500/10 text-primary-500 dark:text-primary-400'
               : 'bg-surface-sunken text-ink-muted';
   return (
     <div className="flex flex-col items-center gap-3 py-8 text-center">

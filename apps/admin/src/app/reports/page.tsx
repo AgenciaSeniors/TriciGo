@@ -170,12 +170,12 @@ export default function ReportsPage() {
 
   // KPI cards
   const kpiCards = [
-    { label: t('reports.active_rides'), value: metrics?.active_rides ?? 0, color: 'text-primary-500', desc: t('reports.desc_active_rides') },
+    { label: t('reports.active_rides'), value: metrics?.active_rides ?? 0, color: 'text-primary-500 dark:text-primary-400', desc: t('reports.desc_active_rides') },
     { label: t('reports.rides_today'), value: metrics?.total_rides_today ?? 0, color: 'text-ink', desc: t('reports.desc_rides_today') },
-    { label: t('reports.online_drivers'), value: metrics?.online_drivers ?? 0, color: 'text-green-600', desc: t('reports.desc_online_drivers') },
-    { label: t('reports.revenue_today'), value: formatCUP(metrics?.total_revenue_today ?? 0), color: 'text-primary-500', desc: t('reports.desc_revenue_today'), isFormatted: true },
-    { label: t('reports.pending_verifications'), value: metrics?.pending_verifications ?? 0, color: 'text-yellow-600', desc: t('reports.desc_pending_verifications') },
-    { label: t('reports.open_incidents'), value: metrics?.open_incidents ?? 0, color: 'text-red-600', desc: t('reports.desc_open_incidents') },
+    { label: t('reports.online_drivers'), value: metrics?.online_drivers ?? 0, color: 'text-green-600 dark:text-green-400', desc: t('reports.desc_online_drivers') },
+    { label: t('reports.revenue_today'), value: formatCUP(metrics?.total_revenue_today ?? 0), color: 'text-primary-500 dark:text-primary-400', desc: t('reports.desc_revenue_today'), isFormatted: true },
+    { label: t('reports.pending_verifications'), value: metrics?.pending_verifications ?? 0, color: 'text-yellow-600 dark:text-yellow-400', desc: t('reports.desc_pending_verifications') },
+    { label: t('reports.open_incidents'), value: metrics?.open_incidents ?? 0, color: 'text-red-600 dark:text-red-400', desc: t('reports.desc_open_incidents') },
   ];
 
   // Revenue trend helpers
@@ -377,7 +377,7 @@ export default function ReportsPage() {
           </div>
           <div className="rounded-xl border border-line bg-surface-sunken p-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('reports.health_active_rides', { defaultValue: 'Viajes activos' })}</p>
-            <p className="font-editorial text-[28px] leading-none italic text-primary-500" data-tabular>
+            <p className="font-editorial text-[28px] leading-none italic text-primary-500 dark:text-primary-400" data-tabular>
               {health.loading ? '—' : health.activeRides}
             </p>
           </div>
@@ -431,7 +431,7 @@ export default function ReportsPage() {
             <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-ink">{t('reports.revenue_forecast')}</h2>
-                <div className="text-sm font-semibold text-primary-700 bg-primary-50 px-3 py-1 rounded-full">
+                <div className="text-sm font-semibold text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-500/10 px-3 py-1 rounded-full">
                   {t('reports.prediction_next_7_days')}: {formatCUP(forecastTotal)}
                 </div>
               </div>
@@ -692,7 +692,7 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
                 <p className="text-sm text-ink-muted mb-1">{t('reports.circulation')}</p>
-                <p className="text-2xl font-bold text-primary-500">{formatTriciCoin(walletStats?.total_in_circulation ?? 0)}</p>
+                <p className="text-2xl font-bold text-primary-500 dark:text-primary-400">{formatTriciCoin(walletStats?.total_in_circulation ?? 0)}</p>
               </div>
               <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
                 <p className="text-sm text-ink-muted mb-1">{t('reports.pending_redemptions')}</p>

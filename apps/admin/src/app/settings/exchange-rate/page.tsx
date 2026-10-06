@@ -86,7 +86,7 @@ export default function ExchangeRatePage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-2">{t('exchange_rate.title')}</h1>
@@ -101,7 +101,7 @@ export default function ExchangeRatePage() {
             <h2 className="text-lg font-bold mb-4">{t('exchange_rate.current_rate')}</h2>
             {currentRate ? (
               <div className="flex items-center gap-6">
-                <div className="text-4xl font-bold text-primary-600">
+                <div className="text-4xl font-bold text-primary-600 dark:text-primary-400">
                   {Number(currentRate.usd_cup_rate).toLocaleString('es-CU')} CUP
                 </div>
                 <div className="text-ink-muted">
@@ -121,7 +121,7 @@ export default function ExchangeRatePage() {
                     return (
                       <span
                         className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full ${
-                          stale ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                          stale ? 'bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400' : 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400'
                         }`}
                       >
                         {stale
@@ -174,7 +174,7 @@ export default function ExchangeRatePage() {
               </p>
             )}
             {error && (
-              <p className="text-sm text-red-600 mt-2">{error}</p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</p>
             )}
           </div>
 
@@ -204,15 +204,15 @@ export default function ExchangeRatePage() {
                         <td className="py-2 px-3">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
                             rate.source === 'eltoque_api'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-amber-100 text-amber-700'
+                              ? 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400'
+                              : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
                           }`}>
                             {rate.source === 'eltoque_api' ? 'ElToque' : t('exchange_rate.manual')}
                           </span>
                         </td>
                         <td className="py-2 px-3">
                           {rate.is_current && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400">
                               {t('exchange_rate.active')}
                             </span>
                           )}

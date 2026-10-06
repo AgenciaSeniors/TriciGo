@@ -61,7 +61,7 @@ export function DashboardHero({ name }: Props) {
           <h1 className="font-display text-[28px] font-semibold leading-[1.08] tracking-[-0.025em] text-ink md:text-[36px]">
             {greeting(hour)}
             {capitalized && <span className="text-ink-muted">, {capitalized}</span>}
-            <span className="text-primary-500">.</span>
+            <span className="text-primary-500 dark:text-primary-400">.</span>
           </h1>
           <p className="max-w-xl text-[13px] text-ink-muted">
             Así se mueve <span className="font-editorial italic">Cuba</span> ahora mismo. Pulso en vivo, auto-refresh cada 30 s.

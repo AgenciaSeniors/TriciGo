@@ -24,15 +24,15 @@ const CANCELABLE_STATUSES = [
    a raw `arrived_at_destination` showing up in the UI. Keyed by RideStatus,
    the next state added to the union fails the build instead. */
 const STATUS_BADGE: Record<RideStatus, string> = {
-  searching: 'bg-yellow-100 text-yellow-700',
-  accepted: 'bg-blue-100 text-blue-700',
-  driver_en_route: 'bg-blue-100 text-blue-700',
-  arrived_at_pickup: 'bg-blue-100 text-blue-700',
-  in_progress: 'bg-blue-100 text-blue-700',
-  arrived_at_destination: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  canceled: 'bg-red-100 text-red-700',
-  disputed: 'bg-orange-100 text-orange-700',
+  searching: 'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+  accepted: 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  driver_en_route: 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  arrived_at_pickup: 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  in_progress: 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  arrived_at_destination: 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  completed: 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400',
+  canceled: 'bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400',
+  disputed: 'bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400',
 };
 
 const STATUS_LABEL_KEY: Record<RideStatus, string> = {
@@ -187,7 +187,7 @@ export default function RideDetailPage() {
           </span>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold text-primary-500">{formatCUP(fare)}</p>
+          <p className="text-3xl font-bold text-primary-500 dark:text-primary-400">{formatCUP(fare)}</p>
           {ride.final_fare_cup != null && ride.final_fare_cup !== ride.estimated_fare_cup && (
             <p className="text-sm text-ink-subtle line-through">{formatCUP(ride.estimated_fare_cup)} {t('rides.estimated')}</p>
           )}
@@ -282,17 +282,17 @@ export default function RideDetailPage() {
           {/* Blockers first: this is what the admin opened the page for. Icon +
               text, never colour alone. */}
           {proofBlockers.length > 0 && (
-            <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 mb-4">
-              <svg className="w-5 h-5 shrink-0 text-amber-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <div className="flex gap-3 rounded-lg border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5 p-3 mb-4">
+              <svg className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.19-1.458-1.516-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
               </svg>
               <div>
-                <p className="text-sm font-medium text-amber-900">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-400">
                   {t('rides.cargo_cannot_complete', { defaultValue: 'Este envío todavía no puede completarse' })}
                 </p>
                 <ul className="mt-1 space-y-0.5">
                   {proofBlockers.map((b) => (
-                    <li key={b} className="text-sm text-amber-800">· {b}</li>
+                    <li key={b} className="text-sm text-amber-800 dark:text-amber-400">· {b}</li>
                   ))}
                 </ul>
               </div>
@@ -349,7 +349,7 @@ export default function RideDetailPage() {
                   <dd className="text-sm font-medium tabular-nums">
                     {delivery.delivery_otp ?? '—'}
                     {delivery.delivery_otp_validated_at ? (
-                      <span className="ml-2 text-green-700">
+                      <span className="ml-2 text-green-700 dark:text-green-400">
                         {t('rides.cargo_otp_validated', { defaultValue: 'validado' })} · {formatAdminDate(delivery.delivery_otp_validated_at)}
                       </span>
                     ) : (
@@ -449,7 +449,7 @@ export default function RideDetailPage() {
                         column — which would read as a finding — the unread
                         state is only ever shown as its absence. */}
                     {m.read_at && (
-                      <span className="text-xs text-green-700">
+                      <span className="text-xs text-green-700 dark:text-green-400">
                         {t('rides.chat_read_at', { defaultValue: 'leído' })} {formatAdminDate(m.read_at)}
                       </span>
                     )}

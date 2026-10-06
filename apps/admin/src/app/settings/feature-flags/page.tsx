@@ -89,7 +89,7 @@ export default function FeatureFlagsPage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -112,7 +112,7 @@ export default function FeatureFlagsPage() {
       </div>
 
       {!superAdminLoading && !isSuperAdmin && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+        <div className="bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-400 rounded-xl p-4 mb-6 text-sm" role="status">
           {t('feature_flags.requires_super_admin', {
             defaultValue:
               'Solo super_admin puede modificar feature flags. Tu cuenta puede consultar los flags actuales pero no toggle ni crear nuevos.',
@@ -150,7 +150,7 @@ export default function FeatureFlagsPage() {
             </button>
             <button
               onClick={() => setShowCreate(false)}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200 dark:hover:bg-surface-elevated"
             >
               {t('common.cancel')}
             </button>

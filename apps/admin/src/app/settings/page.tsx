@@ -96,7 +96,7 @@ export default function SettingsPage() {
                     href={s.href}
                     className="admin-card group flex items-start gap-3 p-4 transition-colors hover:bg-surface-sunken/50"
                   >
-                    <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-500/10 text-primary-500">
+                    <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-500/10 text-primary-500 dark:text-primary-400">
                       <Icon className="h-4.5 w-4.5" strokeWidth={1.8} />
                     </span>
                     <div className="flex-1 min-w-0">

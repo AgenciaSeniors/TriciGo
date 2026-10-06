@@ -120,7 +120,7 @@ export default function ResetPasswordPage() {
             alt="TriciGo"
             className="h-10 w-auto mx-auto mb-2"
           />
-          <p className="text-neutral-500 text-sm">{t('login.admin_panel')}</p>
+          <p className="text-neutral-500 dark:text-neutral-400 text-sm">{t('login.admin_panel')}</p>
         </div>
 
         {success ? (
@@ -180,7 +180,7 @@ export default function ResetPasswordPage() {
             {newPassword.length > 0 && (
               <ul className="space-y-1 text-xs">
                 {checks.map((c) => (
-                  <li key={c.label} className={c.ok ? 'text-emerald-400' : 'text-neutral-500'}>
+                  <li key={c.label} className={c.ok ? 'text-emerald-400' : 'text-neutral-500 dark:text-neutral-400'}>
                     {c.ok ? '✓' : '○'} {c.label}
                   </li>
                 ))}

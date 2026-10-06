@@ -165,7 +165,7 @@ export function DataTable<T>({
     <div className={`admin-card flex flex-col overflow-hidden ${className}`}>
       {error && (
         <div className="flex items-start gap-3 border-b border-line bg-red-500/5 px-5 py-3">
-          <AlertCircle className="mt-0.5 h-4 w-4 text-red-500" />
+          <AlertCircle className="mt-0.5 h-4 w-4 text-red-500 dark:text-red-400" />
           <div className="flex-1">
             <p className="text-[13px] font-medium text-red-600 dark:text-red-400">
               {t('common.load_error', { defaultValue: 'No pudimos cargar los datos' })}

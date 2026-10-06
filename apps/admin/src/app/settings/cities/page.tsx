@@ -140,7 +140,7 @@ export default function CitiesPage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -213,7 +213,7 @@ export default function CitiesPage() {
                       onClick={() => toggleActive(city)}
                       aria-label={city.is_active ? `${t('common.deactivate', { defaultValue: 'Deactivate' })} ${city.name}` : `${t('common.activate', { defaultValue: 'Activate' })} ${city.name}`}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        city.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
+                        city.is_active ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-neutral-100 dark:bg-surface-sunken text-neutral-500 dark:text-neutral-400'
                       }`}
                     >
                       {city.is_active ? t('common.active', { defaultValue: 'Activa' }) : t('common.inactive', { defaultValue: 'Inactiva' })}
@@ -231,7 +231,7 @@ export default function CitiesPage() {
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200 dark:hover:bg-surface-elevated"
                         >
                           {t('common.cancel')}
                         </button>
@@ -239,7 +239,7 @@ export default function CitiesPage() {
                     ) : (
                       <button
                         onClick={() => startEdit(city)}
-                        className="text-sm text-primary-500 hover:underline"
+                        className="text-sm text-primary-500 dark:text-primary-400 hover:underline"
                       >
                         {t('common.edit')}
                       </button>

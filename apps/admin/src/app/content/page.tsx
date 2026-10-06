@@ -235,7 +235,7 @@ export default function ContentPage() {
                 className="admin-card flex flex-col gap-3 p-5 transition-colors hover:bg-surface-sunken/40"
               >
                 <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-500/10 text-primary-500">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-500/10 text-primary-500 dark:text-primary-400">
                     <FileText className="h-4 w-4" strokeWidth={1.8} />
                   </span>
                   <div className="flex-1">

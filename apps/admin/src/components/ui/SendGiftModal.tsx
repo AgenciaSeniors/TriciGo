@@ -146,7 +146,7 @@ export function SendGiftModal({ open, loading = false, onConfirm, onCancel }: Se
               {searching ? t('gifts.searching', { defaultValue: 'Buscando…' }) : t('gifts.search', { defaultValue: 'Buscar' })}
             </button>
           </div>
-          {lookupError && <p className="mt-1 text-[12px] text-red-500">{lookupError}</p>}
+          {lookupError && <p className="mt-1 text-[12px] text-red-500 dark:text-red-400">{lookupError}</p>}
           {recipient && (
             <p className="mt-1.5 text-[13px] text-ink">
               {t('gifts.resolved_to', { defaultValue: 'Destinatario:' })}{' '}

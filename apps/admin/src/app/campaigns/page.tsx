@@ -689,10 +689,10 @@ function FormField({
     <label className={`flex flex-col gap-1 ${className ?? ''}`}>
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-red-500 dark:text-red-400">*</span>}
       </span>
       {children}
-      {error && <span className="text-[11px] text-red-500">{error}</span>}
+      {error && <span className="text-[11px] text-red-500 dark:text-red-400">{error}</span>}
     </label>
   );
 }

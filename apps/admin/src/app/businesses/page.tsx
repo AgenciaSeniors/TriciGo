@@ -67,7 +67,7 @@ export default function BusinessesPage() {
         <span className="font-medium text-ink inline-flex items-center gap-2">
           {a.name}
           {(a.is_fleet_owner || fleetAccountIds.has(a.id)) && (
-            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+            <span className="rounded-full bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-400">
               Flota
             </span>
           )}

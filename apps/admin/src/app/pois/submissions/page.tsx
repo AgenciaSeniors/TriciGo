@@ -132,7 +132,7 @@ export default function PoisSubmissionsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Filter size={16} className="text-neutral-500" />
+          <Filter size={16} className="text-neutral-500 dark:text-neutral-400" />
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as StatusFilter)}
@@ -153,9 +153,9 @@ export default function PoisSubmissionsPage() {
       )}
 
       {loading ? (
-        <div className="p-8 text-center text-neutral-500">Cargando...</div>
+        <div className="p-8 text-center text-neutral-500 dark:text-neutral-400">Cargando...</div>
       ) : submissions.length === 0 ? (
-        <div className="p-8 text-center text-neutral-500">
+        <div className="p-8 text-center text-neutral-500 dark:text-neutral-400">
           No hay sugerencias {status === 'pending' ? 'pendientes' : status === 'approved' ? 'aprobadas' : status === 'rejected' ? 'rechazadas' : ''} todavía.
         </div>
       ) : (
@@ -176,9 +176,9 @@ export default function PoisSubmissionsPage() {
                 <tr key={s.id} className="border-t border-neutral-200 dark:border-neutral-700">
                   <td className="px-4 py-3">
                     <div className="font-medium text-neutral-900 dark:text-white">{s.name}</div>
-                    {s.notes && <div className="text-xs text-neutral-500 mt-1">Nota: {s.notes}</div>}
+                    {s.notes && <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Nota: {s.notes}</div>}
                     {s.rejection_reason && (
-                      <div className="text-xs text-red-500 mt-1">Razón rechazo: {s.rejection_reason}</div>
+                      <div className="text-xs text-red-500 dark:text-red-400 mt-1">Razón rechazo: {s.rejection_reason}</div>
                     )}
                   </td>
                   <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">{s.tricigo_category}</td>
@@ -194,7 +194,7 @@ export default function PoisSubmissionsPage() {
                       <ExternalLink size={11} />
                     </a>
                     {s.address && (
-                      <div className="text-xs text-neutral-500 mt-1 max-w-xs">{s.address}</div>
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 max-w-xs">{s.address}</div>
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -208,7 +208,7 @@ export default function PoisSubmissionsPage() {
                       {s.submitter_role ?? 'unknown'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-neutral-500">
+                  <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">
                     {new Date(s.created_at).toLocaleString('es-CU', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Havana' })}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -238,7 +238,7 @@ export default function PoisSubmissionsPage() {
                     ) : s.status === 'rejected' ? (
                       <span className="text-xs text-red-600 dark:text-red-400">✗ Rechazado</span>
                     ) : (
-                      <span className="text-xs text-neutral-500">{s.status}</span>
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">{s.status}</span>
                     )}
                   </td>
                 </tr>

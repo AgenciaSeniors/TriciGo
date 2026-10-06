@@ -18,9 +18,9 @@ import type {
 } from '@tricigo/types';
 
 const statusClasses: Record<CorporateAccountStatus, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-green-100 text-green-800',
-  suspended: 'bg-red-100 text-red-800',
+  pending: 'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-800 dark:text-yellow-400',
+  approved: 'bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-400',
+  suspended: 'bg-red-100 dark:bg-red-500/10 text-red-800 dark:text-red-400',
   rejected: 'bg-surface-sunken text-ink-muted',
 };
 
@@ -311,7 +311,7 @@ export default function BusinessDetailPage() {
           </div>
         </div>
         {account.commission_percent !== null && account.commission_percent !== undefined && (
-          <p className="mt-2 text-xs text-emerald-700">
+          <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">
             Comisión actual: {account.commission_percent}% (descuento de {(15 - account.commission_percent).toFixed(1)}pp absorbido por la plataforma)
           </p>
         )}
@@ -350,12 +350,12 @@ export default function BusinessDetailPage() {
                   <td className="py-2">{emp.users?.full_name ?? '-'}</td>
                   <td className="py-2 text-ink-muted">{emp.users?.phone ?? '-'}</td>
                   <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${emp.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs ${emp.role === 'admin' ? 'bg-purple-100 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400' : 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400'}`}>
                       {emp.role}
                     </span>
                   </td>
                   <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${emp.is_active ? 'bg-green-100 text-green-700' : 'bg-surface-sunken text-ink-muted'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs ${emp.is_active ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-surface-sunken text-ink-muted'}`}>
                       {emp.is_active ? t('common.active', { defaultValue: 'Activo' }) : t('common.inactive', { defaultValue: 'Inactivo' })}
                     </span>
                   </td>

@@ -190,7 +190,7 @@ export function Sidebar() {
             {!isCollapsed && (
               <span className="flex min-w-0 flex-col">
                 <span className="truncate font-display text-[15px] font-semibold tracking-tight text-ink">
-                  TriciGo<span className="text-primary-500">.</span>
+                  TriciGo<span className="text-primary-500 dark:text-primary-400">.</span>
                 </span>
                 <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-ink-subtle">
                   <span className="inline-block h-1 w-1 rounded-full bg-primary-500" aria-hidden="true" />

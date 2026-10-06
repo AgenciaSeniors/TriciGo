@@ -62,11 +62,11 @@ type DriverDetail = {
 
 // ─── Status visual tokens ─────────────────────────────────────
 const STATUS_STYLES: Record<DriverStatus, { dot: string; text: string; bg: string; gradient: string }> = {
-  pending_verification: { dot: 'bg-yellow-500', text: 'text-yellow-700', bg: 'bg-yellow-50', gradient: 'from-yellow-400 to-amber-600' },
-  under_review:         { dot: 'bg-blue-500',   text: 'text-blue-700',   bg: 'bg-blue-50',   gradient: 'from-blue-400 to-blue-600' },
-  approved:             { dot: 'bg-green-500',  text: 'text-green-700',  bg: 'bg-green-50',  gradient: 'from-green-400 to-emerald-600' },
-  rejected:             { dot: 'bg-red-500',    text: 'text-red-700',    bg: 'bg-red-50',    gradient: 'from-red-400 to-rose-600' },
-  suspended:            { dot: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50', gradient: 'from-orange-400 to-orange-600' },
+  pending_verification: { dot: 'bg-yellow-500', text: 'text-yellow-700 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-500/5', gradient: 'from-yellow-400 to-amber-600' },
+  under_review:         { dot: 'bg-blue-500',   text: 'text-blue-700 dark:text-blue-400',   bg: 'bg-blue-50 dark:bg-blue-500/5',   gradient: 'from-blue-400 to-blue-600' },
+  approved:             { dot: 'bg-green-500',  text: 'text-green-700 dark:text-green-400',  bg: 'bg-green-50 dark:bg-green-500/5',  gradient: 'from-green-400 to-emerald-600' },
+  rejected:             { dot: 'bg-red-500',    text: 'text-red-700 dark:text-red-400',    bg: 'bg-red-50 dark:bg-red-500/5',    gradient: 'from-red-400 to-rose-600' },
+  suspended:            { dot: 'bg-orange-500', text: 'text-orange-700 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-500/5', gradient: 'from-orange-400 to-orange-600' },
 };
 
 const STATUS_LABEL_KEY: Record<DriverStatus, string> = {
@@ -452,7 +452,7 @@ export default function DriverDetailPage() {
         </p>
         <button
           onClick={() => router.push('/drivers')}
-          className="text-sm text-primary-500 hover:text-primary-600"
+          className="text-sm text-primary-500 dark:text-primary-400 hover:text-primary-600"
         >
           {t('common.back', { defaultValue: 'Volver' })}
         </button>
@@ -543,7 +543,7 @@ export default function DriverDetailPage() {
                   <button
                     onClick={handleApprove}
                     disabled={actionLoading || !allDocsVerified}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
                     title={!allDocsVerified ? `Debe verificar los documentos requeridos (${requiredVerifiedCount}/${REQUIRED_DOC_TYPES.length})` : ''}
                   >
                     <CheckCircle2 size={14} />
@@ -555,7 +555,7 @@ export default function DriverDetailPage() {
                   <button
                     onClick={() => { setShowReasonModal('reject'); setActionsMenuOpen(false); }}
                     disabled={actionLoading}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-40 transition-colors text-left"
                   >
                     <XCircle size={14} />
                     {t('drivers.action_reject', { defaultValue: 'Rechazar conductor' })}
@@ -565,7 +565,7 @@ export default function DriverDetailPage() {
                   <button
                     onClick={() => { setShowReasonModal('suspend'); setActionsMenuOpen(false); }}
                     disabled={actionLoading}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-orange-700 hover:bg-orange-50 disabled:opacity-40 transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 disabled:opacity-40 transition-colors text-left"
                   >
                     <AlertTriangle size={14} />
                     {t('drivers.action_suspend', { defaultValue: 'Suspender conductor' })}
@@ -577,7 +577,7 @@ export default function DriverDetailPage() {
                 <button
                   onClick={() => { setWalletModalOpen(true); setActionsMenuOpen(false); }}
                   disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-700 hover:bg-primary-50 disabled:opacity-40 transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary-700 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 disabled:opacity-40 transition-colors text-left"
                 >
                   <span className="text-base leading-none">±</span>
                   {t('admin_ops.adjust_wallet_btn', { defaultValue: 'Ajustar saldo TC' })}
@@ -585,7 +585,7 @@ export default function DriverDetailPage() {
                 <button
                   onClick={() => { setGraceTripsModalOpen(true); setActionsMenuOpen(false); }}
                   disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-sky-700 hover:bg-sky-50 disabled:opacity-40 transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-sky-700 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-500/10 disabled:opacity-40 transition-colors text-left"
                 >
                   <span className="text-base leading-none">★</span>
                   {t('admin_ops.grace_trips_btn', { defaultValue: 'Dar viajes de gracia' })}
@@ -597,7 +597,7 @@ export default function DriverDetailPage() {
                 <button
                   onClick={() => { setDeleteAccountModalOpen(true); setActionsMenuOpen(false); }}
                   disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-40 transition-colors text-left"
                 >
                   <XCircle size={14} />
                   {t('users.delete_account_btn', { defaultValue: 'Eliminar cuenta' })}
@@ -662,10 +662,10 @@ export default function DriverDetailPage() {
                         </p>
                       </div>
                       <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        docVerified ? 'bg-green-100 text-green-700' :
-                        docRejected ? 'bg-red-100 text-red-700' :
-                        docMissing ? 'bg-neutral-100 text-neutral-500' :
-                        'bg-yellow-100 text-yellow-700'
+                        docVerified ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400' :
+                        docRejected ? 'bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400' :
+                        docMissing ? 'bg-neutral-100 dark:bg-surface-sunken text-neutral-500 dark:text-neutral-400' :
+                        'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'
                       }`}>
                         {docVerified ? <CheckCircle2 size={10} /> : docRejected ? <XCircle size={10} /> : docMissing ? <Upload size={10} /> : <Clock size={10} />}
                         {docVerified ? t('verification.doc_status_verified', { defaultValue: 'Verificado' }) :
@@ -702,7 +702,7 @@ export default function DriverDetailPage() {
                               onClick={() => window.open(url, '_blank')}
                               className="w-full h-28 flex flex-col items-center justify-center bg-surface-sunken border border-line rounded-md mb-2 hover:bg-surface-sunken transition-colors gap-1.5 group"
                             >
-                              <FileText size={24} className="text-red-500" />
+                              <FileText size={24} className="text-red-500 dark:text-red-400" />
                               <span className="text-[10px] text-ink-muted font-medium truncate max-w-[90%]">
                                 {doc.file_name || 'PDF'}
                               </span>
@@ -722,8 +722,8 @@ export default function DriverDetailPage() {
                           );
                         })()}
                         {url === '__error__' && (
-                          <div className="w-full h-28 bg-red-50 border border-red-200 rounded-md mb-2 flex items-center justify-center">
-                            <span className="text-[10px] text-red-500">{t('verification.doc_load_error', { defaultValue: 'Error cargando' })}</span>
+                          <div className="w-full h-28 bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/30 rounded-md mb-2 flex items-center justify-center">
+                            <span className="text-[10px] text-red-500 dark:text-red-400">{t('verification.doc_load_error', { defaultValue: 'Error cargando' })}</span>
                           </div>
                         )}
                         {!url && (
@@ -736,7 +736,7 @@ export default function DriverDetailPage() {
                         <div className="flex items-center justify-between text-[10px] text-ink-muted mb-2">
                           <span>{formatAdminDate(doc.uploaded_at)}</span>
                           {doc.face_match_score != null && (
-                            <span className={`font-medium ${doc.face_match_score >= 0.8 ? 'text-green-700 dark:text-green-600' : 'text-red-600'}`}>
+                            <span className={`font-medium ${doc.face_match_score >= 0.8 ? 'text-green-700 dark:text-green-600' : 'text-red-600 dark:text-red-400'}`}>
                               {Math.round(doc.face_match_score * 100)}%
                             </span>
                           )}
@@ -744,13 +744,13 @@ export default function DriverDetailPage() {
 
                         {/* Rejection / Verification notes */}
                         {docRejected && doc.rejection_reason && (
-                          <div className="px-2 py-1.5 mb-2 rounded bg-red-50 border border-red-100">
-                            <p className="text-[10px] text-red-700">{doc.rejection_reason}</p>
+                          <div className="px-2 py-1.5 mb-2 rounded bg-red-50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/30">
+                            <p className="text-[10px] text-red-700 dark:text-red-400">{doc.rejection_reason}</p>
                           </div>
                         )}
                         {docVerified && doc.verification_notes && (
-                          <div className="px-2 py-1.5 mb-2 rounded bg-green-50 border border-green-100">
-                            <p className="text-[10px] text-green-700 italic">{doc.verification_notes}</p>
+                          <div className="px-2 py-1.5 mb-2 rounded bg-green-50 dark:bg-green-500/5 border border-green-100 dark:border-green-500/30">
+                            <p className="text-[10px] text-green-700 dark:text-green-400 italic">{doc.verification_notes}</p>
                           </div>
                         )}
 
@@ -778,8 +778,8 @@ export default function DriverDetailPage() {
 
                         {/* Reject panel — multi-select chips + optional note */}
                         {!docVerified && rejectingDocId === doc.id && (
-                          <div className="mt-2 space-y-2 rounded-md border border-red-200 bg-red-50/50 p-2">
-                            <p className="text-[10px] font-semibold text-red-700 uppercase tracking-wider">
+                          <div className="mt-2 space-y-2 rounded-md border border-red-200 dark:border-red-500/30 bg-red-50/50 p-2">
+                            <p className="text-[10px] font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider">
                               {t('verification.reject_pick_reasons', { defaultValue: 'Elige los motivos' })}
                             </p>
                             <div className="flex flex-wrap gap-1">
@@ -793,7 +793,7 @@ export default function DriverDetailPage() {
                                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border transition-colors ${
                                       active
                                         ? 'bg-red-600 text-white border-red-600'
-                                        : 'bg-white text-red-700 border-red-200 hover:bg-red-100'
+                                        : 'bg-white dark:bg-surface-elevated text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/30 hover:bg-red-100 dark:hover:bg-red-500/10'
                                     }`}
                                   >
                                     {active && <CheckCircle2 size={10} />}
@@ -813,7 +813,7 @@ export default function DriverDetailPage() {
                               <button
                                 onClick={() => cancelReject(doc.id)}
                                 disabled={verifyingDoc === doc.id}
-                                className="flex-1 inline-flex items-center justify-center px-2 py-1 rounded text-[11px] font-medium bg-white text-ink-muted border border-line hover:bg-surface-sunken disabled:opacity-50 transition-colors"
+                                className="flex-1 inline-flex items-center justify-center px-2 py-1 rounded text-[11px] font-medium bg-white dark:bg-surface-elevated text-ink-muted border border-line hover:bg-surface-sunken disabled:opacity-50 transition-colors"
                               >
                                 {t('common.cancel', { defaultValue: 'Cancelar' })}
                               </button>
@@ -930,11 +930,11 @@ export default function DriverDetailPage() {
                         <td className="text-sm text-ink-muted">{formatAdminDate(check.requested_at)}</td>
                         <td>
                           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                            check.status === 'passed' ? 'bg-green-100 text-green-700' :
-                            check.status === 'failed' ? 'bg-red-100 text-red-700' :
-                            check.status === 'processing' ? 'bg-blue-100 text-blue-700' :
-                            check.status === 'expired' ? 'bg-neutral-100 text-neutral-500' :
-                            'bg-yellow-100 text-yellow-700'
+                            check.status === 'passed' ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400' :
+                            check.status === 'failed' ? 'bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400' :
+                            check.status === 'processing' ? 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400' :
+                            check.status === 'expired' ? 'bg-neutral-100 dark:bg-surface-sunken text-neutral-500 dark:text-neutral-400' :
+                            'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400'
                           }`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${
                               check.status === 'passed' ? 'bg-green-500' :
@@ -947,7 +947,7 @@ export default function DriverDetailPage() {
                         </td>
                         <td>
                           {check.face_match_score != null ? (
-                            <span className={`text-sm font-medium tabular-nums ${check.face_match_score >= 0.8 ? 'text-green-700 dark:text-green-600' : 'text-red-600'}`}>
+                            <span className={`text-sm font-medium tabular-nums ${check.face_match_score >= 0.8 ? 'text-green-700 dark:text-green-600' : 'text-red-600 dark:text-red-400'}`}>
                               {Math.round(check.face_match_score * 100)}%
                             </span>
                           ) : (
@@ -957,8 +957,8 @@ export default function DriverDetailPage() {
                         <td>
                           {check.liveness_passed != null ? (
                             check.liveness_passed
-                              ? <CheckCircle2 size={14} className="text-green-600" />
-                              : <XCircle size={14} className="text-red-600" />
+                              ? <CheckCircle2 size={14} className="text-green-600 dark:text-green-400" />
+                              : <XCircle size={14} className="text-red-600 dark:text-red-400" />
                           ) : (
                             <span className="text-sm text-ink-subtle">—</span>
                           )}
@@ -990,7 +990,7 @@ export default function DriverDetailPage() {
                       <p className="text-[10px] text-ink-subtle">{formatAdminDate(evt.created_at)}</p>
                     </div>
                     <span className={`text-sm font-medium tabular-nums shrink-0 ${
-                      evt.delta > 0 ? 'text-green-700 dark:text-green-600' : evt.delta < 0 ? 'text-red-600' : 'text-neutral-400'
+                      evt.delta > 0 ? 'text-green-700 dark:text-green-600' : evt.delta < 0 ? 'text-red-600 dark:text-red-400' : 'text-neutral-400'
                     }`}>
                       {evt.delta > 0 ? '+' : ''}{Number(evt.delta).toFixed(1)}
                     </span>
@@ -1000,7 +1000,7 @@ export default function DriverDetailPage() {
               {scoreEvents.length > 10 && (
                 <button
                   onClick={() => setShowAllEvents((v) => !v)}
-                  className="mt-2 text-sm text-primary-500 hover:text-primary-600"
+                  className="mt-2 text-sm text-primary-500 dark:text-primary-400 hover:text-primary-600"
                 >
                   {showAllEvents
                     ? t('common.show_less', { defaultValue: 'Ver menos' })
@@ -1063,8 +1063,8 @@ export default function DriverDetailPage() {
                 {t('drivers.vehicle_section', { defaultValue: 'Vehículo' })}
               </h2>
               <div className="flex items-center gap-3 mb-3 pb-3 border-b border-line">
-                <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
-                  <VIcon size={20} className="text-primary-600" />
+                <div className="w-10 h-10 rounded-lg bg-primary-50 dark:bg-primary-500/5 flex items-center justify-center">
+                  <VIcon size={20} className="text-primary-600 dark:text-primary-400" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-ink capitalize">
@@ -1083,7 +1083,7 @@ export default function DriverDetailPage() {
                 <Field label={t('drivers.label_capacity', { defaultValue: 'Capacidad' })} value={`${vehicle.capacity} ${t('drivers.passengers', { defaultValue: 'pasajeros' })}`} />
               </dl>
               {vehicle.accepts_cargo && (
-                <div className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                <div className="mt-3 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-500/30">
                   <Package size={10} />
                   {t('drivers.accepts_cargo', { defaultValue: 'Acepta carga' })} · {vehicle.max_cargo_weight_kg ?? '?'}kg
                 </div>
@@ -1100,7 +1100,7 @@ export default function DriverDetailPage() {
               <Metric
                 label={t('drivers.label_rating', { defaultValue: 'Rating' })}
                 value={Number(profile.rating_avg).toFixed(1)}
-                icon={<Star size={12} className="fill-amber-500 text-amber-500" />}
+                icon={<Star size={12} className="fill-amber-500 text-amber-500 dark:text-amber-400" />}
               />
               <Metric
                 label={t('drivers.label_completed_rides', { defaultValue: 'Viajes' })}
@@ -1114,10 +1114,10 @@ export default function DriverDetailPage() {
             {/* Match score mini */}
             <div className="mt-3 pt-3 border-t border-line">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-neutral-500">{t('drivers.match_score', { defaultValue: 'Match score' })}</span>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400">{t('drivers.match_score', { defaultValue: 'Match score' })}</span>
                 <span className={`text-sm font-semibold tabular-nums ${
                   Number(profile.match_score ?? 50) >= 70 ? 'text-green-700 dark:text-green-600' :
-                  Number(profile.match_score ?? 50) >= 40 ? 'text-yellow-800 dark:text-yellow-600' : 'text-red-600'
+                  Number(profile.match_score ?? 50) >= 40 ? 'text-yellow-800 dark:text-yellow-600' : 'text-red-600 dark:text-red-400'
                 }`}>
                   {Number(profile.match_score ?? 50).toFixed(1)}
                 </span>
@@ -1131,7 +1131,7 @@ export default function DriverDetailPage() {
                   style={{ width: `${Math.min(100, Math.max(0, Number(profile.match_score ?? 50)))}%` }}
                 />
               </div>
-              <p className="text-[10px] text-neutral-500 mt-1.5">
+              <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-1.5">
                 {profile.total_rides_offered ?? 0} {t('drivers.rides_offered', { defaultValue: 'viajes ofrecidos' })}
               </p>
             </div>
@@ -1147,7 +1147,7 @@ export default function DriverDetailPage() {
               <div className="space-y-3">
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted">{t('drivers.wallet_balance', { defaultValue: 'Disponible' })}</span>
-                  <span className="text-xl font-bold text-primary-500 tabular-nums">{formatCUP(wallet.balance)}</span>
+                  <span className="text-xl font-bold text-primary-500 dark:text-primary-400 tabular-nums">{formatCUP(wallet.balance)}</span>
                 </div>
                 {wallet.held_balance > 0 && (
                   <div className="flex items-baseline justify-between">
@@ -1156,12 +1156,12 @@ export default function DriverDetailPage() {
                   </div>
                 )}
                 {wallet.is_frozen && (
-                  <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
-                    <p className="text-xs font-semibold text-red-700">
+                  <div className="rounded-lg bg-red-50 dark:bg-red-500/5 border border-red-200 dark:border-red-500/30 px-3 py-2">
+                    <p className="text-xs font-semibold text-red-700 dark:text-red-400">
                       {t('drivers.wallet_frozen', { defaultValue: 'Billetera congelada' })}
                     </p>
                     {wallet.frozen_reason && (
-                      <p className="text-[11px] text-red-700 mt-0.5">{wallet.frozen_reason}</p>
+                      <p className="text-[11px] text-red-700 dark:text-red-400 mt-0.5">{wallet.frozen_reason}</p>
                     )}
                   </div>
                 )}
@@ -1174,21 +1174,21 @@ export default function DriverDetailPage() {
           {/* Churn Risk */}
           {churnRisk && (
             <section className={`rounded-xl border p-4 ${
-              churnRisk.risk_level === 'high' ? 'bg-red-50 border-red-200' :
-              churnRisk.risk_level === 'medium' ? 'bg-amber-50 border-amber-200' :
-              'bg-green-50 border-green-200'
+              churnRisk.risk_level === 'high' ? 'bg-red-50 dark:bg-red-500/5 border-red-200 dark:border-red-500/30' :
+              churnRisk.risk_level === 'medium' ? 'bg-amber-50 dark:bg-amber-500/5 border-amber-200 dark:border-amber-500/30' :
+              'bg-green-50 dark:bg-green-500/5 border-green-200 dark:border-green-500/30'
             }`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  {churnRisk.risk_level === 'high' ? <TrendingDown size={14} className="text-red-600" /> : <TrendingUp size={14} className={churnRisk.risk_level === 'medium' ? 'text-amber-600' : 'text-green-600'} />}
+                  {churnRisk.risk_level === 'high' ? <TrendingDown size={14} className="text-red-600 dark:text-red-400" /> : <TrendingUp size={14} className={churnRisk.risk_level === 'medium' ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'} />}
                   <h3 className="text-xs font-medium uppercase tracking-wider text-ink-muted">
                     {t('drivers.churn_risk', { defaultValue: 'Riesgo de abandono' })}
                   </h3>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  churnRisk.risk_level === 'high' ? 'bg-red-100 text-red-700' :
-                  churnRisk.risk_level === 'medium' ? 'bg-amber-100 text-amber-700' :
-                  'bg-green-100 text-green-700'
+                  churnRisk.risk_level === 'high' ? 'bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400' :
+                  churnRisk.risk_level === 'medium' ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' :
+                  'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400'
                 }`}>
                   {churnRisk.risk_level === 'high' ? 'ALTO' :
                    churnRisk.risk_level === 'medium' ? 'MEDIO' : 'BAJO'}
@@ -1196,7 +1196,7 @@ export default function DriverDetailPage() {
               </div>
               <div className="flex items-baseline gap-1 mb-1">
                 <span className="text-2xl font-bold text-ink tabular-nums">{churnRisk.churn_risk_score}</span>
-                <span className="text-xs text-neutral-500">/100</span>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400">/100</span>
               </div>
               <p className="text-xs text-ink-muted">
                 {churnRisk.days_since_last_ride} {t('drivers.days_since_ride_short', { defaultValue: 'días sin viaje' })}
@@ -1213,8 +1213,8 @@ export default function DriverDetailPage() {
             <div className="flex items-center gap-2">
               <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                 profile.is_financially_eligible !== false
-                  ? 'bg-green-50 text-green-700 border border-green-200'
-                  : 'bg-red-50 text-red-700 border border-red-200'
+                  ? 'bg-green-50 dark:bg-green-500/5 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-500/30'
+                  : 'bg-red-50 dark:bg-red-500/5 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/30'
               }`}>
                 {profile.is_financially_eligible !== false
                   ? <><CheckCircle2 size={11} /> {t('drivers.eligible', { defaultValue: 'Elegible' })}</>
@@ -1222,7 +1222,7 @@ export default function DriverDetailPage() {
               </span>
             </div>
             {profile.negative_balance_since && (
-              <p className="text-[11px] text-neutral-500 mt-2">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-2">
                 {t('drivers.negative_balance_since', { defaultValue: 'Balance negativo desde' })} {formatAdminDate(profile.negative_balance_since)}
               </p>
             )}
@@ -1247,7 +1247,7 @@ export default function DriverDetailPage() {
                   ? t('drivers.reject_reason_title', { defaultValue: 'Rechazar conductor' })
                   : t('drivers.suspend_reason_title', { defaultValue: 'Suspender conductor' })}
               </h3>
-              <p className="text-sm text-neutral-500 mt-1">
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
                 {showReasonModal === 'reject'
                   ? t('drivers.reject_helper', { defaultValue: 'Explica al conductor por qué su solicitud fue rechazada.' })
                   : t('drivers.suspend_helper', { defaultValue: 'Esta acción tiene consecuencias importantes. Revisa antes de continuar.' })}
@@ -1256,14 +1256,14 @@ export default function DriverDetailPage() {
 
             <div className="p-5">
               {showReasonModal === 'suspend' && (
-                <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-500/5 border border-orange-200 dark:border-orange-500/30 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle size={14} className="text-orange-600" />
-                    <p className="text-sm font-semibold text-orange-800">
+                    <AlertTriangle size={14} className="text-orange-600 dark:text-orange-400" />
+                    <p className="text-sm font-semibold text-orange-800 dark:text-orange-400">
                       {t('drivers.suspend_warning_title', { defaultValue: 'Al suspender este conductor' })}
                     </p>
                   </div>
-                  <ul className="space-y-1 text-xs text-orange-700 ml-5 list-disc">
+                  <ul className="space-y-1 text-xs text-orange-700 dark:text-orange-400 ml-5 list-disc">
                     <li>{t('drivers.suspend_warning_active_rides', { defaultValue: 'Sus viajes activos serán cancelados' })}</li>
                     <li>{t('drivers.suspend_warning_no_new', { defaultValue: 'No podrá aceptar nuevos viajes' })}</li>
                     <li>{t('drivers.suspend_warning_wallet', { defaultValue: 'Su billetera quedará restringida' })}</li>
@@ -1413,7 +1413,7 @@ function Field({
 }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <dt className="text-xs text-neutral-500 flex items-center gap-1.5 shrink-0 pt-0.5">
+      <dt className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 shrink-0 pt-0.5">
         {Icon && <Icon size={11} className="text-neutral-400" />}
         {label}
       </dt>
@@ -1429,7 +1429,7 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
         {icon}
         {value}
       </div>
-      <div className="text-[10px] text-neutral-500 mt-0.5">{label}</div>
+      <div className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-0.5">{label}</div>
     </div>
   );
 }

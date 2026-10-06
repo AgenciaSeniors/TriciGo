@@ -33,11 +33,11 @@ type StatusFilter = DriverStatus | 'all';
 
 // ─── Status visual tokens ────────────────────────────────────
 const STATUS_STYLES: Record<DriverStatus, { dot: string; text: string; gradient: string }> = {
-  pending_verification: { dot: 'bg-yellow-500', text: 'text-yellow-700', gradient: 'from-yellow-400 to-amber-600' },
-  under_review:         { dot: 'bg-blue-500',   text: 'text-blue-700',   gradient: 'from-blue-400 to-blue-600' },
-  approved:             { dot: 'bg-green-500',  text: 'text-green-700',  gradient: 'from-green-400 to-emerald-600' },
-  rejected:             { dot: 'bg-red-500',    text: 'text-red-700',    gradient: 'from-red-400 to-rose-600' },
-  suspended:            { dot: 'bg-orange-500', text: 'text-orange-700', gradient: 'from-orange-400 to-orange-600' },
+  pending_verification: { dot: 'bg-yellow-500', text: 'text-yellow-700 dark:text-yellow-400', gradient: 'from-yellow-400 to-amber-600' },
+  under_review:         { dot: 'bg-blue-500',   text: 'text-blue-700 dark:text-blue-400',   gradient: 'from-blue-400 to-blue-600' },
+  approved:             { dot: 'bg-green-500',  text: 'text-green-700 dark:text-green-400',  gradient: 'from-green-400 to-emerald-600' },
+  rejected:             { dot: 'bg-red-500',    text: 'text-red-700 dark:text-red-400',    gradient: 'from-red-400 to-rose-600' },
+  suspended:            { dot: 'bg-orange-500', text: 'text-orange-700 dark:text-orange-400', gradient: 'from-orange-400 to-orange-600' },
 };
 
 const STATUS_LABEL_KEYS: Record<DriverStatus, string> = {
@@ -210,8 +210,8 @@ export default function DriversPage() {
             </h1>
             <p className="mt-1 text-sm text-ink-muted">
               {sortedData.length} {t('drivers.in_page', { defaultValue: 'en esta página' })}
-              {pendingCount > 0 && <> · <span className="text-yellow-700">{pendingCount} {t('drivers.pending_label', { defaultValue: 'pendientes' })}</span></>}
-              {onlineCount > 0 && <> · <span className="text-green-700">{onlineCount} {t('drivers.online_label', { defaultValue: 'en línea' })}</span></>}
+              {pendingCount > 0 && <> · <span className="text-yellow-700 dark:text-yellow-400">{pendingCount} {t('drivers.pending_label', { defaultValue: 'pendientes' })}</span></>}
+              {onlineCount > 0 && <> · <span className="text-green-700 dark:text-green-400">{onlineCount} {t('drivers.online_label', { defaultValue: 'en línea' })}</span></>}
             </p>
           </div>
           <button
@@ -347,7 +347,7 @@ export default function DriversPage() {
                         {t('drivers.no_drivers', { defaultValue: 'No hay conductores' })}
                       </p>
                       {hasFilters && (
-                        <button onClick={clearFilters} className="text-sm text-primary-500 hover:text-primary-600 mt-1">
+                        <button onClick={clearFilters} className="text-sm text-primary-500 dark:text-primary-400 hover:text-primary-600 mt-1">
                           {t('filters.clear_all', { defaultValue: 'Limpiar filtros' })}
                         </button>
                       )}
@@ -395,7 +395,7 @@ export default function DriversPage() {
                           <span className={`text-sm ${status.text}`}>{t(STATUS_LABEL_KEYS[driver.status])}</span>
                         </div>
                         {driver.is_on_break && (
-                          <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700">
+                          <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 dark:bg-amber-500/5 text-amber-700 dark:text-amber-400">
                             {t('drivers.on_break', { defaultValue: 'En descanso' })}
                           </span>
                         )}
@@ -403,7 +403,7 @@ export default function DriversPage() {
                       <td className="px-4">
                         {driver.rating_avg > 0 ? (
                           <div className="inline-flex items-center gap-1">
-                            <Star size={13} className="text-amber-500 fill-amber-500" />
+                            <Star size={13} className="text-amber-500 dark:text-amber-400 fill-amber-500" />
                             <span className="text-sm text-ink-muted tabular-nums">
                               {Number(driver.rating_avg).toFixed(1)}
                             </span>

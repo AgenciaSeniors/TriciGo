@@ -35,31 +35,31 @@ const TONE_ACCENTS: Record<Tone, { text: string; ring: string; spark: string; fi
   primary: {
     text: 'text-primary-600 dark:text-primary-400',
     ring: 'ring-primary-500/20',
-    spark: 'text-primary-500',
+    spark: 'text-primary-500 dark:text-primary-400',
     fill: 'rgb(255 77 0 / 0.18)',
   },
   success: {
     text: 'text-emerald-600 dark:text-emerald-400',
     ring: 'ring-emerald-500/20',
-    spark: 'text-emerald-500',
+    spark: 'text-emerald-500 dark:text-emerald-400',
     fill: 'rgb(16 185 129 / 0.18)',
   },
   warning: {
     text: 'text-amber-700 dark:text-amber-400',
     ring: 'ring-amber-500/20',
-    spark: 'text-amber-500',
+    spark: 'text-amber-500 dark:text-amber-400',
     fill: 'rgb(245 158 11 / 0.18)',
   },
   danger: {
     text: 'text-red-600 dark:text-red-400',
     ring: 'ring-red-500/20',
-    spark: 'text-red-500',
+    spark: 'text-red-500 dark:text-red-400',
     fill: 'rgb(239 68 68 / 0.18)',
   },
   info: {
     text: 'text-sky-600 dark:text-sky-400',
     ring: 'ring-sky-500/20',
-    spark: 'text-sky-500',
+    spark: 'text-sky-500 dark:text-sky-400',
     fill: 'rgb(14 165 233 / 0.18)',
   },
 };

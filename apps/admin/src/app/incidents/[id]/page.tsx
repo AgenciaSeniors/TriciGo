@@ -230,7 +230,7 @@ export default function IncidentDetailPage() {
           <h2 className="mb-3 text-lg font-bold text-ink">{t('incidents.reported_review', { defaultValue: 'Reseña reportada' })}</h2>
           <div className="mb-4">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="text-amber-500">{'★'.repeat(review.rating)}{'☆'.repeat(Math.max(0, 5 - review.rating))}</span>
+              <span className="text-amber-500 dark:text-amber-400">{'★'.repeat(review.rating)}{'☆'.repeat(Math.max(0, 5 - review.rating))}</span>
               <span className="text-sm text-ink-muted">{t('incidents.review_by', { defaultValue: 'por' })} {personLine(against, incident.against_user_id)}</span>
               {!review.is_visible && (
                 <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-ink-muted">{t('incidents.review_hidden_badge', { defaultValue: 'Oculta' })}</span>
@@ -291,7 +291,7 @@ export default function IncidentDetailPage() {
               <div>
                 <dt className="text-sm text-ink-muted">{t('incidents.label_ride', { defaultValue: 'Viaje' })}</dt>
                 <dd className="text-sm font-medium">
-                  <Link href={`/rides/${ride.id}`} className="text-primary-500 hover:underline">
+                  <Link href={`/rides/${ride.id}`} className="text-primary-500 dark:text-primary-400 hover:underline">
                     #{ride.id.slice(0, 8)} · {ride.status}
                   </Link>
                 </dd>
@@ -318,7 +318,7 @@ export default function IncidentDetailPage() {
           <ul className="space-y-2">
             {incident.evidence_urls.map((url, i) => (
               <li key={url}>
-                <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:underline">
+                <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 dark:text-primary-400 hover:underline">
                   {t('incidents.evidence_item', { defaultValue: 'Adjunto' })} {i + 1}
                 </a>
               </li>

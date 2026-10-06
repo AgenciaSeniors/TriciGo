@@ -198,7 +198,7 @@ export function NotificationBell() {
             {/* Nothing to act on. */}
             {isEmpty && (
               <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 dark:text-emerald-400">
                   <Bell className="h-5 w-5" strokeWidth={1.8} />
                 </span>
                 <p className="font-display text-[13px] font-semibold text-ink">

@@ -184,7 +184,7 @@ export default function PoisAdminPage() {
         <div className="flex flex-col">
           <span className="font-semibold text-neutral-900 dark:text-neutral-100">{p.name}</span>
           {p.address && (
-            <span className="text-xs text-neutral-500 truncate max-w-md">{p.address}</span>
+            <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate max-w-md">{p.address}</span>
           )}
         </div>
       ),
@@ -240,7 +240,7 @@ export default function PoisAdminPage() {
     {
       id: 'updated_at',
       header: 'Actualizado',
-      cell: (p) => <span className="text-xs text-neutral-500">{formatAdminDate(p.updated_at)}</span>,
+      cell: (p) => <span className="text-xs text-neutral-500 dark:text-neutral-400">{formatAdminDate(p.updated_at)}</span>,
     },
     {
       id: 'actions',
@@ -296,10 +296,10 @@ export default function PoisAdminPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <MapPin className="text-orange-500" />
+            <MapPin className="text-orange-500 dark:text-orange-400" />
             POIs (Cuba)
           </h1>
-          <p className="text-sm text-neutral-500 mt-1">
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
             {total.toLocaleString()} resultados — admin override sticky vs sync mensual
           </p>
         </div>
@@ -364,7 +364,7 @@ export default function PoisAdminPage() {
 
       {/* Table */}
       {error ? (
-        <div className="text-red-700 dark:text-red-600 p-4 bg-red-50 dark:bg-red-900/10 rounded">{error}</div>
+        <div className="text-red-700 dark:text-red-400 p-4 bg-red-50 dark:bg-red-900/10 rounded">{error}</div>
       ) : (
         <DataTable
           rows={pois}
@@ -389,7 +389,7 @@ export default function PoisAdminPage() {
           >
             Anterior
           </button>
-          <span className="text-neutral-500">Página {page + 1} de {totalPages}</span>
+          <span className="text-neutral-500 dark:text-neutral-400">Página {page + 1} de {totalPages}</span>
           <button
             onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
             disabled={page >= totalPages - 1}

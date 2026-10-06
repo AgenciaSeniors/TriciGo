@@ -16,11 +16,11 @@ type Props = {
 
 const TONE_BG: Record<NonNullable<Props['tone']>, string> = {
   default: 'bg-surface-sunken text-ink-muted',
-  primary: 'bg-primary-500/10 text-primary-500',
-  success: 'bg-emerald-500/10 text-emerald-500',
-  warning: 'bg-amber-500/10 text-amber-500',
-  danger: 'bg-red-500/10 text-red-500',
-  info: 'bg-sky-500/10 text-sky-500',
+  primary: 'bg-primary-500/10 text-primary-500 dark:text-primary-400',
+  success: 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400',
+  warning: 'bg-amber-500/10 text-amber-500 dark:text-amber-400',
+  danger: 'bg-red-500/10 text-red-500 dark:text-red-400',
+  info: 'bg-sky-500/10 text-sky-500 dark:text-sky-400',
 };
 
 export function ActivityRow({

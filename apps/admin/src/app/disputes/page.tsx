@@ -271,7 +271,7 @@ export default function DisputesPage() {
               >
                 <span
                   className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${
-                    active ? 'bg-primary-500/15 text-primary-500' : 'bg-surface-sunken text-ink-muted'
+                    active ? 'bg-primary-500/15 text-primary-500 dark:text-primary-400' : 'bg-surface-sunken text-ink-muted'
                   }`}
                 >
                   <Scale className="h-4 w-4" strokeWidth={1.9} />
@@ -369,7 +369,7 @@ export default function DisputesPage() {
           ) : (
             <div className="flex max-h-[680px] flex-col overflow-y-auto">
               <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-500/10 text-primary-500">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-500/10 text-primary-500 dark:text-primary-400">
                   <Scale className="h-5 w-5" strokeWidth={1.8} />
                 </span>
                 <div className="flex-1">
@@ -522,7 +522,7 @@ export default function DisputesPage() {
                             }`}
                           />
                           {formErrors.refundAmount && (
-                            <span className="text-[11px] text-red-500">
+                            <span className="text-[11px] text-red-500 dark:text-red-400">
                               {formErrors.refundAmount}
                             </span>
                           )}
@@ -531,7 +531,7 @@ export default function DisputesPage() {
 
                       <label className="flex flex-col gap-1">
                         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-                          {t('disputes.resolve_notes_label', { defaultValue: 'Notas de resolución' })} <span className="normal-case text-red-500">*</span>
+                          {t('disputes.resolve_notes_label', { defaultValue: 'Notas de resolución' })} <span className="normal-case text-red-500 dark:text-red-400">*</span>
                         </span>
                         <textarea
                           rows={3}
@@ -551,7 +551,7 @@ export default function DisputesPage() {
                           }`}
                         />
                         {formErrors.resolutionNotes && (
-                          <span className="text-[11px] text-red-500">
+                          <span className="text-[11px] text-red-500 dark:text-red-400">
                             {formErrors.resolutionNotes}
                           </span>
                         )}

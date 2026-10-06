@@ -143,7 +143,7 @@ export default function AutomationPage() {
   if (loading) {
     return (
       <div>
-        <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+        <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
           &larr; {t('settings.back_to_settings')}
         </Link>
         <p className="text-ink-subtle">{t('common.loading')}</p>
@@ -153,14 +153,14 @@ export default function AutomationPage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-2">{t('automation.title')}</h1>
       <p className="text-ink-muted mb-6">{t('automation.subtitle')}</p>
 
       {!superAdminLoading && !isSuperAdmin && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+        <div className="bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-400 rounded-xl p-4 mb-6 text-sm" role="status">
           {t('platform_config.requires_super_admin', {
             defaultValue:
               'Solo super_admin puede modificar esta configuración. Tu cuenta puede consultar los valores actuales pero no guardarlos.',
@@ -178,7 +178,7 @@ export default function AutomationPage() {
               key={rule.enabledKey}
               className={`rounded-xl p-6 shadow-sm border transition-colors ${
                 enabled
-                  ? 'bg-green-50 border-green-200'
+                  ? 'bg-green-50 dark:bg-green-500/5 border-green-200 dark:border-green-500/30'
                   : 'bg-surface-elevated border-line'
               }`}
             >
@@ -240,7 +240,7 @@ export default function AutomationPage() {
               {/* Status indicator */}
               <div className="mt-3">
                 <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${
-                  enabled ? 'bg-green-100 text-green-700' : 'bg-surface-sunken text-ink-muted'
+                  enabled ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-surface-sunken text-ink-muted'
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${enabled ? 'bg-green-500' : 'bg-ink-subtle'}`} />
                   {enabled ? t('automation.enabled') : t('automation.disabled')}

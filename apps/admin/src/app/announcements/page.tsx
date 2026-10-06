@@ -421,7 +421,7 @@ export default function AnnouncementsAdminPage() {
                 ))}
               </datalist>
               {!isValidAnnouncementCta(form.cta_url) && (
-                <span className="font-mono text-[10px] text-red-500">
+                <span className="font-mono text-[10px] text-red-500 dark:text-red-400">
                   {t('announcements.cta_url_invalid', {
                     defaultValue: 'Ruta no válida en la app. Elige un destino de la lista o usa una URL externa (https://, tel:, mailto:).',
                   })}

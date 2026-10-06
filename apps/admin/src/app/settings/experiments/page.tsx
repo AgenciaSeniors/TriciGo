@@ -25,9 +25,9 @@ interface Experiment {
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-surface-sunken text-ink-muted',
-  active: 'bg-green-100 text-green-700',
-  paused: 'bg-amber-100 text-amber-700',
-  completed: 'bg-blue-100 text-blue-700',
+  active: 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400',
+  paused: 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  completed: 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
 };
 
 export default function ExperimentsPage() {
@@ -52,7 +52,7 @@ export default function ExperimentsPage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       <h1 className="text-3xl font-bold mb-2">
@@ -85,19 +85,19 @@ export default function ExperimentsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 {/* Variant A */}
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-blue-700 mb-2">{exp.variant_a_name}</h4>
-                  <p className="text-2xl font-bold text-blue-800">{exp.variant_a_multiplier}x</p>
-                  <div className="mt-2 text-xs text-blue-600">
+                <div className="bg-blue-50 dark:bg-blue-500/5 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">{exp.variant_a_name}</h4>
+                  <p className="text-2xl font-bold text-blue-800 dark:text-blue-400">{exp.variant_a_multiplier}x</p>
+                  <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
                     <p>{exp.variant_a_rides} rides · {convRate(exp.variant_a_conversions, exp.variant_a_rides)} conv</p>
                   </div>
                 </div>
 
                 {/* Variant B */}
-                <div className="bg-orange-50 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-orange-700 mb-2">{exp.variant_b_name}</h4>
-                  <p className="text-2xl font-bold text-orange-800">{exp.variant_b_multiplier}x</p>
-                  <div className="mt-2 text-xs text-orange-700">
+                <div className="bg-orange-50 dark:bg-orange-500/5 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-orange-700 dark:text-orange-400 mb-2">{exp.variant_b_name}</h4>
+                  <p className="text-2xl font-bold text-orange-800 dark:text-orange-400">{exp.variant_b_multiplier}x</p>
+                  <div className="mt-2 text-xs text-orange-700 dark:text-orange-400">
                     <p>{exp.variant_b_rides} rides · {convRate(exp.variant_b_conversions, exp.variant_b_rides)} conv</p>
                   </div>
                 </div>

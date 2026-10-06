@@ -81,7 +81,7 @@ export default function WeatherPage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
 
@@ -112,7 +112,7 @@ export default function WeatherPage() {
 
       {/* Weather status card */}
       {weather && (
-        <div className={`rounded-xl border-2 p-5 mb-6 ${active ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+        <div className={`rounded-xl border-2 p-5 mb-6 ${active ? 'bg-blue-50 dark:bg-blue-500/5 border-blue-200 dark:border-blue-500/30' : 'bg-green-50 dark:bg-green-500/5 border-green-200 dark:border-green-500/30'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-4xl">{emoji}</span>
@@ -125,10 +125,10 @@ export default function WeatherPage() {
               </div>
             </div>
             <div className="text-right">
-              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${active ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${active ? 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400' : 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400'}`}>
                 {(weather.multiplier ?? 1).toFixed(2)}x
               </span>
-              <p className={`text-xs mt-1 ${active ? 'text-blue-600' : 'text-green-700 dark:text-green-600'}`}>
+              <p className={`text-xs mt-1 ${active ? 'text-blue-600 dark:text-blue-400' : 'text-green-700 dark:text-green-600'}`}>
                 {active
                   ? t('weather.surge_active', { defaultValue: 'Recargo por mal tiempo activo' })
                   : t('weather.surge_inactive', { defaultValue: 'Sin recargo (tiempo normal)' })}
@@ -174,7 +174,7 @@ export default function WeatherPage() {
         <p className="text-sm text-ink-muted">
           {t('weather.tuning_note', { defaultValue: 'Los multiplicadores por condición y el umbral de frío extremo se ajustan en Configuración de plataforma (weather_cold_threshold_c, weather_cold_multiplier).' })}
         </p>
-        <Link href="/settings/platform-config" className="mt-2 inline-block text-sm text-primary-500 hover:underline">
+        <Link href="/settings/platform-config" className="mt-2 inline-block text-sm text-primary-500 dark:text-primary-400 hover:underline">
           {t('weather.go_to_config', { defaultValue: 'Ir a Configuración de plataforma' })} &rarr;
         </Link>
       </div>

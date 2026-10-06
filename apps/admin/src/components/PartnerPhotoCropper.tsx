@@ -209,7 +209,7 @@ export default function PartnerPhotoCropper({ file, aspectW, aspectH, onCancel, 
           />
         </label>
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="rounded-lg border border-line px-4 py-2 text-sm text-ink">

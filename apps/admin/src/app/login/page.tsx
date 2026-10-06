@@ -76,7 +76,7 @@ export default function AdminLoginPage() {
             alt="TriciGo"
             className="h-10 w-auto mx-auto mb-2"
           />
-          <p className="text-neutral-500 text-sm">{t('login.admin_panel')}</p>
+          <p className="text-neutral-500 dark:text-neutral-400 text-sm">{t('login.admin_panel')}</p>
         </div>
 
         {/* Login Form */}
@@ -132,7 +132,7 @@ export default function AdminLoginPage() {
           {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-neutral-700" />
-            <span className="text-neutral-500 text-xs uppercase">{t('login.or_divider')}</span>
+            <span className="text-neutral-500 dark:text-neutral-400 text-xs uppercase">{t('login.or_divider')}</span>
             <div className="flex-1 h-px bg-neutral-700" />
           </div>
 

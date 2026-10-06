@@ -31,9 +31,9 @@ export function AdminToastProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const colors = {
-    success: 'bg-green-50 border-green-200 text-green-700',
-    error: 'bg-red-50 border-red-200 text-red-700',
-    warning: 'bg-amber-50 border-amber-200 text-amber-700',
+    success: 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-400',
+    error: 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400',
+    warning: 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400',
   };
   const icons = { success: '\u2713', error: '\u2715', warning: '\u26A0' };
 

@@ -121,7 +121,7 @@ export default function ServiceTypesPage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -134,7 +134,7 @@ export default function ServiceTypesPage() {
       <h1 className="text-3xl font-bold mb-6">{t('service_types.title')}</h1>
 
       {!superAdminLoading && !isSuperAdmin && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+        <div className="bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-400 rounded-xl p-4 mb-6 text-sm" role="status">
           {t('platform_config.requires_super_admin', {
             defaultValue:
               'Solo super_admin puede modificar esta configuración. Tu cuenta puede consultar los valores actuales pero no guardarlos.',
@@ -142,7 +142,7 @@ export default function ServiceTypesPage() {
         </div>
       )}
 
-      <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl px-4 py-3 mb-6 text-sm">
+      <div className="bg-indigo-50 dark:bg-indigo-500/5 border border-indigo-200 dark:border-indigo-500/30 text-indigo-800 dark:text-indigo-400 rounded-xl px-4 py-3 mb-6 text-sm">
         {t('pricing.usd_anchor_note', {
           defaultValue:
             'Los precios están anclados en USD. Editas el valor en CUP de hoy y queda guardado su equivalente en dólares; el CUP se recalcula solo con la tasa de ElToque para que la inflación no afecte nuestro ingreso.',
@@ -216,7 +216,7 @@ export default function ServiceTypesPage() {
                       disabled={!isSuperAdmin}
                       aria-label={c.is_active ? `${t('common.deactivate', { defaultValue: 'Deactivate' })} ${c.slug}` : `${t('common.activate', { defaultValue: 'Activate' })} ${c.slug}`}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium disabled:cursor-not-allowed ${
-                        c.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
+                        c.is_active ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-neutral-100 dark:bg-surface-sunken text-neutral-500 dark:text-neutral-400'
                       }`}
                     >
                       {c.is_active ? t('common.active') : t('common.inactive')}
@@ -234,7 +234,7 @@ export default function ServiceTypesPage() {
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200 dark:hover:bg-surface-elevated"
                         >
                           {t('common.cancel')}
                         </button>
@@ -244,7 +244,7 @@ export default function ServiceTypesPage() {
                         onClick={() => startEdit(c)}
                         disabled={!isSuperAdmin}
                         title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
-                        className="text-sm text-primary-500 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                        className="text-sm text-primary-500 dark:text-primary-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                       >
                         {t('common.edit')}
                       </button>

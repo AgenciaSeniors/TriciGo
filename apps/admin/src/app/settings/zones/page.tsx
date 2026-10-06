@@ -10,9 +10,9 @@ import { useToast } from '@/components/ui/AdminToast';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 
 const TYPE_BADGE: Record<string, string> = {
-  operational: 'bg-green-100 text-green-700',
-  surge: 'bg-yellow-100 text-yellow-700',
-  restricted: 'bg-red-100 text-red-700',
+  operational: 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400',
+  surge: 'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+  restricted: 'bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400',
 };
 
 const TYPE_LABEL_KEY: Record<string, string> = {
@@ -84,7 +84,7 @@ export default function ZonesPage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -140,7 +140,7 @@ export default function ZonesPage() {
                       onClick={() => toggleActive(z)}
                       aria-label={z.is_active ? `${t('common.deactivate', { defaultValue: 'Deactivate' })} ${z.name}` : `${t('common.activate', { defaultValue: 'Activate' })} ${z.name}`}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        z.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
+                        z.is_active ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-neutral-100 dark:bg-surface-sunken text-neutral-500 dark:text-neutral-400'
                       }`}
                     >
                       {z.is_active ? t('common.active') : t('common.inactive')}
@@ -158,7 +158,7 @@ export default function ZonesPage() {
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200 dark:hover:bg-surface-elevated"
                         >
                           {t('common.cancel')}
                         </button>
@@ -166,7 +166,7 @@ export default function ZonesPage() {
                     ) : (
                       <button
                         onClick={() => startEdit(z)}
-                        className="text-sm text-primary-500 hover:underline"
+                        className="text-sm text-primary-500 dark:text-primary-400 hover:underline"
                       >
                         {t('common.edit')}
                       </button>
