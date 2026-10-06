@@ -16,6 +16,9 @@ M613="$DIR/../../migrations/00613_ride_splits_equal_shares.sql"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 PY="${PYTHON:-python3}"
+# The SQL files are UTF-8. psql on Windows otherwise reads them in the console code page
+# when its output is redirected, and "más" in the guard comes out one character longer.
+export PGCLIENTENCODING=UTF8
 DB=pr614
 AS_OWNER="SET SESSION AUTHORIZATION tricigo_owner; SET search_path = ''"
 PASS=0; FAIL=0
