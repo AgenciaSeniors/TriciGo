@@ -35,7 +35,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
-import { getServiceKey } from '../_shared/service-key.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const D7_BALANCE_URL = 'https://api.d7networks.com/messages/v1/balance';
 const DEFAULT_ALERT_USD = 20;
@@ -59,7 +59,14 @@ function json(body: unknown, status: number) {
   });
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  // Cron-only (00557 sends the service key as apikey). verify_jwt only proves
+  // the caller has SOME session, so without this any user could read the D7
+  // balance and rewrite the sms_balance_* snapshot the runway alert depends on.
+  if (!isServiceKeyToken(req.headers.get('apikey') ?? '')) {
+    return json({ error: 'Forbidden: check-sms-balance is internal-only' }, 401);
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const serviceRoleKey = getServiceKey();
   const supabase = createClient(supabaseUrl, serviceRoleKey);
