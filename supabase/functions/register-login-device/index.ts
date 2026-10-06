@@ -24,6 +24,7 @@
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { rateLimit } from '../_shared/rate-limiter.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
@@ -137,14 +138,23 @@ Deno.serve(async (req) => {
       // The auth email is a synthetic phone_<number>@tricigo.app; the
       // real address (if any) lives in public.users.email. No email on
       // file → record the device but skip the alert.
+      //
+      // Only a CONFIRMED address gets the alert, and at most 3 a day. Before
+      // 2026-10-06 the address was whatever the user typed in
+      // add-email-with-verification, unconfirmed, and every new device_id sent
+      // a mail, so any account could point unlimited "new login" mails, with
+      // its own text in the device fields, at someone else's inbox.
       const { data: dbUser } = await admin
         .from('users')
-        .select('email')
+        .select('email, email_verified_at')
         .eq('id', user.id)
         .maybeSingle();
-      const recipient = dbUser?.email?.trim();
+      const recipient = dbUser?.email_verified_at ? dbUser?.email?.trim() : undefined;
+      const alertBudget = recipient
+        ? await rateLimit(`new-device-email:${user.id}`, 3, 24 * 60 * 60 * 1000)
+        : null;
 
-      if (recipient) {
+      if (recipient && alertBudget?.allowed) {
         const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
         const date = new Date().toLocaleString('es-CU', {
           day: 'numeric', month: 'long', year: 'numeric',
