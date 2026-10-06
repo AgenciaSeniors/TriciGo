@@ -24,6 +24,16 @@ const IP_WINDOW_MS = 10 * 60 * 1000;
 const PHONE_MAX = 6;
 const PHONE_WINDOW_MS = 10 * 60 * 1000;
 
+// Codes to numbers outside Cuba share ONE daily budget across all callers.
+// The per-phone limit doesn't bound cost there (an attacker rotates numbers)
+// and the per-IP limit only slows one address, so without this the endpoint
+// would send unlimited paid international SMS (premium-number "SMS pumping").
+// Measured 2026-10-06: 1,390 SMS to +53 and 1 abroad in 90 days, so 20 a day
+// leaves room for every real foreign login. Raise it here if that changes.
+const FOREIGN_DAILY_MAX = 20;
+const FOREIGN_WINDOW_MS = 24 * 60 * 60 * 1000;
+const FOREIGN_KEY = 'send-sms-otp:foreign:global';
+
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
@@ -163,15 +173,27 @@ Deno.serve(async (req) => {
     // Refund both budgets when a send fails downstream (provider reject /
     // misconfig / DB error) so a user who never received a code isn't locked
     // out of retrying. Windows MUST match the rateLimit() calls above/below.
+    const isForeign = !normalizedPhone.startsWith('+53');
     const refundOtpBudget = async () => {
       await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
       await refundRateLimit(`send-sms-otp:${clientIP}`, IP_WINDOW_MS);
+      if (isForeign) await refundRateLimit(FOREIGN_KEY, FOREIGN_WINDOW_MS);
     };
 
     // BUG-186: per-phone rate limit. Caps OTP-spam of one victim number
     // (an attacker rotating IPs). See PHONE_MAX above.
     const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_MAX, PHONE_WINDOW_MS);
     if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
+
+    if (isForeign) {
+      const rlForeign = await rateLimit(FOREIGN_KEY, FOREIGN_DAILY_MAX, FOREIGN_WINDOW_MS);
+      if (!rlForeign.allowed) {
+        console.warn('[send-sms-otp] daily budget for foreign numbers used up');
+        // This send went out on no SMS, so give back the per-phone token it took.
+        await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
+        return rateLimitResponse(rlForeign.retryAfterMs, getCorsHeaders(req));
+      }
+    }
 
     // ── All phones → D7 Networks SMS + otp_codes (sole provider) ──
     if (!Deno.env.get('D7_API_TOKEN')) {
