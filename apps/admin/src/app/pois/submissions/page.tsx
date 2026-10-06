@@ -232,7 +232,7 @@ export default function PoisSubmissionsPage() {
                         </button>
                       </div>
                     ) : s.status === 'approved' ? (
-                      <span className="text-xs text-green-600 dark:text-green-400">
+                      <span className="text-xs text-green-700 dark:text-green-400">
                         ✓ Aprobado{s.promoted_poi_id ? ` (POI #${s.promoted_poi_id})` : ''}
                       </span>
                     ) : s.status === 'rejected' ? (

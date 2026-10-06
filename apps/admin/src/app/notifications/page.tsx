@@ -346,7 +346,7 @@ export default function NotificationsPage() {
                 </div>
               )}
               {targetUserId && (
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
                   {t('notifications.user_selected', { defaultValue: 'Usuario seleccionado' })}
                 </span>
               )}

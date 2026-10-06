@@ -706,7 +706,7 @@ export default function DriverDetailPage() {
                               <span className="text-[10px] text-ink-muted font-medium truncate max-w-[90%]">
                                 {doc.file_name || 'PDF'}
                               </span>
-                              <span className="text-[10px] text-primary-600 group-hover:underline inline-flex items-center gap-1">
+                              <span className="text-[10px] text-primary-700 dark:text-primary-600 group-hover:underline inline-flex items-center gap-1">
                                 {t('drivers.view_document', { defaultValue: 'Ver documento' })}
                                 <ExternalLink size={10} />
                               </span>
@@ -736,7 +736,7 @@ export default function DriverDetailPage() {
                         <div className="flex items-center justify-between text-[10px] text-ink-muted mb-2">
                           <span>{formatAdminDate(doc.uploaded_at)}</span>
                           {doc.face_match_score != null && (
-                            <span className={`font-medium ${doc.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'}`}>
+                            <span className={`font-medium ${doc.face_match_score >= 0.8 ? 'text-green-700 dark:text-green-600' : 'text-red-600'}`}>
                               {Math.round(doc.face_match_score * 100)}%
                             </span>
                           )}
@@ -947,7 +947,7 @@ export default function DriverDetailPage() {
                         </td>
                         <td>
                           {check.face_match_score != null ? (
-                            <span className={`text-sm font-medium tabular-nums ${check.face_match_score >= 0.8 ? 'text-green-600' : 'text-red-600'}`}>
+                            <span className={`text-sm font-medium tabular-nums ${check.face_match_score >= 0.8 ? 'text-green-700 dark:text-green-600' : 'text-red-600'}`}>
                               {Math.round(check.face_match_score * 100)}%
                             </span>
                           ) : (
@@ -990,7 +990,7 @@ export default function DriverDetailPage() {
                       <p className="text-[10px] text-ink-subtle">{formatAdminDate(evt.created_at)}</p>
                     </div>
                     <span className={`text-sm font-medium tabular-nums shrink-0 ${
-                      evt.delta > 0 ? 'text-green-600' : evt.delta < 0 ? 'text-red-600' : 'text-neutral-400'
+                      evt.delta > 0 ? 'text-green-700 dark:text-green-600' : evt.delta < 0 ? 'text-red-600' : 'text-neutral-400'
                     }`}>
                       {evt.delta > 0 ? '+' : ''}{Number(evt.delta).toFixed(1)}
                     </span>
@@ -1116,8 +1116,8 @@ export default function DriverDetailPage() {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-neutral-500">{t('drivers.match_score', { defaultValue: 'Match score' })}</span>
                 <span className={`text-sm font-semibold tabular-nums ${
-                  Number(profile.match_score ?? 50) >= 70 ? 'text-green-600' :
-                  Number(profile.match_score ?? 50) >= 40 ? 'text-yellow-600' : 'text-red-600'
+                  Number(profile.match_score ?? 50) >= 70 ? 'text-green-700 dark:text-green-600' :
+                  Number(profile.match_score ?? 50) >= 40 ? 'text-yellow-800 dark:text-yellow-600' : 'text-red-600'
                 }`}>
                   {Number(profile.match_score ?? 50).toFixed(1)}
                 </span>
@@ -1161,7 +1161,7 @@ export default function DriverDetailPage() {
                       {t('drivers.wallet_frozen', { defaultValue: 'Billetera congelada' })}
                     </p>
                     {wallet.frozen_reason && (
-                      <p className="text-[11px] text-red-600 mt-0.5">{wallet.frozen_reason}</p>
+                      <p className="text-[11px] text-red-700 mt-0.5">{wallet.frozen_reason}</p>
                     )}
                   </div>
                 )}

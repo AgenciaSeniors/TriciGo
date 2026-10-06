@@ -122,9 +122,9 @@ export default function ValidationPage() {
           const tone = rateTone(r.accept_rate, 85, 70);
           const cls =
             tone === 'success'
-              ? 'text-emerald-600 dark:text-emerald-400'
+              ? 'text-emerald-700 dark:text-emerald-400'
               : tone === 'warning'
-                ? 'text-amber-600 dark:text-amber-400'
+                ? 'text-amber-800 dark:text-amber-400'
                 : 'text-red-600 dark:text-red-400';
           return <span className={`font-semibold ${cls}`}>{r.accept_rate}%</span>;
         },
@@ -150,7 +150,7 @@ export default function ValidationPage() {
         id: 'total_overrides',
         header: t('validation.col_total_overrides', { defaultValue: 'Total overrides' }),
         cell: (r) => (
-          <span className={r.total_overrides > 10 ? 'font-semibold text-amber-600 dark:text-amber-400' : ''}>
+          <span className={r.total_overrides > 10 ? 'font-semibold text-amber-800 dark:text-amber-400' : ''}>
             {r.total_overrides}
           </span>
         ),

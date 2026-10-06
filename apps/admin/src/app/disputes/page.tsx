@@ -478,7 +478,7 @@ export default function DisputesPage() {
               {canResolve && (
                 <section className="px-5 py-4">
                   <div className="rounded-xl border border-primary-500/20 bg-primary-500/5 p-4">
-                    <h3 className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600 dark:text-primary-400">
+                    <h3 className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-700 dark:text-primary-400">
                       {t('disputes.resolve_title', { defaultValue: 'Resolver' })}
                     </h3>
                     <div className="flex flex-col gap-3">

@@ -233,7 +233,7 @@ export default function AutomationPage() {
                   {savingKey === rule.thresholdKey ? t('automation.saving') : t('common.save')}
                 </button>
                 {savedKey === rule.thresholdKey && (
-                  <span className="text-xs text-green-600">{t('automation.saved')}</span>
+                  <span className="text-xs text-green-700 dark:text-green-600">{t('automation.saved')}</span>
                 )}
               </div>
 

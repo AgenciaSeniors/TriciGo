@@ -159,7 +159,7 @@ export default function PartnersPage() {
       cell: (p) => p.municipality ?? <span className="text-ink-subtle">—</span> },
     { id: 'discount', header: 'Descuento', width: '120px',
       cell: (p) => (
-        <span className="font-medium tabular-nums text-orange-600">
+        <span className="font-medium tabular-nums text-orange-700 dark:text-orange-600">
           {Math.round(p.discount_percent)}%
         </span>
       ) },

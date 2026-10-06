@@ -97,7 +97,7 @@ export default function ExperimentsPage() {
                 <div className="bg-orange-50 rounded-lg p-4">
                   <h4 className="text-sm font-semibold text-orange-700 mb-2">{exp.variant_b_name}</h4>
                   <p className="text-2xl font-bold text-orange-800">{exp.variant_b_multiplier}x</p>
-                  <div className="mt-2 text-xs text-orange-600">
+                  <div className="mt-2 text-xs text-orange-700">
                     <p>{exp.variant_b_rides} rides · {convRate(exp.variant_b_conversions, exp.variant_b_rides)} conv</p>
                   </div>
                 </div>

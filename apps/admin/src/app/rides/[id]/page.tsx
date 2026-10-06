@@ -489,7 +489,7 @@ export default function RideDetailPage() {
             </div>
           </div>
           {ride.discount_amount_cup > 0 && (
-            <p className="text-sm text-green-600 mt-2">{t('rides.label_discount')}: -{formatCUP(ride.discount_amount_cup)}</p>
+            <p className="text-sm text-green-700 dark:text-green-600 mt-2">{t('rides.label_discount')}: -{formatCUP(ride.discount_amount_cup)}</p>
           )}
         </div>
       )}
