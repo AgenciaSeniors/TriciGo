@@ -10,6 +10,7 @@ import { getStripe } from '../_shared/stripe.ts';
 import { sanitizePayerName } from '../_shared/sanitize.ts';
 import { getFreshFx, FX_UNAVAILABLE_DETAIL } from '../_shared/fx-freshness.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { maskRecipientName } from '../_shared/recipient-name.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -62,6 +63,16 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabase = createClient(supabaseUrl, getServiceKey());
+
+    // Provider gate, same as create-stripe-payment-intent: Stripe stays OFF
+    // until KYC + live keys. Fail CLOSED — only an explicit true enables it.
+    // Without this the public page could still open Checkout sessions and
+    // write intent rows while Stripe is meant to be disabled.
+    const { data: stripeFlag } = await supabase
+      .from('platform_config').select('value').eq('key', 'stripe_enabled').maybeSingle();
+    if (!(stripeFlag?.value === true || stripeFlag?.value === 'true')) {
+      return J(503, { ok: false, error: 'stripe_disabled' });
+    }
 
     // Authoritative recipient resolution (server-side; client cannot forge it).
     const { data: recRows, error: recErr } = await supabase.rpc('find_recipient_for_recharge', { p_phone: phone });
@@ -132,7 +143,7 @@ Deno.serve(async (req) => {
         price_data: {
           currency: 'usd',
           unit_amount: Math.round(chargeUsd * 100),
-          product_data: { name: `TriciGo — recarga para ${recipient.full_name ?? 'usuario'}` },
+          product_data: { name: `TriciGo — recarga para ${maskRecipientName(recipient.full_name) || 'usuario'}` },
         },
       }],
       payment_intent_data: { metadata: { tricigo_intent_id: intent.id } },
