@@ -23,6 +23,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { qpSafeUrl } from '../_shared/qp-safe-url.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { isReservedLoginEmail } from '../_shared/login-identity.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,7 +67,11 @@ Deno.serve(async (req) => {
     // y un correo guardado como "Damian@Gmail.com" no matchearía nunca (el
     // conductor no recibiría el enlace, en silencio).
     const email = (rawEmail ?? '').trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // @tricigo.app is reserved for the synthetic emails verify-otp gives phone
+    // accounts, and verify-otp finds an account by that address. Letting a
+    // user set phone_<n>@tricigo.app for a number with no account yet would
+    // send that number's first OTP login into the user's account.
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || isReservedLoginEmail(email)) {
       return new Response(JSON.stringify({ error: 'invalid_email' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -92,7 +97,16 @@ Deno.serve(async (req) => {
       email_confirm: false,  // requerimos verificación
     });
     if (updateErr) {
-      return new Response(JSON.stringify({ error: 'update_failed', detail: updateErr.message }), {
+      // GoTrue's text names the conflict ("already been registered"); echoing it
+      // told callers which addresses have an account. Map it to the same 409 the
+      // public.users check above returns, and log the rest instead of returning it.
+      if (/already|registered|exists/i.test(updateErr.message)) {
+        return new Response(JSON.stringify({ error: 'email_already_taken' }), {
+          status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      console.error('[add-email] updateUserById failed:', updateErr.message);
+      return new Response(JSON.stringify({ error: 'update_failed' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

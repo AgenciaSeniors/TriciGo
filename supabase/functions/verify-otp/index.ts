@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { phoneConflictsWithAccount } from '../_shared/login-identity.ts';
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -173,20 +174,37 @@ Deno.serve(async (req) => {
 
     if (existingUserId) {
       userId = existingUserId;
-      // Ensure the phone is set + confirmed — but ONLY when it's actually missing.
-      // Writing it on every login is an unnecessary mutation of the shared auth.users
-      // (and a potential second session-revocation source alongside the password write);
-      // skip it once the phone is already present. Never fatal to login.
+      // The lookup also matches by the synthetic email, so the account it found
+      // may not be this phone's: an account created through GoTrue's public
+      // signup with phone_<this number>@tricigo.app (signup is open with
+      // autoconfirm on), or one that moved to a new number with link-phone
+      // (the email stays) while this number went to someone else. Proving this
+      // phone opens only an account that already has this phone. Fail closed
+      // if the account can't be read.
+      let accountPhone: string | null | undefined;
       try {
-        const { data: existing } = await supabase.auth.admin.getUserById(userId);
-        if (!existing?.user?.phone) {
-          await supabase.auth.admin
-            .updateUserById(userId, { phone: normalizedPhone, phone_confirm: true })
-            .catch((e) => console.warn('updateUserById phone failed (non-fatal):', e));
-        }
+        const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(userId);
+        if (getErr || !existing?.user) throw getErr ?? new Error('user not found');
+        accountPhone = existing.user.phone;
       } catch (e) {
-        console.warn('getUserById phone check failed (non-fatal):', e);
+        console.error('getUserById before login failed:', e);
+        return new Response(
+          JSON.stringify({ error: 'Authentication service unavailable' }),
+          { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+        );
       }
+      if (phoneConflictsWithAccount(accountPhone, normalizedPhone)) {
+        console.error(`verify-otp: account ${userId} belongs to another phone; refusing login`);
+        return new Response(
+          JSON.stringify({
+            error: 'This number is linked to another account. Contact support.',
+            reason: 'account_conflict',
+          }),
+          { status: 409, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+        );
+      }
+      // The account already has this phone (checked above), so nothing to write:
+      // no mutation of auth.users on login, and no extra session revocation.
     } else {
       // Create new user
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
