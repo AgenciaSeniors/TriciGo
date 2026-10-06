@@ -165,6 +165,38 @@ interface SplitInviteRow {
   estimated_fare_trc: number | null;
 }
 
+/**
+ * declineSplitInvite before migration 00617: deletes the caller's own
+ * unanswered invite through RLS split_delete_invitee (00614), which 00617
+ * drops. Kept only for the window between this code shipping and 00617
+ * being applied.
+ */
+async function declineSplitInviteDirect(splitId: string, userId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('ride_splits')
+    .delete()
+    .eq('id', splitId)
+    .eq('user_id', userId)
+    .is('accepted_at', null)
+    .select('id');
+  if (error) throw error;
+  if (data && data.length > 0) return;
+
+  const { data: kept, error: readError } = await supabase
+    .from('ride_splits')
+    .select('id, accepted_at')
+    .eq('id', splitId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!kept) return;
+  if (kept.accepted_at) {
+    throw new AppError('declineSplitInvite: already accepted', 'SPLIT_ALREADY_ACCEPTED', 409);
+  }
+  throw new AppError('declineSplitInvite: the invite was not deleted', 'SPLIT_DECLINE_FAILED', 409);
+}
+
 export const rideService = {
   /**
    * Get fare estimate using local calculation (no RPC needed).
@@ -2180,38 +2212,36 @@ export const rideService = {
   /**
    * Decline a split invite (the invited user turns it down).
    *
-   * Deletes the caller's own unanswered invite (RLS split_delete_invitee,
-   * migration 00614). Declining moves no money: the requester pays the
-   * declined part, and no other share goes up. The ride is not touched: the
-   * invitee cannot update it, so `is_split` stays as the requester left it.
+   * Goes through the decline_split_invite RPC (migration 00617), which locks
+   * the ride before deleting, as an invite does: an invite sent at the same
+   * moment counts the declined invitee only if it got the ride first, so the
+   * shares always end as one of the two orders would leave them. Declining
+   * moves no money: the requester pays the declined part, and no other share
+   * goes up. The ride is not touched, so `is_split` stays as the requester
+   * left it.
    *
    * Resolves when the invite is gone, including when the requester had already
-   * withdrawn it. Throws an AppError when the server kept it:
-   * SPLIT_ALREADY_ACCEPTED if it was accepted meanwhile (from another device),
-   * SPLIT_DECLINE_FAILED otherwise (before 00614 RLS deleted 0 rows without
-   * an error, and the invite came back on the next load).
+   * withdrawn it or the ride had ended. Throws an AppError when the server kept
+   * it: SPLIT_ALREADY_ACCEPTED if it was accepted meanwhile (from another
+   * device), SPLIT_DECLINE_FAILED otherwise. Before 00617 is applied the RPC is
+   * missing and the invite is deleted directly, as migration 00614 allowed.
    */
   async declineSplitInvite(splitId: string, userId: string): Promise<void> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('ride_splits')
-      .delete()
-      .eq('id', splitId)
-      .eq('user_id', userId)
-      .is('accepted_at', null)
-      .select('id');
-    if (error) throw error;
-    if (data && data.length > 0) return;
-
-    const { data: kept, error: readError } = await supabase
-      .from('ride_splits')
-      .select('id, accepted_at')
-      .eq('id', splitId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (readError) throw readError;
-    if (!kept) return;
-    if (kept.accepted_at) {
+    const { data: outcome, error: rpcError } = await supabase.rpc('decline_split_invite', {
+      p_split_id: splitId,
+    });
+    if (rpcError) {
+      if (
+        rpcError.code === 'PGRST202' ||
+        /could not find the function/i.test(rpcError.message ?? '')
+      ) {
+        return declineSplitInviteDirect(splitId, userId);
+      }
+      throw rpcError;
+    }
+    if (outcome === 'declined' || outcome === 'gone') return;
+    if (outcome === 'accepted') {
       throw new AppError('declineSplitInvite: already accepted', 'SPLIT_ALREADY_ACCEPTED', 409);
     }
     throw new AppError('declineSplitInvite: the invite was not deleted', 'SPLIT_DECLINE_FAILED', 409);

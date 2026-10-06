@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
       .select('id, email, full_name')
       .in('id', user_ids)
       .not('email', 'is', null)
-      // Consent (mig 00617): marketing email only goes to users who opted in.
+      // Consent (mig 00618): marketing email only goes to users who opted in.
       .eq('marketing_opt_in', true);
     if (error) throw error;
 

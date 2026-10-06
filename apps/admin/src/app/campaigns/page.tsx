@@ -348,7 +348,7 @@ export default function CampaignsPage() {
             sentCount = Math.max(sentCount, emailSent);
             if (emailSent === 0) {
               // send-bulk-email only targets users with a valid address who
-              // accepted marketing messages (mig 00617), so a zero no longer
+              // accepted marketing messages (mig 00618), so a zero no longer
               // means "no valid addresses" alone.
               warnings.push(t('campaigns.warn_email_zero_consent', { defaultValue: 'Guardada, pero el correo no se entregó: nadie del segmento tiene un correo válido y aceptó recibir novedades.' }));
             }

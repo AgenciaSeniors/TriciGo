@@ -28,9 +28,9 @@ export interface User {
   is_active: boolean;
   sms_notifications_enabled: boolean;
   /**
-   * 00617: consent to marketing by WhatsApp, SMS and email. `null` = never asked
+   * 00618: consent to marketing by WhatsApp, SMS and email. `null` = never asked
    * (users who registered before the question existed). Optional because a cached
-   * user, or a database without 00617, has no such field.
+   * user, or a database without 00618, has no such field.
    */
   marketing_opt_in?: boolean | null;
   /** Server time of the current choice; the database stamps it. */

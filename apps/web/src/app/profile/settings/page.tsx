@@ -27,7 +27,7 @@ export default function SettingsPage() {
   const [darkMode, setDarkMode] = useState<'light' | 'dark' | 'system'>('system');
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  // Marketing consent (mig 00617). `undefined` = the profile row has no such
+  // Marketing consent (mig 00618). `undefined` = the profile row has no such
   // column (or isn't loaded yet) → the row stays hidden; `null` = never asked.
   const [marketingOptIn, setMarketingOptIn] = useState<boolean | null | undefined>(undefined);
   const [marketingSaving, setMarketingSaving] = useState(false);
