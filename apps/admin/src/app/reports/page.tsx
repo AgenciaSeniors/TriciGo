@@ -431,7 +431,7 @@ export default function ReportsPage() {
             <section className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-ink">{t('reports.revenue_forecast')}</h2>
-                <div className="text-sm font-semibold text-primary-600 bg-primary-50 px-3 py-1 rounded-full">
+                <div className="text-sm font-semibold text-primary-700 bg-primary-50 px-3 py-1 rounded-full">
                   {t('reports.prediction_next_7_days')}: {formatCUP(forecastTotal)}
                 </div>
               </div>
