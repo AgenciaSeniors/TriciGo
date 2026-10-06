@@ -4,7 +4,10 @@
 -- in platform_config.*_health_*) and the batched-prune pattern (00576: a big
 -- DELETE once tumbled the base — never again). SQL-pure, not an Edge Function:
 -- detecting staleness via net.http_post would inherit pg_cron's blindness (the
--- lesson of the 4-month-silent FX scraper).
+-- lesson of the 4-month-silent FX scraper). The alert emails themselves go out
+-- through cron_http_post('competitor-tracking-alert', …), like 00597, so a send
+-- that send-email rejects shows up in check_cron_http_failures instead of
+-- vanishing; net.http_post would also cut the call at its 5 s default.
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 1. Watchdog — alerts by transition when tracking goes stale OR a session is
@@ -94,22 +97,29 @@ BEGIN
           || CASE WHEN v_status = 'stale' THEN 'Rastreo detenido' ELSE 'Sesión por vencer' END || '</h2>'
           || '<p>' || v_detail || '.</p>'
           || CASE WHEN v_status = 'credential_expiring'
-             THEN '<p>Renová la sesión del competidor desde el celular (deposit-competitor-session) '
+             THEN '<p>Renueva la sesión del competidor desde el celular (deposit-competitor-session) '
                   || 'antes de que venza, o las cotizaciones empezarán a fallar.</p>'
-             ELSE '<p>Revisá los logs de la Edge Function <code>track-competitor-prices</code> y el '
+             ELSE '<p>Revisa los logs de la Edge Function <code>track-competitor-prices</code> y el '
                   || 'estado de <code>competitor_sessions</code> (¿credencial vencida?).</p>' END
           || '<p style="color:#777;font-size:12px">Watchdog automático. No responder.</p></body></html>';
       END IF;
 
-      FOR v_rcpt IN
-        SELECT btrim(x) FROM unnest(string_to_array(v_to_raw, ',')) AS t(x) WHERE position('@' IN x) > 0
-      LOOP
-        PERFORM net.http_post(
-          url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-email',
-          headers := v_headers,
-          body    := jsonb_build_object('recipient_email', v_rcpt, 'subject', v_subject, 'template', v_html, 'data', '{}'::jsonb));
-        v_sent := v_sent + 1;
-      END LOOP;
+      -- 'texto' || NULL is NULL: a NULL piece would turn the whole body NULL and
+      -- send-email would get an empty email. Refuse to send it instead.
+      IF v_html IS NULL OR btrim(v_html) = '' OR v_subject IS NULL THEN
+        RAISE WARNING 'check_competitor_tracking_health: cuerpo vacío, no se envía (subject=%)', v_subject;
+      ELSE
+        FOR v_rcpt IN
+          SELECT btrim(x) FROM unnest(string_to_array(v_to_raw, ',')) AS t(x) WHERE position('@' IN x) > 0
+        LOOP
+          PERFORM public.cron_http_post('competitor-tracking-alert',
+            url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-email',
+            headers := v_headers,
+            -- Raw HTML, accepted by send-email's legacy path.
+            body    := jsonb_build_object('recipient_email', v_rcpt, 'subject', v_subject, 'template', v_html, 'data', '{}'::jsonb));
+          v_sent := v_sent + 1;
+        END LOOP;
+      END IF;
     END IF;
   END IF;
 
@@ -142,7 +152,7 @@ AS $function$
 DECLARE
   -- ::int obligatorio: get_platform_config_numeric devuelve NUMERIC y make_interval
   -- solo acepta INT en days (trampa de 00527, ver CLAUDE.md).
-  v_keep_days int := COALESCE(get_platform_config_numeric('competitor_quotes_retention_days', 365), 365)::int;
+  v_keep_days int := COALESCE(get_platform_config_numeric('competitor_quotes_retention_days', 90), 90)::int;
   v_batch     int := COALESCE(get_platform_config_numeric('competitor_quotes_prune_batch', 20000), 20000)::int;
   v_deleted int := 0;
 BEGIN

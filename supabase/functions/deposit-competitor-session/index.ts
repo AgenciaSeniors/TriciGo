@@ -7,8 +7,10 @@
 // write via PostgREST).
 //
 // Auth: this is NOT open. It authenticates the caller (auth.getUser) and requires
-// an admin/super_admin role — only the owner deposits credentials. That is why it
-// canNOT be a plain verify_jwt=false endpoint the way the cron-only EF is.
+// the super_admin role — only the owner deposits credentials. A plain admin is
+// refused: the credential is the owner's own session at the competitor, and
+// replacing it would point the observatory at someone else's account. That is why
+// it canNOT be a plain verify_jwt=false endpoint the way the cron-only EF is.
 //
 // Why store the raw credential at all (vs the project's "derive, don't store"
 // precedent, mint-netopia-proxy-credential): that HMAC precedent works because the
@@ -43,11 +45,11 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await asUser.auth.getUser();
     if (userErr || !userData?.user) return json({ error: 'unauthenticated' }, 401);
 
-    // Require admin/super_admin.
+    // Require super_admin (see the header).
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const { data: profile } = await admin.from('users').select('role').eq('id', userData.user.id).maybeSingle();
     const role = profile?.role ?? '';
-    if (role !== 'admin' && role !== 'super_admin') return json({ error: 'forbidden' }, 403);
+    if (role !== 'super_admin') return json({ error: 'forbidden' }, 403);
 
     const body = await req.json().catch(() => null);
     const competitor = body?.competitor;
