@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { getSupabaseClient } from '@tricigo/api';
+import { authService, getSupabaseClient } from '@tricigo/api';
 import { getErrorMessage, realEmail } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { AvatarCropModal } from '@/components/AvatarCropModal';
@@ -161,15 +161,35 @@ export default function EditProfilePage() {
         await supabase.from('users').update({ full_name: fullName.trim() }).eq('id', userId);
       } catch { /* RLS may block; auth metadata remains the fallback source */ }
 
-      if (email.trim() !== originalEmail) {
-        await supabase.auth.updateUser({ email: email.trim() });
+      // Same path as the apps: the address is confirmed by a link to it before
+      // it reaches the auth account. auth.updateUser({ email }) applied it
+      // immediately and GoTrue marked it confirmed (autoconfirm is on), so an
+      // account could claim someone else's address.
+      let emailPending = false;
+      if (email.trim() !== originalEmail && email.trim()) {
+        await authService.addBackupEmail(email.trim());
+        emailPending = true;
       }
 
       setToastIsSuccess(true);
-      setToast(t('web.saved', { defaultValue: 'Guardado' }));
+      setToast(
+        emailPending
+          ? t('web.email_confirm_sent', {
+              email: email.trim(),
+              defaultValue: 'Guardado. Te enviamos un enlace a {{email}} para confirmar tu correo.',
+            })
+          : t('web.saved', { defaultValue: 'Guardado' }),
+      );
     } catch (err) {
       setToastIsSuccess(false);
-      setToast(getErrorMessage(err));
+      const code = (err as { code?: string })?.code;
+      setToast(
+        code === 'email_already_taken'
+          ? t('web.email_taken', { defaultValue: 'Ese correo ya pertenece a otra cuenta de TriciGo.' })
+          : code === 'invalid_email'
+            ? t('web.email_invalid', { defaultValue: 'Ingresa un correo electrónico válido.' })
+            : getErrorMessage(err),
+      );
     } finally {
       setSaving(false);
     }

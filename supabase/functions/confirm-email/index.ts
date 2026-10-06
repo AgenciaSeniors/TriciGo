@@ -9,6 +9,10 @@
 // un "callback que marca email_verified_at" que nunca se construyó, así que el
 // flag quedaba NULL para siempre (auditoría del PR #960, 2026-08-17).
 //
+// Desde 2026-10-06 también es el ÚNICO lugar que escribe el correo en
+// auth.users (add-email-with-verification ya no lo hace): así GoTrue nunca
+// tiene por confirmado un correo que su dueño no confirmó.
+//
 // Deliberadamente NO mintea sesión: el click solo prueba posesión del buzón.
 // Si el correo era un typo y lo recibe otra persona, lo peor que puede hacer
 // con este endpoint es confirmar el flag — nunca entrar a la cuenta.
@@ -20,6 +24,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { isReservedLoginEmail } from '../_shared/login-identity.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -71,6 +76,11 @@ Deno.serve(async (req) => {
     if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) {
       return json({ error: 'invalid_or_expired' }, 400);
     }
+    // Tokens issued before add-email started refusing @tricigo.app must not
+    // write such an address into auth.users now (see login-identity.ts).
+    if (isReservedLoginEmail(row.email)) {
+      return json({ error: 'invalid_or_expired' }, 400);
+    }
 
     // El token confirma el correo PARA EL QUE fue emitido. Si el usuario cambió
     // el correo de nuevo después de emitirse este token, el emisor ya borró la
@@ -79,6 +89,19 @@ Deno.serve(async (req) => {
       .from('users').select('email').eq('id', row.user_id).maybeSingle();
     if (!dbUser || (dbUser.email ?? '').toLowerCase() !== row.email.toLowerCase()) {
       return json({ error: 'invalid_or_expired' }, 400);
+    }
+
+    // Recién ahora el correo pasa a la cuenta de autenticación, confirmado.
+    // Si mientras tanto otra cuenta lo tomó, GoTrue lo rechaza y el token sigue
+    // sin usar. Repetirlo con dos clicks a la vez es inofensivo (mismo valor).
+    const { error: authErr } = await supaAdmin.auth.admin
+      .updateUserById(row.user_id, { email: row.email, email_confirm: true });
+    if (authErr) {
+      if (/already|registered|exists/i.test(authErr.message)) {
+        return json({ error: 'email_already_taken' }, 409);
+      }
+      console.error('[confirm-email] auth email update failed:', authErr.message);
+      return json({ error: 'internal' }, 500);
     }
 
     // Un solo uso: marcar gastado ANTES de estampar, con guard de carrera (dos
@@ -93,22 +116,30 @@ Deno.serve(async (req) => {
       return json({ error: 'invalid_or_expired' }, 400);
     }
 
-    // La estampa que todo lo demás gatea.
-    const { error: stampErr } = await supaAdmin
+    // La estampa que todo lo demás gatea, solo si el correo de la fila sigue
+    // siendo el del token. Se relee después de escribir en auth (el trigger
+    // sync_user_email_from_auth puede reescribir la fila) y se estampa con ese
+    // valor exacto en el WHERE: si el usuario lo cambia entre medio, la estampa
+    // no toca nada y el correo nuevo queda sin verificar (00611 también lo
+    // limpia en cada cambio de correo).
+    const { data: freshUser } = await supaAdmin
+      .from('users').select('email').eq('id', row.user_id).maybeSingle();
+    if (!freshUser?.email || freshUser.email.toLowerCase() !== row.email.toLowerCase()) {
+      return json({ error: 'invalid_or_expired' }, 400);
+    }
+    const { data: stamped, error: stampErr } = await supaAdmin
       .from('users')
       .update({ email_verified_at: new Date().toISOString() })
-      .eq('id', row.user_id);
+      .eq('id', row.user_id)
+      .eq('email', freshUser.email)
+      .select('id');
     if (stampErr) {
       console.error('[confirm-email] stamp failed:', stampErr.message);
       return json({ error: 'internal' }, 500);
     }
-
-    // Best-effort: alinear el flag nativo de GoTrue para que la Estrategia A de
-    // verify-otp (signInWithPassword) no tropiece si el proyecto exige correo
-    // confirmado. Nunca fatal: nuestro gate es email_verified_at, no este.
-    await supaAdmin.auth.admin
-      .updateUserById(row.user_id, { email_confirm: true })
-      .catch((e) => console.warn('[confirm-email] email_confirm sync failed (non-fatal):', e?.message));
+    if (!stamped || stamped.length === 0) {
+      return json({ error: 'invalid_or_expired' }, 400);
+    }
 
     await supaAdmin.from('security_audit_log').insert({
       action: 'email_verified',

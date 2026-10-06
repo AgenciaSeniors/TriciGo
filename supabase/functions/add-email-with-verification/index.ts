@@ -2,8 +2,10 @@
 // TriciGo — add-email-with-verification
 //
 // El user logueado agrega/cambia su email. Workflow:
-//   1. EF actualiza auth.users.email (email_confirm: false) y emite un TOKEN
-//      PROPIO de un solo uso (24h) en email_verification_tokens.
+//   1. EF guarda el correo en public.users (sin verified_at) y emite un TOKEN
+//      PROPIO de un solo uso (24h) en email_verification_tokens. NO toca
+//      auth.users: confirm-email escribe ahí el correo recién cuando el dueño
+//      del buzón canjea el token (ver abajo, 2026-10-06).
 //   2. EF manda email custom (template `email_verification`) con el link
 //      https://tricigo.com/auth/email-confirmed?token=<t>.
 //   3. La página canjea el token en la EF confirm-email, que estampa
@@ -18,11 +20,19 @@
 // "marcar email_verified_at" de la versión vieja apuntaba a un callback que
 // nunca existió, así que el flag quedaba NULL para siempre y los resets de
 // contraseña (que gatean en él) jamás salían para estos correos.
+//
+// 2026-10-06: auth.users.email ya no se escribe acá. GoTrue conserva
+// email_confirmed_at al cambiar el correo por la API admin (aunque se pase
+// email_confirm: false; medido: las 160 cuentas con correo real lo tienen
+// confirmado y ninguna pasó por confirm-email), así que un correo AJENO
+// escrito acá quedaba "confirmado" al instante, y un login con Google o Apple
+// con esa dirección podía terminar vinculado a esta cuenta.
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { qpSafeUrl } from '../_shared/qp-safe-url.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { isReservedLoginEmail } from '../_shared/login-identity.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,7 +76,11 @@ Deno.serve(async (req) => {
     // y un correo guardado como "Damian@Gmail.com" no matchearía nunca (el
     // conductor no recibiría el enlace, en silencio).
     const email = (rawEmail ?? '').trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // @tricigo.app is reserved for the synthetic emails verify-otp gives phone
+    // accounts, and verify-otp finds an account by that address. Letting a
+    // user set phone_<n>@tricigo.app for a number with no account yet would
+    // send that number's first OTP login into the user's account.
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || isReservedLoginEmail(email)) {
       return new Response(JSON.stringify({ error: 'invalid_email' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -84,16 +98,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Update email en auth.users (esto manda magic link por defecto si
-    // está configurado, pero queremos custom template, así que generamos
-    // el link manualmente con `email_change` type).
-    const { error: updateErr } = await supaAdmin.auth.admin.updateUserById(user.id, {
-      email,
-      email_confirm: false,  // requerimos verificación
+    // Same check against auth.users (OAuth accounts keep their address there).
+    // auth.users itself is written only by confirm-email, once the owner of the
+    // mailbox proves it; see the header.
+    const { data: authOwner, error: lookupErr } = await supaAdmin.rpc('lookup_auth_user_by_contact', {
+      p_email: email,
+      p_phone: null,
     });
-    if (updateErr) {
-      return new Response(JSON.stringify({ error: 'update_failed', detail: updateErr.message }), {
+    if (lookupErr) {
+      console.error('[add-email] auth lookup failed:', lookupErr.message);
+      return new Response(JSON.stringify({ error: 'update_failed' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (authOwner && authOwner !== user.id) {
+      return new Response(JSON.stringify({ error: 'email_already_taken' }), {
+        status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 

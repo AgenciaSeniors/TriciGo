@@ -2,11 +2,14 @@
 // Given a Cuban phone, returns the recipient's display name for the public
 // /recargar page. Normalized lookup (00461 fix) via find_recipient_for_recharge.
 // Anti-enumeration guard: per-IP rate-limit (the public path's protection).
-// Returns ONLY the name — never the user id (create-stripe-recharge-intent
-// re-resolves server-side so the client cannot forge the recipient).
+// Returns ONLY a masked name ("Eduardo D.") — never the full name or the user
+// id (the create-*-recharge-intent functions re-resolve server-side so the
+// client cannot forge the recipient). The full name made this a public
+// phone-to-identity lookup until 2026-10-06.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { maskRecipientName } from '../_shared/recipient-name.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -43,7 +46,7 @@ Deno.serve(async (req) => {
     }
     const row = Array.isArray(data) ? data[0] : data;
     if (!row?.id) return json(corsHeaders, 200, { found: false });
-    return json(corsHeaders, 200, { found: true, fullName: row.full_name ?? '' });
+    return json(corsHeaders, 200, { found: true, fullName: maskRecipientName(row.full_name) });
   } catch (err) {
     console.error('[resolve-recipient] error:', err);
     return json(corsHeaders, 200, { found: false });

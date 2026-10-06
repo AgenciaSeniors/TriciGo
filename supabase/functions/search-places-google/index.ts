@@ -20,8 +20,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { computeCacheKey, googlePlacesAutocomplete, type SearchBoxResult } from './_shared/google.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { rateLimit } from '../_shared/rate-limiter.ts';
 
 const DEFAULT_DAILY_CAP = 1000;
+// Live Google calls one user may trigger per hour (typing hits the cache most
+// of the time; a person searching for real stays far below this).
+const USER_HOURLY_MAX = 60;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -155,6 +159,31 @@ Deno.serve(async (req: Request) => {
   } catch (e) {
     console.warn('[search-places-google] daily_count check failed:', e);
     // Don't block on counter errors — fail open (call Google anyway)
+  }
+
+  // ── Per-user budget (live calls only; cache hits above are free) ──
+  // Checked after the shared cap so a request the cap already refuses does
+  // not also spend the caller's own allowance.
+  // The daily cap below is shared by everyone, and each live call can fan out
+  // to 1 autocomplete + up to 20 Place Details requests. Without a per-user
+  // limit one account could spend the whole day's Google budget by varying
+  // the query (2026-10-06). Over the limit the client falls back to Mapbox,
+  // exactly as when the global cap is reached.
+  const { data: authData } = await supabase.auth.getUser(authHeader.slice('Bearer '.length));
+  const callerId = authData?.user?.id;
+  if (!callerId) {
+    return jsonResponse({ data: [], source: 'google', reason: 'google_error' }, 401);
+  }
+  const userBudget = await rateLimit(`search-places-google:${callerId}`, USER_HOURLY_MAX, 60 * 60 * 1000);
+  if (!userBudget.allowed) {
+    console.warn(`[search-places-google] per-user budget used up for ${callerId} → fallback`);
+    return jsonResponse({
+      data: [],
+      source: 'google',
+      fallback: 'mapbox',
+      reason: 'budget_cap',
+      cap_remaining: 0,
+    }, 200);
   }
 
   // ── Call Google ──

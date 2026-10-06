@@ -20,6 +20,22 @@ Deno.serve(async (req: Request) => {
     const serviceKey = getServiceKey();
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    // Admins only (2026-10-06). The grid is built from the pickup points of
+    // every current ride, often someone's home, and verify_jwt alone lets any
+    // signed-up user in. No app calls this function today.
+    const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+    const { data: authData } = token ? await supabase.auth.getUser(token) : { data: { user: null } };
+    const callerId = authData?.user?.id;
+    const { data: roleRow } = callerId
+      ? await supabase.from('users').select('role').eq('id', callerId).maybeSingle()
+      : { data: null };
+    if (!roleRow || !['admin', 'super_admin'].includes(String(roleRow.role))) {
+      return new Response(JSON.stringify({ error: 'Forbidden: admin role required' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+
     // Get rides from last 2 hours with status 'searching'
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
@@ -77,7 +93,7 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify(heatmapPoints), {
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': `public, max-age=${CACHE_TTL_S}`,
+        'Cache-Control': `private, max-age=${CACHE_TTL_S}`,
         'Access-Control-Allow-Origin': '*',
         'Connection': 'keep-alive',
       },
