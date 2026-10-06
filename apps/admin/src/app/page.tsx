@@ -427,13 +427,13 @@ function toneBadge(tone: 'default' | 'primary' | 'success' | 'warning' | 'danger
     case 'primary':
       return 'bg-primary-500/10 text-primary-700 dark:text-primary-400';
     case 'success':
-      return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+      return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400';
     case 'warning':
-      return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+      return 'bg-amber-500/10 text-amber-700 dark:text-amber-400';
     case 'danger':
-      return 'bg-red-500/10 text-red-600 dark:text-red-400';
+      return 'bg-red-500/10 text-red-700 dark:text-red-400';
     case 'info':
-      return 'bg-sky-500/10 text-sky-600 dark:text-sky-400';
+      return 'bg-sky-500/10 text-sky-700 dark:text-sky-400';
     default:
       return 'bg-surface-sunken text-ink-muted';
   }
