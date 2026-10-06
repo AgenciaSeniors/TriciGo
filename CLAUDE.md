@@ -2623,6 +2623,30 @@ GROUP BY 1, 2 HAVING count(*) FILTER (WHERE d.status <> 'succeeded') > 0 ORDER B
 - Tras cualquier timeout, verificar por objeto (conteo de filas, `to_regclass`, md5 del cuerpo) y no por `schema_migrations`.
 - No esquivar la confirmación metiendo el `DELETE` dentro de un `DO` o de una función: el aviso existe para que la persona decida.
 
+**Qué dispara esa espera, medido el 2026-10-06 con 00617, 00620 y 00622.** No es la palabra sino una sentencia destructiva, y un `DELETE FROM` dentro del cuerpo de una función cuenta:
+- La 00617 (con un `DROP POLICY` y una función con `DELETE FROM`) y la 00620 (solo la función con `DELETE FROM`) se cortaron a los 60 s sin llegar a la base: ni la función ni nada en `pg_stat_activity` ni en `schema_migrations`.
+- La 00622 entró al instante aunque nombra `DELETE` en un `GRANT … DELETE ON …` y en un comentario.
+- Un bloque de prueba que termina en `RAISE EXCEPTION`, con un `DELETE` de limpieza adentro, también se cortó por `execute_sql`, aunque todo se iba a deshacer. Para probar en prod sin esperar, llamar solo a la función bajo prueba y dejar que el `RAISE EXCEPTION` deshaga las filas creadas.
+
+**Si se corta, se aplica desde el SQL Editor, y pegar desde Windows mete `\r` en el cuerpo de las funciones.** La función anda igual, pero su md5 ya no es el de git: la 00617 quedó en `d7957554…/1173` en vez de `582b8dd9…/1136`. Pegar la migración y agregar al final este bloque, en la misma ejecución, la recrea desde el catálogo sin los `\r`. Conserva permisos y SECURITY DEFINER, y frena si el cuerpo no queda igual al de git. Así quedó bien la 00620 a la primera.
+
+```sql
+DO $fix$
+DECLARE v_def text;
+BEGIN
+  SELECT pg_get_functiondef('public.<funcion>(<args>)'::regprocedure) INTO v_def;
+  IF position(chr(13) IN v_def) > 0 THEN
+    EXECUTE replace(v_def, chr(13), '');
+  END IF;
+  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.<funcion>(<args>)'::regprocedure) <> '<md5 de git>' THEN
+    RAISE EXCEPTION 'el cuerpo instalado no es el de git';
+  END IF;
+END
+$fix$;
+```
+
+Una migración aplicada desde el SQL Editor no queda en `schema_migrations`: se verifica por objeto (md5 y largo del cuerpo, ACL, políticas), como cualquier otra.
+
 **Medir latencia en prod justo después de un backfill engaña, y la firma para reconocerlo es "mismos buffers, 100× más lento".** Tras 00579-00581, `search_pois_smart('hotel')` daba 2,0-5,2 s por MCP contra ~45 ms del ensayo local con las mismas filas; con plan custom, genérico e inline salía igual de mal, así que no era el plan. La respuesta la dio `auto_explain` con `log_nested_statements = on`, `log_analyze = on` y `log_timing = on` en la sesión (los GUC de auto_explain se pueden setear desde el rol `postgres`; el plan de la sentencia interna de la función queda en `postgres_logs`): el plan en frío (2.463 ms) y el mismo plan 1 s después (140 ms) tienen **nodos idénticos y los mismos `shared hit`** (`idx_pois_location` 1.099 buffers en ambos), pero en frío cada nodo tarda **~100×** (ese índice 684 ms vs 7 ms; `idx_cuba_pois_active` 221 ms vs 2 ms; el index scan por pk 4,6 ms/fila vs 0,03). "Hit" con 100× de costo = páginas frías en memoria / CPU contendida de la instancia, no Postgres ni la consulta. Reglas: (1) A/B siempre dentro de UNA petición multi-sentencia, alternando, leyendo las duraciones anidadas en los logs; (2) descartar `plan_cache_mode` ANTES de tocar código (`SET plan_cache_mode = force_custom_plan` / `force_generic_plan` en la sesión — acá el genérico era 2× peor pero no explicaba nada); (3) el número que ven los usuarios es el caliente (PostgREST mantiene sus conexiones): v2 en prod = 18-27 ms exactas/alias, 96-350 ms keyword/fuzzy. La "primera llamada del día de 3-4 s" que ya tenía v1 es esta misma instancia despertando, y se arregla con cómputo, no con SQL.
 
 ### Verificar la superficie correcta (2 incidentes el mismo día, 2026-07-19)
