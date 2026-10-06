@@ -39,9 +39,10 @@
 --     fleet keeps its company and its id. A move to someone else's account
 --     now succeeds the same way instead of failing RLS.
 --   * Nothing else. The descriptive fields (name, city, vehicle types,
---     zones, hours, counts, notes) stay editable: only FleetReview shows
---     them, and the only server functions that read driver_fleets
---     (find_best_drivers, accept_ride_v2) use just id and
+--     zones, hours, counts, notes) stay editable: only screens show them,
+--     such as FleetReview, and no server code reads them. The database
+--     functions that read driver_fleets (find_best_drivers, accept_ride_v2)
+--     and the storage-upload Edge Function use only id and
 --     corporate_account_id. corporate_accounts likewise keeps its name,
 --     contact and tax id editable after approval, and freezes its id.
 --
