@@ -326,6 +326,8 @@
     "split_accept_failed": "Couldn't accept the invitation. Try again.",
     "split_invite_gone": "This invitation is no longer available: the ride ended or the person who invited you withdrew it.",
     "split_already_accepted": "You already accepted this invitation: you'll pay your share when the trip ends.",
+    "split_withdraw_too_late": "The trip already started: you can no longer remove anyone from the split.",
+    "split_withdraw_failed": "Couldn't remove the invitation. Try again.",
     "safety_button": "Safety",
     "insurance_toggle": "Trip insurance",
     "insurance_desc": "Coverage for accidents and damages",

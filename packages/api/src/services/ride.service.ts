@@ -197,6 +197,33 @@ async function declineSplitInviteDirect(splitId: string, userId: string): Promis
   throw new AppError('declineSplitInvite: the invite was not deleted', 'SPLIT_DECLINE_FAILED', 409);
 }
 
+/**
+ * removeSplitInvite before migration 00620: deletes the invite through RLS
+ * split_delete (00031), which takes no lock on the ride. Kept only for the
+ * window between this code shipping and 00620 being applied.
+ */
+async function removeSplitInviteDirect(rideId: string, splitId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('ride_splits')
+    .delete()
+    .eq('id', splitId)
+    .eq('ride_id', rideId)
+    .select('id');
+  if (error) throw error;
+  if (data && data.length > 0) return;
+
+  const { data: kept, error: readError } = await supabase
+    .from('ride_splits')
+    .select('id')
+    .eq('id', splitId)
+    .eq('ride_id', rideId)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!kept) return;
+  throw new AppError('removeSplitInvite: the invite was not withdrawn', 'SPLIT_WITHDRAW_FAILED', 409);
+}
+
 export const rideService = {
   /**
    * Get fare estimate using local calculation (no RPC needed).
@@ -2189,24 +2216,40 @@ export const rideService = {
   /**
    * Remove a split invite (the requester withdraws it, before pickup).
    * The invitee declines with declineSplitInvite.
+   *
+   * Goes through the withdraw_split_invite RPC (migration 00620), which locks
+   * the ride before deleting, as an invite does: an invite sent at the same
+   * moment counts the withdrawn invitee only if it got the ride first, and a
+   * withdraw racing the start of the trip sees the trip started. Accepted
+   * invites can be withdrawn too, before pickup. The ride is not touched:
+   * `is_split` stays true (clearing it raced with invites, and a split ride
+   * with no accepted invite is charged like any other ride).
+   *
+   * Resolves when the invite is gone, including when it already was (declined,
+   * withdrawn from another device, or the ride ended). Throws an AppError when
+   * the server kept it: SPLIT_WITHDRAW_TOO_LATE once the trip started,
+   * SPLIT_WITHDRAW_FAILED otherwise. Before 00620 is applied the RPC is
+   * missing and the invite is deleted directly, as split_delete allows.
    */
   async removeSplitInvite(rideId: string, splitId: string): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('ride_splits')
-      .delete()
-      .eq('id', splitId)
-      .eq('ride_id', rideId);
-    if (error) throw error;
-
-    // Check if there are remaining splits
-    const { data: remaining } = await supabase
-      .from('ride_splits')
-      .select('id')
-      .eq('ride_id', rideId);
-    if (!remaining || remaining.length === 0) {
-      await supabase.from('rides').update({ is_split: false }).eq('id', rideId);
+    const { data: outcome, error: rpcError } = await supabase.rpc('withdraw_split_invite', {
+      p_split_id: splitId,
+    });
+    if (rpcError) {
+      if (
+        rpcError.code === 'PGRST202' ||
+        /could not find the function/i.test(rpcError.message ?? '')
+      ) {
+        return removeSplitInviteDirect(rideId, splitId);
+      }
+      throw rpcError;
     }
+    if (outcome === 'withdrawn' || outcome === 'gone') return;
+    if (outcome === 'too_late') {
+      throw new AppError('removeSplitInvite: the trip already started', 'SPLIT_WITHDRAW_TOO_LATE', 409);
+    }
+    throw new AppError('removeSplitInvite: the invite was not withdrawn', 'SPLIT_WITHDRAW_FAILED', 409);
   },
 
   /**

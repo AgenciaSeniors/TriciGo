@@ -68,8 +68,10 @@ export function FareSplitCard({ rideId, userId, estimatedFareTrc }: Props) {
     try {
       await rideService.removeSplitInvite(rideId, split.id);
       loadSplits();
-    } catch {
-      setError('No se pudo quitar la invitación');
+    } catch (err) {
+      setError((err as { code?: string } | null)?.code === 'SPLIT_WITHDRAW_TOO_LATE'
+        ? 'El viaje ya empezó: ya no puedes quitar a nadie de la división.'
+        : 'No se pudo quitar la invitación. Inténtalo de nuevo.');
     }
   };
 
