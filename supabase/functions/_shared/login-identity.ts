@@ -12,9 +12,9 @@
 //    their auth email for a number that had no account yet; the victim's
 //    first OTP login then found the attacker's account through the email
 //    branch and got a session for it.
-//  - verify-otp logs a phone only into an account that already has that
-//    phone. An account found through the email branch with another phone, or
-//    with none, is refused. "None" matters because GoTrue's public /signup is
+//  - verify-otp looks the account up by phone only, and logs a phone only
+//    into an account that already has that phone, confirmed, and only hands
+//    back a session for that same account. Anything else is refused. "None" matters because GoTrue's public /signup is
 //    open with autoconfirm on (measured 2026-10-06): anyone can create
 //    phone_<victim>@tricigo.app with a password of their choosing, and the
 //    victim's first OTP login would land in it. It also covers a recycled
@@ -44,15 +44,17 @@ export function isReservedLoginEmail(email: string): boolean {
 }
 
 /**
- * True unless the existing account's phone is the one that just proved
- * itself with an OTP. An account without a phone is a conflict too: only the
- * synthetic email could have matched it, and that address can be taken by
- * anyone through GoTrue's public signup.
+ * True unless the existing account holds the phone that just proved itself
+ * with an OTP, confirmed. A missing phone or an unconfirmed one is a conflict:
+ * GoTrue's public signup can create an account with any email or any phone
+ * (left unconfirmed), and neither proves anything. Every account verify-otp
+ * creates has its phone confirmed (572 of 572 on 2026-10-06).
  */
 export function phoneConflictsWithAccount(
   accountPhone: string | null | undefined,
   loginPhone: string,
+  accountPhoneConfirmedAt?: string | null,
 ): boolean {
   const account = digits(accountPhone ?? '');
-  return !account || account !== digits(loginPhone);
+  return !account || account !== digits(loginPhone) || !accountPhoneConfirmedAt;
 }

@@ -31,20 +31,28 @@ describe('isReservedLoginEmail', () => {
 });
 
 describe('phoneConflictsWithAccount', () => {
-  it('is true when the account has no phone (only the squattable email matched it)', () => {
-    expect(phoneConflictsWithAccount(null, '+5351234567')).toBe(true);
-    expect(phoneConflictsWithAccount(undefined, '+5351234567')).toBe(true);
-    expect(phoneConflictsWithAccount('', '+5351234567')).toBe(true);
+  const CONFIRMED = '2026-10-06T10:00:00Z';
+
+  it('is true when the account has no phone (only a squattable email could match it)', () => {
+    expect(phoneConflictsWithAccount(null, '+5351234567', CONFIRMED)).toBe(true);
+    expect(phoneConflictsWithAccount(undefined, '+5351234567', CONFIRMED)).toBe(true);
+    expect(phoneConflictsWithAccount('', '+5351234567', CONFIRMED)).toBe(true);
   });
 
-  it('is false when the account phone is the login phone, in any format', () => {
+  it('is false when the account holds the login phone, confirmed, in any format', () => {
     // GoTrue stores E.164 digits without '+'; verify-otp works with '+'.
-    expect(phoneConflictsWithAccount('5351234567', '+5351234567')).toBe(false);
-    expect(phoneConflictsWithAccount('+5351234567', '+5351234567')).toBe(false);
+    expect(phoneConflictsWithAccount('5351234567', '+5351234567', CONFIRMED)).toBe(false);
+    expect(phoneConflictsWithAccount('+5351234567', '+5351234567', CONFIRMED)).toBe(false);
+  });
+
+  it('is true when the account holds the phone but never confirmed it', () => {
+    // GoTrue's public phone signup leaves exactly this behind.
+    expect(phoneConflictsWithAccount('5351234567', '+5351234567', null)).toBe(true);
+    expect(phoneConflictsWithAccount('5351234567', '+5351234567')).toBe(true);
   });
 
   it('is true when the account belongs to a different phone', () => {
-    expect(phoneConflictsWithAccount('5359999999', '+5351234567')).toBe(true);
-    expect(phoneConflictsWithAccount('5511987654321', '+5351234567')).toBe(true);
+    expect(phoneConflictsWithAccount('5359999999', '+5351234567', CONFIRMED)).toBe(true);
+    expect(phoneConflictsWithAccount('5511987654321', '+5351234567', CONFIRMED)).toBe(true);
   });
 });

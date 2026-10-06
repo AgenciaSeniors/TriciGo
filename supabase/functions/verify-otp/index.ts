@@ -156,8 +156,12 @@ Deno.serve(async (req) => {
     // createUser, hit a phone-collision 500 and could never log in). The RPC is service_role-only.
     let existingUserId: string | undefined;
     try {
+      // By phone ONLY. The email branch matched phone_<n>@tricigo.app, an
+      // address anyone can register through GoTrue's public signup before the
+      // owner of <n> shows up; no account needs it (every one verify-otp made
+      // has its phone, confirmed).
       const { data: foundId, error: lookupError } = await supabase.rpc('lookup_auth_user_by_contact', {
-        p_email: devEmail,
+        p_email: null,
         p_phone: normalizedPhone,
       });
       if (lookupError) throw lookupError;
@@ -174,18 +178,16 @@ Deno.serve(async (req) => {
 
     if (existingUserId) {
       userId = existingUserId;
-      // The lookup also matches by the synthetic email, so the account it found
-      // may not be this phone's: an account created through GoTrue's public
-      // signup with phone_<this number>@tricigo.app (signup is open with
-      // autoconfirm on), or one that moved to a new number with link-phone
-      // (the email stays) while this number went to someone else. Proving this
-      // phone opens only an account that already has this phone. Fail closed
-      // if the account can't be read.
+      // Proving this phone opens only an account that holds it CONFIRMED.
+      // GoTrue's public phone signup can leave an account with this number
+      // unconfirmed (signup is open). Fail closed if the account can't be read.
       let accountPhone: string | null | undefined;
+      let accountPhoneConfirmedAt: string | null | undefined;
       try {
         const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(userId);
         if (getErr || !existing?.user) throw getErr ?? new Error('user not found');
         accountPhone = existing.user.phone;
+        accountPhoneConfirmedAt = existing.user.phone_confirmed_at;
       } catch (e) {
         console.error('getUserById before login failed:', e);
         return new Response(
@@ -193,7 +195,7 @@ Deno.serve(async (req) => {
           { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
-      if (phoneConflictsWithAccount(accountPhone, normalizedPhone)) {
+      if (phoneConflictsWithAccount(accountPhone, normalizedPhone, accountPhoneConfirmedAt)) {
         console.error(`verify-otp: account ${userId} belongs to another phone; refusing login`);
         return new Response(
           JSON.stringify({
@@ -218,6 +220,19 @@ Deno.serve(async (req) => {
 
       if (createError || !newUser.user) {
         console.error('Failed to create user:', createError);
+        // The synthetic email is already taken: someone registered
+        // phone_<n>@tricigo.app through GoTrue's signup, or the number's
+        // previous owner moved to another one with link-phone. Support has to
+        // clear it; say so instead of a generic 500.
+        if (createError && /already|registered|exists/i.test(createError.message)) {
+          return new Response(
+            JSON.stringify({
+              error: 'This number is linked to another account. Contact support.',
+              reason: 'account_conflict',
+            }),
+            { status: 409, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+          );
+        }
         return new Response(
           JSON.stringify({ error: 'Failed to create account' }),
           { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
@@ -358,6 +373,22 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Failed to create session' }),
         { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // The session is minted by EMAIL, so it must belong to the account this
+    // phone resolved to. If that account's email is held by another account
+    // (or the magic-link path created a new user for it), refuse instead of
+    // handing the caller a session for someone else.
+    const sessionUserId = (session.user as { id?: string } | null)?.id;
+    if (sessionUserId !== userId) {
+      console.error(`verify-otp: session minted for ${sessionUserId ?? 'unknown'} instead of ${userId}; refusing`);
+      return new Response(
+        JSON.stringify({
+          error: 'This number is linked to another account. Contact support.',
+          reason: 'account_conflict',
+        }),
+        { status: 409, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       );
     }
 
