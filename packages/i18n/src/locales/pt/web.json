@@ -136,7 +136,8 @@
     "title": "Você foi convidado a dividir uma tarifa",
     "your_share": "Sua parte: {{pct}}%",
     "decline": "Recusar",
-    "accept": "Aceitar"
+    "accept": "Aceitar",
+    "decline_failed": "Não foi possível recusar o convite. Tente novamente."
   },
   "refer": {
     "invalid_code": "Código de indicação inválido.",

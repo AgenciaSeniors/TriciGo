@@ -136,7 +136,8 @@
     "title": "You've been invited to split a fare",
     "your_share": "Your share: {{pct}}%",
     "decline": "Decline",
-    "accept": "Accept"
+    "accept": "Accept",
+    "decline_failed": "Couldn't decline the invitation. Try again."
   },
   "refer": {
     "invalid_code": "Invalid referral code.",
