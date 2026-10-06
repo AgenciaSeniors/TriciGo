@@ -19,7 +19,7 @@ type RoleFilter = UserRole | 'all';
 
 const ROLE_CLASS: Record<string, string> = {
   customer: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
-  driver: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  driver: 'bg-amber-500/10 text-amber-800 dark:text-amber-400',
   admin: 'bg-primary-500/10 text-primary-700 dark:text-primary-400',
   super_admin: 'bg-red-500/10 text-red-700 dark:text-red-400',
 };

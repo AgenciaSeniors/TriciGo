@@ -22,7 +22,7 @@ type Severity = 'critical' | 'high' | 'medium' | 'low';
 const SEVERITY_CLASS: Record<Severity, string> = {
   critical: 'bg-red-600 text-white',
   high: 'bg-red-500/10 text-red-700 dark:text-red-400',
-  medium: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  medium: 'bg-amber-500/10 text-amber-800 dark:text-amber-400',
   low: 'bg-surface-sunken text-ink-muted',
 };
 

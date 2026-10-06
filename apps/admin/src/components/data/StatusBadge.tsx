@@ -15,7 +15,7 @@ const TONE_CLASS: Record<StatusTone, string> = {
   default: 'bg-surface-sunken text-ink-muted',
   primary: 'bg-primary-500/10 text-primary-700 dark:text-primary-400',
   success: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  warning: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  warning: 'bg-amber-500/10 text-amber-800 dark:text-amber-400',
   danger: 'bg-red-500/10 text-red-700 dark:text-red-400',
   info: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
 };

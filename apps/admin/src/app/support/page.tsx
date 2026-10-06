@@ -18,7 +18,7 @@ type Filter = TicketStatus | 'all';
 const PRIORITY_CLASS: Record<string, string> = {
   low: 'bg-surface-sunken text-ink-muted',
   normal: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
-  high: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  high: 'bg-amber-500/10 text-amber-800 dark:text-amber-400',
   urgent: 'bg-red-600 text-white',
 };
 

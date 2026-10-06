@@ -259,7 +259,7 @@ export default function NotificationsPage() {
             {t('notifications.status_read', { defaultValue: 'Leída' })}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-400">
             {t('notifications.status_unread', { defaultValue: 'Sin leer' })}
           </span>
         ),

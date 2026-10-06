@@ -16,7 +16,7 @@ type Filter = 'unresolved' | 'all';
 
 const SEVERITY_CLASS: Record<string, string> = {
   low: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
-  medium: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  medium: 'bg-amber-500/10 text-amber-800 dark:text-amber-400',
   high: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
   critical: 'bg-red-600 text-white',
 };
