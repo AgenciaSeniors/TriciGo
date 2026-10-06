@@ -339,28 +339,147 @@ describe('rideService.createSplitInvite', () => {
   });
 });
 
-describe('rideService.removeSplitInvite', () => {
+describe('rideService.removeSplitInvite (withdraw_split_invite RPC, migration 00620)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRpc.mockReset();
+  });
+  afterEach(() => {
+    mockRpc.mockReset();
   });
 
-  it('deletes the split record', async () => {
-    mockFrom.mockReturnValue({
-      delete: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({ error: null }),
-        }),
-      }),
-    });
+  it('withdraws through the RPC, which locks the ride like an invite, and touches no table', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'withdrawn', error: null });
 
-    // Only test the delete portion — the remaining count check
-    // requires complex chained mocks. Verifying no throw is sufficient.
-    try {
-      await rideService.removeSplitInvite('r-1', 'split-1');
-    } catch {
-      // May throw on the count check — that's OK for unit test
-    }
+    await rideService.removeSplitInvite('r-1', 'split-1');
+
+    expect(mockRpc).toHaveBeenCalledWith('withdraw_split_invite', { p_split_id: 'split-1' });
+    // Not even rides.is_split: clearing it raced with invites, and a split ride
+    // with no accepted invite is charged like any other ride.
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('succeeds when the invite was already gone (declined, withdrawn elsewhere, or the ride ended)', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'gone', error: null });
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).resolves.toBeUndefined();
+  });
+
+  it('says so when the trip already started', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'too_late', error: null });
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).rejects.toMatchObject({
+      code: 'SPLIT_WITHDRAW_TOO_LATE',
+    });
+  });
+
+  it('fails instead of pretending when the server kept the invite', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'kept', error: null });
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).rejects.toMatchObject({
+      code: 'SPLIT_WITHDRAW_FAILED',
+    });
+  });
+
+  it('fails on an answer it does not know', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: null });
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).rejects.toMatchObject({
+      code: 'SPLIT_WITHDRAW_FAILED',
+    });
+  });
+
+  it('throws the RPC error and does not fall back to a direct delete', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'not signed in' } });
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).rejects.toMatchObject({
+      message: 'not signed in',
+    });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe('rideService.removeSplitInvite (before migration 00620: direct delete)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRpc.mockReset();
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'PGRST202',
+        message: 'Could not find the function public.withdraw_split_invite(p_split_id) in the schema cache',
+      },
+    });
+  });
+  afterEach(() => {
+    mockRpc.mockReset();
+  });
+
+  /** from('ride_splits').delete().eq().eq().select() resolving to `result` */
+  function deleteChain(result: { data: unknown; error: unknown }) {
+    const select = vi.fn().mockResolvedValue(result);
+    const eqRide = vi.fn().mockReturnValue({ select });
+    const eqId = vi.fn().mockReturnValue({ eq: eqRide });
+    const del = vi.fn().mockReturnValue({ eq: eqId });
+    return { chain: { delete: del }, del, eqId, eqRide, select };
+  }
+
+  /** from('ride_splits').select().eq().eq().maybeSingle() resolving to `result` */
+  function readChain(result: { data: unknown; error: unknown }) {
+    const maybeSingle = vi.fn().mockResolvedValue(result);
+    const eqRide = vi.fn().mockReturnValue({ maybeSingle });
+    const eqId = vi.fn().mockReturnValue({ eq: eqRide });
+    const select = vi.fn().mockReturnValue({ eq: eqId });
+    return { chain: { select }, select, eqId, eqRide, maybeSingle };
+  }
+
+  it("deletes the invite on that ride, asks for what was deleted, and leaves the ride alone", async () => {
+    const d = deleteChain({ data: [{ id: 'split-1' }], error: null });
+    mockFrom.mockReturnValueOnce(d.chain);
+
+    await rideService.removeSplitInvite('r-1', 'split-1');
+
     expect(mockFrom).toHaveBeenCalledWith('ride_splits');
+    expect(d.eqId).toHaveBeenCalledWith('id', 'split-1');
+    expect(d.eqRide).toHaveBeenCalledWith('ride_id', 'r-1');
+    expect(d.select).toHaveBeenCalledWith('id');
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(mockFrom).not.toHaveBeenCalledWith('rides');
+  });
+
+  it('succeeds when nothing was deleted because the invite was already gone', async () => {
+    mockFrom
+      .mockReturnValueOnce(deleteChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(readChain({ data: null, error: null }).chain);
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).resolves.toBeUndefined();
+  });
+
+  it('fails instead of pretending when the server kept the invite (0 rows, no error: the trip started)', async () => {
+    const r = readChain({ data: { id: 'split-1' }, error: null });
+    mockFrom
+      .mockReturnValueOnce(deleteChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(r.chain);
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).rejects.toMatchObject({
+      code: 'SPLIT_WITHDRAW_FAILED',
+    });
+    expect(r.eqId).toHaveBeenCalledWith('id', 'split-1');
+    expect(r.eqRide).toHaveBeenCalledWith('ride_id', 'r-1');
+  });
+
+  it('throws the delete error', async () => {
+    mockFrom.mockReturnValueOnce(deleteChain({ data: null, error: { message: 'boom' } }).chain);
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).rejects.toMatchObject({ message: 'boom' });
+  });
+
+  it('throws the read error', async () => {
+    mockFrom
+      .mockReturnValueOnce(deleteChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(readChain({ data: null, error: { message: 'timeout' } }).chain);
+
+    await expect(rideService.removeSplitInvite('r-1', 'split-1')).rejects.toMatchObject({ message: 'timeout' });
   });
 });
 

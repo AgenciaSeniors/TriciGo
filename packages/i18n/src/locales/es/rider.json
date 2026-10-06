@@ -326,6 +326,8 @@
     "split_accept_failed": "No se pudo aceptar la invitación. Inténtalo de nuevo.",
     "split_invite_gone": "Esta invitación ya no está disponible: el viaje terminó o quien te invitó la retiró.",
     "split_already_accepted": "Ya aceptaste esta invitación: pagarás tu parte al terminar el viaje.",
+    "split_withdraw_too_late": "El viaje ya empezó: ya no puedes quitar a nadie de la división.",
+    "split_withdraw_failed": "No se pudo quitar la invitación. Inténtalo de nuevo.",
     "safety_button": "Seguridad",
     "insurance_toggle": "Seguro de viaje",
     "insurance_desc": "Cobertura por accidentes y daños",

@@ -118,8 +118,18 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
     try {
       await rideService.removeSplitInvite(rideId, split.id);
       removeSplit(split.id);
-    } catch {
-      Alert.alert('', t('common.error'));
+    } catch (err) {
+      // The invite is still there: keep it on the list.
+      Alert.alert(
+        '',
+        (err as { code?: string } | null)?.code === 'SPLIT_WITHDRAW_TOO_LATE'
+          ? t('ride.split_withdraw_too_late', {
+              defaultValue: 'El viaje ya empezó: ya no puedes quitar a nadie de la división.',
+            })
+          : t('ride.split_withdraw_failed', {
+              defaultValue: 'No se pudo quitar la invitación. Inténtalo de nuevo.',
+            }),
+      );
     }
   };
 

@@ -10,8 +10,9 @@
 --   leaving. Measured with two sessions: Ana's ride with Beto and Eva invited;
 --   Beto declines while Ana invites Fede. One after the other, Eva and Fede
 --   end at 33.33 %; at the same time, they end at 25 % and Ana pays 50 %.
---   Nobody is charged more than they were shown (shares are never raised),
---   but the requester pays a part no order of the two actions would give.
+--   Nobody is charged more than they were shown (shares are never raised);
+--   the shares end as if the invite had come first, though the decline went
+--   first.
 --   A policy cannot lock a row, so the decline needs a function.
 --
 -- WHAT
