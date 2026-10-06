@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { corporateService, walletService } from '@tricigo/api';
+import { corporateService, fleetService, walletService } from '@tricigo/api';
 import { formatTriciCoin, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
@@ -32,6 +32,7 @@ export default function BusinessDetailPage() {
   const { userId: adminUserId } = useAdminUser();
 
   const [account, setAccount] = useState<CorporateAccount | null>(null);
+  const [hasFleet, setHasFleet] = useState(false);
   const [employees, setEmployees] = useState<CorporateEmployeeWithUser[]>([]);
   const [rides, setRides] = useState<CorporateRide[]>([]);
   const [balance, setBalance] = useState<{ available: number; held: number }>({ available: 0, held: 0 });
@@ -48,13 +49,15 @@ export default function BusinessDetailPage() {
     if (!id) return;
     setLoading(true);
     try {
-      const [acc, emps, rds, bal] = await Promise.all([
+      const [acc, emps, rds, bal, withFleet] = await Promise.all([
         corporateService.getAccount(id),
         corporateService.getEmployees(id, 0, 50),
         corporateService.getCorporateRides(id, 0, 20),
         walletService.getCorporateBalance(id),
+        fleetService.getAccountIdsWithFleet([id]),
       ]);
       setAccount(acc);
+      setHasFleet(withFleet.has(id));
       setEmployees(emps);
       setRides(rds);
       setBalance(bal);
@@ -314,8 +317,10 @@ export default function BusinessDetailPage() {
         )}
       </div>
 
-      {/* Fleet review (only for is_fleet_owner accounts) */}
-      {account.is_fleet_owner && adminUserId && (
+      {/* Fleet review: an account with a driver_fleets row, or one an admin
+          flagged. A fleet request sent from the app is only flagged once
+          approved, and its drivers have to be reviewed before that. */}
+      {(account.is_fleet_owner || hasFleet) && adminUserId && (
         <div className="bg-surface-elevated border-line rounded-xl p-5">
           <h3 className="text-sm font-medium text-ink-muted mb-3">Flota — conductores</h3>
           <FleetReview corporateAccountId={account.id} adminUserId={adminUserId} />

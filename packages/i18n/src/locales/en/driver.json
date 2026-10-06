@@ -799,6 +799,7 @@
     "today": "Today",
     "yesterday": "Yesterday",
     "status_change_failed": "Could not change status",
+    "session_unavailable": "Your session is not available. Close the app completely and open it again.",
     "ride_already_accepted": "Another driver already accepted this ride",
     "driver_label": "Driver",
     "home_tab": "Home",
@@ -820,5 +821,12 @@
     "prompt_body": "Allow TriciGo to appear over other apps: when a ride arrives, the app will open by itself even if you're using another app, and you'll see a floating button to jump back quickly.",
     "prompt_enable": "Enable",
     "prompt_later": "Not now"
+  },
+  "fleet": {
+    "load_error_title": "We couldn't load your corporate information",
+    "load_error_body": "Check your internet connection and try again.",
+    "rejected_title": "Request rejected",
+    "rejected_reason": "Reason: {{reason}}",
+    "rejected_resubmit": "You can correct the details and send the request again."
   }
 }

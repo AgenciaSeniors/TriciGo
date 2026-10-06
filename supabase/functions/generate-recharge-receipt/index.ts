@@ -40,6 +40,7 @@ import {
   walletReceiptHtml,
   walletReceiptSubject,
 } from '../_shared/email-templates/wallet_receipt.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 // ── Constants from spec §10 ──
 const FEE_PCT = 0.03;
@@ -123,9 +124,9 @@ Deno.serve(async (req) => {
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
 
     // ── Auth gate: service_role only ──
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const serviceRoleKey = getServiceKey();
     const apiKey = req.headers.get('apikey') ?? '';
-    if (apiKey !== serviceRoleKey) {
+    if (!isServiceKeyToken(apiKey)) {
       return jsonResponse({ error: 'Forbidden: internal-only' }, 403);
     }
 

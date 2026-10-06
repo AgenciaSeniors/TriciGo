@@ -5,6 +5,7 @@
 // notification. Mirrors process-netopia-webhook.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getStripe, stripeWebhookSecret } from '../_shared/stripe.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const ACK = { received: true };
 
@@ -28,7 +29,7 @@ Deno.serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const serviceRoleKey = getServiceKey();
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   const session = event.data.object as {

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { configureStorage, createStorageAdapter, authService, driverService, getSupabaseClient, realtimeStatusLogger } from '@tricigo/api';
+import { configureStorage, createStorageAdapter, authService, didAuthStorageReadFail, driverService, getSupabaseClient, realtimeStatusLogger } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
 import { identifyUser, resetAnalytics, realEmail } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
@@ -121,7 +121,14 @@ const legacyStorageOps =
         };
       })();
 
-const adapter = createStorageAdapter(storageOps, { legacy: legacyStorageOps });
+const adapter = createStorageAdapter(storageOps, {
+  legacy: legacyStorageOps,
+  // The error GoTrue never sees. For 23 minutes on 2026-09-21 a driver's app
+  // ran as `anon` because this read failed, and nothing said so anywhere.
+  onReadError: (key, error) => {
+    logger.warn('[Auth] session storage read failed', { key, error: String(error) });
+  },
+});
 configureStorage(adapter);
 
 /** Wrap a promise with a timeout */
@@ -194,10 +201,25 @@ async function applyDriverProfile(
 }
 
 /**
+ * Why the caller has no session to show:
+ *  - 'session_missing': GoTrue answered "no session" (getSession resolved null,
+ *    or the auth listener fired with a null session).
+ *  - 'transient_error': the lookup threw or timed out — nothing is known.
+ */
+type HydrateReason = 'session_missing' | 'transient_error';
+
+/**
  * Rehydrate the session UI from the offline cache, or reset() only when there
  * is genuinely nothing to show — the USER layer. Called from the transient-error
  * paths so a network blip keeps the driver inside the app instead of bouncing to
  * login.
+ *
+ * A null session is ambiguous: the keychain may have been unreadable (locked
+ * iOS device — keep the cached UI, #802/#804) or genuinely empty (signed out
+ * elsewhere, storage wiped). The adapter now tells them apart. When the store
+ * answered and held nothing, rehydrating would paint a signed-in driver whose
+ * every request goes out as `anon` — the 2026-09-21 "Conectarme" incident — so
+ * that case signs out instead.
  */
 async function hydrateFromCacheOrReset(
   setUser: (user: any) => void,
@@ -205,8 +227,16 @@ async function hydrateFromCacheOrReset(
   setProfileError: () => void,
   reset: () => void,
   mounted: { current: boolean },
+  reason: HydrateReason,
 ) {
   if (!mounted.current) return;
+
+  if (reason === 'session_missing' && !didAuthStorageReadFail()) {
+    logger.warn('[Auth] no session in storage and the read succeeded: signing out the cached UI');
+    await clearAuthCache();
+    if (mounted.current) reset();
+    return;
+  }
 
   // Already showing a signed-in user → a prior load already resolved the profile
   // (home) or set the error-spinner+retry state. Do NOT touch the profile gate:
@@ -285,7 +315,7 @@ async function loadUserAndProfile(
     // almost always a transient/network error — NOT a real sign-out. Never kick
     // the driver to login on a network blip; a genuine invalidation arrives as
     // a separate SIGNED_OUT event, which is handled elsewhere.
-    await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted);
+    await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted, 'transient_error');
   }
 }
 
@@ -328,7 +358,7 @@ export function useAuthInit() {
           // _notifyAllSubscribers (see the note below).
           setTimeout(() => {
             if (!mounted.current) return;
-            void hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted);
+            void hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted, 'session_missing');
           }, 0);
         } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           // IMPORTANT: Defer SDK calls to avoid deadlock.
@@ -393,7 +423,7 @@ export function useAuthInit() {
           // null, so this branch has to hydrate too or it would bounce the
           // driver to login with an intact session sitting in the keychain.
           // hydrateFromCacheOrReset resets by itself when nothing is cached.
-          await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted);
+          await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted, 'session_missing');
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -426,7 +456,7 @@ export function useAuthInit() {
         // getSession() threw (timeout / lock broken) — a transient failure, not
         // proof the session is gone. Keep the driver in the app via the cache
         // instead of ejecting to login.
-        await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted);
+        await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted, 'transient_error');
       }
     }
 
@@ -475,7 +505,7 @@ export function useAuthInit() {
         // Don't hard-reset on native: a 10s stall is usually a bad network, not
         // a lost session. Rehydrate from cache so the driver stays inside the
         // app; only fall back to login when there is truly nothing to show.
-        await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted);
+        await hydrateFromCacheOrReset(setUser, setProfile, setProfileError, reset, mounted, 'transient_error');
       }
     }, 10000);
 

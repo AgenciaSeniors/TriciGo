@@ -28,6 +28,7 @@ import {
   DOC_TYPE_LABELS_ES,
   labelForCode,
 } from '../_shared/driverDocRejectionPresets.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
@@ -77,7 +78,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const serviceRoleKey = getServiceKey();
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     if (!serviceRoleKey || !supabaseUrl) {
       return jsonResponse({ error: 'server_misconfigured' }, 500, corsHeaders);
@@ -85,7 +86,7 @@ Deno.serve(async (req) => {
 
     // ── Auth gate: service_role (DB triggers / cron) OR admin/super_admin JWT.
     const apiKey = req.headers.get('apikey') ?? '';
-    const isInternalCall = apiKey === serviceRoleKey;
+    const isInternalCall = isServiceKeyToken(apiKey);
 
     if (!isInternalCall) {
       const authHeader = req.headers.get('Authorization');

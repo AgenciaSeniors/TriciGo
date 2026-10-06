@@ -13,7 +13,16 @@ import type {
   EmployeeReport,
   ServiceTypeSlug,
 } from '@tricigo/types';
+import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
+import { fleetService } from './fleet.service';
+
+// PostgREST's signal that the database does not have the RPC. A generic
+// Postgres "function ... does not exist" (42883) is deliberately not matched:
+// it can come from inside the RPC body, and must surface.
+function isMissingFunctionError(error: { code?: string; message?: string }): boolean {
+  return error.code === 'PGRST202' || /could not find the function/i.test(error.message ?? '');
+}
 
 export const corporateService = {
   // ─────────────────────────── Registration & Lifecycle ───────────────────────────
@@ -27,8 +36,34 @@ export const corporateService = {
   }): Promise<CorporateAccount> {
     const supabase = getSupabaseClient();
 
-    // Create the corporate account
-    const { data, error } = await supabase
+    // 00601: the account, its creator's admin row and the corporate wallet in
+    // one transaction. Done step by step, a failure left an account its
+    // creator cannot delete, and a retry created another one.
+    const { data, error } = await supabase.rpc('register_corporate_account', {
+      p_created_by: params.created_by,
+      p_name: params.name,
+      p_contact_phone: params.contact_phone,
+      p_contact_email: params.contact_email ?? null,
+      p_tax_id: params.tax_id ?? null,
+    });
+    if (!error) return data as CorporateAccount;
+    // Any other failure may arrive after the server committed (a lost
+    // response), so the steps must not run again from here.
+    if (!isMissingFunctionError(error)) throw error;
+
+    logger.warn('register_corporate_account_missing', { hint: 'apply migration 00601' });
+
+    // Until 00601 is applied, the same steps from the client, wallet first:
+    // it does not depend on the account, so if it fails nothing is left
+    // behind. It is keyed by the account's creator because that is how every
+    // server path moving corporate money finds it (corporate_accounts.created_by).
+    const { error: walletError } = await supabase.rpc('ensure_wallet_account', {
+      p_user_id: params.created_by,
+      p_type: 'corporate_cash',
+    });
+    if (walletError) throw walletError;
+
+    const { data: created, error: accountError } = await supabase
       .from('corporate_accounts')
       .insert({
         name: params.name,
@@ -39,23 +74,19 @@ export const corporateService = {
       })
       .select()
       .single();
-    if (error) throw error;
+    if (accountError) throw accountError;
 
-    const account = data as CorporateAccount;
+    const account = created as CorporateAccount;
 
-    // Add creator as corporate admin employee
-    await supabase.from('corporate_employees').insert({
+    // The creator's admin row: the corporate_accounts UPDATE policy and
+    // getMyAccounts depend on it.
+    const { error: employeeError } = await supabase.from('corporate_employees').insert({
       corporate_account_id: account.id,
       user_id: params.created_by,
       role: 'admin',
       added_by: params.created_by,
     });
-
-    // Create corporate wallet account
-    await supabase.rpc('ensure_wallet_account', {
-      p_user_id: account.id,
-      p_type: 'corporate_cash',
-    });
+    if (employeeError) throw employeeError;
 
     return account;
   },
@@ -102,11 +133,25 @@ export const corporateService = {
 
   // ─────────────────────────── Admin Approval ───────────────────────────
 
+  /**
+   * Approves the account. A fleet request (an account with a driver_fleets
+   * row) also gets is_fleet_owner = true in the same UPDATE: the driver app
+   * cannot set that flag (00418/00434), and approval is when an admin vouches
+   * for the fleet. With the flag, dispatch offers the rides billed to the
+   * account only to its active fleet drivers, once it has one (00336/00337).
+   * An account with no fleet keeps whatever flag it had. Throws, approving
+   * nothing, when the fleet lookup fails.
+   */
   async approveAccount(accountId: string, adminId: string): Promise<void> {
     const supabase = getSupabaseClient();
+    const hasFleet = (await fleetService.getAccountIdsWithFleet([accountId])).has(accountId);
     const { error } = await supabase
       .from('corporate_accounts')
-      .update({ status: 'approved', approved_at: new Date().toISOString() })
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        ...(hasFleet ? { is_fleet_owner: true } : {}),
+      })
       .eq('id', accountId);
     if (error) throw error;
 
@@ -575,9 +620,17 @@ export const corporateService = {
   },
 
   /**
-   * Returns the user's most recent corporate request (any status). Used
-   * by the client app to render the right state on /profile/corporate:
-   * form, "in review", "rejected — resubmit", or full dashboard.
+   * Returns the user's most recent corporate client request (any status).
+   * Used by the client app and the web to render the right state on
+   * /profile/corporate: form, "in review", "rejected — resubmit", or full
+   * dashboard.
+   *
+   * A fleet request is not a client request. The driver app sends it as an
+   * account plus its driver_fleets row, and only an admin can set
+   * is_fleet_owner (00418/00434), so an account with either one is skipped.
+   * Without the row check a pending fleet showed here as a client request in
+   * review, and a rejected one offered the client form to send it again.
+   * Returns null when a lookup fails; both screens treat that as no request.
    */
   async getRequestStatus(userId: string): Promise<CorporateAccount | null> {
     const supabase = getSupabaseClient();
@@ -587,10 +640,16 @@ export const corporateService = {
       .eq('created_by', userId)
       .eq('is_fleet_owner', false)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('id', { ascending: true });
     if (error) return null;
-    return data as CorporateAccount | null;
+    const accounts = (data ?? []) as CorporateAccount[];
+    if (accounts.length === 0) return null;
+
+    const withFleet = await fleetService
+      .getAccountIdsWithFleet(accounts.map((a) => a.id))
+      .catch(() => null);
+    if (!withFleet) return null;
+    return accounts.find((a) => !withFleet.has(a.id)) ?? null;
   },
 
   /**

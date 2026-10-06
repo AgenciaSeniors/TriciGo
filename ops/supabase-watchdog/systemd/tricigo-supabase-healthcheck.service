@@ -1,0 +1,17 @@
+# TriciGo — Supabase availability watchdog (oneshot, driven by the .timer).
+# Install to /etc/systemd/system/tricigo-supabase-healthcheck.service
+# See ops/supabase-watchdog/README.md.
+[Unit]
+Description=TriciGo Supabase availability watchdog
+# Deliberately NOT After=postgresql/squid/nginx: this watchdog must be able to
+# run when everything else it might depend on is broken.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/etc/tricigo/supabase-healthcheck.sh
+# Reads /etc/tricigo/supabase-health.env (600) and writes the state file.
+User=root
+Nice=5
+TimeoutStartSec=90

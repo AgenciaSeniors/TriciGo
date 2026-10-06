@@ -3,12 +3,12 @@ import { View, TextInput, Pressable, Alert, ActivityIndicator } from 'react-nati
 import { useLocalSearchParams, router } from 'expo-router';
 import { Screen } from '@tricigo/ui/Screen';
 import { Text } from '@tricigo/ui/Text';
-import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { disputeService } from '@tricigo/api';
 import { getErrorMessage, formatCUP } from '@tricigo/utils';
 import { useAuth } from '@/lib/useAuth';
+import { TintedCard } from '@/components/TintedCard';
 import { colors } from '@tricigo/theme';
 import type { RideDispute } from '@tricigo/types';
 
@@ -103,7 +103,7 @@ export default function DisputeRespondScreen() {
         {/* What the driver is actually answering. REASON_LABELS was already
             defined in this file and referenced nowhere — the claim was meant
             to be shown here all along. */}
-        <Card theme="light" variant="filled" padding="md" className="bg-orange-50 mb-6">
+        <TintedCard className="bg-orange-50 border border-[#E2E8F0] shadow-sm mb-6">
           <Text variant="bodySmall" color="primary" className="opacity-80">
             {t('dispute.incoming')}
           </Text>
@@ -129,7 +129,7 @@ export default function DisputeRespondScreen() {
               {loadError}
             </Text>
           )}
-        </Card>
+        </TintedCard>
 
         {/* Response form */}
         <Text variant="label" color="primary" className="mb-2">{t('dispute.your_response')}</Text>

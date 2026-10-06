@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 // ============================================================
 // process-sms-dlr — Receives delivery receipt webhooks from
@@ -73,7 +74,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    getServiceKey(),
   );
 
   const nowIso = new Date().toISOString();

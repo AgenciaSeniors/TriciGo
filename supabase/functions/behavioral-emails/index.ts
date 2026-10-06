@@ -11,6 +11,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { isPlaceholderEmail } from '../_shared/email-guard.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -26,7 +27,7 @@ function getCorsHeaders(req: Request) {
 function getSupabase() {
   return createClient(
     Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    getServiceKey(),
   );
 }
 
@@ -102,7 +103,7 @@ async function processWelcomeEmails(supabase: ReturnType<typeof getSupabase>): P
   const sentSet = new Set((alreadySent ?? []).map((r: { user_id: string }) => r.user_id));
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const serviceRoleKey = getServiceKey();
 
   let count = 0;
   for (const user of newUsers) {
@@ -209,7 +210,7 @@ async function sendWinBackBatch(
   const sentSet = new Set((alreadySent ?? []).map((r: { user_id: string }) => r.user_id));
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const serviceRoleKey = getServiceKey();
 
   let count = 0;
   for (const user of users) {
@@ -251,8 +252,7 @@ Deno.serve(async (req) => {
   // `apikey` header like auto-admin/sync-weather; keep the x-cron-secret fallback.
   const cronSecret = Deno.env.get('CRON_SECRET');
   const requestSecret = req.headers.get('x-cron-secret');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-  const isServiceRole = serviceRoleKey !== '' && (req.headers.get('apikey') ?? '') === serviceRoleKey;
+  const isServiceRole = isServiceKeyToken(req.headers.get('apikey') ?? '');
   if (!isServiceRole && (!cronSecret || requestSecret !== cronSecret)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,

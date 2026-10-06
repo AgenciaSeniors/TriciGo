@@ -9,6 +9,7 @@ import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getStripe } from '../_shared/stripe.ts';
 import { sanitizePayerName } from '../_shared/sanitize.ts';
 import { getFreshFx, FX_UNAVAILABLE_DETAIL } from '../_shared/fx-freshness.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 function getCorsHeaders(req: Request) {
@@ -60,7 +61,7 @@ Deno.serve(async (req) => {
     if (amt > MAX_USD) return J(400, { ok: false, error: 'amount_too_high', max_usd: MAX_USD });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const supabase = createClient(supabaseUrl, getServiceKey());
 
     // Authoritative recipient resolution (server-side; client cannot forge it).
     const { data: recRows, error: recErr } = await supabase.rpc('find_recipient_for_recharge', { p_phone: phone });

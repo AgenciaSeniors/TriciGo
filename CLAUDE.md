@@ -62,6 +62,7 @@ Si un plugin no está instalado, ignora su sección y continúa con los que sí 
 
 ### Supabase
 - Row Level Security (RLS) en TODAS las tablas sin excepción
+- GRANT explícito en toda tabla o vista nueva de `public`, en la misma migración y siempre con `service_role` incluido: desde el 30-oct-2026 Supabase ya no los da solo. Lo chequea CI (`pnpm check:migration-grants`). Detalle en § "Tablas nuevas en public: GRANT explícito"
 - Usar el cliente tipado generado con `supabase gen types`
 - Migraciones versionadas, nunca cambios manuales en producción
 - Funciones Edge para lógica server-side compleja
@@ -348,6 +349,59 @@ Elegir el siguiente número libre y confirmar antes de escribir el archivo. Si l
 3. Si tu cambio toca el header/wiring (auth, params), conservar el cuerpo del case statement de la última versión.
 4. PR review: incluir un diff entre el cuerpo de la versión NUEVA y la anterior para que el reviewer detecte regresiones.
 
+### Tablas nuevas en public: GRANT explícito (Data API, desde el 30-oct-2026)
+
+**Qué cambia.** Aviso de Supabase del 2026-09-23 ([discusión](https://github.com/orgs/supabase/discussions/45329)): desde el **30 de octubre de 2026**, los objetos NUEVOS de `public` (tablas, vistas, vistas materializadas y las secuencias de las columnas `serial`) ya no reciben permisos automáticos para `anon`, `authenticated` y `service_role`. Sin GRANT, la Data API (PostgREST, supabase-js, GraphQL) no los ve: las apps **y las Edge Functions** reciben `42501 permission denied for table x`. Las tablas que ya existen conservan sus permisos. También afecta a proyectos nuevos, preview branches y `supabase db reset`.
+
+**Estado de prod medido el 2026-09-27 (solo lectura).** `pg_default_acl` todavía da todo (`arwdDxtm` en tablas, `rwU` en secuencias) a los tres roles en cada objeto nuevo de `public`, tanto con `postgres` como con `supabase_admin` de grantor. Por eso las migraciones nunca escribían GRANT: `driver_heartbeat_log` (00576) no tiene ninguno y en prod los tres roles tienen todo. De los 142 objetos de `public`, 134 tienen todos los permisos para los tres roles. Los otros 8 (`partner_places`, `rpc_attempt_log`, `push_registration_status`, `sms_log`, `ride_offers`, `driver_churn_risk`, `eligible_drivers`, `driver_push_reachability`) tienen REVOKE deliberados de 00120, 00123, 00215/00286, 00350, 00532 y 00585.
+
+**La regla.** Toda migración que cree una tabla, vista o vista materializada en `public`, con o sin el prefijo `public.`, lleva en el mismo archivo:
+
+```sql
+CREATE TABLE public.<tabla> (...);
+ALTER TABLE public.<tabla> ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ... ON public.<tabla> ...;                                  -- la RLS decide qué FILAS
+GRANT SELECT ON public.<tabla> TO anon;                                   -- solo si se lee sin sesión
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<tabla> TO authenticated;  -- solo lo que usan las apps
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<tabla> TO service_role;   -- SIEMPRE
+```
+
+- **`service_role` va siempre.** Lo usan las Edge Functions (webhooks de pago, crons) y los scripts. Se saltea la RLS pero **no** los GRANT: medido en PG16 sin permisos automáticos, un INSERT como `service_role` da `permission denied for table`. El historial muestra la trampa: de las 7 tablas o vistas que alguna vez recibieron GRANT en su propia migración, 6 se los daban solo a `anon`/`authenticated` y dependían del automático para `service_role` (00436, 00532, 00544, 00579 ×2, 00585). La única que no: `push_registration_status` (00585).
+- **Tablas-candado** (RLS sin policies; solo las tocan funciones SECURITY DEFINER, pg_cron o Edge Functions, como `rate_limits`, `otp_codes` o `driver_reactivation_pushes`): solo `service_role`. Una función SECURITY DEFINER corre como su dueño (`postgres`) y no necesita GRANT de los roles de la API.
+- **Vistas:** igual que las tablas (`GRANT SELECT`), con `security_invoker = true` (patrón 00294). `GRANT ... ON ALL TABLES IN SCHEMA public` también cubre vistas y vistas materializadas, pero no secuencias.
+- **Secuencias.** Con `serial`/`bigserial` o `DEFAULT nextval(...)`, cada rol con INSERT necesita además `GRANT USAGE, SELECT ON SEQUENCE public.<tabla>_<col>_seq`: un GRANT sobre la tabla no cubre su secuencia. En una base sin permisos por defecto (proyecto nuevo, branch) el INSERT falla con `permission denied for sequence`. En prod puede que no falle: el SQL que publicó Supabase solo quita `USAGE, SELECT` de las secuencias y deja `UPDATE`, que alcanza para `nextval` (medido en PG16). Supabase igual recomienda el GRANT y el chequeo lo exige. Es mejor usar `bigint GENERATED ALWAYS AS IDENTITY` o `uuid DEFAULT gen_random_uuid()`, que no necesitan permiso de secuencia (medido en PG16). Agregar una columna `serial` a una tabla existente crea una secuencia sin permisos que el chequeo no detecta.
+- **Hasta el 30/10, prod sigue abriendo todo** a las tablas nuevas. Si una tabla NO debe ser visible para `anon`, además de los GRANT hace falta `REVOKE ALL ON public.<tabla> FROM anon;` (patrón 00585). Después del 30/10 ese REVOKE no hace nada y no molesta.
+- **No crear tablas fuera de migraciones** (dashboard, `execute_sql` suelto, scripts): después del 30/10 nacen sin permisos, y además quedan fuera del historial (ver abajo).
+
+**El chequeo de CI.** `pnpm check:migration-grants` corre en el paso "Check migration grants" de `ci.yml`, después de sus 48 tests (`pnpm test:migration-grants`). Revisa las migraciones con número **≥ 00587** y falla en tres casos:
+1. Una tabla o vista nueva no tiene ningún GRANT en la misma migración.
+2. Los GRANT no incluyen a `service_role` (o a `PUBLIC`).
+3. Un rol con INSERT no tiene USAGE sobre la secuencia de una columna `serial` o `nextval`.
+
+El umbral es 00587 porque al entrar la regla ninguna migración de master numerada desde 00587 creaba tablas (00591–00597 no crean). No se eligió 00598 a propósito: los huecos 00587–00590 y 00593 están reservados por PRs abiertos, y **#1004 crea 4 tablas en 00587 sin GRANT**. Su CI va a fallar hasta que los agregue, que es lo que tiene que pasar. Los huecos más viejos (00071, 00111, 00489, 00569) quedan por debajo; el único PR que ocupa uno, #965 (00569), solo actualiza filas.
+
+Para una tabla que a propósito no debe tener ningún acceso por API, o para un falso positivo del chequeo, se agrega `-- grants-exempt: public.<tabla> <motivo>` en la migración. Falsos positivos conocidos: `CREATE OR REPLACE VIEW` de una vista que ya existe (conserva sus permisos; no re-otorgar a `anon` lo que se le había quitado), una tabla temporal de trabajo creada y borrada en el mismo archivo, y la partición de una tabla ya otorgada. El chequeo saltea el SQL dinámico (`EXECUTE format('... %I ...')`) y no ve `SELECT ... INTO`, `ALTER TABLE ... SET DEFAULT nextval(...)` ni un `REVOKE` posterior al GRANT.
+
+Calibrado contra las 609 migraciones del historial: encuentra 117 tablas y vistas, ninguna con nombre falso, y coinciden una por una con prod (salvo 3 borradas y los objetos creados a mano). Se lo vio fallar con una migración de prueba sin GRANT en el directorio real, y pasar al completarla. Un subagente de revisión encontró un falso negativo que se corrigió: un apóstrofo dentro de un literal `$m$...$m$` (00597 tiene uno) desincronizaba el enmascarado de comentarios, y un GRANT comentado más abajo contaba como real. El parser ahora sigue los delimitadores `$tag$`.
+
+**Bases reconstruidas desde cero (branches, `db reset`): riesgo aceptado (decisión 2026-09-27).** No se agregó una migración de "paridad de permisos". Motivos medidos:
+- **Hoy nada reconstruye la base desde el historial.** `list_branches` solo devuelve `main`, así que no hay preview branches, y los PR que tocan migraciones solo corren el CI del repo (ej. #1015). El CI nunca reaplica migraciones (ver el comentario al final de `ci.yml`), y los ensayos locales usan andamios (`supabase/tests/*/scaffold.sql`), no el historial.
+- **El historial ya no puede recrear prod, con o sin permisos.** `cms_content`, `blog_posts`, `driver_quests`, `driver_quest_progress`, `influencers_campaign` y la vista `ride_audit_log` se crearon a mano: ninguna migración las crea, aunque 00294, 00380 y 00438 las modifican. Un replay desde cero muere a más tardar en `00156_seed_cms_terms_privacy.sql` (`INSERT INTO cms_content`), así que una migración de paridad en 00598 nunca llegaría a correr.
+- **Si algún día hacen falta branches o `db reset`**, el arreglo es un baseline: un volcado del esquema de prod que reemplace al historial para las bases nuevas. `pg_dump --schema-only` incluye los GRANT y REVOKE de cada tabla, salvo que se pase `--no-privileges`. Antes de usarlo, comparar `information_schema.role_table_grants` del baseline contra prod.
+- **Descartado: volver al comportamiento viejo** con `ALTER DEFAULT PRIVILEGES ... GRANT ... ON TABLES TO anon, authenticated, service_role`. Va contra el cambio, porque toda tabla nueva vuelve a nacer abierta a `anon` y una sin RLS queda expuesta. Además esconde el bug: en una base que regala permisos, una migración sin GRANT anda en la prueba y falla en prod.
+- **Opcional, a decidir (es un cambio en prod y requiere autorización):** adelantar el cambio con `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM anon, authenticated, service_role;`, más lo mismo con `REVOKE USAGE, SELECT ON SEQUENCES`. Es el SQL que publicó Supabase: deja `TRUNCATE`, `REFERENCES`, `TRIGGER` y `MAINTAIN` en las tablas y `UPDATE` en las secuencias, así que no reproduce la falla de secuencias de una base nueva. A favor: la transición ocurre cuando se elige y no el 30/10, y las tablas nuevas dejan de nacer abiertas a `anon`. En contra: toda tabla creada fuera de migraciones, o un PR sin GRANT (hoy #1004), falla desde ese momento.
+
+**Diagnóstico si después del 30/10 aparece `42501 permission denied for table x`:** a esa tabla nueva le falta el GRANT.
+
+```sql
+SELECT grantee, string_agg(privilege_type, ', ' ORDER BY privilege_type) AS privs
+FROM information_schema.role_table_grants
+WHERE table_schema = 'public' AND table_name = '<tabla>'
+GROUP BY grantee;
+```
+
+Se arregla con una migración nueva que tenga el GRANT, no a mano en prod. `permission denied for sequence <tabla>_id_seq` es el mismo problema con la secuencia.
+
 ### MCP migration guard
 
 El MCP de Supabase está conectado a producción/shared infra. Cualquier `mcp__apply_migration` o `mcp__execute_sql` con DDL es **denegado por el sandbox** ("Permission for this action has been denied. Reason: Production/shared infrastructure modification without explicit user authorization."). Aplica también para creación de triggers, ALTERs, y funciones `CREATE OR REPLACE`.
@@ -599,6 +653,27 @@ Detalle completo en `docs/SECURITY_REMEDIATION.md` § "Pre-flight queries antes 
 
 **10. Reportes de auditoría son gitignored.**
 Los 5 `SECURITY_AUDIT_*.md` (CLIENT, DRIVER, ADMIN, WEB, MASTER) tienen `.gitignore` entry porque contienen mapa de superficie de ataque + PoCs. Compartir solo por canal privado. **No commitear**.
+
+---
+
+### Credenciales en el repo: es PÚBLICO y lo barren bots (verificado 2026-09-27)
+
+`AgenciaSeniors/TriciGo` es **público**. `scripts/run_migrations.js` y `scripts/run_seeds.js` (commit `b8db356a`, 2026-03-10) tenían la cadena de conexión de prod **con la contraseña del rol `postgres`**, y estuvo ~6,5 meses expuesta. Se borraron los dos scripts, que eran código muerto (solo listaban 00001-00014 y ningún paquete depende de `pg`), y la contraseña se reseteó desde el Dashboard.
+
+- **Ninguna credencial en el código, ni siquiera "temporal".** Se lee de `process.env` / `Deno.env` y el programa falla si falta, sin valor por defecto. Borrarla de HEAD no la saca del historial ni de los clones: el arreglo es **rotarla**.
+- **Hay bots probando lo que se filtra.** El 2026-09-26 una IP externa llamó a `GET /auth/v1/admin/users?per_page=1` con el JWT `service_role` legacy, que sigue commiteado en migraciones viejas. Recibió 401 solo porque las claves legacy están deshabilitadas: **no reactivarlas nunca**.
+- **Primero se rota la contraseña de la base, y recién después la clave de servicio y los tokens de `platform_config`.** El rol `postgres` lee `vault.decrypted_secrets`, que guarda `service_role_key`, y también `platform_config`. Si se rota al revés, quien tenga la contraseña vieja lee la clave nueva.
+- **Se resetea desde el Dashboard, nunca con `ALTER ROLE`.** El panel y el MCP se conectan como `postgres` (`application_name='mgmt-api'`) con la credencial que guarda Supabase. Por SQL, además, la contraseña nueva quedaría en texto plano en la conversación y en los logs. Resetearla no corta las sesiones abiertas, así que después hay que revisar `pg_stat_activity`: como `postgres` solo tiene que quedar `mgmt-api`.
+- **Para buscar un secreto sin imprimirlo,** leerlo a una variable dentro del mismo comando (`PW=$(sed -nE '…' archivo)`) y buscar con `git grep -F -e "$PW"` o `git log -S"$PW"`. Para enmascarar la salida: `sed -E 's#(postgres(ql)?://[^:@/ ]+:)[^@ ]+@#\1***@#g'`. El clon del sandbox es superficial (50 commits): correr `git fetch --unshallow origin master` antes de buscar en el historial.
+- **Quién prueba claves legacy** (`query_logs`, últimas 24 h):
+  ```sql
+  select timestamp, event_message, log_attributes['request.headers.cf_connecting_ip'] as ip
+  from logs where source = 'edge_logs'
+    and log_attributes['request.sb.jwt.authorization.payload.algorithm'] = 'HS256'
+  order by timestamp desc limit 20
+  ```
+  Un HS256 con `role=supabase_admin` y user-agent `@supabase-infra/mgmt-api` es de Supabase. Un `service_role` o `anon` HS256 desde otra IP es alguien probando una clave filtrada.
+- **No encontrar rastro no prueba que no hubo uso.** Los logs cubren 24 h y las conexiones directas a Postgres no aparecen en ellos. `pgbouncer_logs` sí registra los logins del pooler dedicado (`login attempt: db=… user=…`).
 
 ---
 
@@ -1197,6 +1272,16 @@ También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`
   ```
 - **Diagnóstico decisivo** cuando un flex-row "no llena el ancho": pintá el contenedor y los hijos con `backgroundColor` temporales + reload **limpio** (no fast-refresh: los cambios de layout en caliente no recalculan bien). Si el contenedor llena pero los hijos no → sospechar de la función-estilo. Un `console.log` de las dimensiones leído en el log de Metro confirma si los valores llegan correctos pero no se aplican.
 
+### Un `Card` no se tiñe por `className`: NativeWind no respeta el orden en que se escriben las clases (verificado 2026-09-27)
+
+**Síntoma:** `<Card theme="light" className="bg-orange-50 …">` se ve blanca; `<Card variant="filled" className="bg-error-light …">` se ve gris. Sin error ni warning: el tinte simplemente no aparece. Pasó en 5 tarjetas del driver (disputa, objeto perdido x2, reclamo, flota rechazada).
+
+**Causa (medida con el compilador real, no deducida):** `react-native-css-interop` aplica las reglas que matchean ordenadas por especificidad y después por **orden en la hoja compilada** (`specificityCompare` en `dist/runtime/native/native-interop.js`); gana la última. Tailwind ordena las utilidades de un mismo plugin **alfabéticamente**, sin importar el orden del `className` ni del contenido escaneado. `Card` mete su propio fondo en el mismo `className` (`bg-white` en `theme="light"`, `bg-neutral-50` / `dark:bg-neutral-800` en `filled`…), así que un tinte solo gana si su nombre ordena después (`bg-primary-50` sí, `bg-orange-50` no). Un `dark:` pesa más que cualquier clase sin `dark:` en modo oscuro. Con `forceDark` / `theme="dark"`, `Card` pone el fondo como **estilo inline**, que le gana a toda clase.
+
+**Regla:** una tarjeta con color propio es un `TintedCard` (`apps/driver/src/components/TintedCard.tsx`: la forma de `Card` sin fondo), nunca un `Card` con `bg-*` en `className`. `apps/driver/src/__tests__/cardTints.test.ts` compila cada `<Card>` y `<TintedCard>` del driver con NativeWind y falla si un color de `className` pierde o no existe en el tema. El cliente no tiene ese guard todavía.
+
+**Trampa hermana:** una opacidad fuera de la escala de Tailwind (pasos de 5) no genera nada: `/10` existe, `/6` y `/12` no. Así estuvieron los bordes oscuros de `Card` (`dark:border-white/12` y `/6`) hasta #1048, que los pasó a `/[0.12]` y `/[0.06]`. Con esas clases por fin generadas, un `border-*` sin `dark:` que se le pase a un `Card` pierde en modo oscuro (por eso `ServiceTypeCard` usa `!border-primary-500`). Todavía quedan `/6` y `/12` en `MenuRow` y en el login del conductor. Para chequear si una clase existe, compilarla: `postcss([tailwindcss({...config, content:[{raw:'<clases>', extension:'html'}]})]).process('@tailwind utilities;')`.
+
 ---
 
 ### Search de direcciones — estado canónico (Tier 1.5–1.7 · fuzzy 2026-06-01 · campaña de precisión 2026-08-04/05 · huella de landmarks 2026-08-21)
@@ -1566,7 +1651,7 @@ Ejemplo concreto: Eduardo Admin tiene `tricicoin=80,905` (visible) Y `driver_cas
 
 1. **Drivers**: usar `tricicoin` para earnings y commission. NUNCA `driver_cash` (excepto insurance que sigue ahí por legacy — referencia el código del ELSE branch en `complete_ride_and_pay`).
 2. **Customers**: usar `customer_cash` para saldo TC.
-3. **Corporate**: `corporate_cash` para wallet de empresa (necesita `admin_adjust_wallet` extended desde 00338 para acreditar via RPC oficial).
+3. **Corporate**: `corporate_cash` para wallet de empresa (necesita `admin_adjust_wallet` extended desde 00338 para acreditar via RPC oficial). **Se asocia al CREADOR de la cuenta (`corporate_accounts.created_by`), nunca al id de la cuenta**: así la buscan `handle_corporate_ride_completion` (el cobro real; la rama corporativa de `complete_ride_and_pay` es un `NULL`), `process_recharge_payment`/`_refund` y `admin_adjust_wallet`. El id de la cuenta no es un `users.id`: choca con la FK y con la verja de 00591 (42501). El cliente usaba la clave vieja de la 00086 y falló en silencio hasta 00601 (`register_corporate_account`, que crea cuenta, fila de admin y billetera en una transacción). Los lectores `getCorporateBalance` (corporate y wallet service) siguen con la clave vieja y muestran 0 (pendiente aparte). Consecuencia del diseño: un creador con dos cuentas corporativas comparte UNA billetera.
 4. **Platform**: `platform_revenue` para commissions/insurance.
 
 **Si encontrás un RPC que credita `driver_cash` para earnings**: es bug silencioso. Verificar con SQL `SELECT prosrc FROM pg_proc WHERE proname='X'` y buscar `'driver_cash'`. Fix patrón: change `ensure_wallet_account(_, 'driver_cash')` → `'tricicoin'` para el path del driver.
@@ -1619,9 +1704,20 @@ Se midió la cascada de verdad (rama descartable, revertida): `supabase gen type
 1. **RPC args vs firma real.** Extraé toda `.rpc('fn', {keys})` del repo (parser que captura el 1er string literal + las top-level keys del 2º arg objeto, depth-aware). Por cada `fn`, traé `pg_get_function_arguments(oid)` + `pronargs`/`pronargdefaults` de prod. Reglas PostgREST: (a) **arg extra** del cliente que NO está en los params → la función no resuelve (PGRST202); (b) **param requerido** (los primeros `pronargs − pronargdefaults`, los defaults van trailing en PG) que ningún call site provee → falla. El union de keys cross-call-site hace el check (a) conservador (caza cualquier site).
 2. **Columnas write/filter vs schema.** Extraé `.from(t).insert/update/upsert({...})` (keys del payload) + columnas de `.eq/.neq/.gt/.gte/.lt/.lte/.like/.ilike/.is/.in/.order/.contains('col',…)`. **CRÍTICO: acotá el chain a UN solo statement** — desde el `.from(` hasta el **primer `;`** (terminador; los method-chains no tienen `;` top-level) o el siguiente `.from(`, lo que venga antes. Sin esto, columnas de statements adyacentes **sangran** (bleed) y generás decenas de falsos positivos. Después emití los pares `(tabla, columna, kind)` a un `WITH client_refs(...) AS (VALUES …) … LEFT JOIN information_schema.columns … WHERE column_name IS NULL AND tbl IN (tablas de prod)` (excluí buckets de storage: `avatars/receipts/driver-documents/delivery-photos/dispute-evidence/driver-contracts` — son `storage.from()`, no tablas).
 3. **Verificá cada candidato con grep/Read del source** antes de afirmarlo (puede quedar 1 bleed residual; y distinguí método muerto vs. live path con `grep` de callers).
-4. **Advisors de Supabase** (`get_advisors security|performance`) en la misma pasada: output gigante → parsealo con un script Node (`j.result.lints`, campos `name/level/metadata.{schema,name,type}/detail`). Ruido conocido a descartar: ERROR `spatial_ref_sys` (PostGIS, no se le puede poner RLS); `rls_enabled_no_policy` en tablas-candado intencionales (`otp_codes`, `rate_limits`, caches, counters — incl. `email_sends`, `google_directions_cache`, `google_directions_daily_counter`, `poi_sync_state`) + las `zzz_backup_*`; `anon/authenticated_security_definer_function_executable` mayormente intencional (share links por token, config/geo públicos, fns de trigger inocuas); `rls_policy_always_true` ×3 en `influencers_campaign` (tabla huérfana de marketing creada a mano en prod, **riesgo aceptado explícitamente por el usuario 2026-07-01 — NO tocar ni re-alertar**); performance (initplan/multi-permissive/FK sin índice) = higiene-a-escala, **no** bloqueante de lanzamiento (varios counts inflados tras un wipe).
+4. **Advisors de Supabase** (`get_advisors security|performance`) en la misma pasada: output gigante → parsealo con un script Node (`j.result.lints`, campos `name/level/metadata.{schema,name,type}/detail`). Ruido conocido a descartar: ERROR `spatial_ref_sys` (PostGIS, no se le puede poner RLS — pero su `rls_disabled_in_public` **no es del todo inofensivo**: ver § «`spatial_ref_sys`: el advisor es ruido, los GRANT de `anon` no»); `rls_enabled_no_policy` en tablas-candado intencionales (`otp_codes`, `rate_limits`, caches, counters — incl. `email_sends`, `google_directions_cache`, `google_directions_daily_counter`, `poi_sync_state`) + las `zzz_backup_*`; `anon/authenticated_security_definer_function_executable` mayormente intencional (share links por token, config/geo públicos, fns de trigger inocuas); `rls_policy_always_true` ×3 en `influencers_campaign` (tabla huérfana de marketing creada a mano en prod, **riesgo aceptado explícitamente por el usuario 2026-07-01 — NO tocar ni re-alertar**); performance (initplan/multi-permissive/FK sin índice) = higiene-a-escala, **no** bloqueante de lanzamiento (varios counts inflados tras un wipe).
 
 Resultado del 1er sweep (PR #517): 99 RPCs + 489 refs de columna → **3 bugs reales** (param de RPC en método muerto, `sitemap` filtrando `blog_posts.status` inexistente → blog fuera del sitemap, toggle admin escribiendo `reviews.is_featured` inexistente → mig 00416). Resto del contrato **sano**.
+
+**`.maybeSingle()` solo es seguro cuando el filtro pega en una clave única (verificado 2026-09-25).** Con dos o más filas, `postgrest-js` 2.99.1 **no lanza**: resuelve `{ data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } }`. Un servicio que hace `if (error) return null` convierte así "varias filas" en "ninguna", y tipar el cliente con `<Database>` tampoco lo caza, porque es cardinalidad y no tipos. Caso latente (`fleet_members` tenía 0 filas en prod el 2026-09-25): `fleetService.getMembershipForDriver` filtraba `fleet_members` por `driver_id`, que no es único, así que un conductor en dos flotas habría visto el formulario de "crear flota" en vez de las suyas. Lo reemplazó `getMembershipsForDriver`, que lee la lista con un `.order()` determinista cerrado en `id` y decide en código. Dos reglas:
+- Antes de escribir `.maybeSingle()` o `.single()`, confirmar contra prod (`pg_constraint`/`pg_index`) que el filtro sea PK o `UNIQUE`. Si no lo es, leer la lista.
+- Para testear el caso, el doble del query builder tiene que devolver PGRST116 con 2+ filas, como el real (ver `packages/api/src/services/__tests__/fleet.test.ts`). `createMockQueryChain` devuelve lo que se le pase y esconde el bug.
+
+**Del lado del dueño el fallo no era de cardinalidad: un trigger de protección anulaba la escritura del cliente (verificado 2026-09-25, reproducido en prod como conductor normal dentro de un bloque revertido).** Desde 00418/00434, `is_fleet_owner` solo lo escriben un admin o el service role: `tg_corporate_accounts_protect_insert` lo fuerza a `false` y `tg_corporate_accounts_protect_admin_fields` lo revierte en cada UPDATE de quien no es admin. El `update({ is_fleet_owner: true })` de `FleetRequestForm` devolvía 1 fila sin error y la cuenta seguía en `false`, así que `getFleetByOwner` (`.eq('is_fleet_owner', true)`) daba 0 filas **con una sola cuenta**: todo dueño volvía a ver el formulario, todavía lleno y sin aviso de éxito, y cada toque creaba otra cuenta con su flota. Ahora la flota se reconoce por su fila en `driver_fleets` (UNIQUE por cuenta; con varias gana aprobada > pendiente > suspendida > rechazada, después la más nueva), el formulario ya no intenta marcar la cuenta y un reintento reusa la cuenta que creó. `is_fleet_owner` sigue siendo decisión del admin porque cambia el despacho de los viajes corporativos (00336/00337): con el flag y al menos un miembro `active`, los viajes pagados con esa cuenta solo se ofrecen a conductores de la flota. Lo pone `approveAccount`, en el mismo UPDATE que aprueba, cuando la cuenta tiene fila en `driver_fleets` (el admin pasa el trigger), y nunca lo baja. Hasta entonces la flota se reconoce por esa fila: el admin la usa para el badge "Flota" y para mostrar `FleetReview`, y `getRequestStatus` (pasajero y web) deja fuera las cuentas con fila o con flag. Antes una solicitud de flota pendiente aparecía allí como solicitud de cliente corporativo en revisión. Regla: antes de depender de una columna que escribe el cliente, buscar en `pg_trigger` un `*_protect_*` que la revierta. Un UPDATE que devuelve 1 fila no prueba que el valor cambió.
+
+**Una decisión del admin se liga a la fila que vio, no solo a su id (verificado 2026-09-27; carrera latente, `fleet_members` tenía 0 filas).** Mientras una invitación está `pending_review`, el dueño puede editarla: la RLS `fleet_members_owner_or_admin_update` lo permite y `tg_fleet_members_protect` recién congela la identidad una vez revisada (00600). `approveMember(id)` hacía `UPDATE … WHERE id = $1`: si el dueño cambiaba el teléfono entre que el admin abría `FleetReview` y tocaba "Aprobar", se aprobaba un teléfono que el admin nunca vio, y el auto-link vinculaba a quien fuera su dueño. Ahora `approveMember`/`rejectMember` reciben la fila mostrada y el `UPDATE` exige `status = 'pending_review'` más cada columna de `FLEET_MEMBER_REVIEWED_FIELDS` (`packages/types/src/fleet.ts`: la misma lista que ese trigger congela para el dueño una vez revisada, migración 00600; hay que mantenerlas iguales). Con la 00598, el trigger de aprobación vincula en ese mismo `UPDATE` a la cuenta que confirmó el teléfono por OTP, y ese teléfono es el que vio el admin porque el `WHERE` lo exige. Si no casa ninguna fila lanza `AppError FLEET_MEMBER_CHANGED` (409) y el panel recarga, marca la fila y nombra los campos que cambiaron. **Sin sesión lanza `AuthError` antes de escribir**: el admin copia su sesión de cookies al cliente de `@tricigo/api` en best-effort (`useAdminUser`), y sin ella el PATCH sale como `anon`, la RLS oculta la fila y las 0 filas se leerían como "cambió" (antes de este fix, como un falso "Conductor aprobado"). No hizo falta migración: en READ COMMITTED, si el `UPDATE` espera el lock de la fila, Postgres re-evalúa el `WHERE` sobre la versión que el dueño confirmó, así que una edición concurrente también deja 0 filas (`supabase/tests/fleet-review/run.sh`, casos C1–C3; en el orden inverso, C4, la 00600 conserva lo aprobado). Con la subida write-once de #1032 cada licencia nueva lleva nombre propio, así que cambiar el archivo también cambia `license_doc_path` y la comparación lo ve. Tres trampas:
+- **Un NULL se filtra con `.is(col, null)`, nunca con `.eq(col, null)`**: postgrest-js manda `col=eq.null`, que compara contra el texto `'null'` y nunca casa una columna NULL.
+- **El valor de un filtro `eq.` de nivel superior es literal** (PostgREST v13, `pSingleVal = many anyChar`): comas, comillas y paréntesis no se escapan (eso es solo dentro de `in.(…)` y `or=(…)`). postgrest-js codifica `+` como `%2B`; un `+` crudo llegaría como espacio.
+- **Renderizar un componente del admin en jsdom sin infraestructura de tests** (el admin no tiene vitest): config descartable con `environment: 'jsdom'`, alias `@` → `apps/admin/src` y `oxc: { jsx: { runtime: 'automatic' } }`. Vite 8 usa oxc e ignora `esbuild.jsx`, y el tsconfig de Next trae `jsx: preserve`, que sin eso da `Unexpected JSX expression`.
 
 **Ruido esperado en logs de prod (verificado en la auditoría de readiness 2026-07-01 — NO re-diagnosticar):** (a) los logs de EF muestran **401 cada 2 min** en `create-netopia-payment-intent` y `mint-netopia-proxy-credential` = crons **keepwarm** (cron.job 33/34, header `x-keepwarm`) que mantienen calientes las EFs NETOPIA; el 401 es esperado — la función bootea y responde, y eso basta para el warm. (b) Los logs de auth se saturan de `GET /user` 403 (`bad_jwt` / `missing sub claim`) = **monitor de uptime externo** (IPs AWS rotando) que carga tricigo.com cada 2 min y el JS de la web llama `getUser()` sin sesión al montar — benigno, pero consume el tope de 100 entradas de `get_logs service=auth` en <1h (para auditar logins reales, filtrar ese patrón). (c) Transacciones de ledger **single-entry** (recargas, ajustes admin) son por diseño — dinero externo, ver §10b de `supabase/money-health-check.sql`; el chequeo canónico de dinero es ese archivo (9 checks = 0 filas en el estado sano, verificado 2026-07-01).
 
@@ -1666,6 +1762,21 @@ END $patch$;
 
 Reglas: (1) **verificá que el target sea único ANTES** — `(length(prosrc)-length(replace(prosrc,'target','')))/length('target')` debe dar 1; (2) **idempotente** — agregá un guard `AND position('<marker-del-cambio>' IN v_src) = 0` para no re-aplicar; (3) escapá comillas simples en los literales (`''driver_cash''`); (4) el `EXCEPTION WHEN undefined_function` lo hace seguro en DBs frescas (la función la crea una migración anterior; el patch corre después por número). **Ventaja clave sobre el verbatim: no puede perder features** porque parte del cuerpo vivo. Ejemplos: `00408` (`complete_ride_and_pay` `driver_cash`→`tricicoin`; `find_best_drivers` + filtro de heartbeat).
 
+### Flotas: una invitación revisada queda congelada para su dueño (00600, verificado 2026-09-25)
+
+**Regla:** mientras una invitación de `fleet_members` está en `pending_review`, el dueño de la flota puede editarla. Cuando el admin ya la revisó (cualquier otro estado: `approved`, `pending_signup`, `rejected`, `active`, `inactive`), `tg_fleet_members_protect` le revierte al dueño lo que el admin revisó y la flota: `driver_phone`, `driver_name`, `driver_email`, `driver_license_number`, `driver_id_number`, `license_doc_path` y `fleet_id`. `rejected_reason` es texto del admin, así que el dueño no puede cambiarlo en ningún estado. Los admins, las llamadas sin JWT (service role, migraciones, GoTrue) y quienes escriben con `app.trusted_fleet_update` siguen como antes.
+
+**Por qué:** todos los caminos que vinculan una invitación a una cuenta (el alta, la confirmación del teléfono de la 00598, el relink del admin, el backfill) leen una fila aprobada y sin vincular como "el admin aprobó a esta persona con este número". Antes de la 00600, el dueño podía cambiar el número después de la aprobación, y el alta de ese número nuevo entraba a la flota sin que nadie lo revisara (reproducido con los cuerpos vivos).
+
+**Es silencioso, igual que con `status`:** el UPDATE del dueño responde OK y no cambia nada. Para cambiar a un conductor ya revisado, el dueño lo borra y lo invita de nuevo, y la fila nueva vuelve a revisión. Una pantalla futura de "editar conductor" tiene que ofrecer eso y no un UPDATE: con un UPDATE parecería que guarda y no guardaría. Hoy ese camino tampoco existe en la app: `fleetService` no tiene método para borrar un miembro, y `submitFleetRequest` ignora un teléfono que la flota ya tiene. Otro efecto: mover una fila revisada a una flota que no es del dueño antes daba error de RLS; ahora responde OK y no cambia nada.
+
+**Lo que no cubre (pendiente):**
+1. La ventana *durante* la revisión. **Cerrado por #1040 (2026-09-27):** `approveMember`/`rejectMember` solo escriben si la fila sigue en `pending_review` con cada valor que el admin vio; si no, lanzan `FLEET_MEMBER_CHANGED` y el panel recarga. Ver «Una decisión del admin se liga a la fila que vio», en la sección del sweep de contrato.
+2. El archivo de la licencia. **Cerrado por #1032 (2026-09-27):** `storage-upload` solo deja subir a `fleet-docs/<corp>/<miembro>/…` a los gestores de la cuenta mientras el miembro está en `pending_review` (después responde `409 member_reviewed`), y bajo ese prefijo nunca reemplaza un archivo, para nadie. Ver el guardrail (4) de la sección de Storage.
+3. Mover la flota entera a otra empresa del mismo dueño (`driver_fleets.corporate_account_id`): la política no tiene `WITH CHECK` y la tabla no tiene trigger de protección, así que la flota se lleva con ella a todos los miembros revisados.
+
+**Si hay que volver a tocar `tg_fleet_members_protect`:** partir del cuerpo vivo (`pg_get_functiondef`), no del texto de la 00435, que en prod no tiene los comentarios de git. Cuerpos conocidos: el previo a la 00600 (md5 `8b0d07af…`) y el de la 00600 (`2b65b4b8…`). La 00600 se niega a reemplazar un cuerpo que no conoce; conviene que la próxima migración haga lo mismo. Ensayo: `supabase/tests/00600/run.sh`. Si la 00598 está en el checkout, o si se pasa `M598=<ruta>`, también corre la prueba combinada en los dos órdenes.
+
 ### Fleet membership 3-way gate (corporate)
 
 **Verificado en migraciones 00336 + 00337.**
@@ -1692,6 +1803,41 @@ SELECT EXISTS (
 **Falsos negativos defensivos**: si el corp NO es fleet_owner, o NO tiene members activos, la gate se desactiva silenciosamente. Esto evita romper service mid-setup (corp recién creada sin drivers asignados todavía).
 
 **FK schema importante**: `fleet_members.driver_id` referencia `users.id`, NO `driver_profiles.id`. En el JOIN final, usar `fm.driver_id = dp.user_id` (NO `dp.id`).
+
+### Flotas: cómo queda vinculada una invitación (00598, verificado 2026-09-25)
+
+**Estado:** aplicada en prod el 2026-09-27, después de la 00599, la 00600 y la 00601, y ninguna de ellas redefine nada de la 00598. Los cuatro cuerpos de prod coinciden byte a byte con git. La prueba combinada de `supabase/tests/00600/run.sh` pasa en los dos órdenes.
+
+**Regla:** una fila de `fleet_members` pasa a `status='active'` con `driver_id` solo hacia **la única cuenta activa que confirmó ese número por OTP** en `auth.users`. Se evalúa en los tres momentos que pueden volverlo cierto, siempre por teléfono normalizado:
+1. **Confirmación:** `on_auth_user_phone_confirmed` (AFTER UPDATE ON **`auth.users`**). Actúa cuando un número queda recién confirmado para una cuenta: la primera confirmación, o un número nuevo en una cuenta que ya estaba confirmada. Reconfirmar el mismo número no cuenta. **Acá se vinculan en la práctica las cuentas nuevas:** el `createUser` de `verify-otp` hace el INSERT sin confirmar y confirma en un UPDATE aparte. `link-phone` y el heal de `verify-otp` llaman a `updateUserById`, que ejecuta `ConfirmPhone` **antes** que `SetPhone` (`supabase/auth`, `internal/api/admin.go`).
+2. **Alta:** `auto_link_fleet_member_on_signup` (AFTER INSERT ON `public.users`, disparado por `handle_new_user`). Solo vincula si el número ya viene confirmado en el INSERT. Como GoTrue inserta antes de confirmar, este camino casi nunca vincula; está para que el alta no vincule un número sin confirmar.
+3. **Aprobación:** `trg_fleet_members_set_driver_on_approval` (BEFORE INSERT OR UPDATE OF status). Actúa cuando la invitación **pasa a** `approved`/`pending_signup`. Una fila que ya estaba aprobada no se vuelve a mirar, así que editarla después no vincula a nadie por este camino. Además, desde la 00600 el dueño de la flota no puede cambiar una invitación que el admin ya revisó; un admin sí.
+4. **Manual:** `relink_fleet_member_for_existing_driver` (solo admin; ninguna pantalla lo llama todavía, así que por ahora es solo SQL). Cubre lo que la regla deja afuera: un número nunca confirmado, una cuenta reactivada después de aprobar, o dos cuentas con el mismo número.
+
+Los tres caminos automáticos solo tocan invitaciones `approved`/`pending_signup` que no tienen `driver_id`. Una invitación sin revisar, rechazada o que ya nombra a otra persona no se toca.
+
+Los ensayos repiten las escrituras de GoTrue sentencia por sentencia (INSERT y después UPDATE; `ConfirmPhone` y después `SetPhone`). Un UPDATE único que haga las dos cosas deja sin probar el camino del que depende `link-phone`.
+
+**`public.users.phone` no prueba nada.** No es único, y hasta la 00599 su dueño podía escribir ahí cualquier número por PostgREST, sin OTP (grant de columna, `users_update_own`, y `tg_users_protect_admin_fields` no lo cubría). Desde la 00599 solo puede poner el número que su cuenta confirmó, pero `handle_new_user` sigue copiando el de `auth.users` al crear la cuenta, esté confirmado o no. Por eso el trigger de confirmación vive en `auth.users` y no en `public.users`. En `public.users`, antes de la 00599, cualquiera podía cambiar su número a otro y volver a ponerlo, sin OTP, y dispararlo (ensayo C5).
+
+La fuente confiable es `auth.users.phone` con `phone_confirmed_at`: tiene el índice único `users_phone_key` y va en E.164 **sin `+`** (`53XXXXXXXX`). Para "la cuenta de este número" usar `_user_id_by_verified_phone(text)`, que no es ejecutable por clientes porque es un oráculo número→cuenta.
+
+**Esto depende de dos cosas:**
+- **`phone_autoconfirm = false` en prod.** Se lee con `GET /auth/v1/settings` y la clave publicable (verificado el 2026-09-25 y de nuevo el 2026-09-27). Con autoconfirm, GoTrue confirmaría un `PUT /user {phone}` sin OTP. El `config.toml` local tiene `enable_confirmations = false`, pero es solo para desarrollo.
+- **Un invariante de las escrituras con la API admin:** todo `phone_confirm` tiene que venir después de un OTP de ese número. Como `updateUserById` confirma antes de poner el número nuevo, una cuenta cuyo número actual nunca se confirmó quedaría con ese número dado por confirmado. Hoy ninguna cuenta con sesión tiene un número sin confirmar. Por lo mismo, `phone_confirmed_at` es por cuenta y no por número: si alguien cambia el teléfono desde el Dashboard sin `phone_confirm`, el número nuevo hereda la fecha de confirmación del anterior.
+
+**Todo trigger en `auth.users` corre dentro de la transacción de GoTrue:** un error ahí rompe el login o la confirmación.
+- **Errores contenidos:** el cuerpo va envuelto en `EXCEPTION WHEN OTHERS`, igual que el trigger de alta (la lección de 00595). Un vínculo que falla deja un WARNING y una fila en `rpc_attempt_log` (`outcome = 'link_failed'`); ahí es donde hay que buscar una invitación que quedó `approved` sin razón.
+- **Sin esperas largas:** `SET lock_timeout TO '2s'` en la definición de la función convierte una espera de lock en un error que ese bloque atrapa. `WHEN OTHERS` no atrapa `query_canceled`, así que sin ese límite una espera terminaría cortada por `statement_timeout`, y ese error sí rompe el login.
+- **Sin columnas en la definición:** el trigger no tiene lista de columnas ni `WHEN`, porque eso le impediría a GoTrue hacer `ALTER COLUMN TYPE` sobre esas columnas. La función filtra adentro y vuelve enseguida en cualquier otro UPDATE.
+- **Cómo apagarlo:** `postgres` no es dueño de `auth.users`, así que no puede hacer `DROP` ni `DISABLE` de un trigger ahí. Para apagarlo, reemplazar el cuerpo de la función por `RETURN NEW`.
+- **Cómo crearlo:** crear el trigger bloquea las escrituras a `auth.users` hasta el commit. Usar `SET lock_timeout` (con `RESET` al final) y dejarlo para el final de la migración.
+
+Los números fuera de Cuba quedan en GoTrue sin `+` y `_normalize_cuban_phone` no los toca, así que las funciones les agregan el `+` antes de buscarlos.
+
+**Orden de triggers:** los del mismo evento y momento disparan en orden de nombre (strcmp), así que el de aprobación corre después de `trg_fleet_members_protect` (`s` > `p`). Es defensa en profundidad, no algo de lo que dependa la corrección: el protect revierte todo lo que escribe el de aprobación, sin importar cuál corra primero.
+
+**Trampa al ensayar:** `auto_link_fleet_member_on_signup` deja `app.trusted_fleet_update = '1'` hasta el final de su transacción. En prod no importa, porque esa transacción es la de GoTrue. Pero un ensayo que siembra usuarios y prueba al dueño en la misma transacción ve que el protect deja pasar todo, y el test del dueño falla por culpa del arnés. Hay que sembrar en una transacción aparte (`tcase` en `supabase/tests/00598/run.sh`).
 
 ### Smoke test E2E paths cuando el rider OTP no funciona
 
@@ -1979,7 +2125,17 @@ git worktree remove <temp>
 
 **Root fix pendiente (Supabase, no código):** ticket a Supabase support para que storage-api valide los ES256 del proyecto (draft en `.support-ticket-storage-jwt.md`, no commiteado). **Cuando lo resuelvan:** re-correr repro (una subida directa autenticada deja objeto con `owner`=user id); si verde → revertir las EFs a `supabase.storage.from().upload()` directo en `_storage-upload.ts` + `delivery.service.ts` + avatar web, y borrar las 2 EFs + sus entradas en `config.toml`. Dejar el bucket `dispute-evidence`.
 
-**GUARDRAILS:** (1) **NO rotar/revocar JWT signing keys** como "fix" — rompe todas las sesiones/servicios; es palanca de soporte. (2) Al agregar una subida **nueva**, rutearla por la EF `storage-upload` (sumar el bucket + su authz al allowlist), NUNCA por `supabase.storage.upload()` directo (fallaría como anon). (3) Diagnóstico: `curl …/auth/v1/.well-known/jwks.json` → clave `ES256` = asimétrico; `SELECT bucket_id, COUNT(*) FILTER (WHERE owner IS NOT NULL) FROM storage.objects GROUP BY 1` → 0 con owner (salvo EF/service-role) = subidas autenticadas rotas.
+**GUARDRAILS:** (1) **NO rotar/revocar JWT signing keys** como "fix" — rompe todas las sesiones/servicios; es palanca de soporte. (2) Al agregar una subida **nueva**, rutearla por la EF `storage-upload` (sumar el bucket + su authz al allowlist), NUNCA por `supabase.storage.upload()` directo (fallaría como anon). (3) Diagnóstico: `curl …/auth/v1/.well-known/jwks.json` → clave `ES256` = asimétrico; `SELECT bucket_id, COUNT(*) FILTER (WHERE owner IS NOT NULL) FROM storage.objects GROUP BY 1` → 0 con owner (salvo EF/service-role) = subidas autenticadas rotas. (4) **`fleet-docs/` es de escritura única y se cierra con la revisión** (2026-09-27, complemento de 00600): la EF solo deja subir a `fleet-docs/{cuenta}/{miembro}/…` a los gestores de la cuenta (creador o corp admin activo) mientras el miembro está en `pending_review`; después responde `409 member_reviewed` (el admin de plataforma puede siempre). Bajo ese prefijo ignora el `upsert` que manda el cliente y nunca reemplaza un archivo, para nadie, así que el archivo detrás de un `license_doc_path` revisado no puede cambiar. `uploadMemberLicense` sube con nombre `{Date.now()}-{nombre}` y `upsert=false`. Las reglas viven en `supabase/functions/_shared/fleet-docs.ts`, con tests. **Si algún día se revierte `storage-upload` a la subida directa** (el root fix de arriba), `fleet-docs/` necesita antes sus propias políticas de Storage: hoy ninguna deja escribir ahí, y sin un INSERT limitado a `pending_review` y sin ninguna de UPDATE se pierde la escritura única.
+
+**`driver-docs/` todavía reemplaza en sitio (medido 2026-09-27, sin arreglar).** El conductor sube con el nombre original del archivo (el de la galería o del PDF) y `upsert: true`, así que re-subir el mismo archivo pisa el objeto al que apunta una fila de `driver_documents` ya revisada. En prod: 53 rutas compartidas por 2+ filas y **10 documentos aprobados de 4 conductores cuyo archivo se reemplazó después de la revisión** (entre el 8 y el 12 de julio). No se forzó la escritura única ahí porque las apps instaladas re-suben con el mismo nombre y dependen del `upsert` (una re-subida daría 409 hasta el próximo APK): hace falta primero nombres únicos en las apps, después el APK, y recién ahí la regla en la EF. Para listarlos:
+```sql
+SELECT v.id, v.driver_id, v.document_type, v.storage_path, v.verified_at, max(l.uploaded_at) AS replaced_at
+FROM driver_documents v
+JOIN driver_documents l ON l.storage_path = v.storage_path AND l.id <> v.id
+ AND l.uploaded_at > coalesce(v.verified_at, v.uploaded_at)
+WHERE v.is_verified
+GROUP BY v.id, v.driver_id, v.document_type, v.storage_path, v.verified_at;
+```
 
 ---
 
@@ -2247,7 +2403,7 @@ Para lo que quedó fuera de la ventana de 6 h: `get_logs service=edge-function` 
 
 **El `Bearer` de un cron NO es decorativo: el gateway lo valida aunque la EF autorice por `apikey` (incidente 2026-08-17, mig 00567).** A las ~13:45 UTC, `auto-admin` / `sync-exchange-rate` / `sync-weather` pasaron de 200 a **401 `{"code":"UNAUTHORIZED_LEGACY_JWT"}`** en todas sus corridas, sin que nadie tocara nada. Los 4 crons de 00219 mandaban `Authorization: Bearer <legacy ANON JWT hardcodeado>` (el `apikey` sí salía del vault en formato nuevo `sb_secret_*`, y es el que la EF chequea de verdad); ese Bearer existía solo para satisfacer el `verify_jwt=true` del gateway. El legacy anon está `disabled` a nivel proyecto desde BUG-199, pero **el gateway venía grandfathereando los JWT legacy** — riesgo que el propio encabezado de 00219 dejó escrito hace meses — y ese día Supabase dejó de hacerlo. **Diagnóstico en 3 consultas:** (1) `cron_http_calls ⋈ net._http_response` da el minuto exacto del corte por job; (2) `SELECT jobname, command LIKE '%eyJ%' FROM cron.job` parte la lista en dos y **los que fallan son exactamente los que tienen el JWT hardcodeado** — los que usan `get_service_role_key()` (`probe-netopia-proxy-health`, `check-sms-balance`, ambos contra funciones `verify_jwt=true`) seguían en 200 a la misma hora, que es la prueba de que el formato nuevo sirve como Bearer; (3) `pg_proc.prosrc LIKE '%eyJ%'` acota el radio (dio 0 → solo crons). **Regla:** nunca hardcodear un JWT en un cron ni en una función — siempre `'Bearer ' || get_service_role_key()`. Un `apikey` correcto NO te salva del gateway. **Ojo con el orden de daño:** el reloj corre desde el último éxito, no desde el aviso — con FX el techo son 24 h antes de que las recargas devuelvan `503 fx_unavailable`, y el cron diario (`behavioral-emails-daily`) ni siquiera había fallado todavía cuando se detectó.
 
-**Los tests de Edge Functions no los corría nadie** (hasta 2026-07-30). Los 3 proyectos vitest limitan su `include` a `src/**/*.test.ts` de su propio paquete, así que `_shared/demo-otp.test.ts` estuvo huérfano desde que se escribió. Ahora `packages/api/vitest.config.ts` incluye además `../../supabase/functions/_shared/**/*.test.ts`. **Solo aplica a helpers `_shared` puros** — un `index.ts` de EF importa de `https://` y toca `Deno.*`, que vitest no resuelve. Para lógica de EF que valga la pena testear, extraerla a un módulo `_shared` sin imports remotos. Ojo también: **`pnpm check:ef-types` no corre desde el sandbox** (el proxy bloquea `esm.sh`, así que `deno check` no puede bajar los imports remotos); tipo-chequear esos módulos con `npx tsc --noEmit --strict`.
+**Los tests de Edge Functions no los corría nadie** (hasta 2026-07-30). Los 3 proyectos vitest limitan su `include` a `src/**/*.test.ts` de su propio paquete, así que `_shared/demo-otp.test.ts` estuvo huérfano desde que se escribió. Ahora `packages/api/vitest.config.ts` incluye además `../../supabase/functions/_shared/**/*.test.ts`. **Solo aplica a helpers `_shared` puros** — un `index.ts` de EF importa de `https://` y toca `Deno.*`, que vitest no resuelve. Para lógica de EF que valga la pena testear, extraerla a un módulo `_shared` sin imports remotos. Ojo también: **`pnpm check:ef-types` no corre desde el sandbox** (el proxy bloquea `esm.sh`, así que `deno check` no puede bajar los imports remotos); tipo-chequear esos módulos con `npx tsc --noEmit --strict`. **Un `index.ts` entero también se puede chequear sin Deno** (verificado 2026-09-27 con `storage-upload`): un `tsconfig` desechable con `"paths": { "https://esm.sh/@supabase/supabase-js@2.108.2": ["<repo>/node_modules/@supabase/supabase-js"] }`, `allowImportingTsExtensions`, `moduleResolution: bundler`, un `.d.ts` con `declare const Deno: { env: { get(n: string): string | undefined }; serve(h: (r: Request) => Response | Promise<Response>): void }` y el `index.ts` en `files`. Los tipos son de la 2.99.1 local, no de la 2.108.2 que corre, pero alcanza para lo que gatea `check:ef-types`: el control negativo (un typo de método, un identificador inexistente, un tipo mal asignado) dio TS2551, TS2304 y TS2322. Correrlo primero sobre la EF sin cambios, para tener línea base.
 
 **Incidente que lo destapó (tipo de cambio congelado 4 días, recargas caídas).** Dos capas:
 1. **Bug latente de 4 meses:** `fetchFromAPI` en `sync-exchange-rate` solo aceptaba la forma **anidada** (`d.tasas.USD.median`). La API de elTOQUE devuelve el USD como **número plano**: `{"tasas":{"USD":665.0},...}`. Devolvía `null` en cada corrida y caía al scraper. Prueba dura: `SELECT source, count(*) FROM exchange_rates GROUP BY source` → 2771 filas `eltoque_scraping`, **cero `eltoque_api`, jamás**.
@@ -2345,6 +2501,35 @@ WHERE table_name='<tabla>' AND column_name='<col>';
 ```
 
 **Lo que lo cazó no fue la revisión de código sino el ensayo rolleado**: crear la función y **ejecutarla** dentro de `BEGIN … ROLLBACK` antes de aplicar. Vale la pena para cualquier función nueva con lógica no trivial — y es seguro incluso cuando manda correos, porque `net.http_post` encola en `net.http_request_queue`, que es transaccional (verificar después con `SELECT count(*) FROM cron_http_calls WHERE called_at > …`, que debe seguir sin la etiqueta nueva).
+
+### Trampa plpgsql: `DELETE/UPDATE … RETURNING … INTO` aborta con 2+ filas aunque no digas `STRICT` (verificado 2026-09-25, mig 00594)
+
+`SELECT … INTO` sin `STRICT` se queda con la primera fila. **Un `INSERT/UPDATE/DELETE … RETURNING … INTO` no**: si la sentencia toca 2 o más filas, plpgsql lanza `P0003 query returned more than one row`, con o sin `STRICT`.
+
+**Por qué engaña:** con 0 o 1 fila funciona, así que pasa la revisión, las primeras pruebas y meses en prod. El día que califican dos filas, la sentencia se revierte y **el trabajo ya no puede volver a andar nunca**: las filas que debía borrar quedan y el atraso solo crece. Caso real: `cleanup_auth_revocations()` (cron 28, 03:00 UTC) tenía `DELETE … RETURNING 1 INTO v_deleted` y falló **las 14 noches** que guarda `cron.job_run_details`. La tabla juntó 62 filas viejas. La más vieja era del 2026-07-09, y cualquier corrida exitosa desde el 07-11 la habría borrado, así que el cron **no anduvo ni una vez en dos meses y medio**.
+
+**Para contar filas afectadas**, cualquiera de estas dos:
+- `GET DIAGNOSTICS v = ROW_COUNT;` justo después de la sentencia, sin `RETURNING`.
+- `WITH d AS (DELETE … RETURNING 1) SELECT count(*) INTO v FROM d;` (lo usan `prune_old_ride_location_events`, `anonymize_old_rides` y `auto_offline_stale_drivers`).
+
+`RETURNING … INTO` solo es seguro cuando el `WHERE` va por una clave `PRIMARY KEY` o `UNIQUE`. En el barrido de prod del 2026-09-25, **19 funciones** usan la forma; 17 son seguras (clave única o el patrón CTE), una era este bug y la otra estaba **latente** hasta 00595: `auto_link_fleet_member_on_signup` (`AFTER INSERT ON users`, sin `EXCEPTION`). `fleet_members` es único por `(fleet_id, driver_phone)` y el `UPDATE` compara el teléfono normalizado. Si dos invitaciones pendientes compartían teléfono (de dos flotas, o la misma flota con el número en dos formatos), **el alta de esa persona fallaba**. 00595 la arregló antes de que le pasara a alguien (`fleet_members` tenía 0 filas): ahora vincula todas las invitaciones, igual que `relink_fleet_member_for_existing_driver`.
+
+**En prod, la 00595 figura dos veces en `supabase_migrations.schema_migrations`, y está bien.** Dos sesiones arreglaron el mismo bug en paralelo, y cada una aplicó su archivo por MCP con 15 segundos de diferencia:
+- `20260925194738 00595_fix_auto_link_fleet_member_on_signup` viene del #1018. Ese PR se cerró sin mergear, así que **su archivo no está en git**.
+- `20260925194753 00595_fix_fleet_signup_multi_invitation` viene del #1019.
+
+Las dos instalan el mismo cuerpo (`md5(prosrc)` `c4b25ab786f201ced8661633ff113e57`, longitud 434), y la segunda solo lo volvió a escribir: no hay nada que corregir. **El chequeo de número de migración no detecta trabajo duplicado** cuando el otro PR se abre y se mergea en minutos. Antes de aplicar en prod, correr `git fetch` y buscar en `git log origin/master` si algo ya tocó el mismo objeto.
+
+**Hasta 00596, ningún watchdog miraba las corridas fallidas de los crons SQL.** `check_cron_http_failures` cubre solo los que llaman a una Edge Function, y por eso este cron falló dos meses y medio sin que nadie se enterara. Desde 00596, `check_cron_sql_failures()` (cron `45 * * * *`) manda un correo a `business_notification_email` cuando cambia la lista de tareas que fallan. Cuenta como fallando una tarea con 3 fallas reales seguidas, o con todas sus corridas fallidas si todavía no tiene 3 (semanales, nuevas). Desde 00597 una falla es real solo si el SQL del job falló (`return_message` empieza con `ERROR:`) o si pg_cron rechazó su comando (`COPY not supported`). Salta todo lo demás, que es pg_cron sin poder correr el job o perdiendo la conexión mientras corría: `job startup timeout`, `server restarted`, `connection failed`, `connection lost`, `job canceled`. Antes saltaba solo los dos primeros, y en modo libpq (el de prod) una caída también puede dejar `connection failed`. Hueco aceptado: un job que muere con FATAL en cada corrida, o cuyo rol o base ya no existe, también se salta. Exige verla fallar en dos revisiones seguidas: medido contra el historial, así se evitan las 4 falsas alarmas de las caídas del 20 y 21 de septiembre. Desde 00597 los correos salen por `cron_http_post` con la etiqueta `cron-sql-failure-alert` (timeout de 30 s en vez de 5): `check_cron_http_failures` avisa cuando `send-email` rechaza 2 o más dentro de su ventana de 90 min. Si el rechazo es de fondo (sin clave de vault, `send-email` caído), su propio aviso falla igual; el rastro queda en `cron_http_calls` (24 h) y `net._http_response` (6 h). `SELECT public.cron_sql_failures_now();` dice qué falla ahora sin mandar nada. El estado queda en `platform_config.cron_sql_health_*`. Cualquier cron nuevo queda cubierto solo, sin tocar nada. A mano, las fallas crónicas se ven así:
+
+```sql
+SELECT j.jobid, j.jobname, count(*) FILTER (WHERE d.status <> 'succeeded') AS fallidas, count(*) AS corridas
+FROM cron.job j JOIN cron.job_run_details d USING (jobid)
+WHERE d.start_time > now() - interval '14 days'
+GROUP BY 1, 2 HAVING count(*) FILTER (WHERE d.status <> 'succeeded') > 0 ORDER BY 3 DESC;
+```
+
+`job startup timeout` y `server restarted` son las caídas de septiembre y el paso a Micro, no bugs. **Un job con fallidas = corridas y un mensaje de error de SQL es un bug de código.**
 
 ### Aplicar migraciones pesadas por MCP: pg-meta corta la conexión a ~4 min y un `ADD COLUMN` + backfill deja a las apps en cola (verificado 2026-09-07, 00579)
 
@@ -2563,7 +2748,278 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 
 **Cómo probar migraciones SQL de verdad sin tocar prod (verificado acá).** El sandbox trae `psql` **y** los binarios de Postgres 16 en `/usr/lib/postgresql/16/bin`. Postgres no corre como root, así que hay que crear un usuario (`useradd -m pgtest`) y poner el datadir en **su home** (`/tmp` da `Permission denied` con `su`). Con un andamio de ~60 líneas (schemas `auth`/`cron`/`net`, `platform_config`, `get_platform_config_numeric`, `net.http_post` que INSERTA en una tabla en vez de mandar correos) se corre **la migración verbatim** y se le pasan tests de comportamiento. Así se encontró el bug del NULL. Ojo: no hay PostGIS ni pg_cron — simulá `cron.schedule`/`unschedule` y usá `text` donde prod tiene `geography` (válido cuando la columna se resta antes de comparar, o sea cuando su tipo no puede influir en el resultado).
 
+**En Windows, sin sandbox (verificado 2026-09-25 con el ensayo de 00595 del #1018, que no entró a master).** La PC no trae `psql`, WSL ni Docker. Sirven los binarios portables de EnterpriseDB: `postgresql-16.14-1-windows-x64-binaries.zip`, 326 MB, de `get.enterprisedb.com`, sin firma Authenticode. Se descomprimen en el scratchpad sin pgAdmin, con `tar.exe -xf <zip> pgsql/bin pgsql/lib pgsql/share`.
+- **Cluster:** `initdb -D <dir> -U pgtest -A trust -E UTF8 --no-locale` y `pg_ctl -D <dir> -o "-p 5433 -c listen_addresses=127.0.0.1" -l <log> -w start`. Esa llamada a `pg_ctl` **no vuelve**, porque postgres hereda el pipe de la herramienta, y la herramienta la pasa a segundo plano. El servidor queda arriba igual; comprobarlo con `pg_ctl status`.
+- **El puerto puede ser del cluster de otra sesión** (verificado 2026-09-26). Varias sesiones levantan su Postgres en paralelo: el 5437 y el 5441 ya estaban tomados. `pg_ctl start` falló por el puerto, pero el `psql` siguiente respondió igual, porque le contestaba el cluster de otra sesión, y un `run.sh` ahí le habría borrado las bases. Antes de arrancar, elegir un puerto que no aparezca en `netstat -ano | grep LISTENING`; después, confirmar que el PID que escucha en ese puerto es el de la primera línea de `<datadir>/postmaster.pid`.
+- **Mensajes:** `--no-locale` deja `lc_messages=C`, así que los errores del servidor salen en inglés y los `grep` de los `run.sh` funcionan. psql igual traduce sus etiquetas (`SUGERENCIA`, `CONTEXTO`).
+- **Los `run.sh` de master no corren tal cual.** Fijan `BIN=/usr/lib/postgresql/16/bin`, llaman a `python3` (en Windows el ejecutable es `python`) y comparan la salida de psql, que en Windows termina cada línea en `\r\n`. El ensayo del #1018 corrió con esas tres cosas resueltas: `BIN` apuntando a `pgsql/bin`, `python`, y un `tr -d '\r'` sobre cada salida de psql. Para correr uno de master, usar una copia en el scratchpad con los mismos tres cambios. La excepción es `supabase/tests/00599/run.sh`, que toma `PGBIN`, `PGPORT` y `PYTHON` del entorno y quita el `\r` él mismo: `PGBIN=<scratchpad>/pgsql/bin PGPORT=<puerto> PYTHON=python bash supabase/tests/00599/run.sh ...`.
+- **Trampa CRLF (copias sacadas antes de #1021):** con `core.autocrlf=true`, esas copias tienen los `.sh` y `.sql` de `supabase/` en CRLF. El bash de Git for Windows los corre igual y **las pruebas de comportamiento pasan**. Lo que falla es todo chequeo de md5, porque los `\r` que caen dentro del cuerpo de cada función se guardan con él, y el resultado **parece deriva contra prod cuando son solo finales de línea**. Pasa lo mismo si se aplica una migración a prod desde una copia así: la función anda, pero su md5 ya no es el del archivo en git. También falla en falso `pnpm check:poi-taxonomy`: dice que el mapper de 00581 difiere y pide una migración nueva que no hace falta.
+  - **Desde #1021** (verificado 2026-09-25), `.gitattributes` fuerza LF en `supabase/tests/**/*.{sh,sql,psv}` y `supabase/migrations/*.sql`, así que un worktree nuevo ya sale bien.
+  - **Una copia vieja no se corrige sola.** `git status` sigue limpio, y `git checkout --` o `git restore` no reescriben los archivos que no cambiaron. Si no hay cambios sin commitear en esas carpetas, borrar los archivos rastreados y volver a sacarlos: `git ls-files -z supabase/tests supabase/migrations | xargs -0 rm --` y después `git checkout -- supabase/tests supabase/migrations`.
+  - Antes de correr un ensayo, comprobar que `git ls-files --eol supabase/tests/<n>/` diga `w/lf`. Para contar los `\r` a mano, usar `tr -cd '\r' < archivo | wc -c` o `grep -U`: el `grep` de Git Bash quita los `\r` de los archivos de texto y siempre da 0.
+- **Al terminar:** `pg_ctl -D <dir> stop` y borrar la carpeta.
+
 **Watchdog de salud (00577).** `check_database_health()` cada hora (muestra + alerta **solo en transición** ok↔warn↔critical, patrón 00503) y `send_db_health_digest()` diario a las 07:30 UTC al `business_notification_email`. Es SQL puro y no una Edge Function por la misma razón que 00503: si la base está por colapsar, la EF puede no conseguir conexión justo cuando hay que avisar. El aviso temprano real es la **proyección**: con 7 días de muestras calcula MB/día y pasa a `warn` cuando faltan ≤14 días para el umbral, *antes* de cruzarlo. `db_size_warn_mb`/`crit_mb` (6000/7500) son el **único número asumido y no medido** — Postgres no conoce el tamaño del disco que le dio Supabase; ajustar si el disco real es otro.
+
+### Toda alarma del proyecto vivía dentro de pg_cron, así que ninguna puede avisar de una caída de disco (verificado 2026-09-21, `ops/supabase-watchdog/`)
+
+**El incidente.** El 2026-09-21, de 09:24 a 12:28 UTC (~3 h), la capa de almacenamiento se atascó. PostgREST devolvió 503 en `/rest/v1/rides` (215), `platform_config` (126), `driver_heartbeat` y `find_nearby_vehicles`; la latencia media por hora llegó a **51 s** y hubo respuestas de **125 s**. **No salió una sola alerta**: el dueño lo descubrió usando la app y reinició el proyecto a mano. Ya había pasado igual el **18** y el **20 de septiembre**.
+
+**Por qué nadie avisó — y es estructural, no un olvido.** Las tres alarmas (`check_database_health` 00577, `check_exchange_rate_freshness` 00503, `check_cron_http_failures` 00507) las dispara **pg_cron**. Cuando el disco se atasca, pg_cron **no arranca sus workers** (98 × `cron job startup timeout` ese día) → ninguna corrió. `platform_config.db_health_status` quedó congelado en `'ok'` desde las 08:55 UTC. **Una alarma que vive dentro de lo que vigila no puede avisar que eso se cayó** — la misma clase que la ceguera de `cron.job_run_details`, un nivel más abajo: ahí el chequeo corría y miraba la señal equivocada; acá ni corre.
+
+**Cómo encontrar caídas pasadas sin ninguna herramienta nueva** — cada hueco en un cron de 1 minuto es una ventana de caída, y `cron.job_run_details` guarda 14 días:
+
+```sql
+WITH r AS (SELECT start_time, lag(start_time) OVER (ORDER BY start_time) AS prev
+           FROM cron.job_run_details WHERE jobid = 17)
+SELECT prev AS caida_desde, start_time AS recupero,
+       round(extract(epoch FROM start_time - prev)/60) AS minutos
+FROM r WHERE start_time - prev > interval '4 minutes' ORDER BY prev DESC LIMIT 25;
+```
+
+**Es el disco, no la base — cómo distinguirlo (y no perder horas).** Todo lo interno estaba impecable durante la caída: 775 MB y bajando −198 MB/día, 13–26/60 conexiones, cache hit **99.76 %**, 0 transacciones largas, 0 `idle in transaction`, 0 deadlocks, ningún `too many clients` ni `out of memory`. Las dos pruebas que sí señalan al almacenamiento:
+- **Checkpoints:** `wrote 118 buffers, total=11.9 s` (normal) contra **`wrote 9 buffers, total=265.4 s`**. Escribir 9 buffers en 4 minutos no es carga de base de datos.
+- **La misma función, 300× más lenta:** `cleanup_orphan_searching_rides` mide **240 ms** en `pg_stat_statements` y tardó **76.036 ms** durante el incidente, sin cambiar consulta ni datos.
+
+Corolario: **`auto_explain` registra `duration: … ms plan:` con el plan VACÍO** cuando el disco está así (8 consultas de 336–510 s ese día). Un plan truncado no es un misterio de la consulta: es la señal de que ni el logger podía escribir.
+
+**El arreglo (PR de esta sesión).** Dos watchdogs **fuera** de Supabase, porque el arreglo no puede vivir donde vive el bug:
+- **Principal:** `ops/supabase-watchdog/healthcheck.sh` + timer systemd de **2 min** en el VPS. Sondea `/rest/v1/platform_config` (el camino exacto de las apps, es el que decide) y `/functions/v1/health-check` (**sobrevive a una base muerta** — verificado: el runtime de EF siguió corriendo toda la caída — y dice qué capa rompió). Estado en archivo local, alertas **directo a Resend/D7**, nunca por las EF `send-email`/`send-sms` (escriben en `email_sends`/`sms_log` → necesitan la base caída). `--selftest` obligatorio antes de programarlo.
+- **Respaldo:** `.github/workflows/supabase-uptime.yml` cada 10 min desde GitHub, porque **el VPS es punto único de fallo**. Abre/cierra un issue y falla la corrida.
+- **`slow` cuenta como caída.** Con respuestas de 125 s, una sonda de arriba/abajo habría dicho "arriba".
+
+**Tres trampas que cazó la suite (`ops/supabase-watchdog/tests/run.sh`, 21 aserciones) y no la revisión:**
+1. **Nunca `source` un archivo de config de alertas.** `ALERT_EMAIL_TO=a@x.com, b@x.com` sin comillas es un **prefijo de comando** para bash: la variable **nunca queda seteada** y todo aviso por correo se salta en silencio — justo el fallo que el watchdog venía a eliminar. Parsear con whitelist, no sourcear (y de paso, un typo en la config no ejecuta nada como root).
+2. **`--selftest` imprimía "listo" sin enviar nada**, porque llamaba a `send_email` antes de su definición (en bash el orden es de ejecución). Un autotest que no verifica el envío es el bug que viene a cazar: ahora exige que un canal haya aceptado de verdad y sale ≠0 si no.
+3. **`tr -d '\000-\037'` borra los saltos de línea** en vez de escaparlos → el correo de alerta llega como un párrafo corrido de 19 líneas pegadas. Convertirlos a `\n` literal.
+
+Y dos del propio banco de pruebas, que son la lección de "verificar la superficie correcta" otra vez: el mock devolvía **200 a cualquier POST**, así que el caso "canal roto" nunca estuvo roto; y un `python3 mock.py` viejo seguía **sosteniendo el puerto**, de modo que los reinicios morían al bindear y las pruebas corrían contra código anterior (`ss -lptn 'sport = :8799'` lo delata; y `pkill -f mock.py` **se mata a sí mismo** porque el patrón coincide con el propio comando — matar por PID). Si un chequeo de seguridad da "permitido", confirmá primero contra qué está hablando.
+
+**Confirmación independiente que ya estaba en el repo (y un tercer caso del mismo bug).** Los workflows programados de master fallan **exactamente** en los días de caída y pasan en los limpios — 6 de 6:
+
+| Día | `sync-osm-delta` | ¿Hubo caída? |
+|---|---|---|
+| 16, 17, 19 sept | success | no |
+| **18, 20, 21 sept** | **failure** (10:27 / 10:30 / 11:49 UTC, dentro de la ventana) | **sí** |
+
+Y la causa en el log es literal: `{"code":"PGRST002","message":"Could not query the database for the schema cache."}`. O sea que **GitHub Actions ya veía las caídas**; nadie leía esos fallos como tal. Es la prueba de que la sonda desde GitHub funciona, y sirve de evidencia cruzada para el ticket con Supabase.
+
+El tercer caso del bug: `sync-osm-delta.yml` y `sync-pois.yml` avisan de su propio fallo llamando a **`notify_ops_workflow_failure` en la base**, y se tragan el error (`|| echo "::warning::…"`). Cuando el workflow falla *porque* la base está caída, el aviso falla también. Queda cubierto de hecho por `supabase-uptime.yml` (la caída ahora se reporta por su cuenta), así que **no** se tocaron esos dos workflows: hacen syncs de datos de producción y el hueco efectivo ya está cerrado. Si algún día se quiere cerrar del todo, el patrón es el de `supabase-uptime.yml`: abrir un issue cuando la RPC no contesta, en vez de degradar a `::warning::`.
+
+**Lo que NO hay que hacer:** subir `dispatch_*`/timeouts, tocar las migraciones de retención (00576/00577 funcionaron: la base bajó de 2.141 MB a 775 MB), ni buscar la consulta culpable. No hay una.
+
+#### Causa confirmada por Supabase (ticket SU-480720, 2026-09-21): saldo de I/O de EBS agotado en un cómputo **Nano**
+
+- **Soporte lo confirmó:** "your project went down due to EBS IO balance exhaustion". El proyecto seguía en **Nano**, herencia del plan Free (en Pro no se puede crear un Nano, pero no se auto-actualiza "por el downtime"). En Pro, Nano y Micro se facturan igual y el crédito de $10/mes cubre Micro entero: **subir a Micro es gratis**, con menos de 2 min de corte según la doc. La doc de Nano dice **"Max DB Size (Recommended) 500 MB" y la nuestra tiene 777 MB**; Micro es 2 núcleos ARM, 1 GB de RAM, hasta 10 GB.
+- **Mecánica** (doc "High Disk I/O"): de Nano a Medium el disco tiene un saldo de ráfaga (*Disk IO Budget*); agotado, la instancia cae a su baseline y "may become unresponsive". El gráfico vive en Reports → Database (`Disk IO % consumed`): >1 % ya significa que ese día se superó el baseline; 100 % es lo que nos pasó. **El porcentaje del saldo no se ve desde SQL**: es una métrica de AWS que solo muestra el panel (no está entre las del endpoint de métricas). Los contadores de disco y memoria del servidor sí se ven (ver «Medir el disco y la memoria desde SQL», más abajo).
+- **Lo que la base SÍ deja medir** (`pg_stat_io`, PG17, 9 h tras el reinicio): 161 MB leídos, 131 MB escritos por el checkpointer, 44 MB de WAL, ~15 IOPS de promedio. **El consumo de Postgres es minúsculo: lo que drena el saldo no son nuestras consultas.** Los tres inicios (18: 06:36, 20: 09:46, 21: 09:23 UTC = 02:36 / 05:46 / 05:23 en La Habana) son madrugada sin usuarios. El candidato que Postgres no ve es el **swap** — la doc lo lista primero: "Every Supabase project has 1GB of disk allocated for swapping" — en una caja de 0,5 GB con `shared_buffers` = 224 MB y ~30 conexiones de servicios internos. En Micro quedó medido el 2026-09-25 (ver más abajo): hay swap en uso y el disco del sistema lee 34 veces más que el de la base. Lo de Nano ya no se puede medir, porque los contadores se reinician con el servidor.
+- **Descartados con timestamps:** el sync de OSM (GitHub retrasa el cron de 06:00 a ~10:00–11:50 y **arrancó después** del inicio de cada caída: falló porque la base ya estaba caída, no la provocó) y el backup físico diario (`checkpoint starting: immediate force wait` = `pg_backup_start`, **todos los días a las 12:03–12:08 UTC**, o sea al FINAL de las ventanas; el 21 corrió a las 12:32 y 12:37, un minuto después del reinicio, porque el de las 12:05 no pudo).
+- **Cómo fechar el inicio real:** los huecos de `cron.job_run_details` lo subestiman (el 18 dieron 07:18 cuando las primeras líneas `duration:` de las consultas de monitoreo de Supabase —`pg_ls_archive_statusdir`, `pg_ls_waldir`, `pg_database_size`, la CTE sobre `pg_stat_statements`— ya pasaban de 10 s a las **06:36**). Corren cada minuto y son operaciones de filesystem: si tardan >10 s el disco está atascado, y marcan el minuto exacto.
+- **Trampa al leer checkpoints:** `write=` crece con los buffers porque `checkpoint_completion_target` duerme ~100 ms por buffer (61 buffers → 5,7 s y 282 → 28,6 s son NORMALES). La anomalía es un `total` muy por encima de 0,1 s × buffers (16 buffers / 33 s; 9 buffers / 265 s) o un `total − write − sync` de decenas de segundos.
+- **Decisión:** Micro ya (gratis) → mirar 3 días el gráfico de Disk IO Budget → si sigue bajando de ~50 %, Small (+$5/mes neto, 2 GB, otro 2× de baseline). Cada escalón Nano → Micro → Small → Medium duplica el baseline de disco (tabla t4g de AWS: 43 / 87 / 174 / 347 Mbps y 250 / 500 / 1.000 / 2.000 IOPS, ráfaga común de 2.085 Mbps; **no verificada desde el sandbox** porque supabase.com y docs.aws están bloqueados por el proxy: se ve en Settings → Compute and Disk).
+- **Micro aplicado el 2026-09-22 y verificado.** El usuario lo subió desde Settings → Compute and Disk. Mientras dura el cambio, `get_project` devuelve `RESIZING` y la base contesta `57P03 the database system is shutting down`. El corte que vieron las apps fue de **2 min 14 s** (23:46:59 → 23:49:13 UTC): 119 respuestas 520/521/522/525 de Cloudflare en `/rest/v1`, y un hueco de 3 min en el cron `jobid 17`. **Ningún conductor quedó fuera de línea**: los dos que estaban conectados volvieron a latir 7-10 s después del arranque.
+- **Cómo saber desde SQL en qué cómputo estás.** El sandbox no llega a `supabase.co` (el proxy responde 403), así que todo pasa por MCP. Supabase deriva la configuración de la RAM, y `effective_cache_size` = 0,75 × RAM es la huella más limpia. `pg_postmaster_start_time()` marca el reinicio. Si cambia el arranque y `effective_cache_size` no, fue un reinicio sin upgrade: tratarlo como posible caída.
+
+  | Setting | Nano (0,5 GB) | Micro (1 GB) |
+  |---|---|---|
+  | `effective_cache_size` | 384 MB | **768 MB** |
+  | `shared_buffers` | 224 MB | 256 MB |
+  | `work_mem` | 2184 kB | 3500 kB |
+  | `maintenance_work_mem` | 32 MB | 64 MB |
+  | `max_connections` | 60 | 60 |
+
+- **Revisado el 2026-09-25, al cierre del plazo: por disco no hace falta Small.** Desde el paso a Micro el disco se usó en promedio a ~6 % del baseline, y no hubo un solo atasco. Lo que queda por vigilar es la memoria. Los números y cómo sacarlos, abajo.
+- **Respuesta de soporte del 2026-10-01 (Lindsay Moss): mecanismo confirmado, más tres datos que la base no puede dar.**
+  - Confirmó con métricas de AWS que durante las tres caídas `nvme0n1` era el root y `nvme1n1` el data, y que **el root tuvo muchísimo más I/O que `/data`** ("compared to your data volume 🦗🦗"). O sea que lo que drenaba el saldo era el swap y el page cache, no Postgres: confirma lo que ya se había medido en Micro.
+  - **El saldo se agota de forma cíclica y se recarga cada 24 h.** No existe una "hora de inicio" de la caída de cada día: el consumo estaba sostenidamente por encima del baseline y el saldo simplemente llegaba a 0. Por eso las tres caídas caen en la misma ventana de la mañana sin que haya nada agendado ahí — no hay que seguir buscando el disparador.
+  - **Baselines exactos de Micro: 500 IOPS y 11 MB/s**, contra la suma de lectura + escritura de los DOS discos. Es el número que faltaba para que los contadores `node_disk_*` sean un chequeo y no una curiosidad. La tabla por tier está en una nota interna que mandaron (`app.notion.com/p/supabase/Understanding-IO-Utilization-3eb5004b775f80ae9a52ea7637e04a9c`).
+  - **El saldo de EBS no está expuesto en ninguna API** — ni el endpoint de métricas ni la Management API; dijeron que lo están discutiendo internamente, y quedó pedido formalmente en el ticket el 2026-10-03. Mientras tanto el proxy es IOPS y MB/s contra el baseline. Para los gráficos que mandaron: la integración de Grafana (`grafana.com/integrations/supabase/monitor`) o los partners de la Metrics API.
+  - **Qué vigilar en memoria según ellos: `node_memory_Committed_AS_bytes`.** Hay picos de memoria prometida (algún proceso potencialmente caro) sin nada preocupante, pero es el gráfico que delata un crecimiento con el tiempo. Medido el 2026-10-03: **1,54 GB = 162 % de la RAM**.
+  - Errata del correo, para no confundirse al releerlo: dice "much better than they were on the Micro" donde quiere decir **Nano**.
+
+#### Medir el disco y la memoria desde SQL (verificado 2026-09-25)
+
+El sandbox no llega al panel, pero la base sí llega al endpoint de métricas del propio proyecto (`/customer/v1/privileged/metrics`, texto Prometheus con los contadores de node_exporter). Se pide con `pg_net` y la clave se arma dentro de la consulta, así que nunca queda escrita:
+
+```sql
+-- 1) Pedir las métricas. encode(..., 'base64') mete un salto de línea cada 76
+--    caracteres y un header HTTP no puede llevarlos: el replace() los saca.
+SELECT net.http_get(
+  url := 'https://lqaufszburqvlslpcuac.supabase.co/customer/v1/privileged/metrics',
+  headers := jsonb_build_object('Authorization', 'Basic ' || replace(
+    encode(convert_to('service_role:' || public.get_service_role_key(), 'UTF8'), 'base64'), E'\n', '')),
+  timeout_milliseconds := 20000) AS request_id;
+
+-- 2) Unos segundos después: ~400 KB de texto en net._http_response (se guarda 6 h).
+SELECT line FROM net._http_response r, regexp_split_to_table(r.content, E'\n') AS line
+WHERE r.id = <request_id>
+  AND line ~ '^node_(disk_(read|written)_bytes_total|disk_(reads|writes)_completed_total|memory_(MemAvailable|Swap(Total|Free))_bytes|vmstat_(pswpin|pswpout|pgmajfault))';
+```
+
+- **Qué hay:** `node_disk_*` por disco, `node_memory_*`, `node_vmstat_pswpin` / `pswpout` (páginas de swap) y `pgmajfault` (veces que hubo que ir al disco por una página que no estaba en memoria). **Qué no hay:** el saldo de I/O de EBS, que es de AWS y solo sale en el panel.
+- **Promedio:** los contadores arrancan con el servidor, así que se divide por el tiempo desde `pg_postmaster_start_time()` (la máquina arranca un par de minutos antes: el error es despreciable). **Uso actual:** dos pedidos separados por un minuto, y se resta.
+
+Línea base, medida 66,5 h después del reinicio de Micro:
+
+| Disco | Qué tiene | Leído | Escrito | Operaciones |
+|---|---|---|---|---|
+| `nvme0n1` → `/` (10,4 GB) | sistema, programas, swap | **110 GB** | 12 GB | 4,8 M |
+| `nvme1n1` → `/data` (8,4 GB) | Postgres | 3,2 GB | 38 GB | 0,6 M |
+
+- **Total: 0,68 MB/s y 23 operaciones/s de promedio**, ~6 % y ~5 % del baseline de Micro según la tabla de AWS de arriba (87 Mbps / 500 IOPS). En un minuto tranquilo de la tarde: 0,35 MB/s y 12 operaciones/s.
+- **El disco del sistema lee 34 veces más que el de Postgres, y todo apunta a falta de memoria.** El servidor tenía 948 MB en total y 455 MB disponibles, con 415 MB en swap, y había mandado 7,2 GB a swap desde el reinicio. De los 110 GB leídos, 6,8 GB son swap que vuelve. El resto, casi seguro, son archivos que el sistema saca de la memoria y vuelve a leer: hubo 1,21 M `pgmajfault`, cada uno una ida al disco por algo que no estaba en memoria. El swap vive en el disco del sistema: la doc de Supabase dice que es 1 GB de disco, y lo que volvió de swap ya es más que todo lo leído de `/data`. Es, con toda probabilidad, lo que en Nano, con la mitad de memoria, se comía el saldo.
+- **Casi todo lo escrito en `/data` es relleno de WAL.** Con `archive_timeout = 120 s`, Postgres cierra un segmento de 16 MB cada 2 minutos aunque casi no haya tráfico: se archivaron **2.001 segmentos (~33 GB) para 169 MB de WAL real** (`pg_stat_archiver` contra `pg_stat_wal`). Lo fija Supabase para el backup continuo: no está en el repo y no hay que perseguirlo.
+- **Sin atascos desde Micro:** el cron `jobid 17` corrió 3.986 veces con un hueco máximo de 61 s y cero `startup timeout`; el peor checkpoint de 24 h fue de 508 buffers en 50,8 s, o sea los 0,1 s por buffer normales; `cleanup_orphan_searching_rides` tarda como mucho 0,5 s (76 s durante la caída).
+- **Qué vigilar:** la memoria, no el disco. Si `SwapFree` se acerca a 0 o las lecturas de `nvme0n1` crecen mucho respecto de esta base, se está repitiendo lo de Nano, y el arreglo es Small (2 GB, el doble de memoria).
+
+**Re-medido a los 10 días (241,5 h de uptime, 2026-10-03): la tasa no se degrada y Micro sigue sobrado.**
+
+| Disco | Leído | Escrito |
+|---|---|---|
+| `nvme0n1` → `/` (sistema + swap) | **407 GiB** | 50 GiB |
+| `nvme1n1` → `/data` (Postgres) | 8,6 GiB | 129 GiB |
+
+- **Combinado: 0,74 MB/s y 27 IOPS**, o sea **6,7 %** de los 11 MB/s y **5,5 %** de los 500 IOPS de Micro.
+- **Lo que importa es la tendencia, no el total:** las lecturas del root promediaron 0,49 MB/s en las primeras 66 h y 0,51 MB/s desde entonces. La firma de falta de memoria sigue igual (el root lee **47×** lo que lee `/data`) pero **estable**: `pgmajfault` pasó de 1,21 M a 6,24 M creciendo lineal, no acelerando. Memoria: 427 MB disponibles de 948, y 472 MB de swap en uso de 1 GB (33 GiB mandados a swap, 34 GiB traídos). Por eso se descartó Small otra vez.
+- **`pg_stat_checkpointer` es el chequeo más barato de "¿está atascado el disco?"** — un solo SELECT, sin depender del servicio de logs (que falla seguido). Desde el arranque: 2.892 checkpoints, 323.162 buffers, **95,6 ms de `write_time` por buffer** = exactamente la siesta de ~100 ms que hace Postgres por buffer, o sea sano. Durante la caída del 09-21 hubo checkpoints de **~27.000 ms por buffer**. `stats_reset` dice desde cuándo mide: se resetea con el servidor, así que el promedio cubre justo el período post-upgrade.
+
+```sql
+SELECT num_timed, buffers_written,
+       round((write_time / NULLIF(buffers_written,0))::numeric, 1) AS ms_por_buffer,
+       stats_reset
+FROM pg_stat_checkpointer;
+```
+
+> Trampa: `round(double precision, integer)` no existe en Postgres — hay que castear a `::numeric` o da `42883`.
+
+### `spatial_ref_sys`: el advisor es ruido, los GRANT de `anon` no (verificado 2026-10-03)
+
+El correo semanal **"Action required: security vulnerabilities detected in your projects"** trae un **Critical `rls_disabled_in_public`** y no nombra la tabla. Medido: la **única** tabla de `public` sin RLS es `spatial_ref_sys` (PostGIS, 8.500 filas de definiciones EPSG, 7 MB). Esa parte es el falso positivo conocido — no se le puede habilitar RLS porque su dueño es `supabase_admin`.
+
+**Lo que sí es real y no estaba medido:** `anon` y `authenticated` tienen `arwdDxtm` sobre ella (todo, escritura incluida), otorgado por `supabase_admin`:
+
+```
+{supabase_admin=arwdDxtm/supabase_admin, postgres=arwdDxtm/supabase_admin,
+ anon=arwdDxtm/supabase_admin, authenticated=arwdDxtm/supabase_admin,
+ service_role=arwdDxtm/supabase_admin, =r/supabase_admin}
+```
+
+Está en `public`, así que la Data API la expone: cualquiera con la clave publicable puede UPDATE o DELETE. No hay datos nuestros ahí, pero **borrar la fila del SRID 4326 rompe todo `::geography`** — el search de calles, el reverse geocode y el matching de conductores dependen de ella. Probabilidad baja, impacto total.
+
+**No lo podemos revocar nosotros.** El grant lo dio `supabase_admin`: `postgres` no es miembro suyo (`pg_has_role(current_user,'supabase_admin','MEMBER')` = false) y tiene los privilegios **sin** GRANT OPTION (no hay `*` en el ACL), y solo el dueño o el otorgante pueden revocar. Pedido a soporte en el ticket SU-480720 el 2026-10-03: revocar INSERT/UPDATE/DELETE a `anon` y `authenticated` conservando SELECT, y dejar de reportar un Critical que el cliente no puede accionar. **Hasta que lo hagan no hay mitigación de nuestro lado.**
+
+**La regla operativa**, que convierte ese correo semanal en algo útil en vez de ruido:
+
+```sql
+SELECT c.relname, pg_get_userbyid(c.relowner) AS dueno, c.relacl::text
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND NOT c.relrowsecurity;
+```
+
+Si devuelve **solo** `spatial_ref_sys`, el Critical es el falso positivo de siempre y se archiva. Si devuelve **cualquier otra cosa**, el Critical es nuestro: a esa tabla le falta `ENABLE ROW LEVEL SECURITY` y hay que arreglarlo con una migración.
+
+### Los REVOKE de una migración de lockdown se verifican en prod, no se asumen (00531 → 00591, 2026-09-15)
+
+**Bug verificado.** `00531_lock_down_ungated_public_rpcs.sql` (31-07) revocaba 9 RPCs SECURITY DEFINER sin gate; la auditoría de pagos del 2026-09-15 encontró que **8 de las 9 seguían ejecutables por `anon`/`authenticated` en prod**: la migración quedó en git y nunca se aplicó. Buscar su número en `schema_migrations` no sirve (los applies por MCP se registran por timestamp — ver § "Cómo se registra el `version`"); lo que decide es `has_function_privilege` contra prod. `00591` la re-aplica con guardas `to_regprocedure()` y cierra dos más de la misma clase (`check_rate_limit` ejecutable por `authenticated`, `ensure_wallet_account` sin guard).
+
+**Chequeo canónico después de CUALQUIER migración de permisos** (correr contra prod, no leer el archivo):
+```sql
+SELECT p.proname, has_function_privilege('anon', p.oid,'EXECUTE') AS anon_x,
+       has_function_privilege('authenticated', p.oid,'EXECUTE') AS auth_x
+FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ('…');
+```
+
+**Patrón "llamada directa vs anidada" para helpers SECDEF que las apps llaman para sí mismas** (`ensure_wallet_account`, 00591). Un guard ingenuo (`p_user_id = auth.uid()`) rompe a los llamadores internos (`send_gift` la llama para el receptor, `complete_ride_and_pay` para el conductor y la plataforma) porque dentro de ellos `auth.uid()` sigue siendo el usuario. `GET DIAGNOSTICS v_ctx = PG_CONTEXT;` lo resuelve: una llamada RPC directa (PostgREST) tiene UNA sola línea; llamada desde otra función plpgsql trae 2+ líneas separadas por `\n`. Restringir solo el caso directo deja intactos a los llamadores internos sin tocarlos y sin cambiar las apps. Antes de usarlo, listar los llamadores con `SELECT proname, prosecdef, lanname FROM pg_proc … WHERE prosrc ILIKE '%<helper>%'` (los de prod son todos plpgsql SECDEF).
+
+**Ojo con las funciones SQL-language intermedias: NO siempre añaden frame.** Medido con un probe que devuelve `PG_CONTEXT` (corregido 2026-09-15; una versión previa de esta nota afirmaba lo contrario):
+
+| Wrapper `LANGUAGE sql` | Frames | El guard lo ve como |
+|---|---|---|
+| plano (sin `STRICT`/`STABLE`/`SECURITY DEFINER`/`SET`) | **1** | llamada DIRECTA — el planner lo **inlinea** y el wrapper desaparece |
+| `STRICT`, `STABLE`, o `SECURITY DEFINER`+`SET` | 2 | anidada (exento) |
+
+O sea que un wrapper SQL plano queda **denegado**, no exento: el riesgo va en la otra dirección.
+
+**La frontera de confianza, explícita:** la exención significa *"me llamó otra función plpgsql"*, NO *"me llamó código confiable"*. Cualquier función ejecutable por `authenticated` que reenvíe `(p_user_id, p_type)` elegidos por el llamante —una plpgsql, o una SQL no-inlinable— **reabre el agujero**; hay que validar el tipo en esa call site. Hoy ninguna lo hace (`send_gift` filtra su wallet de origen; los llamadores de cargo/referidos/corporativo pasan tipos fijos), y ni `anon` ni `authenticated` pueden `CREATE` en `public` (verificado con `has_schema_privilege`), así que solo un desarrollador puede introducirlo. Está escrito en el `COMMENT` de la función para que se lea donde importa.
+
+**El vector del ancla en `wa_insert_own` (00197 → borrada en 00591).** La policy dejaba insertar `customer_cash` con `balance = 0` pero no limitaba `anchor_usd_cents` / `unbacked_cup`; `revalue_anchored_wallets` pone `balance = ancla/100 × tasa + unbacked` al día siguiente → un usuario SIN fila `customer_cash` (261 de 610 el 2026-09-15, 110 conductores) podía acuñar saldo. Regla: toda columna que un trigger o cron convierte en dinero (`anchor_usd_cents`, `unbacked_cup`, `balance_usd_cents`) queda fuera del alcance de INSERT/UPDATE de usuarios, no solo `balance`; las filas de billetera se crean SIEMPRE vía `ensure_wallet_account`. Y las búsquedas de cuentas de plataforma (`platform_fx_reserve`, `platform_revenue`) filtran por `user_id = '…0001'`, nunca `LIMIT 1` por tipo.
+
+**Una migración de permisos tiene que ASERTAR su resultado, no confiar en su propio loop.** Los `REVOKE` de 00591 se hacen sobre firmas exactas y saltan con un `NOTICE` si la función no existe — y un `NOTICE` es **invisible** a través de `apply_migration`. Si la firma de prod hubiera derivado, la migración habría reportado éxito dejando el agujero abierto: exactamente cómo 00531 "funcionó" sin cambiar nada. Por eso 00591 cierra con bloques que recorren `pg_proc` **por nombre** (todas las sobrecargas) y hacen `RAISE EXCEPTION` si alguna sigue siendo ejecutable por `anon`/`authenticated`. Misma idea antes de parchear `revalue_anchored_wallets`: si la fila `platform_fx_reserve` no es del usuario plataforma, el pin la dejaría sin encontrar y la revaluación diaria sería un **no-op silencioso** (su rama `NULL` hace `RAISE WARNING; RETURN 0`, y el watchdog FX de 00503 solo mira la frescura de `exchange_rates`), así que aborta. **Residual aceptado:** `wallet_accounts.user_id` es FK `ON DELETE SET NULL`, o sea que borrar al usuario plataforma anularía ese dueño y silenciaría la revaluación — antes del pin, el `LIMIT 1` igual la encontraba.
+
+**Ensayo local reproducible:** `supabase/tests/00591/run.sh none` (RED: 27 fallos, incluida la acuñación) / `run.sh supabase/migrations/00591_*.sql` (GREEN: 58/58, aplicada dos veces). El andamio lleva los cuerpos VIVOS de prod y sus ACLs, no los de git. Las dos aserciones de arriba tienen **pruebas negativas propias** (G1/G2: se rompe el invariante en una base desechable y se exige que la migración aborte) — una verificación que nunca se vio fallar no es una verificación.
+
+**Trampa de método en la que caí verificando esto:** probé el guard contra la base del ensayo que había quedado del baseline **RED**, o sea sin el guard aplicado, y concluí que un wrapper SQL plano lo evadía. Todo pasaba porque no había nada que evadir. Si un probe de seguridad da "permitido", confirmá primero contra qué base estás hablando.
+
+### `users.phone` no prueba que el número sea del usuario (00599, 2026-09-26)
+
+**El agujero.** Hasta 00599 cualquier usuario con sesión podía escribir cualquier número en `public.users.phone` por PostgREST, sin OTP: `authenticated` tiene UPDATE sobre la columna, `users_update_own` no tiene `WITH CHECK` y `tg_users_protect_admin_fields` no cubría `phone`. Las dos búsquedas de dinero confiaban en esa columna con `LIMIT 1` sin `ORDER BY`: `find_user_by_phone` (regalos, dividir tarifa) y `find_recipient_for_recharge` (recargas de la diáspora). Reproducido en local con los cuerpos vivos: un número que nadie había registrado resolvía siempre a quien se lo había puesto, y un número ajeno pasaba a resolver al atacante en cuanto se reescribía la fila del dueño (su siguiente viaje).
+
+**Regla desde 00599:**
+- El número que prueba propiedad es `auth.users.phone` con `phone_confirmed_at` (único por `users_phone_key`; GoTrue lo guarda como dígitos E.164 **sin `+`**). Toda búsqueda "por número" que decida algo (dinero, vincular cuentas) resuelve contra esa fuente, **nunca** contra `users.phone`: la cuenta activa que lo confirmó, o nadie si hay cero o más de una. Es la misma regla que usa `_user_id_by_verified_phone` (00598), aunque las dos parsean distinto lo que reciben; cuando estén las dos en master, conviene que las búsquedas usen un solo helper.
+- `users.phone` igual puede tener un número sin confirmar: `handle_new_user` copia `auth.users.phone` al alta, esté confirmado o no, y el alta por teléfono de GoTrue está abierta (`external.phone = true`, sin auto-confirmación). Son cuentas que no pueden iniciar sesión (0 al 2026-09-26), pero por eso ninguna decisión se toma leyendo `users.phone`. Todo esto depende de que `phone_autoconfirm` siga en `false` (se ve en `/auth/v1/settings`). Y `phone_confirmed_at` es de la **cuenta**, no del número: si un operador cambia `auth.users.phone` desde el Dashboard sin `phone_confirm`, queda la fecha vieja y el número nuevo cuenta como confirmado.
+- Un JWT que no es admin solo puede escribir en `users.phone` el número que SU cuenta confirmó, y queda guardado en E.164. Cualquier otro valor se revierte en silencio, como role/level, y deja una fila en `rpc_attempt_log` (`rpc_name = 'users_phone_guard'`, `metadata.reason` = `not_the_verified_phone` / `no_verified_phone` / `cleared`, sin el número). Sin JWT (el espejo service-role de `link-phone`, triggers, cron) y los admins no tienen límite.
+- Una pantalla nueva que cambie el teléfono lo confirma primero con `link-phone` (OTP): el `updateProfile({ phone })` de después pasa porque escribe el mismo número.
+
+**Diagnóstico — "cambié mi número y no se guardó":**
+```sql
+SELECT caller_uid, target_id, metadata->>'reason' AS reason, created_at
+FROM rpc_attempt_log WHERE rpc_name = 'users_phone_guard' ORDER BY created_at DESC LIMIT 20;
+```
+`no_verified_phone` = la cuenta no tiene número confirmado en `auth.users` (se escribió sin pasar por `link-phone`, o `link-phone` falló). Varias `not_the_verified_phone` seguidas desde el mismo `caller_uid` = alguien intentando quedarse con un número ajeno.
+
+**Ensayo:** `supabase/tests/00599/run.sh none` (RED: 23 fallos) / `run.sh supabase/migrations/00599_users_phone_guard_and_verified_lookups.sql` (51/51, aplicada dos veces, más dos pruebas negativas del autotest).
+
+**Estado:** 00599 **aplicada a prod el 2026-09-27 04:09 UTC** por MCP tras el merge de #1039 (`schema_migrations` la registra por timestamp `20260927040913`; verificar por objeto, md5/largo del cuerpo: `tg_users_protect_admin_fields` `377912e83023297eda4761622a113364/2995`, `find_user_by_phone` `16f7c080bc4ded004ba4832b04ebb101/1327`, `find_recipient_for_recharge` `4fc4aa9eb404dd66af2aa12306e5b307/590`). Verificado en prod justo después del apply: el autotest no dejó filas (ni log ni rate limit); una escritura revertida con el JWT de una pasajera real conservó su número y quedó registrada como `reverted:not_the_verified_phone`; el número de Luis Manuel resuelve a su cuenta de conductor y el del super_admin sembrado, a nadie. Sin cambios en las apps (ni rebuild ni OTA). **Una migración que redefina `tg_users_protect_admin_fields` tiene que partir de este cuerpo, con el bloque 00599**, no del de 00543.
+
+### `INSERT` en `public.users`: solo el alta lo hace (00605, 2026-09-27)
+
+Hasta 00605, cualquier cuenta con sesión podía insertar su propia fila en `public.users`: la política `users_insert_own` (del esquema inicial 00001) lo permitía, `anon`/`authenticated` tenían el grant de INSERT, y `tg_users_protect_admin_fields` corre solo en UPDATE. Una cuenta que perdiera su fila (con `auth.users` y sus sesiones vivas) podía recrearla como `super_admin` (reproducido en local: `is_super_admin()` pasó a `true`). 00605 quitó la política **y** el grant de INSERT a `anon`/`authenticated`: son dos capas independientes, así que un `GRANT ALL` futuro sigue sin política y una política futura sigue sin grant.
+
+- La fila la crea solo `handle_new_user` (AFTER INSERT ON `auth.users`, dueño `postgres`, igual que la tabla): no depende ni de la política ni del grant.
+- **Nunca `FORCE ROW LEVEL SECURITY` en `public.users`.** Sin política de INSERT, el alta funciona solo porque el dueño de `handle_new_user` es el dueño de la tabla y la RLS no está forzada (el dueño está exento de su RLS salvo que se fuerce). Forzarla rompe todas las altas. El ensayo lo cubre con un canario (R6), y el autotest de 00605 no aplica sobre una tabla con la RLS forzada.
+- **Para reparar una cuenta sin fila, usar `service_role`**, que conserva INSERT. Un `upsert` de cliente sobre `users` también queda rechazado; hoy ninguna app lo usa (las apps solo hacen `.update()`).
+- Si algún día una app necesita insertar en `users`, **no reabrir la política sola**: agregar un `tg_users_protect_insert` como los de `driver_profiles` y `corporate_accounts`, que fuerzan rol, nivel, contadores y teléfono.
+
+**Ensayo:** `supabase/tests/00605/run.sh none` (RED: 8 fallos) / `run.sh supabase/migrations/00605_users_no_client_insert.sql` (25/25, más cuatro pruebas negativas del autotest). El andamio le da las tablas y funciones a un dueño **que no es superusuario**, como `postgres` en prod: con un superusuario de dueño, el ensayo no puede ver una regresión de RLS forzada, porque un superusuario la saltea igual.
+
+### Sesión fantasma: la app pide como `anon` y la RLS revienta con `permission denied for function current_user_role` (verificado 2026-09-22, mig 00592)
+
+**Síntoma.** Un conductor toca "Conectarme" y ve el toast **"No se pudo cambiar el estado — permission denied for function current_user_role"**. Mismo error, otra víctima: el SSR público del blog (cliente anon por diseño) recibía 401 en `blog_posts` 7 de 8 veces. Y no era un caso aislado: en 24 h ~10 IPs cubanas mostraban el mismo patrón, incluidas ráfagas de heartbeat del background task del conductor (25 en 23 min).
+
+**Dos causas en capas distintas, y hubo que arreglar las dos.**
+
+1. **Servidor.** `is_admin()` era `LANGUAGE sql` SECURITY INVOKER y llamaba a `current_user_role()`, que es SECURITY DEFINER **sin EXECUTE para `anon`** desde 00517. Toda policy que llegara a `is_admin()` con role `anon` (`dp_update_own` = `user_id = auth.uid() OR is_admin()`; `users_select_own`, que `blog_posts_admin_all` subconsulta) no evaluaba a `false`: **abortaba con 42501**, y PostgREST lo mapea a 401 con ese texto crudo. Ese texto llegaba a la pantalla porque `driver.service` hace `throw new Error(error.message)` y la app lo pinta tal cual (misma clase que el `RAISE ... USING MESSAGE` de 00519).
+2. **Apps.** La app del conductor corría **sin sesión en memoria mientras la sesión del servidor estaba intacta** (creada el 09-08, refrescada el 09-22, y el conductor online al rato). Sin sesión, supabase-js manda la publishable key como bearer → role `anon`. El adapter de storage (`packages/api/src/storage.ts`) convertía "el store LANZÓ" (keychain bloqueado en iOS, #802/#804) y "el store está VACÍO" en el mismo `null`, tragándose el error; `hydrateFromCacheOrReset` mantenía la UI logueada desde la cache en los dos casos → **sesión fantasma**: cada request salía como `anon`.
+
+**Cómo verlo en prod (sin la app):** `get_logs service=api` / `query_logs` de edge: las requests del incidente tienen `request.sb.jwt.authorization.payload.role` **vacío** y `request.sb.apikey.apikey.prefix = sb_publishable_…` (una app logueada trae `role=authenticated`). `auth.audit_log_entries` está vacía en prod: usar `auth_logs` con `extract(event_message, 'actor_id\":\"([0-9a-f-]{36})')`. **Pista falsa:** `token_revoked` en los logs de auth es la rotación normal del refresh token, no un logout forzado.
+
+**Fix servidor (00592).** `is_admin()` pasa a **plpgsql** con `IF auth.uid() IS NULL THEN RETURN false; END IF;` antes de llamar a `current_user_role()`. **La trampa que costó una vuelta:** un `CASE WHEN auth.uid() IS NULL THEN false ELSE current_user_role() … END` dentro de una función SQL **no sirve**: el EXECUTE de cada función de la expresión se chequea al **inicializar** la expresión, antes de evaluar rama alguna, así que anon seguía recibiendo 42501 (medido: A1/B3 del ensayo fallaban igual con el CASE instalado). plpgsql prepara cada sentencia la primera vez que la alcanza, así que el `RETURN` guardado nunca toca `current_user_role()` para anon. Se conserva SECURITY INVOKER: anon **sigue sin** EXECUTE en `current_user_role()` (00517), solo que ya no pregunta. La migración se **asserta a sí misma** como anon (`SET LOCAL ROLE anon` dentro del `DO`; `postgres` es miembro de `anon` en Supabase, verificado con `pg_has_role`) — si el path anon sigue reventando, la migración aborta en vez de reportar éxito. Ensayo: `supabase/tests/00592/run.sh none` (RED: A1/B3 reproducen el error exacto) / `run.sh supabase/migrations/00592_is_admin_anon_safe.sql` (15/15, aplicada dos veces).
+
+**Fix apps.** `StorageAdapter.lastReadFailed(key)` + opción `onReadError` (el error que GoTrue nunca ve, ahora logueado) + `didAuthStorageReadFail()` en `@tricigo/api`. `hydrateFromCacheOrReset(…, reason)` en los dos `useAuth`: `'session_missing'` **con lectura exitosa** → `clearAuthCache()` + `reset()` (login; la sesión de verdad no está); lectura fallida o `'transient_error'` → cache, como antes. `driverService.setOnlineStatus` chequea la sesión **antes** de cualquier query y lanza `session_expired` (el toast dice `common.session_unavailable`: "Tu sesión no está disponible. Cierra la app por completo y vuelve a abrirla."); `sendHeartbeat`/`updateDriverPosition` **se saltan** sin sesión (log una vez por proceso) en vez de quemar un 401 cada 55 s. Regla: **una escritura que solo tiene sentido con sesión chequea la sesión primero**; el error de RLS que produciría no significa nada para un usuario.
+
+**Trampa de test (vitest):** las colas "once" (`mockReturnValueOnce`) **no** se limpian con `vi.clearAllMocks()`, solo con `mockReset`. Al mover el chequeo de sesión al principio, un test viejo que encolaba una cadena de `vehicles` dejó de consumirla y esa cadena se filtró a los **18 tests siguientes**, que fallaron por cosas que no tenían nada que ver. Cuando cambiás el ORDEN de llamadas de un servicio, buscá qué colas "once" quedan sin consumir en los tests viejos antes de creerle a la cascada.
+
+**Estado:** 00592 **aplicada a prod el 2026-09-22 18:12 UTC** por MCP tras el merge de #1009 (`schema_migrations` la registra por timestamp `20260922181201`; verificar por objeto: `is_admin` con `lanname = 'plpgsql'`, cuerpo md5 `22cb75e91980d512498034cd33e1eda2` = byte a byte el del archivo). Verificado en prod justo después del apply, en una sola petición multi-sentencia con `SET LOCAL ROLE`: como `anon`, `is_admin()` = false **sin error**, lectura de `blog_posts` publicados OK (3 filas) y UPDATE sobre `driver_profiles` = 0 filas sin error; admin → true, customer → false; `anon` sigue sin EXECUTE en `current_user_role()`. Con las APKs actuales el texto crudo de RLS ya no aparece (el servidor devuelve 0 filas y la app vieja lo reporta como `session_expired`); el login honesto y el heartbeat que se salta sin sesión requieren **rebuild de las dos apps**. Si a un conductor todavía le falla "Conectarme": cerrar la app por completo y reabrirla; si persiste, Perfil → Cerrar sesión → volver a entrar.
+
+### Tarifas: cómo se fijan y cómo cambiarlas (verificado 2026-09-24, mig 00593)
+
+**Modelo.** `pricing_rules` tiene 4 franjas por servicio (00–06, 06–12, 12–18, 18–24, hora del celular). Precio = `max(base + km × per_km + min × per_min, mínima)` (`calculateBaseFare`); los minutos salen de la duración neutra de OSRM, no de la del vehículo. El único recargo es el clima. **La fuente de verdad son las columnas `*_usd`**: `recompute_cup_from_usd_prices()` deriva los CUP con la tasa vigente y el cron de FX lo corre en cada cambio de tasa. Una migración que escriba solo CUP se revierte en el próximo cambio de tasa: escribir USD y llamar a `recompute_cup_from_usd_prices()`.
+
+**El piso que rompe viajes.** `tg_rides_validate_estimated_fare` rechaza todo viaje con precio menor que `service_type_configs.min_fare_cup`. Si bajás la mínima de una franja por debajo de ese piso, **bajá el piso en el mismo cambio** o todo viaje corto falla al pedirlo. `accept_ride_v2` lee esa config pero no la usa.
+
+| Migración | Qué hizo |
+|---|---|
+| 00441 | Precios de "la nave" × 0,9412, franjas 1 / 1 / 1,5 / 2 |
+| 00470 | La nave × 0,90, plano las 24 h |
+| 00501 | Noche y madrugada = tarifa publicada de La Nave (se subieron: hay pocos conductores a esas horas) |
+| 00569 (#965) | Tarde = La Nave exacto. **Aplicada en prod, PR sin mergear** |
+| **00593** | **Fase 1 contra Cinco**: mínimas de día (moto 580, triciclo 1.250, auto 1.450) + Confort = auto × 1,3 en todo |
+
+**Lo que se sabe de Cinco** (14 capturas, 22–24 sept): es más barato que La Nave en viaje corto. Tiene precio dinámico (el mismo viaje llegó a costar 2,4 veces más en un día) y muestra siempre un "−10 %" sobre un precio tachado. Sin recargo cobraba moto 585 y auto 1.480 CUP por un viaje corto en Centro Habana. **Esas capturas solo sirven para calibrar la mínima**: los viajes reales de TriciGo tienen mediana 4,8 km (solo 23 de 221 miden 2 km o menos). Para tocar la tarifa por km hacen falta capturas de ~5 y ~10 km sin recargo. El observatorio de #1004 lo automatiza.
+
+**Pendiente.** Fase 2, noche y madrugada, a decidir después de medir la fase 1: moto 810 / 1.040, triciclo 1.750 / 2.250, auto 2.030 / 2.610. **Anomalía de la tarde:** el triciclo cobra 1.070 + 119/km, así que un viaje de 4,7 km cuesta ~1.630 a las 12:00 contra 2.490 a las 11:59.
+
+**Probar un cambio de tarifas sin dejar nada en prod:** un `DO` que aplica los `UPDATE`, llama a `recompute`, verifica y termina con `RAISE EXCEPTION '<valores>'` (la excepción deshace todo y devuelve los valores en el mensaje). Para el piso: insertar dentro de otro `DO` que termina en excepción un viaje **programado** (`scheduled_at` futuro, no se despacha a nadie) con la mínima nueva, y otro un peso por debajo, que debe rechazarse.
 
 ### Recordatorio para Claude
 

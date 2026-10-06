@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { configureStorage, createStorageAdapter, authService, customerService } from '@tricigo/api';
+import { configureStorage, createStorageAdapter, authService, customerService, didAuthStorageReadFail } from '@tricigo/api';
 import { identifyUser, resetAnalytics, logger, realEmail } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useRideStore } from '@/stores/ride.store';
@@ -44,6 +44,14 @@ async function readCachedUser(): Promise<User | null> {
 }
 
 /**
+ * Why the caller has no session to show:
+ *  - 'session_missing': GoTrue answered "no session" (getSession resolved null,
+ *    or the auth listener fired with a null session).
+ *  - 'transient_error': the lookup threw or timed out — nothing is known.
+ */
+type HydrateReason = 'session_missing' | 'transient_error';
+
+/**
  * Rehydrate the session UI from the offline cache, or reset() only when there
  * is genuinely nothing to show. Keeps the passenger in the app on a network
  * blip instead of ejecting to login.
@@ -52,8 +60,21 @@ async function hydrateFromCacheOrReset(
   setUser: (user: User | null) => void,
   reset: () => void,
   isMounted: () => boolean,
+  reason: HydrateReason,
 ): Promise<void> {
   if (!isMounted()) return;
+  // A null session is only "keep the cached UI" when the store could not be
+  // READ (locked keychain, keystore failure). When it answered "nothing here"
+  // the session is genuinely gone, and rendering the cached passenger would run
+  // every request as role `anon` (the 2026-09-21 driver-app incident). Only a
+  // missing session is judged this way; a transient error with a session
+  // present keeps the old behaviour.
+  if (reason === 'session_missing' && !didAuthStorageReadFail()) {
+    logger.warn('[Auth] no session in storage and the read succeeded: signing out the cached UI');
+    await clearAuthCache();
+    if (isMounted()) reset();
+    return;
+  }
   // Already showing a signed-in user → stay put.
   if (useAuthStore.getState().user) return;
   const cached = await readCachedUser();
@@ -119,7 +140,14 @@ const legacyStorageOps =
         };
       })();
 
-const adapter = createStorageAdapter(storageOps, { legacy: legacyStorageOps });
+const adapter = createStorageAdapter(storageOps, {
+  legacy: legacyStorageOps,
+  // The error GoTrue never sees; without it a session-less app running as
+  // `anon` (2026-09-21, driver app) is undiagnosable.
+  onReadError: (key, error) => {
+    logger.warn('[Auth] session storage read failed', { key, error: String(error) });
+  },
+});
 configureStorage(adapter);
 
 /** Wrap a promise with a timeout */
@@ -235,7 +263,7 @@ export function useAuthInit() {
           // locked keychain and land in the catch below, which hydrates; the
           // adapter now reports that read as null, so this branch must hydrate
           // too. hydrateFromCacheOrReset resets by itself when nothing is cached.
-          await hydrateFromCacheOrReset(setUser, reset, () => mounted);
+          await hydrateFromCacheOrReset(setUser, reset, () => mounted, 'session_missing');
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -267,7 +295,7 @@ export function useAuthInit() {
         // The user fetch threw (network / timeout / lock) — not proof the
         // session is gone. Keep the passenger in the app via the cache instead
         // of ejecting to login; the next online fetch refreshes it.
-        await hydrateFromCacheOrReset(setUser, reset, () => mounted);
+        await hydrateFromCacheOrReset(setUser, reset, () => mounted, 'transient_error');
       }
     }
 
@@ -299,7 +327,7 @@ export function useAuthInit() {
           // _notifyAllSubscribers (see the note below).
           setTimeout(() => {
             if (!mounted) return;
-            void hydrateFromCacheOrReset(setUser, reset, () => mounted);
+            void hydrateFromCacheOrReset(setUser, reset, () => mounted, 'session_missing');
           }, 0);
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           // IMPORTANT: Defer SDK calls to avoid deadlock.
@@ -323,7 +351,7 @@ export function useAuthInit() {
               // Network/transient failure — never eject on a blip. Keep the
               // passenger in the app via the cache (a real invalidation arrives
               // as a separate SIGNED_OUT event).
-              await hydrateFromCacheOrReset(setUser, reset, () => mounted);
+              await hydrateFromCacheOrReset(setUser, reset, () => mounted, 'transient_error');
             }
           }, 0);
         }

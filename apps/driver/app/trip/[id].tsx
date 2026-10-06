@@ -14,6 +14,7 @@ import { locationService } from '@tricigo/api/services/location';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import type { RideWithDriver, RidePricingSnapshot, RideLocationEvent, RideDispute, LostItem } from '@tricigo/types';
 import { RideMapView } from '@/components/RideMapView';
+import { TintedCard } from '@/components/TintedCard';
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -272,7 +273,7 @@ export default function TripDetailScreen() {
             accessibilityRole="button"
             accessibilityHint={t('a11y.dispute_action', { ns: 'common' })}
           >
-            <Card theme="light" variant="filled" padding="md" className="bg-orange-50 border border-orange-200">
+            <TintedCard className="bg-orange-50 border border-orange-200 shadow-sm">
               <Text variant="body" color="primary" className="font-semibold mb-1">
                 ⚠️ {t('dispute.incoming')}
               </Text>
@@ -282,7 +283,7 @@ export default function TripDetailScreen() {
               <Text variant="bodySmall" color="accent" className="font-semibold">
                 {t('dispute.respond')} →
               </Text>
-            </Card>
+            </TintedCard>
           </Pressable>
         )}
 
@@ -306,7 +307,7 @@ export default function TripDetailScreen() {
             accessibilityRole="button"
             accessibilityHint={t('a11y.lost_item_action', { ns: 'common' })}
           >
-            <Card theme="light" variant="filled" padding="md" className="bg-amber-50 border border-amber-200">
+            <TintedCard className="bg-amber-50 border border-amber-200 shadow-sm">
               <Text variant="body" color="primary" className="font-semibold mb-1">
                 📦 {t('lost_found.rider_reported')}
               </Text>
@@ -316,7 +317,7 @@ export default function TripDetailScreen() {
               <Text variant="bodySmall" color="accent" className="font-semibold">
                 {t('lost_found.respond')} →
               </Text>
-            </Card>
+            </TintedCard>
           </Pressable>
         )}
 

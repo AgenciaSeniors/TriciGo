@@ -500,20 +500,27 @@ describe('driverService', () => {
     // supabase-js falls back to the publishable key (role anon) and PostgREST
     // answers 200 with ZERO rows and NO error. That is an auth problem, not a
     // missing vehicle.
-    it('throws session_expired (not "no vehicle") when the pre-check returns no rows and there is no session', async () => {
-      const vehicleChain = createMockQueryChain({ data: null, error: null });
-      mockFrom.mockReturnValueOnce(vehicleChain);
+    // 2026-09-21: the session check now runs BEFORE any query. Without one every
+    // request would leave as `anon` (a driver saw the raw RLS text "permission
+    // denied for function current_user_role" in the toast), so nothing is sent
+    // at all — no vehicle pre-check, no UPDATE — and the UI gets the one code it
+    // can translate. Queueing a vehicle chain here would leak into the next test.
+    it('throws session_expired before touching the DB when there is no session', async () => {
       mockGetSession.mockResolvedValueOnce({ data: { session: null } });
 
       await expect(
         driverService.setOnlineStatus('d-1', true),
       ).rejects.toThrow(/session_expired/);
+      expect(mockFrom).not.toHaveBeenCalled();
     });
 
     it('reports the vehicle error when the session lookup itself throws', async () => {
       const vehicleChain = createMockQueryChain({ data: null, error: null });
       mockFrom.mockReturnValueOnce(vehicleChain);
-      mockGetSession.mockRejectedValueOnce(new Error('storage unavailable'));
+      // Both lookups (before the query, and after the empty pre-check) fail.
+      mockGetSession
+        .mockRejectedValueOnce(new Error('storage unavailable'))
+        .mockRejectedValueOnce(new Error('storage unavailable'));
 
       await expect(
         driverService.setOnlineStatus('d-1', true),

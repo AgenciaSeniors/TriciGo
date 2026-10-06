@@ -1,0 +1,17 @@
+# TriciGo — probe Supabase from outside Supabase, every 2 minutes.
+# Install to /etc/systemd/system/tricigo-supabase-healthcheck.timer
+# Enable: systemctl enable --now tricigo-supabase-healthcheck.timer
+# See ops/supabase-watchdog/README.md.
+[Unit]
+Description=Probe Supabase availability every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+# Persistent=false on purpose: a missed probe from a VPS reboot is worthless
+# history, and replaying it on boot would alert about an outage already over.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

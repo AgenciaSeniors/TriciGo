@@ -6,27 +6,115 @@
 // ============================================================
 
 import type {
+  CorporateAccount,
+  CorporateAccountStatus,
   DriverFleet,
   FleetMember,
   FleetMemberInput,
   FleetWithMembers,
+  ReviewedFleetMember,
 } from '@tricigo/types';
+import { FLEET_MEMBER_REVIEWED_FIELDS } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { AppError, AuthError } from '../errors';
+
+type OwnerAccount = Pick<CorporateAccount, 'id' | 'name' | 'status' | 'commission_percent' | 'suspended_reason'>;
+
+/** PostgREST's "column does not exist" for exactly driver_fleets.city (00602). */
+function isMissingCityColumn(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err || err.code !== 'PGRST204') return false;
+  return /\bcity\b/.test(err.message ?? '');
+}
+
+// Which fleet an owner with several corporate accounts sees (lower first).
+const OWNER_STATUS_RANK: Record<CorporateAccountStatus, number> = {
+  approved: 0,
+  pending: 1,
+  suspended: 2,
+  rejected: 3,
+};
+
+/**
+ * Whether the client holds a session. Without one supabase-js sends the
+ * publishable key as the bearer, RLS hides every fleet_members row and an
+ * update matches nothing, which would read as a changed invitation. The admin
+ * panel copies its cookie session into this client on a best-effort basis
+ * (useAdminUser), so the case is real. Same rule as driver.service: when the
+ * SDK cannot even answer, let the request go and surface the real error.
+ */
+async function hasSession(supabase: ReturnType<typeof getSupabaseClient>): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return Boolean(data?.session);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Records an admin decision on a fleet invitation only while the row is still
+ * what the admin reviewed: pending_review, with every reviewed column equal to
+ * the value shown. The owner may edit a pending invitation, so matching on the
+ * id alone would record the decision against data the admin never saw. A NULL
+ * is matched with is(), because eq(column, null) compares against the text
+ * "null". When the update waits on the row lock, READ COMMITTED re-checks this
+ * WHERE on the version the owner committed, so a concurrent edit also leaves it
+ * matching nothing (supabase/tests/fleet-review/run.sh). Throws AuthError
+ * without a session, and AppError FLEET_MEMBER_CHANGED when nothing matched:
+ * the invitation changed, was reviewed or was removed since it was loaded (or
+ * the caller is no longer an admin, since RLS hides the row from anyone else).
+ */
+async function reviewShownMember(
+  shown: ReviewedFleetMember,
+  decision: { status: 'approved' | 'rejected'; reviewed_by: string; rejected_reason?: string },
+  failure: string,
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  if (!(await hasSession(supabase))) throw new AuthError(`${failure}: no auth session`);
+
+  let update = supabase
+    .from('fleet_members')
+    .update({ ...decision, reviewed_at: new Date().toISOString() })
+    .eq('id', shown.id)
+    .eq('status', 'pending_review');
+  for (const field of FLEET_MEMBER_REVIEWED_FIELDS) {
+    const value = shown[field];
+    update = value === null ? update.is(field, null) : update.eq(field, value);
+  }
+
+  const { data, error } = await update.select('id');
+  if (error) throw new Error(`${failure}: ${error.message}`);
+  if (!data || data.length === 0) {
+    throw new AppError(`${failure}: fleet member ${shown.id} changed since it was loaded`, 'FLEET_MEMBER_CHANGED', 409);
+  }
+}
 
 export const fleetService = {
   /**
-   * Submit a new fleet request from a corporate_account owner.
-   * Creates the driver_fleets row + N fleet_members rows in one
-   * call. Returns the fleet id so the caller can immediately upload
-   * license documents per member.
+   * Submit a fleet request from a corporate_account owner: the
+   * driver_fleets row + N fleet_members rows. Returns the fleet id so the
+   * caller can immediately upload license documents per member.
    *
-   * Caller must already own the corporate_account (RLS enforced).
-   * The corporate_account itself should already exist with
-   * is_fleet_owner = true and status = 'pending'.
+   * Caller must already own the corporate_account (RLS enforced). The
+   * account stays pending with is_fleet_owner = false: since 00418/00434
+   * only an admin can set that flag, and corporateService.approveAccount
+   * sets it when it approves the fleet.
+   *
+   * Both writes are safe to retry on the same account. The fleet is upserted
+   * on corporate_account_id (UNIQUE), so a retry reuses the fleet a previous
+   * attempt created and applies the new values. The drivers are inserted on
+   * (fleet_id, driver_phone) ignoring duplicates, so drivers already saved
+   * are kept as they are and only the missing ones are added. A phone listed
+   * twice is saved once.
+   *
+   * While 00602 is not applied driver_fleets has no city column, and the
+   * fleet is saved without it rather than failing the request.
    */
   async submitFleetRequest(params: {
     corporate_account_id: string;
     name: string;
+    /** 00602: main city / municipality. */
+    city?: string;
     vehicle_count_estimate?: number;
     vehicle_types?: string[];
     operating_zones?: string[];
@@ -38,21 +126,31 @@ export const fleetService = {
   }): Promise<{ fleet_id: string }> {
     const supabase = getSupabaseClient();
 
-    const { data: fleet, error: fleetErr } = await supabase
-      .from('driver_fleets')
-      .insert({
-        corporate_account_id: params.corporate_account_id,
-        name: params.name,
-        vehicle_count_estimate: params.vehicle_count_estimate ?? null,
-        vehicle_types: params.vehicle_types ?? [],
-        operating_zones: params.operating_zones ?? [],
-        estimated_rides_per_day_per_vehicle: params.estimated_rides_per_day_per_vehicle ?? null,
-        operating_hours_start: params.operating_hours_start ?? null,
-        operating_hours_end: params.operating_hours_end ?? null,
-        notes: params.notes ?? null,
-      })
-      .select('id')
-      .single();
+    const fleetRow: Record<string, unknown> = {
+      corporate_account_id: params.corporate_account_id,
+      name: params.name,
+      city: params.city ?? null,
+      vehicle_count_estimate: params.vehicle_count_estimate ?? null,
+      vehicle_types: params.vehicle_types ?? [],
+      operating_zones: params.operating_zones ?? [],
+      estimated_rides_per_day_per_vehicle: params.estimated_rides_per_day_per_vehicle ?? null,
+      operating_hours_start: params.operating_hours_start ?? null,
+      operating_hours_end: params.operating_hours_end ?? null,
+      notes: params.notes ?? null,
+    };
+    const upsertFleet = (row: Record<string, unknown>) =>
+      supabase
+        .from('driver_fleets')
+        .upsert(row, { onConflict: 'corporate_account_id' })
+        .select('id')
+        .single();
+
+    let { data: fleet, error: fleetErr } = await upsertFleet(fleetRow);
+    if (fleetErr && isMissingCityColumn(fleetErr)) {
+      console.warn('[fleetService] driver_fleets.city missing (00602 not applied) — saving the fleet without the city');
+      const { city: _city, ...withoutCity } = fleetRow;
+      ({ data: fleet, error: fleetErr } = await upsertFleet(withoutCity));
+    }
 
     if (fleetErr || !fleet) {
       throw new Error(`Fleet creation failed: ${fleetErr?.message ?? 'unknown'}`);
@@ -69,9 +167,10 @@ export const fleetService = {
         status: 'pending_review' as const,
       }));
 
+      // A driver already saved on this fleet (same phone) is left as it is.
       const { error: membersErr } = await supabase
         .from('fleet_members')
-        .insert(memberRows);
+        .upsert(memberRows, { onConflict: 'fleet_id,driver_phone', ignoreDuplicates: true });
 
       if (membersErr) {
         throw new Error(`Fleet member insertion failed: ${membersErr.message}`);
@@ -82,63 +181,127 @@ export const fleetService = {
   },
 
   /**
-   * Owner-side query: returns the fleet (with members) belonging to
-   * the corporate_account currently owned by the user. NULL if the
-   * user has no fleet.
+   * Owner-side query: the fleet (with members) of a corporate account the
+   * user created, or NULL when none of their accounts has a fleet.
+   *
+   * The driver_fleets row is what makes an account a fleet, not
+   * is_fleet_owner: since 00418/00434 only an admin can set that flag, so a
+   * request sent from the app carries it only once approved. A user can hold
+   * several accounts (a corporate client request, a retried fleet request),
+   * so the fleet shown is the approved one, else pending, suspended,
+   * rejected; the newest wins within a status and the account id breaks a
+   * full tie. The account carries the admin's reason when it was rejected
+   * or suspended.
+   * Throws when a lookup fails, so a failed read is never taken for "no fleet".
    */
   async getFleetByOwner(userId: string): Promise<FleetWithMembers | null> {
     const supabase = getSupabaseClient();
 
-    const { data: account, error: accountErr } = await supabase
+    const { data: accountRows, error: accountsErr } = await supabase
       .from('corporate_accounts')
-      .select('id, name, status, commission_percent, is_fleet_owner')
+      .select('id, name, status, commission_percent, suspended_reason')
       .eq('created_by', userId)
-      .eq('is_fleet_owner', true)
-      .maybeSingle();
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true });
+    if (accountsErr) throw new Error(`Fleet owner lookup failed: ${accountsErr.message}`);
+    const accounts = (accountRows ?? []) as OwnerAccount[];
+    if (accounts.length === 0) return null;
 
-    if (accountErr || !account) return null;
-
-    const { data: fleet, error: fleetErr } = await supabase
+    const { data: fleetRows, error: fleetsErr } = await supabase
       .from('driver_fleets')
       .select('*')
-      .eq('corporate_account_id', account.id)
-      .maybeSingle();
+      .in('corporate_account_id', accounts.map((a) => a.id));
+    if (fleetsErr) throw new Error(`Fleet lookup failed: ${fleetsErr.message}`);
+    const fleetByAccount = new Map(
+      ((fleetRows ?? []) as DriverFleet[]).map((f) => [f.corporate_account_id, f]),
+    );
 
-    if (fleetErr || !fleet) return null;
+    // accounts come newest first, so the first one seen at each status is
+    // the one to keep; only a better status replaces it.
+    let owned: { account: OwnerAccount; fleet: DriverFleet } | null = null;
+    for (const account of accounts) {
+      const fleet = fleetByAccount.get(account.id);
+      if (!fleet) continue;
+      if (!owned || OWNER_STATUS_RANK[account.status] < OWNER_STATUS_RANK[owned.account.status]) {
+        owned = { account, fleet };
+      }
+    }
+    if (!owned) return null;
 
-    const { data: members } = await supabase
+    const { data: members, error: membersErr } = await supabase
       .from('fleet_members')
       .select('*')
-      .eq('fleet_id', fleet.id)
+      .eq('fleet_id', owned.fleet.id)
       .order('added_at', { ascending: true });
+    if (membersErr) throw new Error(`Fleet members lookup failed: ${membersErr.message}`);
 
     return {
-      fleet: fleet as DriverFleet,
+      fleet: owned.fleet,
       members: (members ?? []) as FleetMember[],
       account: {
-        id: account.id,
-        name: account.name,
-        status: account.status,
-        commission_percent: account.commission_percent,
+        id: owned.account.id,
+        name: owned.account.name,
+        status: owned.account.status,
+        commission_percent: owned.account.commission_percent,
+        suspended_reason: owned.account.suspended_reason,
       },
     };
   },
 
   /**
-   * Driver-side query: when a driver opens the app, we check if their
-   * own user_id is associated with any fleet_members row. If yes, they
-   * are part of a fleet and the discounted commission applies.
+   * The ids, among accountIds, of the corporate accounts that have a
+   * driver_fleets row. That row is what tells a fleet request sent from the
+   * driver app from a corporate client request until an admin approves it:
+   * the app cannot set is_fleet_owner (00418/00434). RLS shows a fleet row
+   * only to an admin and to the account's creator, the two callers this
+   * serves; for anyone else a missing id proves nothing. Throws when the
+   * lookup fails, so a failed read is never taken for "not a fleet".
    */
-  async getMembershipForDriver(driverId: string): Promise<FleetMember | null> {
+  async getAccountIdsWithFleet(accountIds: string[]): Promise<Set<string>> {
+    if (accountIds.length === 0) return new Set();
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('driver_fleets')
+      .select('corporate_account_id')
+      .in('corporate_account_id', accountIds);
+    if (error) throw new Error(`Fleet lookup failed: ${error.message}`);
+    return new Set(
+      ((data ?? []) as Pick<DriverFleet, 'corporate_account_id'>[]).map((f) => f.corporate_account_id),
+    );
+  },
+
+  /**
+   * Driver-side query: the fleets the driver belongs to, one entry per
+   * fleet, active ones first. Never assumes a single row: the signup
+   * auto-link and the admin relink link every invitation that matches the
+   * driver's phone, and one fleet can hold the number twice in two formats
+   * (unique on the raw phone, matched on the normalized one). A fleet shows
+   * through its active row, else its latest signup. Throws when the lookup
+   * fails, so a failed read is never taken for "no fleet".
+   */
+  async getMembershipsForDriver(driverId: string): Promise<FleetMember[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('fleet_members')
       .select('*')
       .eq('driver_id', driverId)
       .in('status', ['active', 'approved'])
-      .maybeSingle();
-    if (error) return null;
-    return data as FleetMember | null;
+      .order('signed_up_at', { ascending: false, nullsFirst: false })
+      .order('added_at', { ascending: false })
+      .order('id', { ascending: true });
+    if (error) throw new Error(`Fleet membership lookup failed: ${error.message}`);
+
+    const rows = (data ?? []) as FleetMember[];
+    const activeFirst = [
+      ...rows.filter((m) => m.status === 'active'),
+      ...rows.filter((m) => m.status !== 'active'),
+    ];
+    const seenFleets = new Set<string>();
+    return activeFirst.filter((m) => {
+      if (seenFleets.has(m.fleet_id)) return false;
+      seenFleets.add(m.fleet_id);
+      return true;
+    });
   },
 
   /**
@@ -146,6 +309,14 @@ export const fleetService = {
    * 'driver-documents' bucket under the fleet-docs/ prefix, via the
    * storage-upload Edge Function. The path includes the corporate account
    * so the EF can enforce ownership (creator / active corp admin).
+   *
+   * For the owner, a licence can only be added while the member is
+   * pending_review. Once the admin has reviewed it, the EF refuses the
+   * upload (409 member_reviewed) and the database keeps the reviewed
+   * license_doc_path (00600). The EF never replaces a file under fleet-docs/,
+   * so each upload gets a name of its own (the time, then the original
+   * name). To replace a reviewed member's licence, delete the member and
+   * invite again.
    */
   async uploadMemberLicense(params: {
     fleet_member_id: string;
@@ -155,7 +326,7 @@ export const fleetService = {
     mime_type: string;
   }): Promise<{ storage_path: string }> {
     const supabase = getSupabaseClient();
-    const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${params.file_name}`;
+    const path = `fleet-docs/${params.corporate_account_id}/${params.fleet_member_id}/${Date.now()}-${params.file_name}`;
 
     // A6-01: the old code uploaded straight to a 'driver-docs' BUCKET that
     // doesn't exist in prod ('driver-docs' is a path PREFIX inside the
@@ -168,7 +339,7 @@ export const fleetService = {
     formData.append('file', params.file, params.file_name);
     formData.append('bucket', 'driver-documents');
     formData.append('path', path);
-    formData.append('upsert', 'true');
+    formData.append('upsert', 'false');
     formData.append('contentType', params.mime_type);
 
     const { data, error: uploadErr } = await supabase.functions.invoke('storage-upload', {
@@ -188,75 +359,36 @@ export const fleetService = {
     return { storage_path: path };
   },
 
-  /** Admin: approve a single fleet member after reviewing their docs. */
-  async approveMember(fleetMemberId: string, adminId: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('fleet_members')
-      .update({
-        status: 'approved',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: adminId,
-      })
-      .eq('id', fleetMemberId);
-    if (error) throw new Error(`Approve member failed: ${error.message}`);
-  },
-
-  /** Admin: reject a single fleet member with a reason for the owner to see. */
-  async rejectMember(fleetMemberId: string, adminId: string, reason: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('fleet_members')
-      .update({
-        status: 'rejected',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: adminId,
-        rejected_reason: reason,
-      })
-      .eq('id', fleetMemberId);
-    if (error) throw new Error(`Reject member failed: ${error.message}`);
-  },
-
-  /** Admin: list all fleets pending review (queue for /admin/businesses?fleet=pending). */
-  async listPendingFleets(): Promise<FleetWithMembers[]> {
-    const supabase = getSupabaseClient();
-    const { data: accounts, error } = await supabase
-      .from('corporate_accounts')
-      .select('id, name, status, commission_percent, is_fleet_owner')
-      .eq('is_fleet_owner', true)
-      .in('status', ['pending', 'approved']);
-    if (error || !accounts) return [];
-
-    const out: FleetWithMembers[] = [];
-    for (const account of accounts) {
-      const { data: fleet } = await supabase
-        .from('driver_fleets')
-        .select('*')
-        .eq('corporate_account_id', account.id)
-        .maybeSingle();
-      if (!fleet) continue;
-      const { data: members } = await supabase
-        .from('fleet_members')
-        .select('*')
-        .eq('fleet_id', fleet.id);
-      out.push({
-        fleet: fleet as DriverFleet,
-        members: (members ?? []) as FleetMember[],
-        account: {
-          id: account.id,
-          name: account.name,
-          status: account.status,
-          commission_percent: account.commission_percent,
-        },
-      });
-    }
-    return out;
+  /**
+   * Admin: approve a fleet invitation as the admin saw it. Approves nothing
+   * and throws AppError FLEET_MEMBER_CHANGED when the invitation changed, was
+   * reviewed or was removed since it was loaded. If an active account has
+   * already confirmed the phone shown by OTP, the database links it in this
+   * same update and the row ends up 'active' (00598).
+   */
+  async approveMember(shown: ReviewedFleetMember, adminId: string): Promise<void> {
+    await reviewShownMember(shown, { status: 'approved', reviewed_by: adminId }, 'Approve member failed');
   },
 
   /**
-   * Manually trigger the auto-link RPC for a driver that was already
-   * registered before their fleet was approved. The DB has an INSERT
-   * trigger that handles new signups; this is the after-the-fact path.
+   * Admin: reject a fleet invitation as the admin saw it, with a reason for
+   * the owner. Throws AppError FLEET_MEMBER_CHANGED like approveMember.
+   */
+  async rejectMember(shown: ReviewedFleetMember, adminId: string, reason: string): Promise<void> {
+    await reviewShownMember(
+      shown,
+      { status: 'rejected', reviewed_by: adminId, rejected_reason: reason },
+      'Reject member failed',
+    );
+  },
+
+  /**
+   * Manual fallback: link the approved invitations for `phone` to the given
+   * account. The database already links on its own at signup, at approval
+   * and when an account confirms its phone later (00598), always to the one
+   * active account whose number is OTP-confirmed. This is for the cases that
+   * rule leaves out, such as a number that was never confirmed or an account
+   * reactivated after the approval. No screen calls it yet.
    */
   async relinkExistingDriver(driverId: string, phone: string): Promise<number> {
     const supabase = getSupabaseClient();

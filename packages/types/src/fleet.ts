@@ -1,8 +1,12 @@
 // ============================================================
 // TriciGo — Driver Fleet Types
 // Tables: driver_fleets + fleet_members (migration 00235).
-// A fleet is the operational extension of a corporate_account
-// where is_fleet_owner = true.
+// A fleet is the operational extension of a corporate_account:
+// the account's driver_fleets row. Only an admin can set
+// is_fleet_owner (00418/00434), which approving the fleet does.
+// Until then the row is what marks a fleet: the driver app finds
+// the owner's fleet by it, and the admin and getRequestStatus take
+// an account with the row or the flag for a fleet.
 // ============================================================
 
 export type FleetMemberStatus =
@@ -17,6 +21,8 @@ export interface DriverFleet {
   id: string;
   corporate_account_id: string;
   name: string;
+  /** 00602: main city / municipality from the request form. NULL on older requests. */
+  city: string | null;
   vehicle_count_estimate: number | null;
   vehicle_types: string[];
   operating_zones: string[];
@@ -47,6 +53,29 @@ export interface FleetMember {
 }
 
 /**
+ * The fleet_members columns an admin reviews before deciding on an
+ * invitation. The owner may still edit them while the invitation is
+ * pending_review, so fleetService.approveMember and rejectMember only act on
+ * a row that still holds every value the admin was shown. Once the invitation
+ * is reviewed, tg_fleet_members_protect freezes the same columns for the owner
+ * (migration 00600); keep both lists equal.
+ */
+export const FLEET_MEMBER_REVIEWED_FIELDS = [
+  'fleet_id',
+  'driver_name',
+  'driver_phone',
+  'driver_email',
+  'driver_license_number',
+  'driver_id_number',
+  'license_doc_path',
+] as const satisfies readonly (keyof FleetMember)[];
+
+export type FleetMemberReviewedField = (typeof FLEET_MEMBER_REVIEWED_FIELDS)[number];
+
+/** A fleet invitation as the admin saw it: its id and every reviewed column. */
+export type ReviewedFleetMember = Pick<FleetMember, 'id' | FleetMemberReviewedField>;
+
+/**
  * Owner-supplied data for a single fleet member when submitting a
  * fleet request (Phase 4 form). License document is uploaded
  * separately, after the row is created (so we can store the storage
@@ -73,5 +102,7 @@ export interface FleetWithMembers {
     name: string;
     status: 'pending' | 'approved' | 'suspended' | 'rejected';
     commission_percent: number | null;
+    /** Why an admin rejected or suspended the account, as they wrote it. */
+    suspended_reason: string | null;
   };
 }

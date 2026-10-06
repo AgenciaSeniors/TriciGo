@@ -110,8 +110,9 @@ export default function CorporateRequestForm({ onSubmitted, initialError }: Prop
 
   return (
     <View className="mt-4">
+      {/* `!` beats the filled variant's bg-neutral-*, which Tailwind emits later. */}
       {initialError && (
-        <Card variant="filled" padding="md" className="mb-4 bg-error-50 dark:bg-error-900/20">
+        <Card variant="filled" padding="md" className="mb-4 !bg-error-light dark:!bg-error/20">
           <Text variant="bodySmall" color="error">{initialError}</Text>
         </Card>
       )}

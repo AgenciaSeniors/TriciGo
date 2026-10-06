@@ -2,6 +2,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getFreshFx } from '../_shared/fx-freshness.ts';
 import { configFlag, resolveFxSyncFailure, resolveSoftLimitHours } from '../_shared/fx-sync-outcome.ts';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -203,9 +204,9 @@ async function fetchFromAPIWithRetry(
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = getServiceKey();
   const presented = req.headers.get('apikey') ?? '';
-  if (!serviceRoleKey || presented !== serviceRoleKey) {
+  if (!isServiceKeyToken(presented)) {
     return new Response(JSON.stringify({ error: 'Forbidden: sync-exchange-rate is internal-only' }),
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }

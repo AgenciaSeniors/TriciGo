@@ -35,6 +35,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const D7_BALANCE_URL = 'https://api.d7networks.com/messages/v1/balance';
 const DEFAULT_ALERT_USD = 20;
@@ -60,7 +61,7 @@ function json(body: unknown, status: number) {
 
 Deno.serve(async () => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = getServiceKey();
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   const nowMs = Date.now();

@@ -31,7 +31,11 @@ export interface CorporateAccount {
   commission_percent: number | null;
   /**
    * 00235: when true, this corporate_account is a driver fleet (not a
-   * regular corporate client). Drives admin UI + which sub-table to use.
+   * regular corporate client), and dispatch offers the rides billed to it
+   * only to its active fleet drivers (00336/00337). Only an admin or the
+   * service role can set it (00418/00434): a fleet request sent from the
+   * app keeps it false until corporateService.approveAccount sets it, so
+   * the apps and the admin also recognize a fleet by its driver_fleets row.
    */
   is_fleet_owner: boolean;
   created_at: string;

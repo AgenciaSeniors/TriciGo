@@ -1,5 +1,6 @@
 // supabase/functions/cancel-stale-rides/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 // ── CORS: restrict to allowed origins ──
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -28,8 +29,7 @@ Deno.serve(async (req) => {
   // covers it — but fix the check for parity / future use.)
   const cronSecret = Deno.env.get('CRON_SECRET');
   const requestSecret = req.headers.get('x-cron-secret');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-  const isServiceRole = serviceRoleKey !== '' && (req.headers.get('apikey') ?? '') === serviceRoleKey;
+  const isServiceRole = isServiceKeyToken(req.headers.get('apikey') ?? '');
   if (!isServiceRole && (!cronSecret || requestSecret !== cronSecret)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      getServiceKey(),
     );
 
     const { data, error } = await supabase.rpc('auto_cancel_stale_searching_rides');

@@ -27,6 +27,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { decodePolyline } from './_shared/polyline.ts';
+import { getServiceKey } from '../_shared/service-key.ts';
 
 const DEFAULT_DAILY_CAP = 2000;
 
@@ -77,7 +78,7 @@ Deno.serve(async (req: Request) => {
   const mode = body.mode === 'walking' || body.mode === 'bicycling' ? body.mode : 'driving';
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseServiceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const supabaseServiceRole = getServiceKey();
   // Reuse the existing Places key by default — same GCP project, just enable
   // the Directions API on it + add it to the key's API restrictions (no new
   // Supabase secret needed). Set GOOGLE_DIRECTIONS_API_KEY only if you want a

@@ -34,6 +34,22 @@ export function configureStorage(adapter: StorageAdapter): void {
   (globalThis as Record<string, unknown>)[STORAGE_KEY] = adapter;
 }
 
+/** The key GoTrue persists the session under (createClient `auth.storageKey`). */
+export const AUTH_STORAGE_KEY = 'sb-tricigo-auth';
+
+/**
+ * Whether the last attempt to READ the persisted session threw, as opposed to
+ * finding nothing. A null session from GoTrue means two very different things:
+ * an unreadable store (locked iOS keychain, Android keystore failure) is "keep
+ * the cached UI and retry"; a readable-but-empty store is "the session is gone,
+ * go to login". Rendering the cached user in the second case runs the whole app
+ * as role `anon` (2026-09-21: 32 anonymous requests, "permission denied for
+ * function current_user_role" in the driver's toast).
+ */
+export function didAuthStorageReadFail(): boolean {
+  return storageAdapter?.lastReadFailed?.(AUTH_STORAGE_KEY) ?? false;
+}
+
 // Static env references using dot notation so bundlers (webpack/metro)
 // can resolve them at compile time. Computed access like
 // process.env[`PREFIX_${name}`] is NOT replaced by webpack.
@@ -173,7 +189,7 @@ export function getSupabaseClient(): SupabaseClient {
       autoRefreshToken: true,
       detectSessionInUrl: _isWeb, // Enable on web for OAuth redirects, disable on native
       ...(_isWeb ? { flowType: 'implicit' as const } : {}),
-      storageKey: 'sb-tricigo-auth',
+      storageKey: AUTH_STORAGE_KEY,
       // On web, provide no-op lock to prevent navigator.locks deadlock
       ...(_isWeb ? { lock: lockNoOp } : {}),
       ...(storageAdapter ? { storage: storageAdapter } : {}),

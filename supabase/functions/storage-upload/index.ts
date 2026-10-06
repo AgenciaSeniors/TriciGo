@@ -28,10 +28,20 @@
 // we do our OWN Bearer-token auth inside via auth.getUser.
 //
 // Request: multipart/form-data { file, bucket, path, upsert?, contentType? }
+//   upsert is ignored under fleet-docs/: those files are never replaced
+//   (see _shared/fleet-docs.ts), so reusing a name fails the upload and
+//   leaves that file as it was.
 // Returns: { ok: true } | { error } with 4xx/5xx.
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
+import { getServiceKey } from '../_shared/service-key.ts';
+import {
+  authorizeFleetDocUpload,
+  FLEET_DOCS_PREFIX,
+  storageUpsert,
+  type FleetDocLookups,
+} from '../_shared/fleet-docs.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB — generous cap for ID/vehicle/avatar photos.
@@ -103,7 +113,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = getServiceKey();
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
   if (!supabaseUrl || !serviceRoleKey || !anonKey) {
     return jsonResponse(req, { error: 'misconfigured' }, 500);
@@ -141,7 +151,7 @@ Deno.serve(async (req: Request) => {
     const file = form.get('file');
     const bucket = String(form.get('bucket') ?? '');
     const path = String(form.get('path') ?? '');
-    const upsert = String(form.get('upsert') ?? 'false') === 'true';
+    const requestedUpsert = String(form.get('upsert') ?? 'false') === 'true';
     const contentType =
       String(form.get('contentType') ?? '') ||
       (file instanceof File ? file.type : '') ||
@@ -179,45 +189,48 @@ Deno.serve(async (req: Request) => {
       if (error) throw new UploadError(503, 'db_error', error.message);
       return !!data?.id;
     };
-    // Corporate fleet license uploads (A6-01): the member must belong to a
-    // fleet of the corporate account named in the path, and the caller must
-    // administer that account (creator or active corp admin) — or be a
-    // platform admin.
-    const canManageFleetMemberDoc = async (corpId: string, memberId: string): Promise<boolean> => {
-      if (!corpId || !memberId) return false;
-      const { data: member, error: memberErr } = await admin
-        .from('fleet_members')
-        .select('id, fleet:driver_fleets!fleet_id(corporate_account_id)')
-        .eq('id', memberId)
-        .maybeSingle();
-      if (memberErr) throw new UploadError(503, 'db_error', memberErr.message);
-      const fleet = member?.fleet as
-        | { corporate_account_id?: string }
-        | { corporate_account_id?: string }[]
-        | null
-        | undefined;
-      const memberCorp = Array.isArray(fleet)
-        ? fleet[0]?.corporate_account_id
-        : fleet?.corporate_account_id;
-      if (!memberCorp || memberCorp !== corpId) return false;
-      if (await isAdmin()) return true;
-      const { data: corp, error: corpErr } = await admin
-        .from('corporate_accounts')
-        .select('created_by')
-        .eq('id', corpId)
-        .maybeSingle();
-      if (corpErr) throw new UploadError(503, 'db_error', corpErr.message);
-      if (corp?.created_by === user.id) return true;
-      const { data: emp, error: empErr } = await admin
-        .from('corporate_employees')
-        .select('id')
-        .eq('corporate_account_id', corpId)
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .eq('is_active', true)
-        .maybeSingle();
-      if (empErr) throw new UploadError(503, 'db_error', empErr.message);
-      return !!emp?.id;
+    // Corporate fleet license uploads (A6-01). The rules live in
+    // _shared/fleet-docs.ts; these are the database reads they run on.
+    const fleetDocLookups: FleetDocLookups = {
+      member: async (memberId) => {
+        const { data: member, error: memberErr } = await admin
+          .from('fleet_members')
+          .select('status, fleet:driver_fleets!fleet_id(corporate_account_id)')
+          .eq('id', memberId)
+          .maybeSingle();
+        if (memberErr) throw new UploadError(503, 'db_error', memberErr.message);
+        if (!member) return null;
+        const fleet = member.fleet as
+          | { corporate_account_id?: string }
+          | { corporate_account_id?: string }[]
+          | null
+          | undefined;
+        const memberCorp = Array.isArray(fleet)
+          ? fleet[0]?.corporate_account_id
+          : fleet?.corporate_account_id;
+        return { corporateAccountId: memberCorp ?? null, status: member.status as string };
+      },
+      isAdmin,
+      // The account's creator, or one of its active corp admins.
+      managesAccount: async (corpId) => {
+        const { data: corp, error: corpErr } = await admin
+          .from('corporate_accounts')
+          .select('created_by')
+          .eq('id', corpId)
+          .maybeSingle();
+        if (corpErr) throw new UploadError(503, 'db_error', corpErr.message);
+        if (corp?.created_by === user.id) return true;
+        const { data: emp, error: empErr } = await admin
+          .from('corporate_employees')
+          .select('id')
+          .eq('corporate_account_id', corpId)
+          .eq('user_id', user.id)
+          .eq('role', 'admin')
+          .eq('is_active', true)
+          .maybeSingle();
+        if (empErr) throw new UploadError(503, 'db_error', empErr.message);
+        return !!emp?.id;
+      },
     };
 
     let authorized = false;
@@ -232,10 +245,15 @@ Deno.serve(async (req: Request) => {
       // (closing the long-standing gap where selfie uploads had no INSERT policy).
       if ((segs[0] === 'driver-docs' || segs[0] === 'selfie-checks') && segs.length >= 3) {
         authorized = (await ownsDriverProfile(segs[1])) || (await isAdmin());
-      } else if (segs[0] === 'fleet-docs' && segs.length >= 4) {
+      } else if (segs[0] === FLEET_DOCS_PREFIX && segs.length >= 4) {
         // fleet-docs/{corporateAccountId}/{fleetMemberId}/{file} — corporate
         // fleet member license uploads (fleet.service.uploadMemberLicense).
-        authorized = await canManageFleetMemberDoc(segs[1], segs[2]);
+        // Closed to the account's managers once the admin reviewed the member.
+        const verdict = await authorizeFleetDocUpload(segs[1], segs[2], fleetDocLookups);
+        if (verdict === 'member_reviewed') {
+          return jsonResponse(req, { error: 'member_reviewed' }, 409);
+        }
+        authorized = verdict === 'allowed';
       }
     } else if (bucket === 'dispute-evidence') {
       // disputes/{rideId}/{userId}/{file} — uploader's own folder + party to ride.
@@ -290,7 +308,7 @@ Deno.serve(async (req: Request) => {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const { error: uploadErr } = await admin.storage.from(bucket).upload(path, bytes, {
       contentType,
-      upsert,
+      upsert: storageUpsert(bucket, segs, requestedUpsert),
     });
     if (uploadErr) {
       const status = (uploadErr as { statusCode?: number | string }).statusCode;
