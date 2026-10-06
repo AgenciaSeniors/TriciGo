@@ -205,7 +205,7 @@ export default function LoginScreen() {
             {/* Phone input with fixed Cuba +53 country prefix. */}
             <View className="flex-row items-center gap-2 mb-1">
               <View
-                className="bg-[#1a1a2e] rounded-xl px-3 py-3.5 flex-row items-center border border-white/12"
+                className="bg-[#1a1a2e] rounded-xl px-3 py-3.5 flex-row items-center border border-white/[0.12]"
                 accessible
                 accessibilityLabel="Cuba +53"
                 accessibilityRole="text"
@@ -244,11 +244,11 @@ export default function LoginScreen() {
 
             {/* Divider */}
             <View className="flex-row items-center my-6">
-              <View className="flex-1 h-px bg-white/6" />
+              <View className="flex-1 h-px bg-white/[0.06]" />
               <Text variant="caption" color="secondary" className="mx-4" style={{ color: midnightEmber.map.text.secondary }}>
                 {t('auth.or_continue_with')}
               </Text>
-              <View className="flex-1 h-px bg-white/6" />
+              <View className="flex-1 h-px bg-white/[0.06]" />
             </View>
 
             {/* Social login buttons — stacked full-width so each shows the
@@ -257,7 +257,7 @@ export default function LoginScreen() {
                 the white HIG variant on the dark background. */}
             <View className="gap-3">
               <Pressable
-                className="flex-row items-center justify-center gap-2 rounded-2xl bg-[#1a1a2e] border border-white/12 active:bg-[#252540] min-h-[52px]"
+                className="flex-row items-center justify-center gap-2 rounded-2xl bg-[#1a1a2e] border border-white/[0.12] active:bg-[#252540] min-h-[52px]"
                 disabled={socialLoading || loading}
                 onPress={async () => {
                   setSocialLoading(true);

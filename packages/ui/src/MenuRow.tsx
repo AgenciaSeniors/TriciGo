@@ -76,7 +76,7 @@ export function MenuRow({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      className={`flex-row items-center py-3.5 ${showBorder ? (forceDark ? 'border-b border-white/6' : 'border-b border-neutral-100 dark:border-neutral-800') : ''} ${disabled ? 'opacity-50' : ''} ${className ?? ''}`}
+      className={`flex-row items-center py-3.5 ${showBorder ? (forceDark ? 'border-b border-white/[0.06]' : 'border-b border-neutral-100 dark:border-neutral-800') : ''} ${disabled ? 'opacity-50' : ''} ${className ?? ''}`}
       style={({ pressed }) => ({
         opacity: pressed ? 0.7 : disabled ? 0.5 : 1,
       })}
