@@ -242,7 +242,7 @@ export function Sidebar() {
                           className={`
                             group/item relative flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-200
                             ${active
-                              ? 'bg-gradient-to-r from-primary-500/[0.12] via-primary-500/[0.06] to-transparent text-primary-600 dark:text-primary-400'
+                              ? 'bg-gradient-to-r from-primary-500/[0.12] via-primary-500/[0.06] to-transparent text-primary-700 dark:text-primary-400'
                               : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'}
                             ${isCollapsed ? 'md:justify-center md:px-0 md:py-2.5' : ''}
                           `}
