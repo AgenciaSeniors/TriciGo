@@ -286,10 +286,14 @@ async function requeryNetopiaStatus(args: {
         httpStatus: resp.status,
       };
     }
-    // If NETOPIA names the order this transaction belongs to, it must be ours:
-    // a paid ntpID posted under another orderID must not confirm that order.
+    // If NETOPIA names the order this transaction belongs to, it should be
+    // ours. LOG ONLY for now: no paid-path response has been captured, so the
+    // field's presence and format are unverified, and enforcing on a guess
+    // could refuse every real recharge. The binding that IS enforced is the
+    // one-ntpID-one-intent check in the handler. Make this refuse once the
+    // logs show NETOPIA echoing our orderID verbatim.
     if (requeryOrderMismatch(parsed, args.orderId)) {
-      return { status: null, confirmedPaid: false, reason: 'status re-query reports a different order', httpStatus: resp.status };
+      console.error(`[netopia] status re-query for ntp=${args.ntpId} names order ${String(parsed?.order?.orderID)}, not ${args.orderId}`);
     }
     const st = typeof parsed?.payment?.status === 'number' ? parsed.payment.status : null;
     if (st === null) {
@@ -403,13 +407,21 @@ Deno.serve(async (req) => {
     // this check one real payment could be posted again under the orderID of
     // any unpaid intent and credit it. A genuine IPN never carries another
     // intent's ntpID.
-    const { data: ntpOwner } = await supabase
+    const { data: ntpOwner, error: ntpOwnerErr } = await supabase
       .from('payment_intents')
       .select('id')
       .eq('stripe_payment_intent_id', ntpId)
       .neq('id', orderId)
       .limit(1)
       .maybeSingle();
+    if (ntpOwnerErr) {
+      // Fail closed: NETOPIA retries a non-2xx IPN.
+      console.error(`[netopia] ntpID ownership check failed for intent ${orderId}:`, ntpOwnerErr.message);
+      return new Response(
+        JSON.stringify({ error: 'ntpid_check_unavailable' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
     if (ntpOwner) {
       console.error(
         `[netopia] CRITICAL: IPN for intent ${orderId} carries ntpID=${ntpId}, which belongs to intent ${ntpOwner.id} — ` +
@@ -667,6 +679,21 @@ Deno.serve(async (req) => {
     if (status === 'failed') {
       const failReason = ipn.payment?.message ?? `NETOPIA status ${ipn.payment?.status}`;
       const providerCode = ipn.payment?.code ?? null;
+
+      // Failed IPNs are not confirmed with NETOPIA, so one must not replace the
+      // ntpID this intent already holds. A forged failed IPN with a junk ntpID
+      // would otherwise unbind the real one, and the one-ntpID-one-intent check
+      // above could no longer stop that payment from being posted under
+      // another order. Acknowledge and change nothing.
+      const storedNtp = existingIntent.stripe_payment_intent_id as string | null;
+      if (storedNtp && storedNtp !== ntpId) {
+        console.error(
+          `[netopia] failed IPN for intent ${orderId} carries ntpID=${ntpId} but the intent holds ${storedNtp} — ignored (ip=${clientIP})`,
+        );
+        return new Response(JSON.stringify(ACK_OK), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       // Best-effort update including the new provider_error_code column
       // (migration 00286). If the column doesn't exist yet in this env
