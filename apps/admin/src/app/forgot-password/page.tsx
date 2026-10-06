@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
             alt="TriciGo"
             className="h-10 w-auto mx-auto mb-2"
           />
-          <p className="text-neutral-500 text-sm">{t('login.admin_panel')}</p>
+          <p className="text-neutral-500 dark:text-neutral-400 text-sm">{t('login.admin_panel')}</p>
         </div>
 
         {sent ? (

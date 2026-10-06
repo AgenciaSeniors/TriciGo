@@ -83,7 +83,7 @@ export function ProvinceSwitch() {
         aria-expanded={open}
         className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink transition-all hover:border-line-strong hover:bg-surface-sunken"
       >
-        <MapPin className="h-3.5 w-3.5 text-primary-500" strokeWidth={2} />
+        <MapPin className="h-3.5 w-3.5 text-primary-500 dark:text-primary-400" strokeWidth={2} />
         <span className="hidden max-w-[120px] truncate sm:inline">{selected.label}</span>
         <ChevronDown className={`h-3.5 w-3.5 text-ink-subtle transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>

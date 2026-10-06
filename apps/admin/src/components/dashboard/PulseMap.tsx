@@ -185,14 +185,14 @@ export function PulseMap({ onlineDrivers, activeRides, pendingRides, live = true
         <div className="h-8 w-px bg-line" aria-hidden="true" />
         <div className="flex flex-col">
           <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-subtle">Activos</span>
-          <span className="font-editorial text-xl leading-none italic text-primary-500" data-tabular>
+          <span className="font-editorial text-xl leading-none italic text-primary-500 dark:text-primary-400" data-tabular>
             {activeRides}
           </span>
         </div>
         <div className="h-8 w-px bg-line" aria-hidden="true" />
         <div className="flex flex-col">
           <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-subtle">Buscando</span>
-          <span className="font-editorial text-xl leading-none italic text-amber-500" data-tabular>
+          <span className="font-editorial text-xl leading-none italic text-amber-500 dark:text-amber-400" data-tabular>
             {pendingRides}
           </span>
         </div>

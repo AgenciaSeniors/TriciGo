@@ -17,11 +17,11 @@ import { DeletePendingAccountModal } from '@/components/ui/DeletePendingAccountM
 type UserDetail = Awaited<ReturnType<typeof adminService.getUserDetail>>;
 
 const levelBadgeClasses: Record<UserLevel, string> = {
-  bronce: 'bg-amber-100 text-amber-800',
+  bronce: 'bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400',
   plata: 'bg-surface-sunken text-ink-muted',
-  oro: 'bg-yellow-100 text-yellow-800',
-  platino: 'bg-teal-100 text-teal-800',
-  diamante: 'bg-violet-100 text-violet-800',
+  oro: 'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-800 dark:text-yellow-400',
+  platino: 'bg-teal-100 dark:bg-teal-500/10 text-teal-800 dark:text-teal-400',
+  diamante: 'bg-violet-100 dark:bg-violet-500/10 text-violet-800 dark:text-violet-400',
 };
 
 const LEVEL_LABEL_KEY: Record<UserLevel, string> = {
@@ -38,10 +38,10 @@ const LANG_KEY: Record<string, string> = {
 };
 
 const roleBadgeClasses: Record<string, string> = {
-  customer: 'bg-blue-50 text-blue-700',
-  driver: 'bg-amber-50 text-amber-700',
-  admin: 'bg-purple-50 text-purple-700',
-  super_admin: 'bg-red-50 text-red-700',
+  customer: 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  driver: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  admin: 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400',
+  super_admin: 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400',
 };
 
 function formatCurrency(amount: number): string {
@@ -203,7 +203,7 @@ export default function UserDetailPage() {
             <span
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
                 user.is_active
-                  ? 'bg-green-50 text-green-700'
+                  ? 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400'
                   : 'bg-surface-sunken text-ink-muted'
               }`}
             >
@@ -237,7 +237,7 @@ export default function UserDetailPage() {
           {user.role !== 'admin' && user.role !== 'super_admin' && (
             <button
               onClick={() => setDeleteModalOpen(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500 text-red-700 dark:text-red-600 hover:bg-red-50 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
             >
               {t('users.delete_account_btn')}
             </button>
@@ -350,7 +350,7 @@ export default function UserDetailPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-surface-sunken rounded-lg p-4">
               <p className="text-xs text-ink-muted mb-1">{t('users.label_available_balance')}</p>
-              <p className="text-lg font-bold text-primary-500">{formatCurrency(wallet.balance)}</p>
+              <p className="text-lg font-bold text-primary-500 dark:text-primary-400">{formatCurrency(wallet.balance)}</p>
             </div>
             <div className="bg-surface-sunken rounded-lg p-4">
               <p className="text-xs text-ink-muted mb-1">{t('users.label_held_balance')}</p>
@@ -358,7 +358,7 @@ export default function UserDetailPage() {
             </div>
             <div className="bg-surface-sunken rounded-lg p-4">
               <p className="text-xs text-ink-muted mb-1">{t('users.label_wallet_status')}</p>
-              <p className={`text-lg font-bold ${wallet.is_active ? 'text-green-700 dark:text-green-600' : 'text-red-600'}`}>
+              <p className={`text-lg font-bold ${wallet.is_active ? 'text-green-700 dark:text-green-600' : 'text-red-600 dark:text-red-400'}`}>
                 {wallet.is_active ? t('users.wallet_active') : t('users.wallet_inactive')}
               </p>
             </div>
@@ -378,7 +378,7 @@ export default function UserDetailPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="bg-surface-sunken rounded-lg p-4">
                 <p className="text-xs text-ink-muted mb-1">{t('users.label_available_balance')}</p>
-                <p className="text-lg font-bold text-primary-500">{formatCurrency(driverWallet.balance)}</p>
+                <p className="text-lg font-bold text-primary-500 dark:text-primary-400">{formatCurrency(driverWallet.balance)}</p>
               </div>
               <div className="bg-surface-sunken rounded-lg p-4">
                 <p className="text-xs text-ink-muted mb-1">{t('users.label_held_balance')}</p>
@@ -386,7 +386,7 @@ export default function UserDetailPage() {
               </div>
               <div className="bg-surface-sunken rounded-lg p-4">
                 <p className="text-xs text-ink-muted mb-1">{t('users.label_wallet_status')}</p>
-                <p className={`text-lg font-bold ${driverWallet.is_frozen ? 'text-red-600' : 'text-green-700 dark:text-green-600'}`}>
+                <p className={`text-lg font-bold ${driverWallet.is_frozen ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-600'}`}>
                   {driverWallet.is_frozen
                     ? t('users.wallet_frozen', { defaultValue: 'Congelada' })
                     : t('users.wallet_active')}
@@ -423,14 +423,14 @@ export default function UserDetailPage() {
                         <span
                           className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                             isSender
-                              ? 'bg-red-50 text-red-700'
-                              : 'bg-green-50 text-green-700'
+                              ? 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'
+                              : 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400'
                           }`}
                         >
                           {isSender ? t('users.transfer_sent') : t('users.transfer_received')}
                         </span>
                       </td>
-                      <td className={`px-4 py-3 text-sm font-medium ${isSender ? 'text-red-600' : 'text-green-700 dark:text-green-600'}`}>
+                      <td className={`px-4 py-3 text-sm font-medium ${isSender ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-600'}`}>
                         {isSender ? '-' : '+'}{formatCurrency(tx.amount)}
                       </td>
                       <td className="px-4 py-3 text-sm text-ink-muted">
@@ -466,7 +466,7 @@ export default function UserDetailPage() {
                     <td className="px-4 py-3 text-sm text-ink-muted">
                       {formatAdminDate(p.created_at)}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-red-600">
+                    <td className="px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400">
                       {p.amount > 0 ? `-${formatCurrency(p.amount)}` : t('users.no_charge')}
                     </td>
                     <td className="px-4 py-3 text-sm text-ink-muted">

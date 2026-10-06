@@ -193,7 +193,7 @@ export default function LostFoundPage() {
               >
                 <span
                   className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${
-                    active ? 'bg-primary-500/15 text-primary-500' : 'bg-surface-sunken text-ink-muted'
+                    active ? 'bg-primary-500/15 text-primary-500 dark:text-primary-400' : 'bg-surface-sunken text-ink-muted'
                   }`}
                 >
                   <Icon className="h-4 w-4" strokeWidth={1.9} />
@@ -306,7 +306,7 @@ function ItemDetail({
   return (
     <div className="flex max-h-[640px] flex-col overflow-y-auto">
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-500/10 text-primary-500">
+        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-500/10 text-primary-500 dark:text-primary-400">
           <Icon className="h-5 w-5" strokeWidth={1.8} />
         </span>
         <div className="flex-1">

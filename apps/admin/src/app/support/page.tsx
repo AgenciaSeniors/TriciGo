@@ -197,7 +197,7 @@ export default function SupportPage() {
               >
                 <span
                   className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${
-                    active ? 'bg-primary-500/15 text-primary-500' : 'bg-surface-sunken text-ink-muted'
+                    active ? 'bg-primary-500/15 text-primary-500 dark:text-primary-400' : 'bg-surface-sunken text-ink-muted'
                   }`}
                 >
                   <Headphones className="h-4 w-4" strokeWidth={1.9} />

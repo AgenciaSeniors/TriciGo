@@ -296,7 +296,7 @@ export default function NotificationsPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label className="flex flex-col gap-1">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              {t('notifications.field_audience', { defaultValue: 'Audiencia' })} <span className="text-red-500">*</span>
+              {t('notifications.field_audience', { defaultValue: 'Audiencia' })} <span className="text-red-500 dark:text-red-400">*</span>
             </span>
             <select
               value={targetType}
@@ -350,13 +350,13 @@ export default function NotificationsPage() {
                   {t('notifications.user_selected', { defaultValue: 'Usuario seleccionado' })}
                 </span>
               )}
-              {formErrors.target && <span className="text-[11px] text-red-500">{formErrors.target}</span>}
+              {formErrors.target && <span className="text-[11px] text-red-500 dark:text-red-400">{formErrors.target}</span>}
             </label>
           )}
 
           <label className="flex flex-col gap-1 md:col-span-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              {t('notifications.field_title', { defaultValue: 'Título' })} <span className="text-red-500">*</span>
+              {t('notifications.field_title', { defaultValue: 'Título' })} <span className="text-red-500 dark:text-red-400">*</span>
             </span>
             <input
               value={title}
@@ -367,12 +367,12 @@ export default function NotificationsPage() {
               placeholder={t('notifications.placeholder_title', { defaultValue: 'Lo que aparece en la notificación' })}
               className={errorInputCls(!!formErrors.title)}
             />
-            {formErrors.title && <span className="text-[11px] text-red-500">{formErrors.title}</span>}
+            {formErrors.title && <span className="text-[11px] text-red-500 dark:text-red-400">{formErrors.title}</span>}
           </label>
 
           <label className="flex flex-col gap-1 md:col-span-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-              {t('notifications.field_body', { defaultValue: 'Cuerpo' })} <span className="text-red-500">*</span>
+              {t('notifications.field_body', { defaultValue: 'Cuerpo' })} <span className="text-red-500 dark:text-red-400">*</span>
             </span>
             <textarea
               rows={3}
@@ -384,7 +384,7 @@ export default function NotificationsPage() {
               placeholder={t('notifications.placeholder_body', { defaultValue: 'Mensaje que va a leer el usuario' })}
               className={errorTextareaCls(!!formErrors.body)}
             />
-            {formErrors.body && <span className="text-[11px] text-red-500">{formErrors.body}</span>}
+            {formErrors.body && <span className="text-[11px] text-red-500 dark:text-red-400">{formErrors.body}</span>}
           </label>
         </div>
         <div className="mt-4 flex justify-end">

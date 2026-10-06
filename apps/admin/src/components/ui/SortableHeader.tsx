@@ -24,7 +24,7 @@ export function SortableHeader({ label, sortKey, currentSortKey, sortDirection, 
     >
       <span className="inline-flex items-center gap-1">
         {label}
-        <span className={`text-xs ${isActive ? 'text-primary-500' : 'text-neutral-400'}`}>
+        <span className={`text-xs ${isActive ? 'text-primary-500 dark:text-primary-400' : 'text-neutral-400'}`}>
           {isActive ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
         </span>
       </span>

@@ -130,7 +130,7 @@ export default function AdminReceiptsPage() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded-xl border border-line bg-surface p-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('receipts.kpi_count', { defaultValue: 'Comprobantes' })}</p>
-          <p className="mt-1 font-editorial text-[26px] leading-none italic text-primary-500">{totals.count}</p>
+          <p className="mt-1 font-editorial text-[26px] leading-none italic text-primary-500 dark:text-primary-400">{totals.count}</p>
         </div>
         <div className="rounded-xl border border-line bg-surface p-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('receipts.kpi_total_usd', { defaultValue: 'USD cobrado' })}</p>
@@ -142,7 +142,7 @@ export default function AdminReceiptsPage() {
         </div>
         <div className="rounded-xl border border-line bg-surface p-3">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('receipts.kpi_with_pdf', { defaultValue: 'Con PDF' })}</p>
-          <p className="mt-1 font-editorial text-[26px] leading-none italic text-emerald-600">{totals.withPdf}/{totals.count}</p>
+          <p className="mt-1 font-editorial text-[26px] leading-none italic text-emerald-600 dark:text-emerald-400">{totals.withPdf}/{totals.count}</p>
         </div>
       </div>
 
@@ -238,9 +238,9 @@ export default function AdminReceiptsPage() {
                     <td className="px-3 py-2 text-ink-muted text-[12px]">{formatAdminDate(r.created_at)}</td>
                     <td className="px-3 py-2">
                       {isPending ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-800">{t('receipts.status_pending', { defaultValue: 'Pendiente' })}</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:text-amber-400">{t('receipts.status_pending', { defaultValue: 'Pendiente' })}</span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800">{t('receipts.status_ready', { defaultValue: 'Listo' })}</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800 dark:text-emerald-400">{t('receipts.status_ready', { defaultValue: 'Listo' })}</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">

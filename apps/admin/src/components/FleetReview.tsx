@@ -21,11 +21,11 @@ interface Props {
 }
 
 const STATUS_COLORS: Record<FleetMemberStatus, string> = {
-  pending_review: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-blue-100 text-blue-800',
-  rejected: 'bg-red-100 text-red-700',
-  pending_signup: 'bg-amber-100 text-amber-700',
-  active: 'bg-green-100 text-green-800',
+  pending_review: 'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-800 dark:text-yellow-400',
+  approved: 'bg-blue-100 dark:bg-blue-500/10 text-blue-800 dark:text-blue-400',
+  rejected: 'bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400',
+  pending_signup: 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  active: 'bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-400',
   inactive: 'bg-surface-sunken text-ink-muted',
 };
 
@@ -221,7 +221,7 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
                   <td className="py-2 pr-2 text-ink-muted">
                     {m.driver_license_number ?? '—'}
                     {m.license_doc_path && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-green-700">doc ✓</span>
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-green-700 dark:text-green-400">doc ✓</span>
                     )}
                   </td>
                   <td className="py-2 pr-2">
@@ -229,7 +229,7 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
                       {STATUS_LABELS[m.status]}
                     </span>
                     {m.rejected_reason && (
-                      <div className="text-[11px] text-red-600 mt-1">{m.rejected_reason}</div>
+                      <div className="text-[11px] text-red-600 dark:text-red-400 mt-1">{m.rejected_reason}</div>
                     )}
                     <ChangeNotice shown={changedRows.get(m.id)} current={m} />
                   </td>
@@ -296,7 +296,7 @@ export function FleetReview({ corporateAccountId, adminUserId }: Props) {
 
 function ChangeNotice({ shown, current }: { shown: FleetMember | undefined; current: FleetMember }) {
   if (!shown) return null;
-  return <div className="text-[11px] text-amber-700 mt-1">{changeNotice(shown, current)}</div>;
+  return <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">{changeNotice(shown, current)}</div>;
 }
 
 function Meta({ label, value }: { label: string; value: string | number }) {

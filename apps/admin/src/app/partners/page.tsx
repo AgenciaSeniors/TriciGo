@@ -191,7 +191,7 @@ export default function PartnersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="inline-flex items-center gap-2 text-2xl font-bold text-ink">
-            <Gift className="h-5 w-5 text-orange-500" /> Lugares aliados
+            <Gift className="h-5 w-5 text-orange-500 dark:text-orange-400" /> Lugares aliados
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
             Terminar un viaje aquí le descuenta la tarifa al pasajero. Lo absorbe

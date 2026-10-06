@@ -112,11 +112,11 @@ export function DeletePendingAccountModal({
               </p>
             </div>
             {deletability.deletable ? (
-              <p className="text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
+              <p className="text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/5 rounded-lg px-3 py-2">
                 {t('users.delete_account_deletable')}
               </p>
             ) : (
-              <div className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">
+              <div className="text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg px-3 py-2">
                 <p className="font-medium mb-1">{t('users.delete_account_not_deletable')}</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   {deletability.blockers.map((b) => (

@@ -219,7 +219,7 @@ export default function CancellationReviewDetailPage() {
             {rides.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 last:border-0">
                 <div className="min-w-0">
-                  <Link href={`/rides/${r.id}`} className="font-mono text-sm text-primary-500 hover:underline">#{r.id.slice(0, 8)}</Link>
+                  <Link href={`/rides/${r.id}`} className="font-mono text-sm text-primary-500 dark:text-primary-400 hover:underline">#{r.id.slice(0, 8)}</Link>
                   <span className="ml-2 text-xs text-ink-muted">
                     {r.cancellation_reason_code
                       ? t(`cancellations.reason_${r.cancellation_reason_code}`, { defaultValue: r.cancellation_reason_code })

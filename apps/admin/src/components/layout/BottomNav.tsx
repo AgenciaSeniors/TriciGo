@@ -45,7 +45,7 @@ export function BottomNav() {
                 aria-current={active ? 'page' : undefined}
                 aria-label={label}
                 className={`flex min-h-[56px] flex-col items-center justify-center gap-1 px-1 py-1.5 text-[10px] font-medium transition-colors ${
-                  active ? 'text-primary-500' : 'text-ink-muted hover:text-ink'
+                  active ? 'text-primary-500 dark:text-primary-400' : 'text-ink-muted hover:text-ink'
                 }`}
               >
                 <span className="relative">

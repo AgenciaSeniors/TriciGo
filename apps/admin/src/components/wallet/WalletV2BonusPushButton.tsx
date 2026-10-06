@@ -54,7 +54,7 @@ export function WalletV2BonusPushButton() {
         type="button"
         onClick={() => setConfirmOpen(true)}
         disabled={sending || targetCount === null}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 px-3 py-1.5 text-[12.5px] font-medium text-orange-900 transition-colors hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-200"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 px-3 py-1.5 text-[12.5px] font-medium text-orange-900 transition-colors hover:bg-orange-100 dark:hover:bg-orange-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-200"
         title={
           targetCount != null
             ? `Enviar a ${targetCount} usuario${targetCount === 1 ? '' : 's'} con bono migración`

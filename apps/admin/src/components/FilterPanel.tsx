@@ -111,13 +111,13 @@ export function FilterPanel({
                   return (
                     <span
                       key={f.key}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-50 text-primary-700 text-xs font-medium"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 text-xs font-medium"
                     >
                       {f.label}: {displayValue}
                       <button
                         onClick={() => onChange(f.key, '')}
                         aria-label={`Remove filter: ${f.label}`}
-                        className="ml-0.5 hover:text-primary-900"
+                        className="ml-0.5 hover:text-primary-900 dark:hover:text-primary-300"
                       >
                         ×
                       </button>

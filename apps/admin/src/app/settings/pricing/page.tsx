@@ -54,10 +54,10 @@ function TimeBandBadge({ start, end, t }: { start: string | null | undefined; en
     return <span className="text-xs">{start} - {end}</span>;
   }
   const configs: Record<string, { emoji: string; label: string; color: string }> = {
-    morning: { emoji: '\u{1F305}', label: t('pricing.time_band_morning'), color: 'bg-amber-100 text-amber-700' },
-    afternoon: { emoji: '\u{2600}\u{FE0F}', label: t('pricing.time_band_afternoon'), color: 'bg-yellow-100 text-yellow-700' },
-    night: { emoji: '\u{1F319}', label: t('pricing.time_band_night'), color: 'bg-indigo-100 text-indigo-700' },
-    dawn: { emoji: '\u{1F311}', label: t('pricing.time_band_dawn'), color: 'bg-purple-100 text-purple-700' },
+    morning: { emoji: '\u{1F305}', label: t('pricing.time_band_morning'), color: 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' },
+    afternoon: { emoji: '\u{2600}\u{FE0F}', label: t('pricing.time_band_afternoon'), color: 'bg-yellow-100 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400' },
+    night: { emoji: '\u{1F319}', label: t('pricing.time_band_night'), color: 'bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400' },
+    dawn: { emoji: '\u{1F311}', label: t('pricing.time_band_dawn'), color: 'bg-purple-100 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400' },
   };
   const c = configs[band]!;
   return (
@@ -318,7 +318,7 @@ export default function PricingPage() {
 
   return (
     <div>
-      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 hover:underline mb-4 inline-block">
+      <Link href="/settings" aria-label="Back to settings" className="text-sm text-primary-500 dark:text-primary-400 hover:underline mb-4 inline-block">
         &larr; {t('settings.back_to_settings')}
       </Link>
       {error && (
@@ -341,7 +341,7 @@ export default function PricingPage() {
       </div>
 
       {!superAdminLoading && !isSuperAdmin && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm" role="status">
+        <div className="bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-400 rounded-xl p-4 mb-6 text-sm" role="status">
           {t('platform_config.requires_super_admin', {
             defaultValue:
               'Solo super_admin puede modificar esta configuración. Tu cuenta puede consultar los valores actuales pero no guardarlos.',
@@ -350,7 +350,7 @@ export default function PricingPage() {
       )}
 
       {/* USD-anchored pricing note */}
-      <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl px-4 py-3 mb-6 text-sm">
+      <div className="bg-indigo-50 dark:bg-indigo-500/5 border border-indigo-200 dark:border-indigo-500/30 text-indigo-800 dark:text-indigo-400 rounded-xl px-4 py-3 mb-6 text-sm">
         {t('pricing.usd_anchor_note', {
           defaultValue:
             'Los precios están anclados en USD. Editas el valor en CUP de hoy y queda guardado su equivalente en dólares; el CUP se recalcula solo con la tasa de ElToque para que la inflación no afecte nuestro ingreso.',
@@ -366,7 +366,7 @@ export default function PricingPage() {
           <h3 className="text-lg font-semibold mb-4">{t('pricing.new_rule_title')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_service_type')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_service_type')}<span className="text-red-500 dark:text-red-400 ml-1">*</span></label>
               <select
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.service_type ? 'border-red-500' : 'border-line'}`}
                 value={createForm.service_type}
@@ -391,7 +391,7 @@ export default function PricingPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_base_fare')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_base_fare')}<span className="text-red-500 dark:text-red-400 ml-1">*</span></label>
               <input
                 type="number"
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.base_fare_cup ? 'border-red-500' : 'border-line'}`}
@@ -399,10 +399,10 @@ export default function PricingPage() {
                 onChange={(e) => { setCreateForm((f) => ({ ...f, base_fare_cup: Math.round(parseFloat(e.target.value || '0')) })); setFormErrors((prev) => { const { base_fare_cup, ...rest } = prev; return rest; }); }}
                 step="1"
               />
-              {formErrors.base_fare_cup && <p className="text-red-500 text-xs mt-1">{formErrors.base_fare_cup}</p>}
+              {formErrors.base_fare_cup && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{formErrors.base_fare_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_per_km')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_per_km')}<span className="text-red-500 dark:text-red-400 ml-1">*</span></label>
               <input
                 type="number"
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.per_km_rate_cup ? 'border-red-500' : 'border-line'}`}
@@ -410,10 +410,10 @@ export default function PricingPage() {
                 onChange={(e) => { setCreateForm((f) => ({ ...f, per_km_rate_cup: Math.round(parseFloat(e.target.value || '0')) })); setFormErrors((prev) => { const { per_km_rate_cup, ...rest } = prev; return rest; }); }}
                 step="1"
               />
-              {formErrors.per_km_rate_cup && <p className="text-red-500 text-xs mt-1">{formErrors.per_km_rate_cup}</p>}
+              {formErrors.per_km_rate_cup && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{formErrors.per_km_rate_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_per_min')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_per_min')}<span className="text-red-500 dark:text-red-400 ml-1">*</span></label>
               <input
                 type="number"
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.per_minute_rate_cup ? 'border-red-500' : 'border-line'}`}
@@ -421,10 +421,10 @@ export default function PricingPage() {
                 onChange={(e) => { setCreateForm((f) => ({ ...f, per_minute_rate_cup: Math.round(parseFloat(e.target.value || '0')) })); setFormErrors((prev) => { const { per_minute_rate_cup, ...rest } = prev; return rest; }); }}
                 step="1"
               />
-              {formErrors.per_minute_rate_cup && <p className="text-red-500 text-xs mt-1">{formErrors.per_minute_rate_cup}</p>}
+              {formErrors.per_minute_rate_cup && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{formErrors.per_minute_rate_cup}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_min_fare')}<span className="text-red-500 ml-1">*</span></label>
+              <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_min_fare')}<span className="text-red-500 dark:text-red-400 ml-1">*</span></label>
               <input
                 type="number"
                 className={`w-full px-3 py-2 border bg-surface text-ink rounded-lg text-sm ${formErrors.min_fare_cup ? 'border-red-500' : 'border-line'}`}
@@ -432,7 +432,7 @@ export default function PricingPage() {
                 onChange={(e) => { setCreateForm((f) => ({ ...f, min_fare_cup: Math.round(parseFloat(e.target.value || '0')) })); setFormErrors((prev) => { const { min_fare_cup, ...rest } = prev; return rest; }); }}
                 step="1"
               />
-              {formErrors.min_fare_cup && <p className="text-red-500 text-xs mt-1">{formErrors.min_fare_cup}</p>}
+              {formErrors.min_fare_cup && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{formErrors.min_fare_cup}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-ink-muted mb-1">{t('pricing.label_time_start')}</label>
@@ -490,7 +490,7 @@ export default function PricingPage() {
             </button>
             <button
               onClick={() => { setShowCreate(false); setFormErrors({}); }}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200 dark:hover:bg-surface-elevated"
             >
               {t('common.cancel')}
             </button>
@@ -619,7 +619,7 @@ export default function PricingPage() {
                       disabled={!isSuperAdmin}
                       aria-label={r.is_active ? t('pricing.deactivate_rule', { defaultValue: 'Deactivate rule' }) : t('pricing.activate_rule', { defaultValue: 'Activate rule' })}
                       className={`px-2 py-0.5 rounded-full text-xs font-medium disabled:cursor-not-allowed ${
-                        r.is_active ? 'bg-green-100 text-green-700' : 'bg-neutral-100 text-neutral-500'
+                        r.is_active ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-neutral-100 dark:bg-surface-sunken text-neutral-500 dark:text-neutral-400'
                       }`}
                     >
                       {r.is_active ? t('common.active') : t('common.inactive')}
@@ -637,7 +637,7 @@ export default function PricingPage() {
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-surface-sunken text-ink-muted hover:bg-neutral-200 dark:hover:bg-surface-elevated"
                         >
                           {t('common.cancel')}
                         </button>
@@ -648,7 +648,7 @@ export default function PricingPage() {
                           onClick={() => startEdit(r)}
                           disabled={!isSuperAdmin}
                           title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
-                          className="text-sm text-primary-500 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                          className="text-sm text-primary-500 dark:text-primary-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                         >
                           {t('common.edit')}
                         </button>
@@ -656,7 +656,7 @@ export default function PricingPage() {
                           onClick={() => handleDelete(r)}
                           disabled={!isSuperAdmin}
                           title={!isSuperAdmin ? t('platform_config.requires_super_admin', { defaultValue: 'Solo super_admin puede guardar' }) : undefined}
-                          className="text-sm text-red-500 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+                          className="text-sm text-red-500 dark:text-red-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
                         >
                           {t('pricing.delete_rule')}
                         </button>
