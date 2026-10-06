@@ -24,6 +24,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { isReservedLoginEmail } from '../_shared/login-identity.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -75,6 +76,11 @@ Deno.serve(async (req) => {
     if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) {
       return json({ error: 'invalid_or_expired' }, 400);
     }
+    // Tokens issued before add-email started refusing @tricigo.app must not
+    // write such an address into auth.users now (see login-identity.ts).
+    if (isReservedLoginEmail(row.email)) {
+      return json({ error: 'invalid_or_expired' }, 400);
+    }
 
     // El token confirma el correo PARA EL QUE fue emitido. Si el usuario cambió
     // el correo de nuevo después de emitirse este token, el emisor ya borró la
@@ -110,14 +116,29 @@ Deno.serve(async (req) => {
       return json({ error: 'invalid_or_expired' }, 400);
     }
 
-    // La estampa que todo lo demás gatea.
-    const { error: stampErr } = await supaAdmin
+    // La estampa que todo lo demás gatea, solo si el correo de la fila sigue
+    // siendo el del token. Se relee después de escribir en auth (el trigger
+    // sync_user_email_from_auth puede reescribir la fila) y se estampa con ese
+    // valor exacto en el WHERE: si el usuario lo cambia entre medio, la estampa
+    // no toca nada y el correo nuevo queda sin verificar (00611 también lo
+    // limpia en cada cambio de correo).
+    const { data: freshUser } = await supaAdmin
+      .from('users').select('email').eq('id', row.user_id).maybeSingle();
+    if (!freshUser?.email || freshUser.email.toLowerCase() !== row.email.toLowerCase()) {
+      return json({ error: 'invalid_or_expired' }, 400);
+    }
+    const { data: stamped, error: stampErr } = await supaAdmin
       .from('users')
       .update({ email_verified_at: new Date().toISOString() })
-      .eq('id', row.user_id);
+      .eq('id', row.user_id)
+      .eq('email', freshUser.email)
+      .select('id');
     if (stampErr) {
       console.error('[confirm-email] stamp failed:', stampErr.message);
       return json({ error: 'internal' }, 500);
+    }
+    if (!stamped || stamped.length === 0) {
+      return json({ error: 'invalid_or_expired' }, 400);
     }
 
     await supaAdmin.from('security_audit_log').insert({
