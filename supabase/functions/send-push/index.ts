@@ -175,16 +175,24 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Rate limit: 30 requests per IP per minute
-    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = await rateLimit(`send-push:${clientIP}`, 30, 60 * 1000);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
-
     // ── Auth gate: service_role OR authenticated admin ──
     const serviceRoleKey = getServiceKey();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const apiKey = req.headers.get('apikey') ?? '';
     const isInternalCall = isServiceKeyToken(apiKey);
+
+    // Rate limit: 30 requests per IP per minute, for everyone EXCEPT internal
+    // calls. Every database trigger (one push per ride offer, offline notices,
+    // reactivation pushes) reaches us from the same pg_net address, so a shared
+    // per-IP bucket would drop ride-offer pushes with a 429 once a dispatch
+    // fans out to more than 30 drivers in a minute (dispatch_offer_limit=0
+    // offers to every eligible driver). Not hit yet: the busiest minute on
+    // record had 8 pushes.
+    if (!isInternalCall) {
+      const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+      const rl = await rateLimit(`send-push:${clientIP}`, 30, 60 * 1000);
+      if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+    }
 
     if (!isInternalCall) {
       const authHeader = req.headers.get('Authorization');
