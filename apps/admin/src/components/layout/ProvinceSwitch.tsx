@@ -121,7 +121,7 @@ export function ProvinceSwitch() {
                     <span className="flex min-w-0 flex-col">
                       <span
                         className={`truncate text-[13px] font-medium ${
-                          active ? 'text-primary-600 dark:text-primary-400' : 'text-ink'
+                          active ? 'text-primary-700 dark:text-primary-400' : 'text-ink'
                         }`}
                       >
                         {s.label}
