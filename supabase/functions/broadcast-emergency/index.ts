@@ -6,7 +6,7 @@
 //   2. Lee `trusted_contacts` con `auto_share=true` del usuario.
 //   3. Por cada contacto, llama internamente a `send-sms` (que es
 //      service-role only) con un mensaje preformateado que incluye:
-//        · Nombre del que pidió ayuda (de users, no del request)
+//        · Nombre e inicial del que pidió ayuda (de users, no del request)
 //        · Maps URL con la ubicación reportada
 //        · Conductor y placa, solo si el que pide ayuda es el pasajero del
 //          viaje (de la base, no del request)
@@ -28,7 +28,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
-import { buildSosSmsBody, cleanSmsField, validCoordinates } from '../_shared/sos-message.ts';
+import { buildSosSmsBody, cleanSmsField, smsPersonName, validCoordinates } from '../_shared/sos-message.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -83,14 +83,10 @@ Deno.serve(async (req) => {
         { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
 
-    // ─── Rate limit (per user, 1/min and 10/day) ───
-    // The daily cap bounds what one account can spend on SMS: each SOS texts
-    // up to 5 contacts. A real emergency is also covered by the incident
-    // report trigger, which texts the same contacts from the database.
+    // ─── Rate limit (per user, 1/min; 10/day counted below, once there are
+    // contacts to text) ───
     const rl = await rateLimit(`broadcast-emergency:${user.id}`, 1, 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
-    const rlDay = await rateLimit(`broadcast-emergency:day:${user.id}`, 10, 24 * 60 * 60 * 1000);
-    if (!rlDay.allowed) return rateLimitResponse(rlDay.retryAfterMs);
 
     // ─── Validate body ───
     const body = (await req.json()) as BroadcastBody;
@@ -118,6 +114,12 @@ Deno.serve(async (req) => {
         message: 'No trusted contacts configured for auto-share',
       }), { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
+
+    // ─── Daily cap: bounds what one account can spend on SMS (each SOS texts
+    // up to 5 contacts). A real emergency is also covered by the incident
+    // report trigger, which texts the same contacts from the database. ───
+    const rlDay = await rateLimit(`broadcast-emergency:day:${user.id}`, 10, 24 * 60 * 60 * 1000);
+    if (!rlDay.allowed) return rateLimitResponse(rlDay.retryAfterMs);
 
     // ─── Names and plate from the database, never from the request ───
     const { data: caller } = await admin
@@ -149,7 +151,7 @@ Deno.serve(async (req) => {
             admin.from('vehicles').select('plate_number').eq('driver_id', ride.driver_id)
               .eq('is_active', true).limit(1).maybeSingle(),
           ]);
-          driverName = cleanSmsField(du?.full_name, 40);
+          driverName = smsPersonName(du?.full_name);
           vehiclePlate = cleanSmsField(veh?.plate_number, 15);
         }
       }
@@ -159,7 +161,7 @@ Deno.serve(async (req) => {
     const smsBody = buildSosSmsBody({
       latitude: body.latitude,
       longitude: body.longitude,
-      riderName: cleanSmsField(caller?.full_name, 40),
+      riderName: smsPersonName(caller?.full_name),
       driverName,
       vehiclePlate,
       rideRef,

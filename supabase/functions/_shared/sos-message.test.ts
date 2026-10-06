@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSosSmsBody, cleanSmsField, validCoordinates } from './sos-message';
+import { buildSosSmsBody, cleanSmsField, smsPersonName, validCoordinates } from './sos-message';
 
 describe('cleanSmsField', () => {
   it('collapses whitespace and strips control characters', () => {
@@ -63,5 +63,27 @@ describe('buildSosSmsBody', () => {
 
   it('never starts with an emoji (carriers drop those)', () => {
     expect(buildSosSmsBody(base, 'es').codePointAt(0)).toBeLessThan(0x2000);
+  });
+});
+
+describe('smsPersonName', () => {
+  it('keeps the first name and the next initial', () => {
+    expect(smsPersonName('Ana María Pérez')).toBe('Ana M.');
+    expect(smsPersonName('Yunior')).toBe('Yunior');
+  });
+
+  it('drops links, digits and symbols an owner could put in their name', () => {
+    expect(smsPersonName('Visita bit.ly/x para cobrar')).toBe('Visita B.');
+    expect(smsPersonName('https://evil.example 5355555555')).toBe('httpsevilexample');
+    expect(smsPersonName('$$$ 123')).toBeNull();
+  });
+
+  it('caps the first word', () => {
+    expect(smsPersonName('A'.repeat(50))).toBe('A'.repeat(20));
+  });
+
+  it('returns null for empty or non-string input', () => {
+    expect(smsPersonName('   ')).toBeNull();
+    expect(smsPersonName(null)).toBeNull();
   });
 });
