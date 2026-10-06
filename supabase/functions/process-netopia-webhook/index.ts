@@ -37,6 +37,7 @@ import { decodeProtectedHeader, importX509 } from 'https://esm.sh/jose@5.9.6';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { translateNetopiaError } from '../_shared/netopia-errors.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { requeryOrderMismatch } from '../_shared/netopia-ipn.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -274,7 +275,7 @@ async function requeryNetopiaStatus(args: {
     }
 
     const text = await resp.text();
-    let parsed: { payment?: { status?: number }; error?: { code?: string; message?: string } } = {};
+    let parsed: { order?: { orderID?: unknown }; payment?: { status?: number }; error?: { code?: string; message?: string } } = {};
     try {
       parsed = text ? JSON.parse(text) : {};
     } catch {
@@ -284,6 +285,11 @@ async function requeryNetopiaStatus(args: {
         reason: `non-JSON status response (HTTP ${resp.status}): ${text.slice(0, 200)}`,
         httpStatus: resp.status,
       };
+    }
+    // If NETOPIA names the order this transaction belongs to, it must be ours:
+    // a paid ntpID posted under another orderID must not confirm that order.
+    if (requeryOrderMismatch(parsed, args.orderId)) {
+      return { status: null, confirmedPaid: false, reason: 'status re-query reports a different order', httpStatus: resp.status };
     }
     const st = typeof parsed?.payment?.status === 'number' ? parsed.payment.status : null;
     if (st === null) {
@@ -386,6 +392,31 @@ Deno.serve(async (req) => {
       console.error(`[netopia] payment_intent ${orderId} belongs to ${existingIntent.payment_provider}, not netopia`);
       return new Response(
         JSON.stringify({ error: 'Provider mismatch' }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── 2a. One NETOPIA transaction belongs to one intent ──
+    // create-netopia-*-intent stores each order's ntpID when NETOPIA opens it,
+    // and the payer gets it back in the response. The status re-query below
+    // only says whether that ntpID is paid, not for which order, so without
+    // this check one real payment could be posted again under the orderID of
+    // any unpaid intent and credit it. A genuine IPN never carries another
+    // intent's ntpID.
+    const { data: ntpOwner } = await supabase
+      .from('payment_intents')
+      .select('id')
+      .eq('stripe_payment_intent_id', ntpId)
+      .neq('id', orderId)
+      .limit(1)
+      .maybeSingle();
+    if (ntpOwner) {
+      console.error(
+        `[netopia] CRITICAL: IPN for intent ${orderId} carries ntpID=${ntpId}, which belongs to intent ${ntpOwner.id} — ` +
+        `refusing (ip=${clientIP})`,
+      );
+      return new Response(
+        JSON.stringify({ error: 'ntpid_belongs_to_another_order' }),
         { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -641,7 +672,7 @@ Deno.serve(async (req) => {
       // (migration 00286). If the column doesn't exist yet in this env
       // (pre-migration deploy), retry without it so the webhook still
       // marks the intent failed and notifies the user.
-      const { error: updateErr } = await supabase
+      const { data: failedRows, error: updateErr } = await supabase
         .from('payment_intents')
         .update({
           status: 'failed',
@@ -652,11 +683,13 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq('id', orderId)
-        .in('status', ['created', 'pending', 'processing']);
+        .in('status', ['created', 'pending', 'processing'])
+        .select('id');
+      let transitioned = (failedRows?.length ?? 0) > 0;
 
       if (updateErr && /provider_error_code|column.*does not exist|schema cache/i.test(updateErr.message)) {
         console.warn(`[netopia] provider_error_code column missing — retrying without it (apply migration 00286): ${updateErr.message}`);
-        await supabase
+        const { data: retryRows } = await supabase
           .from('payment_intents')
           .update({
             status: 'failed',
@@ -666,14 +699,23 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString(),
           })
           .eq('id', orderId)
-          .in('status', ['created', 'pending', 'processing']);
+          .in('status', ['created', 'pending', 'processing'])
+          .select('id');
+        transitioned = (retryRows?.length ?? 0) > 0;
       } else if (updateErr) {
         console.error('[netopia] failed-branch update error:', updateErr);
       }
 
-      const failMeta = (existingIntent.metadata ?? null) as Record<string, unknown> | null;
-      const failPayerName = typeof failMeta?.payer_name === 'string' ? (failMeta.payer_name as string) : null;
-      await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, false, failReason, failPayerName);
+      // Notify only when this IPN actually moved the intent to 'failed'. Failed
+      // IPNs are not confirmed with NETOPIA, so a repeated one (or a forged one
+      // for an intent that is already failed or completed) must not push again.
+      if (transitioned) {
+        const failMeta = (existingIntent.metadata ?? null) as Record<string, unknown> | null;
+        const failPayerName = typeof failMeta?.payer_name === 'string' ? (failMeta.payer_name as string) : null;
+        await sendPaymentNotification(supabase, existingIntent.user_id, existingIntent.amount_cup, false, failReason, failPayerName);
+      } else {
+        console.log(`[netopia] failed IPN for ${orderId} changed nothing (status=${existingIntent.status}) — no push`);
+      }
 
       console.log(`[netopia] Payment failed: ${orderId} — ${failReason} (provider_code=${providerCode ?? 'none'})`);
 
