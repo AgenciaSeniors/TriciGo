@@ -62,7 +62,8 @@
     "title": "Te invitaron a dividir una tarifa",
     "your_share": "Tu parte: {{pct}}%",
     "decline": "Rechazar",
-    "accept": "Aceptar"
+    "accept": "Aceptar",
+    "decline_failed": "No se pudo rechazar la invitación. Inténtalo de nuevo."
   },
   "refer": {
     "invalid_code": "Código de referido inválido.",

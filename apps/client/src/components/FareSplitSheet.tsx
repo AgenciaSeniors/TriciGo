@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Alert } from 'react-native';
 import { Text } from '@tricigo/ui/Text';
 import { Button } from '@tricigo/ui/Button';
@@ -36,6 +36,25 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
   // What the requester pays with the shares the server set (00613): the fare
   // minus every invitee's part, so the rounding and any withdrawn invite land here.
   const myShare = requesterShareTrc(estimatedFareTrc, splits);
+
+  // Read the splits again each time the sheet opens: an invitee who declined
+  // deleted their row, and the ride screen's realtime channel only hears
+  // inserts and updates.
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    rideService
+      .getSplitsForRide(rideId)
+      .then((fresh) => {
+        if (!cancelled) setSplits(withKnownNames(fresh, useRideStore.getState().splits));
+      })
+      .catch(() => {
+        // Keep the list the ride screen loaded.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, rideId, setSplits]);
 
   const handleInvite = async () => {
     if (!phone.trim() || !userId) return;

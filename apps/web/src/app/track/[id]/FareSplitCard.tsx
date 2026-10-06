@@ -9,6 +9,8 @@ import { rideService, walletService } from '@tricigo/api';
 import { formatTRC, getErrorMessage, equalSplitSharePct, requesterShareTrc } from '@tricigo/utils';
 import type { RideSplit } from '@tricigo/types';
 
+const SPLITS_POLL_MS = 20_000;
+
 interface Props {
   rideId: string;
   userId: string;
@@ -22,10 +24,17 @@ export function FareSplitCard({ rideId, userId, estimatedFareTrc }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const loadSplits = useCallback(() => {
-    rideService.getSplitsForRide(rideId).then(setSplits).catch(() => setSplits([]));
+    // On a failed read keep the last list: blanking it would show the whole fare as yours.
+    rideService.getSplitsForRide(rideId).then(setSplits).catch(() => {});
   }, [rideId]);
 
-  useEffect(() => { loadSplits(); }, [loadSplits]);
+  // Poll like SplitInviteBanner: an invitee who accepts or declines changes the
+  // list (a decline deletes their row) and this page has no realtime channel.
+  useEffect(() => {
+    loadSplits();
+    const id = setInterval(loadSplits, SPLITS_POLL_MS);
+    return () => clearInterval(id);
+  }, [loadSplits]);
 
   // The fare minus every invitee's part, with the shares the server set (00613).
   const yourShare = requesterShareTrc(estimatedFareTrc, splits);

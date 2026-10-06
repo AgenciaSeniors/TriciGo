@@ -4,6 +4,7 @@ import { Text } from '@tricigo/ui/Text';
 import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api';
 import { formatTRC, splitAmountTrc } from '@tricigo/utils';
@@ -66,13 +67,32 @@ function SplitInviteCardInner({ onAction }: SplitInviteCardProps) {
   };
 
   const handleDecline = async (invite: PendingInvite) => {
+    if (!userId) return;
     setLoading((prev) => ({ ...prev, [invite.id]: true }));
     try {
-      await rideService.removeSplitInvite(invite.ride_id, invite.id);
+      await rideService.declineSplitInvite(invite.id, userId);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
       onAction?.();
-    } catch {
-      // keep in list on error
+    } catch (err) {
+      if ((err as { code?: string } | null)?.code === 'SPLIT_ALREADY_ACCEPTED') {
+        // Accepted from another device: it is no longer a pending invite.
+        setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+        onAction?.();
+        Toast.show({
+          type: 'info',
+          text1: t('ride.split_already_accepted', {
+            defaultValue: 'Ya aceptaste esta invitación: pagarás tu parte al terminar el viaje.',
+          }),
+        });
+      } else {
+        // The invite is still there: keep the card so the rider can try again.
+        Toast.show({
+          type: 'error',
+          text1: t('ride.split_decline_failed', {
+            defaultValue: 'No se pudo rechazar la invitación. Inténtalo de nuevo.',
+          }),
+        });
+      }
     } finally {
       setLoading((prev) => ({ ...prev, [invite.id]: false }));
     }

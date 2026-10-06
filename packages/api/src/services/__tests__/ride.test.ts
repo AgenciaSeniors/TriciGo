@@ -364,6 +364,102 @@ describe('rideService.removeSplitInvite', () => {
   });
 });
 
+describe('rideService.declineSplitInvite', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** from('ride_splits').delete().eq().eq().is().select() resolving to `result` */
+  function deleteChain(result: { data: unknown; error: unknown }) {
+    const select = vi.fn().mockResolvedValue(result);
+    const is = vi.fn().mockReturnValue({ select });
+    const eqUser = vi.fn().mockReturnValue({ is });
+    const eqId = vi.fn().mockReturnValue({ eq: eqUser });
+    const del = vi.fn().mockReturnValue({ eq: eqId });
+    return { chain: { delete: del }, del, eqId, eqUser, is, select };
+  }
+
+  /** from('ride_splits').select().eq().eq().maybeSingle() resolving to `result` */
+  function readChain(result: { data: unknown; error: unknown }) {
+    const maybeSingle = vi.fn().mockResolvedValue(result);
+    const eqUser = vi.fn().mockReturnValue({ maybeSingle });
+    const eqId = vi.fn().mockReturnValue({ eq: eqUser });
+    const select = vi.fn().mockReturnValue({ eq: eqId });
+    return { chain: { select }, select, eqId, eqUser, maybeSingle };
+  }
+
+  it("deletes only the caller's own unanswered invite", async () => {
+    const d = deleteChain({ data: [{ id: 'split-1' }], error: null });
+    mockFrom.mockReturnValueOnce(d.chain);
+
+    await rideService.declineSplitInvite('split-1', 'u-2');
+
+    expect(mockFrom).toHaveBeenCalledWith('ride_splits');
+    expect(d.eqId).toHaveBeenCalledWith('id', 'split-1');
+    expect(d.eqUser).toHaveBeenCalledWith('user_id', 'u-2');
+    expect(d.is).toHaveBeenCalledWith('accepted_at', null);
+    expect(d.select).toHaveBeenCalledWith('id');
+    // A deleted row is the whole answer: no second read
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it('never touches the ride (the invitee cannot update it)', async () => {
+    mockFrom.mockReturnValueOnce(deleteChain({ data: [{ id: 'split-1' }], error: null }).chain);
+
+    await rideService.declineSplitInvite('split-1', 'u-2');
+
+    expect(mockFrom).not.toHaveBeenCalledWith('rides');
+  });
+
+  it('succeeds when nothing was deleted because the requester already withdrew the invite', async () => {
+    mockFrom
+      .mockReturnValueOnce(deleteChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(readChain({ data: null, error: null }).chain);
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).resolves.toBeUndefined();
+  });
+
+  it('says so when the invite was accepted in the meantime', async () => {
+    const r = readChain({ data: { id: 'split-1', accepted_at: '2026-10-06T12:00:00Z' }, error: null });
+    mockFrom
+      .mockReturnValueOnce(deleteChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(r.chain);
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      code: 'SPLIT_ALREADY_ACCEPTED',
+    });
+    expect(r.eqId).toHaveBeenCalledWith('id', 'split-1');
+    expect(r.eqUser).toHaveBeenCalledWith('user_id', 'u-2');
+  });
+
+  it('fails instead of pretending when the server kept a pending invite (0 rows, no error)', async () => {
+    // Before migration 00614, RLS let the invitee delete nothing and PostgREST still answered OK.
+    mockFrom
+      .mockReturnValueOnce(deleteChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(readChain({ data: { id: 'split-1', accepted_at: null }, error: null }).chain);
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      code: 'SPLIT_DECLINE_FAILED',
+    });
+  });
+
+  it('throws the delete error', async () => {
+    mockFrom.mockReturnValueOnce(deleteChain({ data: null, error: { message: 'boom' } }).chain);
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).rejects.toMatchObject({ message: 'boom' });
+  });
+
+  it('throws when the follow-up read fails', async () => {
+    mockFrom
+      .mockReturnValueOnce(deleteChain({ data: [], error: null }).chain)
+      .mockReturnValueOnce(readChain({ data: null, error: { message: 'read failed' } }).chain);
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      message: 'read failed',
+    });
+  });
+});
+
 describe('rideService.acceptSplitInvite', () => {
   beforeEach(() => {
     vi.clearAllMocks();

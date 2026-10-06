@@ -322,6 +322,8 @@
     "split_decline": "Recusar",
     "split_you": "Você",
     "split_paid": "Pago",
+    "split_decline_failed": "Não foi possível recusar o convite. Tente novamente.",
+    "split_already_accepted": "Você já aceitou este convite: vai pagar sua parte no fim da viagem.",
     "safety_button": "Segurança",
     "insurance_toggle": "Seguro de viagem",
     "insurance_desc": "Cobertura por acidentes e danos",

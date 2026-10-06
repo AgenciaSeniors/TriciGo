@@ -8,7 +8,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { rideService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC } from '@tricigo/utils';
+import { formatTRC, splitAmountTrc } from '@tricigo/utils';
 import type { RideSplit } from '@tricigo/types';
 
 interface PendingInvite extends RideSplit {
@@ -27,6 +27,7 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
   const { t } = useTranslation('web');
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -59,12 +60,20 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
   };
 
   const handleDecline = async (invite: PendingInvite) => {
+    if (!userId) return;
     setBusy((p) => ({ ...p, [invite.id]: true }));
+    setFailed((p) => ({ ...p, [invite.id]: false }));
     try {
-      await rideService.removeSplitInvite(invite.ride_id, invite.id);
+      await rideService.declineSplitInvite(invite.id, userId);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
-    } catch {
-      /* keep in list on error */
+    } catch (err) {
+      if ((err as { code?: string } | null)?.code === 'SPLIT_ALREADY_ACCEPTED') {
+        // Accepted from another device: it is no longer a pending invite.
+        setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+      } else {
+        // The invite is still there: keep it and say the decline did not go through.
+        setFailed((p) => ({ ...p, [invite.id]: true }));
+      }
     } finally {
       setBusy((p) => ({ ...p, [invite.id]: false }));
     }
@@ -77,7 +86,7 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
       {invites.map((invite) => {
         const isBusy = busy[invite.id] ?? false;
         const fareTrc = invite.rides?.estimated_fare_trc ?? null;
-        const estimatedShare = fareTrc != null ? Math.round(fareTrc * invite.share_pct / 100) : null;
+        const estimatedShare = fareTrc != null ? splitAmountTrc(fareTrc, invite.share_pct) : null;
         return (
           <div
             key={invite.id}
@@ -139,6 +148,11 @@ export function SplitInviteBanner({ userId }: { userId: string | null | undefine
                 {t('split.accept', { defaultValue: 'Aceptar' })}
               </button>
             </div>
+            {failed[invite.id] && (
+              <p role="alert" style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--error, #dc2626)' }}>
+                {t('split.decline_failed', { defaultValue: 'No se pudo rechazar la invitación. Inténtalo de nuevo.' })}
+              </p>
+            )}
           </div>
         );
       })}

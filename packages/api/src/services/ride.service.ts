@@ -2140,7 +2140,8 @@ export const rideService = {
   },
 
   /**
-   * Remove a split invite (before ride starts).
+   * Remove a split invite (the requester withdraws it, before pickup).
+   * The invitee declines with declineSplitInvite.
    */
   async removeSplitInvite(rideId: string, splitId: string): Promise<void> {
     const supabase = getSupabaseClient();
@@ -2159,6 +2160,46 @@ export const rideService = {
     if (!remaining || remaining.length === 0) {
       await supabase.from('rides').update({ is_split: false }).eq('id', rideId);
     }
+  },
+
+  /**
+   * Decline a split invite (the invited user turns it down).
+   *
+   * Deletes the caller's own unanswered invite (RLS split_delete_invitee,
+   * migration 00614). Declining moves no money: the requester pays the
+   * declined part, and no other share goes up. The ride is not touched: the
+   * invitee cannot update it, so `is_split` stays as the requester left it.
+   *
+   * Resolves when the invite is gone, including when the requester had already
+   * withdrawn it. Throws an AppError when the server kept it:
+   * SPLIT_ALREADY_ACCEPTED if it was accepted meanwhile (from another device),
+   * SPLIT_DECLINE_FAILED otherwise (before 00614 RLS deleted 0 rows without
+   * an error, and the invite came back on the next load).
+   */
+  async declineSplitInvite(splitId: string, userId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('ride_splits')
+      .delete()
+      .eq('id', splitId)
+      .eq('user_id', userId)
+      .is('accepted_at', null)
+      .select('id');
+    if (error) throw error;
+    if (data && data.length > 0) return;
+
+    const { data: kept, error: readError } = await supabase
+      .from('ride_splits')
+      .select('id, accepted_at')
+      .eq('id', splitId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!kept) return;
+    if (kept.accepted_at) {
+      throw new AppError('declineSplitInvite: already accepted', 'SPLIT_ALREADY_ACCEPTED', 409);
+    }
+    throw new AppError('declineSplitInvite: the invite was not deleted', 'SPLIT_DECLINE_FAILED', 409);
   },
 
   /**

@@ -322,6 +322,8 @@
     "split_decline": "Decline",
     "split_you": "You",
     "split_paid": "Paid",
+    "split_decline_failed": "Couldn't decline the invitation. Try again.",
+    "split_already_accepted": "You already accepted this invitation: you'll pay your share when the trip ends.",
     "safety_button": "Safety",
     "insurance_toggle": "Trip insurance",
     "insurance_desc": "Coverage for accidents and damages",
