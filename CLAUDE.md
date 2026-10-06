@@ -2971,6 +2971,25 @@ O sea que un wrapper SQL plano queda **denegado**, no exento: el riesgo va en la
 
 **Trampa de método en la que caí verificando esto:** probé el guard contra la base del ensayo que había quedado del baseline **RED**, o sea sin el guard aplicado, y concluí que un wrapper SQL plano lo evadía. Todo pasaba porque no había nada que evadir. Si un probe de seguridad da "permitido", confirmá primero contra qué base estás hablando.
 
+### Una función SECURITY DEFINER se salta la RLS de la tabla que lee (verificado 2026-10-06, mig 00608)
+
+La 00517 ocultó las claves secretas de `platform_config` con la política `pc_select`, pero `get_platform_config_text` y `get_platform_config_numeric` son SECURITY DEFINER: leen la tabla como su dueño, sin RLS. La 00348 las había dejado ejecutables por `anon` cuando la tabla todavía era pública. Medido como `anon`: un SELECT de `openweather_api_key` en la tabla devolvía 0 filas, y la función devolvía la clave. Con la clave publicable, cualquiera podía leer por `POST /rest/v1/rpc/get_platform_config_text` el token de elToque, la clave de OpenWeather y las firmas de NETOPIA. La 00608 les quita EXECUTE a `PUBLIC`, `anon` y `authenticated`.
+
+- **Cuando una RLS esconde filas, buscar las funciones SECURITY DEFINER que leen esa tabla y que un cliente puede ejecutar**: para ellas la política no existe.
+  ```sql
+  SELECT p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_x,
+         has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_x
+  FROM pg_proc p
+  WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef
+    AND p.prosrc ~* 'from\s+(public\.)?<tabla>'
+    AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'));
+  ```
+- **Un helper que solo llaman otras funciones SECURITY DEFINER no necesita EXECUTE para los clientes**: la llamada interna corre como el dueño. El ensayo lo prueba (K2: `get_weather_surge()` como `anon` sigue leyendo su multiplicador).
+- **Una función nueva nace con EXECUTE para `PUBLIC`**, y `anon` lo hereda. `refresh_cuba_landmask` (00575) quedó así, y cualquiera podía vaciar y reconstruir `cuba_landmask`.
+- **Revocar no deshace lo que ya se leyó.** Esas claves no se rotaron desde marzo (elToque, OpenWeather) y junio (NETOPIA live); se rotan a mano en cada proveedor.
+
+Ensayo: `supabase/tests/00608/run.sh none` (RED: fallan las 7 pruebas de la fuga) / `run.sh supabase/migrations/00608_*.sql` (GREEN 21/21, con 4 pruebas negativas de sus aserciones).
+
 ### `users.phone` no prueba que el número sea del usuario (00599, 2026-09-26)
 
 **El agujero.** Hasta 00599 cualquier usuario con sesión podía escribir cualquier número en `public.users.phone` por PostgREST, sin OTP: `authenticated` tiene UPDATE sobre la columna, `users_update_own` no tiene `WITH CHECK` y `tg_users_protect_admin_fields` no cubría `phone`. Las dos búsquedas de dinero confiaban en esa columna con `LIMIT 1` sin `ORDER BY`: `find_user_by_phone` (regalos, dividir tarifa) y `find_recipient_for_recharge` (recargas de la diáspora). Reproducido en local con los cuerpos vivos: un número que nadie había registrado resolvía siempre a quien se lo había puesto, y un número ajeno pasaba a resolver al atacante en cuanto se reescribía la fila del dueño (su siguiente viaje).
