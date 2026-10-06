@@ -19,7 +19,7 @@ type RoleFilter = UserRole | 'all';
 
 const ROLE_CLASS: Record<string, string> = {
   customer: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
-  driver: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  driver: 'bg-amber-500/10 text-amber-800 dark:text-amber-400',
   admin: 'bg-primary-500/10 text-primary-700 dark:text-primary-400',
   super_admin: 'bg-red-500/10 text-red-700 dark:text-red-400',
 };
@@ -176,7 +176,7 @@ export default function UsersPage() {
         header: t('users.col_status', { defaultValue: 'Estado' }),
         cell: (u) =>
           u.is_active ? (
-            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
               {t('users.status_active', { defaultValue: 'Activo' })}
             </span>
           ) : (

@@ -192,7 +192,7 @@ export default function NotificationsPage() {
         id: 'target_type',
         header: t('notifications.col_audience', { defaultValue: 'Audiencia' }),
         cell: (n) => (
-          <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
+          <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-400">
             {audienceLabel(n.target_type)}
           </span>
         ),
@@ -255,11 +255,11 @@ export default function NotificationsPage() {
       header: t('notifications.col_status', { defaultValue: 'Estado' }),
       cell: (n) =>
         n.read ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
             {t('notifications.status_read', { defaultValue: 'Leída' })}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-400">
             {t('notifications.status_unread', { defaultValue: 'Sin leer' })}
           </span>
         ),

@@ -17,8 +17,8 @@ type Filter = DisputeStatus | 'all';
 
 const PRIORITY_CLASS: Record<string, string> = {
   low: 'bg-surface-sunken text-ink-muted',
-  normal: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  high: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  normal: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
+  high: 'bg-amber-500/10 text-amber-800 dark:text-amber-400',
   urgent: 'bg-red-600 text-white',
 };
 
@@ -290,12 +290,12 @@ export default function DisputesPage() {
                       {priorityLabel(d.priority)}
                     </span>
                     {sla === 'expired' && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-400">
                         <AlertTriangle className="h-2.5 w-2.5" /> {t('disputes.sla_expired', { defaultValue: 'SLA vencido' })}
                       </span>
                     )}
                     {sla === 'warning' && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-400">
                         {t('disputes.sla_warning', { defaultValue: 'SLA < 6 h' })}
                       </span>
                     )}

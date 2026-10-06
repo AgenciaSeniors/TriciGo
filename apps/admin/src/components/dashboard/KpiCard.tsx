@@ -78,9 +78,9 @@ function DeltaBadge({ delta }: { delta: number | null | undefined }) {
   const flat = delta === 0;
   const Icon = up ? ArrowUpRight : down ? ArrowDownRight : Minus;
   const classes = up
-    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
     : down
-      ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+      ? 'bg-red-500/10 text-red-700 dark:text-red-400'
       : 'bg-surface-sunken text-ink-subtle';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] ${classes}`}>

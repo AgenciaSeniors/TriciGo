@@ -175,7 +175,7 @@ export function DataTable<T>({
           {onRetry && (
             <button
               onClick={onRetry}
-              className="inline-flex items-center gap-1 rounded-full border border-red-500/30 px-2.5 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
+              className="inline-flex items-center gap-1 rounded-full border border-red-500/30 px-2.5 py-1 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-500/10 dark:text-red-400"
             >
               <RefreshCw className="h-3 w-3" />
               {t('common.retry', { defaultValue: 'Reintentar' })}
@@ -255,7 +255,7 @@ export function DataTable<T>({
                                   onClick={() => a.onClick(row)}
                                   className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
                                     a.tone === 'danger'
-                                      ? 'text-red-600 hover:bg-red-500/10 dark:text-red-400'
+                                      ? 'text-red-700 hover:bg-red-500/10 dark:text-red-400'
                                       : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
                                   }`}
                                 >

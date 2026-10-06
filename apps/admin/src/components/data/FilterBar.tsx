@@ -48,7 +48,7 @@ const TONE_CLASS: Record<StatusTone, string> = {
   default: 'text-ink',
   primary: 'text-primary-700 dark:text-primary-400',
   success: 'text-emerald-700 dark:text-emerald-400',
-  warning: 'text-amber-700 dark:text-amber-400',
+  warning: 'text-amber-800 dark:text-amber-400',
   danger: 'text-red-700 dark:text-red-400',
   info: 'text-sky-700 dark:text-sky-400',
 };

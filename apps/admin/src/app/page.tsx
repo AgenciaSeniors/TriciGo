@@ -429,7 +429,7 @@ function toneBadge(tone: 'default' | 'primary' | 'success' | 'warning' | 'danger
     case 'success':
       return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400';
     case 'warning':
-      return 'bg-amber-500/10 text-amber-700 dark:text-amber-400';
+      return 'bg-amber-500/10 text-amber-800 dark:text-amber-400';
     case 'danger':
       return 'bg-red-500/10 text-red-700 dark:text-red-400';
     case 'info':
