@@ -1,0 +1,309 @@
+-- Scaffold for the 00609 rehearsal: the LIVE production shapes of users,
+-- corporate_accounts, driver_fleets and fleet_members, their RLS policies and
+-- grants, and every function a fleet owner's writes on them run, transcribed
+-- on 2026-10-05 from pg_get_functiondef, pg_policies, pg_trigger, pg_indexes
+-- and information_schema. Each function body is byte for byte the one running
+-- in prod: run.sh checks md5(prosrc) and length against the values read there,
+-- and each function keeps its prod ACL. auth.users and public.users keep only
+-- the columns these paths read. RLS is on, so the tests run each call as
+-- `authenticated` with JWT claims, the way PostgREST does. Everything is owned
+-- by a role `postgres` that is NOT a superuser and has BYPASSRLS, as in prod:
+-- run.sh applies the migration as that role, and the ACLs read exactly like
+-- prod's.
+-- Left out: corporate_accounts' two UPDATE triggers (no test updates an
+-- account), the corporate_employees policies (no test runs as a corporate
+-- employee, and driver_fleets' policies only look at created_by), and the
+-- fleet linking triggers of 00595/00598 (no test signs anyone up or approves
+-- a member).
+-- driver_fleets, fleet_members and corporate_accounts had 0 rows in prod.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN CREATE ROLE postgres NOLOGIN BYPASSRLS; END IF;
+END $$;
+GRANT anon, authenticated, service_role, postgres TO pgtest;
+
+CREATE SCHEMA IF NOT EXISTS auth;
+GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
+GRANT USAGE, CREATE ON SCHEMA public, auth TO postgres;
+SET ROLE postgres;
+
+-- LIVE (md5 cdef18c6…, 176)
+CREATE OR REPLACE FUNCTION auth.uid()
+ RETURNS uuid
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select 
+  coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+  )::uuid
+$function$;
+GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+
+CREATE TYPE public.user_role AS ENUM ('customer', 'driver', 'admin', 'super_admin');
+
+-- GoTrue's table, trimmed. GoTrue stores phones as E.164 digits without '+'.
+-- No grant to anon/authenticated, as in prod.
+CREATE TABLE auth.users (
+  id                 uuid PRIMARY KEY,
+  phone              text DEFAULT NULL,
+  phone_confirmed_at timestamptz
+);
+CREATE UNIQUE INDEX users_phone_key ON auth.users USING btree (phone);
+
+-- LIVE public.users, trimmed to what these paths read. Since 00605 clients
+-- have no INSERT grant and no INSERT policy on it.
+CREATE TABLE public.users (
+  id         uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  phone      text,
+  role       public.user_role NOT NULL DEFAULT 'customer',
+  is_active  boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT users_phone_not_blank CHECK (((phone IS NULL) OR (btrim(phone) <> ''::text)))
+);
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, UPDATE, DELETE ON public.users TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO service_role;
+
+-- LIVE (md5 cb4a7c12…, 103). ACL {postgres, authenticated, service_role}.
+CREATE OR REPLACE FUNCTION public.current_user_role()
+ RETURNS user_role
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+  SELECT COALESCE(
+    (SELECT role FROM users WHERE id = auth.uid()),
+    'customer'::user_role
+  );
+$function$;
+REVOKE EXECUTE ON FUNCTION public.current_user_role() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.current_user_role() TO authenticated, service_role;
+
+-- LIVE (00592, md5 22cb75e9…, 285). ACL {PUBLIC, postgres, anon, authenticated, service_role}.
+CREATE OR REPLACE FUNCTION public.is_admin()
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+BEGIN
+  -- No JWT subject: anon, service role, cron, triggers without a user. None of
+  -- them is an admin, and anon may not even call current_user_role().
+  IF auth.uid() IS NULL THEN
+    RETURN false;
+  END IF;
+  RETURN public.current_user_role() IN ('admin', 'super_admin');
+END;
+$function$;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated, service_role;
+
+-- LIVE users policies (00605 removed users_insert_own)
+CREATE POLICY users_admin_select ON public.users FOR SELECT USING (is_admin());
+CREATE POLICY users_select_own ON public.users FOR SELECT USING ((id = ( SELECT auth.uid() AS uid)) OR is_admin());
+CREATE POLICY users_update_own ON public.users FOR UPDATE USING (id = ( SELECT auth.uid() AS uid));
+
+-- LIVE corporate_accounts: every column and constraint.
+CREATE TABLE public.corporate_accounts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  contact_phone text NOT NULL,
+  contact_email text,
+  tax_id text,
+  status text NOT NULL DEFAULT 'pending'::text,
+  created_by uuid NOT NULL,
+  monthly_budget_trc integer NOT NULL DEFAULT 0,
+  per_ride_cap_trc integer NOT NULL DEFAULT 0,
+  allowed_service_types text[] DEFAULT '{}'::text[],
+  allowed_hours_start time without time zone,
+  allowed_hours_end time without time zone,
+  current_month_spent integer NOT NULL DEFAULT 0,
+  approved_at timestamp with time zone,
+  suspended_at timestamp with time zone,
+  suspended_reason text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  commission_percent numeric(5,2) DEFAULT NULL::numeric,
+  is_fleet_owner boolean NOT NULL DEFAULT false,
+  CONSTRAINT corporate_accounts_pkey PRIMARY KEY (id),
+  CONSTRAINT corporate_accounts_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id),
+  CONSTRAINT corporate_accounts_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'suspended'::text, 'rejected'::text])))
+);
+ALTER TABLE public.corporate_accounts ADD CONSTRAINT corporate_accounts_commission_range
+  CHECK (((commission_percent IS NULL) OR ((commission_percent >= (0)::numeric) AND (commission_percent <= (100)::numeric)))) NOT VALID;
+ALTER TABLE public.corporate_accounts ENABLE ROW LEVEL SECURITY;
+
+-- LIVE (00434, md5 16d3e412…, 455). ACL {PUBLIC, postgres, service_role}.
+CREATE OR REPLACE FUNCTION public.tg_corporate_accounts_protect_insert()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  IF is_admin() THEN RETURN NEW; END IF;
+  IF auth.uid() IS NULL THEN RETURN NEW; END IF;
+  IF current_setting('app.trusted_corporate_update', true) = '1' THEN RETURN NEW; END IF;
+
+  NEW.status              := 'pending';
+  NEW.is_fleet_owner      := false;
+  NEW.commission_percent  := NULL;
+  NEW.current_month_spent := 0;
+  NEW.approved_at         := NULL;
+  NEW.suspended_at        := NULL;
+  NEW.suspended_reason    := NULL;
+  RETURN NEW;
+END;
+$function$;
+GRANT EXECUTE ON FUNCTION public.tg_corporate_accounts_protect_insert() TO service_role;
+CREATE TRIGGER trg_corporate_accounts_protect_insert BEFORE INSERT ON public.corporate_accounts
+  FOR EACH ROW EXECUTE FUNCTION tg_corporate_accounts_protect_insert();
+
+-- LIVE corporate_accounts policies. corporate_accounts_corp_admin_update and
+-- corporate_accounts_employee_read need corporate_employees and no test runs
+-- as a corporate employee, so they are left out.
+CREATE POLICY corporate_accounts_admin_read ON public.corporate_accounts FOR SELECT TO authenticated
+  USING (EXISTS ( SELECT 1 FROM users WHERE ((users.id = auth.uid()) AND (users.role = ANY (ARRAY['admin'::user_role, 'super_admin'::user_role])))));
+CREATE POLICY corporate_accounts_admin_update ON public.corporate_accounts FOR UPDATE TO authenticated
+  USING (EXISTS ( SELECT 1 FROM users WHERE ((users.id = auth.uid()) AND (users.role = ANY (ARRAY['admin'::user_role, 'super_admin'::user_role])))));
+CREATE POLICY corporate_accounts_creator_read ON public.corporate_accounts FOR SELECT TO authenticated
+  USING (created_by = auth.uid());
+CREATE POLICY corporate_accounts_insert ON public.corporate_accounts FOR INSERT TO authenticated
+  WITH CHECK (created_by = auth.uid());
+
+-- LIVE driver_fleets (00246 + 00602's city): one fleet per corporate account.
+-- The owner's UPDATE policy has no WITH CHECK, so its USING is also the check
+-- on the new row: a fleet can move to any account the owner created.
+CREATE TABLE public.driver_fleets (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  corporate_account_id uuid NOT NULL,
+  name text NOT NULL,
+  vehicle_count_estimate integer,
+  vehicle_types text[] DEFAULT '{}'::text[],
+  operating_zones text[] DEFAULT '{}'::text[],
+  estimated_rides_per_day_per_vehicle integer,
+  operating_hours_start time without time zone,
+  operating_hours_end time without time zone,
+  notes text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  city text,
+  CONSTRAINT driver_fleets_pkey PRIMARY KEY (id),
+  CONSTRAINT driver_fleets_corporate_account_id_key UNIQUE (corporate_account_id),
+  CONSTRAINT driver_fleets_corporate_account_id_fkey FOREIGN KEY (corporate_account_id) REFERENCES corporate_accounts(id) ON DELETE CASCADE,
+  CONSTRAINT driver_fleets_city_length CHECK (((city IS NULL) OR ((char_length(city) >= 1) AND (char_length(city) <= 120))))
+);
+ALTER TABLE public.driver_fleets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY driver_fleets_admin_delete ON public.driver_fleets FOR DELETE USING (is_admin());
+CREATE POLICY driver_fleets_owner_insert ON public.driver_fleets FOR INSERT
+  WITH CHECK (corporate_account_id IN ( SELECT corporate_accounts.id FROM corporate_accounts WHERE (corporate_accounts.created_by = auth.uid())));
+CREATE POLICY driver_fleets_owner_select ON public.driver_fleets FOR SELECT
+  USING (is_admin() OR (corporate_account_id IN ( SELECT corporate_accounts.id FROM corporate_accounts WHERE (corporate_accounts.created_by = auth.uid()))));
+CREATE POLICY driver_fleets_owner_update ON public.driver_fleets FOR UPDATE
+  USING (is_admin() OR (corporate_account_id IN ( SELECT corporate_accounts.id FROM corporate_accounts WHERE (corporate_accounts.created_by = auth.uid()))));
+
+-- LIVE (00246, md5 301a8849…, 52). ACL {postgres, service_role}.
+CREATE OR REPLACE FUNCTION public.trg_driver_fleets_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$function$;
+REVOKE EXECUTE ON FUNCTION public.trg_driver_fleets_updated_at() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.trg_driver_fleets_updated_at() TO service_role;
+CREATE TRIGGER driver_fleets_updated_at BEFORE UPDATE ON public.driver_fleets
+  FOR EACH ROW EXECUTE FUNCTION trg_driver_fleets_updated_at();
+
+-- LIVE fleet_members: unique only on (fleet_id, driver_phone) as typed. The
+-- owner's UPDATE policy has no WITH CHECK, and authenticated can UPDATE every column.
+CREATE TABLE public.fleet_members (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  fleet_id uuid NOT NULL,
+  driver_id uuid,
+  driver_name text NOT NULL,
+  driver_phone text NOT NULL,
+  driver_email text,
+  driver_license_number text,
+  driver_id_number text,
+  status text NOT NULL DEFAULT 'pending_review'::text,
+  license_doc_path text,
+  added_at timestamp with time zone NOT NULL DEFAULT now(),
+  reviewed_at timestamp with time zone,
+  reviewed_by uuid,
+  rejected_reason text,
+  signed_up_at timestamp with time zone,
+  CONSTRAINT fleet_members_pkey PRIMARY KEY (id),
+  CONSTRAINT fleet_members_fleet_id_driver_phone_key UNIQUE (fleet_id, driver_phone),
+  CONSTRAINT fleet_members_fleet_id_fkey FOREIGN KEY (fleet_id) REFERENCES driver_fleets(id) ON DELETE CASCADE,
+  CONSTRAINT fleet_members_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fleet_members_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES users(id),
+  CONSTRAINT fleet_members_status_check CHECK ((status = ANY (ARRAY['pending_review'::text, 'approved'::text, 'rejected'::text, 'pending_signup'::text, 'active'::text, 'inactive'::text])))
+);
+CREATE INDEX fleet_members_phone_idx ON public.fleet_members USING btree (driver_phone);
+CREATE INDEX fleet_members_driver_id_idx ON public.fleet_members USING btree (driver_id);
+CREATE INDEX fleet_members_status_idx ON public.fleet_members USING btree (status);
+ALTER TABLE public.fleet_members ENABLE ROW LEVEL SECURITY;
+CREATE POLICY fleet_members_owner_delete ON public.fleet_members FOR DELETE
+  USING (is_admin() OR (fleet_id IN ( SELECT df.id FROM (driver_fleets df JOIN corporate_accounts ca ON ((ca.id = df.corporate_account_id))) WHERE (ca.created_by = auth.uid()))));
+CREATE POLICY fleet_members_owner_insert ON public.fleet_members FOR INSERT
+  WITH CHECK (fleet_id IN ( SELECT df.id FROM (driver_fleets df JOIN corporate_accounts ca ON ((ca.id = df.corporate_account_id))) WHERE (ca.created_by = auth.uid())));
+CREATE POLICY fleet_members_owner_or_admin_update ON public.fleet_members FOR UPDATE
+  USING (is_admin() OR (fleet_id IN ( SELECT df.id FROM (driver_fleets df JOIN corporate_accounts ca ON ((ca.id = df.corporate_account_id))) WHERE (ca.created_by = auth.uid()))));
+CREATE POLICY fleet_members_owner_or_self_select ON public.fleet_members FOR SELECT
+  USING (is_admin() OR (driver_id = auth.uid()) OR (fleet_id IN ( SELECT df.id FROM (driver_fleets df JOIN corporate_accounts ca ON ((ca.id = df.corporate_account_id))) WHERE (ca.created_by = auth.uid()))));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.corporate_accounts, public.driver_fleets, public.fleet_members TO anon, authenticated, service_role;
+
+-- LIVE (00600, md5 2b65b4b8…, 1405). ACL {PUBLIC, postgres, service_role}.
+CREATE OR REPLACE FUNCTION public.tg_fleet_members_protect()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  IF is_admin() THEN RETURN NEW; END IF;
+  IF auth.uid() IS NULL THEN RETURN NEW; END IF;
+  IF current_setting('app.trusted_fleet_update', true) = '1' THEN RETURN NEW; END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    NEW.status          := 'pending_review';
+    NEW.driver_id       := NULL;
+    NEW.signed_up_at    := NULL;
+    NEW.reviewed_at     := NULL;
+    NEW.reviewed_by     := NULL;
+    NEW.rejected_reason := NULL;
+    RETURN NEW;
+  ELSE
+    NEW.status       := OLD.status;
+    NEW.driver_id    := OLD.driver_id;
+    NEW.signed_up_at := OLD.signed_up_at;
+    NEW.reviewed_at  := OLD.reviewed_at;
+    NEW.reviewed_by  := OLD.reviewed_by;
+    -- 00600: the rejection reason is the admin's text. Once the admin has
+    -- reviewed the invitation, what they reviewed and the fleet it is for
+    -- stay as reviewed; to change them, the owner deletes it and invites again.
+    NEW.rejected_reason := OLD.rejected_reason;
+    IF OLD.status IS DISTINCT FROM 'pending_review' THEN
+      NEW.fleet_id              := OLD.fleet_id;
+      NEW.driver_name           := OLD.driver_name;
+      NEW.driver_phone          := OLD.driver_phone;
+      NEW.driver_email          := OLD.driver_email;
+      NEW.driver_license_number := OLD.driver_license_number;
+      NEW.driver_id_number      := OLD.driver_id_number;
+      NEW.license_doc_path      := OLD.license_doc_path;
+    END IF;
+    RETURN NEW;
+  END IF;
+END;
+$function$;
+GRANT EXECUTE ON FUNCTION public.tg_fleet_members_protect() TO service_role;
+CREATE TRIGGER trg_fleet_members_protect BEFORE INSERT OR UPDATE ON public.fleet_members
+  FOR EACH ROW EXECUTE FUNCTION tg_fleet_members_protect();
+RESET ROLE;
