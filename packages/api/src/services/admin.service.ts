@@ -2538,24 +2538,6 @@ export const adminService = {
   },
 
   /**
-   * Grant N grace trips (rides where commission is waived) to a driver.
-   */
-  async grantGraceTrips(driverUserId: string, trips: number, reason: string): Promise<{ trips_added: number; new_total: number }> {
-    const supabase = getSupabaseClient();
-    const { data: { user: admin } } = await supabase.auth.getUser();
-    if (!admin) throw new Error('Admin not authenticated');
-
-    const { data, error } = await supabase.rpc('admin_grant_grace_trips', {
-      p_driver_user_id: driverUserId,
-      p_trips: trips,
-      p_admin_user_id: admin.id,
-      p_reason: reason,
-    });
-    if (error) throw error;
-    return data as { trips_added: number; new_total: number };
-  },
-
-  /**
    * Fire-and-forget business email notification for significant wallet movements.
    * Hits the notify-business-movement edge function. Fails silently.
    */
