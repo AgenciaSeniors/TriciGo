@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
 import { maskPhone } from '@tricigo/utils';
 import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
@@ -364,9 +364,78 @@ describe('rideService.removeSplitInvite', () => {
   });
 });
 
-describe('rideService.declineSplitInvite', () => {
+describe('rideService.declineSplitInvite (decline_split_invite RPC, migration 00617)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRpc.mockReset();
+  });
+  afterEach(() => {
+    mockRpc.mockReset();
+  });
+
+  it('declines through the RPC, which locks the ride like an invite, and reads no table', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'declined', error: null });
+
+    await rideService.declineSplitInvite('split-1', 'u-2');
+
+    expect(mockRpc).toHaveBeenCalledWith('decline_split_invite', { p_split_id: 'split-1' });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('succeeds when the invite was already gone (withdrawn, or the ride ended)', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'gone', error: null });
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).resolves.toBeUndefined();
+  });
+
+  it('says so when the invite was accepted in the meantime', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'accepted', error: null });
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      code: 'SPLIT_ALREADY_ACCEPTED',
+    });
+  });
+
+  it('fails instead of pretending when the server kept the invite', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'kept', error: null });
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      code: 'SPLIT_DECLINE_FAILED',
+    });
+  });
+
+  it('fails on an answer it does not know', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: null });
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      code: 'SPLIT_DECLINE_FAILED',
+    });
+  });
+
+  it('throws the RPC error and does not fall back to a direct delete', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'not signed in' } });
+
+    await expect(rideService.declineSplitInvite('split-1', 'u-2')).rejects.toMatchObject({
+      message: 'not signed in',
+    });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe('rideService.declineSplitInvite (before migration 00617: direct delete)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRpc.mockReset();
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'PGRST202',
+        message: 'Could not find the function public.decline_split_invite(p_split_id) in the schema cache',
+      },
+    });
+  });
+  afterEach(() => {
+    mockRpc.mockReset();
   });
 
   /** from('ride_splits').delete().eq().eq().is().select() resolving to `result` */
