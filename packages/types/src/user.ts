@@ -27,9 +27,21 @@ export interface User {
   last_cancellation_at: string | null;
   is_active: boolean;
   sms_notifications_enabled: boolean;
+  /**
+   * 00616: consent to marketing by WhatsApp, SMS and email. `null` = never asked
+   * (users who registered before the question existed). Optional because a cached
+   * user, or a database without 00616, has no such field.
+   */
+  marketing_opt_in?: boolean | null;
+  /** Server time of the current choice; the database stamps it. */
+  marketing_opt_in_at?: string | null;
+  marketing_opt_in_source?: MarketingOptInSource | null;
   created_at: string;
   updated_at: string;
 }
+
+/** Where the marketing consent was given or withdrawn. */
+export type MarketingOptInSource = 'signup' | 'prompt' | 'settings';
 
 export interface SavedLocation {
   label: string;

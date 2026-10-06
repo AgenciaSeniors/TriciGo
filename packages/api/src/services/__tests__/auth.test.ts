@@ -212,6 +212,46 @@ describe('authService', () => {
     });
   });
 
+  // ==================== setMarketingOptIn ====================
+  describe('setMarketingOptIn', () => {
+    function mockUsersUpdate(result: { data: unknown; error: unknown }) {
+      const mockSingle = vi.fn().mockResolvedValue(result);
+      const mockSelect = vi.fn(() => ({ single: mockSingle }));
+      const mockEq = vi.fn(() => ({ select: mockSelect }));
+      const mockUpdate = vi.fn(() => ({ eq: mockEq }));
+      mockFrom.mockReturnValueOnce({ update: mockUpdate });
+      return { mockUpdate, mockEq };
+    }
+
+    it('writes the choice and where it was made, and returns the updated user', async () => {
+      const updated = { id: 'u-1', marketing_opt_in: true, marketing_opt_in_source: 'signup' };
+      const { mockUpdate, mockEq } = mockUsersUpdate({ data: updated, error: null });
+
+      const result = await authService.setMarketingOptIn('u-1', true, 'signup');
+
+      expect(mockFrom).toHaveBeenCalledWith('users');
+      expect(mockUpdate).toHaveBeenCalledWith({ marketing_opt_in: true, marketing_opt_in_source: 'signup' });
+      expect(mockEq).toHaveBeenCalledWith('id', 'u-1');
+      expect(result).toEqual(updated);
+    });
+
+    it('returns null while the consent columns do not exist yet (migration 00616 not applied)', async () => {
+      mockUsersUpdate({
+        data: null,
+        error: { code: 'PGRST204', message: "Could not find the 'marketing_opt_in' column of 'users' in the schema cache" },
+      });
+
+      await expect(authService.setMarketingOptIn('u-1', false, 'prompt')).resolves.toBeNull();
+    });
+
+    it('throws any other error', async () => {
+      const err = { code: '42501', message: 'permission denied for table users' };
+      mockUsersUpdate({ data: null, error: err });
+
+      await expect(authService.setMarketingOptIn('u-1', true, 'settings')).rejects.toEqual(err);
+    });
+  });
+
   // ==================== signOut ====================
   describe('signOut', () => {
     it('calls supabase auth.signOut', async () => {
