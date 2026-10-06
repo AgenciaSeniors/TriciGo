@@ -142,7 +142,28 @@ Deno.serve(async (req: Request) => {
     console.warn('[search-places-google] cache_get failed:', e);
   }
 
+  // ── Budget cap check ──
+  try {
+    const { data: dailyCount, error: capErr } = await supabase.rpc('google_cache_daily_count');
+    const cap = parseInt(Deno.env.get('GOOGLE_DAILY_CAP') ?? String(DEFAULT_DAILY_CAP), 10);
+    if (!capErr && typeof dailyCount === 'number' && dailyCount >= cap) {
+      console.warn(`[search-places-google] daily cap reached: ${dailyCount}/${cap} → fallback`);
+      return jsonResponse({
+        data: [],
+        source: 'google',
+        fallback: 'mapbox',
+        reason: 'budget_cap',
+        cap_remaining: 0,
+      }, 200);
+    }
+  } catch (e) {
+    console.warn('[search-places-google] daily_count check failed:', e);
+    // Don't block on counter errors — fail open (call Google anyway)
+  }
+
   // ── Per-user budget (live calls only; cache hits above are free) ──
+  // Checked after the shared cap so a request the cap already refuses does
+  // not also spend the caller's own allowance.
   // The daily cap below is shared by everyone, and each live call can fan out
   // to 1 autocomplete + up to 20 Place Details requests. Without a per-user
   // limit one account could spend the whole day's Google budget by varying
@@ -163,25 +184,6 @@ Deno.serve(async (req: Request) => {
       reason: 'budget_cap',
       cap_remaining: 0,
     }, 200);
-  }
-
-  // ── Budget cap check ──
-  try {
-    const { data: dailyCount, error: capErr } = await supabase.rpc('google_cache_daily_count');
-    const cap = parseInt(Deno.env.get('GOOGLE_DAILY_CAP') ?? String(DEFAULT_DAILY_CAP), 10);
-    if (!capErr && typeof dailyCount === 'number' && dailyCount >= cap) {
-      console.warn(`[search-places-google] daily cap reached: ${dailyCount}/${cap} → fallback`);
-      return jsonResponse({
-        data: [],
-        source: 'google',
-        fallback: 'mapbox',
-        reason: 'budget_cap',
-        cap_remaining: 0,
-      }, 200);
-    }
-  } catch (e) {
-    console.warn('[search-places-google] daily_count check failed:', e);
-    // Don't block on counter errors — fail open (call Google anyway)
   }
 
   // ── Call Google ──

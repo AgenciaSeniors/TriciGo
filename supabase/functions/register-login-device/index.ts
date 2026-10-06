@@ -19,8 +19,8 @@
 // call use the service role. Best-effort: any failure returns 200 so a
 // flaky device-check never blocks the user's login.
 //
-// Self-contained on purpose (only the remote supabase-js import, no
-// ../_shared/* deps) so it deploys as a single file.
+// Imports ../_shared/service-key.ts and ../_shared/rate-limiter.ts, so it
+// deploys with them (CLI, or MCP with all three files).
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey } from '../_shared/service-key.ts';
