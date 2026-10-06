@@ -8,6 +8,7 @@ import { colors } from '@tricigo/theme';
 import { useDriverRideStore } from '@/stores/ride.store';
 import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
 import { UpdateAvailableSheet } from '@/components/UpdateAvailableSheet';
+import { MarketingConsentSheet } from '@/components/MarketingConsentSheet';
 
 export default function TabLayout() {
   const { t } = useTranslation('driver');
@@ -100,6 +101,7 @@ export default function TabLayout() {
       </Tabs>
       <NotificationPermissionSheet />
       <UpdateAvailableSheet />
+      <MarketingConsentSheet />
     </>
   );
 }
