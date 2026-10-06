@@ -228,7 +228,7 @@ export default function AdminReceiptsPage() {
                     </td>
                     <td className="px-3 py-2 text-right text-ink font-mono text-[12px]">{formatUsd(r.usd_charged)}</td>
                     <td className="px-3 py-2 text-right text-ink-muted font-mono text-[12px]">-{formatUsd(r.fee_usd)}</td>
-                    <td className="px-3 py-2 text-right text-primary-600 font-mono text-[12px] font-semibold">{formatTc(r.tc_credited)}</td>
+                    <td className="px-3 py-2 text-right text-primary-700 dark:text-primary-600 font-mono text-[12px] font-semibold">{formatTc(r.tc_credited)}</td>
                     <td className="px-3 py-2 text-right text-ink-muted font-mono text-[12px]">{formatCup(r.cup_equivalent)}</td>
                     <td className="px-3 py-2 text-ink text-[12px]">
                       {r.card_brand && r.card_last4

@@ -390,7 +390,7 @@ export default function LiveMapPage() {
         )}
 
         {showDrivers && fleetUnavailable && (
-          <p className="text-xs text-amber-600">
+          <p className="text-xs text-amber-800 dark:text-amber-600">
             {t('live_map.drivers_layer_unavailable', { defaultValue: 'Capa de conductores no disponible' })}
           </p>
         )}

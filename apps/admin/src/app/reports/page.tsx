@@ -361,7 +361,7 @@ export default function ReportsPage() {
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${health.loading ? 'animate-pulse bg-ink-subtle' : health.apiOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('reports.health_api', { defaultValue: 'API' })}</p>
-              <p className={`text-[12.5px] font-semibold ${health.apiOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+              <p className={`text-[12.5px] font-semibold ${health.apiOk ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                 {health.loading ? '…' : health.apiOk ? t('reports.health_ok', { defaultValue: 'Operativa' }) : t('reports.health_down', { defaultValue: 'Caída' })}
               </p>
             </div>
@@ -370,7 +370,7 @@ export default function ReportsPage() {
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${health.loading ? 'animate-pulse bg-ink-subtle' : health.dbOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">{t('reports.health_db', { defaultValue: 'Base de datos' })}</p>
-              <p className={`text-[12.5px] font-semibold ${health.dbOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+              <p className={`text-[12.5px] font-semibold ${health.dbOk ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                 {health.loading ? '…' : health.dbOk ? t('reports.health_ok', { defaultValue: 'Operativa' }) : t('reports.health_down', { defaultValue: 'Caída' })}
               </p>
             </div>
@@ -696,7 +696,7 @@ export default function ReportsPage() {
               </div>
               <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
                 <p className="text-sm text-ink-muted mb-1">{t('reports.pending_redemptions')}</p>
-                <p className="text-2xl font-bold text-yellow-600">{walletStats?.pending_redemptions_count ?? 0}</p>
+                <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-600">{walletStats?.pending_redemptions_count ?? 0}</p>
               </div>
               <div className="bg-surface-elevated rounded-xl p-6 shadow-sm border border-line">
                 <p className="text-sm text-ink-muted mb-1">{t('reports.pending_amount')}</p>

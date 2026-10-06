@@ -128,7 +128,7 @@ export default function WeatherPage() {
               <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${active ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
                 {(weather.multiplier ?? 1).toFixed(2)}x
               </span>
-              <p className={`text-xs mt-1 ${active ? 'text-blue-600' : 'text-green-600'}`}>
+              <p className={`text-xs mt-1 ${active ? 'text-blue-600' : 'text-green-700 dark:text-green-600'}`}>
                 {active
                   ? t('weather.surge_active', { defaultValue: 'Recargo por mal tiempo activo' })
                   : t('weather.surge_inactive', { defaultValue: 'Sin recargo (tiempo normal)' })}

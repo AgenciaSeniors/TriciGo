@@ -161,7 +161,7 @@ export function FilterBar<TId extends string = string>({
             <Filter className="h-3.5 w-3.5" strokeWidth={2} />
             <span>{t('common.filters', { defaultValue: 'Filtros' })}</span>
             {activeFilterCount > 0 && (
-              <span className="rounded-full bg-primary-500 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white">
+              <span className="rounded-full bg-primary-700 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white">
                 {activeFilterCount}
               </span>
             )}

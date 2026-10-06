@@ -109,7 +109,7 @@ export default function CompetitorsPage() {
         if (r.competitor_price_cup == null || r.delta_cup == null) return <span className="text-ink-subtle">—</span>;
         const cheaper = r.cheaper_side === 'tricigo';
         const tie = r.cheaper_side === 'tie';
-        const cls = tie ? 'text-ink-muted' : cheaper ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+        const cls = tie ? 'text-ink-muted' : cheaper ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
         const sign = r.delta_cup > 0 ? '+' : '';
         return <span className={cls}>{sign}{formatCUP(r.delta_cup)}</span>;
       },

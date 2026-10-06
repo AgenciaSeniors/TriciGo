@@ -45,7 +45,7 @@ const TONE_ACCENTS: Record<Tone, { text: string; ring: string; spark: string; fi
     fill: 'rgb(16 185 129 / 0.18)',
   },
   warning: {
-    text: 'text-amber-600 dark:text-amber-400',
+    text: 'text-amber-700 dark:text-amber-400',
     ring: 'ring-amber-500/20',
     spark: 'text-amber-500',
     fill: 'rgb(245 158 11 / 0.18)',

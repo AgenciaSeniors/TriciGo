@@ -364,7 +364,7 @@ export default function PoisAdminPage() {
 
       {/* Table */}
       {error ? (
-        <div className="text-red-600 p-4 bg-red-50 dark:bg-red-900/10 rounded">{error}</div>
+        <div className="text-red-700 dark:text-red-600 p-4 bg-red-50 dark:bg-red-900/10 rounded">{error}</div>
       ) : (
         <DataTable
           rows={pois}

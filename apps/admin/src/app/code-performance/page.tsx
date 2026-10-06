@@ -229,7 +229,7 @@ export default function CodePerformancePage() {
       {
         id: 'rewarded',
         header: t('code_performance.col_rewarded', { defaultValue: 'Premiados' }),
-        cell: (r) => <span className="font-mono text-emerald-600 dark:text-emerald-400" data-tabular>{num(r.rewarded)}</span>,
+        cell: (r) => <span className="font-mono text-emerald-700 dark:text-emerald-400" data-tabular>{num(r.rewarded)}</span>,
         align: 'right',
         sortKey: 'rewarded',
         width: '110px',

@@ -237,7 +237,7 @@ export default function UserDetailPage() {
           {user.role !== 'admin' && user.role !== 'super_admin' && (
             <button
               onClick={() => setDeleteModalOpen(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500 text-red-600 hover:bg-red-50 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-red-500 text-red-700 dark:text-red-600 hover:bg-red-50 transition-colors"
             >
               {t('users.delete_account_btn')}
             </button>
@@ -358,7 +358,7 @@ export default function UserDetailPage() {
             </div>
             <div className="bg-surface-sunken rounded-lg p-4">
               <p className="text-xs text-ink-muted mb-1">{t('users.label_wallet_status')}</p>
-              <p className={`text-lg font-bold ${wallet.is_active ? 'text-green-600' : 'text-red-600'}`}>
+              <p className={`text-lg font-bold ${wallet.is_active ? 'text-green-700 dark:text-green-600' : 'text-red-600'}`}>
                 {wallet.is_active ? t('users.wallet_active') : t('users.wallet_inactive')}
               </p>
             </div>
@@ -386,7 +386,7 @@ export default function UserDetailPage() {
               </div>
               <div className="bg-surface-sunken rounded-lg p-4">
                 <p className="text-xs text-ink-muted mb-1">{t('users.label_wallet_status')}</p>
-                <p className={`text-lg font-bold ${driverWallet.is_frozen ? 'text-red-600' : 'text-green-600'}`}>
+                <p className={`text-lg font-bold ${driverWallet.is_frozen ? 'text-red-600' : 'text-green-700 dark:text-green-600'}`}>
                   {driverWallet.is_frozen
                     ? t('users.wallet_frozen', { defaultValue: 'Congelada' })
                     : t('users.wallet_active')}
@@ -430,7 +430,7 @@ export default function UserDetailPage() {
                           {isSender ? t('users.transfer_sent') : t('users.transfer_received')}
                         </span>
                       </td>
-                      <td className={`px-4 py-3 text-sm font-medium ${isSender ? 'text-red-600' : 'text-green-600'}`}>
+                      <td className={`px-4 py-3 text-sm font-medium ${isSender ? 'text-red-600' : 'text-green-700 dark:text-green-600'}`}>
                         {isSender ? '-' : '+'}{formatCurrency(tx.amount)}
                       </td>
                       <td className="px-4 py-3 text-sm text-ink-muted">
