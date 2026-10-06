@@ -2142,6 +2142,25 @@ Si el diff sale vacío, iOS se puede armar desde `HEAD`.
   El JWT es ES256 con `node:crypto` (`dsaEncoding: 'ieee-p1363'`) y `iat` 60 s atrasado, o da 401. **Trampa de Git Bash:** un argumento que empieza con `/v1/…` sin `?` se convierte en ruta de Windows y el host queda `api.appstoreconnect.apple.comc` (`ENOTFOUND`). Exportar `MSYS_NO_PATHCONV=1` antes de llamar. Si un envío falla a medias, leer las trampas de la memoria `project_apple_ios_launch`: la lista de envíos miente, y un envío huérfano solo se borra desde la web.
 - **Para Play falta una service account.** Crearla en Google Cloud, invitarla en Play Console (Usuarios y permisos) con permiso para gestionar versiones de las dos apps y guardar su JSON como `apps/<app>/google-service-account.json` (ya está en `.gitignore`). Con eso, `eas submit -p android --id <buildId>` sube el `.aab` sin descargarlo. Ojo: por defecto va al track `internal` con `releaseStatus: completed`; para producción sin enviar a revisión, poner `"track": "production", "releaseStatus": "draft"` en el perfil de submit. `eas submit` no carga notas de versión: eso se hace con la API de Play (`edits.tracks.update` con `releaseNotes`).
 
+### Qué versión corre cada instalación: `app_opens` (00622, 2026-10-06)
+
+`user_known_devices.app_version` **no** dice qué versión corre la gente: la escribe `register-login-device` solo al iniciar sesión, y casi nadie vuelve a entrar después de actualizar. El 2026-10-06, los 14 pasajeros activos del último mes figuraban con versiones de 1.0.5 a 1.7.3, cada uno con la de su último login.
+
+Desde 00622, las dos apps llaman a `report_app_open` al arrancar con sesión, después de un login y al volver al frente si pasaron 6 horas desde el último aviso (`useReportAppOpen`, un archivo por app). Se guarda una fila por cuenta, app (`client` o `driver`) e instalación en `public.app_opens`, con la versión y la plataforma de la última apertura.
+
+- **No se puede reusar `register-login-device` para esto.** Con un dispositivo que no conoce, lo registra y, si la cuenta ya tenía otro, manda el correo de "inicio de sesión nuevo". Llamarla al abrir mandaría ese correo sin ningún login, y una apertura registrada antes que el login se comería el aviso de un login real. `report_app_open` no manda correos ni toca `user_known_devices`.
+- **Tabla-candado:** RLS sin políticas, `REVOKE ALL` a `anon` y `authenticated`, GRANT solo a `service_role`. Se lee con SQL o la clave de servicio.
+- **Tope de 20 instalaciones por cuenta y app:** cada reinstalación es un id nuevo. Pasado el tope responde `capped` y no registra nada.
+- **Los builds anteriores a este no avisan.** Una cuenta activa sin fila reciente en `app_opens` está en un build viejo o usa la web, que no avisa.
+
+```sql
+-- Qué versiones abrieron la app en las últimas dos semanas
+SELECT app, app_version, count(*) FROM public.app_opens
+WHERE last_opened_at > now() - interval '14 days' GROUP BY 1, 2 ORDER BY 1, 2;
+```
+
+La revisión semanal que decide cuándo borrar `split_delete` (00620) usa esta tabla. Ensayo: `supabase/tests/00622/run.sh` (RED: 11 fallos; GREEN 24/24, en los dos modos de permisos: el de prod hasta el 30/10 y el de después).
+
 ### Worktrees compartidos: sesiones paralelas pueden cambiar tu rama (verificado 2026-06-04)
 
 Un worktree (`.claude/worktrees/<x>`) puede estar en uso por **varias sesiones**. Una sesión paralela puede hacer **checkout de otra rama** en tu worktree detrás tuyo: tu commit queda en la rama vieja, el working tree salta de rama, y tus cambios sin commitear cuelgan en la rama equivocada. **Antes de commitear/pushear SIEMPRE `git branch --show-current` + `git log -1`.**

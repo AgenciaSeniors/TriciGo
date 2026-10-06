@@ -9,6 +9,22 @@ export interface RegisterLoginDeviceInput {
   app_version?: string | null;
 }
 
+/** What a mobile app sends each time it is opened (report_app_open, migration 00622). */
+export interface ReportAppOpenInput {
+  app: 'client' | 'driver';
+  /** The same per-install id the app sends at login. */
+  device_id: string;
+  app_version: string | null;
+  platform: string | null;
+}
+
+/**
+ * 'recorded' (a new install), 'updated', 'capped' (the account already has 20
+ * installs of that app), 'invalid', or 'unavailable' while migration 00622 is
+ * not applied.
+ */
+export type ReportAppOpenOutcome = 'recorded' | 'updated' | 'capped' | 'invalid' | 'unavailable';
+
 /** A device row recorded in user_known_devices (returned by listMyDevices). */
 export interface KnownDevice {
   id: string;
@@ -38,6 +54,33 @@ export const deviceService = {
       body: input,
     });
     if (error) throw error;
+  },
+
+  /**
+   * Record that this app was opened, with its version (report_app_open,
+   * migration 00622). Unlike registerLoginDevice it never emails and never
+   * touches user_known_devices, so it is safe on every open: it only keeps
+   * one row per account, app and install in app_opens, which is how we tell
+   * which builds are still in use.
+   *
+   * Fire-and-forget from the apps. Resolves 'unavailable' while the
+   * migration is not applied; throws any other error.
+   */
+  async reportAppOpen(input: ReportAppOpenInput): Promise<ReportAppOpenOutcome> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('report_app_open', {
+      p_app: input.app,
+      p_device_id: input.device_id,
+      p_app_version: input.app_version ?? null,
+      p_platform: input.platform ?? null,
+    });
+    if (error) {
+      if (error.code === 'PGRST202' || /could not find the function/i.test(error.message ?? '')) {
+        return 'unavailable';
+      }
+      throw error;
+    }
+    return data as ReportAppOpenOutcome;
   },
 
   /**

@@ -38,6 +38,7 @@ import { useDynamicOfflineMap } from '@/hooks/useDynamicOfflineMap';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
 import { registerForPushNotifications } from '@/services/push.service';
 import { useRideInit } from '@/hooks/useRide';
+import { useReportAppOpen } from '@/hooks/useReportAppOpen';
 import '../global.css';
 
 // Silence known-benign runtime warnings (ExpoKeepAwake / expo-av / SafeAreaView
@@ -152,6 +153,9 @@ function RootNavigator() {
   // watcher was inside NativeHomeScreen and died on tab change, leaving
   // stale local state that the watcher would have cleared.
   useRideInit();
+
+  // Report this open with the app version (who still runs which build).
+  useReportAppOpen();
 
   const router = useRouter();
   const navRef = useNavigationContainerRef();

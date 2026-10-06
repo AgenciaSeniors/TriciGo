@@ -6,9 +6,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // would otherwise expose every user's devices on the personal "Tus
 // dispositivos" screen.
 const mockFrom = vi.fn();
+const mockRpc = vi.fn();
 const mockGetUser = vi.fn();
 const mockSupabase = {
   from: mockFrom,
+  rpc: mockRpc,
   auth: { getUser: mockGetUser },
 };
 
@@ -90,6 +92,53 @@ describe('deviceService', () => {
 
       await expect(deviceService.revokeDevice('dev-1')).rejects.toThrow();
       expect(mockFrom).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reportAppOpen', () => {
+    const input = { app: 'client' as const, device_id: 'dev-1', app_version: '1.7.4', platform: 'android' };
+
+    it('reports through report_app_open and never touches user_known_devices', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'recorded', error: null });
+
+      const outcome = await deviceService.reportAppOpen(input);
+
+      expect(outcome).toBe('recorded');
+      expect(mockRpc).toHaveBeenCalledWith('report_app_open', {
+        p_app: 'client',
+        p_device_id: 'dev-1',
+        p_app_version: '1.7.4',
+        p_platform: 'android',
+      });
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('passes a missing version or platform as null', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'updated', error: null });
+
+      await deviceService.reportAppOpen({ app: 'driver', device_id: 'dev-2', app_version: null, platform: null });
+
+      expect(mockRpc).toHaveBeenCalledWith('report_app_open', {
+        p_app: 'driver',
+        p_device_id: 'dev-2',
+        p_app_version: null,
+        p_platform: null,
+      });
+    });
+
+    it("answers 'unavailable' while the migration is not applied", async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST202', message: 'Could not find the function public.report_app_open in the schema cache' },
+      });
+
+      await expect(deviceService.reportAppOpen(input)).resolves.toBe('unavailable');
+    });
+
+    it('throws any other error', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'not signed in' } });
+
+      await expect(deviceService.reportAppOpen(input)).rejects.toMatchObject({ message: 'not signed in' });
     });
   });
 });

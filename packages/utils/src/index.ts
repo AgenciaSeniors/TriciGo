@@ -118,6 +118,8 @@ export { logger, setLogContext, clearLogContext } from './logger';
 // Crash-proof star-rating formatter (rating_avg can be null for new accounts).
 export { formatRating } from './rating';
 export { isVersionOutdated } from './version';
+export { shouldReportAppOpen, APP_OPEN_REPORT_INTERVAL_MS } from './appOpen';
+export type { AppOpenReport } from './appOpen';
 export { offlineQueue } from './offlineQueue';
 export { fuzzyMatch, stripAccents } from './fuzzyMatch';
 export { SHARE_BASE_URL, buildShareUrl } from './shareRide';
