@@ -216,7 +216,7 @@ export default function PersonalInfoScreen() {
       Toast.show({
         type: 'success',
         text1: t('onboarding.referral_applied_title', { defaultValue: 'Código de referido aplicado' }),
-        text2: t('onboarding.referral_applied_body', { defaultValue: 'El bono se acreditará cuando tu cuenta sea aprobada.' }),
+        text2: t('onboarding.referral_applied_body', { defaultValue: 'El bono se acreditará cuando completes tu primer viaje.' }),
       });
     } catch (err) {
       Toast.show({
@@ -700,7 +700,7 @@ export default function PersonalInfoScreen() {
                       {t('onboarding.referral_title', { defaultValue: '¿Te invitó alguien? (opcional)' })}
                     </Text>
                     <Text variant="caption" color="secondary" className="mt-1" style={{ color: midnightEmber.map.text.secondary }}>
-                      {t('onboarding.referral_hint', { defaultValue: 'Ingresa el código de referido de quien te invitó. Aplícalo antes de que aprobemos tu cuenta.' })}
+                      {t('onboarding.referral_hint', { defaultValue: 'Ingresa el código de referido de quien te invitó. Aplícalo antes de tu primer viaje.' })}
                     </Text>
                     <View className="mt-3">
                       <Input
