@@ -6,7 +6,7 @@ import { Button } from '@tricigo/ui/Button';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService } from '@tricigo/api';
-import { formatTRC } from '@tricigo/utils';
+import { formatTRC, splitAmountTrc } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { colors } from '@tricigo/theme';
 import type { RideSplit } from '@tricigo/types';
@@ -17,8 +17,11 @@ interface SplitInviteCardProps {
 }
 
 interface PendingInvite extends RideSplit {
-  ride_pickup_address?: string;
-  ride_estimated_fare_trc?: number;
+  // getMySplitInvites joins the ride via `rides!inner(...)`
+  rides?: {
+    pickup_address?: string;
+    estimated_fare_trc?: number | null;
+  };
   inviter_name?: string;
 }
 
@@ -81,9 +84,8 @@ function SplitInviteCardInner({ onAction }: SplitInviteCardProps) {
     <View className="mb-4">
       {invites.map((invite) => {
         const isProcessing = loading[invite.id] ?? false;
-        const estimatedShare = invite.ride_estimated_fare_trc
-          ? Math.round(invite.ride_estimated_fare_trc * invite.share_pct / 100)
-          : null;
+        const fareTrc = invite.rides?.estimated_fare_trc;
+        const estimatedShare = fareTrc ? splitAmountTrc(fareTrc, invite.share_pct) : null;
 
         return (
           <Card key={invite.id} variant="filled" padding="md" className="mb-2 border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20">
@@ -104,9 +106,9 @@ function SplitInviteCardInner({ onAction }: SplitInviteCardProps) {
             </View>
 
             {/* Ride info */}
-            {invite.ride_pickup_address && (
+            {invite.rides?.pickup_address && (
               <Text variant="caption" color="secondary" className="mb-1" numberOfLines={1}>
-                📍 {invite.ride_pickup_address}
+                📍 {invite.rides.pickup_address}
               </Text>
             )}
 

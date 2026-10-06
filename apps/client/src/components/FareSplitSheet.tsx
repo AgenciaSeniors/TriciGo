@@ -8,8 +8,9 @@ import { Card } from '@tricigo/ui/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '@tricigo/i18n';
 import { rideService, walletService } from '@tricigo/api';
-import { formatTRC } from '@tricigo/utils';
+import { formatTRC, equalSplitSharePct, requesterShareTrc } from '@tricigo/utils';
 import { useRideStore } from '@/stores/ride.store';
+import { withKnownNames } from '@/stores/rideSplits';
 import { useAuthStore } from '@/stores/auth.store';
 import { darkColors } from '@tricigo/theme';
 import { useThemeStore } from '@/stores/theme.store';
@@ -28,14 +29,13 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
   const isDark = resolvedScheme === 'dark';
   const userId = useAuthStore((s) => s.user?.id);
   const splits = useRideStore((s) => s.splits);
-  const { addSplit, removeSplit } = useRideStore();
+  const { addSplit, removeSplit, setSplits } = useRideStore();
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Calculate equal split percentage
-  const totalParticipants = splits.length + 1; // +1 for requester
-  const equalPct = Math.round(10000 / totalParticipants) / 100; // 2 decimal places
-  const myShare = estimatedFareTrc - splits.reduce((sum, s) => sum + Math.round(estimatedFareTrc * s.share_pct / 100), 0);
+  // What the requester pays with the shares the server set (00613): the fare
+  // minus every invitee's part, so the rounding and any withdrawn invite land here.
+  const myShare = requesterShareTrc(estimatedFareTrc, splits);
 
   const handleInvite = async () => {
     if (!phone.trim() || !userId) return;
@@ -65,9 +65,9 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
         return;
       }
 
-      // Calculate new equal share for all participants
-      const newTotal = splits.length + 2; // existing splits + new invite + requester
-      const newPct = Math.round(10000 / newTotal) / 100;
+      // The server gives everyone an equal part and lowers the earlier
+      // invites to it (00613); this is the share it will pick.
+      const newPct = equalSplitSharePct(splits.length + 2); // + the new invitee and the requester
 
       const result = await rideService.createSplitInvite(rideId, invitedUser.id, userId, newPct);
       addSplit({
@@ -76,6 +76,13 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
         user_phone: phone,
       });
       setPhone('');
+      // Read the shares back: the earlier invites just went down.
+      try {
+        const fresh = await rideService.getSplitsForRide(rideId);
+        setSplits(withKnownNames(fresh, useRideStore.getState().splits));
+      } catch {
+        // The realtime UPDATEs bring the new shares too.
+      }
     } catch (err: unknown) {
       const errObj = err as Record<string, unknown> | null;
       if (typeof errObj?.message === 'string' && errObj.message === 'SPLIT_ONLY_TRICICOIN') {
@@ -118,7 +125,7 @@ export function FareSplitSheet({ visible, onClose, rideId, estimatedFareTrc }: F
             {t('ride.split_your_share', { defaultValue: 'Tu parte' })}
           </Text>
           <Text variant="body" className="font-bold">
-            ~{formatTRC(Math.round(estimatedFareTrc / totalParticipants))}
+            ~{formatTRC(myShare)}
           </Text>
         </View>
       </Card>

@@ -176,4 +176,5 @@ export { classifyPushPermission, shouldSpendPushPrompt, describePushError, isRet
 export type { PushPermissionState, PushPermissionSnapshot, PushRegistrationOutcome } from './pushRegistration';
 
 export { SEARCH_TYPICAL_WAIT_S, SEARCH_LONG_WAIT_S, searchWaitStage, searchWaitView } from './searchWait';
+export { equalSplitSharePct, splitAmountTrc, requesterShareTrc } from './fareSplit';
 export type { SearchWaitStage, SearchWaitInput, SearchWaitView } from './searchWait';
