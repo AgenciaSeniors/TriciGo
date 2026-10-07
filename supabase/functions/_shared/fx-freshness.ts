@@ -38,9 +38,9 @@ export interface FxFreshness {
   reason?: 'no_rate' | 'stale' | 'error';
 }
 
-/** Spanish copy shown to the user. Kept identical to the pre-existing wording. */
+/** Spanish copy shown to the user (tuteo, like the rest of TriciGo's copy). */
 export const FX_UNAVAILABLE_DETAIL =
-  'Tipo de cambio USD→CUP no disponible o desactualizado. Intentalo más tarde.';
+  'Tipo de cambio USD→CUP no disponible o desactualizado. Inténtalo más tarde.';
 
 function resolveMaxAgeHours(raw: unknown): number {
   // platform_config.value is jsonb: a bare number arrives as number, but tolerate a

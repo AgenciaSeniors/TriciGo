@@ -38,7 +38,7 @@ export function winBackHtml(data: WinBackData): string {
     </p>
     <p style="margin: 0 0 24px;">
       Pedir un viaje toma 30 segundos. Sin trámites, sin esperas largas — el
-      conductor llega a vos.
+      conductor llega a ti.
     </p>
   `;
 
@@ -51,6 +51,6 @@ export function winBackHtml(data: WinBackData): string {
     body,
     cta: { label: 'Volver a viajar', href: `${WEB_ORIGIN}/book` },
     footerNote:
-      '¿Ya no querés recibir estos correos? Respondé a este mensaje y te damos de baja.',
+      '¿Ya no quieres recibir estos correos? Responde a este mensaje y te damos de baja.',
   });
 }

@@ -100,7 +100,7 @@ export function rideReceiptHtml(data: RideReceiptData): string {
     },
     body,
     footerNote:
-      '¿Algo no cuadra con tu viaje? Respondé a este correo o escribinos a soporte@tricigo.com.',
+      '¿Algo no cuadra con tu viaje? Responde a este correo o escríbenos a soporte@tricigo.com.',
   });
 }
 

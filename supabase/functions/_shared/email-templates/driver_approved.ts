@@ -30,26 +30,26 @@ export function driverApprovedHtml(data: DriverApprovedData): string {
     </p>
     <p style="margin: 0 0 16px;">
       Tu cuenta de conductor en TriciGo fue <strong style="color: ${COLORS.success};">aprobada</strong>.
-      Ya podés conectarte y empezar a recibir viajes.
+      Ya puedes conectarte y empezar a recibir viajes.
     </p>
     <p style="margin: 0 0 8px; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 600; color: ${COLORS.ink};">
       Para empezar:
     </p>
     <ol style="margin: 0 0 8px; padding-left: 20px; color: ${COLORS.text}; line-height: 1.6;">
-      <li style="margin: 0 0 6px;">Abrí la app TriciGo Conductor.</li>
-      <li style="margin: 0 0 6px;">Activá tu disponibilidad para ponerte en línea.</li>
-      <li style="margin: 0 0 6px;">Aceptá tu primer viaje cuando recibas una solicitud.</li>
+      <li style="margin: 0 0 6px;">Abre la app TriciGo Conductor.</li>
+      <li style="margin: 0 0 6px;">Activa tu disponibilidad para ponerte en línea.</li>
+      <li style="margin: 0 0 6px;">Acepta tu primer viaje cuando recibas una solicitud.</li>
     </ol>
   `;
 
   return wrapHtml({
-    preheader: '¡Tu cuenta de conductor fue aprobada! Ya podés conectarte.',
+    preheader: '¡Tu cuenta de conductor fue aprobada! Ya puedes conectarte.',
     hero: {
       title: '¡Cuenta aprobada!',
-      subtitle: 'Ya podés conectarte y recibir viajes.',
+      subtitle: 'Ya puedes conectarte y recibir viajes.',
     },
     body,
     footerNote:
-      '¿Dudas para arrancar? Escribinos a soporte@tricigo.com.',
+      '¿Dudas para arrancar? Escríbenos a soporte@tricigo.com.',
   });
 }

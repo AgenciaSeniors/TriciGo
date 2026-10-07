@@ -58,13 +58,13 @@ export function trustedContactRideStartedHtml(data: TrustedContactRideStartedDat
   `;
 
   return wrapHtml({
-    preheader: `${rider} inició un viaje — seguilo en vivo`,
+    preheader: `${rider} inició un viaje — síguelo en vivo`,
     hero: {
       title: 'Viaje en curso 🚗',
       subtitle: `${rider} está viajando con TriciGo`,
     },
     body,
     cta: url ? { label: 'Ver viaje en vivo', href: url } : undefined,
-    footerNote: 'Recibís este aviso porque sos contacto de confianza. ¿Dudas? Escribinos a soporte@tricigo.com.',
+    footerNote: 'Recibes este aviso porque eres contacto de confianza. ¿Dudas? Escríbenos a soporte@tricigo.com.',
   });
 }

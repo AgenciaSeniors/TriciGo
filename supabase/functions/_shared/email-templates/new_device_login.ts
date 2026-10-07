@@ -28,7 +28,7 @@ export function newDeviceLoginHtml(data: NewDeviceLoginData): string {
   const body = `
     <p style="margin: 0 0 20px;">
       Tu cuenta TriciGo (<strong>${escapeHtml(data.email)}</strong>) se abrió desde un
-      dispositivo que no reconocemos. Si fuiste vos, podés ignorar este mensaje.
+      dispositivo que no reconocemos. Si fuiste tú, puedes ignorar este mensaje.
     </p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 20px; border-collapse: collapse;">
       ${detailRow('Fecha', fallback(data.date), { strong: true })}
@@ -37,16 +37,16 @@ export function newDeviceLoginHtml(data: NewDeviceLoginData): string {
       ${detailRow('Sistema operativo', fallback(data.os), { strong: true })}
     </table>
     <p style="margin: 24px 0 8px; font-family: ${FONT_STACK}; font-size: 16px; font-weight: 600; color: ${COLORS.ink};">
-      ¿No fuiste vos?
+      ¿No fuiste tú?
     </p>
     <p style="margin: 0 0 12px;">
-      Si no reconocés este acceso, tu cuenta podría estar comprometida. Tomá estas
+      Si no reconoces este acceso, tu cuenta podría estar comprometida. Toma estas
       acciones cuanto antes:
     </p>
     <ol style="margin: 0 0 8px; padding-left: 20px; color: ${COLORS.text};">
-      <li style="margin: 0 0 6px;">Restablecé tu contraseña desde la pantalla de inicio de sesión.</li>
-      <li style="margin: 0 0 6px;">Cerrá sesión en todos tus dispositivos desde tu perfil.</li>
-      <li style="margin: 0 0 6px;">Escribinos a <a href="mailto:soporte@tricigo.com" style="color: ${COLORS.primary}; text-decoration: none;">soporte@tricigo.com</a> para reportar el incidente.</li>
+      <li style="margin: 0 0 6px;">Restablece tu contraseña desde la pantalla de inicio de sesión.</li>
+      <li style="margin: 0 0 6px;">Cierra sesión en todos tus dispositivos desde tu perfil.</li>
+      <li style="margin: 0 0 6px;">Escríbenos a <a href="mailto:soporte@tricigo.com" style="color: ${COLORS.primary}; text-decoration: none;">soporte@tricigo.com</a> para reportar el incidente.</li>
     </ol>
   `;
 

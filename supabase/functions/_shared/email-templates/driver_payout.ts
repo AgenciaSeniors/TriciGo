@@ -67,7 +67,7 @@ export function driverPayoutHtml(data: DriverPayoutData): string {
     },
     body,
     footerNote:
-      '¿Algo no cuadra? Escribinos a soporte@tricigo.com.',
+      '¿Algo no cuadra? Escríbenos a soporte@tricigo.com.',
   });
 }
 

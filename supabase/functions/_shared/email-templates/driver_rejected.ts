@@ -40,8 +40,8 @@ export function driverRejectedHtml(data: DriverRejectedData): string {
     </p>
     ${reasonBlock}
     <p style="margin: 16px 0 0; font-family: ${FONT_STACK}; font-size: 14px; color: ${COLORS.text}; line-height: 1.6;">
-      Podés volver a postularte corrigiendo lo indicado. Si creés que se trata
-      de un error, contactanos y lo revisamos.
+      Puedes volver a postularte corrigiendo lo indicado. Si crees que se trata
+      de un error, contáctanos y lo revisamos.
     </p>
   `;
 
@@ -49,10 +49,10 @@ export function driverRejectedHtml(data: DriverRejectedData): string {
     preheader: 'Actualización sobre tu solicitud de conductor en TriciGo.',
     hero: {
       title: 'Actualización de tu solicitud',
-      subtitle: 'Revisá los detalles y volvé a postularte.',
+      subtitle: 'Revisa los detalles y vuelve a postularte.',
     },
     body,
     footerNote:
-      '¿Preguntas sobre tu solicitud? Escribinos a soporte@tricigo.com.',
+      '¿Preguntas sobre tu solicitud? Escríbenos a soporte@tricigo.com.',
   });
 }
