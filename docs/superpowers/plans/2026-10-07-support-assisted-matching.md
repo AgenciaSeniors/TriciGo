@@ -82,6 +82,8 @@ Rules from CLAUDE.md that apply throughout: commits in English with the conventi
 ## Phase 1 — Database (migration 00628)
 
 > **Review fixes (commits `7c888fac` and `3d268749`).** The migration's code blocks in Tasks 3-7, and the `run.sh` code block in Task 2, predate the review fixes of those commits (offers on a type change, the help keepalive patched into `cleanup_orphan_searching_rides`, the alert's e-mail in a block of its own, seven new tests). `supabase/migrations/00628_support_assisted_matching.sql` and `supabase/tests/00628/` are the source of truth; the counts and md5 lists in this plan are theirs.
+>
+> **Second review round (commit `8a067cd6`; admin copy for the new codes in `85315a8b`).** The code blocks of Tasks 2-7 also predate these fixes: "Enviar oferta" refuses an accepted offer row (`offer_already_accepted`), applies the fleet gate and refuses a deactivated driver, like "Asignar directo" (`driver_inactive`); a type change requires cash, TriciCoin or mixed, no split, and for TriciCoin a balance of 1.2 times the new fare; no support action on a ride scheduled for later (`scheduled_not_due`); alert e-mails became a per-minute digest from the cron under one label, `support-alert-email` (the pushes keep `support-help-alert` and `support-wait-alert`), with at most 3 help pushes per rider an hour, no wait alert after a help alert, and failures logged to `rpc_attempt_log`; a refused accept retires the proposal. The suite grew by 23 tests (and the scaffold by a reduced `ride_splits`), and Task 21's prodcheck checks the estimate snapshot right after its INSERT, picks a driver whose account is active, and runs the cron after the help request, where the digest can still list the ride.
 
 ### Task 1: Rehearsal cluster and scaffold
 
@@ -1166,7 +1168,7 @@ chmod +x supabase/tests/00628/run.sh
 supabase/tests/00628/run.sh none | tail -25
 ```
 
-Expected: `L1`, `H9`, `H11`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 5  FAIL 75` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
+Expected: `L1`, `H9`, `H11`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 5  FAIL 98` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
 
 - [ ] **Step 3: Commit**
 
@@ -2548,7 +2550,7 @@ $assert$;
 supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -8
 ```
 
-Expected: no `FAIL` line, and the last line is `PASS 80  FAIL 0`.
+Expected: no `FAIL` line, and the last line is `PASS 103  FAIL 0`.
 
 - [ ] **Step 3: Run the repo's migration checks**
 
@@ -6108,7 +6110,7 @@ supabase/tests/00628/run.sh none | tail -1
 supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -1
 ```
 
-Expected: `PASS 5  FAIL 75`, then `PASS 80  FAIL 0`.
+Expected: `PASS 5  FAIL 98`, then `PASS 103  FAIL 0`.
 
 - [ ] **Step 4: Record the md5 of every function the migration creates or changes**
 
@@ -6182,6 +6184,7 @@ DECLARE
   v_res    jsonb;
   v_out    jsonb := '{}'::jsonb;
   v_n      integer;
+  v_snap   integer;
 BEGIN
   -- A super_admin on purpose: the discount trigger must recompute for one too (the 00628 patch).
   SELECT id INTO v_admin FROM public.users WHERE role = 'super_admin' AND is_active LIMIT 1;
@@ -6190,6 +6193,7 @@ BEGIN
   SELECT dp.id INTO v_driver
   FROM public.driver_profiles dp
   WHERE dp.status = 'approved' AND NOT dp.is_online
+    AND EXISTS (SELECT 1 FROM public.users u WHERE u.id = dp.user_id AND u.is_active)
     AND EXISTS (SELECT 1 FROM public.vehicles v WHERE v.driver_id = dp.id AND v.is_active AND v.type IN ('auto', 'confort'))
     AND NOT EXISTS (SELECT 1 FROM public.rides a WHERE a.driver_id = dp.id
                     AND a.status IN ('accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'))
@@ -6213,6 +6217,15 @@ BEGIN
     2000, 2000, 3200, 900, 1, 'passenger', now() + interval '1 hour');
   UPDATE public.rides SET scheduled_at = NULL, is_scheduled = false, created_at = now() - interval '2 minutes'
    WHERE id = v_ride;
+  -- The INSERT wrote the estimate row, before any type change: tg_rides_create_estimate_snapshot
+  -- now calls _write_ride_estimate_snapshot and swallows its own errors, and the type change
+  -- below would INSERT the row itself, so the end of this block cannot tell.
+  SELECT count(*), max(total) INTO v_n, v_snap FROM public.ride_pricing_snapshots
+   WHERE ride_id = v_ride AND snapshot_type = 'estimate';
+  IF v_n <> 1 OR v_snap IS DISTINCT FROM 2000 THEN
+    RAISE EXCEPTION 'PRODCHECK-FAILED no estimate snapshot after the INSERT: rows=% total=%', v_n, v_snap;
+  END IF;
+  v_out := v_out || jsonb_build_object('snapshot_at_insert', v_snap);
 
   -- 1. The rider asks for help.
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_rider, 'role', 'authenticated')::text, true);
@@ -6220,6 +6233,10 @@ BEGIN
   SET LOCAL ROLE authenticated;
   v_out := v_out || jsonb_build_object('help', public.request_ride_help(v_ride));
   RESET ROLE;
+  -- The help e-mail goes in the cron's next digest, which only lists searching rides: run it now.
+  PERFORM set_config('request.jwt.claims', '', true);
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  PERFORM public.notify_support_waiting_rides();
 
   -- 2. Support sees it and proposes an auto.
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
@@ -6293,12 +6310,13 @@ $prodcheck$;
 ```
 
 Expected: the call fails with an error whose message starts with `PRODCHECK` and holds:
+- `snapshot_at_insert`: `2000` (an error starting with `PRODCHECK-FAILED` is a finding);
 - `help`: `{"success": true, "code": "<8 characters>"}`; `banner`: `1`; `context`: `"searching"`; `auto_candidates`: a number (0 is possible if no auto driver was seen in 7 days); `propose`: `"propose"`; `rider_sees`: `"auto_standard"`;
 - `accept`: `{"success": true, "accepted": true, "service_type": "auto_standard", "fare_cup": <v_auto>}`;
 - `apply`: `"apply"`; `offer`: `"created"` or `"extended"` (dispatch may have offered it already); `assign_offline`: `"not_online"`;
 - `assign`: `{"success": true, …}`;
 - `ride`: `status` `"accepted"`, `service_type` `"auto_confort"`, `fare` = `snapshot_total` = `v_comf`, `snapshots` `1`, `discount` `0`, `driver_ok` `true`, and `admin_actions` with `support_propose_service`, `support_change_service`, `support_offer_ride`, `support_assign_ride`;
-- `cron`: a number; `queued`: at least `support-help-alert` 1, `support-help-email` (one per address in `support_alert_email`) and `support-assign-push` 1.
+- `cron`: a number; `queued`: at least `support-help-alert` 1, `support-alert-email` (the digest: one per address in `support_alert_email`, more if real rides were waiting) and `support-assign-push` 1.
 
 Any other error (a missing column, a trigger refusing, `lock_timeout`) is a finding: stop, fix the migration, re-run Task 20, then this step.
 
@@ -6328,7 +6346,7 @@ Expected: every column `true`.
 git push -u origin claude/hopeful-shannon-g3theu
 ```
 
-PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 80 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
+PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 103 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
 
 - [ ] **Step 2: Ask for authorization to merge and apply**
 
@@ -6376,7 +6394,7 @@ Dispatch does not skip test accounts (measured 2026-10-07: neither `dispatch_rid
 With a test rider (`users.is_test`) signed in on https://tricigo.com:
 1. request a ride and stay on `/track/<id>`;
 2. after 45 s tap "¿No aparece conductor? Pide ayuda": WhatsApp opens with "Viaje: <CODE>";
-3. within 15 s the admin shows the red banner with "Pidió ayuda" and "Prueba", with a sound if the page was clicked once; the support phones with a push token get "Pasajero pide ayuda · <CODE>"; every address in `support_alert_email` gets the e-mail, whose button opens the assist page;
+3. within 15 s the admin shows the red banner with "Pidió ayuda" and "Prueba", with a sound if the page was clicked once; the support phones with a push token get "Pasajero pide ayuda · <CODE>"; within a minute every address in `support_alert_email` gets the digest e-mail, whose "Asistir" link opens the assist page;
 4. on the assist page: propose another type; the web shows the card; accept it; the track page and the assist page show the new type and price;
 5. cancel the ride from the web.
 
