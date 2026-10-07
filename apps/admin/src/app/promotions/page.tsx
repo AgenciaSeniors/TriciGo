@@ -299,7 +299,7 @@ export default function PromotionsAdminPage() {
         isFkBlocked
           ? t('promotions.delete_in_use', {
               defaultValue:
-                'No se puede eliminar: esta promoción ya se usó en viajes. Desactivala en lugar de borrarla.',
+                'No se puede eliminar: esta promoción ya se usó en viajes. Desactívala en lugar de borrarla.',
             })
           : raw,
       );

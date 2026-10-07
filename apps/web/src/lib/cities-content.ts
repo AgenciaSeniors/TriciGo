@@ -591,7 +591,7 @@ export const CITY_CONTENT: Record<string, CityContent> = {
     "faqs": [
       {
         "q": "¿Cómo pido un triciclo en Baracoa?",
-        "a": "Abre la app de TriciGo, marca tu punto de recogida y tu destino dentro de Baracoa —por ejemplo de la Catedral hacia el malecón o un barrio cercano—, elige triciclo y confirma. Verás el precio estimado en CUP antes de aceptar y podrás seguir al conductor verificado en el mapa hasta que llegue. La disponibilidad depende de tu zona, así que consultala en la app antes de pedir."
+        "a": "Abre la app de TriciGo, marca tu punto de recogida y tu destino dentro de Baracoa —por ejemplo de la Catedral hacia el malecón o un barrio cercano—, elige triciclo y confirma. Verás el precio estimado en CUP antes de aceptar y podrás seguir al conductor verificado en el mapa hasta que llegue. La disponibilidad depende de tu zona, así que consúltala en la app antes de pedir."
       },
       {
         "q": "¿Sirve TriciGo para subir a los barrios en pendiente de Baracoa?",

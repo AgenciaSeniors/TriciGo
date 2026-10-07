@@ -33,7 +33,7 @@ export default function EmailLoginScreen() {
     setError('');
     const value = email.trim();
     if (!isValidEmail(value)) {
-      setError(t('auth.email_invalid', { defaultValue: 'Escribí un correo válido' }));
+      setError(t('auth.email_invalid', { defaultValue: 'Escribe un correo válido' }));
       return;
     }
 
@@ -48,7 +48,7 @@ export default function EmailLoginScreen() {
       setError(
         code === 'rate_limited'
           ? t('auth.email_link_rate_limited', {
-              defaultValue: 'Pediste varios enlaces seguidos. Esperá una hora e intentá de nuevo.',
+              defaultValue: 'Pediste varios enlaces seguidos. Espera una hora e intenta de nuevo.',
             })
           : t('errors.generic'),
       );
@@ -77,7 +77,7 @@ export default function EmailLoginScreen() {
             <View className="flex-1 items-center justify-center px-2">
               <Ionicons name="mail-open-outline" size={56} color={colors.brand.orange} />
               <Text variant="h3" color="inverse" className="mt-4 mb-2 text-center">
-                {t('auth.email_link_sent_title', { defaultValue: 'Revisá tu correo' })}
+                {t('auth.email_link_sent_title', { defaultValue: 'Revisa tu correo' })}
               </Text>
               <Text
                 variant="bodySmall"

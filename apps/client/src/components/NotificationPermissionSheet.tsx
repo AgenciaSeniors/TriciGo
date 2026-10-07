@@ -178,7 +178,7 @@ export function NotificationPermissionSheet() {
           {denied
             ? t('notifications.permission_body_denied', {
                 defaultValue:
-                  'Las notificaciones están desactivadas. Activalas en Ajustes para enterarte cuando un conductor acepte tu viaje, llegue al punto de recogida, y cuando recibas mensajes.',
+                  'Las notificaciones están desactivadas. Actívalas en Ajustes para enterarte cuando un conductor acepte tu viaje, llegue al punto de recogida, y cuando recibas mensajes.',
               })
             : t('notifications.permission_body', {
                 defaultValue:

@@ -41,7 +41,7 @@ TriciGo te permite solicitar un viaje desde tu teléfono, ver el precio antes de
 
 • Divide el costo — Comparte la tarifa con otros pasajeros en tiempo real.
 
-• Créditos de viaje — consultá tu saldo e historial de movimientos.
+• Créditos de viaje — consulta tu saldo e historial de movimientos.
 
 • Blog TriciGo — Lee noticias y novedades del servicio directamente desde la app.
 

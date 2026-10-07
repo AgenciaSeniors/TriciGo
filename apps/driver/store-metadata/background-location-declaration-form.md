@@ -48,7 +48,7 @@ The prominent disclosure is an `Alert.alert` that appears the FIRST time the dri
 
 > **Compartir ubicación durante el viaje**
 >
-> TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras tenés un viaje activo, para que el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, el pasajero pierde tu posición cuando salís de la app.
+> TriciGo Conductor necesita acceso a tu ubicación en segundo plano (opción "Siempre" / "Always") mientras tienes un viaje activo, para que el pasajero pueda verte llegar en tiempo real aunque la app esté minimizada o la pantalla apagada. Sin este permiso, el pasajero pierde tu posición cuando sales de la app.
 >
 > [Más tarde] [Permitir]
 
@@ -63,7 +63,7 @@ The disclosure satisfies all four Google requirements:
 | Appears before the system prompt | The Alert is shown synchronously; the system prompt only fires after the user taps "Permitir". |
 | Uses the word "ubicación" (location) | Title ("Compartir ubicación durante el viaje") + body. |
 | Uses "background" / "siempre" (always) | Body: "en segundo plano (opción 'Siempre' / 'Always')". |
-| Names the specific feature | Body: "mientras tenés un viaje activo … el pasajero pueda verte llegar en tiempo real". |
+| Names the specific feature | Body: "mientras tienes un viaje activo … el pasajero pueda verte llegar en tiempo real". |
 | Explicit "Allow" CTA | "Permitir" button. |
 
 ---

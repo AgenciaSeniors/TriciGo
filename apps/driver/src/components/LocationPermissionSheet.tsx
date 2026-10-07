@@ -137,7 +137,7 @@ export function LocationPermissionSheet({
               })
             : t('location_permission.body_denied', {
                 defaultValue:
-                  'La ubicación está desactivada para TriciGo, y tu teléfono ya no vuelve a preguntarte. Activala en Ajustes para poder conectarte y recibir viajes.',
+                  'La ubicación está desactivada para TriciGo, y tu teléfono ya no vuelve a preguntarte. Actívala en Ajustes para poder conectarte y recibir viajes.',
               })}
         </Text>
 

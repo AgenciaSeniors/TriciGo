@@ -174,7 +174,7 @@ export default function CompetitorsPage() {
           tone: 'info',
           title: t('competitors.empty_title', { defaultValue: 'Sin cotizaciones todavía' }),
           body: t('competitors.empty_body', {
-            defaultValue: 'El observatorio aún no capturó precios. Verificá que la sesión del competidor esté depositada y el rastreo activo.',
+            defaultValue: 'El observatorio aún no capturó precios. Verifica que la sesión del competidor esté depositada y el rastreo activo.',
           }),
         }}
       />

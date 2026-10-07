@@ -256,7 +256,7 @@ export default function EmpresasRegistroPage() {
         }}
       >
         Llena este formulario para solicitar tu cuenta corporativa TriciGo. Un
-        admin revisa cada solicitud en menos de 24 horas habiles. Si tenes
+        admin revisa cada solicitud en menos de 24 horas habiles. Si tienes
         dudas antes,{' '}
         <Link href="/contact" style={{ color: 'var(--primary)' }}>
           contáctanos

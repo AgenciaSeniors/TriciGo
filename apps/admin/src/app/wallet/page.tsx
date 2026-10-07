@@ -184,7 +184,7 @@ export default function WalletPage() {
       setConfirmModal({
         open: true,
         title: t('wallet_admin.reject_recharge_title', { defaultValue: 'Rechazar recarga' }),
-        message: t('wallet_admin.reject_recharge_msg', { defaultValue: 'Contanos el motivo del rechazo (el usuario lo va a ver).' }),
+        message: t('wallet_admin.reject_recharge_msg', { defaultValue: 'Cuéntanos el motivo del rechazo (el usuario lo va a ver).' }),
         variant: 'danger',
         inputPlaceholder: t('wallet_admin.reject_reason_placeholder', { defaultValue: 'Motivo del rechazo' }),
         action: async () => {

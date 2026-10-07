@@ -233,7 +233,7 @@ export default function HomeClient() {
                 </svg>
               </div>
               <h3>Agrega paradas</h3>
-              <p>¿Surgió una parada? Sumala en pleno viaje y el precio se ajusta solo.</p>
+              <p>¿Surgió una parada? Súmala en pleno viaje y el precio se ajusta solo.</p>
             </div>
 
             {/* Chatea con tu conductor */}
@@ -406,7 +406,7 @@ export default function HomeClient() {
               </div>
               <div>
                 <h3>Regala saldo</h3>
-                <p>Mandale TriciCoin a un familiar o a un amigo para sus próximos viajes, al instante.</p>
+                <p>Mándale TriciCoin a un familiar o a un amigo para sus próximos viajes, al instante.</p>
               </div>
             </div>
           </div>

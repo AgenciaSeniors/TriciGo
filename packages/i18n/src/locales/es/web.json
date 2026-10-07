@@ -5,7 +5,7 @@
     "subtitle": "Recarga la billetera TriciGo de un familiar en Cuba.",
     "recipient_phone": "Teléfono del usuario a recargar",
     "recipient_found": "Recargando a: {{name}}",
-    "recipient_not_found": "Este número no es usuario de TriciGo. Pedile que instale la app.",
+    "recipient_not_found": "Este número no es usuario de TriciGo. Pídele que instale la app.",
     "amount": "Monto a recargar (USD)",
     "amount_min": "Mínimo 20",
     "rate": "Tasa de cambio",
@@ -26,7 +26,7 @@
     "rate_ago_days": "hace {{count}} d",
     "rate_stale_hours": "Hace {{count}} h que esta tasa no se actualiza, así que el monto en TriciCoin puede cambiar. Puedes continuar igual.",
     "rate_stale_days": "Hace {{count}} d que esta tasa no se actualiza, así que el monto en TriciCoin puede cambiar. Puedes continuar igual.",
-    "error_region": "Los pagos con tarjeta no están disponibles desde tu país. Pedile a alguien en el exterior que haga la recarga."
+    "error_region": "Los pagos con tarjeta no están disponibles desde tu país. Pídele a alguien en el exterior que haga la recarga."
   },
   "offline": "Sin conexión — revisa tu red.",
   "support": {
@@ -82,7 +82,7 @@
     "cta_login": "Iniciar sesión y aplicar",
     "cta_open_app": "Abrir en la app TriciGo",
     "cta_my_code": "Ir a mi código",
-    "no_app": "¿No tienes la app? Descargala desde la App Store o Google Play.",
+    "no_app": "¿No tienes la app? Descárgala desde la App Store o Google Play.",
     "visit_site": "Visitar tricigo.com"
   },
   "promo": {
@@ -629,7 +629,7 @@
     "back_credits": "← Mis créditos",
     "back_credits_aria": "Volver a mis créditos",
     "title": "Comprobantes de recarga",
-    "subtitle": "Cada recarga genera un PDF con el detalle del cargo y los TriciCoin acreditados. Conservalos para tus registros.",
+    "subtitle": "Cada recarga genera un PDF con el detalle del cargo y los TriciCoin acreditados. Consérvalos para tus registros.",
     "empty_title": "Sin comprobantes todavía",
     "empty_description": "Cuando hagas una recarga vas a poder descargar el PDF aquí.",
     "go_recharge": "Ir a recargar",

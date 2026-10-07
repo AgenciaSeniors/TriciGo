@@ -17,7 +17,7 @@ export function WebFooter() {
           <p className="footer-brand-desc">
             {t('footer.location')}
           </p>
-          <div className="footer-social-label">{t('footer.follow_us', { defaultValue: 'Seguinos' })}</div>
+          <div className="footer-social-label">{t('footer.follow_us', { defaultValue: 'Síguenos' })}</div>
           <div className="footer-social">
             <a
               href="https://facebook.com/tricigoapp"
