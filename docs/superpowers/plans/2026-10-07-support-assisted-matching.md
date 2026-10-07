@@ -84,6 +84,8 @@ Rules from CLAUDE.md that apply throughout: commits in English with the conventi
 > **Review fixes (commits `7c888fac` and `3d268749`).** The migration's code blocks in Tasks 3-7, and the `run.sh` code block in Task 2, predate the review fixes of those commits (offers on a type change, the help keepalive patched into `cleanup_orphan_searching_rides`, the alert's e-mail in a block of its own, seven new tests). `supabase/migrations/00628_support_assisted_matching.sql` and `supabase/tests/00628/` are the source of truth; the counts and md5 lists in this plan are theirs.
 >
 > **Second review round (commit `8a067cd6`; admin copy for the new codes in `85315a8b`).** The code blocks of Tasks 2-7 also predate these fixes: "Enviar oferta" refuses an accepted offer row (`offer_already_accepted`), applies the fleet gate and refuses a deactivated driver, like "Asignar directo" (`driver_inactive`); a type change requires cash, TriciCoin or mixed, no split, and for TriciCoin a balance of 1.2 times the new fare; no support action on a ride scheduled for later (`scheduled_not_due`); alert e-mails became a per-minute digest from the cron under one label, `support-alert-email` (the pushes keep `support-help-alert` and `support-wait-alert`), with at most 3 help pushes per rider an hour, no wait alert after a help alert, and failures logged to `rpc_attempt_log`; a refused accept retires the proposal. The suite grew by 23 tests (and the scaffold by a reduced `ride_splits`), and Task 21's prodcheck checks the estimate snapshot right after its INSERT, picks a driver whose account is active, and runs the cron after the help request, where the digest can still list the ride.
+>
+> **Third review round (commit `a60e6da3`).** `_ride_service_change_error` refuses a target type whose `max_passengers` is NULL or 0 or less (`service_type_unavailable`), so an active cargo type cannot take a passenger ride; `admin_ride_assist_candidates` builds `vehicle_label` with `concat_ws`, so a missing or blank vehicle field no longer blanks the label; `get_my_ride_service_proposal` also returns `expires_in_s`, the seconds left by the server's clock, for the apps' countdown. Three new tests (K6, S27, P14); the md5 list of Task 20 still has 22 lines.
 
 ### Task 1: Rehearsal cluster and scaffold
 
@@ -1168,7 +1170,7 @@ chmod +x supabase/tests/00628/run.sh
 supabase/tests/00628/run.sh none | tail -25
 ```
 
-Expected: `L1`, `H9`, `H11`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 5  FAIL 98` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
+Expected: `L1`, `H9`, `H11`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 5  FAIL 101` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
 
 - [ ] **Step 3: Commit**
 
@@ -2550,7 +2552,7 @@ $assert$;
 supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -8
 ```
 
-Expected: no `FAIL` line, and the last line is `PASS 103  FAIL 0`.
+Expected: no `FAIL` line, and the last line is `PASS 106  FAIL 0`.
 
 - [ ] **Step 3: Run the repo's migration checks**
 
@@ -6110,7 +6112,7 @@ supabase/tests/00628/run.sh none | tail -1
 supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -1
 ```
 
-Expected: `PASS 5  FAIL 98`, then `PASS 103  FAIL 0`.
+Expected: `PASS 5  FAIL 101`, then `PASS 106  FAIL 0`.
 
 - [ ] **Step 4: Record the md5 of every function the migration creates or changes**
 
@@ -6346,7 +6348,7 @@ Expected: every column `true`.
 git push -u origin claude/hopeful-shannon-g3theu
 ```
 
-PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 103 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
+PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 106 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
 
 - [ ] **Step 2: Ask for authorization to merge and apply**
 
