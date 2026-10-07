@@ -19,6 +19,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useLocationStore } from '@/stores/location.store';
 import type { RideStatus, DriverAcceptedBroadcast, Vehicle } from '@tricigo/types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { onRideAssignedPush } from '@/utils/rideAssignedPush';
 
 /** Cached vehicle info for broadcast — loaded once per session */
 let cachedVehicle: Vehicle | null = null;
@@ -137,6 +138,17 @@ function unbindBgLocationFromRide(driverId: string | undefined): void {
     ? demoteBgLocationToOnline(driverId)
     : stopBgLocationTracking();
   done.catch(() => { /* best-effort */ });
+}
+
+/**
+ * Re-runs the home tab's active-trip check (useDriverRideInit) from outside it. Support can
+ * assign a ride directly while the app is open and idle (00628, admin_assign_ride_to_driver);
+ * realtime is off (BUG-277) and the 5 s trip poll only runs while there already is a trip, so
+ * nothing else would read it. A no-op while the home tab is not mounted: it checks on mount.
+ */
+let activeTripReconciler: (() => void) | null = null;
+export function requestActiveTripReconcile(): void {
+  activeTripReconciler?.();
 }
 
 /**
@@ -267,6 +279,31 @@ export function useDriverRideInit() {
     }
 
     checkActive();
+
+    const reconcile = () => {
+      if (mounted) void checkActive();
+    };
+    activeTripReconciler = reconcile;
+
+    // Support assigned a ride (push with data.event = 'ride_assigned', 00628): load it now and
+    // say so with sound, since it did not come as an offer the driver accepted. A push that is
+    // received and then tapped gives one notice, not two.
+    let lastAssignedNoticeAt = 0;
+    const offRideAssigned = onRideAssignedPush(() => {
+      reconcile();
+      if (Date.now() - lastAssignedNoticeAt < 10_000) return;
+      lastAssignedNoticeAt = Date.now();
+      triggerHaptic('success');
+      playSound('new_request');
+      Toast.show({
+        type: 'success',
+        text1: i18next.t('driver:trip.support_assigned_title', { defaultValue: 'Soporte te asignó un viaje' }),
+        text2: i18next.t('driver:trip.support_assigned_body', {
+          defaultValue: 'Ya está en tu pantalla. Ve a recoger al pasajero.',
+        }),
+        visibilityTime: 6000,
+      });
+    });
 
     // Bug 36: Re-check active trip when app returns from background
     const appStateSub = AppState.addEventListener('change', (state) => {
@@ -419,6 +456,8 @@ export function useDriverRideInit() {
 
     return () => {
       mounted = false;
+      if (activeTripReconciler === reconcile) activeTripReconciler = null;
+      offRideAssigned();
       channelRef.current?.unsubscribe();
       activeChannelIdRef.current = null;
       appStateSub.remove();
@@ -515,6 +554,16 @@ export function useIncomingRequests(isOnline: boolean) {
         const rides = await rideService.getSearchingRides();
         for (const ride of rides) addRequest(ride);
       } catch { /* best-effort fallback */ }
+      // A ride support assigned directly comes with no offer (00628). If its push did not
+      // arrive, this is what loads it. getActiveTrip only returns rides still in progress.
+      const local = useDriverRideStore.getState().activeTrip;
+      if (!local || local.status === 'completed' || local.status === 'canceled') {
+        const profileId = useDriverStore.getState().profile?.id;
+        if (profileId) {
+          const trip = await driverService.getActiveTrip(profileId).catch(() => null);
+          if (trip) requestActiveTripReconcile();
+        }
+      }
     }, 30000);
 
     return () => {

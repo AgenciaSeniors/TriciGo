@@ -15,6 +15,7 @@ import type { PushRegistrationOutcome } from '@tricigo/utils';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { emitRideAssignedPush, isRideAssignedPush } from '@/utils/rideAssignedPush';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
@@ -393,8 +394,14 @@ export function useNotificationSetup(userId: string | null | undefined) {
       (response) => {
         const data = response.notification.request.content.data;
         handleNotificationNavigation(data as Record<string, unknown>);
+        if (isRideAssignedPush(data)) emitRideAssignedPush();
       },
     );
+
+    // Support assigned a ride while the app is open (00628): load it without waiting for a tap.
+    const receivedListener = Notifications.addNotificationReceivedListener((notification) => {
+      if (isRideAssignedPush(notification.request.content.data)) emitRideAssignedPush();
+    });
 
     // Handle cold-start: notification that launched the app
     // getLastNotificationResponseAsync is not available on web
@@ -402,6 +409,7 @@ export function useNotificationSetup(userId: string | null | undefined) {
       if (response && !cancelled) {
         const data = response.notification.request.content.data;
         handleNotificationNavigation(data as Record<string, unknown>);
+        if (isRideAssignedPush(data)) emitRideAssignedPush();
       }
     });
 
@@ -423,6 +431,7 @@ export function useNotificationSetup(userId: string | null | undefined) {
     return () => {
       cancelled = true;
       responseListenerRef.current?.remove();
+      receivedListener.remove();
       appStateSubscription.remove();
     };
   }, [userId]);
