@@ -139,3 +139,25 @@ export function searchWaitView(input: SearchWaitInput): SearchWaitView {
 
   return { stage, hint, longNotice: !quiet && stage === 'long', progress };
 }
+
+/**
+ * Whether the searching screen offers "Pedir ayuda" (support helps the rider find a driver).
+ * From 45 s, the stage where the screen starts reassuring: before that most rides are still
+ * being accepted, and a help button would only add work for support.
+ */
+export function searchHelpAvailable(elapsedSeconds: number): boolean {
+  const stage = searchWaitStage(elapsedSeconds);
+  return stage === 'extended' || stage === 'long';
+}
+
+/** TriciGo support's WhatsApp, the number the help screens of both apps already open. */
+export const SUPPORT_WHATSAPP_PHONE = '+5356621636';
+
+/**
+ * The ride code the rider and support talk about: the first 8 characters of the id, upper
+ * case. The same as the server's _ride_short_code (00628), so the app can write it on
+ * WhatsApp even when request_ride_help did not answer.
+ */
+export function rideShortCode(rideId: string): string {
+  return rideId.slice(0, 8).toUpperCase();
+}

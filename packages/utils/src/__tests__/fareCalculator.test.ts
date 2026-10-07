@@ -5,6 +5,7 @@ import {
   calculateDiscount,
   matchPricingRule,
   calculateFareRange,
+  pricingClock,
 } from '../fareCalculator';
 import type { FareParams, PricingRuleMatch } from '../fareCalculator';
 
@@ -338,5 +339,29 @@ describe('calculateFareRange', () => {
     });
     expect(result.minFareCup).toBe(0);
     expect(result.maxFareCup).toBe(0);
+  });
+});
+
+describe('pricingClock — the clock matchPricingRule reads', () => {
+  it('reads Havana time in October (UTC-4, daylight saving)', () => {
+    // 03:30 UTC on Wednesday 7 Oct 2026 is 23:30 on Tuesday 6 Oct in Havana.
+    expect(pricingClock(new Date('2026-10-07T03:30:00Z'), 'America/Havana')).toEqual({ hhmm: '23:30', day: 2 });
+  });
+
+  it('reads Havana time in December (UTC-5)', () => {
+    // 15:05 UTC on Monday 7 Dec 2026 is 10:05 in Havana.
+    expect(pricingClock(new Date('2026-12-07T15:05:00Z'), 'America/Havana')).toEqual({ hhmm: '10:05', day: 1 });
+  });
+
+  it('pads single digits and never says 24:00 at midnight', () => {
+    expect(pricingClock(new Date('2026-10-07T04:05:00Z'), 'America/Havana')).toEqual({ hhmm: '00:05', day: 3 });
+  });
+
+  it('reads the device clock without a zone, as the rider app always has', () => {
+    const d = new Date('2026-10-07T15:04:00Z');
+    expect(pricingClock(d)).toEqual({
+      hhmm: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+      day: d.getDay(),
+    });
   });
 });
