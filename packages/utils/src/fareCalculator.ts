@@ -276,3 +276,17 @@ export function pricingClock(date: Date, timeZone?: string): { hhmm: string; day
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
   return { hhmm: `${part('hour')}:${part('minute')}`, day: WEEKDAYS.indexOf(part('weekday')) };
 }
+
+/**
+ * The fare the server applies promo, partner and shared-ride discounts to
+ * (00633): the quote without the stops surcharge. A ride with stops is created
+ * at the direct fare and the server adds the stops afterwards, so every
+ * discount preview must start from here for the shown price to be the price
+ * charged.
+ */
+export function discountBaseCup(
+  estimate: { estimated_fare_cup: number; stops_surcharge_cup?: number } | null | undefined,
+): number {
+  if (!estimate) return 0;
+  return Math.max(estimate.estimated_fare_cup - (estimate.stops_surcharge_cup ?? 0), 0);
+}

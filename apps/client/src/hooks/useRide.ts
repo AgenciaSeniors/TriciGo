@@ -5,7 +5,7 @@ import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { rideService, deliveryService, walletService, corporateService, partnerPlaceService } from '@tricigo/api';
-import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance, isPlaceholderAddress, reverseGeocode, trimNotes } from '@tricigo/utils';
+import { triggerHaptic, trackEvent, getErrorMessage, logger, mapLogger, deliveryVehicleToSlug, haversineDistance, isPlaceholderAddress, reverseGeocode, trimNotes, discountBaseCup } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { recentAddressService } from '@/services/recentAddresses';
 import { useAuthStore } from '@/stores/auth.store';
@@ -466,7 +466,8 @@ export function useRideActions() {
         .getDiscountForDropoff(
           draft.dropoff.location.latitude,
           draft.dropoff.location.longitude,
-          estimate.estimated_fare_cup,
+          // The fare the server discounts: without the stops (00633).
+          discountBaseCup(estimate),
           // Same derivation confirmRide uses for ride_mode (and gated ONLY on
           // serviceType, per the isDelivery note there). A delivery gets no
           // partner discount, so previewing one would bill more than shown.
@@ -529,8 +530,8 @@ export function useRideActions() {
       d.serviceType === 'mensajeria' && d.delivery.deliveryVehicleType
         ? deliveryVehicleToSlug(d.delivery.deliveryVehicleType)
         : d.serviceType;
-    const fareAmount =
-      allFareEstimates?.[effSlug]?.estimated_fare_cup ?? fe?.estimated_fare_cup ?? 0;
+    // The fare the server applies the promo to: without the stops (00633).
+    const fareAmount = discountBaseCup(allFareEstimates?.[effSlug] ?? fe);
 
     // With no estimate the RPC returns `valid: true, discount_amount: 0`
     // (fare × pct = 0) and the UI cheerfully announced "¡Descuento de 0
@@ -827,6 +828,9 @@ export function useRideActions() {
         // min_fare > service default).
         min_fare_cup: selectedFare?.min_fare_cup,
         surge_multiplier: selectedFare?.surge_multiplier,
+        // 00633: the part of the fare that prices the stops; createRide
+        // creates the ride without it and the server adds it with the stops.
+        stops_surcharge_cup: selectedFare?.stops_surcharge_cup,
         pricing_rule_id: selectedFare?.pricing_rule_id || undefined,
         promo_code_id: promoResult?.valid ? promoResult.promotionId : undefined,
         // BUG-068: Validate discount is non-negative before sending

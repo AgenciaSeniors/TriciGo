@@ -119,6 +119,11 @@ export interface FareEstimate {
   min_fare_cup?: number;
   /** Exchange rate used: 1 USD = X CUP/TRC (from eltoque) */
   exchange_rate_usd_cup: number;
+  /** Part of estimated_fare_cup that prices the stops (00633): the detour
+   *  surcharge the server adds when the stops are inserted. 0 without stops.
+   *  createRide inserts estimated_fare_cup minus this, so the server's
+   *  surcharge is not charged twice. */
+  stops_surcharge_cup?: number;
   /** Minimum expected fare in CUP/TRC (considering traffic variance) */
   fare_range_min_cup: number;
   /** Maximum expected fare in CUP/TRC (considering traffic + surge) */

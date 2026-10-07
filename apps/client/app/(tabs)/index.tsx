@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService } from '@tricigo/api';
@@ -3290,11 +3290,13 @@ function SelectingView({ openPicker }: {
   // changes. The server is still authoritative; this is just the preview.
   const SHARE_PCT = 7;
   const grossCup = selectedEstimate?.estimated_fare_cup ?? 0;
+  // The server discounts the fare without the stops (00633).
+  const discountBase = discountBaseCup(selectedEstimate);
   const shareOcc = Math.min(Math.max(draft.passengerCount || 1, 1), 3);
   const shareFreeSeats = (draft.serviceType === 'triciclo_basico' && draft.shareRide) ? (4 - shareOcc) : 0;
-  const shareDiscountCup = Math.floor((grossCup * shareFreeSeats * SHARE_PCT) / 100);
+  const shareDiscountCup = Math.floor((discountBase * shareFreeSeats * SHARE_PCT) / 100);
   const promoDiscountCup = promoResult?.valid ? (promoResult.discountAmount ?? 0) : 0;
-  const totalDiscountCup = Math.min(promoDiscountCup + shareDiscountCup, grossCup);
+  const totalDiscountCup = Math.min(promoDiscountCup + shareDiscountCup, discountBase);
   const netCup = Math.max(0, grossCup - totalDiscountCup);
   const netTrc = (selectedEstimate?.estimated_fare_trc != null && grossCup > 0)
     ? Math.round(selectedEstimate.estimated_fare_trc * (netCup / grossCup))
@@ -4329,7 +4331,7 @@ function ReviewingView() {
       : 0;
   const shareDiscount =
     shareFreeSeats > 0
-      ? Math.floor((fareEstimate?.estimated_fare_cup ?? 0) * shareFreeSeats * 7 / 100)
+      ? Math.floor(discountBaseCup(fareEstimate) * shareFreeSeats * 7 / 100)
       : 0;
   // Partner place (00559). Promo and partner do NOT stack — the larger wins.
   // Mirrors exactly what tg_rides_validate_promo_discount computes server-side,

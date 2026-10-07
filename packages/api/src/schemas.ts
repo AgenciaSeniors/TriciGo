@@ -68,6 +68,9 @@ export const createRideSchema = z.object({
   // sino cae al `service_type_configs.min_fare_cup` live.
   min_fare_cup: z.number().nonnegative().max(100000).optional(),
   surge_multiplier: z.number().min(0.5).max(5).optional(),
+  // 00633: the part of estimated_fare_cup that prices the stops. createRide
+  // inserts the fare without it; the server adds it when the stops go in.
+  stops_surcharge_cup: z.number().int().nonnegative().max(1000000).optional(),
   pricing_rule_id: z.string().optional(),
   scheduled_at: z.string().datetime().optional(),
   promo_code_id: uuidSchema.optional(),
