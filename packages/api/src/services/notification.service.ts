@@ -4,6 +4,8 @@ import { realtimeStatusLogger } from './_realtime-status';
 import { realEmail, PUSH_DETAIL_MAX_LEN } from '@tricigo/utils';
 import type { PushRegistrationOutcome } from '@tricigo/utils';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const notificationService = {
   async registerPushToken(
     userId: string,
@@ -253,20 +255,30 @@ export const notificationService = {
       }
     }
 
-    const tokens = await this.getDeviceTokens(userId);
-
-    const result = tokens.length > 0
-      ? await this.sendPushNotification(tokens, title, body, data)
-      : { successCount: 0, errorCount: 0 };
-
-    await supabase.from('notification_log').insert({
-      title,
-      body,
-      target_type: 'user',
-      target_user_id: userId,
-      sent_by: sentBy,
-      sent_count: result.successCount,
+    // Delivered by the send-push Edge Function (service-side, also saved to
+    // the user's inbox). The admin panel used to call exp.host from the
+    // browser, which blocks it: every driver-approval and document push it
+    // ever logged went out to nobody. No category: send-push would overwrite
+    // data.type with it, and the apps route on data.type.
+    const { data: res, error } = await supabase.functions.invoke('send-push', {
+      body: { user_ids: [userId], title, body, ...(data ? { data } : {}) },
     });
+    if (error) throw error;
+    const counts = (res ?? {}) as { sent?: number; failed?: number };
+    const result = { successCount: counts.sent ?? 0, errorCount: counts.failed ?? 0 };
+
+    // The admin history row needs a real user id (sent_by is a NOT NULL uuid);
+    // callers that pass 'system' get no row instead of a failed insert.
+    if (UUID_RE.test(sentBy)) {
+      await supabase.from('notification_log').insert({
+        title,
+        body,
+        target_type: 'user',
+        target_user_id: userId,
+        sent_by: sentBy,
+        sent_count: result.successCount,
+      });
+    }
 
     return result;
   },
@@ -714,13 +726,17 @@ export const notificationService = {
    * panel: those fetch exp.host directly, which works from React Native but
    * is CORS-blocked in a browser (same bug class as campaigns, fix #641) and
    * never persists to the `notifications` inbox.
+   *
+   * The sender is the signed-in admin, taken from the session
+   * (notification_log.sent_by is a uuid; the panel used to pass 'admin').
    */
   async sendAdminPush(
     target: 'all' | 'customers' | 'drivers' | { userId: string },
     opts: { title: string; body: string },
-    sentBy: string,
   ): Promise<{ successCount: number; errorCount: number }> {
     const supabase = getSupabaseClient();
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
 
     let userIds: string[];
     let targetType: string;
@@ -768,7 +784,7 @@ export const notificationService = {
       body: opts.body,
       target_type: targetType,
       target_user_id: targetUserId,
-      sent_by: sentBy,
+      sent_by: admin.id,
       sent_count: sent,
     });
     if (logError) {

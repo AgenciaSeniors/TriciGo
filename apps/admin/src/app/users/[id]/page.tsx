@@ -9,7 +9,7 @@ import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
 import { getErrorMessage } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
-import { useAdminUser } from '@/lib/useAdminUser';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
 import { DeletePendingAccountModal } from '@/components/ui/DeletePendingAccountModal';
@@ -52,7 +52,8 @@ export default function UserDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
-  const { userId: adminUserId } = useAdminUser();
+  // The level override is super_admin only (00629); the server refuses it too.
+  const { isSuperAdmin } = useIsSuperAdmin();
   const router = useRouter();
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -143,9 +144,9 @@ export default function UserDetailPage() {
     if (!newActive && !blockReason.trim()) return; // Require reason to block
     setBlockUpdating(true);
     try {
-      // 3rd arg is the ACTING admin for the admin_actions audit row — it was
-      // passing the target user's id, attributing the block to the blocked user.
-      await adminService.toggleUserActive(id, newActive, adminUserId, blockReason || undefined);
+      // admin_set_user_active (00629) bans the login, closes the sessions,
+      // takes a driver offline and writes the audit row under the caller.
+      await adminService.toggleUserActive(id, newActive, blockReason || undefined);
       setDetail((prev) =>
         prev
           ? { ...prev, user: { ...prev.user, is_active: newActive } }
@@ -153,7 +154,9 @@ export default function UserDetailPage() {
       );
       setBlockModalOpen(false);
       setBlockReason('');
-      showToast('success', newActive ? t('users.unblocked', { defaultValue: 'Usuario desbloqueado' }) : t('users.blocked', { defaultValue: 'Usuario bloqueado' }));
+      showToast('success', newActive
+        ? t('users.user_unblocked')
+        : t('users.user_blocked'));
     } catch (err) {
       showToast('error', getErrorMessage(err));
     } finally {
@@ -322,8 +325,9 @@ export default function UserDetailPage() {
               <select
                 value={selectedLevel}
                 onChange={(e) => setSelectedLevel(e.target.value as UserLevel)}
+                disabled={!isSuperAdmin}
                 aria-label={t('users.change_level')}
-                className="border border-line bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                className="border border-line bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value="bronce">{t('users.level_bronze')}</option>
                 <option value="plata">{t('users.level_silver')}</option>
@@ -333,12 +337,15 @@ export default function UserDetailPage() {
               </select>
               <button
                 onClick={handleLevelChange}
-                disabled={levelUpdating || selectedLevel === currentLevel}
+                disabled={!isSuperAdmin || levelUpdating || selectedLevel === currentLevel}
                 className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {levelUpdating ? t('common.saving') : t('common.save')}
               </button>
             </div>
+            {!isSuperAdmin && (
+              <p className="mt-2 text-xs text-ink-subtle">{t('users.level_super_admin_only')}</p>
+            )}
           </div>
         </div>
       </div>

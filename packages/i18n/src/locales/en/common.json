@@ -90,6 +90,7 @@
     "otp_expired": "Your code expired. Request a new one.",
     "otp_incorrect": "Incorrect code. Check the digits.",
     "otp_too_many": "Too many attempts. Request a new code.",
+    "account_blocked": "Your account is blocked. Write to soporte@tricigo.com if you think this is a mistake.",
     "send_otp_failed": "Could not send code. Check the number.",
     "phone_taken": "That number is already in use by another account",
     "phone_taken_existing_account": "This number already has a TriciGo account. Sign out and log in with your phone.",
