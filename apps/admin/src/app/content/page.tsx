@@ -67,7 +67,6 @@ export default function ContentPage() {
       await cmsService.updateContent(
         editing.slug,
         { title_es: titleEs, title_en: titleEn, body_es: bodyEs, body_en: bodyEn },
-        'admin',
       );
       setEditing(null);
       await loadContent();
