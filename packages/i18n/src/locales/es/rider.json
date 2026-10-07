@@ -619,7 +619,9 @@
     "allowed_services": "Servicios permitidos",
     "allowed_hours": "Horario permitido",
     "contact": "Contacto",
-    "policy_exceeded": "Este viaje excede las políticas de tu empresa"
+    "policy_exceeded": "Este viaje excede las políticas de tu empresa",
+    "employee_not_found": "No hay ninguna cuenta TriciGo con ese teléfono confirmado.",
+    "employee_exists": "Esa persona ya es empleada de esta empresa."
   },
 
   "lost_found": {
