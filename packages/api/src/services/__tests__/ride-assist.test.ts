@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockRpc = vi.fn();
 vi.mock('../../client', () => ({
@@ -32,12 +32,40 @@ describe('rideAssistService', () => {
   });
 
   describe('getPendingProposal', () => {
-    it('returns the proposal', async () => {
-      const p = { id: 'p-1', ride_id: 'r-1', from_service_type: 'triciclo_basico', to_service_type: 'auto_standard',
-        from_fare_cup: 2000, to_fare_cup: 3000, expires_at: '2026-10-07T12:03:00Z' };
+    const p = { id: 'p-1', ride_id: 'r-1', from_service_type: 'triciclo_basico', to_service_type: 'auto_standard',
+      from_fare_cup: 2000, to_fare_cup: 3000, expires_at: '2026-10-07T12:03:00Z' };
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('returns the proposal, stamped with the moment the answer arrived', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-10-07T12:00:05Z'));
       mockRpc.mockResolvedValueOnce({ data: p, error: null });
-      await expect(rideAssistService.getPendingProposal('r-1')).resolves.toEqual(p);
+      await expect(rideAssistService.getPendingProposal('r-1')).resolves.toEqual({
+        ...p,
+        received_at_ms: Date.parse('2026-10-07T12:00:05Z'),
+      });
       expect(mockRpc).toHaveBeenCalledWith('get_my_ride_service_proposal', { p_ride_id: 'r-1' });
+    });
+
+    it('passes the seconds left by the server clock through, so the card does not need the phone clock', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-10-07T12:00:05Z'));
+      mockRpc.mockResolvedValueOnce({ data: { ...p, expires_in_s: 174 }, error: null });
+      await expect(rideAssistService.getPendingProposal('r-1')).resolves.toMatchObject({
+        expires_in_s: 174,
+        received_at_ms: Date.parse('2026-10-07T12:00:05Z'),
+      });
+    });
+
+    it('works against a server that does not send expires_in_s yet', async () => {
+      mockRpc.mockResolvedValueOnce({ data: p, error: null });
+      const got = await rideAssistService.getPendingProposal('r-1');
+      expect(got).not.toBeNull();
+      expect(got).not.toHaveProperty('expires_in_s');
+      expect(typeof got?.received_at_ms).toBe('number');
     });
 
     it('returns null when there is none or the migration is missing', async () => {

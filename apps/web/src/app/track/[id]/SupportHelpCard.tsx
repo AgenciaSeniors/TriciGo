@@ -24,6 +24,18 @@ function mmss(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+// Whole seconds left on the proposal. Counts down the server's own `expires_in_s` from the moment
+// the answer arrived, so a device whose clock is minutes off still shows the full window; against
+// a server that predates `expires_in_s` it falls back to `expires_at` on the device's clock.
+function secondsLeft(proposal: ServiceProposal, nowMs: number): number {
+  if (typeof proposal.expires_in_s === 'number' && Number.isFinite(proposal.expires_in_s)) {
+    // The 1 s tick can lag a fresh answer; never count a negative elapsed time.
+    const elapsedMs = Math.max(0, nowMs - proposal.received_at_ms);
+    return Math.floor(proposal.expires_in_s - elapsedMs / 1000);
+  }
+  return Math.floor((new Date(proposal.expires_at).getTime() - nowMs) / 1000);
+}
+
 export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: Props) {
   const { t } = useTranslation('web');
   const [now, setNow] = useState(() => Date.now());
@@ -76,7 +88,7 @@ export function SupportHelpCard({ rideId, startedAtMs, sharedRide, onChanged }: 
     }
   };
 
-  const left = proposal ? Math.floor((new Date(proposal.expires_at).getTime() - now) / 1000) : 0;
+  const left = proposal ? secondsLeft(proposal, now) : 0;
   const shown = proposal && proposal.id !== answeredId && left > 0 ? proposal : null;
   const showHelp = searchHelpAvailable(Math.floor((now - startedAtMs) / 1000));
   const helpUrl = waMeLink(

@@ -19,6 +19,20 @@ interface ServiceProposalCardProps {
 }
 
 /**
+ * Whole seconds left on the proposal. Counts down the server's own `expires_in_s` from the moment
+ * the answer arrived, so a phone whose clock is minutes off still shows the full window; against a
+ * server that predates `expires_in_s` it falls back to `expires_at` on the phone's clock.
+ */
+function secondsLeft(proposal: ServiceProposal, nowMs: number): number {
+  if (typeof proposal.expires_in_s === 'number' && Number.isFinite(proposal.expires_in_s)) {
+    // The 1 s tick can lag a fresh answer; never count a negative elapsed time.
+    const elapsedMs = Math.max(0, nowMs - proposal.received_at_ms);
+    return Math.floor(proposal.expires_in_s - elapsedMs / 1000);
+  }
+  return Math.floor((new Date(proposal.expires_at).getTime() - nowMs) / 1000);
+}
+
+/**
  * Support proposes switching the searching ride to another vehicle type at a new price (00628,
  * admin_change_ride_service). Accepting switches it at once and the search goes on with drivers
  * of the new type; rejecting it, or letting it expire, changes nothing.
@@ -33,7 +47,7 @@ export function ServiceProposalCard({ proposal, paymentMethod, sharedRide, onDon
     return () => clearInterval(id);
   }, []);
 
-  const left = Math.max(0, Math.floor((new Date(proposal.expires_at).getTime() - now) / 1000));
+  const left = Math.max(0, secondsLeft(proposal, now));
   // Past expiry the server refuses it anyway; the next poll clears it.
   if (left === 0) return null;
 

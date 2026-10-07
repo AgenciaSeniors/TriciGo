@@ -37,6 +37,15 @@ export interface ServiceProposal {
   from_fare_cup: number;
   to_fare_cup: number;
   expires_at: string;
+  /**
+   * Seconds until it expires by the SERVER's clock, >= 0, as of the response. Absent on a server
+   * that predates it. The cards count down from this, starting at `received_at_ms`, and use
+   * `expires_at` against the phone's clock only when it is missing: a phone a few minutes off
+   * would otherwise hide a fresh proposal, or keep an expired one on screen.
+   */
+  expires_in_s?: number;
+  /** Date.now() when the response arrived, where `expires_in_s` starts counting. Set by getPendingProposal, not by the server. */
+  received_at_ms: number;
 }
 
 export interface RideAssistOffer {
@@ -170,7 +179,8 @@ export const rideAssistService = {
       if (isMissingRpc(error)) return null;
       throw error;
     }
-    return (data as ServiceProposal | null) ?? null;
+    const proposal = data as Omit<ServiceProposal, 'received_at_ms'> | null;
+    return proposal ? { ...proposal, received_at_ms: Date.now() } : null;
   },
 
   /** The rider accepts or rejects a proposal. Refusals throw with the server's code. */
