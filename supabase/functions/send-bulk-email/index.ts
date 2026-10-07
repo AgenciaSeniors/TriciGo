@@ -17,6 +17,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
+import { fetchMailableEmails } from '../_shared/mailable-emails.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -100,7 +101,12 @@ Deno.serve(async (req) => {
       .eq('marketing_opt_in', true);
     if (error) throw error;
 
-    const recipients = (users ?? []).filter((u) => u.email && u.email.includes('@'));
+    // 00635: opting in an address says nothing about owning it. Only the addresses
+    // mailable_user_emails calls proven get the campaign, at the proven address.
+    const mailable = await fetchMailableEmails(supabase, (users ?? []).map((u) => u.id));
+    const recipients = (users ?? [])
+      .filter((u) => mailable.has(u.id))
+      .map((u) => ({ ...u, email: mailable.get(u.id)! }));
 
     // 2. Optional promo code lookup
     let promoCode: string | null = null;

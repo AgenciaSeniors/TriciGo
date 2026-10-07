@@ -18,6 +18,7 @@
 // Response:
 //   200 { sent: true }
 //   200 { sent: false, reason: 'no_real_email' }   // phone-OTP placeholder
+//   200 { sent: false, reason: 'no_proven_email' } // address never proven (00635)
 //   200 { sent: false, reason: 'document_missing' }
 //   401 / 403 / 400 / 500 as appropriate
 // ============================================================
@@ -29,6 +30,7 @@ import {
   labelForCode,
 } from '../_shared/driverDocRejectionPresets.ts';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
+import { fetchMailableEmail } from '../_shared/mailable-emails.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
@@ -144,9 +146,14 @@ Deno.serve(async (req) => {
     type ProfileShape = { user_id: string; users: { full_name: string | null; email: string | null } };
     const profile = doc.driver_profiles as unknown as ProfileShape;
     const fullName = profile?.users?.full_name ?? '';
-    const email = realEmail(profile?.users?.email);
-    if (!email) {
+    if (!realEmail(profile?.users?.email)) {
       return jsonResponse({ sent: false, reason: 'no_real_email' }, 200, corsHeaders);
+    }
+    // 00635: only an address its owner proved (mailable_user_emails), never the one
+    // typed into the profile: the e-mail carries the account's name and the admin's note.
+    const email = await fetchMailableEmail(supabase, profile?.user_id);
+    if (!email) {
+      return jsonResponse({ sent: false, reason: 'no_proven_email' }, 200, corsHeaders);
     }
 
     const documentType = doc.document_type as keyof typeof DOC_TYPE_LABELS_ES;

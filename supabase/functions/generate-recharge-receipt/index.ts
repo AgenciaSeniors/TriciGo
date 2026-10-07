@@ -33,6 +33,7 @@ import {
   WEB_ORIGIN,
 } from '../_shared/brand.ts';
 import { realEmail } from '../_shared/email-guard.ts';
+import { fetchMailableEmail } from '../_shared/mailable-emails.ts';
 // Import directly from the template module (not the registry index) so this
 // function's deploy bundle stays narrow — we don't need welcome / win_back /
 // ride_receipt / driver_under_review here.
@@ -185,21 +186,15 @@ Deno.serve(async (req) => {
     if (userErr) throw userErr;
     const userRow = user as UserRow;
 
-    // Receipt recipient: prefer public.users.email, but fall back to the
-    // canonical auth.users.email. Phone-signup users often have an email
-    // only there (kept in sync going forward by migration 00358); without
-    // this fallback the user's receipt was silently skipped.
-    // realEmail() filters the synthetic phone-OTP placeholder
-    // (phone_<n>@tricigo.app) → treated as "no email" so we never email a
-    // non-existent address that bounces.
-    let recipientEmail: string | null = realEmail(userRow.email);
-    if (!recipientEmail) {
-      const { data: authUser } = await supabase.auth.admin.getUserById(piRow.user_id);
-      recipientEmail = realEmail(authUser?.user?.email);
-    }
+    // Receipt recipient: only an address its owner proved (00635,
+    // mailable_user_emails). users.email is written before its owner confirms
+    // it, so the typed address may be a stranger's. The old fallback to
+    // auth.users.email is gone: for phone accounts it holds the synthetic
+    // placeholder or an address typed before 2026-10-06, unproven either way.
+    const recipientEmail: string | null = await fetchMailableEmail(supabase, piRow.user_id);
     if (!recipientEmail) {
       console.warn(
-        `[generate-recharge-receipt] no email for user ${piRow.user_id} — user receipt NOT sent (admin copy still sent)`,
+        `[generate-recharge-receipt] no proven email for user ${piRow.user_id} — user receipt NOT sent (admin copy still sent)`,
       );
     }
 
