@@ -55,6 +55,7 @@ PROMO=9a000000-0000-4000-8000-000000000025     # BACO25, 25 %
 CORP=c0c00000-0000-4000-8000-000000000001
 FLEET=f1ee0000-0000-4000-8000-000000000001
 P1=b1000000-0000-4000-8000-000000000001        # a proposal on R1
+OF5=0f500000-0000-4000-8000-0000000000d5       # D5's offer on R1 (S15-S17)
 SNAP_OLD=5a000000-0000-4000-8000-0000000000a1  # estimate row written by the LIVE trigger
 SNAP_NEW=5a000000-0000-4000-8000-0000000000a2  # estimate row written after the migration
 
@@ -109,12 +110,12 @@ load $DB
 # L1: the scaffold carries prod's live bodies (md5 of prosrc read from prod on 2026-10-07)
 val L1 "SELECT string_agg(p.proname || '=' || md5(p.prosrc), ',' ORDER BY p.proname COLLATE \"C\")
   FROM pg_proc p WHERE p.pronamespace IN ('public'::regnamespace, 'auth'::regnamespace) AND p.proname IN (
-  'uid', 'accept_ride_v2', 'cron_http_post', 'current_user_role', 'dispatch_ride', 'driver_can_afford_commission',
-  'enforce_ride_transition', 'enforce_ride_update_columns', 'find_best_drivers', 'get_platform_config_numeric',
-  'get_platform_config_text', 'is_admin', 'is_super_admin', 'log_rpc_attempt', 'notify_driver_new_offer',
-  'rides_sync_coords', 'tg_ride_offer_increment_offered', 'tg_ride_offer_refresh_acceptance',
+  'uid', 'accept_ride_v2', 'cleanup_orphan_searching_rides', 'cron_http_post', 'current_user_role', 'dispatch_ride',
+  'driver_can_afford_commission', 'enforce_ride_transition', 'enforce_ride_update_columns', 'find_best_drivers',
+  'get_platform_config_numeric', 'get_platform_config_text', 'is_admin', 'is_super_admin', 'log_rpc_attempt',
+  'notify_driver_new_offer', 'rides_sync_coords', 'tg_ride_offer_increment_offered', 'tg_ride_offer_refresh_acceptance',
   'tg_rides_create_estimate_snapshot', 'tg_rides_validate_insurance', 'tg_rides_validate_promo_discount')" \
-  "accept_ride_v2=b51311095327fa66df27849ec9a4660f,cron_http_post=15d9ded451c60f92a0fd0a3c4e1ee0ab,current_user_role=cb4a7c12d4e21fe2997135833f141e25,dispatch_ride=a16ae76866950dedd21d33595f345d63,driver_can_afford_commission=cc0dde026b1e9262afbda4bde8f79723,enforce_ride_transition=35bde4fd60a4a4fa0fc86a237ec4a414,enforce_ride_update_columns=c181b9e3e630e306a329de56398033f5,find_best_drivers=53a6b5d68be18d5369445986a83e2fa9,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,get_platform_config_text=407a7b835c527164a4aa8b3aa8525ba5,is_admin=22cb75e91980d512498034cd33e1eda2,is_super_admin=5655a4615e92e8b1e323d06c7566b058,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,notify_driver_new_offer=6226f91fe0acacd99b298718a3c35937,rides_sync_coords=66b9877c7ff14aed2dd133d0d04b64b7,tg_ride_offer_increment_offered=34482879e7d798ba9c96c5c8ae67a993,tg_ride_offer_refresh_acceptance=f9c2c0652ab23eb08f1b2b571a2d8ee6,tg_rides_create_estimate_snapshot=b801283b9dcb6de3e4822992347d962e,tg_rides_validate_insurance=4d5516aca57a3b81076fdad9fdb6f9f6,tg_rides_validate_promo_discount=d4494bd8ab75ce590e1c42743583aec5,uid=cdef18c69c4f4cbbced2eaf81e628b49"
+  "accept_ride_v2=b51311095327fa66df27849ec9a4660f,cleanup_orphan_searching_rides=3a43dc26cde6e2a35df3bbba122587b5,cron_http_post=15d9ded451c60f92a0fd0a3c4e1ee0ab,current_user_role=cb4a7c12d4e21fe2997135833f141e25,dispatch_ride=a16ae76866950dedd21d33595f345d63,driver_can_afford_commission=cc0dde026b1e9262afbda4bde8f79723,enforce_ride_transition=35bde4fd60a4a4fa0fc86a237ec4a414,enforce_ride_update_columns=c181b9e3e630e306a329de56398033f5,find_best_drivers=53a6b5d68be18d5369445986a83e2fa9,get_platform_config_numeric=13d2587037eca74854cf2394ba42a90c,get_platform_config_text=407a7b835c527164a4aa8b3aa8525ba5,is_admin=22cb75e91980d512498034cd33e1eda2,is_super_admin=5655a4615e92e8b1e323d06c7566b058,log_rpc_attempt=0a902c34a1148dac5686403a7c941bc0,notify_driver_new_offer=6226f91fe0acacd99b298718a3c35937,rides_sync_coords=66b9877c7ff14aed2dd133d0d04b64b7,tg_ride_offer_increment_offered=34482879e7d798ba9c96c5c8ae67a993,tg_ride_offer_refresh_acceptance=f9c2c0652ab23eb08f1b2b571a2d8ee6,tg_rides_create_estimate_snapshot=b801283b9dcb6de3e4822992347d962e,tg_rides_validate_insurance=4d5516aca57a3b81076fdad9fdb6f9f6,tg_rides_validate_promo_discount=d4494bd8ab75ce590e1c42743583aec5,uid=cdef18c69c4f4cbbced2eaf81e628b49"
 
 # An estimate row written by the LIVE trigger, for S11. Canceled at once so no alert sees it.
 run $DB "$(ride $SNAP_OLD) UPDATE public.rides SET status = 'canceled' WHERE id = '$SNAP_OLD';" >/dev/null
@@ -145,6 +146,22 @@ val H7 "$(tx "$(ride $R1) UPDATE public.rides SET pickup_address = '<script>x</s
      FROM net.calls c WHERE c.url LIKE '%/send-email'")" "true;t"
 val H8 "$(tx "$(ride $R1) UPDATE public.rides SET customer_id = '$TESTER' WHERE id = '$R1';" $TESTER \
   "SELECT public.request_ride_help('$R1')->>'success';" "SELECT $(calls support-help-alert)")" "true;1"
+# cleanup_orphan_searching_rides (cron) cancels a search the app stopped refreshing. A rider who
+# asked for help is in WhatsApp with support, so a help request keeps the ride for
+# support_help_keepalive_s (1800 s). R1's app last refreshed its search 15 minutes ago:
+STALE="UPDATE public.rides SET searching_seen_at = now() - interval '15 minutes' WHERE id = '$R1';"
+# helped AGO: the ride_assist row request_ride_help writes for R1, AGO ago. Skipped where the
+# table does not exist, so the RED run shows prod as it is.
+helped(){ echo "DO \$h\$ BEGIN IF to_regclass('public.ride_assist') IS NOT NULL THEN
+  INSERT INTO public.ride_assist (ride_id, help_requested_at, help_alert_sent_at)
+  VALUES ('$R1', now() - interval '$1', now() - interval '$1'); END IF; END \$h\$;"; }
+CSTATE="SELECT status || '|' || coalesce(cancellation_reason, '') FROM public.rides WHERE id = '$R1'"
+val H9 "BEGIN; $(ride $R1 triciclo_basico 2000 '20 minutes') $STALE
+  SELECT public.cleanup_orphan_searching_rides(); $CSTATE; ROLLBACK;" "1;canceled|searching_abandoned"
+val H10 "BEGIN; $(ride $R1 triciclo_basico 2000 '20 minutes') $STALE $(helped '5 minutes')
+  SELECT public.cleanup_orphan_searching_rides(); $CSTATE; ROLLBACK;" "0;searching|"
+val H11 "BEGIN; $(ride $R1 triciclo_basico 2000 '45 minutes') $STALE $(helped '40 minutes')
+  SELECT public.cleanup_orphan_searching_rides(); $CSTATE; ROLLBACK;" "1;canceled|searching_abandoned"
 
 # --- C: the one-minute alert cron ---------------------------------------------------------
 val C1 "BEGIN; $(ride $R1) SELECT public.notify_support_waiting_rides();
@@ -286,6 +303,33 @@ val S13 "$(tx "$(ride $R1)" $ADMIN "$(apply mensajeria 3000) $(apply triciclo_pr
 val S14 "$(tx "$(ride $R1) INSERT INTO public.ride_waypoints (ride_id, sort_order, location, address)
   VALUES ('$R1', 1, ST_SetSRID(ST_MakePoint(-82.3700, 23.1350), 4326)::geography, 'Parada');" $ADMIN "$(apply auto_standard 3000)" "$RSTATE")" \
   "waypoints_not_supported;triciclo_basico|2000"
+# A driver who can still serve the new type keeps the ride (auto_standard and auto_confort share
+# their drivers). offer5 [STATUS] [EXPIRES]: D5's offer on R1, with a known id.
+offer5(){ echo "INSERT INTO public.ride_offers (id, ride_id, driver_profile_id, status, expires_at)
+  VALUES ('$OF5', '$R1', '$D5', '${1:-pending}', now() + interval '${2:-1 minute}');"; }
+# D5's only offer on R1: the same row, pending, live, unanswered, and its pushes at 4000 CUP.
+O5STATE="SELECT o.id = '$OF5', o.status, o.expires_at > now(), o.responded_at IS NULL,
+    (SELECT count(*) FROM net.calls c WHERE c.body->>'user_id' = '$U5' AND c.body->'data'->>'offer_id' = '$OF5'
+       AND c.body->>'body' LIKE '%4000 CUP')
+  FROM public.ride_offers o WHERE o.ride_id = '$R1' AND o.driver_profile_id = '$D5'"
+# Fare up: re-offered at once, on the same row, with a push at the new fare.
+val S15 "$(tx "$(ride $R1 auto_standard 3000) $BEAT $(offer5) $QUIET" $ADMIN \
+  "$(apply auto_confort 4000 "'Aceptó por WhatsApp'" mode)" "$O5STATE")" "apply;t|pending|t|t|1"
+# Fare down: the offer only expires, so the old card, at the higher price, cannot be accepted; once
+# the cooldown has passed, re-dispatch (here dispatch_ride as the cron) re-offers it at the new fare.
+val S16 "BEGIN; $(ride $R1 auto_confort 4000) $BEAT $(offer5) $QUIET
+  $(as $ADMIN) $(apply auto_standard 3000 "'Aceptó por WhatsApp'" mode)
+  RESET ROLE; SELECT status FROM public.ride_offers WHERE id = '$OF5';
+  $(as $U5) SELECT public.accept_ride_v2('$R1', '$D5')->>'error';
+  RESET ROLE; SET LOCAL request.jwt.claim.sub = '';
+  UPDATE public.ride_offers SET expires_at = now() - interval '121 seconds' WHERE id = '$OF5';
+  SET LOCAL ROLE postgres; SELECT public.dispatch_ride('$R1')->>'offers_created'; RESET ROLE;
+  SELECT o.status || '|' || (SELECT count(*) FROM net.calls c WHERE c.body->>'user_id' = '$U5' AND c.body->>'body' LIKE '%3000 CUP')
+    FROM public.ride_offers o WHERE o.id = '$OF5'; ROLLBACK;" \
+  "apply;expired;offer_not_found_or_expired;1;pending|1"
+# An offer that expired 5 s ago, inside the 120 s cooldown, is re-offered at once by a fare up.
+val S17 "$(tx "$(ride $R1 auto_standard 3000) $BEAT $(offer5 expired '-5 seconds') $QUIET" $ADMIN \
+  "$(apply auto_confort 4000 "'Aceptó por WhatsApp'" mode)" "$O5STATE")" "apply;t|pending|t|t|1"
 
 # --- P: proposals the rider answers in the app ----------------------------------------------
 propose(){ echo "SELECT public.admin_change_ride_service('$R1', '$1', $2, 'propose', NULL)->>'mode';"; }

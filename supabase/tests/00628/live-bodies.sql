@@ -1320,3 +1320,33 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.cleanup_orphan_searching_rides()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_count   INTEGER;
+  v_abandon INTEGER;
+BEGIN
+  SELECT ((value #>> '{}')::INTEGER) INTO v_abandon
+  FROM platform_config WHERE key = 'searching_abandon_seconds';
+  v_abandon := COALESCE(v_abandon, 180);
+
+  UPDATE rides
+  SET status = 'canceled',
+      cancellation_reason = 'searching_abandoned',
+      canceled_at = now()
+  WHERE status = 'searching'
+    AND CASE
+          WHEN is_scheduled = TRUE AND scheduled_at IS NOT NULL
+            THEN scheduled_at     < now() - (v_abandon || ' seconds')::interval
+          ELSE     searching_seen_at < now() - (v_abandon || ' seconds')::interval
+        END;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END;
+$function$
+;
+

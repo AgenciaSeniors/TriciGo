@@ -20,6 +20,8 @@
 -- through _write_ride_estimate_snapshot, now shared with tg_rides_create_estimate_snapshot,
 -- and re-runs the discount trigger. tg_rides_validate_promo_discount gets a one-line patch so
 -- that its super_admin bypass does not skip that recompute when this code asks for it.
+-- cleanup_orphan_searching_rides gets one more condition: a ride whose rider asked for help is
+-- not cancelled as abandoned for support_help_keepalive_s (30 min) while the rider is in WhatsApp.
 --
 -- Design: docs/superpowers/specs/2026-10-07-support-assisted-matching-design.md
 -- Rehearsal: supabase/tests/00628/run.sh (RED without this file, GREEN with it, applied twice)
@@ -70,7 +72,8 @@ INSERT INTO public.platform_config (key, value) VALUES
   ('support_alert_enabled', 'true'::jsonb),
   ('support_alert_after_s', '60'::jsonb),
   ('support_offer_ttl_s', '120'::jsonb),
-  ('support_proposal_ttl_s', '180'::jsonb)
+  ('support_proposal_ttl_s', '180'::jsonb),
+  ('support_help_keepalive_s', '1800'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 -- Who gets the alert e-mail: starts as the business list. Empty turns the e-mail off.
 INSERT INTO public.platform_config (key, value)
@@ -150,7 +153,8 @@ REVOKE ALL ON FUNCTION public._html_escape(text) FROM PUBLIC, anon, authenticate
 
 -- 4. The estimate snapshot: one writer for the ride INSERT trigger and the type change.
 
--- The two live bodies rewritten below must be the ones this migration was written for.
+-- The live bodies this migration rewrites (below) or patches (sections 5 and 9) must be the ones
+-- it was written for.
 DO $guard$
 DECLARE
   v_src text;
@@ -164,6 +168,11 @@ BEGIN
   IF position('app.force_discount_recompute' IN v_src) = 0
      AND md5(v_src) <> 'd4494bd8ab75ce590e1c42743583aec5' THEN
     RAISE EXCEPTION '00628: tg_rides_validate_promo_discount is not the body this migration was written for (md5 %)', md5(v_src);
+  END IF;
+  SELECT prosrc INTO v_src FROM pg_proc WHERE oid = 'public.cleanup_orphan_searching_rides()'::regprocedure;
+  IF position('-- 00628:' IN v_src) = 0
+     AND md5(v_src) <> '3a43dc26cde6e2a35df3bbba122587b5' THEN
+    RAISE EXCEPTION '00628: cleanup_orphan_searching_rides is not the body this migration was written for (md5 %)', md5(v_src);
   END IF;
 END
 $guard$;
@@ -367,7 +376,8 @@ BEGIN
   IF p_fare_cup IS NULL OR p_fare_cup < v_svc.min_fare_cup THEN
     RETURN 'fare_below_minimum';
   END IF;
-  -- A typo guard: no vehicle type costs five times another for the same trip.
+  -- A typo guard: at most five times the larger of the current fare and the new type's minimum
+  -- fare. The minimum keeps the bound usable for a ride with a 0 fare and for a much pricier type.
   IF p_fare_cup > 5 * GREATEST(COALESCE(p_ride.estimated_fare_cup, 0), v_svc.min_fare_cup) THEN
     RETURN 'fare_out_of_range';
   END IF;
@@ -385,8 +395,10 @@ SECURITY DEFINER
 SET search_path = public, extensions, pg_catalog
 AS $$
 DECLARE
-  v_ride public.rides%ROWTYPE;
-  v_err  text;
+  v_ride     public.rides%ROWTYPE;
+  v_err      text;
+  v_old_fare integer;
+  v_cooldown integer;
 BEGIN
   SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
   IF NOT FOUND THEN
@@ -396,6 +408,7 @@ BEGIN
   IF v_err IS NOT NULL THEN
     RAISE EXCEPTION '%', v_err;
   END IF;
+  v_old_fare := v_ride.estimated_fare_cup;  -- step 1 overwrites v_ride; step 3 compares with it
 
   -- 1. The estimate row first: complete_ride_and_pay charges its total, and the discount
   --    trigger below reads it as the fare base.
@@ -424,9 +437,30 @@ BEGIN
    WHERE id = p_ride_id;
   PERFORM set_config('app.force_discount_recompute', '', true);
 
-  -- 3. Offers made for the old type are void; drivers of the new type get offers.
-  UPDATE public.ride_offers SET status = 'superseded', responded_at = now()
-   WHERE ride_id = p_ride_id AND status = 'pending';
+  -- 3. Offers. dispatch_ride re-offers an 'expired' row once its expiry is older than
+  --    reoffer_cooldown_s, never a 'superseded' one (00524). A pending offer of a driver whose
+  --    vehicle cannot serve the new type is superseded: that driver is out for good. A driver who
+  --    still can (auto_standard and auto_confort share their drivers) keeps an 'expired' row:
+  --    * fare up or the same: back-dated past the cooldown, so the dispatch_ride below re-offers
+  --      it at once, on the same row, with a fresh TTL and a push (trg_notify_driver_reoffer);
+  --    * fare down: only a pending offer changes. The driver's card may still show the old,
+  --      higher price, so it must not be acceptable from it; re-dispatch offers the new fare
+  --      once the cooldown has passed.
+  --    Rejected and accepted offers stay as they are; a pending proposal is void.
+  UPDATE public.ride_offers o SET status = 'superseded', responded_at = now()
+   WHERE o.ride_id = p_ride_id AND o.status = 'pending'
+     AND NOT public._driver_can_serve_ride(o.driver_profile_id, p_service_type, false);
+  IF p_fare_cup >= COALESCE(v_old_fare, 0) THEN
+    -- Read as dispatch_ride reads it.
+    v_cooldown := GREATEST(0, public.get_platform_config_numeric('reoffer_cooldown_s', 120))::int;
+    UPDATE public.ride_offers o SET status = 'expired', expires_at = now() - make_interval(secs => v_cooldown + 1)
+     WHERE o.ride_id = p_ride_id AND o.status IN ('pending', 'expired')
+       AND public._driver_can_serve_ride(o.driver_profile_id, p_service_type, false);
+  ELSE
+    UPDATE public.ride_offers o SET status = 'expired', expires_at = LEAST(o.expires_at, now())
+     WHERE o.ride_id = p_ride_id AND o.status = 'pending'
+       AND public._driver_can_serve_ride(o.driver_profile_id, p_service_type, false);
+  END IF;
   UPDATE public.ride_service_proposals SET status = 'superseded', responded_at = now()
    WHERE ride_id = p_ride_id AND status = 'pending';
   PERFORM public.dispatch_ride(p_ride_id);
@@ -1011,8 +1045,10 @@ REVOKE ALL ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) FROM
 GRANT EXECUTE ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) TO authenticated, service_role;
 
 -- 8. Alerts to support: a push to every active admin and super_admin, and an e-mail to each
---    address in support_alert_email. Both through cron_http_post, so a failing send-push or
---    send-email shows up in the cron watchdog (check_cron_http_failures).
+--    address in support_alert_email, both through cron_http_post. The cron watchdog
+--    (check_cron_http_failures, 00509) only reports a label whose calls failed at the HTTP level
+--    twice or more within 90 minutes, so a single failed alert goes unreported; a failure before
+--    the call only leaves a WARNING in the Postgres logs.
 CREATE OR REPLACE FUNCTION public._support_alert(p_ride_id uuid, p_kind text)
 RETURNS void
 LANGUAGE plpgsql
@@ -1043,6 +1079,7 @@ BEGIN
 
   v_key := public.get_service_role_key();
   IF v_key IS NULL OR v_key = '' THEN
+    RAISE WARNING '_support_alert: no service role key, the % alert for ride % was not sent', p_kind, p_ride_id;
     RETURN;
   END IF;
   v_headers := jsonb_build_object('Content-Type', 'application/json',
@@ -1067,43 +1104,48 @@ BEGIN
         'data', jsonb_build_object('event', 'support_' || p_kind, 'ride_id', p_ride_id::text, 'url', v_link)));
   END IF;
 
-  v_to_raw := public.get_platform_config_text('support_alert_email', '');
-  IF position('@' IN COALESCE(v_to_raw, '')) > 0 THEN
-    -- Every value a user typed is escaped; every other value is non-null, because one NULL in a
-    -- || chain blanks the whole body (CLAUDE.md, 00577).
-    v_html := '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">'
-      || '<h2 style="color:#ff4d00;border-bottom:2px solid #ff4d00;padding-bottom:8px">' || public._html_escape(v_title) || '</h2>'
-      || '<p>' || CASE WHEN p_kind = 'help'
-           THEN 'El pasajero tocó <b>Pedir ayuda</b> en la pantalla de búsqueda. También puede escribir por WhatsApp con el código del viaje.'
-           ELSE 'Este viaje lleva más de ' || public.get_platform_config_numeric('support_alert_after_s', 60)::int
-                || ' segundos sin conductor.' END
-      || '</p>'
-      || '<table style="width:100%;border-collapse:collapse;margin:16px 0">'
-      || format(v_row, 'Código', v_code)
-      || format(v_row, 'Espera', v_wait_min || ' min')
-      || format(v_row, 'Pasajero', public._html_escape(COALESCE(v_customer.full_name, '—') || ' ' || COALESCE(v_customer.phone, '')))
-      || format(v_row, 'Servicio', public._html_escape(v_ride.service_type) || ' · ' || COALESCE(v_ride.estimated_fare_cup, 0) || ' CUP')
-      || format(v_row, 'Origen', public._html_escape(COALESCE(v_ride.pickup_address, '—')))
-      || format(v_row, 'Destino', public._html_escape(COALESCE(v_ride.dropoff_address, '—')))
-      || '</table>'
-      || '<p><a href="' || v_link || '" style="display:inline-block;background:#ff4d00;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Asistir el viaje</a></p>'
-      || '<p style="color:#777;font-size:12px">Aviso automático de TriciGo (00628). Se envía una vez por viaje y motivo. No responder.</p>'
-      || '</body></html>';
-    IF v_html IS NULL THEN
-      RAISE EXCEPTION 'empty alert e-mail';
+  -- The e-mail in a block of its own: an error in it must not take back the push queued above.
+  BEGIN
+    v_to_raw := public.get_platform_config_text('support_alert_email', '');
+    IF position('@' IN COALESCE(v_to_raw, '')) > 0 THEN
+      -- Every value a user typed is escaped; every other value is non-null, because one NULL in a
+      -- || chain blanks the whole body (CLAUDE.md, 00577).
+      v_html := '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">'
+        || '<h2 style="color:#ff4d00;border-bottom:2px solid #ff4d00;padding-bottom:8px">' || public._html_escape(v_title) || '</h2>'
+        || '<p>' || CASE WHEN p_kind = 'help'
+             THEN 'El pasajero tocó <b>Pedir ayuda</b> en la pantalla de búsqueda. También puede escribir por WhatsApp con el código del viaje.'
+             ELSE 'Este viaje lleva más de ' || public.get_platform_config_numeric('support_alert_after_s', 60)::int
+                  || ' segundos sin conductor.' END
+        || '</p>'
+        || '<table style="width:100%;border-collapse:collapse;margin:16px 0">'
+        || format(v_row, 'Código', v_code)
+        || format(v_row, 'Espera', v_wait_min || ' min')
+        || format(v_row, 'Pasajero', public._html_escape(COALESCE(v_customer.full_name, '—') || ' ' || COALESCE(v_customer.phone, '')))
+        || format(v_row, 'Servicio', public._html_escape(v_ride.service_type) || ' · ' || COALESCE(v_ride.estimated_fare_cup, 0) || ' CUP')
+        || format(v_row, 'Origen', public._html_escape(COALESCE(v_ride.pickup_address, '—')))
+        || format(v_row, 'Destino', public._html_escape(COALESCE(v_ride.dropoff_address, '—')))
+        || '</table>'
+        || '<p><a href="' || v_link || '" style="display:inline-block;background:#ff4d00;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Asistir el viaje</a></p>'
+        || '<p style="color:#777;font-size:12px">Aviso automático de TriciGo (00628). Se envía una vez por viaje y motivo. No responder.</p>'
+        || '</body></html>';
+      IF v_html IS NULL THEN
+        RAISE EXCEPTION 'empty alert e-mail';
+      END IF;
+      FOR v_rcpt IN
+        SELECT btrim(x) FROM unnest(string_to_array(v_to_raw, ',')) AS t(x) WHERE position('@' IN x) > 0
+      LOOP
+        PERFORM public.cron_http_post(
+          CASE WHEN p_kind = 'help' THEN 'support-help-email' ELSE 'support-wait-email' END,
+          url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-email',
+          headers := v_headers,
+          body    := jsonb_build_object('recipient_email', v_rcpt, 'subject', '[TriciGo] ' || v_title,
+                                        -- raw HTML: the legacy path of send-email's resolveTemplate (00503, 00538)
+                                        'template', v_html, 'data', '{}'::jsonb));
+      END LOOP;
     END IF;
-    FOR v_rcpt IN
-      SELECT btrim(x) FROM unnest(string_to_array(v_to_raw, ',')) AS t(x) WHERE position('@' IN x) > 0
-    LOOP
-      PERFORM public.cron_http_post(
-        CASE WHEN p_kind = 'help' THEN 'support-help-email' ELSE 'support-wait-email' END,
-        url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-email',
-        headers := v_headers,
-        body    := jsonb_build_object('recipient_email', v_rcpt, 'subject', '[TriciGo] ' || v_title,
-                                      -- raw HTML: the legacy path of send-email's resolveTemplate (00503, 00538)
-                                      'template', v_html, 'data', '{}'::jsonb));
-    END LOOP;
-  END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '_support_alert: the % e-mail for ride % failed: % %', p_kind, p_ride_id, SQLSTATE, SQLERRM;
+  END;
 EXCEPTION WHEN OTHERS THEN
   -- An alert never fails its caller (the rider's button, the cron).
   RAISE WARNING '_support_alert failed for ride %: % %', p_ride_id, SQLSTATE, SQLERRM;
@@ -1198,7 +1240,36 @@ REVOKE ALL ON FUNCTION public.notify_support_waiting_rides() FROM PUBLIC, anon, 
 
 SELECT cron.schedule('notify-support-waiting-rides', '* * * * *', 'SELECT public.notify_support_waiting_rides()');
 
--- 9. What this migration promises, checked in the database it just changed.
+-- 9. A ride whose rider asked for help is not cancelled as abandoned. cleanup_orphan_searching_rides
+--    (pg_cron, every minute) cancels a searching ride whose searching_seen_at is older than
+--    searching_abandon_seconds (600 s in prod). The rider app refreshes it only in the foreground,
+--    and "Pedir ayuda" sends the rider to WhatsApp, so the ride would be cancelled while support
+--    works on it. One more condition keeps it for support_help_keepalive_s after the request.
+--    Patched in place from the live body (CLAUDE.md § "Patch in-place"): nothing else changes.
+DO $patch$
+DECLARE
+  v_src    text;
+  v_target constant text := E'END;\n  GET DIAGNOSTICS v_count = ROW_COUNT;';
+  v_new    constant text := E'END\n'
+    || E'    -- 00628: a ride whose rider asked for help stays while support works on it.\n'
+    || E'    AND NOT EXISTS (\n'
+    || E'      SELECT 1 FROM public.ride_assist ra\n'
+    || E'      WHERE ra.ride_id = rides.id\n'
+    || E'        AND ra.help_requested_at > now() - make_interval(secs => public.get_platform_config_numeric(''support_help_keepalive_s'', 1800)));\n'
+    || E'  GET DIAGNOSTICS v_count = ROW_COUNT;';
+BEGIN
+  SELECT prosrc INTO v_src FROM pg_proc WHERE oid = 'public.cleanup_orphan_searching_rides()'::regprocedure;
+  IF position('-- 00628:' IN v_src) > 0 THEN
+    RETURN;  -- already patched
+  END IF;
+  IF (length(v_src) - length(replace(v_src, v_target, ''))) / length(v_target) <> 1 THEN
+    RAISE EXCEPTION '00628: the end of the WHERE clause is not exactly once in cleanup_orphan_searching_rides';
+  END IF;
+  EXECUTE replace(pg_get_functiondef('public.cleanup_orphan_searching_rides()'::regprocedure), v_target, v_new);
+END
+$patch$;
+
+-- 10. What this migration promises, checked in the database it just changed.
 DO $assert$
 DECLARE
   r record;
@@ -1244,6 +1315,10 @@ BEGIN
   IF position('app.force_discount_recompute' IN
        (SELECT prosrc FROM pg_proc WHERE oid = 'public.tg_rides_validate_promo_discount()'::regprocedure)) = 0 THEN
     RAISE EXCEPTION '00628: the discount trigger was not patched';
+  END IF;
+  IF position('-- 00628:' IN
+       (SELECT prosrc FROM pg_proc WHERE oid = 'public.cleanup_orphan_searching_rides()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION '00628: the searching cleanup was not patched';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'notify-support-waiting-rides') THEN
     RAISE EXCEPTION '00628: the support alert cron is not scheduled';
