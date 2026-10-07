@@ -81,7 +81,7 @@ Rules from CLAUDE.md that apply throughout: commits in English with the conventi
 
 ## Phase 1 — Database (migration 00628)
 
-> **Review fixes (commit `7c888fac`).** The migration's code blocks in Tasks 3-7, and the `run.sh` code block in Task 2, predate the review fixes of that commit (offers on a type change, the help keepalive patched into `cleanup_orphan_searching_rides`, the alert's e-mail in a block of its own, six new tests). `supabase/migrations/00628_support_assisted_matching.sql` and `supabase/tests/00628/` are the source of truth; the counts and md5 lists in this plan are theirs.
+> **Review fixes (commits `7c888fac` and `3d268749`).** The migration's code blocks in Tasks 3-7, and the `run.sh` code block in Task 2, predate the review fixes of those commits (offers on a type change, the help keepalive patched into `cleanup_orphan_searching_rides`, the alert's e-mail in a block of its own, seven new tests). `supabase/migrations/00628_support_assisted_matching.sql` and `supabase/tests/00628/` are the source of truth; the counts and md5 lists in this plan are theirs.
 
 ### Task 1: Rehearsal cluster and scaffold
 
@@ -1063,7 +1063,7 @@ val S1 "$(tx "$(ride $R1) $BEAT UPDATE public.rides SET shared_ride = true, shar
           (SELECT string_agg(left(o.driver_profile_id::text, 2) || '=' || o.status, ',' ORDER BY o.driver_profile_id) FROM public.ride_offers o WHERE o.ride_id = '$R1'),
           r.dispatch_round, (SELECT count(*) FROM public.admin_actions WHERE action = 'support_change_service')
      FROM public.rides r WHERE r.id = '$R1'")" \
-  "apply;auto_standard|3000|3000|f|0|0|1:3000:700|d1=superseded,d5=pending|1|1"
+  "apply;auto_standard|3000|3000|f|0|0|1:3000:700|d1=expired,d5=pending|1|1"
 DSTATE="SELECT discount_amount_cup || '|' || (promo_code_id IS NOT NULL) FROM public.rides WHERE id = '$R1'"
 val S2 "$(tx "$(ride $R1) UPDATE public.rides SET promo_code_id = '$PROMO' WHERE id = '$R1';" $ADMIN \
   "$(apply auto_standard 3000 "'Aceptó por WhatsApp'" mode)" "$DSTATE")" "apply;750|true"
@@ -1166,7 +1166,7 @@ chmod +x supabase/tests/00628/run.sh
 supabase/tests/00628/run.sh none | tail -25
 ```
 
-Expected: `L1`, `H9`, `H11`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 5  FAIL 74` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
+Expected: `L1`, `H9`, `H11`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 5  FAIL 75` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
 
 - [ ] **Step 3: Commit**
 
@@ -2548,7 +2548,7 @@ $assert$;
 supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -8
 ```
 
-Expected: no `FAIL` line, and the last line is `PASS 79  FAIL 0`.
+Expected: no `FAIL` line, and the last line is `PASS 80  FAIL 0`.
 
 - [ ] **Step 3: Run the repo's migration checks**
 
@@ -6108,7 +6108,7 @@ supabase/tests/00628/run.sh none | tail -1
 supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -1
 ```
 
-Expected: `PASS 5  FAIL 74`, then `PASS 79  FAIL 0`.
+Expected: `PASS 5  FAIL 75`, then `PASS 80  FAIL 0`.
 
 - [ ] **Step 4: Record the md5 of every function the migration creates or changes**
 
@@ -6311,6 +6311,8 @@ SELECT to_regclass('public.ride_assist') IS NULL                                
        NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'request_ride_help')                  AS no_rpc,
        position('app.force_discount_recompute' IN
          (SELECT prosrc FROM pg_proc WHERE oid = 'public.tg_rides_validate_promo_discount()'::regprocedure)) = 0 AS trigger_untouched,
+       md5((SELECT prosrc FROM pg_proc WHERE oid = 'public.cleanup_orphan_searching_rides()'::regprocedure))
+         = '3a43dc26cde6e2a35df3bbba122587b5'                                                   AS cleanup_untouched,
        NOT EXISTS (SELECT 1 FROM public.rides WHERE pickup_address LIKE 'Prueba 00628%')       AS no_ride;
 ```
 
@@ -6326,7 +6328,7 @@ Expected: every column `true`.
 git push -u origin claude/hopeful-shannon-g3theu
 ```
 
-PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 79 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
+PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 80 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
 
 - [ ] **Step 2: Ask for authorization to merge and apply**
 
