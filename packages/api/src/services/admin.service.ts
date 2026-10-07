@@ -95,6 +95,34 @@ export interface AdminRideMessage {
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
 import { buildRejectionMessage } from './_driverDocRejectionPresets';
+import { AppError } from '../errors';
+
+/**
+ * The admin RPCs raise a Spanish MESSAGE meant for the panel and put a
+ * machine-readable code in DETAIL. A missing function (PGRST202) means the
+ * migration is not applied yet.
+ */
+function adminRpcError(
+  error: { code?: string; message?: string; details?: string | null },
+  rpc: string,
+): AppError {
+  if (error.code === 'PGRST202') {
+    return new AppError(
+      'La base de datos todavía no tiene esta función. Avisa al equipo técnico.',
+      'RPC_MISSING',
+      400,
+      { rpc },
+    );
+  }
+  return new AppError(
+    error.message || 'Error inesperado. Intenta de nuevo.',
+    error.details || error.code || 'RPC_ERROR',
+    // 400 on purpose: getErrorMessage turns 401/403 into "Sesión expirada" and
+    // 5xx into a generic text, and the panel must show this message.
+    400,
+    { rpc, pgCode: error.code },
+  );
+}
 
 /**
  * USD-anchored pricing (migration 00441). When an admin edits a CUP rate, we
@@ -1651,43 +1679,40 @@ export const adminService = {
   },
 
   /**
-   * Update user level (admin override).
+   * Override a user's loyalty level. Only a super admin may (00629); the
+   * function audits the old and the new level.
    */
   async updateUserLevel(
     userId: string,
     level: UserLevel,
   ): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('users')
-      .update({ level })
-      .eq('id', userId);
-    if (error) throw error;
+    const { error } = await supabase.rpc('admin_set_user_level', {
+      p_user_id: userId,
+      p_level: level,
+    });
+    if (error) throw adminRpcError(error, 'admin_set_user_level');
   },
 
   /**
-   * Toggle user active status (block/unblock).
+   * Block or unblock an account (00629). Blocking bans the login and the
+   * token refresh, closes every open session and takes a driver offline; a
+   * reason is required. The function writes the admin_actions row.
    */
   async toggleUserActive(
     userId: string,
     isActive: boolean,
-    adminId: string,
     reason?: string,
-  ): Promise<void> {
+  ): Promise<{ isActive: boolean; sessionsClosed: number }> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('users')
-      .update({ is_active: isActive })
-      .eq('id', userId);
-    if (error) throw error;
-
-    await supabase.from('admin_actions').insert({
-      admin_id: adminId,
-      action: isActive ? 'unblock_user' : 'block_user',
-      target_type: 'user',
-      target_id: userId,
-      reason: reason ?? null,
+    const { data, error } = await supabase.rpc('admin_set_user_active', {
+      p_user_id: userId,
+      p_active: isActive,
+      p_reason: reason?.trim() || null,
     });
+    if (error) throw adminRpcError(error, 'admin_set_user_active');
+    const res = (data ?? {}) as { is_active?: boolean; sessions_closed?: number };
+    return { isActive: res.is_active ?? isActive, sessionsClosed: res.sessions_closed ?? 0 };
   },
 
   /**

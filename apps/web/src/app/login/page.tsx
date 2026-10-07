@@ -224,7 +224,9 @@ export default function LoginPage() {
           ? t('auth.otp_expired', { defaultValue: 'El código expiró. Pide uno nuevo.' })
           : reason === 'too_many_attempts'
             ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pide un código nuevo.' })
-            : t('auth.invalid_otp'),
+            : reason === 'account_blocked'
+              ? t('auth.account_blocked')
+              : t('auth.invalid_otp'),
       );
       console.error(err);
     } finally {
