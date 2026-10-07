@@ -19,6 +19,11 @@ export default defineConfig({
       // add-email-with-verification's handler: same, plus its own esm.sh import of
       // supabase-js, which the test also replaces with vi.mock.
       '../../supabase/functions/add-email-with-verification/*.test.ts',
+      // behavioral-emails, send-bulk-email and notify-document-rejection: same,
+      // supabase-js replaced with vi.mock.
+      '../../supabase/functions/behavioral-emails/*.test.ts',
+      '../../supabase/functions/send-bulk-email/*.test.ts',
+      '../../supabase/functions/notify-document-rejection/*.test.ts',
     ],
   },
 });

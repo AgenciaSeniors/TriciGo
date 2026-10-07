@@ -44,6 +44,7 @@ import fontkit from 'https://esm.sh/@pdf-lib/fontkit@1.1.1?target=deno';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { BRAND_NAME, BRAND_RGB, LOGO_URL } from '../_shared/brand.ts';
 import { realEmail } from '../_shared/email-guard.ts';
+import { fetchMailableEmail } from '../_shared/mailable-emails.ts';
 import {
   CONTRACT_ES,
   CONTRACT_RO,
@@ -221,6 +222,10 @@ Deno.serve(async (req) => {
       const { data: authUser } = await admin.auth.admin.getUserById(driver.user_id);
       driverEmail = realEmail(authUser?.user?.email);
     }
+    // driverEmail is what the PDF prints. The contract is MAILED only to an address
+    // its owner proved (00635, mailable_user_emails): the PDF carries the driver's ID
+    // number and home address, and the typed address may be a stranger's.
+    const driverMailTo = await fetchMailableEmail(admin, driver.user_id);
 
     const { data: vehicles } = await admin
       .from('vehicles')
@@ -334,10 +339,10 @@ Deno.serve(async (req) => {
     const esB64 = encodeBase64(pdfEs);
     const roB64 = encodeBase64(pdfRo);
 
-    const skipDriverEmail = !driverEmail || (!!existing?.emailed_driver_at && !body.force);
+    const skipDriverEmail = !driverMailTo || (!!existing?.emailed_driver_at && !body.force);
     const driverEmailResult = !skipDriverEmail
       ? await sendResend({
-          to: driverEmail!,
+          to: driverMailTo!,
           subject: driverContractSubject('driver', contractNo),
           html: driverContractHtml({ audience: 'driver', ...emailData }),
           attachments: [{ filename: `${contractNo}-es.pdf`, content: esB64 }],

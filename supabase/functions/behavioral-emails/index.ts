@@ -7,10 +7,14 @@
 // Uses the send-email function to render and deliver emails
 // via Resend. Tracks sends in the email_sends table to avoid
 // duplicate deliveries.
+//
+// Recipients are only the addresses mailable_user_emails (00635)
+// calls proven: anyone can sign up and type a stranger's address
+// into the profile, and this cron would mail it the next morning.
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
-import { isPlaceholderEmail } from '../_shared/email-guard.ts';
+import { fetchMailableEmails } from '../_shared/mailable-emails.ts';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -101,6 +105,7 @@ async function processWelcomeEmails(supabase: ReturnType<typeof getSupabase>): P
     .eq('template', 'welcome');
 
   const sentSet = new Set((alreadySent ?? []).map((r: { user_id: string }) => r.user_id));
+  const mailable = await fetchMailableEmails(supabase, userIds);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = getServiceKey();
@@ -108,12 +113,13 @@ async function processWelcomeEmails(supabase: ReturnType<typeof getSupabase>): P
   let count = 0;
   for (const user of newUsers) {
     if (sentSet.has(user.id)) continue;
-    if (!user.email || isPlaceholderEmail(user.email)) continue;
+    const email = mailable.get(user.id);
+    if (!email) continue;
 
     const ok = await sendEmail(
       supabaseUrl,
       serviceRoleKey,
-      user.email,
+      email,
       '\u00a1Bienvenido a TriciGo!',
       'welcome',
       { full_name: user.full_name ?? '' },
@@ -208,6 +214,7 @@ async function sendWinBackBatch(
     .gte('sent_at', thirtyDaysAgo);
 
   const sentSet = new Set((alreadySent ?? []).map((r: { user_id: string }) => r.user_id));
+  const mailable = await fetchMailableEmails(supabase, userIds);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = getServiceKey();
@@ -215,14 +222,15 @@ async function sendWinBackBatch(
   let count = 0;
   for (const user of users) {
     if (sentSet.has(user.id)) continue;
-    if (!user.email || isPlaceholderEmail(user.email)) continue;
+    const email = mailable.get(user.id);
+    if (!email) continue;
 
     const days = user.days_since_last_ride ?? 7;
 
     const ok = await sendEmail(
       supabaseUrl,
       serviceRoleKey,
-      user.email,
+      email,
       '\u00a1Te extra\u00f1amos! Vuelve a viajar con TriciGo',
       'win_back',
       { full_name: user.full_name ?? '', days_since_last_ride: days },
