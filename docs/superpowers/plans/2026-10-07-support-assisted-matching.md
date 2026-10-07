@@ -96,11 +96,11 @@ test -f /usr/share/postgresql/16/extension/postgis.control || apt-get install -y
 id pgtest >/dev/null 2>&1 || useradd -m pgtest
 /usr/lib/postgresql/16/bin/pg_isready -h 127.0.0.1 -p 5433 \
   || su pgtest -c '/usr/lib/postgresql/16/bin/initdb -D ~/pg627 -U pgtest -A trust -E UTF8 --no-locale >/dev/null \
-       && /usr/lib/postgresql/16/bin/pg_ctl -D ~/pg627 -o "-p 5433 -c listen_addresses=127.0.0.1" -l ~/pg627.log -w start'
+       && /usr/lib/postgresql/16/bin/pg_ctl -D ~/pg627 -o "-p 5433 -c listen_addresses=127.0.0.1 -c unix_socket_directories=/tmp" -l ~/pg627.log -w start'
 /usr/lib/postgresql/16/bin/psql -h 127.0.0.1 -p 5433 -U pgtest -d postgres -Atc "SELECT current_user, version() LIKE 'PostgreSQL 16%'"
 ```
 
-Expected last line: `pgtest|t`. If `pg_isready` reported a server already listening on 5433, confirm it is this session's (`su pgtest -c 'cat ~/pg627/postmaster.pid' | head -1` matches the PID from `ss -lptn 'sport = :5433'`); a cluster of another session must not be reused, because `run.sh` drops and recreates its databases.
+Expected last line: `pgtest|t`. (`unix_socket_directories=/tmp` because `/var/run/postgresql` belongs to the `postgres` group, which `pgtest` is not in: without it the server stops with `could not create lock file ... Permission denied`.) If `pg_isready` reported a server already listening on 5433, confirm it is this session's (`su pgtest -c 'cat ~/pg627/postmaster.pid' | head -1` matches the PID from `ss -lptn 'sport = :5433'`); a cluster of another session must not be reused, because `run.sh` drops and recreates its databases.
 
 - [ ] **Step 2: Write `supabase/tests/00628/scaffold.sql`**
 
