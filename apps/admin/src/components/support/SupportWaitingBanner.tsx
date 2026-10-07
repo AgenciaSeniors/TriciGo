@@ -35,7 +35,7 @@ export function SupportWaitingBanner() {
   return (
     <div
       role="alert"
-      className={`border-b px-4 py-2.5 text-white md:px-6 ${help ? 'border-red-700 bg-red-600' : 'border-amber-700 bg-amber-600'}`}
+      className={`border-b px-4 py-2.5 text-white md:px-6 ${help ? 'border-red-800 bg-red-700' : 'border-amber-800 bg-amber-700'}`}
     >
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
@@ -48,7 +48,7 @@ export function SupportWaitingBanner() {
                 : t('ride_assist.banner_title_many', { count: rides.length, defaultValue: '{{count}} viajes esperando conductor' })}
           </p>
           {!soundOn && (
-            <span className="inline-flex items-center gap-1 text-[11.5px] text-white/85">
+            <span className="inline-flex items-center gap-1 text-[11.5px] text-white">
               <VolumeX className="h-3.5 w-3.5" />
               {t('ride_assist.banner_sound_off', { defaultValue: 'Haz clic en cualquier parte del panel para activar el sonido de las alertas.' })}
             </span>
@@ -66,8 +66,8 @@ export function SupportWaitingBanner() {
                 <span className="min-w-0 truncate">{r.pickup_address} → {r.dropoff_address}</span>
                 <span className="whitespace-nowrap">{r.service_type} · {formatCUP(r.estimated_fare_cup)}</span>
                 {r.help_requested_at && (
-                  // eslint-disable-next-line tricigo/require-dark-variant -- translucent white on a permanently red/amber alert banner
-                  <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10.5px] font-semibold uppercase">
+                  // eslint-disable-next-line tricigo/require-dark-variant -- white chip on a banner that is always red, in both themes
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10.5px] font-semibold uppercase text-red-700">
                     {t('ride_assist.chip_help', { defaultValue: 'Pidió ayuda' })}
                   </span>
                 )}
@@ -77,7 +77,7 @@ export function SupportWaitingBanner() {
                   </span>
                 )}
                 {r.pending_offers > 0 && (
-                  <span className="text-[11px] text-white/85">
+                  <span className="text-[11px] text-white">
                     {t('ride_assist.chip_offers', { count: r.pending_offers, defaultValue: '{{count}} ofertas activas' })}
                   </span>
                 )}
@@ -90,7 +90,7 @@ export function SupportWaitingBanner() {
           ))}
         </ul>
         {rides.length > shown.length && (
-          <p className="px-2 text-[11.5px] text-white/85">
+          <p className="px-2 text-[11.5px] text-white">
             {t('ride_assist.banner_more', { count: rides.length - shown.length, defaultValue: 'y {{count}} más' })}
           </p>
         )}

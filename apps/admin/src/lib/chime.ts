@@ -17,7 +17,7 @@ export function unlockChime(): void {
   if (!Ctor) return;
   try {
     ctx = ctx ?? new Ctor();
-    if (ctx.state === 'suspended') void ctx.resume();
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
   } catch {
     ctx = null;
   }
