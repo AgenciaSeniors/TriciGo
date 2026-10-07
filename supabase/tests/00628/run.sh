@@ -270,6 +270,14 @@ val K4 "$(tx "$(ride $R1) INSERT INTO public.user_blocks (blocker_id, blocked_id
   "SELECT left(x.driver_profile_id::text, 2) FROM public.admin_ride_assist_candidates('$R1') WITH ORDINALITY AS x($KCOLS) ORDER BY x.ord LIMIT 1;" \
   "SELECT 1")" "d6;1"
 err K5 "$(tx "$(ride $R1)" $RIDER "SELECT public.admin_ride_assist_candidates('$R1');" "SELECT 1")" "forbidden"
+# A NULL or blank vehicle field drops out of the label instead of blanking it (the scaffold's
+# columns are NOT NULL, as in prod; the test lifts that inside its own transaction).
+val K6 "$(tx "$(ride $R1) ALTER TABLE public.vehicles ALTER COLUMN color DROP NOT NULL;
+  UPDATE public.vehicles SET color = NULL, model = '  ' WHERE driver_id = '$D1';" $ADMIN \
+  "SELECT string_agg(left(x.driver_profile_id::text, 2) || '=' || coalesce(x.vehicle_label, '<null>'), ',' ORDER BY x.ord)
+     FROM public.admin_ride_assist_candidates('$R1') WITH ORDINALITY AS x($KCOLS)
+    WHERE left(x.driver_profile_id::text, 2) IN ('d1', 'd3');" "SELECT 1")" \
+  "d1=Bicitaxi · T-0001,d3=Bicitaxi Clásico · Azul · T-0003;1"
 
 # --- O: support sends an offer --------------------------------------------------------------
 OSTATE="SELECT o.status || '|' || (SELECT count(*) FROM net.calls c WHERE c.body->>'user_id' = '$U1') || '|' || extract(epoch FROM o.expires_at - now())::int
@@ -466,6 +474,14 @@ val S25 "$(tx "$(ride $R1) $DUE" $ADMIN "$(apply auto_standard 3000 "'Aceptó po
 val S26 "$(tx "$(ride $R1)" $ADMIN "SELECT public.admin_change_ride_service('$R1', NULL, 3000, 'apply', 'ok')->>'error';
   SELECT public.admin_change_ride_service('$R1', '  ', 3000, 'apply', 'ok')->>'error';" "$RSTATE")" \
   "invalid_service_type;invalid_service_type;triciclo_basico|2000"
+# A target type that carries no passengers (max_passengers 0, as triciclo_cargo from 00058) is
+# unavailable even when active, in both modes.
+val S27 "$(tx "$(ride $R1) INSERT INTO public.service_type_configs
+    (slug, name_es, name_en, base_fare_cup, per_km_rate_cup, per_minute_rate_cup, min_fare_cup, max_passengers, is_active)
+    VALUES ('triciclo_cargo', 'Triciclo de carga', 'Cargo tricycle', 500, 150, 10, 1000, 0, true);" $ADMIN \
+  "$(apply triciclo_cargo 3000) SELECT public.admin_change_ride_service('$R1', 'triciclo_cargo', 3000, 'propose', NULL)->>'error';" \
+  "$RSTATE")" \
+  "service_type_unavailable;service_type_unavailable;triciclo_basico|2000"
 
 # --- P: proposals the rider answers in the app ----------------------------------------------
 propose(){ echo "SELECT public.admin_change_ride_service('$R1', '$1', $2, 'propose', NULL)->>'mode';"; }
@@ -500,6 +516,12 @@ val P11 "$(tx "$(ride $R1) $(prop) UPDATE public.service_type_configs SET min_fa
   "$(respond true) SELECT public.get_my_ride_service_proposal('$R1') IS NULL;" "$PCHECK")" \
   "fare_below_minimum;t;superseded|triciclo_basico"
 val P13 "$(tx "$(ride $R1) $(prop)" $RIDER "$(respond NULL)" "$PCHECK")" "invalid_answer;pending|triciclo_basico"
+# The card counts down from the server's clock, not the phone's: expires_in_s, rounded up.
+val P14 "$(tx "$(ride $R1) $(prop pending '90.4 seconds')" $RIDER \
+  "SELECT (p->>'expires_in_s') || '|' || jsonb_typeof(p->'expires_in_s') || '|'
+          || (SELECT string_agg(k, ',' ORDER BY k) FROM jsonb_object_keys(p) AS k)
+     FROM (SELECT public.get_my_ride_service_proposal('$R1') AS p) x;" "$PCHECK")" \
+  "91|number|expires_at,expires_in_s,from_fare_cup,from_service_type,id,ride_id,to_fare_cup,to_service_type;pending|triciclo_basico"
 
 # --- G: who may call what -----------------------------------------------------------------
 err G1 "$(tx "$(ride $R1)" $ADMIN "SELECT public._apply_ride_service_change('$R1', 'auto_standard', 3000);" "SELECT 1")" \

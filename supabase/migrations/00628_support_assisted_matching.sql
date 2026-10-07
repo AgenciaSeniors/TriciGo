@@ -392,11 +392,13 @@ BEGIN
   IF p_service_type = p_ride.service_type THEN
     RETURN 'same_service_type';
   END IF;
+  -- A passenger ride only goes to a type that carries passengers: max_passengers 0 marks a
+  -- cargo type (mensajeria, or triciclo_cargo from 00058 if it is ever activated).
   SELECT * INTO v_svc FROM public.service_type_configs WHERE slug = p_service_type AND is_active;
-  IF NOT FOUND OR p_service_type = 'mensajeria' THEN
+  IF NOT FOUND OR p_service_type = 'mensajeria' OR COALESCE(v_svc.max_passengers, 0) <= 0 THEN
     RETURN 'service_type_unavailable';
   END IF;
-  IF v_svc.max_passengers > 0 AND COALESCE(p_ride.passenger_count, 1) > v_svc.max_passengers THEN
+  IF COALESCE(p_ride.passenger_count, 1) > v_svc.max_passengers THEN
     RETURN 'too_many_passengers';
   END IF;
   IF p_fare_cup IS NULL OR p_fare_cup < v_svc.min_fare_cup THEN
@@ -571,7 +573,8 @@ $$;
 REVOKE ALL ON FUNCTION public.admin_change_ride_service(uuid, text, integer, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_change_ride_service(uuid, text, integer, text, text) TO authenticated, service_role;
 
--- The rider's pending, unexpired proposal for their own searching ride, or NULL.
+-- The rider's pending, unexpired proposal for their own searching ride, or NULL. expires_in_s
+-- counts by the server's clock, so the card's countdown does not depend on the phone's.
 CREATE OR REPLACE FUNCTION public.get_my_ride_service_proposal(p_ride_id uuid)
 RETURNS jsonb
 LANGUAGE sql STABLE
@@ -582,7 +585,8 @@ AS $$
     'id', p.id, 'ride_id', p.ride_id,
     'from_service_type', p.from_service_type, 'to_service_type', p.to_service_type,
     'from_fare_cup', p.from_fare_cup, 'to_fare_cup', p.to_fare_cup,
-    'expires_at', p.expires_at)
+    'expires_at', p.expires_at,
+    'expires_in_s', GREATEST(0, ceil(extract(epoch FROM p.expires_at - now())))::int)
   FROM public.ride_service_proposals p
   JOIN public.rides r ON r.id = p.ride_id
   WHERE p.ride_id = p_ride_id
@@ -819,7 +823,9 @@ BEGIN
          u.full_name,
          u.phone,
          v.type,
-         v.make || ' ' || v.model || ' · ' || v.color || ' · ' || v.plate_number,
+         -- A NULL or blank field drops out instead of blanking the whole label.
+         concat_ws(' · ', NULLIF(concat_ws(' ', NULLIF(btrim(v.make), ''), NULLIF(btrim(v.model), '')), ''),
+                   NULLIF(btrim(v.color), ''), NULLIF(btrim(v.plate_number), '')),
          dp.is_online,
          dp.last_heartbeat_at,
          ST_Distance(dp.current_location, v_ride.pickup_location)::int,
