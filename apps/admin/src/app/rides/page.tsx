@@ -11,6 +11,7 @@ import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { formatAdminDate } from '@/lib/formatDate';
+import { rideTypeLabel } from '@/lib/rideType';
 import { exportToCsv } from '@/lib/exportCsv';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRequestGuard } from '@/hooks/useRequestGuard';
@@ -184,6 +185,12 @@ export default function RidesPage() {
       ),
       primary: true,
       cardLabel: t('rides.col_route_card', { defaultValue: 'Ruta' }),
+    },
+    {
+      id: 'service_type',
+      header: t('rides.col_vehicle', { defaultValue: 'Vehículo' }),
+      cell: (r) => <span className="font-medium text-ink">{rideTypeLabel(t, r.service_type, r.ride_mode)}</span>,
+      width: '140px',
     },
     {
       id: 'status',

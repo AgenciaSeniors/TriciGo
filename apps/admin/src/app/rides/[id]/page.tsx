@@ -12,6 +12,7 @@ import type { DeliveryDetails, AdminRideMessage } from '@tricigo/api';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
+import { rideTypeLabel } from '@/lib/rideType';
 
 // States from which an admin may cancel a ride (matches valid_transitions
 // rows granting admin/super_admin → canceled, incl. in_progress from mig 00485).
@@ -256,9 +257,15 @@ export default function RideDetailPage() {
                 </dd>
               </div>
             </div>
-            <div>
-              <dt className="text-sm text-ink-muted">{t('rides.label_payment_method')}</dt>
-              <dd className="text-sm font-medium">{PAYMENT_KEY[ride.payment_method] ? t(PAYMENT_KEY[ride.payment_method]!) : ride.payment_method}</dd>
+            <div className="flex gap-6">
+              <div>
+                <dt className="text-sm text-ink-muted">{t('rides.col_vehicle', { defaultValue: 'Vehículo' })}</dt>
+                <dd className="text-sm font-medium">{rideTypeLabel(t, ride.service_type, ride.ride_mode)}</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-ink-muted">{t('rides.label_payment_method')}</dt>
+                <dd className="text-sm font-medium">{PAYMENT_KEY[ride.payment_method] ? t(PAYMENT_KEY[ride.payment_method]!) : ride.payment_method}</dd>
+              </div>
             </div>
           </dl>
         </div>

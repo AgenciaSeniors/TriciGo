@@ -397,6 +397,7 @@
     "csv_col_created": "Created",
     "col_route_card": "Route",
     "fare_estimated_suffix": "est.",
+    "col_vehicle": "Vehicle",
     "type_all": "All",
     "type_triciclo": "Triciclo",
     "type_moto": "Moto",

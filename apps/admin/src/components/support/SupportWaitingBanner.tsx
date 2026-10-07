@@ -13,6 +13,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { formatCUP } from '@tricigo/utils';
 import { useSupportWaitingRides } from '@/hooks/useSupportWaitingRides';
 import { chimeReady, unlockChime } from '@/lib/chime';
+import { rideTypeLabel } from '@/lib/rideType';
 import { waitLabel } from './supportFormat';
 
 export function SupportWaitingBanner() {
@@ -78,9 +79,11 @@ export function SupportWaitingBanner() {
                   className="group flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg px-2 py-1 text-[12.5px] transition-colors hover:bg-black/15"
                 >
                   <span className="font-mono font-semibold">#{r.code}</span>
+                  {/* The vehicle decides which drivers support calls: it goes first, in words. */}
+                  <span className="whitespace-nowrap font-bold uppercase">{rideTypeLabel(t, r.service_type)}</span>
                   <span className="tabular-nums">{waitLabel(r.wait_s)}</span>
                   <span className="min-w-0 truncate">{r.pickup_address} → {r.dropoff_address}</span>
-                  <span className="whitespace-nowrap">{r.service_type} · {formatCUP(r.estimated_fare_cup)}</span>
+                  <span className="whitespace-nowrap">{formatCUP(r.estimated_fare_cup)}</span>
                   {r.help_requested_at && (
                     // eslint-disable-next-line tricigo/require-dark-variant -- white chip on a banner that is always red, in both themes
                     <span className="rounded-full bg-white px-2 py-0.5 text-[10.5px] font-semibold uppercase text-red-700">
