@@ -70,7 +70,7 @@ export function deliveryReceiptCustomerHtml(data: DeliveryReceiptCustomerData): 
       Tu envío fue <strong style="color: ${COLORS.success};">entregado</strong>.
     </p>
     <p style="margin: 0 0 24px;">
-      Gracias por enviar con <strong>TriciGo</strong>. Acá está el comprobante.
+      Gracias por enviar con <strong>TriciGo</strong>. Aquí está el comprobante.
     </p>
 
     ${routeBlock(data.pickup_address, data.dropoff_address)}
@@ -90,7 +90,7 @@ export function deliveryReceiptCustomerHtml(data: DeliveryReceiptCustomerData): 
     },
     body,
     footerNote:
-      '¿Algo no cuadra con tu envío? Escribinos a soporte@tricigo.com.',
+      '¿Algo no cuadra con tu envío? Escríbenos a soporte@tricigo.com.',
   });
 }
 

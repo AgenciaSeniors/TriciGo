@@ -31,7 +31,7 @@ export function welcomeHtml(data: WelcomeData): string {
       Estamos creciendo ciudad por ciudad para llevarte a donde quieras.
     </p>
     <p style="margin: 0 0 12px; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 600; color: ${COLORS.ink};">
-      Lo que podés hacer:
+      Lo que puedes hacer:
     </p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 24px;">
       ${valuePropRow('🛺', 'Pedir un viaje en triciclo, moto, auto o confort.')}
@@ -39,7 +39,7 @@ export function welcomeHtml(data: WelcomeData): string {
       ${valuePropRow('📦', 'Enviar paquetes con nuestro servicio de mensajería.')}
     </table>
     <p style="margin: 0;">
-      ¿Listo para tu primer viaje? Tocá el botón de abajo.
+      ¿Listo para tu primer viaje? Toca el botón de abajo.
     </p>
   `;
 
@@ -51,7 +51,7 @@ export function welcomeHtml(data: WelcomeData): string {
     },
     body,
     cta: { label: 'Pedir mi primer viaje', href: `${WEB_ORIGIN}/book` },
-    footerNote: '¿Necesitás ayuda? Escribinos a soporte@tricigo.com',
+    footerNote: '¿Necesitas ayuda? Escríbenos a soporte@tricigo.com',
   });
 }
 

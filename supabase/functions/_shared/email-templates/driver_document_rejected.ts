@@ -64,12 +64,12 @@ export function driverDocumentRejectedHtml(data: DriverDocumentRejectedData): st
     ${reasonsList}
     ${noteBlock}
     <p style="margin: 16px 0 24px; font-family: ${FONT_STACK}; font-size: 14px; color: ${COLORS.text}; line-height: 1.6;">
-      Volvé a subir el documento desde la app y nuestro equipo lo revisará nuevamente. Si creés que esto fue un error, contactanos a soporte@tricigo.com.
+      Vuelve a subir el documento desde la app y nuestro equipo lo revisará nuevamente. Si crees que esto fue un error, contáctanos a soporte@tricigo.com.
     </p>
   `;
 
   return wrapHtml({
-    preheader: 'Volvé a subir el documento desde la app para que lo revisemos de nuevo.',
+    preheader: 'Vuelve a subir el documento desde la app para que lo revisemos de nuevo.',
     hero: {
       title: 'Necesitamos otra revisión',
       subtitle: 'Tu documento no pasó la verificación inicial.',
@@ -82,6 +82,6 @@ export function driverDocumentRejectedHtml(data: DriverDocumentRejectedData): st
       href: `${WEB_ORIGIN}/app/driver/profile/documents`,
     },
     footerNote:
-      '¿Preguntas sobre tu documento? Escribinos a soporte@tricigo.com.',
+      '¿Preguntas sobre tu documento? Escríbenos a soporte@tricigo.com.',
   });
 }

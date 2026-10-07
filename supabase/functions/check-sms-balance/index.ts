@@ -199,8 +199,8 @@ Deno.serve(async (req) => {
       const subject = status !== 'low'
         ? '[TriciGo] Saldo de SMS recuperado'
         : isReminder
-          ? `[TriciGo] Saldo de SMS SIGUE bajo ($${balance.toFixed(2)}) — recargá D7`
-          : '[TriciGo] Saldo de SMS bajo — recargá D7 antes de que nadie pueda entrar';
+          ? `[TriciGo] Saldo de SMS SIGUE bajo ($${balance.toFixed(2)}) — recarga D7`
+          : '[TriciGo] Saldo de SMS bajo — recarga D7 antes de que nadie pueda entrar';
 
       const html = status === 'low'
         ? '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">'

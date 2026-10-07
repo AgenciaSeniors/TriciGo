@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
   <h2 style="color: #FF4D00;">Hola ${escapeHtml(user.full_name ?? '')},</h2>
   ${body_html}
   ${promoCode ? `<div style="margin: 20px 0; padding: 16px; background: #fff3e0; border-radius: 8px; text-align: center;">
-    <p style="margin: 0; color: #666; font-size: 12px;">Usá el código:</p>
+    <p style="margin: 0; color: #666; font-size: 12px;">Usa el código:</p>
     <p style="margin: 4px 0 0 0; font-family: ui-monospace, monospace; font-size: 22px; font-weight: 700; color: #FF4D00;">${escapeHtml(promoCode)}</p>
   </div>` : ''}
   <p style="color: #777; font-size: 11px; margin-top: 32px;">TriciGo · tricigo.com</p>

@@ -39,7 +39,7 @@ export function driverSuspendedHtml(data: DriverSuspendedData): string {
     </p>
     ${reasonBlock}
     <p style="margin: 16px 0 0; font-family: ${FONT_STACK}; font-size: 14px; color: ${COLORS.text}; line-height: 1.6;">
-      Si creés que se trata de un error o querés más información, contactanos
+      Si crees que se trata de un error o quieres más información, contáctanos
       y revisamos tu caso.
     </p>
   `;
@@ -52,6 +52,6 @@ export function driverSuspendedHtml(data: DriverSuspendedData): string {
     },
     body,
     footerNote:
-      'Para apelar o consultar, escribinos a soporte@tricigo.com.',
+      'Para apelar o consultar, escríbenos a soporte@tricigo.com.',
   });
 }

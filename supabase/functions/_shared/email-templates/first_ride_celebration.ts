@@ -31,16 +31,16 @@ export function firstRideCelebrationHtml(data: FirstRideCelebrationData): string
       ¡Gracias por tu primer viaje, <strong>${escapeHtml(name)}</strong>!
     </p>
     <p style="margin: 0 0 16px;">
-      Esperamos que la pasada haya sido cómoda. Con TriciGo te movés por toda
+      Esperamos que la pasada haya sido cómoda. Con TriciGo te mueves por toda
       la ciudad — del triciclo de tu barrio al auto para distancias largas.
     </p>
     <p style="margin: 0 0 8px; font-family: ${FONT_STACK}; font-size: 15px; font-weight: 600; color: ${COLORS.ink};">
       Algunos tips:
     </p>
     <ul style="margin: 0 0 8px; padding-left: 20px; color: ${COLORS.text}; line-height: 1.6;">
-      <li style="margin: 0 0 6px;">Guardá tus direcciones frecuentes para pedir más rápido.</li>
-      <li style="margin: 0 0 6px;">Cargá créditos TriciCoin y pagá sin efectivo.</li>
-      <li style="margin: 0 0 6px;">Calificá a tu conductor para ayudar a la comunidad.</li>
+      <li style="margin: 0 0 6px;">Guarda tus direcciones frecuentes para pedir más rápido.</li>
+      <li style="margin: 0 0 6px;">Carga créditos TriciCoin y paga sin efectivo.</li>
+      <li style="margin: 0 0 6px;">Califica a tu conductor para ayudar a la comunidad.</li>
     </ul>
   `;
 
@@ -53,6 +53,6 @@ export function firstRideCelebrationHtml(data: FirstRideCelebrationData): string
     body,
     cta: { label: 'Pedir otro viaje', href: WEB_ORIGIN },
     footerNote:
-      '¿Algo para mejorar? Escribinos a soporte@tricigo.com.',
+      '¿Algo para mejorar? Escríbenos a soporte@tricigo.com.',
   });
 }

@@ -59,6 +59,6 @@ export function trustedContactRideCompletedHtml(data: TrustedContactRideComplete
       subtitle: `${rider} completó su viaje de forma segura`,
     },
     body,
-    footerNote: 'Recibís este aviso porque sos contacto de confianza. ¿Dudas? Escribinos a soporte@tricigo.com.',
+    footerNote: 'Recibes este aviso porque eres contacto de confianza. ¿Dudas? Escríbenos a soporte@tricigo.com.',
   });
 }

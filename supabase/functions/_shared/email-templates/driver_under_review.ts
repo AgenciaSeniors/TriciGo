@@ -38,7 +38,7 @@ export function driverUnderReviewHtml(data: DriverUnderReviewData): string {
       Hay un <strong>nuevo conductor</strong> esperando revisión.
     </p>
     <p style="margin: 0 0 24px;">
-      Datos enviados desde la app driver. Confirmá identidad, vehículo y
+      Datos enviados desde la app driver. Confirma identidad, vehículo y
       documentos en el panel.
     </p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">

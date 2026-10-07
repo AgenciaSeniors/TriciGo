@@ -16,7 +16,7 @@ export interface PasswordResetData {
   reset_link: string;
 }
 
-export const passwordResetSubject = 'Restablecé tu contraseña de TriciGo';
+export const passwordResetSubject = 'Restablece tu contraseña de TriciGo';
 
 export function passwordResetHtml(data: PasswordResetData): string {
   const greetingName = data.full_name?.trim() || 'viajero';
@@ -27,25 +27,25 @@ export function passwordResetHtml(data: PasswordResetData): string {
     </p>
     <p style="margin: 0 0 20px;">
       Recibimos una solicitud para restablecer la contraseña de tu cuenta TriciGo.
-      Tocá el botón de abajo para elegir una nueva.
+      Toca el botón de abajo para elegir una nueva.
     </p>
     <p style="margin: 0 0 8px; font-family: ${FONT_STACK}; font-size: 14px; color: ${COLORS.muted};">
       Por seguridad, este enlace expira en una hora y solo puede usarse una vez.
     </p>
     <p style="margin: 0;">
-      Si no pediste este cambio, podés ignorar este correo: tu contraseña actual
+      Si no pediste este cambio, puedes ignorar este correo: tu contraseña actual
       sigue funcionando.
     </p>
   `;
 
   return wrapHtml({
-    preheader: 'Restablecé la contraseña de tu cuenta TriciGo.',
+    preheader: 'Restablece la contraseña de tu cuenta TriciGo.',
     hero: {
       title: 'Restablecer contraseña',
-      subtitle: 'Elegí una nueva contraseña para tu cuenta.',
+      subtitle: 'Elige una nueva contraseña para tu cuenta.',
     },
     body,
     cta: { label: 'Restablecer contraseña', href: data.reset_link },
-    footerNote: '¿No fuiste vos? Escribinos a soporte@tricigo.com',
+    footerNote: '¿No fuiste tú? Escríbenos a soporte@tricigo.com',
   });
 }

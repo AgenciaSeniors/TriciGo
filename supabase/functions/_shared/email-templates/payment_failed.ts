@@ -44,24 +44,24 @@ export function paymentFailedHtml(data: PaymentFailedData): string {
     </p>
     <p style="margin: 0 0 20px;">
       No pudimos procesar tu pago. No te preocupes: no se realizó ningún cargo.
-      Podés volver a intentarlo desde la app en unos minutos.
+      Puedes volver a intentarlo desde la app en unos minutos.
     </p>
     ${detailTable}
     <p style="margin: 20px 0 0; font-family: ${FONT_STACK}; font-size: 14px; color: ${COLORS.text}; line-height: 1.6;">
-      Si el problema continúa, verificá los datos de tu tarjeta o probá con otro
+      Si el problema continúa, verifica los datos de tu tarjeta o prueba con otro
       método de pago.
     </p>
   `;
 
   return wrapHtml({
-    preheader: 'No pudimos procesar tu pago — podés reintentar desde la app.',
+    preheader: 'No pudimos procesar tu pago — puedes reintentar desde la app.',
     hero: {
       title: 'Pago no procesado',
-      subtitle: 'No se realizó ningún cargo. Podés reintentar.',
+      subtitle: 'No se realizó ningún cargo. Puedes reintentar.',
     },
     body,
     footerNote:
-      '¿Necesitás ayuda con tu pago? Escribinos a soporte@tricigo.com.',
+      '¿Necesitas ayuda con tu pago? Escríbenos a soporte@tricigo.com.',
   });
 }
 

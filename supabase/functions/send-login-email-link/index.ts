@@ -134,15 +134,15 @@ Deno.serve(async (req) => {
         const nombre = esc(dbUser.full_name ?? '').split(' ')[0];
         const html =
           '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">'
-          + `<h2 style="color:#ff6a00;border-bottom:2px solid #ff6a00;padding-bottom:8px">Entrá a TriciGo</h2>`
-          + `<p>${nombre ? `Hola ${nombre}. ` : ''}Tocá el botón para entrar a tu cuenta sin esperar el código por SMS.</p>`
+          + `<h2 style="color:#ff6a00;border-bottom:2px solid #ff6a00;padding-bottom:8px">Entra a TriciGo</h2>`
+          + `<p>${nombre ? `Hola ${nombre}. ` : ''}Toca el botón para entrar a tu cuenta sin esperar el código por SMS.</p>`
           + '<p style="margin:24px 0">'
           + `<a href="${safeLink}" `
           + 'style="background:#ff6a00;color:#fff;padding:14px 28px;border-radius:8px;'
           + 'text-decoration:none;font-weight:600;display:inline-block">Entrar a mi cuenta</a>'
           + '</p>'
           + '<p style="color:#555;font-size:14px">El enlace vence en 1 hora y sirve una sola vez. '
-          + 'Si no pediste entrar, ignorá este correo: tu cuenta sigue segura.</p>'
+          + 'Si no pediste entrar, ignora este correo: tu cuenta sigue segura.</p>'
           + '<p style="color:#777;font-size:12px">TriciGo — movilidad urbana en Cuba. No responder.</p>'
           + '</body></html>';
 

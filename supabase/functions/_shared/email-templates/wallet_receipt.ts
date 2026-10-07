@@ -82,7 +82,7 @@ function renderUser(data: WalletReceiptData): string {
     </p>
     <p style="margin: 0 0 24px;">
       Tus créditos TriciCoin ya están disponibles para tus próximos viajes.
-      Adjuntamos el comprobante en PDF — también lo encontrás en tus créditos
+      Adjuntamos el comprobante en PDF — también lo encuentras en tus créditos
       de viaje dentro de la app.
     </p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 8px;">
@@ -109,7 +109,7 @@ function renderUser(data: WalletReceiptData): string {
     },
     body,
     footerNote:
-      'Conservá este correo y el PDF adjunto como comprobante. Cualquier duda, escribinos a soporte@tricigo.com.',
+      'Conserva este correo y el PDF adjunto como comprobante. Cualquier duda, escríbenos a soporte@tricigo.com.',
   });
 }
 
@@ -147,7 +147,7 @@ function renderPayer(data: WalletReceiptData): string {
     },
     body,
     footerNote:
-      'Gracias por recargar con TriciGo. Cualquier duda, escribinos a soporte@tricigo.com.',
+      'Gracias por recargar con TriciGo. Cualquier duda, escríbenos a soporte@tricigo.com.',
   });
 }
 

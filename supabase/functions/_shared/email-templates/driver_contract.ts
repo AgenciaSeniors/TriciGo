@@ -50,7 +50,7 @@ function renderDriver(data: DriverContractEmailData): string {
       ${detailRow('Fecha de aceptación', data.acceptedLabel)}
     </table>
     <p style="margin: 24px 0 0; font-family: ${FONT_STACK}; font-size: 13px; color: ${COLORS.muted}; line-height: 1.6;">
-      Guardá este documento para tu referencia. Tu solicitud está siendo revisada por
+      Guarda este documento para tu referencia. Tu solicitud está siendo revisada por
       nuestro equipo — te avisaremos cuando tu cuenta sea aprobada.
     </p>
   `;
@@ -62,7 +62,7 @@ function renderDriver(data: DriverContractEmailData): string {
       subtitle: 'Aceptación de Términos y Condiciones — conductor',
     },
     body,
-    footerNote: 'Si no fuiste vos quien se registró como conductor, escribinos a soporte@tricigo.com.',
+    footerNote: 'Si no fuiste tú quien se registró como conductor, escríbenos a soporte@tricigo.com.',
   });
 }
 

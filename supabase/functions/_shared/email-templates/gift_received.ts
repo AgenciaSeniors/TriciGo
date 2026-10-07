@@ -82,7 +82,7 @@ export function giftReceivedHtml(data: GiftReceivedData): string {
     },
     body,
     footerNote:
-      'Los regalos TriciGo se usan para pagar viajes dentro de la app. ¿Dudas? Escribinos a soporte@tricigo.com.',
+      'Los regalos TriciGo se usan para pagar viajes dentro de la app. ¿Dudas? Escríbenos a soporte@tricigo.com.',
   });
 }
 
