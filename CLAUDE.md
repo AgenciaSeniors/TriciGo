@@ -2231,7 +2231,7 @@ Cuando el despacho no encuentra conductor, soporte ayuda desde el panel: banner 
   WHERE c.jobname LIKE 'support-%' ORDER BY c.called_at DESC LIMIT 20;
   ```
 - **Una prueba con cuenta de prueba llega a conductores reales**: `dispatch_ride` y `find_best_drivers` no miran `is_test`. El push de espera sí saltea cuentas de prueba, y el banner las muestra marcadas "Prueba".
-- **`dispatch_ride` lo llama `_apply_ride_service_change` (SECURITY DEFINER, dueño `postgres`)**, así que quitarle EXECUTE a los clientes (00630, PR #1099 todavía abierto) no lo afecta. Medido en prod después de aplicar 00628: las 6 funciones que llaman a `dispatch_ride` son SECURITY DEFINER con dueño `postgres`, que es lo que asserta 00630.
+- **`dispatch_ride` lo llama `_apply_ride_service_change` (SECURITY DEFINER, dueño `postgres`)**, así que 00630, que les quitó EXECUTE a los clientes, no lo afecta. Medido en prod con las dos aplicadas: `authenticated` ya no puede ejecutar `dispatch_ride`, su dueño sí, y las 6 funciones que lo llaman (`_apply_ride_service_change` incluida) son SECURITY DEFINER con dueño `postgres`.
 - **Verificar que una migración larga llegó intacta por MCP**: en el ensayo en prod se agregó al bloque final `md5(substring(current_query() FROM <inicio> FOR <largo>))`, que mide el texto que recibió el servidor, y se comparó con el md5 del archivo. Coincidió; si no coincide, algo se transcribió mal antes de que corra nada.
 
 ---
