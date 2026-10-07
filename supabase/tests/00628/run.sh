@@ -56,6 +56,7 @@ CORP=c0c00000-0000-4000-8000-000000000001
 FLEET=f1ee0000-0000-4000-8000-000000000001
 P1=b1000000-0000-4000-8000-000000000001        # a proposal on R1
 OF5=0f500000-0000-4000-8000-0000000000d5       # D5's offer on R1 (S15-S17)
+OF1=0f100000-0000-4000-8000-0000000000d1       # D1's offer on R1 (S18)
 SNAP_OLD=5a000000-0000-4000-8000-0000000000a1  # estimate row written by the LIVE trigger
 SNAP_NEW=5a000000-0000-4000-8000-0000000000a2  # estimate row written after the migration
 
@@ -270,7 +271,7 @@ val S1 "$(tx "$(ride $R1) $BEAT UPDATE public.rides SET shared_ride = true, shar
           (SELECT string_agg(left(o.driver_profile_id::text, 2) || '=' || o.status, ',' ORDER BY o.driver_profile_id) FROM public.ride_offers o WHERE o.ride_id = '$R1'),
           r.dispatch_round, (SELECT count(*) FROM public.admin_actions WHERE action = 'support_change_service')
      FROM public.rides r WHERE r.id = '$R1'")" \
-  "apply;auto_standard|3000|3000|f|0|0|1:3000:700|d1=superseded,d5=pending|1|1"
+  "apply;auto_standard|3000|3000|f|0|0|1:3000:700|d1=expired,d5=pending|1|1"
 DSTATE="SELECT discount_amount_cup || '|' || (promo_code_id IS NOT NULL) FROM public.rides WHERE id = '$R1'"
 val S2 "$(tx "$(ride $R1) UPDATE public.rides SET promo_code_id = '$PROMO' WHERE id = '$R1';" $ADMIN \
   "$(apply auto_standard 3000 "'Aceptó por WhatsApp'" mode)" "$DSTATE")" "apply;750|true"
@@ -304,20 +305,20 @@ val S14 "$(tx "$(ride $R1) INSERT INTO public.ride_waypoints (ride_id, sort_orde
   VALUES ('$R1', 1, ST_SetSRID(ST_MakePoint(-82.3700, 23.1350), 4326)::geography, 'Parada');" $ADMIN "$(apply auto_standard 3000)" "$RSTATE")" \
   "waypoints_not_supported;triciclo_basico|2000"
 # A driver who can still serve the new type keeps the ride (auto_standard and auto_confort share
-# their drivers). offer5 [STATUS] [EXPIRES]: D5's offer on R1, with a known id.
-offer5(){ echo "INSERT INTO public.ride_offers (id, ride_id, driver_profile_id, status, expires_at)
-  VALUES ('$OF5', '$R1', '$D5', '${1:-pending}', now() + interval '${2:-1 minute}');"; }
+# their drivers). offerid ID DRIVER [STATUS] [EXPIRES]: DRIVER's offer on R1, with a known id.
+offerid(){ echo "INSERT INTO public.ride_offers (id, ride_id, driver_profile_id, status, expires_at)
+  VALUES ('$1', '$R1', '$2', '${3:-pending}', now() + interval '${4:-1 minute}');"; }
 # D5's only offer on R1: the same row, pending, live, unanswered, and its pushes at 4000 CUP.
 O5STATE="SELECT o.id = '$OF5', o.status, o.expires_at > now(), o.responded_at IS NULL,
     (SELECT count(*) FROM net.calls c WHERE c.body->>'user_id' = '$U5' AND c.body->'data'->>'offer_id' = '$OF5'
        AND c.body->>'body' LIKE '%4000 CUP')
   FROM public.ride_offers o WHERE o.ride_id = '$R1' AND o.driver_profile_id = '$D5'"
 # Fare up: re-offered at once, on the same row, with a push at the new fare.
-val S15 "$(tx "$(ride $R1 auto_standard 3000) $BEAT $(offer5) $QUIET" $ADMIN \
+val S15 "$(tx "$(ride $R1 auto_standard 3000) $BEAT $(offerid $OF5 $D5) $QUIET" $ADMIN \
   "$(apply auto_confort 4000 "'Aceptó por WhatsApp'" mode)" "$O5STATE")" "apply;t|pending|t|t|1"
 # Fare down: the offer only expires, so the old card, at the higher price, cannot be accepted; once
 # the cooldown has passed, re-dispatch (here dispatch_ride as the cron) re-offers it at the new fare.
-val S16 "BEGIN; $(ride $R1 auto_confort 4000) $BEAT $(offer5) $QUIET
+val S16 "BEGIN; $(ride $R1 auto_confort 4000) $BEAT $(offerid $OF5 $D5) $QUIET
   $(as $ADMIN) $(apply auto_standard 3000 "'Aceptó por WhatsApp'" mode)
   RESET ROLE; SELECT status FROM public.ride_offers WHERE id = '$OF5';
   $(as $U5) SELECT public.accept_ride_v2('$R1', '$D5')->>'error';
@@ -328,8 +329,21 @@ val S16 "BEGIN; $(ride $R1 auto_confort 4000) $BEAT $(offer5) $QUIET
     FROM public.ride_offers o WHERE o.id = '$OF5'; ROLLBACK;" \
   "apply;expired;offer_not_found_or_expired;1;pending|1"
 # An offer that expired 5 s ago, inside the 120 s cooldown, is re-offered at once by a fare up.
-val S17 "$(tx "$(ride $R1 auto_standard 3000) $BEAT $(offer5 expired '-5 seconds') $QUIET" $ADMIN \
+val S17 "$(tx "$(ride $R1 auto_standard 3000) $BEAT $(offerid $OF5 $D5 expired '-5 seconds') $QUIET" $ADMIN \
   "$(apply auto_confort 4000 "'Aceptó por WhatsApp'" mode)" "$O5STATE")" "apply;t|pending|t|t|1"
+# A round trip. D1 (triciclo) cannot serve moto: its offer only expires and cannot be accepted.
+# Back to triciclo at a fare at least as high: re-offered at once, on the same row, at the new fare.
+val S18 "BEGIN; $(ride $R1) $BEAT $(offerid $OF1 $D1) $QUIET
+  $(as $ADMIN) $(apply moto_standard 1000 "'Aceptó por WhatsApp'" mode)
+  RESET ROLE; SELECT status FROM public.ride_offers WHERE id = '$OF1';
+  $(as $U1) SELECT public.accept_ride_v2('$R1', '$D1')->>'error';
+  $(as $ADMIN) $(apply triciclo_basico 2400 "'Aceptó por WhatsApp'" mode)
+  RESET ROLE; SET LOCAL request.jwt.claim.sub = '';
+  SELECT o.id = '$OF1', o.status, o.expires_at > now(), o.responded_at IS NULL,
+         (SELECT count(*) FROM net.calls c WHERE c.body->>'user_id' = '$U1' AND c.body->'data'->>'offer_id' = '$OF1'
+            AND c.body->>'body' LIKE '%2400 CUP')
+    FROM public.ride_offers o WHERE o.ride_id = '$R1' AND o.driver_profile_id = '$D1'; ROLLBACK;" \
+  "apply;expired;offer_not_found_or_expired;apply;t|pending|t|t|1"
 
 # --- P: proposals the rider answers in the app ----------------------------------------------
 propose(){ echo "SELECT public.admin_change_ride_service('$R1', '$1', $2, 'propose', NULL)->>'mode';"; }

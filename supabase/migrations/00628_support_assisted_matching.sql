@@ -438,29 +438,26 @@ BEGIN
   PERFORM set_config('app.force_discount_recompute', '', true);
 
   -- 3. Offers. dispatch_ride re-offers an 'expired' row once its expiry is older than
-  --    reoffer_cooldown_s, never a 'superseded' one (00524). A pending offer of a driver whose
-  --    vehicle cannot serve the new type is superseded: that driver is out for good. A driver who
-  --    still can (auto_standard and auto_confort share their drivers) keeps an 'expired' row:
-  --    * fare up or the same: back-dated past the cooldown, so the dispatch_ride below re-offers
-  --      it at once, on the same row, with a fresh TTL and a push (trg_notify_driver_reoffer);
-  --    * fare down: only a pending offer changes. The driver's card may still show the old,
-  --      higher price, so it must not be acceptable from it; re-dispatch offers the new fare
-  --      once the cooldown has passed.
+  --    reoffer_cooldown_s, and never a 'superseded' one (00524), so no offer is superseded here:
+  --    * on a fare up or the same fare, the pending or expired offer of a driver whose vehicle can
+  --      serve the new type (auto_standard and auto_confort share their drivers) is back-dated
+  --      past the cooldown, so the dispatch_ride below re-offers it at once, on the same row, with
+  --      a fresh TTL and a push (trg_notify_driver_reoffer);
+  --    * every other pending offer only expires: the driver's card may still show the old type
+  --      and price, so it must not be acceptable from it. A driver who cannot serve the new type
+  --      stays out (find_best_drivers filters the vehicle type) until the ride comes back to a
+  --      type they serve; on a fare down, re-dispatch offers the new fare once the cooldown has
+  --      passed.
   --    Rejected and accepted offers stay as they are; a pending proposal is void.
-  UPDATE public.ride_offers o SET status = 'superseded', responded_at = now()
-   WHERE o.ride_id = p_ride_id AND o.status = 'pending'
-     AND NOT public._driver_can_serve_ride(o.driver_profile_id, p_service_type, false);
   IF p_fare_cup >= COALESCE(v_old_fare, 0) THEN
     -- Read as dispatch_ride reads it.
     v_cooldown := GREATEST(0, public.get_platform_config_numeric('reoffer_cooldown_s', 120))::int;
     UPDATE public.ride_offers o SET status = 'expired', expires_at = now() - make_interval(secs => v_cooldown + 1)
      WHERE o.ride_id = p_ride_id AND o.status IN ('pending', 'expired')
        AND public._driver_can_serve_ride(o.driver_profile_id, p_service_type, false);
-  ELSE
-    UPDATE public.ride_offers o SET status = 'expired', expires_at = LEAST(o.expires_at, now())
-     WHERE o.ride_id = p_ride_id AND o.status = 'pending'
-       AND public._driver_can_serve_ride(o.driver_profile_id, p_service_type, false);
   END IF;
+  UPDATE public.ride_offers o SET status = 'expired', expires_at = LEAST(o.expires_at, now())
+   WHERE o.ride_id = p_ride_id AND o.status = 'pending';
   UPDATE public.ride_service_proposals SET status = 'superseded', responded_at = now()
    WHERE ride_id = p_ride_id AND status = 'pending';
   PERFORM public.dispatch_ride(p_ride_id);
