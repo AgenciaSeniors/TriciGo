@@ -249,7 +249,6 @@ export default function BookPage() {
   /* ─── Nearby vehicles state ─── */
   const [nearbyVehicles, setNearbyVehicles] = useState<NearbyVehicle[]>([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
-  const realtimeChannelRef = useRef<ReturnType<typeof nearbyService.subscribeToDriverPositions> | null>(null);
 
   /* ─── ETA by vehicle type (closest driver per type) ─── */
   const [etaByType, setEtaByType] = useState<Record<VehicleType, number | null>>({
@@ -336,30 +335,6 @@ export default function BookPage() {
     fetchVehicles();
     return () => { cancelled = true; };
   }, [pickup]);
-
-  /* ─── Subscribe to real-time driver positions ─── */
-  useEffect(() => {
-    let isMounted = true;
-    const channel = nearbyService.subscribeToDriverPositions((update) => {
-      if (!isMounted) return;
-      setNearbyVehicles((prev) =>
-        prev.map((v) =>
-          v.driver_profile_id === update.driver_profile_id
-            ? { ...v, latitude: update.latitude, longitude: update.longitude, heading: update.heading }
-            : v,
-        ),
-      );
-    });
-    realtimeChannelRef.current = channel;
-
-    return () => {
-      isMounted = false;
-      if (realtimeChannelRef.current) {
-        realtimeChannelRef.current.unsubscribe();
-        realtimeChannelRef.current = null;
-      }
-    };
-  }, []);
 
   /* ─── Reverse geocode map center for center pin ─── */
   useEffect(() => {
