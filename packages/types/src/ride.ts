@@ -339,7 +339,9 @@ export interface CompleteRideResult {
   /** @deprecated Use quota_deduction_amount instead */
   commission_amount: number;
   driver_earnings: number;
-  payment_method: string;
+  /** 00636: 'mixed' when the rider's wallet could not cover a TriciCoin fare
+   *  and the rest is cash (see cash_amount_cup). */
+  payment_method: PaymentMethod;
   share_token: string;
   surge_multiplier: number;
   driver_custom_rate_cup: number | null;

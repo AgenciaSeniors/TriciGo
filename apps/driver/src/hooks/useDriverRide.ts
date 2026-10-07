@@ -1147,6 +1147,10 @@ export function useDriverRideActions() {
           // the justification modal when the driver exceeded 1.3× estimate.
           excess_distance_uncharged_m: result.excess_distance_uncharged_m ?? 0,
           share_token: result.share_token,
+          // 00636: a TriciCoin ride whose rider's wallet fell short completes as
+          // 'mixed'. Take the method from the RPC so TripCompleteView shows
+          // "Cobrar $X en efectivo" instead of a TriciCoin summary.
+          payment_method: result.payment_method ?? activeTrip.payment_method,
           // Mixed payment split: the RPC computes wallet/cash portions at
           // completion and returns them. Merge so TripCompleteView shows the
           // real "Cobrar $X efectivo / $Y del wallet" instead of $0/$0 (the
