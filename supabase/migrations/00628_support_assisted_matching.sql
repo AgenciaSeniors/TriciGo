@@ -1009,3 +1009,244 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) TO authenticated, service_role;
+
+-- 8. Alerts to support: a push to every active admin and super_admin, and an e-mail to each
+--    address in support_alert_email. Both through cron_http_post, so a failing send-push or
+--    send-email shows up in the cron watchdog (check_cron_http_failures).
+CREATE OR REPLACE FUNCTION public._support_alert(p_ride_id uuid, p_kind text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_ride     public.rides%ROWTYPE;
+  v_customer public.users%ROWTYPE;
+  v_admins   uuid[];
+  v_key      text;
+  v_headers  jsonb;
+  v_code     text := public._ride_short_code(p_ride_id);
+  v_link     text := 'https://admin.tricigo.com/rides/' || p_ride_id::text || '/assist';
+  v_wait_min integer;
+  v_title    text;
+  v_body     text;
+  v_html     text;
+  v_to_raw   text;
+  v_rcpt     text;
+  v_row      text := '<tr><td style="padding:6px;border-bottom:1px solid #eee"><b>%s</b></td><td style="padding:6px;border-bottom:1px solid #eee;text-align:right">%s</td></tr>';
+BEGIN
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+  SELECT * INTO v_customer FROM public.users WHERE id = v_ride.customer_id;
+
+  v_key := public.get_service_role_key();
+  IF v_key IS NULL OR v_key = '' THEN
+    RETURN;
+  END IF;
+  v_headers := jsonb_build_object('Content-Type', 'application/json',
+                                  'Authorization', 'Bearer ' || v_key, 'apikey', v_key);
+
+  v_wait_min := GREATEST(0, floor(extract(epoch FROM now() - GREATEST(v_ride.created_at, v_ride.scheduled_at)) / 60))::int;
+  v_title := CASE WHEN p_kind = 'help' THEN 'Pasajero pide ayuda · ' ELSE 'Viaje sin conductor · ' END || v_code;
+  v_body := 'Espera ' || v_wait_min || ' min · '
+         || left(COALESCE(v_ride.pickup_address, '—'), 60) || ' → ' || left(COALESCE(v_ride.dropoff_address, '—'), 60);
+
+  SELECT array_agg(u.id) INTO v_admins
+  FROM public.users u
+  WHERE u.role IN ('admin', 'super_admin') AND u.is_active;
+  IF v_admins IS NOT NULL THEN
+    PERFORM public.cron_http_post(
+      CASE WHEN p_kind = 'help' THEN 'support-help-alert' ELSE 'support-wait-alert' END,
+      url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
+      headers := v_headers,
+      body    := jsonb_build_object(
+        'user_ids', to_jsonb(v_admins),
+        'title', v_title, 'body', v_body, 'category', 'system',
+        'data', jsonb_build_object('event', 'support_' || p_kind, 'ride_id', p_ride_id::text, 'url', v_link)));
+  END IF;
+
+  v_to_raw := public.get_platform_config_text('support_alert_email', '');
+  IF position('@' IN COALESCE(v_to_raw, '')) > 0 THEN
+    -- Every value a user typed is escaped; every other value is non-null, because one NULL in a
+    -- || chain blanks the whole body (CLAUDE.md, 00577).
+    v_html := '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">'
+      || '<h2 style="color:#ff4d00;border-bottom:2px solid #ff4d00;padding-bottom:8px">' || public._html_escape(v_title) || '</h2>'
+      || '<p>' || CASE WHEN p_kind = 'help'
+           THEN 'El pasajero tocó <b>Pedir ayuda</b> en la pantalla de búsqueda. También puede escribir por WhatsApp con el código del viaje.'
+           ELSE 'Este viaje lleva más de ' || public.get_platform_config_numeric('support_alert_after_s', 60)::int
+                || ' segundos sin conductor.' END
+      || '</p>'
+      || '<table style="width:100%;border-collapse:collapse;margin:16px 0">'
+      || format(v_row, 'Código', v_code)
+      || format(v_row, 'Espera', v_wait_min || ' min')
+      || format(v_row, 'Pasajero', public._html_escape(COALESCE(v_customer.full_name, '—') || ' ' || COALESCE(v_customer.phone, '')))
+      || format(v_row, 'Servicio', public._html_escape(v_ride.service_type) || ' · ' || COALESCE(v_ride.estimated_fare_cup, 0) || ' CUP')
+      || format(v_row, 'Origen', public._html_escape(COALESCE(v_ride.pickup_address, '—')))
+      || format(v_row, 'Destino', public._html_escape(COALESCE(v_ride.dropoff_address, '—')))
+      || '</table>'
+      || '<p><a href="' || v_link || '" style="display:inline-block;background:#ff4d00;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Asistir el viaje</a></p>'
+      || '<p style="color:#777;font-size:12px">Aviso automático de TriciGo (00628). Se envía una vez por viaje y motivo. No responder.</p>'
+      || '</body></html>';
+    IF v_html IS NULL THEN
+      RAISE EXCEPTION 'empty alert e-mail';
+    END IF;
+    FOR v_rcpt IN
+      SELECT btrim(x) FROM unnest(string_to_array(v_to_raw, ',')) AS t(x) WHERE position('@' IN x) > 0
+    LOOP
+      PERFORM public.cron_http_post(
+        CASE WHEN p_kind = 'help' THEN 'support-help-email' ELSE 'support-wait-email' END,
+        url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-email',
+        headers := v_headers,
+        body    := jsonb_build_object('recipient_email', v_rcpt, 'subject', '[TriciGo] ' || v_title,
+                                      -- raw HTML: the legacy path of send-email's resolveTemplate (00503, 00538)
+                                      'template', v_html, 'data', '{}'::jsonb));
+    END LOOP;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- An alert never fails its caller (the rider's button, the cron).
+  RAISE WARNING '_support_alert failed for ride %: % %', p_ride_id, SQLSTATE, SQLERRM;
+END;
+$$;
+REVOKE ALL ON FUNCTION public._support_alert(uuid, text) FROM PUBLIC, anon, authenticated;
+
+-- The rider's "Pedir ayuda". Idempotent: support is alerted the first time only.
+CREATE OR REPLACE FUNCTION public.request_ride_help(p_ride_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_uid  uuid := auth.uid();
+  v_ride public.rides%ROWTYPE;
+  v_sent timestamptz;
+BEGIN
+  IF v_uid IS NULL THEN
+    RETURN jsonb_build_object('error', 'unauthenticated');
+  END IF;
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id;
+  IF NOT FOUND OR v_ride.customer_id IS DISTINCT FROM v_uid THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+  IF v_ride.status <> 'searching' THEN
+    RETURN jsonb_build_object('error', 'ride_not_searching', 'status', v_ride.status);
+  END IF;
+
+  INSERT INTO public.ride_assist (ride_id, help_requested_at)
+  VALUES (p_ride_id, now())
+  ON CONFLICT (ride_id) DO UPDATE
+    SET help_requested_at = COALESCE(public.ride_assist.help_requested_at, EXCLUDED.help_requested_at)
+  RETURNING help_alert_sent_at INTO v_sent;
+
+  IF v_sent IS NULL THEN
+    UPDATE public.ride_assist SET help_alert_sent_at = now() WHERE ride_id = p_ride_id;
+    PERFORM public._support_alert(p_ride_id, 'help');
+  END IF;
+
+  RETURN jsonb_build_object('success', true, 'code', public._ride_short_code(p_ride_id));
+END;
+$$;
+REVOKE ALL ON FUNCTION public.request_ride_help(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.request_ride_help(uuid) TO authenticated, service_role;
+
+-- Every minute: one alert per ride that has waited longer than support_alert_after_s (at most
+-- 6 hours back; a scheduled ride waits from scheduled_at). Test riders do not trigger it.
+CREATE OR REPLACE FUNCTION public.notify_support_waiting_rides()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_after integer;
+  v_id    uuid;
+  v_n     integer := 0;
+BEGIN
+  IF public.get_platform_config_text('support_alert_enabled', 'true') = 'false' THEN
+    RETURN 0;
+  END IF;
+  v_after := GREATEST(15, public.get_platform_config_numeric('support_alert_after_s', 60)::int);
+
+  FOR v_id IN
+    SELECT r.id
+    FROM public.rides r
+    JOIN public.users c ON c.id = r.customer_id
+    LEFT JOIN public.ride_assist ra ON ra.ride_id = r.id
+    WHERE r.status = 'searching'
+      AND NOT c.is_test
+      AND GREATEST(r.created_at, r.scheduled_at) <= now() - make_interval(secs => v_after)
+      AND GREATEST(r.created_at, r.scheduled_at) > now() - interval '6 hours'
+      AND ra.wait_alert_sent_at IS NULL
+    ORDER BY GREATEST(r.created_at, r.scheduled_at)
+    LIMIT 20
+  LOOP
+    INSERT INTO public.ride_assist (ride_id, wait_alert_sent_at)
+    VALUES (v_id, now())
+    ON CONFLICT (ride_id) DO UPDATE SET wait_alert_sent_at = EXCLUDED.wait_alert_sent_at
+    WHERE public.ride_assist.wait_alert_sent_at IS NULL;
+    IF FOUND THEN
+      PERFORM public._support_alert(v_id, 'wait');
+      v_n := v_n + 1;
+    END IF;
+  END LOOP;
+  RETURN v_n;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.notify_support_waiting_rides() FROM PUBLIC, anon, authenticated;
+
+SELECT cron.schedule('notify-support-waiting-rides', '* * * * *', 'SELECT public.notify_support_waiting_rides()');
+
+-- 9. What this migration promises, checked in the database it just changed.
+DO $assert$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT p.oid::regprocedure AS fn FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
+      '_ride_short_code', '_vehicle_types_for_service', '_driver_can_serve_ride', '_users_blocked',
+      '_html_escape', '_write_ride_estimate_snapshot', '_ride_service_change_error',
+      '_apply_ride_service_change', '_support_alert', 'notify_support_waiting_rides')
+  LOOP
+    IF has_function_privilege('anon', r.fn, 'EXECUTE') OR has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00628: % is executable by a client role', r.fn;
+    END IF;
+  END LOOP;
+
+  FOR r IN
+    SELECT p.oid::regprocedure AS fn FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
+      'request_ride_help', 'get_my_ride_service_proposal', 'respond_ride_service_proposal',
+      'admin_support_waiting_rides', 'admin_ride_assist_context', 'admin_ride_assist_candidates',
+      'admin_offer_ride_to_driver', 'admin_assign_ride_to_driver', 'admin_change_ride_service')
+  LOOP
+    IF has_function_privilege('anon', r.fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00628: % is executable by anon', r.fn;
+    END IF;
+    IF NOT has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00628: % is not executable by authenticated', r.fn;
+    END IF;
+  END LOOP;
+
+  IF has_table_privilege('anon', 'public.ride_assist', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.ride_assist', 'SELECT')
+     OR has_table_privilege('anon', 'public.ride_service_proposals', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.ride_service_proposals', 'SELECT') THEN
+    RAISE EXCEPTION '00628: a client role can read a support table';
+  END IF;
+
+  IF position('_write_ride_estimate_snapshot' IN
+       (SELECT prosrc FROM pg_proc WHERE oid = 'public.tg_rides_create_estimate_snapshot()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION '00628: the estimate trigger does not call the shared writer';
+  END IF;
+  IF position('app.force_discount_recompute' IN
+       (SELECT prosrc FROM pg_proc WHERE oid = 'public.tg_rides_validate_promo_discount()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION '00628: the discount trigger was not patched';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'notify-support-waiting-rides') THEN
+    RAISE EXCEPTION '00628: the support alert cron is not scheduled';
+  END IF;
+END
+$assert$;
