@@ -312,7 +312,7 @@ export default function RidesPage() {
         search={{
           value: filters.search,
           onChange: (v) => updateFilter('search', v),
-          placeholder: t('rides.search_address_placeholder', { defaultValue: 'Buscar por dirección…' }),
+          placeholder: t('rides.search_address_placeholder', { defaultValue: 'Buscar por dirección o código del viaje…' }),
         }}
         activeFilterCount={activeFilterCount - (filters.search ? 1 : 0)}
       >
