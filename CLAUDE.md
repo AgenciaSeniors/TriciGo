@@ -3247,7 +3247,7 @@ La política `r_update` deja al pasajero y al conductor asignado hacer UPDATE de
 - También se les quitó TRUNCATE y TRIGGER sobre `rides` a `anon` y `authenticated` (TRUNCATE no pasa por RLS).
 - Historial revisado hasta diciembre de 2025: el último código de app que cambiaba estado o tarifa directo (cancelar y aceptar crudos) se borró en abril de 2026.
 - Ensayo: `supabase/tests/00634/run.sh` (RED: 18 fallos; GREEN 37/37 con 4 pruebas negativas). Ensayo en prod dentro de un bloque revertido, con los triggers reales: 10/10, incluidos `complete_ride_and_pay`, `cancel_ride`, compartir enlace y abrir una disputa.
-- **Estado:** pendiente de aplicar.
+- **Estado:** aplicada en prod el 2026-10-07 por MCP (`20261007221834`). Verificado por objeto: la verja (md5 `dadf42ea…`) es el primer trigger BEFORE UPDATE de `rides`, `update_ride_status_v2` quedó en `182eeb57…` sin EXECUTE para `anon`, y `authenticated` ya no tiene TRUNCATE. Probado después en prod en un bloque revertido: el completado crudo y el atraso de llegada se bloquean; `complete_ride_and_pay`, compartir enlace, abrir una disputa, `update_ride_status_v2` y `cancel_ride` siguen andando.
 
 ### `users.phone` no prueba que el número sea del usuario (00599, 2026-09-26)
 
