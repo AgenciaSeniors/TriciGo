@@ -119,6 +119,8 @@
   },
 
   "trip": {
+    "support_assigned_title": "Soporte te asignó un viaje",
+    "support_assigned_body": "Ya está en tu pantalla. Ve a recoger al pasajero.",
     "queued_offline": "Guardado sin conexión",
     "queued_offline_sub": "Se enviará solo cuando vuelva la señal. Puedes continuar.",
     "camera_error": "Error al abrir la cámara",

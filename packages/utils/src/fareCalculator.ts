@@ -250,3 +250,29 @@ export function calculateFareRange(params: FareRangeParams): FareRange {
     maxFareUsd: toUsd(maxFareCup),
   };
 }
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * The wall clock matchPricingRule needs ("HH:MM" and day of week, 0 = Sunday), read in an IANA
+ * time zone. Without a zone it reads the device clock, which is what the rider app has always
+ * done: phones in Cuba run on Havana time. Support re-quotes a ride from a browser that can be
+ * anywhere, so it passes 'America/Havana', the zone the estimate snapshot uses (00299, 00628).
+ */
+export function pricingClock(date: Date, timeZone?: string): { hhmm: string; day: number } {
+  if (!timeZone) {
+    return {
+      hhmm: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`,
+      day: date.getDay(),
+    };
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    weekday: 'short',
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  return { hhmm: `${part('hour')}:${part('minute')}`, day: WEEKDAYS.indexOf(part('weekday')) };
+}

@@ -15,6 +15,8 @@ import type { PushRegistrationOutcome } from '@tricigo/utils';
 import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { emitRideAssignedPush, isRideAssignedPush } from '@/utils/rideAssignedPush';
+import { claimNotificationResponse } from '@/utils/notificationResponses';
 
 const NOTIF_PREF_KEY = '@tricigo/notifications_enabled';
 
@@ -388,20 +390,30 @@ export function useNotificationSetup(userId: string | null | undefined) {
 
     register();
 
-    // Handle notification taps (app in background)
+    // Handle notification taps (app in background). Claimed by identifier, so the
+    // cold-start read below (which runs again whenever userId changes) cannot replay it.
     responseListenerRef.current = Notifications.addNotificationResponseReceivedListener(
       (response) => {
+        if (!claimNotificationResponse(response.notification.request.identifier)) return;
         const data = response.notification.request.content.data;
         handleNotificationNavigation(data as Record<string, unknown>);
+        if (isRideAssignedPush(data)) emitRideAssignedPush();
       },
     );
 
+    // Support assigned a ride while the app is open (00628): load it without waiting for a tap.
+    const receivedListener = Notifications.addNotificationReceivedListener((notification) => {
+      if (isRideAssignedPush(notification.request.content.data)) emitRideAssignedPush();
+    });
+
     // Handle cold-start: notification that launched the app
-    // getLastNotificationResponseAsync is not available on web
+    // getLastNotificationResponseAsync is not available on web. It keeps returning the
+    // same last tap for the life of the process, so each one is handled once.
     (Platform.OS !== 'web' ? Notifications.getLastNotificationResponseAsync() : Promise.resolve(null)).then((response) => {
-      if (response && !cancelled) {
+      if (response && !cancelled && claimNotificationResponse(response.notification.request.identifier)) {
         const data = response.notification.request.content.data;
         handleNotificationNavigation(data as Record<string, unknown>);
+        if (isRideAssignedPush(data)) emitRideAssignedPush();
       }
     });
 
@@ -423,6 +435,7 @@ export function useNotificationSetup(userId: string | null | undefined) {
     return () => {
       cancelled = true;
       responseListenerRef.current?.remove();
+      receivedListener.remove();
       appStateSubscription.remove();
     };
   }, [userId]);

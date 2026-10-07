@@ -742,6 +742,19 @@ describe('adminService', () => {
       expect(result).toEqual(rides);
     });
 
+    it('finds a ride by its 8-character code (with or without #, any case)', async () => {
+      const rides = [{ id: 'f1a2b3c4-0000-4000-8000-000000000001' }];
+      const chain = createMockQueryChain({ data: rides, error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      const result = await adminService.getRides({ search: ' #F1A2B3C4 ' });
+
+      expect(chain.gte).toHaveBeenCalledWith('id', 'f1a2b3c4-0000-0000-0000-000000000000');
+      expect(chain.lte).toHaveBeenCalledWith('id', 'f1a2b3c4-ffff-ffff-ffff-ffffffffffff');
+      expect(chain.or).not.toHaveBeenCalled();
+      expect(result).toEqual(rides);
+    });
+
     it('applies date range filters', async () => {
       const rides = [{ id: 'r-1' }];
       const chain = createMockQueryChain({ data: rides, error: null });

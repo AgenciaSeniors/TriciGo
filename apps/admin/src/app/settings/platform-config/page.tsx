@@ -139,6 +139,14 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   // Invite link (https://chat.whatsapp.com/<code>). Empty = the join UI
   // stays hidden in the driver app. Editable only by super_admin.
   driver_whatsapp_group_url: { type: 'text', helpKey: 'platform_config.driver_whatsapp_group_url_help' },
+
+  // ── Soporte: viajes sin conductor (00628) ──
+  support_alert_enabled: { type: 'select', helpKey: 'platform_config.support_alert_enabled_help', options: [{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }] },
+  support_alert_after_s: { type: 'number', helpKey: 'platform_config.support_alert_after_s_help' },
+  support_offer_ttl_s: { type: 'number', helpKey: 'platform_config.support_offer_ttl_s_help' },
+  support_proposal_ttl_s: { type: 'number', helpKey: 'platform_config.support_proposal_ttl_s_help' },
+  support_alert_email: { type: 'text', helpKey: 'platform_config.support_alert_email_help' },
+  support_help_keepalive_s: { type: 'number', helpKey: 'platform_config.support_help_keepalive_s_help' },
 };
 
 export default function PlatformConfigPage() {

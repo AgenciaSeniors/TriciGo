@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
@@ -190,6 +191,14 @@ export default function RideDetailPage() {
           <p className="text-3xl font-bold text-primary-500">{formatCUP(fare)}</p>
           {ride.final_fare_cup != null && ride.final_fare_cup !== ride.estimated_fare_cup && (
             <p className="text-sm text-ink-subtle line-through">{formatCUP(ride.estimated_fare_cup)} {t('rides.estimated')}</p>
+          )}
+          {ride.status === 'searching' && (
+            <Link
+              href={`/rides/${ride.id}/assist`}
+              className="mt-3 mr-2 inline-block px-4 py-2 text-sm rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium"
+            >
+              {t('ride_assist.assist_open', { defaultValue: 'Asistir' })}
+            </Link>
           )}
           {CANCELABLE_STATUSES.includes(ride.status) && (
             <button

@@ -18,6 +18,7 @@ import { fetchRoute } from '../../../services/geoService';
 import { TipFlow } from '../../../components/TipFlow';
 import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
 import { FareSplitCard } from './FareSplitCard';
+import { SupportHelpCard } from './SupportHelpCard';
 import { StopPickerMap } from './StopPickerMap';
 import './track.css';
 
@@ -883,6 +884,19 @@ export default function TrackRidePage() {
             <div className="track-card">
               <StatusStepper steps={statusSteps} currentIdx={currentStepIdx} />
             </div>
+          )}
+
+          {/* Support-assisted matching (00628): a type change support proposed, and "Pedir ayuda". */}
+          {ride.status === 'searching' && userId === ride.customer_id && (
+            <SupportHelpCard
+              rideId={ride.id}
+              startedAtMs={Math.max(
+                new Date(ride.created_at).getTime(),
+                ride.scheduled_at ? new Date(ride.scheduled_at).getTime() : 0,
+              )}
+              sharedRide={!!ride.shared_ride}
+              onChanged={fetchRide}
+            />
           )}
 
           {/* Proximity banner — el conductor entró en ~300m del punto activo

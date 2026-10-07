@@ -261,6 +261,12 @@ export function useRideInit() {
             || (fresh as { estimated_duration_s?: number | null }).estimated_duration_s !==
               (pinned as { estimated_duration_s?: number | null }).estimated_duration_s;
 
+          // Support can switch a searching ride to another vehicle type (00628): a new
+          // service_type and fare with the same status, and the fare can even stay equal.
+          const serviceChanged =
+            fresh.service_type !== pinned.service_type
+            || fresh.estimated_fare_trc !== pinned.estimated_fare_trc;
+
           // Payment can flip pending→paid without touching status (the driver
           // confirms cash, or a wallet debit settles). Without this the
           // confirmation toast never fires.
@@ -277,6 +283,7 @@ export function useRideInit() {
             || gpsConfChanged
             || driverGpsStatusChanged
             || estimatedChanged
+            || serviceChanged
             || paymentStatusChanged
           ) {
             // eslint-disable-next-line no-console
@@ -287,6 +294,7 @@ export function useRideInit() {
               gps_conf_changed: gpsConfChanged,
               driver_gps_status_changed: driverGpsStatusChanged,
               estimated_changed: estimatedChanged,
+              service_changed: serviceChanged,
               payment_status_changed: paymentStatusChanged,
             });
 

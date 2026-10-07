@@ -269,8 +269,11 @@ function IncomingRideCardInner({
     }, 1000);
 
     return () => clearInterval(interval);
+    // Restarts when the same ride comes back with a later expiry: support
+    // extended or re-armed the offer (00628), and the store refreshed this
+    // card in place instead of mounting a new one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ride.id]);
+  }, [ride.id, ride.offer_expires_at]);
 
   // Side-effect of the offer expiring (outside setState). Declines the
   // offer — the mirror image of the old auto-accept: no action = no ride.

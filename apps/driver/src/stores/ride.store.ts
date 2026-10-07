@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as Notifications from 'expo-notifications';
 import type { Ride } from '@tricigo/types';
 import { logger } from '@tricigo/utils';
+import { decideIncomingOffer } from '@/utils/incomingOffer';
 
 /** Ride with a local timestamp for TTL expiry */
 type TimestampedRide = Ride & { _receivedAt: number };
@@ -43,17 +44,34 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
 
   addRequest: (ride) =>
     set((s) => {
-      // Avoid duplicates
-      if (s.incomingRequests.some((r) => r.id === ride.id)) return s;
-      // …and don't resurrect one the driver just turned down. `addRequest`
-      // only ever checked the CURRENT list, which "No me sirve" had just
-      // removed from — so the 30s `getSearchingRides` poll re-added the very
-      // offer they declined, reopened the full-screen card, and fired another
+      const cached = s.incomingRequests.find((r) => r.id === ride.id) ?? null;
+      // Don't resurrect one the driver just turned down. `addRequest` only
+      // ever checked the CURRENT list, which "No me sirve" had just removed
+      // from — so the 30s `getSearchingRides` poll re-added the very offer
+      // they declined, reopened the full-screen card, and fired another
       // "Nueva solicitud de viaje" notification for it. There is no
       // server-side decline to lean on (ride_offers is REVOKEd from
       // `authenticated` and no decline RPC exists), so the refusal has to be
-      // remembered here until the offer expires on its own.
-      if (s.dismissedRequestIds.includes(ride.id)) return s;
+      // remembered here, for the session: the normal re-offer re-arms it
+      // every few minutes with a later expiry.
+      //
+      // The same offer is heard many times (realtime, then every poll), but a
+      // copy that expires LATER than the one on screen is a newer offer:
+      // support extended or re-armed it (00628), or re-offered it at a new
+      // type and price. It replaces the old copy; see decideIncomingOffer.
+      const action = decideIncomingOffer(
+        ride.offer_expires_at,
+        cached ? { expiresAt: cached.offer_expires_at } : null,
+        s.dismissedRequestIds.includes(ride.id),
+        Date.now(),
+      );
+      if (action === 'ignore') return s;
+      const fresh: TimestampedRide = { ...ride, _receivedAt: Date.now() };
+      // Still on screen: refresh it in place (the card restarts its countdown
+      // from the new expiry). No notification, the driver is looking at it.
+      if (action === 'replace') {
+        return { incomingRequests: s.incomingRequests.map((r) => (r.id === ride.id ? fresh : r)) };
+      }
       // Local notification for new ride request
       Notifications.scheduleNotificationAsync({
         content: {
@@ -62,7 +80,7 @@ export const useDriverRideStore = create<DriverRideState>((set, get) => ({
         },
         trigger: null,
       }).catch(() => { /* best-effort: local notification */ });
-      return { incomingRequests: [{ ...ride, _receivedAt: Date.now() }, ...s.incomingRequests] };
+      return { incomingRequests: [fresh, ...s.incomingRequests.filter((r) => r.id !== ride.id)] };
     }),
 
   removeRequest: (rideId) =>

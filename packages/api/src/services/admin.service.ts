@@ -9,6 +9,15 @@ function escapeLikePattern(pattern: string): string {
 }
 
 /**
+ * A ride code as riders and support write it ("F1A2B3C4", "#f1a2b3c4"): the first 8 hex
+ * characters of the ride id, lower-cased. null when the text is not one.
+ */
+function rideCodePrefix(text: string): string | null {
+  const m = text.trim().match(/^#?([0-9a-f]{8})$/i);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+/**
  * supabase-js wraps a non-2xx Edge Function response in a FunctionsHttpError
  * with the raw Response on `error.context`. Pull the JSON body out so the
  * structured `{ error, blockers }` reaches the caller instead of a generic
@@ -780,8 +789,16 @@ export const adminService = {
       query = query.lt('created_at', havanaDayRangeUtc(filters.dateTo).end.toISOString());
     }
     if (filters.search) {
-      const escaped = escapeLikePattern(filters.search);
-      query = query.or(`pickup_address.ilike.%${escaped}%,dropoff_address.ilike.%${escaped}%`);
+      const code = rideCodePrefix(filters.search);
+      if (code) {
+        // uuid order is byte order, so every id with this prefix lies in this range.
+        query = query
+          .gte('id', `${code}-0000-0000-0000-000000000000`)
+          .lte('id', `${code}-ffff-ffff-ffff-ffffffffffff`);
+      } else {
+        const escaped = escapeLikePattern(filters.search);
+        query = query.or(`pickup_address.ilike.%${escaped}%,dropoff_address.ilike.%${escaped}%`);
+      }
     }
     if (filters.cityId) {
       query = query.eq('city_id', filters.cityId);

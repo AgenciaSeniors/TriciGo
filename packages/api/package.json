@@ -12,6 +12,7 @@
     "./services/auth": "./src/services/auth.service.ts",
     "./services/wallet": "./src/services/wallet.service.ts",
     "./services/ride": "./src/services/ride.service.ts",
+    "./services/ride-assist": "./src/services/ride-assist.service.ts",
     "./services/driver": "./src/services/driver.service.ts",
     "./services/review": "./src/services/review.service.ts",
     "./services/admin": "./src/services/admin.service.ts",
