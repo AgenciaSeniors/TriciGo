@@ -6,6 +6,7 @@ import {
   matchPricingRule,
   calculateFareRange,
   pricingClock,
+  discountBaseCup,
 } from '../fareCalculator';
 import type { FareParams, PricingRuleMatch } from '../fareCalculator';
 
@@ -363,5 +364,20 @@ describe('pricingClock — the clock matchPricingRule reads', () => {
       hhmm: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
       day: d.getDay(),
     });
+  });
+});
+
+describe('discountBaseCup (00633)', () => {
+  it('is the fare without the stops surcharge: the base the server discounts', () => {
+    expect(discountBaseCup({ estimated_fare_cup: 9000, stops_surcharge_cup: 1516 })).toBe(7484);
+  });
+  it('is the whole fare when there are no stops', () => {
+    expect(discountBaseCup({ estimated_fare_cup: 9000 })).toBe(9000);
+    expect(discountBaseCup({ estimated_fare_cup: 9000, stops_surcharge_cup: 0 })).toBe(9000);
+  });
+  it('is 0 without an estimate and never negative', () => {
+    expect(discountBaseCup(null)).toBe(0);
+    expect(discountBaseCup(undefined)).toBe(0);
+    expect(discountBaseCup({ estimated_fare_cup: 100, stops_surcharge_cup: 500 })).toBe(0);
   });
 });

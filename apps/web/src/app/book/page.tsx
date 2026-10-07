@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance, getErrorMessage, trimNotes } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance, getErrorMessage, trimNotes, discountBaseCup } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
 import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService, useFeatureFlag } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory, RidePreferences } from '@tricigo/types';
@@ -215,7 +215,8 @@ export default function BookPage() {
   const shareOccSeats = Math.min(Math.max(passengerCount, 1), 3);
   const shareFreeSeats = (serviceType === 'triciclo_basico' && shareRide) ? (4 - shareOccSeats) : 0;
   const shareDiscountCup = selectedEstimate && shareFreeSeats > 0
-    ? Math.floor(selectedEstimate.estimated_fare_cup * shareFreeSeats * (sharePct / 100))
+    // The server discounts the fare without the stops (00633).
+    ? Math.floor(discountBaseCup(selectedEstimate) * shareFreeSeats * (sharePct / 100))
     : 0;
   const promoDiscountCup = promoResult?.valid ? Math.max(0, promoResult.discount ?? 0) : 0;
   const displayFareCup = Math.max((selectedEstimate?.estimated_fare_cup ?? 0) - promoDiscountCup - shareDiscountCup, 0);
@@ -648,7 +649,8 @@ export default function BookPage() {
       const result = await rideService.validatePromoCode({
         code,
         userId: user?.id || '',
-        fareAmount: selectedEstimate.estimated_fare_cup,
+        // The fare the server applies the promo to: without the stops (00633).
+        fareAmount: discountBaseCup(selectedEstimate),
       });
       if (result.valid && result.promotion) {
         setPromoResult({ valid: true, promoId: result.promotion.id, discount: result.discountAmount });
@@ -818,6 +820,9 @@ export default function BookPage() {
         per_minute_rate_cup: freshEstimate.per_minute_rate_cup,
         min_fare_cup: freshEstimate.min_fare_cup,
         surge_multiplier: freshEstimate.surge_multiplier,
+        // 00633: the part of the fare that prices the stops; createRide
+        // creates the ride without it and the server adds it with the stops.
+        stops_surcharge_cup: freshEstimate.stops_surcharge_cup,
         pricing_rule_id: freshEstimate.pricing_rule_id || undefined,
         promo_code_id: promoResult?.valid ? promoResult.promoId : undefined,
         discount_amount_cup: promoResult?.valid ? Math.max(0, promoResult.discount ?? 0) : undefined,

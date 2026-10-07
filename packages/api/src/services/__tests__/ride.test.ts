@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
-import { maskPhone } from '@tricigo/utils';
+import { maskPhone, haversineDistance } from '@tricigo/utils';
 import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
@@ -46,6 +46,19 @@ const { mockCreateDeliveryDetails } = vi.hoisted(() => ({ mockCreateDeliveryDeta
 vi.mock('../delivery.service', () => ({
   deliveryService: { createDeliveryDetails: mockCreateDeliveryDetails },
 }));
+
+// Route lookups: the real ones by default (offline in tests, so they fall back
+// to straight lines); the stops tests below pin them to known routes.
+const { mockFetchRoute, mockFetchMultiStopRoute } = vi.hoisted(() => ({
+  mockFetchRoute: vi.fn(),
+  mockFetchMultiStopRoute: vi.fn(),
+}));
+vi.mock('@tricigo/utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tricigo/utils')>();
+  mockFetchRoute.mockImplementation(actual.fetchRoute);
+  mockFetchMultiStopRoute.mockImplementation(actual.fetchMultiStopRoute);
+  return { ...actual, fetchRoute: mockFetchRoute, fetchMultiStopRoute: mockFetchMultiStopRoute };
+});
 
 // Import after mock is set up
 import { rideService } from '../ride.service';
@@ -2387,5 +2400,142 @@ describe('createRide — a fare above the tariff ceiling (00631)', () => {
     );
     expect((err as AppError).code).toBe('FARE_ABOVE_CEILING');
     expect((err as AppError).statusCode).toBe(400);
+  });
+});
+
+describe('getLocalFareEstimate — a booking with stops is the direct fare + the server surcharge (00633)', () => {
+  const CAPITOLIO = { lat: 23.1352, lng: -82.3599 };
+  const NACIONAL = { lat: 23.1375, lng: -82.3964 };
+  const PLAZA = { lat: 23.1225, lng: -82.3866 };
+  const base = {
+    service_type: 'triciclo_basico' as const,
+    pickup_lat: CAPITOLIO.lat,
+    pickup_lng: CAPITOLIO.lng,
+    dropoff_lat: NACIONAL.lat,
+    dropoff_lng: NACIONAL.lng,
+  };
+  let actualFetchRoute: unknown;
+  let actualFetchMultiStopRoute: unknown;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const chain = createMockQueryChain();
+    chain.single.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+    chain.maybeSingle.mockResolvedValue({ data: null, error: null });
+    mockFrom.mockImplementation(() => chain);
+    actualFetchRoute = mockFetchRoute.getMockImplementation();
+    actualFetchMultiStopRoute = mockFetchMultiStopRoute.getMockImplementation();
+    // The direct route and the route through the stop.
+    mockFetchRoute.mockImplementation(() => Promise.resolve({ distance_m: 4000, duration_s: 600 }));
+    mockFetchMultiStopRoute.mockImplementation(() => Promise.resolve({ distance_m: 6500, duration_s: 960 }));
+  });
+
+  afterEach(() => {
+    mockFetchRoute.mockImplementation(actualFetchRoute as never);
+    mockFetchMultiStopRoute.mockImplementation(actualFetchMultiStopRoute as never);
+    mockRpc.mockReset();
+  });
+
+  it("prices the direct route and adds the server's surcharge for the stops", async () => {
+    mockRpc.mockImplementation((fn: string) =>
+      Promise.resolve(fn === 'preview_stops_surcharge' ? { data: 1516, error: null } : { data: null, error: null }),
+    );
+    const direct = await rideService.getLocalFareEstimate(base);
+    const withStop = await rideService.getLocalFareEstimate({ ...base, waypoints: [PLAZA] });
+
+    expect(withStop.stops_surcharge_cup).toBe(1516);
+    expect(withStop.estimated_fare_cup).toBe(direct.estimated_fare_cup + 1516);
+    expect(withStop.estimated_fare_trc).toBe(direct.estimated_fare_trc + 1516);
+    expect(withStop.fare_range_min_cup).toBe(direct.fare_range_min_cup + 1516);
+    expect(withStop.fare_range_max_cup).toBe(direct.fare_range_max_cup + 1516);
+    // The rider still sees the distance through the stop.
+    expect(withStop.estimated_distance_m).toBe(6500);
+    expect(direct.stops_surcharge_cup).toBe(0);
+    expect(mockRpc).toHaveBeenCalledWith('preview_stops_surcharge', {
+      p_service_type: 'triciclo_basico',
+      p_pickup_lat: CAPITOLIO.lat,
+      p_pickup_lng: CAPITOLIO.lng,
+      p_dropoff_lat: NACIONAL.lat,
+      p_dropoff_lng: NACIONAL.lng,
+      p_stops: [{ lat: PLAZA.lat, lng: PLAZA.lng }],
+      p_surge: 1,
+    });
+  });
+
+  it("falls back to the same formula on the device while 00633 is not applied", async () => {
+    mockRpc.mockImplementation((fn: string) =>
+      Promise.resolve(
+        fn === 'preview_stops_surcharge'
+          ? { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } }
+          : { data: null, error: null },
+      ),
+    );
+    const direct = await rideService.getLocalFareEstimate(base);
+    const withStop = await rideService.getLocalFareEstimate({ ...base, waypoints: [PLAZA] });
+
+    const p = { latitude: CAPITOLIO.lat, longitude: CAPITOLIO.lng };
+    const s = { latitude: PLAZA.lat, longitude: PLAZA.lng };
+    const d = { latitude: NACIONAL.lat, longitude: NACIONAL.lng };
+    const extraRoadM = Math.max(haversineDistance(p, s) + haversineDistance(s, d) - haversineDistance(p, d), 0) * 1.3;
+    const expected = Math.round((extraRoadM / 1000) * TRICICLO_CONFIG.per_km_rate_cup * 1);
+
+    expect(expected).toBeGreaterThan(0);
+    expect(withStop.stops_surcharge_cup).toBe(expected);
+    expect(withStop.estimated_fare_cup).toBe(direct.estimated_fare_cup + expected);
+  });
+
+  it('does not ask for a surcharge when there are no stops', async () => {
+    mockRpc.mockImplementation(() => Promise.resolve({ data: null, error: null }));
+    await rideService.getLocalFareEstimate({ ...base, waypoints: [] });
+    expect(mockRpc).not.toHaveBeenCalledWith('preview_stops_surcharge', expect.anything());
+  });
+});
+
+describe('createRide — a booking with stops is created at the direct fare (00633)', () => {
+  const BASE = {
+    service_type: 'auto_standard' as const,
+    payment_method: 'cash' as const,
+    pickup_latitude: 23.1352,
+    pickup_longitude: -82.3599,
+    pickup_address: 'Capitolio',
+    dropoff_latitude: 23.1375,
+    dropoff_longitude: -82.3964,
+    dropoff_address: 'Hotel Nacional',
+    estimated_fare_cup: 9000,
+    stops_surcharge_cup: 1516,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+  });
+
+  function captureRideInsert() {
+    const rideInsert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data: { id: 'ride-9', status: 'searching' }, error: null }),
+      }),
+    });
+    mockFrom.mockImplementation((...args: unknown[]) =>
+      args[0] === 'rides' ? { insert: rideInsert } : { insert: vi.fn().mockResolvedValue({ error: null }) },
+    );
+    return rideInsert;
+  }
+
+  it('inserts the quoted fare minus the stops surcharge: the server adds it back', async () => {
+    const rideInsert = captureRideInsert();
+    await rideService.createRide({
+      ...BASE,
+      waypoints: [{ sort_order: 1, latitude: 23.1225, longitude: -82.3866, address: 'Plaza' }],
+    });
+    expect(rideInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ estimated_fare_cup: 7484, estimated_fare_trc: 7484 }),
+    );
+  });
+
+  it('ignores the surcharge when the ride has no stops', async () => {
+    const rideInsert = captureRideInsert();
+    await rideService.createRide(BASE);
+    expect(rideInsert).toHaveBeenCalledWith(expect.objectContaining({ estimated_fare_cup: 9000 }));
   });
 });

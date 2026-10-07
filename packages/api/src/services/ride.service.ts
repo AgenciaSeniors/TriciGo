@@ -90,6 +90,10 @@ export interface CreateRideParams {
   per_minute_rate_cup?: number;
   min_fare_cup?: number;
   surge_multiplier?: number;
+  /** 00633: the part of estimated_fare_cup that prices the stops
+   *  (FareEstimate.stops_surcharge_cup). With waypoints the ride is created
+   *  without it; the server adds it when the stops are inserted. */
+  stops_surcharge_cup?: number;
   pricing_rule_id?: string;
   scheduled_at?: string;
   promo_code_id?: string;
@@ -226,6 +230,51 @@ async function removeSplitInviteDirect(rideId: string, splitId: string): Promise
   throw new AppError('removeSplitInvite: the invite was not withdrawn', 'SPLIT_WITHDRAW_FAILED', 409);
 }
 
+/**
+ * The detour surcharge for a booking's stops (00633): what
+ * trg_recalc_fare_on_waypoint_change adds to the ride's price when createRide
+ * inserts the stops. Asked to the server (preview_stops_surcharge, the formula
+ * of _waypoint_pricing) so the quote is the price charged; while 00633 is not
+ * applied, the same formula on the device, with straight lines that can differ
+ * from the server's by a few pesos.
+ */
+async function previewStopsSurcharge(args: {
+  serviceType: ServiceTypeSlug;
+  pickup: { latitude: number; longitude: number };
+  dropoff: { latitude: number; longitude: number };
+  stops: { lat: number; lng: number }[];
+  surge: number;
+  perKmCup: number;
+}): Promise<number> {
+  try {
+    const { data, error } = await getSupabaseClient().rpc('preview_stops_surcharge', {
+      p_service_type: args.serviceType,
+      p_pickup_lat: args.pickup.latitude,
+      p_pickup_lng: args.pickup.longitude,
+      p_dropoff_lat: args.dropoff.latitude,
+      p_dropoff_lng: args.dropoff.longitude,
+      p_stops: args.stops.map((stop) => ({ lat: stop.lat, lng: stop.lng })),
+      p_surge: args.surge,
+    });
+    if (!error && typeof data === 'number' && Number.isFinite(data)) return data;
+    if (error && error.code !== 'PGRST202' && !/could not find the function/i.test(error.message ?? '')) {
+      logger.warn('preview_stops_surcharge_failed', { error: error.message });
+    }
+  } catch {
+    // Network or client error: price the stops on the device.
+  }
+  const points = [
+    args.pickup,
+    ...args.stops.map((stop) => ({ latitude: stop.lat, longitude: stop.lng })),
+    args.dropoff,
+  ];
+  let pathM = 0;
+  for (let i = 0; i < points.length - 1; i++) pathM += haversineDistance(points[i]!, points[i + 1]!);
+  const extraRoadM = Math.max(pathM - haversineDistance(args.pickup, args.dropoff), 0) * 1.3;
+  const surge = Math.min(Math.max(args.surge || 1, 1), 3);
+  return Math.round((extraRoadM / 1000) * args.perKmCup * surge);
+}
+
 export const rideService = {
   /**
    * Get fare estimate using local calculation (no RPC needed).
@@ -278,8 +327,14 @@ export const rideService = {
       ...(params.waypoints ?? []),
       { lat: params.dropoff_lat, lng: params.dropoff_lng },
     ];
+    // 00633: with stops, the fare is the direct route's plus the detour
+    // surcharge the server adds when the stops are inserted. The route through
+    // the stops only feeds the distance and time the rider sees.
+    const stops = params.waypoints ?? [];
+    const hasStops = stops.length > 0;
+    const directRouteKey = `route:${params.pickup_lat.toFixed(6)},${params.pickup_lng.toFixed(6)}->${params.dropoff_lat.toFixed(6)},${params.dropoff_lng.toFixed(6)}`;
 
-    const [configResult, rulesResult, routeResult, surgeResult, experimentResult, exchangeRate] =
+    const [configResult, rulesResult, routeResult, surgeResult, experimentResult, exchangeRate, directRouteResult] =
       await Promise.all([
         supabase
           .from('service_type_configs')
@@ -313,6 +368,14 @@ export const rideService = {
           .eq('service_type', params.service_type)
           .maybeSingle(),
         dedupe(exchangeKey, () => exchangeRateService.getUsdCupRate().catch(() => 300)),
+        hasStops
+          ? dedupe(directRouteKey, () =>
+              fetchRoute(
+                { lat: params.pickup_lat, lng: params.pickup_lng },
+                { lat: params.dropoff_lat, lng: params.dropoff_lng },
+              ).catch(() => null),
+            )
+          : Promise.resolve(null),
       ]);
 
     if (configResult.error) throw configResult.error;
@@ -357,20 +420,29 @@ export const rideService = {
     //     preserved without time penalising the slow option.
     let roadDistance: number;
     let displayDuration: number;
-    let fareDuration: number;
     if (routeResult) {
       roadDistance = routeResult.distance_m;
       displayDuration = calculateTripDuration(routeResult.distance_m, params.service_type);
-      fareDuration = routeResult.duration_s; // neutral OSRM duration
     } else {
       const straightLine = haversineDistance(pickup, dropoff);
       roadDistance = estimateRoadDistance(straightLine);
       displayDuration = estimateDuration(roadDistance, params.service_type);
-      // No OSRM result; approximate neutral duration with auto profile.
-      fareDuration = estimateDuration(roadDistance, 'auto_standard');
     }
 
-    const distanceKm = roadDistance / 1000;
+    // The fare's route: the direct one when there are stops (00633).
+    const fareRoute = hasStops ? directRouteResult : routeResult;
+    let fareDistance: number;
+    let fareDuration: number;
+    if (fareRoute) {
+      fareDistance = fareRoute.distance_m;
+      fareDuration = fareRoute.duration_s; // neutral OSRM duration
+    } else {
+      fareDistance = estimateRoadDistance(haversineDistance(pickup, dropoff));
+      // No OSRM result; approximate neutral duration with auto profile.
+      fareDuration = estimateDuration(fareDistance, 'auto_standard');
+    }
+
+    const distanceKm = fareDistance / 1000;
     const fareDurationMin = fareDuration / 60;
 
     // Calculate fare using pure function — uses fareDuration (neutral)
@@ -434,15 +506,30 @@ export const rideService = {
       }
     } catch { /* experiments are optional, don't break pricing */ }
 
+    // ─── Stops: the server's detour surcharge (00633) ───
+    const stopsSurchargeCup = hasStops
+      ? await previewStopsSurcharge({
+          serviceType: params.service_type,
+          pickup,
+          dropoff,
+          stops,
+          surge: surgeMultiplier,
+          perKmCup: svcConfig.per_km_rate_cup,
+        })
+      : 0;
+    const totalFare = surgedFare + stopsSurchargeCup;
+
     // ─── Exchange Rate: convert CUP → TRC ───
-    const estimatedFareTrc = cupToTrc(surgedFare);
+    const estimatedFareTrc = cupToTrc(totalFare);
 
     // ─── Fare Range (min-max considering traffic variance) ───
+    // The stops' surcharge is fixed: it moves both ends by the same amount.
     const fareRange = calculateFareRange({
       fareCup: surgedFare,
       surgeMultiplier,
       exchangeRate,
     });
+    const stopsSurchargeTrc = cupToTrc(stopsSurchargeCup);
 
     // ─── Insurance Premium (optional) ───
     let insurancePremiumCup: number | undefined;
@@ -454,7 +541,7 @@ export const rideService = {
       const insuranceConfig = await this.getInsuranceConfig(params.service_type);
       if (insuranceConfig) {
         insuranceAvailable = true;
-        const premium = this.calculateInsurancePremium(surgedFare, insuranceConfig);
+        const premium = this.calculateInsurancePremium(totalFare, insuranceConfig);
         insurancePremiumCup = premium;
         insurancePremiumTrc = cupToTrc(premium);
         insuranceCoverageDesc = insuranceConfig.coverage_description_es;
@@ -465,8 +552,9 @@ export const rideService = {
 
     return {
       service_type: params.service_type,
-      estimated_fare_cup: surgedFare,
+      estimated_fare_cup: totalFare,
       estimated_fare_trc: estimatedFareTrc,
+      stops_surcharge_cup: stopsSurchargeCup,
       estimated_distance_m: Math.round(roadDistance),
       // BUG-221 (final): expose PER-VEHICLE duration to the client so each
       // card shows the realistic ETA for that specific service (moto 25,
@@ -487,10 +575,10 @@ export const rideService = {
       // el client lo pase a createRide y el RPC lo use como floor.
       min_fare_cup: minFare,
       exchange_rate_usd_cup: exchangeRate,
-      fare_range_min_cup: fareRange.minFareCup,
-      fare_range_max_cup: fareRange.maxFareCup,
-      fare_range_min_trc: fareRange.minFareTrc,
-      fare_range_max_trc: fareRange.maxFareTrc,
+      fare_range_min_cup: fareRange.minFareCup + stopsSurchargeCup,
+      fare_range_max_cup: fareRange.maxFareCup + stopsSurchargeCup,
+      fare_range_min_trc: fareRange.minFareTrc + stopsSurchargeTrc,
+      fare_range_max_trc: fareRange.maxFareTrc + stopsSurchargeTrc,
       insurance_premium_cup: insurancePremiumCup,
       insurance_premium_trc: insurancePremiumTrc,
       insurance_available: insuranceAvailable,
@@ -543,17 +631,23 @@ export const rideService = {
 
     // Snapshot exchange rate at ride creation for consistent pricing
     const exchangeRate = await exchangeRateService.getUsdCupRate();
-    const estimatedFareTrc = validParams.estimated_fare_cup
-      ? cupToTrc(validParams.estimated_fare_cup)
+    // 00633: a quote with stops includes the detour surcharge the server adds
+    // when the stops are inserted below. The ride is created without it, so
+    // the surcharge is charged once and the total is the price the rider saw.
+    const stopsSurchargeCup = validParams.waypoints && validParams.waypoints.length > 0
+      ? (validParams.stops_surcharge_cup ?? 0)
       : 0;
+    const quotedFareCup = validParams.estimated_fare_cup;
+    const rideFareCup = quotedFareCup != null ? Math.max(quotedFareCup - stopsSurchargeCup, 0) : undefined;
+    const estimatedFareTrc = rideFareCup ? cupToTrc(rideFareCup) : 0;
 
-    // Corporate ride validation
+    // Corporate ride validation (on the whole price, stops included)
     let paymentMethod = validParams.payment_method;
     if (validParams.corporate_account_id) {
       const validation = await corporateService.validateCorporateRide(
         validParams.corporate_account_id,
         user.id,
-        estimatedFareTrc,
+        quotedFareCup ? cupToTrc(quotedFareCup) : 0,
         validParams.service_type,
       );
       if (!validation.valid) {
@@ -574,7 +668,7 @@ export const rideService = {
         pickup_address: validParams.pickup_address,
         dropoff_location: `POINT(${validParams.dropoff_longitude} ${validParams.dropoff_latitude})`,
         dropoff_address: validParams.dropoff_address,
-        estimated_fare_cup: validParams.estimated_fare_cup ?? 0,
+        estimated_fare_cup: rideFareCup ?? 0,
         estimated_fare_trc: estimatedFareTrc,
         exchange_rate_usd_cup: exchangeRate,
         estimated_distance_m: validParams.estimated_distance_m ?? 0,
@@ -687,7 +781,7 @@ export const rideService = {
       validParams.per_minute_rate_cup != null;
     if (hasEstimateBreakdown) {
       try {
-        const subtotalEstimate = validParams.estimated_fare_cup ?? 0;
+        const subtotalEstimate = rideFareCup ?? 0;
         const surgeMult = validParams.surge_multiplier ?? 1;
 
         // BUG-fare-audit-followup Cambio 2: leer commission_rate del
