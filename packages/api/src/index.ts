@@ -51,6 +51,19 @@ export type {
   IncompleteDriverSignup,
   OutreachChannel,
 } from './services/launch-pulse.service';
+export { rideAssistService, RIDE_ASSIST_UNAVAILABLE, isProposalGone } from './services/ride-assist.service';
+export type {
+  SupportWaitingRide,
+  ServiceProposal,
+  RideAssistContext,
+  RideAssistOffer,
+  RideAssistProposal,
+  AssistCandidate,
+  RideOfferStatus,
+  ServiceProposalStatus,
+  ServiceChangeMode,
+  SupportOfferMode,
+} from './services/ride-assist.service';
 export { deliveryService, DELIVERY_OTP_LOCKOUT_SECONDS } from './services/delivery.service';
 export type { DeliveryDetails, PublicDeliveryView, ValidateOtpResult, CreateDeliveryParams } from './services/delivery.service';
 export { nearbyService } from './services/nearby.service';
