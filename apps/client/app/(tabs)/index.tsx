@@ -75,6 +75,9 @@ import { useSearchingDrivers } from '@/hooks/useSearchingDrivers';
 import { useRideOfferStats } from '@/hooks/useRideOfferStats';
 import { DriverInfoMiniCard } from '@/components/DriverInfoMiniCard';
 import { AcceptedDriverCard } from '@/components/AcceptedDriverCard';
+import { ServiceProposalCard } from '@/components/ServiceProposalCard';
+import { SupportHelpButton } from '@/components/SupportHelpButton';
+import { useServiceProposal } from '@/hooks/useServiceProposal';
 import { WebActiveRideView } from '@/components/WebActiveRideView';
 import { getMapFallbackCoordLngLat } from '@/config/demo';
 import { LAST_KNOWN_LOCATION_KEY, readCachedLocation, useTwoStageUserCenter } from '@/lib/userLocation';
@@ -5045,6 +5048,24 @@ function SearchingView() {
     enabled: activeRide?.status === 'searching',
   });
 
+  // Support-assisted matching (00628): a vehicle-type change support proposed, answered here.
+  const customerId = useAuthStore((s) => s.user?.id);
+  const { proposal, dismiss: dismissProposal } = useServiceProposal(
+    activeRide?.id ?? null,
+    activeRide?.status === 'searching',
+  );
+  const onProposalDone = useCallback(
+    async (proposalId: string, accepted: boolean) => {
+      dismissProposal(proposalId);
+      if (!accepted || !customerId) return;
+      // Show the new type and price now, not at the next 3 s poll. Only while still searching:
+      // a status change belongs to the poll, which fires its sounds and notices.
+      const fresh = await rideService.getActiveRide(customerId).catch(() => null);
+      if (fresh?.status === 'searching') useRideStore.getState().updateRideFromRealtime(fresh);
+    },
+    [dismissProposal, customerId],
+  );
+
   // Live countdown based on earliest_expires_at. Ticks every 500ms.
   const [offerSecondsLeft, setOfferSecondsLeft] = useState<number | null>(null);
   useEffect(() => {
@@ -5301,6 +5322,16 @@ function SearchingView() {
            much the app explains itself. */}
       {!acceptedDriver ? (
         <>
+          {proposal && (
+            <View className="w-full px-8 mb-4">
+              <ServiceProposalCard
+                proposal={proposal}
+                paymentMethod={activeRide?.payment_method}
+                sharedRide={!!activeRide?.shared_ride}
+                onDone={(accepted) => void onProposalDone(proposal.id, accepted)}
+              />
+            </View>
+          )}
           <Animated.View style={{ opacity: searchFadeAnim }}>
             <Text variant="bodySmall" color="secondary" className="mb-2 text-center">
               {searchMessage}
@@ -5396,6 +5427,8 @@ function SearchingView() {
               )}
             </View>
           </View>
+
+          {activeRide && <SupportHelpButton rideId={activeRide.id} elapsedSeconds={elapsedSeconds} />}
 
           {error && (
             <Text variant="bodySmall" color="error" className="mb-4 text-center">
