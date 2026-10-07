@@ -49,6 +49,8 @@ vi.mock('../delivery.service', () => ({
 
 // Import after mock is set up
 import { rideService } from '../ride.service';
+import { corporateService } from '../corporate.service';
+import { AppError } from '../../errors';
 
 const TRICICLO_CONFIG = {
   id: 'config-1',
@@ -2202,5 +2204,91 @@ describe('createRide — endpoint notes (00578)', () => {
     expect(view).not.toHaveProperty('pickup_notes');
     expect(view).not.toHaveProperty('dropoff_notes');
     expect(JSON.stringify(view)).not.toContain('SECRET');
+  });
+});
+
+describe('createRide — corporate rejections reach the rider in Spanish (00625)', () => {
+  const COMPANY = '00000000-0000-4000-8000-0000000000c1';
+  const BASE = {
+    service_type: 'triciclo_basico' as const,
+    payment_method: 'cash' as const,
+    pickup_latitude: 23.1352,
+    pickup_longitude: -82.3599,
+    pickup_address: 'Capitolio',
+    dropoff_latitude: 23.1375,
+    dropoff_longitude: -82.3964,
+    dropoff_address: 'Hotel Nacional',
+    estimated_fare_cup: 5000,
+    corporate_account_id: COMPANY,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+  });
+
+  function insertResult(result: { data: unknown; error: unknown }) {
+    const insert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue(result) }),
+    });
+    mockFrom.mockReturnValue({ insert });
+    return insert;
+  }
+
+  async function rejection(): Promise<AppError> {
+    try {
+      await rideService.createRide(BASE);
+    } catch (err) {
+      expect(err).toBeInstanceOf(AppError);
+      return err as AppError;
+    }
+    throw new Error('createRide did not reject');
+  }
+
+  it.each([
+    ['ACCOUNT_NOT_APPROVED', 'La cuenta de la empresa no está habilitada para pagar viajes.'],
+    ['NOT_AN_EMPLOYEE', 'No eres empleado activo de esta empresa.'],
+    ['EXCEEDS_RIDE_CAP', 'El viaje supera el tope por viaje que fijó la empresa.'],
+    ['EXCEEDS_MONTHLY_BUDGET', 'El viaje supera lo que le queda al presupuesto mensual de la empresa.'],
+    ['SERVICE_TYPE_NOT_ALLOWED', 'La empresa no paga viajes en este tipo de vehículo.'],
+    ['OUTSIDE_ALLOWED_HOURS', 'La empresa no paga viajes a esta hora.'],
+  ])('the pre-check reason %s is shown as a sentence, not a code', async (reason, message) => {
+    vi.mocked(corporateService.validateCorporateRide).mockResolvedValueOnce({ valid: false, reason });
+    const insert = insertResult({ data: { id: 'never' }, error: null });
+    const err = await rejection();
+    expect(err.message).toBe(message);
+    expect(err.code).toBe(reason);
+    expect(err.statusCode).toBe(400);
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('an unknown pre-check reason still reads as a sentence', async () => {
+    vi.mocked(corporateService.validateCorporateRide).mockResolvedValueOnce({ valid: false });
+    insertResult({ data: { id: 'never' }, error: null });
+    const err = await rejection();
+    expect(err.message).toBe('La empresa no puede pagar este viaje.');
+  });
+
+  it("the server's rejection keeps its Spanish message, and its code comes from the detail", async () => {
+    insertResult({
+      data: null,
+      error: {
+        code: 'P0001',
+        message: 'La empresa no tiene saldo suficiente para este viaje. Pídele a un administrador de la empresa que la recargue.',
+        details: 'corporate_insufficient_balance',
+        hint: null,
+      },
+    });
+    const err = await rejection();
+    expect(err.message).toBe(
+      'La empresa no tiene saldo suficiente para este viaje. Pídele a un administrador de la empresa que la recargue.',
+    );
+    expect(err.code).toBe('CORPORATE_INSUFFICIENT_BALANCE');
+    expect(err.statusCode).toBe(400);
+  });
+
+  it('any other insert error keeps the generic wrapping', async () => {
+    insertResult({ data: null, error: { code: '23505', message: 'duplicate key value', details: 'Key (id)=(x) already exists.', hint: null } });
+    await expect(rideService.createRide(BASE)).rejects.toThrow('createRide failed: duplicate key value');
   });
 });
