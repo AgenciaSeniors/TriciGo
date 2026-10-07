@@ -6,7 +6,8 @@
 -- dispatch_ride(uuid, integer) offers a searching ride to every eligible driver:
 -- it inserts ride_offers, re-arms the ones that expired past the cooldown, bumps
 -- rides.dispatch_round, and every new or re-armed offer fires a push through
--- trg_notify_driver_new_offer / trg_notify_driver_reoffer.
+-- trg_notify_driver_new_offer / trg_notify_driver_reoffer. On rounds 2 and 3,
+-- trg_notify_dispatch_retry also pushes the rider ("Seguimos buscando...").
 --
 -- 00211 (BUG-177, "re-dispatch any ride") meant to make it internal-only with
 --
@@ -46,11 +47,16 @@
 --    so no caller sees a difference. If the live body no longer has it in the
 --    expected form, the body is left alone (NOTICE) and the revoke still applies.
 -- 3. Assert the end state: no overload of the name is executable by anon or
---    authenticated, and the owner (every internal caller runs as it) and
---    service_role still can.
+--    authenticated; the owner (every internal caller runs as it) and service_role
+--    still can; and every function that calls dispatch_ride is SECURITY DEFINER
+--    with an owner that can execute it, so none of them loses the call.
 --
 -- Idempotent: REVOKE and GRANT are no-ops when repeated, and the patch only acts
 -- while the old check is still there.
+--
+-- CREATE OR REPLACE keeps these grants. A DROP + CREATE (an arity change, as in
+-- 00126 and 00336) gets the default privileges back, EXECUTE for authenticated
+-- included, and has to repeat this REVOKE.
 -- ============================================================
 
 SET lock_timeout = '5s';
@@ -84,12 +90,13 @@ END
 $patch$;
 
 COMMENT ON FUNCTION public.dispatch_ride(uuid, integer) IS
-  'Offers a searching ride to the eligible drivers: new offers, expired ones re-armed past the cooldown, a push each. Internal: triggers, cron jobs and SECURITY DEFINER functions call it as the owner. No EXECUTE for PUBLIC, anon or authenticated (00630).';
+  'Offers a searching ride to the eligible drivers: new offers, expired ones re-armed past the cooldown, a push each. Internal: triggers, cron jobs and SECURITY DEFINER functions call it as the owner. No EXECUTE for PUBLIC, anon or authenticated (00630); a DROP + CREATE must revoke it again.';
 
 -- Assert the end state ----------------------------------------------------
 DO $check$
 DECLARE
   r record;
+  c record;
   v_found int := 0;
 BEGIN
   FOR r IN
@@ -119,6 +126,22 @@ BEGIN
   IF NOT has_function_privilege('service_role', 'public.dispatch_ride(uuid, integer)', 'EXECUTE') THEN
     RAISE EXCEPTION '00630: service_role lost EXECUTE on public.dispatch_ride(uuid,integer)';
   END IF;
+  -- Every function that names dispatch_ride( must keep calling it after the revoke: SECURITY
+  -- DEFINER, with an owner that can execute it. A SECURITY INVOKER caller runs it as whoever
+  -- called it, and three of the paths swallow errors, so it would just leave a ride unoffered.
+  FOR c IN
+    SELECT p.oid::regprocedure AS sig, p.prosecdef, pg_get_userbyid(p.proowner) AS owner
+    FROM pg_proc p
+    WHERE p.prosrc ~ '\mdispatch_ride\s*\('
+      AND p.oid <> 'public.dispatch_ride(uuid, integer)'::regprocedure
+  LOOP
+    IF NOT c.prosecdef THEN
+      RAISE EXCEPTION '00630: % is SECURITY INVOKER and calls dispatch_ride, so it runs it as its caller', c.sig;
+    END IF;
+    IF NOT has_function_privilege(c.owner, 'public.dispatch_ride(uuid, integer)', 'EXECUTE') THEN
+      RAISE EXCEPTION '00630: % calls dispatch_ride as %, which cannot execute it', c.sig, c.owner;
+    END IF;
+  END LOOP;
 END
 $check$;
 

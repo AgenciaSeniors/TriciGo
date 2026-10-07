@@ -25,7 +25,9 @@
 --     get_service_role_key returns a constant; notify_offline_drivers_for_searching_rides
 --     returns 0.
 -- Not modelled: the BEFORE triggers on rides (fare floor, rate limit, scheduling
--- normalization), the ride_offers stats triggers, and the policies the tests do not use.
+-- normalization), trg_notify_dispatch_retry (the rider's "Seguimos buscando" push on
+-- rounds 2 and 3, which would add to the push counts), the ride_offers stats triggers,
+-- and the policies the tests do not use.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;

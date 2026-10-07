@@ -9,6 +9,10 @@
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
 # Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00630/run.sh ...
 set -u
+# Git Bash: with MSYS_NO_PATHCONV=1 (handy for adb), /c/... paths reach psql.exe unconverted.
+unset MSYS_NO_PATHCONV
+# Server messages in English, so the error patterns match on any cluster (the suite runs as a superuser).
+export PGOPTIONS='-c lc_messages=C'
 DIR="$(cd "$(dirname "$0")" && pwd)"
 MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
@@ -24,7 +28,7 @@ ok(){ echo "PASS  $1"; PASS=$((PASS+1)); }
 ko(){ echo "FAIL  $1  -- $2"; FAIL=$((FAIL+1)); }
 # run DBNAME SQL -> psql on DBNAME; errors show their SQLSTATE (VERBOSITY=verbose). On Windows psql
 # ends its lines with \r\n: the \r is dropped so the suite reads the same on both. Empty lines are dropped.
-run(){ $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c "$2" 2>&1 | tr -d '\r' | sed '/^$/d' | paste -sd';' -; }
+run(){ "$BIN/psql" $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c "$2" 2>&1 | tr -d '\r' | sed '/^$/d' | paste -sd';' -; }
 # val NAME SQL EXPECTED -> the output of SQL, rows joined with ';', must equal EXPECTED
 val(){ local r; r=$(run $DB "$2"); if [ "$r" = "$3" ]; then ok "$1"; else ko "$1" "expected [$3], got [$r]"; fi; }
 # has NAME SQL PATTERN -> the output of SQL must contain PATTERN (grep -E)
@@ -58,22 +62,22 @@ PRIVS="SELECT string_agg(p.oid::regprocedure::text || ':' ||
          has_function_privilege('service_role', p.oid, 'EXECUTE')::text || ' ' || p.proacl::text, ',')
        FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'dispatch_ride'"
 # fresh DBNAME [seed] -> a new database with the scaffold, and the seed when asked
-fresh(){ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $1" -c "CREATE DATABASE $1" >/dev/null 2>&1
-         $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -f "$DIR/scaffold.sql" >/dev/null 2>&1 || return 1
-         if [ "${2:-}" = seed ]; then $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -f "$DIR/seed.sql" >/dev/null 2>&1 || return 1; fi; }
+fresh(){ "$BIN/psql" $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $1" -c "CREATE DATABASE $1" >/dev/null 2>&1
+         "$BIN/psql" $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -f "$DIR/scaffold.sql" >/dev/null 2>&1 || return 1
+         if [ "${2:-}" = seed ]; then "$BIN/psql" $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -f "$DIR/seed.sql" >/dev/null 2>&1 || return 1; fi; }
 # apply DBNAME FILE [-1] -> applies FILE as the owner (in one transaction with -1); prints everything psql said
 # and, last, 'applied' or 'failed'
-apply(){ local out rc; out=$($BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -v VERBOSITY=verbose ${3:-} -c "$AS_OWNER" -f "$2" 2>&1); rc=$?
+apply(){ local out rc; out=$("$BIN/psql" $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -v VERBOSITY=verbose ${3:-} -c "$AS_OWNER" -f "$2" 2>&1); rc=$?
          echo "$out" | tr -d '\r'; [ $rc -eq 0 ] && echo applied || echo failed; }
 # apply_err DBNAME FILE -> applies FILE in one transaction; prints the first ERROR line, or 'applied'
 apply_err(){ local r; r=$(apply "$1" "$2" -1); if [ "$(echo "$r" | tail -1)" = applied ]; then echo applied; else echo "$r" | grep -m1 ERROR; fi; }
 # body DBNAME FILE -> dispatch_ride's prosrc, as stored, into FILE
-body(){ $BIN/psql $CONN -d "$1" -qAt -c "SELECT prosrc FROM pg_proc WHERE oid = 'public.dispatch_ride(uuid,integer)'::regprocedure" | tr -d '\r' > "$2"; }
+body(){ "$BIN/psql" $CONN -d "$1" -qAt -c "SELECT prosrc FROM pg_proc WHERE oid = 'public.dispatch_ride(uuid,integer)'::regprocedure" | tr -d '\r' > "$2"; }
 # shape: owner|owner is superuser|SECURITY DEFINER|proconfig|md5/length of the body
 SHAPE="SELECT pg_get_userbyid(p.proowner) || '|' || r.rolsuper || '|' || p.prosecdef || '|' || array_to_string(p.proconfig, ',') || '|' ||
          md5(p.prosrc) || '/' || length(p.prosrc)
        FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner WHERE p.oid = 'public.dispatch_ride(uuid,integer)'::regprocedure"
-T=$(mktemp -d)
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 
 echo "== reset database =="
 fresh $DB seed || { echo "scaffold or seed failed"; exit 1; }
@@ -84,6 +88,19 @@ val "S0 scaffold carries the live prod bodies (md5/length of prosrc)" \
                      'dispatch_searching_rides_for_driver', 'tg_redispatch_searching_on_ride_freed',
                      'retry_dispatch_expired_rides', 'activate_scheduled_rides', 'notify_driver_new_offer')" \
   "activate_scheduled_rides:4ccac5902f86f94f4b4b4d3d2a7743e1/731,current_user_role:cb4a7c12d4e21fe2997135833f141e25/103,dispatch_ride:a16ae76866950dedd21d33595f345d63/5537,dispatch_searching_rides_for_driver:5bb66ef3d51603259b1e39b8f830c806/615,dispatch_searching_rides_near_driver:2b34bc2c1c0b82917ca81dbadaf679eb/181,get_platform_config_numeric:13d2587037eca74854cf2394ba42a90c/479,is_admin:22cb75e91980d512498034cd33e1eda2/285,notify_driver_new_offer:6226f91fe0acacd99b298718a3c35937/2181,on_ride_insert_dispatch:93a4c0c44b85f4ed41ff6ba9785e9fd4/403,retry_dispatch_expired_rides:44da5d968977eadfcec31e0f7dbd959e/1029,tg_dispatch_on_delivery_details:88a12f75dfa77176dfdadb48376819a3/591,tg_redispatch_searching_on_ride_freed:97283c1dd46d529810292e0c9ed9de8e/129,uid:cdef18c69c4f4cbbced2eaf81e628b49/176"
+val "S0b and their SECURITY DEFINER flag, owner and SET clause are prod's" \
+  "SELECT string_agg(proname || ':' || prosecdef || ':' || pg_get_userbyid(proowner) || ':' || coalesce(array_to_string(proconfig, ';'), '-'), ','
+          ORDER BY proname) FROM pg_proc
+   WHERE pronamespace = 'public'::regnamespace AND proname IN ('current_user_role', 'is_admin', 'get_platform_config_numeric',
+     'dispatch_ride', 'on_ride_insert_dispatch', 'tg_dispatch_on_delivery_details', 'dispatch_searching_rides_near_driver',
+     'dispatch_searching_rides_for_driver', 'tg_redispatch_searching_on_ride_freed', 'retry_dispatch_expired_rides',
+     'activate_scheduled_rides', 'notify_driver_new_offer')" \
+  "activate_scheduled_rides:true:postgres:search_path=public, pg_catalog,current_user_role:true:postgres:search_path=public, pg_catalog,dispatch_ride:true:postgres:search_path=public, pg_catalog,dispatch_searching_rides_for_driver:true:postgres:search_path=public, pg_catalog,dispatch_searching_rides_near_driver:true:postgres:search_path=public, pg_catalog,get_platform_config_numeric:true:postgres:search_path=public, pg_catalog,is_admin:false:postgres:search_path=public, extensions, pg_catalog,notify_driver_new_offer:true:postgres:search_path=public, pg_catalog,on_ride_insert_dispatch:true:postgres:search_path=public, pg_catalog,retry_dispatch_expired_rides:true:postgres:search_path=public, pg_catalog,tg_dispatch_on_delivery_details:true:postgres:search_path=public, pg_catalog,tg_redispatch_searching_on_ride_freed:true:postgres:search_path=public, pg_catalog"
+val "S0c the six triggers that reach dispatch_ride or its pushes are prod's (md5 of pg_get_triggerdef)" \
+  "SELECT md5(string_agg(pg_get_triggerdef(t.oid), E'\n' ORDER BY t.tgname)) || '/' || count(*) FROM pg_trigger t
+   WHERE NOT t.tgisinternal AND t.tgname IN ('trg_on_ride_insert_dispatch', 'trg_redispatch_searching_on_ride_freed',
+     'trg_dispatch_on_delivery_details', 'trg_dispatch_on_driver_online', 'trg_notify_driver_new_offer', 'trg_notify_driver_reoffer')" \
+  "31a88d11e36858e580e6de33f225bd19/6"
 val "S1 like prod, a NON-superuser role named postgres owns dispatch_ride, SECURITY DEFINER, search_path public, pg_catalog" \
   "$SHAPE" "postgres|false|true|search_path=public, pg_catalog|a16ae76866950dedd21d33595f345d63/5537"
 val "S2 the seed: RIDE_A is searching, round 1, no live offer, no push; D1 and D2 hold expired offers" \
@@ -243,9 +260,25 @@ PYEOF
   [ "$r" = applied ] && echo "$k1" | grep -q "$DENIED" && [ "$k3" = "1|0|0;0" ] \
     && ok "G6 with the owner's EXECUTE gone, K1 fails loudly and K3 silently offers nothing" \
     || ko "G6 with the owner's EXECUTE gone, K1 fails loudly and K3 silently offers nothing" "$r / K1 [$k1] / K3 [$k3]"
-  $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}g" -c "DROP DATABASE IF EXISTS ${DB}m" >/dev/null 2>&1
+  # A caller that would lose the call once clients lose EXECUTE: one that runs as its caller...
+  fresh ${DB}g
+  run ${DB}g "SET ROLE postgres; CREATE FUNCTION public.redispatch_now(p uuid) RETURNS jsonb LANGUAGE plpgsql
+    AS \$f\$ BEGIN RETURN public.dispatch_ride(p); END \$f\$;" >/dev/null
+  r=$(apply_err ${DB}g "$MIG")
+  echo "$r" | grep -q "00630: public.redispatch_now(uuid) is SECURITY INVOKER and calls dispatch_ride" \
+    && ok "G7 a SECURITY INVOKER caller of dispatch_ride aborts the migration" || ko "G7 a SECURITY INVOKER caller of dispatch_ride aborts the migration" "$r"
+  # ...or one whose owner cannot execute it.
+  fresh ${DB}g
+  run ${DB}g "DO \$r\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'g8_owner') THEN CREATE ROLE g8_owner NOLOGIN; END IF; END \$r\$;
+    CREATE FUNCTION public.redispatch_as_other(p uuid) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
+    AS \$f\$ BEGIN RETURN public.dispatch_ride(p); END \$f\$;
+    ALTER FUNCTION public.redispatch_as_other(uuid) OWNER TO g8_owner;" >/dev/null
+  r=$(apply_err ${DB}g "$MIG")
+  echo "$r" | grep -q "00630: public.redispatch_as_other(uuid) calls dispatch_ride as g8_owner, which cannot execute it" \
+    && ok "G8 a SECURITY DEFINER caller whose owner cannot execute dispatch_ride aborts the migration" \
+    || ko "G8 a SECURITY DEFINER caller whose owner cannot execute dispatch_ride aborts the migration" "$r"
+  "$BIN/psql" $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}g" -c "DROP DATABASE IF EXISTS ${DB}m" -c "DROP ROLE IF EXISTS g8_owner" >/dev/null 2>&1
 fi
-rm -rf "$T"
 
 echo "== $PASS passed, $FAIL failed =="
 [ "$FAIL" -eq 0 ]
