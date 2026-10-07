@@ -147,12 +147,18 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    const rl = await rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
-    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
-
+    // Rate limit: 10 requests per IP per minute, only for callers the 401 below
+    // rejects (no service key). Every legitimate caller presents the key: database
+    // triggers and crons all come through pg_net from one address, and Edge
+    // Functions share egress addresses. Counted before the auth check, they shared
+    // one bucket and lost e-mails to a 429 past 10 in a minute (the daily
+    // behavioral-emails batch already did). send-push exempts its internal calls too.
     const callerKey = extractCallerKey(req);
     if (!isServiceKeyToken(callerKey)) {
+      const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+      const rl = await rateLimit(`send-email:${clientIP}`, 10, 60 * 1000);
+      if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs);
+
       return new Response(
         JSON.stringify({ error: 'Forbidden: send-email is internal-only' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

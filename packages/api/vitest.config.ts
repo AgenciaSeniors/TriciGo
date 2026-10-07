@@ -10,9 +10,12 @@ export default defineConfig({
       // sat unexecuted from the day it was written. These are plain TypeScript modules
       // with no Deno or remote imports, so they run here unmodified — and the backend
       // service layer is the closest thing they have to a home.
-      // NOTE: only _shared/ helpers qualify. An EF index.ts imports from https:// URLs
-      // and touches Deno.*, which vitest cannot resolve.
+      // NOTE: an EF index.ts usually imports from https:// URLs and touches Deno.*,
+      // which vitest cannot resolve. send-email is the exception below.
       '../../supabase/functions/_shared/**/*.test.ts',
+      // send-email's handler: its only remote import (supabase-js, inside
+      // _shared/rate-limiter.ts) is replaced with vi.mock, and the test stubs Deno.
+      '../../supabase/functions/send-email/*.test.ts',
     ],
   },
 });
