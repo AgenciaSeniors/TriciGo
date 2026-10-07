@@ -17,6 +17,7 @@ import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { fleetService } from './fleet.service';
 import { readCorporateBalance } from './_corporate-balance';
+import { AppError, ValidationError } from '../errors';
 
 // PostgREST's signal that the database does not have the RPC. A generic
 // Postgres "function ... does not exist" (42883) is deliberately not matched:
@@ -147,12 +148,46 @@ export const corporateService = {
       'allowed_hours_start' | 'allowed_hours_end'
     >>,
   ): Promise<void> {
+    const limits = (['monthly_budget_trc', 'per_ride_cap_trc'] as const).filter(
+      (field) => updates[field] !== undefined,
+    );
+    for (const field of limits) {
+      const value = updates[field] as number;
+      if (!Number.isInteger(value) || value < 0) {
+        throw new ValidationError('El presupuesto y el tope por viaje deben ser montos enteros de 0 o más.');
+      }
+    }
+
     const supabase = getSupabaseClient();
-    const { error } = await supabase
+    if (limits.length === 0) {
+      const { error } = await supabase
+        .from('corporate_accounts')
+        .update(updates)
+        .eq('id', accountId);
+      if (error) throw error;
+      return;
+    }
+
+    // A company admin may set its budget and cap from 00625. RLS turns anyone
+    // else's update into no row, and before 00625 a trigger put the old values
+    // back without an error: read the row back so neither reads as saved.
+    const { data, error } = await supabase
       .from('corporate_accounts')
       .update(updates)
-      .eq('id', accountId);
+      .eq('id', accountId)
+      .select('monthly_budget_trc, per_ride_cap_trc');
     if (error) throw error;
+    const saved = (data as Array<Pick<CorporateAccount, 'monthly_budget_trc' | 'per_ride_cap_trc'>> | null)?.[0];
+    if (!saved) {
+      throw new AppError('Solo un administrador de la empresa puede cambiar sus límites.', 'CORPORATE_NOT_ADMIN', 400);
+    }
+    if (limits.some((field) => saved[field] !== updates[field])) {
+      throw new AppError(
+        'No se pudieron guardar el presupuesto y el tope. Vuelve a intentarlo más tarde.',
+        'CORPORATE_LIMITS_NOT_SAVED',
+        400,
+      );
+    }
   },
 
   // ─────────────────────────── Admin Approval ───────────────────────────

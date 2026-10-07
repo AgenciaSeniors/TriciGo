@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient, corporateService, paymentService, invoiceService } from '@tricigo/api';
+import { AppError, getSupabaseClient, corporateService, paymentService, invoiceService } from '@tricigo/api';
 import { getErrorMessage, formatTRC } from '@tricigo/utils';
 import type { CorporateAccount, CorporateEmployeeRole, CorporateEmployeeWithUser, EmployeeReport, CorporateBillingSummary, CorporateRide } from '@tricigo/types';
 import { WebSkeletonList } from '@/components/WebSkeleton';
@@ -276,8 +276,9 @@ export default function CorporatePage() {
       );
       setSaveSuccess(accountId);
       setEditingId(null);
-    } catch {
-      setError(t('corporate_save_error', { defaultValue: 'Error al guardar las políticas' }));
+    } catch (err) {
+      // updateAccount says why when it can (a limit that did not save, not an admin).
+      setError(err instanceof AppError ? err.message : t('corporate_save_error', { defaultValue: 'Error al guardar las políticas' }));
     } finally {
       setSaving(false);
     }

@@ -501,6 +501,7 @@ export default function CorporateProfileScreen() {
         t('corporate.policies_saved_msg', { defaultValue: 'Las políticas se actualizaron correctamente' }),
       );
       setPolicyExpanded(null);
+      refetchAccounts();
     } catch (err) {
       Alert.alert(t('common:error', { defaultValue: 'Error' }), getErrorMessage(err));
     } finally {
