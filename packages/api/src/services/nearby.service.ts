@@ -1,11 +1,10 @@
 // ============================================================
 // TriciGo — Nearby Vehicle Service
-// Find nearby drivers for map display + real-time position updates
+// Find nearby drivers for map display
 // ============================================================
 
 import type { NearbyVehicle, VehicleType } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
-import { realtimeStatusLogger } from './_realtime-status';
 
 export const nearbyService = {
   /**
@@ -73,60 +72,5 @@ export const nearbyService = {
       ne: [row.ne_lng, row.ne_lat],
       sw: [row.sw_lng, row.sw_lat],
     };
-  },
-
-  /**
-   * Subscribe to real-time driver position changes for map updates.
-   * Listens to driver_profiles UPDATE events where is_online = true.
-   */
-  subscribeToDriverPositions(
-    onUpdate: (payload: {
-      driver_profile_id: string;
-      latitude: number;
-      longitude: number;
-      heading: number | null;
-      is_online: boolean;
-    }) => void,
-  ) {
-    const supabase = getSupabaseClient();
-    return supabase
-      .channel('nearby-drivers')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'driver_profiles',
-        },
-        (payload) => {
-          const row = payload.new as Record<string, unknown>;
-          // Only process online drivers with location
-          if (!row.is_online || !row.current_location) return;
-
-          let latitude = 0;
-          let longitude = 0;
-
-          // Supabase returns geography as GeoJSON or WKT
-          const loc = row.current_location;
-          if (typeof loc === 'object' && loc !== null) {
-            const geo = loc as { coordinates?: number[] };
-            if (geo.coordinates && geo.coordinates.length >= 2) {
-              longitude = geo.coordinates[0] ?? 0;
-              latitude = geo.coordinates[1] ?? 0;
-            }
-          }
-
-          if (latitude === 0 && longitude === 0) return;
-
-          onUpdate({
-            driver_profile_id: row.id as string,
-            latitude,
-            longitude,
-            heading: (row.current_heading as number) ?? null,
-            is_online: row.is_online as boolean,
-          });
-        },
-      )
-      .subscribe(realtimeStatusLogger('nearby_drivers'));
   },
 };

@@ -18,6 +18,7 @@ import { getSupabaseClient } from '../client';
 import { validate, rechargeSchema, sendGiftSchema, giftCodeSchema, cubanPhoneSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
 import { NotFoundError } from '../errors';
+import { readCorporateBalance } from './_corporate-balance';
 
 export const walletService = {
   /**
@@ -353,22 +354,13 @@ export const walletService = {
   // ==================== CORPORATE WALLETS ====================
 
   /**
-   * Get corporate wallet balance.
-   * Reuses user_id column to store corporate_account_id.
+   * The balance of the wallet that funds a company: its creator's
+   * corporate_cash, not a wallet keyed by the company id (00624).
    */
   async getCorporateBalance(
     corporateAccountId: string,
   ): Promise<{ available: number; held: number }> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('wallet_accounts')
-      .select('balance, held_balance')
-      .eq('user_id', corporateAccountId)
-      .eq('account_type', 'corporate_cash')
-      .single();
-    if (error && error.code !== 'PGRST116') throw error;
-    if (!data) return { available: 0, held: 0 };
-    return { available: data.balance, held: data.held_balance };
+    return readCorporateBalance(corporateAccountId);
   },
 
   /**

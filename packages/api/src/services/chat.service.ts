@@ -140,6 +140,12 @@ export const chatService = {
    * about it has to be worded that narrowly, or it is a guess dressed up as
    * a fact.
    *
+   * The channel is PRIVATE (00626): realtime.messages lets only the ride's
+   * customer and driver join it. On a public channel anyone holding the ride
+   * id could see who has the chat open and fake typing. A private and a public
+   * channel with the same name never reach each other, so an older build on
+   * the public one and a newer build on this one do not see each other type.
+   *
    * Returns the channel so the caller can unsubscribe.
    */
   subscribeToTyping(
@@ -150,7 +156,7 @@ export const chatService = {
   ) {
     const supabase = getSupabaseClient();
     const channel = supabase
-      .channel(`typing:${rideId}`, { config: { presence: { key: myUserId } } })
+      .channel(`typing:${rideId}`, { config: { private: true, presence: { key: myUserId } } })
       .on('broadcast', { event: 'typing' }, (payload) => {
         const senderId = payload.payload?.user_id as string | undefined;
         if (senderId && senderId !== myUserId) {
@@ -170,33 +176,49 @@ export const chatService = {
     }
 
     const log = realtimeStatusLogger('chat_typing');
-    channel.subscribe((status, err) => {
-      log(status, err);
-      // track() only works once the socket is joined; announcing earlier is
-      // a silent no-op and the other side never sees us.
-      if (onPresence && status === 'SUBSCRIBED') {
-        void channel.track({ user_id: myUserId });
-      }
-    });
+    // Attach the user's JWT to the socket first: a private join without it is
+    // refused. If the screen already left (unsubscribe drops the channel from
+    // getChannels()), joining now would leave it open for nobody.
+    supabase.realtime
+      .setAuth()
+      .then(() => {
+        if (!supabase.getChannels().includes(channel)) return;
+        channel.subscribe((status, err) => {
+          log(status, err);
+          // track() only works once the socket is joined; announcing earlier is
+          // a silent no-op and the other side never sees us.
+          if (onPresence && status === 'SUBSCRIBED') {
+            void channel.track({ user_id: myUserId });
+          }
+        });
+      })
+      .catch(() => { /* best-effort: the typing indicator is supplementary */ });
 
     return channel;
   },
 
   /**
    * Broadcast a typing event for the current user.
-   * Reuses or creates a short-lived channel.
+   * Reuses the chat screen's channel, or creates a short-lived private one.
    */
   broadcastTyping(rideId: string, userId: string) {
     const supabase = getSupabaseClient();
     const channelName = `typing:${rideId}`;
 
-    // Try to find an existing channel, otherwise create one
+    // Try to find an existing channel, otherwise create one. Until it joins,
+    // send() goes over REST with the channel's private flag and the user's JWT.
     const channels = supabase.getChannels();
     let channel = channels.find((c) => c.topic === `realtime:${channelName}`);
 
     if (!channel) {
-      channel = supabase.channel(channelName);
-      channel.subscribe();
+      const created = supabase.channel(channelName, { config: { private: true } });
+      channel = created;
+      supabase.realtime
+        .setAuth()
+        .then(() => {
+          if (supabase.getChannels().includes(created)) created.subscribe();
+        })
+        .catch(() => { /* best-effort */ });
     }
 
     channel.send({

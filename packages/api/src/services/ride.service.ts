@@ -50,6 +50,7 @@ import { getSupabaseClient } from '../client';
 import { transformRideCoordinates } from './_ride-coordinates';
 import { exchangeRateService } from './exchange-rate.service';
 import { corporateService } from './corporate.service';
+import { corporatePreCheckRejection, corporateServerRejection } from './_corporate-rides';
 import { notificationService } from './notification.service';
 import { validate, createRideSchema } from '../schemas';
 import { logger } from '@tricigo/utils';
@@ -546,7 +547,7 @@ export const rideService = {
         validParams.service_type,
       );
       if (!validation.valid) {
-        throw new ValidationError(validation.reason ?? 'Corporate ride validation failed');
+        throw corporatePreCheckRejection(validation.reason);
       }
       paymentMethod = 'corporate';
     }
@@ -601,6 +602,10 @@ export const rideService = {
       ({ data, error } = await insertRideRow(withoutNotes));
     }
     if (error) {
+      // A company that will not pay this ride (00625): the server's message is
+      // already a sentence for the rider.
+      const corporateRejection = corporateServerRejection(error);
+      if (corporateRejection) throw corporateRejection;
       // PostgrestError from Supabase is a plain object, not an Error
       // instance. If we throw it raw, callers that do `String(err)` or
       // `err instanceof Error` get "[object Object]" / `false`. Wrap

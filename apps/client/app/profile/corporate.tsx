@@ -173,7 +173,15 @@ export default function CorporateProfileScreen() {
       setNewRole('employee');
       await loadEmployees(expandedAccountId);
     } catch (err) {
-      Alert.alert(t('common:error', { defaultValue: 'Error' }), getErrorMessage(err));
+      const code = err instanceof Error ? err.message : '';
+      Alert.alert(
+        t('common:error', { defaultValue: 'Error' }),
+        code === 'USER_NOT_FOUND'
+          ? t('corporate.employee_not_found', { defaultValue: 'No hay ninguna cuenta TriciGo con ese teléfono confirmado.' })
+          : code === 'EMPLOYEE_ALREADY_EXISTS'
+            ? t('corporate.employee_exists', { defaultValue: 'Esa persona ya es empleada de esta empresa.' })
+            : getErrorMessage(err),
+      );
     } finally {
       setAddingEmployee(false);
     }
@@ -493,6 +501,7 @@ export default function CorporateProfileScreen() {
         t('corporate.policies_saved_msg', { defaultValue: 'Las políticas se actualizaron correctamente' }),
       );
       setPolicyExpanded(null);
+      refetchAccounts();
     } catch (err) {
       Alert.alert(t('common:error', { defaultValue: 'Error' }), getErrorMessage(err));
     } finally {
