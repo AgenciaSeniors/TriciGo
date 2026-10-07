@@ -75,7 +75,7 @@ Rules from CLAUDE.md that apply throughout: commits in English with the conventi
 
 **Driver**
 - Create `apps/driver/src/utils/rideAssignedPush.ts` (+ test) — recognizes the `ride_assigned` push and passes it on.
-- Modify `apps/driver/src/hooks/useDriverRide.ts` — `requestActiveTripReconcile`, poll.
+- Modify `apps/driver/src/hooks/useDriverRide.ts` — the idle active-trip check and the assigned-ride notice (final shape: see the note at the top of Task 19).
 - Modify `apps/driver/src/hooks/useNotifications.ts` — `ride_assigned` push.
 - Modify `packages/i18n/src/locales/{es,en,pt}/driver.json`.
 
@@ -5734,6 +5734,8 @@ Expected: no type errors.
 ## Phase 5 — Driver app
 
 ### Task 19: The driver app picks up a ride support assigned
+
+> **Superseded in part by the final review (2026-10-07).** The code blocks below are what was first implemented. After the cross-layer review the driver code changed: `requestActiveTripReconcile` and the 30 s offers-poll branch are gone; the idle active-trip check runs from the 5 s trip poll every 30 s (also over the completed-trip screen); the notice comes from the reconcile through `shouldAnnounceAssignedRide`; notification responses are handled once (`claimNotificationResponse`); a non-dismissed offer card is refreshed when the offer comes back with a later expiry (`decideIncomingOffer`), and dismissed cards stay hidden. The files in `apps/driver/` are the source of truth; the spec's "Driver app" bullet describes the final behavior.
 
 A directly assigned ride has no offer, so nothing in the driver app reads it while the app is open and idle: realtime is off (BUG-277), the 5 s trip poll in `useDriverRideInit` only runs while there already is a trip, and the 30 s poll of `useIncomingRequests` only looks for searching rides. Today it shows up when the app starts or comes back to the foreground. This task adds two ways in: the `ride_assigned` push (received in the foreground or tapped), and the 30 s poll.
 
