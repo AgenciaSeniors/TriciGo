@@ -1,0 +1,5 @@
+-- 00628 — support-assisted matching (placeholder)
+--
+-- Reserves migration number 00628 for PR #1094 while the migration is written.
+-- Task 3 of docs/superpowers/plans/2026-10-07-support-assisted-matching.md replaces
+-- this whole file. It has no statements, so applying it would do nothing.

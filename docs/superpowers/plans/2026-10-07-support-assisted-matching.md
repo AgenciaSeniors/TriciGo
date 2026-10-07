@@ -4,7 +4,7 @@
 
 **Goal:** When the app cannot find a driver, TriciGo support gets alerted (admin banner with sound, push, e-mail), can send the ride to a chosen driver or assign it directly, and can switch it to another vehicle type at a recomputed price with the rider's consent; the rider gets a "Pedir ayuda" button and a proposal card.
 
-**Architecture:** One migration (`00627`) adds two lock tables, the rider and admin RPCs, a one-minute alert cron, a shared estimate-snapshot writer, and a one-line patch to the discount trigger. A new `rideAssistService` in `packages/api` wraps the RPCs. The admin gets a banner in its shell and a `/rides/[id]/assist` page. The rider client (1.7.4) and web get the help button and the proposal card. The driver app (1.7.4) learns to pick up a ride support assigned while the app is open.
+**Architecture:** One migration (`00628`) adds two lock tables, the rider and admin RPCs, a one-minute alert cron, a shared estimate-snapshot writer, and a one-line patch to the discount trigger. A new `rideAssistService` in `packages/api` wraps the RPCs. The admin gets a banner in its shell and a `/rides/[id]/assist` page. The rider client (1.7.4) and web get the help button and the proposal card. The driver app (1.7.4) learns to pick up a ride support assigned while the app is open.
 
 **Tech Stack:** PostgreSQL 16 + PostGIS (Supabase), plpgsql, Next.js 14 admin and web, Expo / React Native client and driver apps, TypeScript, vitest, i18next.
 
@@ -28,16 +28,16 @@ Read the spec first. Facts the tasks rely on, all measured in prod on 2026-10-07
 - **The admin has no Mapbox token** (`deploy-admin.yml` never passes `NEXT_PUBLIC_MAPBOX_TOKEN`), so a fare quoted there routes through the public OSRM server; the rider app uses Mapbox. The rider consents to the exact price shown, which is what is charged.
 - **Dispatch does not skip test accounts** (`users.is_test` is not read by `dispatch_ride`, `find_best_drivers` or the reactivation push). A test ride in prod reaches real drivers.
 - **`admin.json` already has a `support` section** (the support tickets page, 55 keys). This feature's admin copy lives in a new `ride_assist` section; `pnpm check:i18n` rejects duplicate keys.
-- **Migration number.** `00627`. On 2026-10-07 master ended at `00626` and the only open PR with a migration (#965) holds `00569`. Re-check both right before writing the file (Task 3, step 1).
+- **Migration number.** `00628`. On 2026-10-07 master ended at `00626`; the open PRs with migrations were #965 (`00569`) and #1095 (`00627`, admin money policies, opened by a parallel session the same morning). #1094 reserves `00628` with a placeholder file until Task 3 fills it. Re-check right before writing the file (Task 3, step 1).
 
 Rules from CLAUDE.md that apply throughout: commits in English with the conventional format (the `git commit` commands below show only the subject; end every message with the attribution trailer your session instructions give); no credentials in code; every new `public` table gets explicit GRANTs including `service_role`; never apply a migration or merge without explicit per-PR authorization; never say "listo" without evidence.
 
 ## File map
 
 **Database**
-- Create `supabase/migrations/00627_support_assisted_matching.sql` — everything server-side.
-- Create `supabase/tests/00627/scaffold.sql` — prod's tables and live function bodies for the local rehearsal.
-- Create `supabase/tests/00627/run.sh` — the rehearsal suite (RED without the migration, GREEN with it).
+- Create `supabase/migrations/00628_support_assisted_matching.sql` — everything server-side.
+- Create `supabase/tests/00628/scaffold.sql` — prod's tables and live function bodies for the local rehearsal.
+- Create `supabase/tests/00628/run.sh` — the rehearsal suite (RED without the migration, GREEN with it).
 
 **Shared packages**
 - Modify `packages/utils/src/searchWait.ts` — `searchHelpAvailable`, `rideShortCode`, `SUPPORT_WHATSAPP_PHONE`.
@@ -79,15 +79,15 @@ Rules from CLAUDE.md that apply throughout: commits in English with the conventi
 - Modify `apps/driver/src/hooks/useNotifications.ts` — `ride_assigned` push.
 - Modify `packages/i18n/src/locales/{es,en,pt}/driver.json`.
 
-## Phase 1 — Database (migration 00627)
+## Phase 1 — Database (migration 00628)
 
 ### Task 1: Rehearsal cluster and scaffold
 
 The rehearsal reproduces prod's tables and the live bodies of the functions around `rides` and `ride_offers` in a local Postgres 16 with PostGIS, so the migration can be tested RED → GREEN without touching prod.
 
 **Files:**
-- Create: `supabase/tests/00627/scaffold.sql`
-- Create: `supabase/tests/00627/live-bodies.sql` (generated from prod in step 4)
+- Create: `supabase/tests/00628/scaffold.sql`
+- Create: `supabase/tests/00628/live-bodies.sql` (generated from prod in step 4)
 
 - [ ] **Step 1: Install PostGIS and start the cluster**
 
@@ -102,10 +102,10 @@ id pgtest >/dev/null 2>&1 || useradd -m pgtest
 
 Expected last line: `pgtest|t`. If `pg_isready` reported a server already listening on 5433, confirm it is this session's (`su pgtest -c 'cat ~/pg627/postmaster.pid' | head -1` matches the PID from `ss -lptn 'sport = :5433'`); a cluster of another session must not be reused, because `run.sh` drops and recreates its databases.
 
-- [ ] **Step 2: Write `supabase/tests/00627/scaffold.sql`**
+- [ ] **Step 2: Write `supabase/tests/00628/scaffold.sql`**
 
 ```sql
--- Scaffold for the 00627 rehearsal (support-assisted matching).
+-- Scaffold for the 00628 rehearsal (support-assisted matching).
 -- Prod's tables as of 2026-10-07, reduced to the columns the code under test reads, and the
 -- LIVE bodies of the functions around rides and ride_offers (live-bodies.sql, dumped from prod;
 -- run.sh checks every body against prod's md5).
@@ -739,7 +739,7 @@ These are the md5 of `prosrc` in prod on 2026-10-07. `run.sh` (Task 2) checks th
 | `tg_rides_validate_insurance` | `4d5516aca57a3b81076fdad9fdb6f9f6` |
 | `tg_rides_validate_promo_discount` | `d4494bd8ab75ce590e1c42743583aec5` |
 
-- [ ] **Step 4: Dump the live bodies into `supabase/tests/00627/live-bodies.sql`**
+- [ ] **Step 4: Dump the live bodies into `supabase/tests/00628/live-bodies.sql`**
 
 Run this with `mcp__Supabase__execute_sql` (project `lqaufszburqvlslpcuac`). It returns one row per function: its md5 and its full `CREATE OR REPLACE` statement as base64 on a single line (base64 survives copying where an SQL body full of quotes and backslashes does not).
 
@@ -768,9 +768,9 @@ Write each `def_b64` value to its own file in a scratch directory outside the re
 ```bash
 SP=<that scratch directory>
 ls "$SP"/*.b64 | wc -l            # expect 21 files, named 00-auth.uid.b64, 01-..., in the query's order
-: > supabase/tests/00627/live-bodies.sql
-for f in $(ls "$SP"/*.b64 | sort); do base64 -d "$f" >> supabase/tests/00627/live-bodies.sql || echo "BAD $f"; done
-grep -c '^CREATE OR REPLACE FUNCTION' supabase/tests/00627/live-bodies.sql
+: > supabase/tests/00628/live-bodies.sql
+for f in $(ls "$SP"/*.b64 | sort); do base64 -d "$f" >> supabase/tests/00628/live-bodies.sql || echo "BAD $f"; done
+grep -c '^CREATE OR REPLACE FUNCTION' supabase/tests/00628/live-bodies.sql
 ```
 
 Expected: no `BAD` line and a count of `21`. The md5 check in Task 2 proves each body is byte-identical to prod.
@@ -780,7 +780,7 @@ Expected: no `BAD` line and a count of `21`. The md5 check in Task 2 proves each
 ```bash
 BIN=/usr/lib/postgresql/16/bin; CONN="-h 127.0.0.1 -p 5433 -U pgtest"
 $BIN/dropdb $CONN --if-exists s627 && $BIN/createdb $CONN s627
-$BIN/psql $CONN -d s627 -q -v ON_ERROR_STOP=1 -f supabase/tests/00627/scaffold.sql && echo LOADED
+$BIN/psql $CONN -d s627 -q -v ON_ERROR_STOP=1 -f supabase/tests/00628/scaffold.sql && echo LOADED
 $BIN/psql $CONN -d s627 -Atc "SELECT count(*) FROM public.driver_profiles; SELECT count(*) FROM public.ride_pricing_snapshots"
 $BIN/dropdb $CONN s627
 ```
@@ -790,8 +790,8 @@ Expected: `LOADED`, then `8` and `1` (RB's estimate row, written by the live tri
 - [ ] **Step 6: Commit**
 
 ```bash
-git add supabase/tests/00627/scaffold.sql supabase/tests/00627/live-bodies.sql
-git commit -m "test(db): scaffold for the 00627 support-assisted matching rehearsal"
+git add supabase/tests/00628/scaffold.sql supabase/tests/00628/live-bodies.sql
+git commit -m "test(db): scaffold for the 00628 support-assisted matching rehearsal"
 ```
 
 ### Task 2: Rehearsal suite (RED)
@@ -799,18 +799,18 @@ git commit -m "test(db): scaffold for the 00627 support-assisted matching rehear
 Write every test before the migration. Each test is one transaction that is rolled back, so tests cannot leak into each other. The race test (P12) needs committed data and uses its own database.
 
 **Files:**
-- Create: `supabase/tests/00627/run.sh`
+- Create: `supabase/tests/00628/run.sh`
 
-- [ ] **Step 1: Write `supabase/tests/00627/run.sh`**
+- [ ] **Step 1: Write `supabase/tests/00628/run.sh`**
 
 ```bash
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00627 (support-assisted matching).
+# Rehearsal runner for migration 00628 (support-assisted matching).
 # Local Postgres 16 + PostGIS, no Supabase stack.
-#   supabase/tests/00627/run.sh none
+#   supabase/tests/00628/run.sh none
 #       -> prod as of 2026-10-07 (scaffold + live bodies) + tests
 #          (RED: none of the support functions exist)
-#   supabase/tests/00627/run.sh supabase/migrations/00627_support_assisted_matching.sql
+#   supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql
 #       -> the same + the migration applied twice (idempotency) + tests (GREEN)
 # The migration is applied as postgres, the scaffold's non-superuser owner, with an empty
 # search_path, so every name in it must be schema-qualified.
@@ -1158,8 +1158,8 @@ echo "PASS $PASS  FAIL $FAIL"
 - [ ] **Step 2: Run it without the migration and confirm it is RED**
 
 ```bash
-chmod +x supabase/tests/00627/run.sh
-supabase/tests/00627/run.sh none | tail -25
+chmod +x supabase/tests/00628/run.sh
+supabase/tests/00628/run.sh none | tail -25
 ```
 
 Expected: `L1`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 3  FAIL 70` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
@@ -1167,14 +1167,14 @@ Expected: `L1`, `S3b` and `S11` PASS (they describe prod as it is); every other 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/tests/00627/run.sh
-git commit -m "test(db): RED rehearsal suite for 00627 support-assisted matching"
+git add supabase/tests/00628/run.sh
+git commit -m "test(db): RED rehearsal suite for 00628 support-assisted matching"
 ```
 
 ### Task 3: Migration — support tables, settings, helpers
 
 **Files:**
-- Create: `supabase/migrations/00627_support_assisted_matching.sql`
+- Create: `supabase/migrations/00628_support_assisted_matching.sql` (it already holds a comment-only placeholder that reserves the number; replace its whole content)
 
 - [ ] **Step 1: Confirm the migration number is still free**
 
@@ -1183,13 +1183,13 @@ git fetch origin master
 git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -3
 ```
 
-Then list the migration files of every open PR with `mcp__github__list_pull_requests` (state open) and, for each, `git fetch origin <head-branch> && git diff --name-only origin/master...FETCH_HEAD -- supabase/migrations`. Expected: master ends at `00626`, and no open PR holds `00627`. If either changed, use the next free number everywhere `00627` appears in this plan (file names, `run.sh`, the migration's comments).
+Then list the migration files of every open PR with `mcp__github__list_pull_requests` (state open) and, for each, `git fetch origin <head-branch> && git diff --name-only origin/master...FETCH_HEAD -- supabase/migrations`. Expected: master ends at `00626` (or `00627`, if #1095 merged), and no open PR other than #1094 holds `00628`. If either changed, use the next free number everywhere `00628` appears in this plan (file names, `run.sh`, the migration's comments).
 
 - [ ] **Step 2: Write sections 1 to 3 of the migration**
 
 ```sql
 -- ============================================================
--- 00627 — support-assisted matching
+-- 00628 — support-assisted matching
 --
 -- When the app cannot find a driver, TriciGo support helps the rider get one, inside the app.
 --   * request_ride_help: the rider's "Pedir ayuda" button. Marks the ride and alerts support.
@@ -1212,7 +1212,7 @@ Then list the migration files of every open PR with `mcp__github__list_pull_requ
 -- that its super_admin bypass does not skip that recompute when this code asks for it.
 --
 -- Design: docs/superpowers/specs/2026-10-07-support-assisted-matching-design.md
--- Rehearsal: supabase/tests/00627/run.sh (RED without this file, GREEN with it, applied twice)
+-- Rehearsal: supabase/tests/00628/run.sh (RED without this file, GREEN with it, applied twice)
 -- ============================================================
 
 -- The foreign keys below lock rides (SHARE ROW EXCLUSIVE) until commit. Give up after 10 s rather
@@ -1342,7 +1342,7 @@ REVOKE ALL ON FUNCTION public._html_escape(text) FROM PUBLIC, anon, authenticate
 - [ ] **Step 3: Run the suite**
 
 ```bash
-supabase/tests/00627/run.sh supabase/migrations/00627_support_assisted_matching.sql | grep -E '^(PASS|FAIL)  (L1|G2|G3|S3b|S11)|^PASS [0-9]'
+supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | grep -E '^(PASS|FAIL)  (L1|G2|G3|S3b|S11)|^PASS [0-9]'
 ```
 
 Expected: the migration applies twice without error, and `L1`, `G2`, `G3`, `S3b`, `S11` PASS. Everything that calls a support function still fails.
@@ -1350,14 +1350,14 @@ Expected: the migration applies twice without error, and `L1`, `G2`, `G3`, `S3b`
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/00627_support_assisted_matching.sql
-git commit -m "feat(db): support tables, settings and helpers for assisted matching (00627)"
+git add supabase/migrations/00628_support_assisted_matching.sql
+git commit -m "feat(db): support tables, settings and helpers for assisted matching (00628)"
 ```
 
 ### Task 4: Migration — shared estimate snapshot and the discount patch
 
 **Files:**
-- Modify: `supabase/migrations/00627_support_assisted_matching.sql` (append)
+- Modify: `supabase/migrations/00628_support_assisted_matching.sql` (append)
 
 - [ ] **Step 1: Append sections 4 and 5**
 
@@ -1372,18 +1372,18 @@ BEGIN
   SELECT prosrc INTO v_src FROM pg_proc WHERE oid = 'public.tg_rides_create_estimate_snapshot()'::regprocedure;
   IF position('_write_ride_estimate_snapshot' IN v_src) = 0
      AND md5(v_src) <> 'b801283b9dcb6de3e4822992347d962e' THEN
-    RAISE EXCEPTION '00627: tg_rides_create_estimate_snapshot is not the body this migration was written for (md5 %)', md5(v_src);
+    RAISE EXCEPTION '00628: tg_rides_create_estimate_snapshot is not the body this migration was written for (md5 %)', md5(v_src);
   END IF;
   SELECT prosrc INTO v_src FROM pg_proc WHERE oid = 'public.tg_rides_validate_promo_discount()'::regprocedure;
   IF position('app.force_discount_recompute' IN v_src) = 0
      AND md5(v_src) <> 'd4494bd8ab75ce590e1c42743583aec5' THEN
-    RAISE EXCEPTION '00627: tg_rides_validate_promo_discount is not the body this migration was written for (md5 %)', md5(v_src);
+    RAISE EXCEPTION '00628: tg_rides_validate_promo_discount is not the body this migration was written for (md5 %)', md5(v_src);
   END IF;
 END
 $guard$;
 
 -- Writes the ride's estimate row, the price contract complete_ride_and_pay charges.
--- The logic is tg_rides_create_estimate_snapshot's body as of 00627 (md5 b801283b…) with NEW
+-- The logic is tg_rides_create_estimate_snapshot's body as of 00628 (md5 b801283b…) with NEW
 -- renamed p_ride. p_replace = false only writes a ride that has no estimate row yet (the INSERT
 -- trigger). p_replace = true rewrites the existing row in place (a type change).
 CREATE OR REPLACE FUNCTION public._write_ride_estimate_snapshot(p_ride public.rides, p_replace boolean)
@@ -1513,7 +1513,7 @@ SECURITY DEFINER
 SET search_path = public, extensions, pg_catalog
 AS $$
 BEGIN
-  -- 00627: the body moved to _write_ride_estimate_snapshot, shared with the type change.
+  -- 00628: the body moved to _write_ride_estimate_snapshot, shared with the type change.
   PERFORM public._write_ride_estimate_snapshot(NEW, false);
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
@@ -1539,7 +1539,7 @@ BEGIN
     RETURN;  -- already patched
   END IF;
   IF (length(v_src) - length(replace(v_src, v_target, ''))) / length(v_target) <> 1 THEN
-    RAISE EXCEPTION '00627: the super_admin bypass is not exactly once in tg_rides_validate_promo_discount';
+    RAISE EXCEPTION '00628: the super_admin bypass is not exactly once in tg_rides_validate_promo_discount';
   END IF;
   EXECUTE replace(pg_get_functiondef('public.tg_rides_validate_promo_discount()'::regprocedure), v_target, v_new);
 END
@@ -1549,7 +1549,7 @@ $patch$;
 - [ ] **Step 2: Run the suite**
 
 ```bash
-supabase/tests/00627/run.sh supabase/migrations/00627_support_assisted_matching.sql | grep -E '^(PASS|FAIL)  (L1|G2|G3|S3b|S11)'
+supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | grep -E '^(PASS|FAIL)  (L1|G2|G3|S3b|S11)'
 ```
 
 Expected: the five still PASS. `S11` now compares a row written by the new trigger with one written by the live one, so it proves the refactor writes the same snapshot. `S3b` proves the super_admin escape hatch still works outside a type change.
@@ -1557,14 +1557,14 @@ Expected: the five still PASS. `S11` now compares a row written by the new trigg
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00627_support_assisted_matching.sql
-git commit -m "feat(db): share the estimate snapshot writer and let a type change recompute discounts (00627)"
+git add supabase/migrations/00628_support_assisted_matching.sql
+git commit -m "feat(db): share the estimate snapshot writer and let a type change recompute discounts (00628)"
 ```
 
 ### Task 5: Migration — changing the vehicle type, and the rider's proposals
 
 **Files:**
-- Modify: `supabase/migrations/00627_support_assisted_matching.sql` (append)
+- Modify: `supabase/migrations/00628_support_assisted_matching.sql` (append)
 
 - [ ] **Step 1: Append section 6**
 
@@ -1836,7 +1836,7 @@ GRANT EXECUTE ON FUNCTION public.respond_ride_service_proposal(uuid, boolean) TO
 - [ ] **Step 2: Run the suite**
 
 ```bash
-supabase/tests/00627/run.sh supabase/migrations/00627_support_assisted_matching.sql | grep -E '^(PASS|FAIL)  (S|P|G1)'
+supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | grep -E '^(PASS|FAIL)  (S|P|G1)'
 ```
 
 Expected: every `S…`, `P…` (P12 included) and `G1` line is PASS. If `S1` fails on its offers column, check that `dispatch_ride` created D5's offer: `find_best_drivers` must see D5 inside the 50 km radius, which needs the ride to be older than `dispatch_stage1_seconds` (the `ride` helper makes it 2 minutes old).
@@ -1844,14 +1844,14 @@ Expected: every `S…`, `P…` (P12 included) and `G1` line is PASS. If `S1` fai
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00627_support_assisted_matching.sql
-git commit -m "feat(db): support can switch a ride's vehicle type, proposed or applied (00627)"
+git add supabase/migrations/00628_support_assisted_matching.sql
+git commit -m "feat(db): support can switch a ride's vehicle type, proposed or applied (00628)"
 ```
 
 ### Task 6: Migration — offers, direct assignment, the waiting list and the assist page's data
 
 **Files:**
-- Modify: `supabase/migrations/00627_support_assisted_matching.sql` (append)
+- Modify: `supabase/migrations/00628_support_assisted_matching.sql` (append)
 
 - [ ] **Step 1: Append section 7**
 
@@ -2276,7 +2276,7 @@ GRANT EXECUTE ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) T
 - [ ] **Step 2: Run the suite**
 
 ```bash
-supabase/tests/00627/run.sh supabase/migrations/00627_support_assisted_matching.sql | grep -E '^(PASS|FAIL)  (W|K|O|A|G4)'
+supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | grep -E '^(PASS|FAIL)  (W|K|O|A|G4)'
 ```
 
 Expected: every `W…`, `K…`, `O…`, `A…` and `G4` line is PASS. `O10` proves a support offer is accepted through the live `accept_ride_v2`; `A2` proves the assignment writes what `accept_ride_v2` writes and logs `actor_role = admin` in `ride_transitions`.
@@ -2284,14 +2284,14 @@ Expected: every `W…`, `K…`, `O…`, `A…` and `G4` line is PASS. `O10` prov
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00627_support_assisted_matching.sql
-git commit -m "feat(db): support can offer or assign a waiting ride to a chosen driver (00627)"
+git add supabase/migrations/00628_support_assisted_matching.sql
+git commit -m "feat(db): support can offer or assign a waiting ride to a chosen driver (00628)"
 ```
 
 ### Task 7: Migration — alerts, the help request, the cron and the closing checks (GREEN)
 
 **Files:**
-- Modify: `supabase/migrations/00627_support_assisted_matching.sql` (append)
+- Modify: `supabase/migrations/00628_support_assisted_matching.sql` (append)
 
 - [ ] **Step 1: Append sections 8 and 9**
 
@@ -2373,7 +2373,7 @@ BEGIN
       || format(v_row, 'Destino', public._html_escape(COALESCE(v_ride.dropoff_address, '—')))
       || '</table>'
       || '<p><a href="' || v_link || '" style="display:inline-block;background:#ff4d00;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Asistir el viaje</a></p>'
-      || '<p style="color:#777;font-size:12px">Aviso automático de TriciGo (00627). Se envía una vez por viaje y motivo. No responder.</p>'
+      || '<p style="color:#777;font-size:12px">Aviso automático de TriciGo (00628). Se envía una vez por viaje y motivo. No responder.</p>'
       || '</body></html>';
     IF v_html IS NULL THEN
       RAISE EXCEPTION 'empty alert e-mail';
@@ -2497,7 +2497,7 @@ BEGIN
       '_apply_ride_service_change', '_support_alert', 'notify_support_waiting_rides')
   LOOP
     IF has_function_privilege('anon', r.fn, 'EXECUTE') OR has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
-      RAISE EXCEPTION '00627: % is executable by a client role', r.fn;
+      RAISE EXCEPTION '00628: % is executable by a client role', r.fn;
     END IF;
   END LOOP;
 
@@ -2509,10 +2509,10 @@ BEGIN
       'admin_offer_ride_to_driver', 'admin_assign_ride_to_driver', 'admin_change_ride_service')
   LOOP
     IF has_function_privilege('anon', r.fn, 'EXECUTE') THEN
-      RAISE EXCEPTION '00627: % is executable by anon', r.fn;
+      RAISE EXCEPTION '00628: % is executable by anon', r.fn;
     END IF;
     IF NOT has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
-      RAISE EXCEPTION '00627: % is not executable by authenticated', r.fn;
+      RAISE EXCEPTION '00628: % is not executable by authenticated', r.fn;
     END IF;
   END LOOP;
 
@@ -2520,19 +2520,19 @@ BEGIN
      OR has_table_privilege('authenticated', 'public.ride_assist', 'SELECT')
      OR has_table_privilege('anon', 'public.ride_service_proposals', 'SELECT')
      OR has_table_privilege('authenticated', 'public.ride_service_proposals', 'SELECT') THEN
-    RAISE EXCEPTION '00627: a client role can read a support table';
+    RAISE EXCEPTION '00628: a client role can read a support table';
   END IF;
 
   IF position('_write_ride_estimate_snapshot' IN
        (SELECT prosrc FROM pg_proc WHERE oid = 'public.tg_rides_create_estimate_snapshot()'::regprocedure)) = 0 THEN
-    RAISE EXCEPTION '00627: the estimate trigger does not call the shared writer';
+    RAISE EXCEPTION '00628: the estimate trigger does not call the shared writer';
   END IF;
   IF position('app.force_discount_recompute' IN
        (SELECT prosrc FROM pg_proc WHERE oid = 'public.tg_rides_validate_promo_discount()'::regprocedure)) = 0 THEN
-    RAISE EXCEPTION '00627: the discount trigger was not patched';
+    RAISE EXCEPTION '00628: the discount trigger was not patched';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'notify-support-waiting-rides') THEN
-    RAISE EXCEPTION '00627: the support alert cron is not scheduled';
+    RAISE EXCEPTION '00628: the support alert cron is not scheduled';
   END IF;
 END
 $assert$;
@@ -2541,7 +2541,7 @@ $assert$;
 - [ ] **Step 2: Run the whole suite**
 
 ```bash
-supabase/tests/00627/run.sh supabase/migrations/00627_support_assisted_matching.sql | tail -8
+supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -8
 ```
 
 Expected: no `FAIL` line, and the last line is `PASS 73  FAIL 0`.
@@ -2550,7 +2550,7 @@ Expected: no `FAIL` line, and the last line is `PASS 73  FAIL 0`.
 
 ```bash
 pnpm test:migration-grants && pnpm check:migration-grants
-grep -nE '\b(DELETE|DROP|TRUNCATE)\b' supabase/migrations/00627_support_assisted_matching.sql
+grep -nE '\b(DELETE|DROP|TRUNCATE)\b' supabase/migrations/00628_support_assisted_matching.sql
 ```
 
 Expected: both checks pass, and `grep` prints five lines and nothing else: the three foreign-key clauses (`ride_assist.ride_id` and `ride_service_proposals.ride_id` with `ON DELETE CASCADE`, `ride_service_proposals.proposed_by` with `ON DELETE SET NULL`) and the two `GRANT SELECT, INSERT, UPDATE, DELETE … TO service_role` lines. None of those is a destructive statement. A `DELETE`, `DROP` or `TRUNCATE` statement anywhere in the file, even inside a function body, makes the MCP apply wait for approval in the app and time out at 60 s (CLAUDE.md § "Aplicar migraciones pesadas por MCP"); if `grep` shows one, rewrite it before going on.
@@ -2558,8 +2558,8 @@ Expected: both checks pass, and `grep` prints five lines and nothing else: the t
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/00627_support_assisted_matching.sql
-git commit -m "feat(db): alert support about waiting rides by push and e-mail, rider help request (00627)"
+git add supabase/migrations/00628_support_assisted_matching.sql
+git commit -m "feat(db): alert support about waiting rides by push and e-mail, rider help request (00628)"
 ```
 
 ## Phase 2 — Shared packages
@@ -2660,7 +2660,7 @@ export const SUPPORT_WHATSAPP_PHONE = '+5356621636';
 
 /**
  * The ride code the rider and support talk about: the first 8 characters of the id, upper
- * case. The same as the server's _ride_short_code (00627), so the app can write it on
+ * case. The same as the server's _ride_short_code (00628), so the app can write it on
  * WhatsApp even when request_ride_help did not answer.
  */
 export function rideShortCode(rideId: string): string {
@@ -2677,7 +2677,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
  * The wall clock matchPricingRule needs ("HH:MM" and day of week, 0 = Sunday), read in an IANA
  * time zone. Without a zone it reads the device clock, which is what the rider app has always
  * done: phones in Cuba run on Havana time. Support re-quotes a ride from a browser that can be
- * anywhere, so it passes 'America/Havana', the zone the estimate snapshot uses (00299, 00627).
+ * anywhere, so it passes 'America/Havana', the zone the estimate snapshot uses (00299, 00628).
  */
 export function pricingClock(date: Date, timeZone?: string): { hhmm: string; day: number } {
   if (!timeZone) {
@@ -3030,10 +3030,10 @@ Expected: FAIL — `Cannot find module '../ride-assist.service'`.
 
 ```ts
 // ============================================================
-// TriciGo — support-assisted matching (migration 00627)
+// TriciGo — support-assisted matching (migration 00628)
 // The rider's "Pedir ayuda" and proposal card, and the admin's assist page.
 // The server answers an expected refusal as `{ error: code }`; it comes back here as an
-// AppError whose `code` is that string. A missing function (00627 not applied) is PGRST202.
+// AppError whose `code` is that string. A missing function (00628 not applied) is PGRST202.
 // ============================================================
 
 import { getSupabaseClient } from '../client';
@@ -3154,7 +3154,7 @@ function isMissingRpc(error: RpcError | null | undefined): boolean {
 }
 
 function unavailable(rpc: string): AppError {
-  return new AppError(`${rpc} is not deployed yet (migration 00627)`, RIDE_ASSIST_UNAVAILABLE, 503);
+  return new AppError(`${rpc} is not deployed yet (migration 00628)`, RIDE_ASSIST_UNAVAILABLE, 503);
 }
 
 /** `{ error: code }` from an RPC becomes an AppError carrying the code. */
@@ -3458,7 +3458,7 @@ Each file ends with the `incomplete_drivers` section and `}`. Replace the last t
     "waiting_for": "Esperando hace {{time}}",
     "not_searching": "El viaje ya no está buscando conductor (estado: {{status}}).",
     "see_ride": "Ver el viaje",
-    "unavailable": "Esta función todavía no está disponible: falta aplicar la migración 00627.",
+    "unavailable": "Esta función todavía no está disponible: falta aplicar la migración 00628.",
     "load_error": "No se pudo cargar el viaje.",
     "ride_card": "Viaje",
     "origin": "Origen",
@@ -3557,7 +3557,7 @@ Each file ends with the `incomplete_drivers` section and `}`. Replace the last t
     "waiting_for": "Waiting for {{time}}",
     "not_searching": "The ride is no longer looking for a driver (status: {{status}}).",
     "see_ride": "See the ride",
-    "unavailable": "This feature is not available yet: migration 00627 has not been applied.",
+    "unavailable": "This feature is not available yet: migration 00628 has not been applied.",
     "load_error": "Could not load the ride.",
     "ride_card": "Ride",
     "origin": "Pickup",
@@ -3656,7 +3656,7 @@ Each file ends with the `incomplete_drivers` section and `}`. Replace the last t
     "waiting_for": "Esperando há {{time}}",
     "not_searching": "A viagem não está mais procurando motorista (status: {{status}}).",
     "see_ride": "Ver a viagem",
-    "unavailable": "Esta função ainda não está disponível: falta aplicar a migração 00627.",
+    "unavailable": "Esta função ainda não está disponível: falta aplicar a migração 00628.",
     "load_error": "Não foi possível carregar a viagem.",
     "ride_card": "Viagem",
     "origin": "Origem",
@@ -3797,7 +3797,7 @@ In `apps/admin/src/app/settings/platform-config/page.tsx`, before the closing `}
 
 ```ts
 
-  // ── Soporte: viajes sin conductor (00627) ──
+  // ── Soporte: viajes sin conductor (00628) ──
   support_alert_enabled: { type: 'select', helpKey: 'platform_config.support_alert_enabled_help', options: [{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }] },
   support_alert_after_s: { type: 'number', helpKey: 'platform_config.support_alert_after_s_help' },
   support_offer_ttl_s: { type: 'number', helpKey: 'platform_config.support_offer_ttl_s_help' },
@@ -3899,7 +3899,7 @@ export function waitLabel(seconds: number): string {
 
 ```ts
 /**
- * useSupportWaitingRides — the rides waiting for support (admin_support_waiting_rides, 00627),
+ * useSupportWaitingRides — the rides waiting for support (admin_support_waiting_rides, 00628),
  * polled every 15 s. Plays the chime when a ride the panel had not seen enters the list, and
  * again when its rider asks for help. Polling rather than Realtime, like useStuckRideAlerts
  * (BUG-277). A failed poll keeps the last list.
@@ -4160,7 +4160,7 @@ Every key it returns exists in the three `admin.json` files (Task 12). The other
 'use client';
 
 /**
- * The drivers support can send a waiting ride to (admin_ride_assist_candidates, 00627):
+ * The drivers support can send a waiting ride to (admin_ride_assist_candidates, 00628):
  * online first, then by distance to the pickup. "Enviar oferta" puts the ride on the driver's
  * screen like any offer; "Asignar directo" gives it to them at once, with a reason.
  * Support can also look at drivers of another type, to call them before changing the ride's
@@ -4421,7 +4421,7 @@ export function AssistCandidates({ rideId, rideServiceType, pickupAddress, typeO
 'use client';
 
 /**
- * Switch a waiting ride to another vehicle type (00627). The price is quoted here with the
+ * Switch a waiting ride to another vehicle type (00628). The price is quoted here with the
  * code the rider app uses (rideService.getLocalFareEstimate), on Havana time and for the
  * rider. Support then proposes it to the rider in the app, or applies it with the rider's
  * WhatsApp consent. The admin has no Mapbox token, so the route comes from OSRM: the price
@@ -4636,7 +4636,7 @@ In prod on 2026-10-07 the active types were `auto_confort` (4 passengers), `auto
 'use client';
 
 /**
- * /rides/[id]/assist — support helps a waiting ride find a driver (00627): send it to a
+ * /rides/[id]/assist — support helps a waiting ride find a driver (00628): send it to a
  * chosen driver, assign it directly, or switch its vehicle type with the rider's consent.
  * The ride is re-read every 10 s; the candidates refresh on their own every 20 s.
  */
@@ -5071,8 +5071,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { rideAssistService, type ServiceProposal } from '@tricigo/api';
 
 /**
- * The vehicle-type change support proposed for this searching ride (00627), polled every 5 s
- * while `enabled`. null when there is none, when 00627 is not applied, or when a poll fails.
+ * The vehicle-type change support proposed for this searching ride (00628), polled every 5 s
+ * while `enabled`. null when there is none, when 00628 is not applied, or when a poll fails.
  * `dismiss(id)` hides a proposal the rider already answered, even if a poll that was in flight
  * still returns it.
  */
@@ -5136,10 +5136,10 @@ interface SupportHelpButtonProps {
 }
 
 /**
- * "¿No aparece conductor? Pide ayuda" (00627), from 45 s of searching. Alerts support once
+ * "¿No aparece conductor? Pide ayuda" (00628), from 45 s of searching. Alerts support once
  * (request_ride_help) and opens WhatsApp with the ride code; the search keeps running.
  * The alert is awaited for at most 4 s so it leaves before WhatsApp takes the screen (the app
- * can be suspended then); WhatsApp opens either way, also when 00627 is not applied.
+ * can be suspended then); WhatsApp opens either way, also when 00628 is not applied.
  */
 export function SupportHelpButton({ rideId, elapsedSeconds }: SupportHelpButtonProps) {
   const { t } = useTranslation('rider');
@@ -5210,7 +5210,7 @@ interface ServiceProposalCardProps {
 }
 
 /**
- * Support proposes switching the searching ride to another vehicle type at a new price (00627,
+ * Support proposes switching the searching ride to another vehicle type at a new price (00628,
  * admin_change_ride_service). Accepting switches it at once and the search goes on with drivers
  * of the new type; rejecting it, or letting it expire, changes nothing.
  */
@@ -5335,7 +5335,7 @@ In `SearchingView`, right after the `useRideOfferStats` call:
     enabled: activeRide?.status === 'searching',
   });
 
-  // Support-assisted matching (00627): a vehicle-type change support proposed, answered here.
+  // Support-assisted matching (00628): a vehicle-type change support proposed, answered here.
   const customerId = useAuthStore((s) => s.user?.id);
   const { proposal, dismiss: dismissProposal } = useServiceProposal(
     activeRide?.id ?? null,
@@ -5414,7 +5414,7 @@ In `apps/client/src/hooks/useRide.ts`, after the `estimatedChanged` declaration 
 
 ```ts
 
-          // Support can switch a searching ride to another vehicle type (00627): a new
+          // Support can switch a searching ride to another vehicle type (00628): a new
           // service_type and fare with the same status, and the fare can even stay equal.
           const serviceChanged =
             fresh.service_type !== pinned.service_type
@@ -5461,10 +5461,10 @@ git commit -m "feat(client): ask support for help while searching, and answer it
 ```tsx
 'use client';
 
-// Support-assisted matching (00627), the web side of the rider app's SearchingView: while the
+// Support-assisted matching (00628), the web side of the rider app's SearchingView: while the
 // ride is searching, the vehicle-type change support proposed (Aceptar / Rechazar), and from
 // 45 s the "Pedir ayuda" link, which alerts support and opens WhatsApp with the ride code.
-// Without 00627 both stay quiet: getPendingProposal answers null and requestHelp never throws,
+// Without 00628 both stay quiet: getPendingProposal answers null and requestHelp never throws,
 // so the WhatsApp link still works.
 
 import { useCallback, useEffect, useState } from 'react';
@@ -5697,7 +5697,7 @@ with
             </div>
           )}
 
-          {/* Support-assisted matching (00627): a type change support proposed, and "Pedir ayuda". */}
+          {/* Support-assisted matching (00628): a type change support proposed, and "Pedir ayuda". */}
           {ride.status === 'searching' && userId === ride.customer_id && (
             <SupportHelpCard
               rideId={ride.id}
@@ -5803,7 +5803,7 @@ Expected: FAIL — `Cannot find module '../rideAssignedPush'`.
 
 ```ts
 /**
- * Support assigned this driver a ride (00627, admin_assign_ride_to_driver). The push is
+ * Support assigned this driver a ride (00628, admin_assign_ride_to_driver). The push is
  * category `system`, and send-push overwrites data.type with the category, so the event
  * travels in data.event.
  *
@@ -5857,7 +5857,7 @@ import { onRideAssignedPush } from '@/utils/rideAssignedPush';
 
 /**
  * Re-runs the home tab's active-trip check (useDriverRideInit) from outside it. Support can
- * assign a ride directly while the app is open and idle (00627, admin_assign_ride_to_driver);
+ * assign a ride directly while the app is open and idle (00628, admin_assign_ride_to_driver);
  * realtime is off (BUG-277) and the 5 s trip poll only runs while there already is a trip, so
  * nothing else would read it. A no-op while the home tab is not mounted: it checks on mount.
  */
@@ -5885,7 +5885,7 @@ with
     };
     activeTripReconciler = reconcile;
 
-    // Support assigned a ride (push with data.event = 'ride_assigned', 00627): load it now and
+    // Support assigned a ride (push with data.event = 'ride_assigned', 00628): load it now and
     // say so with sound, since it did not come as an offer the driver accepted. A push that is
     // received and then tapped gives one notice, not two.
     let lastAssignedNoticeAt = 0;
@@ -5947,7 +5947,7 @@ with
         const rides = await rideService.getSearchingRides();
         for (const ride of rides) addRequest(ride);
       } catch { /* best-effort fallback */ }
-      // A ride support assigned directly comes with no offer (00627). If its push did not
+      // A ride support assigned directly comes with no offer (00628). If its push did not
       // arrive, this is what loads it. getActiveTrip only returns rides still in progress.
       const local = useDriverRideStore.getState().activeTrip;
       if (!local || local.status === 'completed' || local.status === 'canceled') {
@@ -6003,7 +6003,7 @@ with
       },
     );
 
-    // Support assigned a ride while the app is open (00627): load it without waiting for a tap.
+    // Support assigned a ride while the app is open (00628): load it without waiting for a tap.
     const receivedListener = Notifications.addNotificationReceivedListener((notification) => {
       if (isRideAssignedPush(notification.request.content.data)) emitRideAssignedPush();
     });
@@ -6083,7 +6083,7 @@ pnpm install --frozen-lockfile
 git status --short pnpm-lock.yaml   # must print nothing; if it does: git checkout HEAD -- pnpm-lock.yaml
 ```
 
-If the merge brought a new migration numbered `00627`, renumber this one before anything else (CLAUDE.md § "Pre-flight para elegir número de migración").
+If the merge brought a new migration numbered `00628`, renumber this one before anything else (CLAUDE.md § "Pre-flight para elegir número de migración").
 
 - [ ] **Step 2: Run CI's checks**
 
@@ -6100,8 +6100,8 @@ Expected: every command exits 0. `pnpm lint` may print the warnings that already
 - [ ] **Step 3: Run the database rehearsal both ways**
 
 ```bash
-supabase/tests/00627/run.sh none | tail -1
-supabase/tests/00627/run.sh supabase/migrations/00627_support_assisted_matching.sql | tail -1
+supabase/tests/00628/run.sh none | tail -1
+supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -1
 ```
 
 Expected: `PASS 3  FAIL 70`, then `PASS 73  FAIL 0`.
@@ -6113,9 +6113,9 @@ Task 22 compares prod against these.
 ```bash
 BIN=/usr/lib/postgresql/16/bin; CONN="-h 127.0.0.1 -p 5433 -U pgtest"
 $BIN/dropdb $CONN --if-exists md5check; $BIN/createdb $CONN md5check
-$BIN/psql $CONN -d md5check -q -v ON_ERROR_STOP=1 -f supabase/tests/00627/scaffold.sql
+$BIN/psql $CONN -d md5check -q -v ON_ERROR_STOP=1 -f supabase/tests/00628/scaffold.sql
 $BIN/psql $CONN -d md5check -q -v ON_ERROR_STOP=1 -c "SET SESSION AUTHORIZATION postgres; SET search_path = '';" \
-  -f supabase/migrations/00627_support_assisted_matching.sql
+  -f supabase/migrations/00628_support_assisted_matching.sql
 $BIN/psql $CONN -d md5check -At -c "
   SELECT p.proname || '=' || md5(p.prosrc) || '/' || length(p.prosrc)
   FROM pg_proc p
@@ -6126,11 +6126,11 @@ $BIN/psql $CONN -d md5check -At -c "
     'get_my_ride_service_proposal', 'respond_ride_service_proposal', 'admin_support_waiting_rides',
     'admin_ride_assist_context', 'admin_ride_assist_candidates', 'admin_offer_ride_to_driver',
     'admin_assign_ride_to_driver', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides'])
-  ORDER BY 1" | tee /tmp/00627-md5-local.txt | wc -l
+  ORDER BY 1" | tee /tmp/00628-md5-local.txt | wc -l
 $BIN/dropdb $CONN md5check
 ```
 
-Expected: `21`. Keep `/tmp/00627-md5-local.txt` (or paste it into the PR body) for Task 22.
+Expected: `21`. Keep `/tmp/00628-md5-local.txt` (or paste it into the PR body) for Task 22.
 
 - [ ] **Step 5: Ask for a code review**
 
@@ -6144,7 +6144,7 @@ The local scaffold carries the live bodies of the functions this migration touch
 
 - [ ] **Step 1: Ask for authorization**
 
-It is DDL against prod, even though it rolls back. Use `AskUserQuestion`: "¿Autorizás ensayar la migración 00627 en producción dentro de una transacción que se deshace al final (no queda nada aplicado y no sale ningún aviso)?", with "Sí, ensayala (Recommended)" first. Do not continue without that answer.
+It is DDL against prod, even though it rolls back. Use `AskUserQuestion`: "¿Autorizás ensayar la migración 00628 en producción dentro de una transacción que se deshace al final (no queda nada aplicado y no sale ningún aviso)?", with "Sí, ensayala (Recommended)" first. Do not continue without that answer.
 
 - [ ] **Step 2: Pick a quiet moment**
 
@@ -6161,7 +6161,7 @@ The transaction locks `rides` against writes for its few seconds (the new foreig
 Build one query string, in this order, and send it with `mcp__Supabase__execute_sql`:
 
 1. `BEGIN;` and `SET LOCAL statement_timeout = '50s';`
-2. the whole content of `supabase/migrations/00627_support_assisted_matching.sql`;
+2. the whole content of `supabase/migrations/00628_support_assisted_matching.sql`;
 3. this block, which uses the new functions the way the rider and support will, and ends by raising its findings, which rolls the whole transaction back:
 
 ```sql
@@ -6178,7 +6178,7 @@ DECLARE
   v_out    jsonb := '{}'::jsonb;
   v_n      integer;
 BEGIN
-  -- A super_admin on purpose: the discount trigger must recompute for one too (the 00627 patch).
+  -- A super_admin on purpose: the discount trigger must recompute for one too (the 00628 patch).
   SELECT id INTO v_admin FROM public.users WHERE role = 'super_admin' AND is_active LIMIT 1;
   SELECT id INTO v_rider FROM public.users WHERE role = 'customer' AND is_test AND is_active LIMIT 1;
   -- An offline approved driver with an auto or confort, free, whose balance covers a commission.
@@ -6203,8 +6203,8 @@ BEGIN
     estimated_fare_cup, estimated_fare_trc, estimated_distance_m, estimated_duration_s,
     passenger_count, ride_mode, scheduled_at)
   VALUES (v_ride, v_rider, 'triciclo_basico', 'searching', 'cash',
-    ST_SetSRID(ST_MakePoint(-82.3597, 23.1352), 4326)::geography, 'Prueba 00627 · Paseo del Prado, La Habana',
-    ST_SetSRID(ST_MakePoint(-82.3830, 23.1225), 4326)::geography, 'Prueba 00627 · Plaza de la Revolución, La Habana',
+    ST_SetSRID(ST_MakePoint(-82.3597, 23.1352), 4326)::geography, 'Prueba 00628 · Paseo del Prado, La Habana',
+    ST_SetSRID(ST_MakePoint(-82.3830, 23.1225), 4326)::geography, 'Prueba 00628 · Plaza de la Revolución, La Habana',
     2000, 2000, 3200, 900, 1, 'passenger', now() + interval '1 hour');
   UPDATE public.rides SET scheduled_at = NULL, is_scheduled = false, created_at = now() - interval '2 minutes'
    WHERE id = v_ride;
@@ -6246,15 +6246,15 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub', v_admin::text, true);
   SET LOCAL ROLE authenticated;
   v_out := v_out || jsonb_build_object('apply',
-    public.admin_change_ride_service(v_ride, 'auto_confort', v_comf, 'apply', 'Prueba 00627 (rollback)') ->> 'mode');
+    public.admin_change_ride_service(v_ride, 'auto_confort', v_comf, 'apply', 'Prueba 00628 (rollback)') ->> 'mode');
   v_out := v_out || jsonb_build_object('offer', public.admin_offer_ride_to_driver(v_ride, v_driver) ->> 'mode');
   v_out := v_out || jsonb_build_object('assign_offline',
-    public.admin_assign_ride_to_driver(v_ride, v_driver, 'Prueba 00627 (rollback)') ->> 'error');
+    public.admin_assign_ride_to_driver(v_ride, v_driver, 'Prueba 00628 (rollback)') ->> 'error');
   RESET ROLE;
   -- The driver comes online (inside this transaction only), then support assigns.
   UPDATE public.driver_profiles SET is_online = true, last_heartbeat_at = now() WHERE id = v_driver;
   SET LOCAL ROLE authenticated;
-  v_out := v_out || jsonb_build_object('assign', public.admin_assign_ride_to_driver(v_ride, v_driver, 'Prueba 00627 (rollback)'));
+  v_out := v_out || jsonb_build_object('assign', public.admin_assign_ride_to_driver(v_ride, v_driver, 'Prueba 00628 (rollback)'));
   RESET ROLE;
 
   -- 5. What complete_ride_and_pay would charge, and what the trail says.
@@ -6306,7 +6306,7 @@ SELECT to_regclass('public.ride_assist') IS NULL                                
        NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'request_ride_help')                  AS no_rpc,
        position('app.force_discount_recompute' IN
          (SELECT prosrc FROM pg_proc WHERE oid = 'public.tg_rides_validate_promo_discount()'::regprocedure)) = 0 AS trigger_untouched,
-       NOT EXISTS (SELECT 1 FROM public.rides WHERE pickup_address LIKE 'Prueba 00627%')       AS no_ride;
+       NOT EXISTS (SELECT 1 FROM public.rides WHERE pickup_address LIKE 'Prueba 00628%')       AS no_ride;
 ```
 
 Expected: every column `true`.
@@ -6321,11 +6321,11 @@ Expected: every column `true`.
 git push -u origin claude/hopeful-shannon-g3theu
 ```
 
-PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00627)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 73 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
+PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 73 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
 
 - [ ] **Step 2: Ask for authorization to merge and apply**
 
-With CI green, use `AskUserQuestion`: "¿Autorizás el squash-merge de #1094 y aplicar la migración 00627 en producción por MCP?", with "Sí: merge y aplicar 00627 (Recommended)" first. Merge and apply need this explicit answer for this PR (CLAUDE.md § "Merges a master requieren autorización explícita por PR").
+With CI green, use `AskUserQuestion`: "¿Autorizás el squash-merge de #1094 y aplicar la migración 00628 en producción por MCP?", with "Sí: merge y aplicar 00628 (Recommended)" first. Merge and apply need this explicit answer for this PR (CLAUDE.md § "Merges a master requieren autorización explícita por PR").
 
 - [ ] **Step 3: Merge**
 
@@ -6333,7 +6333,7 @@ Squash-merge #1094 with `mcp__github__merge_pull_request`.
 
 - [ ] **Step 4: Apply the migration**
 
-`mcp__Supabase__apply_migration` with name `00627_support_assisted_matching` and the file's content. The file has no `DELETE`, `DROP` or `TRUNCATE`, so it should not wait for in-app approval. If the call times out at 60 s anyway, do not resend it blindly: check by object first (step 5); if nothing landed, apply it from the SQL Editor, adding the `\r` clean-up block of CLAUDE.md § "Aplicar migraciones pesadas por MCP" for each function when pasting from Windows.
+`mcp__Supabase__apply_migration` with name `00628_support_assisted_matching` and the file's content. The file has no `DELETE`, `DROP` or `TRUNCATE`, so it should not wait for in-app approval. If the call times out at 60 s anyway, do not resend it blindly: check by object first (step 5); if nothing landed, apply it from the SQL Editor, adding the `\r` clean-up block of CLAUDE.md § "Aplicar migraciones pesadas por MCP" for each function when pasting from Windows.
 
 - [ ] **Step 5: Verify by object**
 
@@ -6353,7 +6353,7 @@ SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'notify-support-w
 SELECT key, value FROM public.platform_config WHERE key LIKE 'support_%' ORDER BY key;
 ```
 
-Expected: the 21 lines equal `/tmp/00627-md5-local.txt` from Task 20 line by line; the cron job is active with `* * * * *`; the five settings are there, `support_alert_email` equal to `business_notification_email`. `schema_migrations` registers an MCP apply by timestamp, so do not look it up by number.
+Expected: the 21 lines equal `/tmp/00628-md5-local.txt` from Task 20 line by line; the cron job is active with `* * * * *`; the five settings are there, `support_alert_email` equal to `business_notification_email`. `schema_migrations` registers an MCP apply by timestamp, so do not look it up by number.
 
 - [ ] **Step 6: Check the deploys**
 

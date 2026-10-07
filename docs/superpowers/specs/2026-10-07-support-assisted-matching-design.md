@@ -58,7 +58,7 @@ The marketing agency (Baco) promises riders that when the app can't find a drive
 
 ## Server design (one migration)
 
-Migration `00627` (the next free number on 2026-10-07, checked against master and every open PR; re-check right before writing it). The RPCs are `SECURITY DEFINER` with `SET search_path = public, pg_catalog` (plus `extensions` where they reach the snapshot code). EXECUTE is revoked from `PUBLIC`, `anon` and `authenticated` on every function and granted back to `authenticated` only for the RPCs the table marks as called by the rider or an admin; the migration asserts it.
+Migration `00628` (the next free number on 2026-10-07 after #1095 took `00627`, checked against master and every open PR; re-check right before writing it). The RPCs are `SECURITY DEFINER` with `SET search_path = public, pg_catalog` (plus `extensions` where they reach the snapshot code). EXECUTE is revoked from `PUBLIC`, `anon` and `authenticated` on every function and granted back to `authenticated` only for the RPCs the table marks as called by the rider or an admin; the migration asserts it.
 
 | Function | Caller | What it does |
 |---|---|---|
@@ -119,7 +119,7 @@ Migration `00627` (the next free number on 2026-10-07, checked against master an
 
 ## Testing
 
-- **Local rehearsal** `supabase/tests/00627/` (Postgres 16 + PostGIS scaffold with the live bodies of `accept_ride_v2`, `dispatch_ride`, `find_best_drivers`, `tg_rides_validate_promo_discount`, `tg_rides_create_estimate_snapshot` and the ride and offer triggers around them, checked by md5):
+- **Local rehearsal** `supabase/tests/00628/` (Postgres 16 + PostGIS scaffold with the live bodies of `accept_ride_v2`, `dispatch_ride`, `find_best_drivers`, `tg_rides_validate_promo_discount`, `tg_rides_create_estimate_snapshot` and the ride and offer triggers around them, checked by md5):
   - RED without the migration, GREEN with it, applied twice.
   - Covers: help request (rider only, idempotent); offer creation and each re-arm path with push enqueued; direct assignment with each failure code; races (the ride accepted or canceled concurrently, a proposal answered concurrently with an admin apply); service change recomputing the discount and rebuilding the snapshot (charged total equals the new fare); rejection of a fare below the minimum; corporate refusal; the cron alert stamping once.
 - **Prod check** inside a block that rolls back at the end, before the merge.
