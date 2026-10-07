@@ -1,6 +1,12 @@
--- 00636: a wallet-paid ride whose payers can no longer cover the fare is paid
+-- 00637: a wallet-paid ride whose payers can no longer cover the fare is paid
 -- as far as the wallets go and the rest in cash; trip insurance is priced only
 -- with its feature flag on.
+--
+-- Written and applied to prod as 00636 (registered by timestamp as
+-- 00636_wallet_shortfall_pays_cash); renumbered in git because 00636 went to
+-- rate_limits_retention (#1110). The comments inside the patched function
+-- bodies still say 00636: that is the text prod has, and the md5 checks below
+-- depend on it.
 --
 -- complete_ride_and_pay debits the rider's customer_cash for a TriciCoin ride
 -- without checking the balance, and the CHECK
