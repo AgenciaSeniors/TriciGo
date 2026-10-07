@@ -154,7 +154,6 @@ export default function NotificationsPage() {
       const result = await notificationService.sendAdminPush(
         targetType === 'user' ? { userId: targetUserId } : targetType,
         { title, body },
-        'admin',
       );
       setTitle('');
       setBody('');

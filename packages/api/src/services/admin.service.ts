@@ -1929,8 +1929,10 @@ export const adminService = {
           .catch(() => { /* silent */ });
       }
     } else {
-      // Reject
-      await supabase
+      // Reject. RLS (00627) lets an admin move only a PENDING request to
+      // rejected under their own id; anything else touches 0 rows, which
+      // PostgREST reports as success, so check the rows.
+      const { data: rejected, error: rejErr } = await supabase
         .from('wallet_recharge_requests')
         .update({
           status: 'rejected',
@@ -1938,7 +1940,13 @@ export const adminService = {
           processed_at: new Date().toISOString(),
           rejection_reason: reason ?? null,
         })
-        .eq('id', rechargeId);
+        .eq('id', rechargeId)
+        .eq('status', 'pending')
+        .select('id');
+      if (rejErr) throw rejErr;
+      if (!rejected || rejected.length === 0) {
+        throw new Error('No se rechazó: la solicitud ya no está pendiente.');
+      }
     }
 
     await supabase.from('admin_actions').insert({

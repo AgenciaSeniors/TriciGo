@@ -909,7 +909,7 @@ describe('adminService', () => {
     });
 
     it('processes a rejected recharge', async () => {
-      const updateChain = createMockQueryChain({ data: null, error: null });
+      const updateChain = createMockQueryChain({ data: [{ id: 'rr-1' }], error: null });
       const insertChain = createMockQueryChain({ data: null, error: null });
 
       mockFrom
@@ -924,10 +924,22 @@ describe('adminService', () => {
         rejection_reason: 'Invalid receipt',
       }));
       expect(updateChain.eq).toHaveBeenCalledWith('id', 'rr-1');
+      expect(updateChain.eq).toHaveBeenCalledWith('status', 'pending');
       expect(insertChain.insert).toHaveBeenCalledWith(expect.objectContaining({
         action: 'reject_recharge',
         reason: 'Invalid receipt',
       }));
+    });
+
+    it('fails, and logs no action, when the request is no longer pending', async () => {
+      // RLS (00627) touches 0 rows; PostgREST answers OK with an empty list.
+      const updateChain = createMockQueryChain({ data: [], error: null });
+      mockFrom.mockReturnValueOnce(updateChain);
+
+      await expect(
+        adminService.processRecharge('rr-1', 'admin-1', false, 'Invalid receipt'),
+      ).rejects.toThrow('ya no está pendiente');
+      expect(mockFrom).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -33,24 +33,34 @@ export const cmsService = {
     return (data ?? []) as CmsContent[];
   },
 
+  /**
+   * Admin-only. The editor is the signed-in admin, taken from the session:
+   * cms_content.updated_by and admin_actions.admin_id are uuids, and the
+   * panel used to pass the string 'admin', so every save failed (22P02).
+   */
   async updateContent(
     slug: string,
     updates: Partial<Pick<CmsContent, 'title_es' | 'title_en' | 'body_es' | 'body_en'>>,
-    adminId: string,
   ): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
+    const { data: { user: admin } } = await supabase.auth.getUser();
+    if (!admin) throw new Error('Admin not authenticated');
+
+    const { data, error } = await supabase
       .from('cms_content')
       .update({
         ...updates,
         updated_at: new Date().toISOString(),
-        updated_by: adminId,
+        updated_by: admin.id,
       })
-      .eq('slug', slug);
+      .eq('slug', slug)
+      .select('slug');
     if (error) throw error;
+    // RLS hides the row from a non-admin and PostgREST answers OK with 0 rows.
+    if (!data || data.length === 0) throw new Error('No se guardó el contenido: tu cuenta no tiene permisos de administrador.');
 
     await supabase.from('admin_actions').insert({
-      admin_id: adminId,
+      admin_id: admin.id,
       action: 'update_cms_content',
       target_type: 'cms_content',
       target_id: slug,
