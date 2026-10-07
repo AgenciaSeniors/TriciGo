@@ -81,6 +81,8 @@ Rules from CLAUDE.md that apply throughout: commits in English with the conventi
 
 ## Phase 1 — Database (migration 00628)
 
+> **Review fixes (commit `7c888fac`).** The migration's code blocks in Tasks 3-7, and the `run.sh` code block in Task 2, predate the review fixes of that commit (offers on a type change, the help keepalive patched into `cleanup_orphan_searching_rides`, the alert's e-mail in a block of its own, six new tests). `supabase/migrations/00628_support_assisted_matching.sql` and `supabase/tests/00628/` are the source of truth; the counts and md5 lists in this plan are theirs.
+
 ### Task 1: Rehearsal cluster and scaffold
 
 The rehearsal reproduces prod's tables and the live bodies of the functions around `rides` and `ride_offers` in a local Postgres 16 with PostGIS, so the migration can be tested RED → GREEN without touching prod.
@@ -719,6 +721,7 @@ These are the md5 of `prosrc` in prod on 2026-10-07. `run.sh` (Task 2) checks th
 |---|---|
 | `auth.uid` | `cdef18c69c4f4cbbced2eaf81e628b49` |
 | `accept_ride_v2` | `b51311095327fa66df27849ec9a4660f` |
+| `cleanup_orphan_searching_rides` | `3a43dc26cde6e2a35df3bbba122587b5` |
 | `cron_http_post` | `15d9ded451c60f92a0fd0a3c4e1ee0ab` |
 | `current_user_role` | `cb4a7c12d4e21fe2997135833f141e25` |
 | `dispatch_ride` | `a16ae76866950dedd21d33595f345d63` |
@@ -755,9 +758,10 @@ WHERE (n.nspname = 'auth' AND p.proname = 'uid')
         'get_platform_config_numeric', 'get_platform_config_text', 'is_admin', 'is_super_admin',
         'log_rpc_attempt', 'notify_driver_new_offer', 'rides_sync_coords', 'tg_ride_offer_increment_offered',
         'tg_ride_offer_refresh_acceptance', 'tg_rides_create_estimate_snapshot', 'tg_rides_validate_insurance',
-        'tg_rides_validate_promo_discount'))
+        'tg_rides_validate_promo_discount', 'cleanup_orphan_searching_rides'))
 ORDER BY CASE n.nspname || '.' || p.proname
-           WHEN 'auth.uid' THEN 0 WHEN 'public.current_user_role' THEN 1 WHEN 'public.is_super_admin' THEN 2 ELSE 3 END,
+           WHEN 'auth.uid' THEN 0 WHEN 'public.current_user_role' THEN 1 WHEN 'public.is_super_admin' THEN 2
+           WHEN 'public.cleanup_orphan_searching_rides' THEN 4 ELSE 3 END,
          p.proname;
 ```
 
@@ -767,13 +771,13 @@ Write each `def_b64` value to its own file in a scratch directory outside the re
 
 ```bash
 SP=<that scratch directory>
-ls "$SP"/*.b64 | wc -l            # expect 21 files, named 00-auth.uid.b64, 01-..., in the query's order
+ls "$SP"/*.b64 | wc -l            # expect 22 files, named 00-auth.uid.b64, 01-..., in the query's order
 : > supabase/tests/00628/live-bodies.sql
 for f in $(ls "$SP"/*.b64 | sort); do base64 -d "$f" >> supabase/tests/00628/live-bodies.sql || echo "BAD $f"; done
 grep -c '^CREATE OR REPLACE FUNCTION' supabase/tests/00628/live-bodies.sql
 ```
 
-Expected: no `BAD` line and a count of `21`. The md5 check in Task 2 proves each body is byte-identical to prod.
+Expected: no `BAD` line and a count of `22`, with `cleanup_orphan_searching_rides` last (the review fixes appended it). The md5 check in Task 2 proves each body is byte-identical to prod.
 
 - [ ] **Step 5: Load the scaffold once by hand**
 
@@ -1162,7 +1166,7 @@ chmod +x supabase/tests/00628/run.sh
 supabase/tests/00628/run.sh none | tail -25
 ```
 
-Expected: `L1`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 3  FAIL 70` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
+Expected: `L1`, `H9`, `H11`, `S3b` and `S11` PASS (they describe prod as it is); every other test FAILs, most with `function public.… does not exist`. The last line reads `PASS 5  FAIL 74` (one test per `val`/`err` line plus P12). If `L1` fails, the live bodies were not pasted byte for byte: redo Task 1, step 4.
 
 - [ ] **Step 3: Commit**
 
@@ -2544,7 +2548,7 @@ $assert$;
 supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -8
 ```
 
-Expected: no `FAIL` line, and the last line is `PASS 73  FAIL 0`.
+Expected: no `FAIL` line, and the last line is `PASS 79  FAIL 0`.
 
 - [ ] **Step 3: Run the repo's migration checks**
 
@@ -6104,7 +6108,7 @@ supabase/tests/00628/run.sh none | tail -1
 supabase/tests/00628/run.sh supabase/migrations/00628_support_assisted_matching.sql | tail -1
 ```
 
-Expected: `PASS 3  FAIL 70`, then `PASS 73  FAIL 0`.
+Expected: `PASS 5  FAIL 74`, then `PASS 79  FAIL 0`.
 
 - [ ] **Step 4: Record the md5 of every function the migration creates or changes**
 
@@ -6125,12 +6129,13 @@ $BIN/psql $CONN -d md5check -At -c "
     '_ride_service_change_error', '_apply_ride_service_change', 'admin_change_ride_service',
     'get_my_ride_service_proposal', 'respond_ride_service_proposal', 'admin_support_waiting_rides',
     'admin_ride_assist_context', 'admin_ride_assist_candidates', 'admin_offer_ride_to_driver',
-    'admin_assign_ride_to_driver', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides'])
+    'admin_assign_ride_to_driver', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides',
+    'cleanup_orphan_searching_rides'])
   ORDER BY 1" | tee /tmp/00628-md5-local.txt | wc -l
 $BIN/dropdb $CONN md5check
 ```
 
-Expected: `21`. Keep `/tmp/00628-md5-local.txt` (or paste it into the PR body) for Task 22.
+Expected: `22`. Keep `/tmp/00628-md5-local.txt` (or paste it into the PR body) for Task 22.
 
 - [ ] **Step 5: Ask for a code review**
 
@@ -6321,7 +6326,7 @@ Expected: every column `true`.
 git push -u origin claude/hopeful-shannon-g3theu
 ```
 
-PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 73 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
+PR #1094 (draft) already holds this branch. Update its title to `feat: support-assisted matching (00628)` and its body: what it does (from the spec's "Decisions" and "User-facing behavior"), the migration and its rehearsal (`PASS 79 FAIL 0`, the prod rehearsal of Task 21 with its `PRODCHECK` line), the md5 list of Task 20 step 4, and the rollout order (step 3 onwards). State that the migration is not applied yet. Mark it ready for review once CI is green, and drive CI to green.
 
 - [ ] **Step 2: Ask for authorization to merge and apply**
 
@@ -6346,14 +6351,15 @@ WHERE p.pronamespace = 'public'::regnamespace AND p.proname = ANY (ARRAY[
   '_ride_service_change_error', '_apply_ride_service_change', 'admin_change_ride_service',
   'get_my_ride_service_proposal', 'respond_ride_service_proposal', 'admin_support_waiting_rides',
   'admin_ride_assist_context', 'admin_ride_assist_candidates', 'admin_offer_ride_to_driver',
-  'admin_assign_ride_to_driver', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides'])
+  'admin_assign_ride_to_driver', '_support_alert', 'request_ride_help', 'notify_support_waiting_rides',
+  'cleanup_orphan_searching_rides'])
 ORDER BY 1;
 
 SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'notify-support-waiting-rides';
 SELECT key, value FROM public.platform_config WHERE key LIKE 'support_%' ORDER BY key;
 ```
 
-Expected: the 21 lines equal `/tmp/00628-md5-local.txt` from Task 20 line by line; the cron job is active with `* * * * *`; the five settings are there, `support_alert_email` equal to `business_notification_email`. `schema_migrations` registers an MCP apply by timestamp, so do not look it up by number.
+Expected: the 22 lines equal `/tmp/00628-md5-local.txt` from Task 20 line by line; the cron job is active with `* * * * *`; the six settings are there, `support_alert_email` equal to `business_notification_email`. `schema_migrations` registers an MCP apply by timestamp, so do not look it up by number.
 
 - [ ] **Step 6: Check the deploys**
 
