@@ -616,6 +616,11 @@ export const rideService = {
       // already a sentence for the rider.
       const corporateRejection = corporateServerRejection(error);
       if (corporateRejection) throw corporateRejection;
+      // An estimate above what the tariff could produce (00631): the server's
+      // message is a sentence for the rider; the HINT carries the numbers.
+      if (error.details === 'fare_above_ceiling' && error.message) {
+        throw new AppError(error.message, 'FARE_ABOVE_CEILING', 400);
+      }
       // PostgrestError from Supabase is a plain object, not an Error
       // instance. If we throw it raw, callers that do `String(err)` or
       // `err instanceof Error` get "[object Object]" / `false`. Wrap
