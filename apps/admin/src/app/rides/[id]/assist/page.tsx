@@ -7,7 +7,7 @@
  */
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { MessageCircle, Phone } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
@@ -50,14 +50,20 @@ export default function RideAssistPage() {
   const [configs, setConfigs] = useState<ServiceTypeConfig[]>([]);
   const [now, setNow] = useState(() => Date.now());
 
+  // Only the latest request may write: the 10 s poll and the reload after each action can
+  // overlap, and an older answer arriving last would show the ride as it was before the action.
+  const latestLoad = useRef(0);
   const load = useCallback(async () => {
     if (!id) return;
+    const seq = ++latestLoad.current;
     try {
       const next = await rideAssistService.getAssistContext(id);
+      if (seq !== latestLoad.current) return;
       setCtx(next);
       setFetchedAt(Date.now());
       setState('ready');
     } catch (err) {
+      if (seq !== latestLoad.current) return;
       const code = (err as { code?: unknown } | null)?.code;
       // A failed poll keeps the page as it was; only the first load decides what to show.
       setState((s) => (s === 'ready' ? s : code === RIDE_ASSIST_UNAVAILABLE ? 'unavailable' : 'error'));
