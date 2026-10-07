@@ -98,6 +98,11 @@ $o$;
   END IF;
 $n$;
 BEGIN
+  -- Pasted into the SQL Editor from Windows, these literals carry \r\n line
+  -- ends: the anchor would not match the live body and the patched body would
+  -- not be the one checked below.
+  v_old := replace(v_old, chr(13), '');
+  v_new := replace(v_new, chr(13), '');
   SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = v_fn;
   IF v_md5 = '754d9bf4837c140f93553b214a6c79cc' THEN
     RETURN;  -- already patched
