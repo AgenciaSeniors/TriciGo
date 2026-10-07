@@ -19,7 +19,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useLocationStore } from '@/stores/location.store';
 import type { RideStatus, DriverAcceptedBroadcast, Vehicle } from '@tricigo/types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { onRideAssignedPush } from '@/utils/rideAssignedPush';
+import { onRideAssignedPush, shouldAnnounceAssignedRide } from '@/utils/rideAssignedPush';
 
 /** Cached vehicle info for broadcast — loaded once per session */
 let cachedVehicle: Vehicle | null = null;
@@ -141,14 +141,48 @@ function unbindBgLocationFromRide(driverId: string | undefined): void {
 }
 
 /**
- * Re-runs the home tab's active-trip check (useDriverRideInit) from outside it. Support can
- * assign a ride directly while the app is open and idle (00628, admin_assign_ride_to_driver);
- * realtime is off (BUG-277) and the 5 s trip poll only runs while there already is a trip, so
- * nothing else would read it. A no-op while the home tab is not mounted: it checks on mount.
+ * Support can assign a ride directly (00628, admin_assign_ride_to_driver). Realtime is off
+ * (BUG-277) and most drivers have no push token, so while the driver is on shift with no trip in
+ * progress (none, or the completed one TripCompleteView is showing) the home tab asks the server
+ * for an active trip about this often, counting every other check (mount, foreground, push).
  */
-let activeTripReconciler: (() => void) | null = null;
-export function requestActiveTripReconcile(): void {
-  activeTripReconciler?.();
+const IDLE_ACTIVE_TRIP_CHECK_MS = 30_000;
+
+// Module-level, not per effect run: useDriverRideInit's effect re-runs whenever the profile
+// object changes (driver_profiles realtime), which would reset them.
+/** When the app last got an answer, or started asking, about the active trip. */
+let lastActiveTripCheckAt = 0;
+/** The server's last answer about this profile's active trip (ride id, or null for none). */
+let activeTripBaseline: { profileId: string; tripId: string | null } | null = null;
+/** Last "Soporte te asignó un viaje" notice. */
+let lastAssignedNoticeAt = 0;
+/** Rides the driver tapped "Aceptar" on in this process (most recent first). */
+const acceptAttemptedRideIds: string[] = [];
+
+function markAcceptAttempt(rideId: string): void {
+  if (acceptAttemptedRideIds.includes(rideId)) return;
+  acceptAttemptedRideIds.unshift(rideId);
+  if (acceptAttemptedRideIds.length > 20) acceptAttemptedRideIds.length = 20;
+}
+
+function clearAcceptAttempt(rideId: string): void {
+  const i = acceptAttemptedRideIds.indexOf(rideId);
+  if (i >= 0) acceptAttemptedRideIds.splice(i, 1);
+}
+
+/** Say that a ride appeared on screen without the driver accepting an offer. */
+function announceAssignedRide(): void {
+  lastAssignedNoticeAt = Date.now();
+  triggerHaptic('success');
+  playSound('new_request');
+  Toast.show({
+    type: 'success',
+    text1: i18next.t('driver:trip.support_assigned_title', { defaultValue: 'Soporte te asignó un viaje' }),
+    text2: i18next.t('driver:trip.support_assigned_body', {
+      defaultValue: 'Ya está en tu pantalla. Ve a recoger al pasajero.',
+    }),
+    visibilityTime: 6000,
+  });
 }
 
 /**
@@ -183,7 +217,13 @@ export function useDriverRideInit() {
         }
 
         const trip = await driverService.getActiveTrip(profile!.id);
+        lastActiveTripCheckAt = Date.now();
         if (!mounted) return;
+        // Only a run that applies its answer to the store moves the baseline: a run the effect
+        // already replaced must not make the current one think it had seen this ride.
+        const previousServerTripId =
+          activeTripBaseline?.profileId === profile!.id ? activeTripBaseline.tripId : undefined;
+        activeTripBaseline = { profileId: profile!.id, tripId: trip?.id ?? null };
 
         if (!trip) {
           const localTrip = useDriverRideStore.getState().activeTrip;
@@ -207,7 +247,22 @@ export function useDriverRideInit() {
           return;
         }
 
+        const heldTrip = useDriverRideStore.getState().activeTrip;
         setActiveTrip(trip);
+
+        // A ride the driver did not accept here: support assigned it (push, the idle check or the
+        // app coming back). Said only once it is really on screen, whatever brought it.
+        if (shouldAnnounceAssignedRide({
+          previousServerTripId,
+          heldTripId: heldTrip?.id ?? null,
+          loadedTripId: trip.id,
+          driverTriedToAccept: acceptAttemptedRideIds.includes(trip.id),
+          lastNoticeAt: lastAssignedNoticeAt,
+          now: Date.now(),
+        })) {
+          logger.info('[Reconcile] Loaded a ride the driver did not accept here', { ride_id: trip.id });
+          announceAssignedRide();
+        }
 
         logger.info('[Reconcile] Result', {
           had_local_trip: !!useDriverRideStore.getState().activeTrip,
@@ -278,31 +333,13 @@ export function useDriverRideInit() {
       }
     }
 
+    lastActiveTripCheckAt = Date.now();
     checkActive();
 
-    const reconcile = () => {
-      if (mounted) void checkActive();
-    };
-    activeTripReconciler = reconcile;
-
-    // Support assigned a ride (push with data.event = 'ride_assigned', 00628): load it now and
-    // say so with sound, since it did not come as an offer the driver accepted. A push that is
-    // received and then tapped gives one notice, not two.
-    let lastAssignedNoticeAt = 0;
+    // Support assigned a ride (push with data.event = 'ride_assigned', 00628): load it now.
+    // checkActive gives the notice once the ride is actually in the store.
     const offRideAssigned = onRideAssignedPush(() => {
-      reconcile();
-      if (Date.now() - lastAssignedNoticeAt < 10_000) return;
-      lastAssignedNoticeAt = Date.now();
-      triggerHaptic('success');
-      playSound('new_request');
-      Toast.show({
-        type: 'success',
-        text1: i18next.t('driver:trip.support_assigned_title', { defaultValue: 'Soporte te asignó un viaje' }),
-        text2: i18next.t('driver:trip.support_assigned_body', {
-          defaultValue: 'Ya está en tu pantalla. Ve a recoger al pasajero.',
-        }),
-        visibilityTime: 6000,
-      });
+      if (mounted) void checkActive();
     });
 
     // Bug 36: Re-check active trip when app returns from background
@@ -339,13 +376,34 @@ export function useDriverRideInit() {
     const pollInterval = setInterval(async () => {
       if (!mounted) return;
       const localTrip = useDriverRideStore.getState().activeTrip;
-      if (!localTrip || !profile) return;
-      // Once the trip is locally terminal there's nothing to poll:
-      // 'completed' keeps rendering TripCompleteView, 'canceled' is cleared.
-      if (localTrip.status === 'completed' || localTrip.status === 'canceled') return;
+      if (!profile) return;
+      // No trip in progress ('completed' keeps rendering TripCompleteView,
+      // 'canceled' is cleared): nothing of a trip to poll, but support may
+      // assign one (00628). While on shift, look about every 30 s. The
+      // check is cheap; the full reconcile runs only when it finds a trip.
+      if (!localTrip || localTrip.status === 'completed' || localTrip.status === 'canceled') {
+        if (!useDriverStore.getState().isOnline) return;
+        if (Date.now() - lastActiveTripCheckAt < IDLE_ACTIVE_TRIP_CHECK_MS) return;
+        // Claimed before the await so the next ticks don't pile on a slow request.
+        lastActiveTripCheckAt = Date.now();
+        try {
+          const found = await driverService.getActiveTrip(profile.id);
+          if (!found) {
+            activeTripBaseline = { profileId: profile.id, tripId: null };
+            return;
+          }
+          // Left to checkActive, which compares it with the previous answer.
+          if (mounted) void checkActive();
+        } catch { /* best-effort, retry in 30 s */ }
+        return;
+      }
       try {
         const fresh = await driverService.getActiveTrip(profile.id);
         if (!mounted) return;
+        lastActiveTripCheckAt = Date.now();
+        // Kept current so a ride that leaves this driver and comes back (support assigns it to
+        // him again) is announced as new.
+        activeTripBaseline = { profileId: profile.id, tripId: fresh?.id ?? null };
 
         // BUG-active-trip-cancel: the passenger (or an admin) canceled the
         // trip. Realtime is disabled (subscribeToRide is a no-op, BUG-277)
@@ -456,7 +514,6 @@ export function useDriverRideInit() {
 
     return () => {
       mounted = false;
-      if (activeTripReconciler === reconcile) activeTripReconciler = null;
       offRideAssigned();
       channelRef.current?.unsubscribe();
       activeChannelIdRef.current = null;
@@ -554,16 +611,8 @@ export function useIncomingRequests(isOnline: boolean) {
         const rides = await rideService.getSearchingRides();
         for (const ride of rides) addRequest(ride);
       } catch { /* best-effort fallback */ }
-      // A ride support assigned directly comes with no offer (00628). If its push did not
-      // arrive, this is what loads it. getActiveTrip only returns rides still in progress.
-      const local = useDriverRideStore.getState().activeTrip;
-      if (!local || local.status === 'completed' || local.status === 'canceled') {
-        const profileId = useDriverStore.getState().profile?.id;
-        if (profileId) {
-          const trip = await driverService.getActiveTrip(profileId).catch(() => null);
-          if (trip) requestActiveTripReconcile();
-        }
-      }
+      // A ride support assigns directly comes with no offer (00628): useDriverRideInit's trip
+      // poll looks for it, also over TripCompleteView, where this poll is off.
     }, 30000);
 
     return () => {
@@ -654,6 +703,11 @@ export function useDriverRideActions() {
     // BUG-005 fix: Prevent double-tap race condition
     if (acceptingRef.current) return;
     acceptingRef.current = true;
+    // A reconcile can load this ride before the accept's reply arrives, or after a dropped
+    // connection lost it: the driver accepted it, so it is not announced as assigned by support.
+    // Cleared once the server answers; an earlier attempt with no answer keeps it.
+    const earlierAttemptPending = acceptAttemptedRideIds.includes(rideId);
+    markAcceptAttempt(rideId);
 
     try {
       // #9b: refresh heartbeat right before accepting. Android throttles the
@@ -704,6 +758,7 @@ export function useDriverRideActions() {
         presenceService.broadcastDriverAccepted(rideId, broadcastData);
       }
       setActiveTrip(ride);
+      clearAcceptAttempt(rideId);
       removeRequest(rideId);
       triggerHaptic('success');
       playSound('ride_accepted');
@@ -804,6 +859,9 @@ export function useDriverRideActions() {
         },
       };
       const entry = errorMessages[rawMsg];
+      // A known code is the server's "no". After an earlier attempt that got no answer, though,
+      // a retry's "no" (already taken, offer gone) may mean that attempt went through.
+      if (entry && !earlierAttemptPending) clearAcceptAttempt(rideId);
       // Enrich insufficient_balance subtitle with the actual numbers so the
       // driver sees exactly how much they need. We read the payload the
       // service stashed on the Error instance (driver.service.ts).

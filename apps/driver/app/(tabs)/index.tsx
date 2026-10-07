@@ -1208,8 +1208,11 @@ function NativeDriverHomeScreen() {
           <FloatingHeader isOnline={isOnline} unreadCount={unreadCount} notifEnabled={notifCenterEnabled} t={t} />
         </View>
 
-        {/* Layer 3: Trip DraggableSheet from bottom */}
-        <DriverTripView />
+        {/* Layer 3: Trip DraggableSheet from bottom. Keyed by ride: a ride
+            support assigns can replace the completed one TripCompleteView is
+            showing (00628), and the new trip must not inherit its state
+            (cargo photo flags, waypoints, open sheets). */}
+        <DriverTripView key={activeTrip.id} />
       </Animated.View>
     );
   }

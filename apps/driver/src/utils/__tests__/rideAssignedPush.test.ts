@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { emitRideAssignedPush, isRideAssignedPush, onRideAssignedPush } from '../rideAssignedPush';
+import {
+  ASSIGNED_RIDE_NOTICE_DEDUP_MS,
+  emitRideAssignedPush,
+  isRideAssignedPush,
+  onRideAssignedPush,
+  shouldAnnounceAssignedRide,
+} from '../rideAssignedPush';
 
 describe('isRideAssignedPush', () => {
   it('recognizes support assigning a ride by data.event (send-push overwrites data.type)', () => {
@@ -45,5 +51,47 @@ describe('onRideAssignedPush / emitRideAssignedPush', () => {
 
     offBad();
     offGood();
+  });
+});
+
+describe('shouldAnnounceAssignedRide', () => {
+  const NOW = 1_000_000;
+  // Server said "no active trip" last time, the store holds nothing, the driver did not try to
+  // accept this ride, no recent notice: a reconcile just loaded a ride support assigned.
+  const base = {
+    previousServerTripId: null as string | null | undefined,
+    heldTripId: null as string | null,
+    loadedTripId: 'r-2',
+    driverTriedToAccept: false,
+    lastNoticeAt: 0,
+    now: NOW,
+  };
+
+  it('announces a ride a reconcile loaded that the app did not have', () => {
+    expect(shouldAnnounceAssignedRide(base)).toBe(true);
+  });
+
+  it('announces it over the completed-trip screen (the store holds the finished ride)', () => {
+    expect(shouldAnnounceAssignedRide({ ...base, heldTripId: 'r-1' })).toBe(true);
+  });
+
+  it('stays quiet on the first answer of the process: that is restoring a trip after a restart', () => {
+    expect(shouldAnnounceAssignedRide({ ...base, previousServerTripId: undefined })).toBe(false);
+  });
+
+  it('stays quiet when the server already reported this ride, or the store already has it', () => {
+    expect(shouldAnnounceAssignedRide({ ...base, previousServerTripId: 'r-2' })).toBe(false);
+    expect(shouldAnnounceAssignedRide({ ...base, heldTripId: 'r-2' })).toBe(false);
+  });
+
+  it('stays quiet for a ride the driver accepted here', () => {
+    // The reconcile landed before the accept's reply, or the reply was lost after the server took
+    // the ride: support did not assign it.
+    expect(shouldAnnounceAssignedRide({ ...base, driverTriedToAccept: true })).toBe(false);
+  });
+
+  it('gives one notice for overlapping reconciles (push received, then tapped)', () => {
+    expect(shouldAnnounceAssignedRide({ ...base, lastNoticeAt: NOW - ASSIGNED_RIDE_NOTICE_DEDUP_MS + 1 })).toBe(false);
+    expect(shouldAnnounceAssignedRide({ ...base, lastNoticeAt: NOW - ASSIGNED_RIDE_NOTICE_DEDUP_MS })).toBe(true);
   });
 });
