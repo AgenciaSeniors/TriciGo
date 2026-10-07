@@ -10,6 +10,7 @@ import { SidebarProvider } from './SidebarContext';
 import { ThemeProvider } from './ThemeProvider';
 import { AdminToastProvider } from '@/components/ui/AdminToast';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { SupportWaitingBanner } from '@/components/support/SupportWaitingBanner';
 
 let i18nInitialized = false;
 
@@ -73,6 +74,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <Sidebar />
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
               <Header />
+              <SupportWaitingBanner />
               <main
                 id="main-content"
                 className="relative flex-1 overflow-y-auto pb-20 md:pb-6"
