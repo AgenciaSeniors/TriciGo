@@ -71,6 +71,22 @@ Deno.serve(async (req) => {
     const rl = await rateLimit(`add-email:${user.id}`, 5, 60 * 60 * 1000);
     if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs, corsHeaders);
 
+    // And per client IP, 10 an hour. Accounts are cheap (GoTrue's /signup is open
+    // with autoconfirm), so the per-user cap alone does not bound how many
+    // verification e-mails a caller can send to addresses of its choosing.
+    // send-email's 10-per-minute bucket on its caller's IP used to throttle this
+    // relay as a side effect: it counted the Edge Function's egress IP, which other
+    // functions share. A weak brake (156 distinct egress IPs reached send-email
+    // between June and October), but the only one on the number of addresses.
+    // Since #1097 send-email does not count calls that carry the service key, so
+    // the limit lives here, keyed on the end user's IP. Counted after the session check
+    // and before the body is read, so it also caps "email_already_taken" probes.
+    // Measured 2026-10-07: at most 3 signed-in users behind one IP in any hour of
+    // the last day, and 3 calls to this function in its whole history.
+    const clientIP = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    const rlIp = await rateLimit(`add-email-ip:${clientIP}`, 10, 60 * 60 * 1000);
+    if (!rlIp.allowed) return rateLimitResponse(rlIp.retryAfterMs, corsHeaders);
+
     const { email: rawEmail } = (await req.json()) as { email: string };
     // Minúsculas SIEMPRE al guardar: send-login-email-link busca en minúsculas,
     // y un correo guardado como "Damian@Gmail.com" no matchearía nunca (el
@@ -144,11 +160,9 @@ Deno.serve(async (req) => {
     // la entrega (QP-eater de Resend/SES, E2E 2026-08-18) y el enlace llega roto.
     const verificationLink = qpSafeUrl(`${PUBLIC_BASE_URL}/auth/email-confirmed?token=${token}`);
 
-    // Get user full_name
-    const { data: dbUser } = await supaAdmin
-      .from('users').select('full_name').eq('id', user.id).maybeSingle();
-
-    // Mandar email custom
+    // Mandar email custom. Without the account's full_name: its owner writes it,
+    // and the recipient is whatever address the caller typed, so the name put
+    // the caller's own text in an e-mail from noreply@tricigo.com to anyone.
     await fetch(`${supabaseUrl}/functions/v1/send-email`, {
       method: 'POST',
       headers: {
@@ -160,7 +174,6 @@ Deno.serve(async (req) => {
         template: 'email_verification',
         recipient_email: email,
         data: {
-          full_name: dbUser?.full_name ?? '',
           email,
           verification_link: verificationLink,
         },

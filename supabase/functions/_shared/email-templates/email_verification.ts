@@ -2,17 +2,21 @@
 // TriciGo — Email verification template
 //
 // Sent by the add-email-with-verification EF when a logged-in user
-// adds/changes their email. Carries the magic link that confirms the
-// new address. Registered key: 'email_verification'
-// (data: { full_name, email, verification_link }).
+// adds/changes their email. Carries the one-time link (our own token,
+// not a session link) that confirms the new address. Registered key:
+// 'email_verification' (data: { email, verification_link }).
 // Was unregistered before, so send-email 400'd and the email was
 // silently never sent.
+//
+// No greeting by name (2026-10-07). The recipient is whatever address
+// the account typed, so it can be a stranger, and full_name is written
+// by the account's owner: rendering it put the owner's own text (a
+// link, a phone number) in an e-mail from noreply@tricigo.com.
 // ============================================================
 
 import { wrapHtml, COLORS, FONT_STACK, escapeHtml } from './_layout.ts';
 
 export interface EmailVerificationData {
-  full_name?: string | null;
   email: string;
   verification_link: string;
 }
@@ -20,11 +24,9 @@ export interface EmailVerificationData {
 export const emailVerificationSubject = 'Confirmá tu correo en TriciGo';
 
 export function emailVerificationHtml(data: EmailVerificationData): string {
-  const greetingName = data.full_name?.trim() || 'viajero';
-
   const body = `
     <p style="margin: 0 0 16px; font-family: ${FONT_STACK}; font-size: 16px; color: ${COLORS.ink};">
-      Hola, <strong>${escapeHtml(greetingName)}</strong>
+      Hola:
     </p>
     <p style="margin: 0 0 20px;">
       Para terminar de agregar <strong>${escapeHtml(data.email)}</strong> a tu cuenta
