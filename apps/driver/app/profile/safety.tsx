@@ -114,7 +114,7 @@ export default function DriverSafetyCenterScreen() {
                     defaultValue: 'No tienes contactos de confianza configurados',
                   }),
                   text2: t('safety.sos_no_contacts_hint', {
-                    defaultValue: 'Agregalos en Perfil → Contactos de confianza',
+                    defaultValue: 'Agrégalos en Perfil → Contactos de confianza',
                   }),
                 });
               }

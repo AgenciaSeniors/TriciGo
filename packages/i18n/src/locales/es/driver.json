@@ -6,7 +6,7 @@
   "location_permission": {
     "title": "Necesitamos tu ubicación",
     "body": "Sin ubicación no podemos saber qué viajes te quedan cerca, así que no vas a poder conectarte ni recibir ofertas.",
-    "body_denied": "La ubicación está desactivada para TriciGo, y tu teléfono ya no vuelve a preguntarte. Activala en Ajustes para poder conectarte y recibir viajes.",
+    "body_denied": "La ubicación está desactivada para TriciGo, y tu teléfono ya no vuelve a preguntarte. Actívala en Ajustes para poder conectarte y recibir viajes.",
     "benefit_offers": "Recibir las ofertas de viaje más cercanas",
     "benefit_rider": "Que el pasajero te vea llegar",
     "benefit_always": "Elige \"Permitir todo el tiempo\" para no caerte al minimizar la app",
@@ -725,11 +725,11 @@
   },
 
   "profile": {
-    "backup_email_sent_title": "Confirmá tu correo",
-    "backup_email_sent_body": "Te enviamos un enlace a {{email}}. Confirmalo y vas a poder entrar con tu correo cuando no te lleguen los códigos por SMS.",
+    "backup_email_sent_title": "Confirma tu correo",
+    "backup_email_sent_body": "Te enviamos un enlace a {{email}}. Confírmalo y vas a poder entrar con tu correo cuando no te lleguen los códigos por SMS.",
     "backup_email_failed_title": "Correo no confirmado",
-    "backup_email_taken": "Ese correo ya pertenece a otra cuenta de TriciGo. Probá con otro.",
-    "backup_email_retry": "Guardamos tu perfil, pero no pudimos enviarte el enlace de confirmación. Volvé a intentarlo más tarde.",
+    "backup_email_taken": "Ese correo ya pertenece a otra cuenta de TriciGo. Prueba con otro.",
+    "backup_email_retry": "Guardamos tu perfil, pero no pudimos enviarte el enlace de confirmación. Vuelve a intentarlo más tarde.",
     "accepts_deliveries_desc": "Recibe pedidos de envío de paquetes",
     "all_photos_required": "Debes subir las 3 fotos de verificación",
     "cargo_disabled_confirm": "¿Dejar de aceptar envíos?",

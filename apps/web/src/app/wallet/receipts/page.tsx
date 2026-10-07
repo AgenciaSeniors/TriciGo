@@ -159,7 +159,7 @@ export default function ReceiptsPage() {
             margin: '0 0 1.5rem',
           }}
         >
-          {t('receipts.subtitle', { defaultValue: 'Cada recarga genera un PDF con el detalle del cargo y los TriciCoin acreditados. Conservalos para tus registros.' })}
+          {t('receipts.subtitle', { defaultValue: 'Cada recarga genera un PDF con el detalle del cargo y los TriciCoin acreditados. Consérvalos para tus registros.' })}
         </p>
 
         {downloadError && (

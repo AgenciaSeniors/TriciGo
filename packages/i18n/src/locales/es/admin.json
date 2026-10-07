@@ -589,7 +589,7 @@
     "approve_recharge_title": "Aprobar recarga",
     "approve_recharge_msg": "¿Confirmas aprobar esta recarga? Se va a acreditar al usuario.",
     "reject_recharge_title": "Rechazar recarga",
-    "reject_recharge_msg": "Contanos el motivo del rechazo (el usuario lo va a ver).",
+    "reject_recharge_msg": "Cuéntanos el motivo del rechazo (el usuario lo va a ver).",
     "toast_recharge_approved": "Recarga aprobada",
     "toast_recharge_rejected": "Recarga rechazada",
     "recharge_error": "No pudimos procesar la recarga.",
@@ -843,7 +843,7 @@
   },
   "promotions": {
     "title": "Promociones",
-    "delete_in_use": "No se puede eliminar: esta promoción ya se usó en viajes. Desactivala en lugar de borrarla.",
+    "delete_in_use": "No se puede eliminar: esta promoción ya se usó en viajes. Desactívala en lugar de borrarla.",
     "create_promotion": "Crear promoción",
     "filter_all": "Todas",
     "filter_active": "Activas",
@@ -1642,7 +1642,7 @@
     "reason_lost_item": "Objeto perdido",
     "reason_other": "Otro",
     "resolution_warning": "Advertencia emitida",
-    "notes_required": "Contanos qué hiciste y por qué.",
+    "notes_required": "Cuéntanos qué hiciste y por qué.",
     "amount_invalid": "El monto debe ser un número positivo.",
     "load_error": "No pudimos cargar las disputas.",
     "resolve_error": "No pudimos resolver la disputa.",
@@ -2149,7 +2149,7 @@
     "kpi_avg_delta": "Δ promedio (ellos − nosotros)",
     "kpi_freshness": "Antigüedad del último dato",
     "empty_title": "Sin cotizaciones todavía",
-    "empty_body": "El observatorio aún no capturó precios. Verificá que la sesión del competidor esté depositada y el rastreo activo."
+    "empty_body": "El observatorio aún no capturó precios. Verifica que la sesión del competidor esté depositada y el rastreo activo."
   },
   "code_performance": {
     "tab_acquisition": "Códigos de origen",

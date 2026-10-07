@@ -308,11 +308,11 @@ export default function EditProfileScreen() {
         try {
           await authService.addBackupEmail(email.trim());
           Alert.alert(
-            td('profile.backup_email_sent_title', { defaultValue: 'Confirmá tu correo' }),
+            td('profile.backup_email_sent_title', { defaultValue: 'Confirma tu correo' }),
             td('profile.backup_email_sent_body', {
               email: email.trim(),
               defaultValue:
-                'Te enviamos un enlace a {{email}}. Confirmalo y vas a poder entrar con tu correo cuando no te lleguen los códigos por SMS.',
+                'Te enviamos un enlace a {{email}}. Confírmalo y vas a poder entrar con tu correo cuando no te lleguen los códigos por SMS.',
             }),
           );
         } catch (err) {
@@ -321,11 +321,11 @@ export default function EditProfileScreen() {
             td('profile.backup_email_failed_title', { defaultValue: 'Correo no confirmado' }),
             code === 'email_already_taken'
               ? td('profile.backup_email_taken', {
-                  defaultValue: 'Ese correo ya pertenece a otra cuenta de TriciGo. Probá con otro.',
+                  defaultValue: 'Ese correo ya pertenece a otra cuenta de TriciGo. Prueba con otro.',
                 })
               : td('profile.backup_email_retry', {
                   defaultValue:
-                    'Guardamos tu perfil, pero no pudimos enviarte el enlace de confirmación. Volvé a intentarlo más tarde.',
+                    'Guardamos tu perfil, pero no pudimos enviarte el enlace de confirmación. Vuelve a intentarlo más tarde.',
                 }),
           );
         }

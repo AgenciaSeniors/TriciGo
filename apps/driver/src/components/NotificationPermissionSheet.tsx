@@ -178,7 +178,7 @@ export function NotificationPermissionSheet({
           {denied
             ? t('notifications.driver_permission_body_denied', {
                 defaultValue:
-                  'Las notificaciones están desactivadas. Activalas en Ajustes para no perderte las ofertas de viaje, los mensajes del pasajero y tus pagos.',
+                  'Las notificaciones están desactivadas. Actívalas en Ajustes para no perderte las ofertas de viaje, los mensajes del pasajero y tus pagos.',
               })
             : context === 'pending'
               ? t('notifications.driver_permission_body_pending', {

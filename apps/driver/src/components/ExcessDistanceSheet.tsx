@@ -95,7 +95,7 @@ export function ExcessDistanceSheet({
         </Text>
         <Text variant="caption" color="tertiary">
           {t('excess.why_we_ask', {
-            defaultValue: 'Para que podamos cubrirte la próxima vez, contanos qué pasó.',
+            defaultValue: 'Para que podamos cubrirte la próxima vez, cuéntanos qué pasó.',
           })}
         </Text>
       </Card>

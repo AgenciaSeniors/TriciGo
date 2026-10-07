@@ -229,7 +229,7 @@ export default function ReferralLandingPage() {
 
         {/* Fallback note + brand link, always visible. */}
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 'var(--space-md)' }}>
-          {t('refer.no_app', { defaultValue: '¿No tienes la app? Descargala desde la App Store o Google Play.' })}
+          {t('refer.no_app', { defaultValue: '¿No tienes la app? Descárgala desde la App Store o Google Play.' })}
         </p>
         <a
           href="https://play.google.com/store/apps/details?id=app.tricigo.client"

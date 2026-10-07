@@ -721,7 +721,7 @@ export function DriverTripView() {
         Toast.show({
           type: 'error',
           text1: t('trip.sos_report_failed', {
-            defaultValue: 'No pudimos registrar el reporte. Llamá al 106.',
+            defaultValue: 'No pudimos registrar el reporte. Llama al 106.',
           }),
         });
       });
@@ -740,7 +740,7 @@ export function DriverTripView() {
       Toast.show({
         type: 'error',
         text1: t('trip.sos_report_failed', {
-          defaultValue: 'No pudimos registrar el reporte. Llamá al 106.',
+          defaultValue: 'No pudimos registrar el reporte. Llama al 106.',
         }),
       });
     }

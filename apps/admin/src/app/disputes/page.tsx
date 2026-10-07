@@ -138,7 +138,7 @@ export default function DisputesPage() {
 
   const validateResolveForm = () => {
     const errors: Record<string, string> = {};
-    if (!resolutionNotes.trim()) errors.resolutionNotes = t('disputes.notes_required', { defaultValue: 'Contanos qué hiciste y por qué.' });
+    if (!resolutionNotes.trim()) errors.resolutionNotes = t('disputes.notes_required', { defaultValue: 'Cuéntanos qué hiciste y por qué.' });
     if (resolution !== 'no_action' && resolution !== 'warning_issued') {
       const amt = parseInt(refundAmount || '0', 10);
       if (isNaN(amt) || amt < 0) errors.refundAmount = t('disputes.amount_invalid', { defaultValue: 'El monto debe ser un número positivo.' });

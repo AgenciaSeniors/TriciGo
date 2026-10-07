@@ -72,8 +72,8 @@ export default function EmailConfirmedPage() {
             <h1 style={{ fontSize: 22, marginBottom: 8 }}>Correo confirmado</h1>
             <p style={{ opacity: 0.8, lineHeight: 1.5 }}>
               {email ? `${email} quedó verificado. ` : ''}
-              Ya podés usarlo para entrar a TriciGo cuando no te lleguen los códigos por SMS.
-              Podés cerrar esta página.
+              Ya puedes usarlo para entrar a TriciGo cuando no te lleguen los códigos por SMS.
+              Puedes cerrar esta página.
             </p>
           </>
         )}
@@ -82,7 +82,7 @@ export default function EmailConfirmedPage() {
             <div style={{ fontSize: 44, marginBottom: 16 }}>⚠️</div>
             <h1 style={{ fontSize: 22, marginBottom: 8 }}>No pudimos confirmar el correo</h1>
             <p style={{ opacity: 0.8, lineHeight: 1.5 }}>
-              El enlace venció, ya se usó, o no es válido. Pedí uno nuevo guardando tu correo
+              El enlace venció, ya se usó, o no es válido. Pide uno nuevo guardando tu correo
               otra vez desde tu perfil en la app.
             </p>
           </>

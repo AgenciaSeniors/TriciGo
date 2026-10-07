@@ -246,7 +246,7 @@ subject = "Te han invitado a TriciGo"
 content_path = "supabase/templates/invite.html"
 
 [auth.email.template.recovery]
-subject = "Restablecé tu contraseña de TriciGo"
+subject = "Restablece tu contraseña de TriciGo"
 content_path = "supabase/templates/recovery.html"
 
 [auth.email.template.magic_link]
@@ -254,11 +254,11 @@ subject = "Tu enlace mágico para entrar a TriciGo"
 content_path = "supabase/templates/magic_link.html"
 
 [auth.email.template.email_change]
-subject = "Confirmá tu nuevo correo en TriciGo"
+subject = "Confirma tu nuevo correo en TriciGo"
 content_path = "supabase/templates/email_change.html"
 
 [auth.email.template.reauthentication]
-subject = "Verificá tu identidad en TriciGo"
+subject = "Verifica tu identidad en TriciGo"
 content_path = "supabase/templates/reauthentication.html"
 
 [auth.email.notification.password_changed]
