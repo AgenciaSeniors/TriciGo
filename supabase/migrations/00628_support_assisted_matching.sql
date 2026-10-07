@@ -2,11 +2,12 @@
 -- 00628 — support-assisted matching
 --
 -- When the app cannot find a driver, TriciGo support helps the rider get one, inside the app.
---   * request_ride_help: the rider's "Pedir ayuda" button. Marks the ride and alerts support.
---   * notify_support_waiting_rides (cron, every minute): alerts support once per ride that has
---     waited longer than support_alert_after_s (60 s).
---     An alert is a push to every active admin and super_admin (category system, always
---     delivered) and an e-mail to support_alert_email, both through cron_http_post.
+--   * request_ride_help: the rider's "Pedir ayuda" button. Marks the ride and pushes support.
+--   * notify_support_waiting_rides (cron, every minute): pushes support once per ride that has
+--     waited longer than support_alert_after_s (60 s), and e-mails a digest: one e-mail per
+--     address in support_alert_email, listing the rides pushed since the previous one.
+--     Pushes go to every active admin and super_admin (category system, always delivered).
+--     Pushes and e-mails go through cron_http_post.
 --   * admin_support_waiting_rides, admin_ride_assist_context, admin_ride_assist_candidates:
 --     the admin banner and the assist page.
 --   * admin_offer_ride_to_driver: an offer the driver accepts in the app as usual.
@@ -35,11 +36,15 @@ SET LOCAL lock_timeout = '10s';
 -- 1. Support tables. Both are lock tables (RLS, no policies): only the SECURITY DEFINER
 --    functions below read and write them.
 
+-- *_alert_sent_at: the push went out (or was tried). *_email_sent_at: the ride was listed in
+-- an e-mail digest.
 CREATE TABLE IF NOT EXISTS public.ride_assist (
   ride_id            uuid PRIMARY KEY REFERENCES public.rides(id) ON DELETE CASCADE,
   help_requested_at  timestamptz,
   help_alert_sent_at timestamptz,
   wait_alert_sent_at timestamptz,
+  help_email_sent_at timestamptz,
+  wait_email_sent_at timestamptz,
   created_at         timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.ride_assist ENABLE ROW LEVEL SECURITY;
@@ -63,6 +68,9 @@ CREATE TABLE IF NOT EXISTS public.ride_service_proposals (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ride_service_proposals_one_pending
   ON public.ride_service_proposals (ride_id) WHERE status = 'pending';
+-- The assist page reads a ride's latest proposal.
+CREATE INDEX IF NOT EXISTS ride_service_proposals_ride_created
+  ON public.ride_service_proposals (ride_id, created_at DESC);
 ALTER TABLE public.ride_service_proposals ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.ride_service_proposals FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.ride_service_proposals TO service_role;
@@ -342,7 +350,8 @@ $patch$;
 
 -- 6. Changing the vehicle type of a searching ride.
 
--- Why the ride cannot switch to p_service_type at p_fare_cup, or NULL when it can.
+-- Why the ride cannot switch to p_service_type at p_fare_cup, or NULL when it can. The proposal,
+-- the WhatsApp apply and the rider's accept all check it.
 CREATE OR REPLACE FUNCTION public._ride_service_change_error(p_ride public.rides, p_service_type text, p_fare_cup integer)
 RETURNS text
 LANGUAGE plpgsql STABLE
@@ -354,16 +363,33 @@ BEGIN
   IF p_ride.status <> 'searching' THEN
     RETURN 'ride_not_searching';
   END IF;
+  -- The change dispatches the ride at once, and a driver who accepts it hours early is
+  -- cancelled by stale_pre_pickup (00282). The predicate of on_ride_insert_dispatch.
+  IF COALESCE(p_ride.is_scheduled, false) AND p_ride.scheduled_at IS NOT NULL AND p_ride.scheduled_at > now() THEN
+    RETURN 'scheduled_not_due';
+  END IF;
   IF COALESCE(p_ride.ride_mode, 'passenger') <> 'passenger' THEN
     RETURN 'cargo_not_supported';
   END IF;
   IF p_ride.corporate_account_id IS NOT NULL THEN
     RETURN 'corporate_not_supported';
   END IF;
+  -- A prepaid ride cannot change its amount silently. Mixed can: its wallet part is capped at
+  -- the balance when the ride completes.
+  IF p_ride.payment_method::text NOT IN ('cash', 'tricicoin', 'mixed') THEN
+    RETURN 'payment_method_not_supported';
+  END IF;
+  -- An accepted invitee would be charged a share of a fare they never saw.
+  IF EXISTS (SELECT 1 FROM public.ride_splits s WHERE s.ride_id = p_ride.id) THEN
+    RETURN 'split_not_supported';
+  END IF;
   IF EXISTS (SELECT 1 FROM public.ride_waypoints w WHERE w.ride_id = p_ride.id) THEN
     RETURN 'waypoints_not_supported';
   END IF;
-  IF p_service_type IS NULL OR p_service_type = p_ride.service_type THEN
+  IF NULLIF(btrim(COALESCE(p_service_type, '')), '') IS NULL THEN
+    RETURN 'invalid_service_type';
+  END IF;
+  IF p_service_type = p_ride.service_type THEN
     RETURN 'same_service_type';
   END IF;
   SELECT * INTO v_svc FROM public.service_type_configs WHERE slug = p_service_type AND is_active;
@@ -380,6 +406,16 @@ BEGIN
   -- fare. The minimum keeps the bound usable for a ride with a 0 fare and for a much pricier type.
   IF p_fare_cup > 5 * GREATEST(COALESCE(p_ride.estimated_fare_cup, 0), v_svc.min_fare_cup) THEN
     RETURN 'fare_out_of_range';
+  END IF;
+  -- complete_ride_and_pay charges a TriciCoin ride from the rider's customer_cash, uncapped, and
+  -- that balance may not go negative: a fare the rider cannot pay would leave the driver unable
+  -- to finish the ride. The rider app books it only with 1.2 times the fare.
+  IF p_ride.payment_method::text = 'tricicoin' AND NOT EXISTS (
+       SELECT 1 FROM public.wallet_accounts w
+       WHERE w.user_id = p_ride.customer_id
+         AND w.account_type = 'customer_cash'
+         AND w.balance - COALESCE(w.held_balance, 0) >= ceil(p_fare_cup * 1.2)) THEN
+    RETURN 'rider_balance_too_low';
   END IF;
   RETURN NULL;
 END;
@@ -441,8 +477,9 @@ BEGIN
   --    reoffer_cooldown_s, and never a 'superseded' one (00524), so no offer is superseded here:
   --    * on a fare up or the same fare, the pending or expired offer of a driver whose vehicle can
   --      serve the new type (auto_standard and auto_confort share their drivers) is back-dated
-  --      past the cooldown, so the dispatch_ride below re-offers it at once, on the same row, with
-  --      a fresh TTL and a push (trg_notify_driver_reoffer);
+  --      past the cooldown. The dispatch_ride below re-offers it at once, on the same row, with a
+  --      fresh TTL and a push (trg_notify_driver_reoffer), if find_best_drivers still returns
+  --      that driver (online, free, in range); otherwise a later dispatch can;
   --    * every other pending offer only expires: the driver's card may still show the old type
   --      and price, so it must not be acceptable from it. A driver who cannot serve the new type
   --      stays out (find_best_drivers filters the vehicle type) until the ride comes back to a
@@ -559,7 +596,11 @@ $$;
 REVOKE ALL ON FUNCTION public.get_my_ride_service_proposal(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_my_ride_service_proposal(uuid) TO authenticated, service_role;
 
--- The rider accepts or rejects a proposal.
+-- The rider accepts or rejects a proposal. The accept runs _apply_ride_service_change under the
+-- rider's JWT. That works because trg_enforce_ride_update_columns fires before
+-- trg_rides_validate_insurance (triggers of the same kind fire in name order): the first refuses
+-- a rider's change to insurance_premium_cup, which the second recomputes on the new fare. Keep
+-- it so if either trigger is renamed.
 CREATE OR REPLACE FUNCTION public.respond_ride_service_proposal(p_proposal_id uuid, p_accept boolean)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -574,6 +615,9 @@ DECLARE
 BEGIN
   IF v_uid IS NULL THEN
     RETURN jsonb_build_object('error', 'unauthenticated');
+  END IF;
+  IF p_accept IS NULL THEN
+    RETURN jsonb_build_object('error', 'invalid_answer');
   END IF;
   SELECT ride_id INTO v_ride_id FROM public.ride_service_proposals WHERE id = p_proposal_id;
   IF NOT FOUND THEN
@@ -597,7 +641,7 @@ BEGIN
     RETURN jsonb_build_object('error', 'ride_not_searching', 'status', v_ride.status);
   END IF;
 
-  IF NOT COALESCE(p_accept, false) THEN
+  IF NOT p_accept THEN
     UPDATE public.ride_service_proposals SET status = 'rejected', responded_at = now() WHERE id = p_proposal_id;
     PERFORM public.log_rpc_attempt('respond_ride_service_proposal', v_uid, v_ride_id, 'rejected',
       jsonb_build_object('proposal_id', p_proposal_id));
@@ -608,8 +652,10 @@ BEGIN
     UPDATE public.ride_service_proposals SET status = 'accepted', responded_at = now() WHERE id = p_proposal_id;
     PERFORM public._apply_ride_service_change(v_ride_id, v_prop.to_service_type, v_prop.to_fare_cup);
   EXCEPTION WHEN raise_exception THEN
-    -- _apply_ride_service_change refused (the type's minimum fare went up since the proposal,
-    -- for example). Nothing changed and the proposal stays pending.
+    -- _apply_ride_service_change refused (the type's minimum fare went up since the proposal, or
+    -- the rider's balance no longer covers it, for example), and nothing it did stays. The
+    -- proposal is retired, so the rider's next poll does not show it again.
+    UPDATE public.ride_service_proposals SET status = 'superseded', responded_at = now() WHERE id = p_proposal_id;
     PERFORM public.log_rpc_attempt('respond_ride_service_proposal', v_uid, v_ride_id, SQLERRM,
       jsonb_build_object('proposal_id', p_proposal_id));
     RETURN jsonb_build_object('error', SQLERRM);
@@ -817,13 +863,15 @@ SECURITY DEFINER
 SET search_path = public, pg_catalog
 AS $$
 DECLARE
-  v_admin   uuid := auth.uid();
-  v_ride    public.rides%ROWTYPE;
-  v_dp      public.driver_profiles%ROWTYPE;
-  v_offer   public.ride_offers%ROWTYPE;
-  v_expires timestamptz;
-  v_dist    double precision;
-  v_mode    text;
+  v_admin           uuid := auth.uid();
+  v_ride            public.rides%ROWTYPE;
+  v_dp              public.driver_profiles%ROWTYPE;
+  v_offer           public.ride_offers%ROWTYPE;
+  v_expires         timestamptz;
+  v_dist            double precision;
+  v_mode            text;
+  v_fleet_required  boolean := false;
+  v_driver_in_fleet boolean := false;
 BEGIN
   IF NOT public.is_admin() THEN
     RETURN jsonb_build_object('error', 'forbidden');
@@ -836,6 +884,11 @@ BEGIN
   IF v_ride.status <> 'searching' THEN
     RETURN jsonb_build_object('error', 'ride_not_searching', 'status', v_ride.status);
   END IF;
+  -- Not before its time: a driver who accepts a ride hours early is cancelled by
+  -- stale_pre_pickup (00282). The predicate of on_ride_insert_dispatch.
+  IF COALESCE(v_ride.is_scheduled, false) AND v_ride.scheduled_at IS NOT NULL AND v_ride.scheduled_at > now() THEN
+    RETURN jsonb_build_object('error', 'scheduled_not_due', 'scheduled_at', v_ride.scheduled_at);
+  END IF;
 
   SELECT * INTO v_dp FROM public.driver_profiles WHERE id = p_driver_profile_id;
   IF NOT FOUND THEN
@@ -843,6 +896,9 @@ BEGIN
   END IF;
   IF v_dp.status <> 'approved' THEN
     RETURN jsonb_build_object('error', 'driver_not_approved', 'driver_status', v_dp.status);
+  END IF;
+  IF NOT COALESCE((SELECT u.is_active FROM public.users u WHERE u.id = v_dp.user_id), false) THEN
+    RETURN jsonb_build_object('error', 'driver_inactive');
   END IF;
   IF NOT public._driver_can_serve_ride(v_dp.id, v_ride.service_type,
                                         v_ride.ride_mode = 'cargo' OR v_ride.service_type = 'mensajeria') THEN
@@ -852,6 +908,33 @@ BEGIN
     RETURN jsonb_build_object('error', 'blocked');
   END IF;
 
+  -- Fleet gate, as accept_ride_v2 (00337): the driver could not accept it anyway.
+  IF v_ride.corporate_account_id IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM public.corporate_accounts ca
+      WHERE ca.id = v_ride.corporate_account_id
+        AND ca.is_fleet_owner = true
+        AND EXISTS (
+          SELECT 1 FROM public.fleet_members fm
+          JOIN public.driver_fleets df ON df.id = fm.fleet_id
+          WHERE df.corporate_account_id = ca.id
+            AND fm.status = 'active'
+            AND fm.driver_id IS NOT NULL)
+    ) INTO v_fleet_required;
+    IF v_fleet_required THEN
+      SELECT EXISTS (
+        SELECT 1 FROM public.fleet_members fm
+        JOIN public.driver_fleets df ON df.id = fm.fleet_id
+        WHERE df.corporate_account_id = v_ride.corporate_account_id
+          AND fm.driver_id = v_dp.user_id
+          AND fm.status = 'active'
+      ) INTO v_driver_in_fleet;
+      IF NOT v_driver_in_fleet THEN
+        RETURN jsonb_build_object('error', 'not_in_fleet');
+      END IF;
+    END IF;
+  END IF;
+
   v_expires := now() + make_interval(secs => GREATEST(30, public.get_platform_config_numeric('support_offer_ttl_s', 120)::int));
   v_dist := ST_Distance(v_dp.current_location, v_ride.pickup_location);
 
@@ -859,7 +942,14 @@ BEGIN
    WHERE ride_id = p_ride_id AND driver_profile_id = p_driver_profile_id
    FOR UPDATE;
 
-  IF NOT FOUND THEN
+  -- The driver already accepted this ride once (it went back to searching, 00542). Moving that
+  -- row off 'accepted' would lower their acceptance_rate for good (00555); "Asignar directo"
+  -- gives them the ride instead.
+  IF FOUND AND v_offer.status = 'accepted' THEN
+    RETURN jsonb_build_object('error', 'offer_already_accepted');
+  END IF;
+
+  IF v_offer.id IS NULL THEN
     -- trg_notify_driver_new_offer pushes it like any dispatched offer.
     INSERT INTO public.ride_offers (ride_id, driver_profile_id, distance_m, expires_at)
     VALUES (p_ride_id, p_driver_profile_id, v_dist, v_expires);
@@ -924,6 +1014,10 @@ BEGIN
   IF v_ride.status <> 'searching' THEN
     RETURN jsonb_build_object('error', 'ride_not_searching', 'status', v_ride.status);
   END IF;
+  -- As for an offer: stale_pre_pickup (00282) would cancel a ride accepted hours early.
+  IF COALESCE(v_ride.is_scheduled, false) AND v_ride.scheduled_at IS NOT NULL AND v_ride.scheduled_at > now() THEN
+    RETURN jsonb_build_object('error', 'scheduled_not_due', 'scheduled_at', v_ride.scheduled_at);
+  END IF;
 
   SELECT * INTO v_dp FROM public.driver_profiles WHERE id = p_driver_profile_id;
   IF NOT FOUND THEN
@@ -931,6 +1025,9 @@ BEGIN
   END IF;
   IF v_dp.status <> 'approved' THEN
     RETURN jsonb_build_object('error', 'driver_not_approved', 'driver_status', v_dp.status);
+  END IF;
+  IF NOT COALESCE((SELECT u.is_active FROM public.users u WHERE u.id = v_dp.user_id), false) THEN
+    RETURN jsonb_build_object('error', 'driver_inactive');
   END IF;
   IF NOT v_dp.is_online THEN
     RETURN jsonb_build_object('error', 'not_online');
@@ -1019,21 +1116,32 @@ BEGIN
 
   -- The driver's push. Category system is always delivered; send-push overwrites data.type with
   -- the category, so the event travels in data.event. Driver apps from 1.7.4 load the trip when
-  -- it arrives; older ones load it when the app comes back to the foreground.
-  v_key := public.get_service_role_key();
-  IF v_key IS NOT NULL AND v_key <> '' THEN
-    PERFORM public.cron_http_post('support-assign-push',
-      url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
-      headers := jsonb_build_object('Content-Type', 'application/json',
-                                    'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
-      body    := jsonb_build_object(
-        'user_id', v_dp.user_id::text,
-        'title', 'Soporte te asignó un viaje',
-        'body', 'Recogida: ' || left(COALESCE(v_ride.pickup_address, '—'), 60)
-                || ' · ' || COALESCE(v_ride.estimated_fare_cup, 0) || ' CUP. Abre la app.',
-        'category', 'system',
-        'data', jsonb_build_object('event', 'ride_assigned', 'ride_id', p_ride_id::text)));
-  END IF;
+  -- it arrives; older ones load it when the app comes back to the foreground. In a block of its
+  -- own, like notify_driver_new_offer: a failing push must not take back the assignment.
+  BEGIN
+    v_key := public.get_service_role_key();
+    IF v_key IS NULL OR v_key = '' THEN
+      RAISE WARNING 'admin_assign_ride_to_driver: no service role key, no push for ride %', p_ride_id;
+      PERFORM public.log_rpc_attempt('admin_assign_ride_to_driver', v_admin, p_ride_id, 'push_failed',
+        jsonb_build_object('driver_profile_id', v_dp.id, 'error', 'no service role key'));
+    ELSE
+      PERFORM public.cron_http_post('support-assign-push',
+        url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
+        headers := jsonb_build_object('Content-Type', 'application/json',
+                                      'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
+        body    := jsonb_build_object(
+          'user_id', v_dp.user_id::text,
+          'title', 'Soporte te asignó un viaje',
+          'body', 'Recogida: ' || left(COALESCE(v_ride.pickup_address, '—'), 60)
+                  || ' · ' || COALESCE(v_ride.estimated_fare_cup, 0) || ' CUP. Abre la app.',
+          'category', 'system',
+          'data', jsonb_build_object('event', 'ride_assigned', 'ride_id', p_ride_id::text)));
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'admin_assign_ride_to_driver: the push for ride % failed: % %', p_ride_id, SQLSTATE, SQLERRM;
+    PERFORM public.log_rpc_attempt('admin_assign_ride_to_driver', v_admin, p_ride_id, 'push_failed',
+      jsonb_build_object('driver_profile_id', v_dp.id, 'error', SQLERRM));
+  END;
 
   RETURN jsonb_build_object('success', true, 'ride_id', p_ride_id, 'driver_profile_id', v_dp.id);
 END;
@@ -1041,11 +1149,18 @@ $$;
 REVOKE ALL ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) TO authenticated, service_role;
 
--- 8. Alerts to support: a push to every active admin and super_admin, and an e-mail to each
---    address in support_alert_email, both through cron_http_post. The cron watchdog
---    (check_cron_http_failures, 00509) only reports a label whose calls failed at the HTTP level
---    twice or more within 90 minutes, so a single failed alert goes unreported; a failure before
---    the call only leaves a WARNING in the Postgres logs.
+-- 8. Alerts to support.
+--    * A push per ride, at once, to every active admin and super_admin (_support_alert): the help
+--      push from request_ride_help, the wait push from the cron.
+--    * E-mail only from the cron, as a digest: one e-mail per address in support_alert_email,
+--      listing the rides pushed since the previous digest. send-email allows 10 calls a minute
+--      per caller IP, before its auth check, and every e-mail the database sends (receipts,
+--      watchdogs) comes from the same IP: one e-mail per ride and address would use it up.
+--    Both go through cron_http_post: labels support-help-alert and support-wait-alert (pushes) and
+--    support-alert-email (digests). The cron watchdog (check_cron_http_failures, 00509) only
+--    reports a label whose calls failed at the HTTP level twice or more within 90 minutes, so a
+--    single failed alert goes unreported there. A failure before the HTTP call leaves a WARNING
+--    and an rpc_attempt_log row with outcome alert_failed.
 CREATE OR REPLACE FUNCTION public._support_alert(p_ride_id uuid, p_kind text)
 RETURNS void
 LANGUAGE plpgsql
@@ -1054,33 +1169,26 @@ SET search_path = public, pg_catalog
 AS $$
 DECLARE
   v_ride     public.rides%ROWTYPE;
-  v_customer public.users%ROWTYPE;
   v_admins   uuid[];
   v_key      text;
-  v_headers  jsonb;
   v_code     text := public._ride_short_code(p_ride_id);
   v_link     text := 'https://admin.tricigo.com/rides/' || p_ride_id::text || '/assist';
   v_wait_min integer;
   v_title    text;
   v_body     text;
-  v_html     text;
-  v_to_raw   text;
-  v_rcpt     text;
-  v_row      text := '<tr><td style="padding:6px;border-bottom:1px solid #eee"><b>%s</b></td><td style="padding:6px;border-bottom:1px solid #eee;text-align:right">%s</td></tr>';
 BEGIN
   SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id;
   IF NOT FOUND THEN
     RETURN;
   END IF;
-  SELECT * INTO v_customer FROM public.users WHERE id = v_ride.customer_id;
 
   v_key := public.get_service_role_key();
   IF v_key IS NULL OR v_key = '' THEN
-    RAISE WARNING '_support_alert: no service role key, the % alert for ride % was not sent', p_kind, p_ride_id;
+    RAISE WARNING '_support_alert: no service role key, the % push for ride % was not sent', p_kind, p_ride_id;
+    PERFORM public.log_rpc_attempt('_support_alert', auth.uid(), p_ride_id, 'alert_failed',
+      jsonb_build_object('kind', p_kind, 'error', 'no service role key'));
     RETURN;
   END IF;
-  v_headers := jsonb_build_object('Content-Type', 'application/json',
-                                  'Authorization', 'Bearer ' || v_key, 'apikey', v_key);
 
   v_wait_min := GREATEST(0, floor(extract(epoch FROM now() - GREATEST(v_ride.created_at, v_ride.scheduled_at)) / 60))::int;
   v_title := CASE WHEN p_kind = 'help' THEN 'Pasajero pide ayuda · ' ELSE 'Viaje sin conductor · ' END || v_code;
@@ -1094,63 +1202,27 @@ BEGIN
     PERFORM public.cron_http_post(
       CASE WHEN p_kind = 'help' THEN 'support-help-alert' ELSE 'support-wait-alert' END,
       url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
-      headers := v_headers,
+      headers := jsonb_build_object('Content-Type', 'application/json',
+                                    'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
       body    := jsonb_build_object(
         'user_ids', to_jsonb(v_admins),
         'title', v_title, 'body', v_body, 'category', 'system',
         'data', jsonb_build_object('event', 'support_' || p_kind, 'ride_id', p_ride_id::text, 'url', v_link)));
   END IF;
-
-  -- The e-mail in a block of its own: an error in it must not take back the push queued above.
-  BEGIN
-    v_to_raw := public.get_platform_config_text('support_alert_email', '');
-    IF position('@' IN COALESCE(v_to_raw, '')) > 0 THEN
-      -- Every value a user typed is escaped; every other value is non-null, because one NULL in a
-      -- || chain blanks the whole body (CLAUDE.md, 00577).
-      v_html := '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">'
-        || '<h2 style="color:#ff4d00;border-bottom:2px solid #ff4d00;padding-bottom:8px">' || public._html_escape(v_title) || '</h2>'
-        || '<p>' || CASE WHEN p_kind = 'help'
-             THEN 'El pasajero tocó <b>Pedir ayuda</b> en la pantalla de búsqueda. También puede escribir por WhatsApp con el código del viaje.'
-             ELSE 'Este viaje lleva más de ' || public.get_platform_config_numeric('support_alert_after_s', 60)::int
-                  || ' segundos sin conductor.' END
-        || '</p>'
-        || '<table style="width:100%;border-collapse:collapse;margin:16px 0">'
-        || format(v_row, 'Código', v_code)
-        || format(v_row, 'Espera', v_wait_min || ' min')
-        || format(v_row, 'Pasajero', public._html_escape(COALESCE(v_customer.full_name, '—') || ' ' || COALESCE(v_customer.phone, '')))
-        || format(v_row, 'Servicio', public._html_escape(v_ride.service_type) || ' · ' || COALESCE(v_ride.estimated_fare_cup, 0) || ' CUP')
-        || format(v_row, 'Origen', public._html_escape(COALESCE(v_ride.pickup_address, '—')))
-        || format(v_row, 'Destino', public._html_escape(COALESCE(v_ride.dropoff_address, '—')))
-        || '</table>'
-        || '<p><a href="' || v_link || '" style="display:inline-block;background:#ff4d00;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Asistir el viaje</a></p>'
-        || '<p style="color:#777;font-size:12px">Aviso automático de TriciGo (00628). Se envía una vez por viaje y motivo. No responder.</p>'
-        || '</body></html>';
-      IF v_html IS NULL THEN
-        RAISE EXCEPTION 'empty alert e-mail';
-      END IF;
-      FOR v_rcpt IN
-        SELECT btrim(x) FROM unnest(string_to_array(v_to_raw, ',')) AS t(x) WHERE position('@' IN x) > 0
-      LOOP
-        PERFORM public.cron_http_post(
-          CASE WHEN p_kind = 'help' THEN 'support-help-email' ELSE 'support-wait-email' END,
-          url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-email',
-          headers := v_headers,
-          body    := jsonb_build_object('recipient_email', v_rcpt, 'subject', '[TriciGo] ' || v_title,
-                                        -- raw HTML: the legacy path of send-email's resolveTemplate (00503, 00538)
-                                        'template', v_html, 'data', '{}'::jsonb));
-      END LOOP;
-    END IF;
-  EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING '_support_alert: the % e-mail for ride % failed: % %', p_kind, p_ride_id, SQLSTATE, SQLERRM;
-  END;
 EXCEPTION WHEN OTHERS THEN
   -- An alert never fails its caller (the rider's button, the cron).
   RAISE WARNING '_support_alert failed for ride %: % %', p_ride_id, SQLSTATE, SQLERRM;
+  PERFORM public.log_rpc_attempt('_support_alert', auth.uid(), p_ride_id, 'alert_failed',
+    jsonb_build_object('kind', p_kind, 'error', SQLERRM));
 END;
 $$;
 REVOKE ALL ON FUNCTION public._support_alert(uuid, text) FROM PUBLIC, anon, authenticated;
 
--- The rider's "Pedir ayuda". Idempotent: support is alerted the first time only.
+-- The rider's "Pedir ayuda". Records the request, which also keeps the ride from the
+-- abandoned-search cleanup (section 9), and pushes support at once, the first time only; the
+-- e-mail goes in the next minute's digest. A rider can create, ask for help on and cancel several
+-- rides a minute: once their rides have alerted support 3 times in the last hour, a new request
+-- is recorded but alerts nobody. The rider gets the same answer either way.
 CREATE OR REPLACE FUNCTION public.request_ride_help(p_ride_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1158,9 +1230,10 @@ SECURITY DEFINER
 SET search_path = public, pg_catalog
 AS $$
 DECLARE
-  v_uid  uuid := auth.uid();
-  v_ride public.rides%ROWTYPE;
-  v_sent timestamptz;
+  v_uid    uuid := auth.uid();
+  v_ride   public.rides%ROWTYPE;
+  v_sent   timestamptz;
+  v_recent integer;
 BEGIN
   IF v_uid IS NULL THEN
     RETURN jsonb_build_object('error', 'unauthenticated');
@@ -1180,8 +1253,19 @@ BEGIN
   RETURNING help_alert_sent_at INTO v_sent;
 
   IF v_sent IS NULL THEN
-    UPDATE public.ride_assist SET help_alert_sent_at = now() WHERE ride_id = p_ride_id;
-    PERFORM public._support_alert(p_ride_id, 'help');
+    SELECT count(*) INTO v_recent
+    FROM public.ride_assist ra
+    JOIN public.rides r ON r.id = ra.ride_id
+    WHERE r.customer_id = v_uid
+      AND ra.ride_id <> p_ride_id
+      AND ra.help_alert_sent_at > now() - interval '1 hour';
+    IF v_recent < 3 THEN
+      UPDATE public.ride_assist SET help_alert_sent_at = now() WHERE ride_id = p_ride_id;
+      PERFORM public._support_alert(p_ride_id, 'help');
+    ELSE
+      PERFORM public.log_rpc_attempt('request_ride_help', v_uid, p_ride_id, 'help_alert_capped',
+        jsonb_build_object('help_alerts_last_hour', v_recent));
+    END IF;
   END IF;
 
   RETURN jsonb_build_object('success', true, 'code', public._ride_short_code(p_ride_id));
@@ -1190,8 +1274,16 @@ $$;
 REVOKE ALL ON FUNCTION public.request_ride_help(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.request_ride_help(uuid) TO authenticated, service_role;
 
--- Every minute: one alert per ride that has waited longer than support_alert_after_s (at most
--- 6 hours back; a scheduled ride waits from scheduled_at). Test riders do not trigger it.
+-- Every minute:
+--   1. A wait push for each ride that has waited longer than support_alert_after_s (floored at
+--      15 s, at most 6 hours back; a scheduled ride waits from scheduled_at), 20 rides a minute
+--      at most. Not for a test rider, nor for a ride whose help push already went out.
+--      support_alert_enabled = false turns these off, and nothing else.
+--   2. The e-mail digest: one e-mail per address in support_alert_email, listing every
+--      searching ride whose help or wait push has not been e-mailed yet, help first, 20 rows at
+--      most; the rest wait for the next minute. The rows are stamped when the e-mails are
+--      queued, and stay for the next minute if they could not be.
+-- Returns how many wait pushes it sent.
 CREATE OR REPLACE FUNCTION public.notify_support_waiting_rides()
 RETURNS integer
 LANGUAGE plpgsql
@@ -1199,37 +1291,130 @@ SECURITY DEFINER
 SET search_path = public, pg_catalog
 AS $$
 DECLARE
-  v_after integer;
-  v_id    uuid;
-  v_n     integer := 0;
+  v_enabled  boolean := COALESCE(public.get_platform_config_text('support_alert_enabled', 'true'), 'true') <> 'false';
+  v_after    integer := GREATEST(15, public.get_platform_config_numeric('support_alert_after_s', 60)::int);
+  v_id       uuid;
+  v_n        integer := 0;
+  v_rec      record;
+  v_rows     text := '';
+  v_help_ids uuid[] := '{}';
+  v_wait_ids uuid[] := '{}';
+  v_count    integer;
+  v_to_raw   text;
+  v_rcpt     text;
+  v_key      text;
+  v_subject  text;
+  v_html     text;
+  v_cell     text := 'padding:8px 6px;border-bottom:1px solid #eee;vertical-align:top';
 BEGIN
-  IF public.get_platform_config_text('support_alert_enabled', 'true') = 'false' THEN
-    RETURN 0;
+  IF v_enabled THEN
+    FOR v_id IN
+      SELECT r.id
+      FROM public.rides r
+      JOIN public.users c ON c.id = r.customer_id
+      LEFT JOIN public.ride_assist ra ON ra.ride_id = r.id
+      WHERE r.status = 'searching'
+        AND NOT c.is_test
+        AND GREATEST(r.created_at, r.scheduled_at) <= now() - make_interval(secs => v_after)
+        AND GREATEST(r.created_at, r.scheduled_at) > now() - interval '6 hours'
+        AND ra.wait_alert_sent_at IS NULL
+        AND ra.help_alert_sent_at IS NULL
+      ORDER BY GREATEST(r.created_at, r.scheduled_at)
+      LIMIT 20
+    LOOP
+      INSERT INTO public.ride_assist (ride_id, wait_alert_sent_at)
+      VALUES (v_id, now())
+      ON CONFLICT (ride_id) DO UPDATE SET wait_alert_sent_at = EXCLUDED.wait_alert_sent_at
+      WHERE public.ride_assist.wait_alert_sent_at IS NULL AND public.ride_assist.help_alert_sent_at IS NULL;
+      IF FOUND THEN
+        PERFORM public._support_alert(v_id, 'wait');
+        v_n := v_n + 1;
+      END IF;
+    END LOOP;
   END IF;
-  v_after := GREATEST(15, public.get_platform_config_numeric('support_alert_after_s', 60)::int);
 
-  FOR v_id IN
-    SELECT r.id
-    FROM public.rides r
-    JOIN public.users c ON c.id = r.customer_id
-    LEFT JOIN public.ride_assist ra ON ra.ride_id = r.id
-    WHERE r.status = 'searching'
-      AND NOT c.is_test
-      AND GREATEST(r.created_at, r.scheduled_at) <= now() - make_interval(secs => v_after)
-      AND GREATEST(r.created_at, r.scheduled_at) > now() - interval '6 hours'
-      AND ra.wait_alert_sent_at IS NULL
-    ORDER BY GREATEST(r.created_at, r.scheduled_at)
-    LIMIT 20
-  LOOP
-    INSERT INTO public.ride_assist (ride_id, wait_alert_sent_at)
-    VALUES (v_id, now())
-    ON CONFLICT (ride_id) DO UPDATE SET wait_alert_sent_at = EXCLUDED.wait_alert_sent_at
-    WHERE public.ride_assist.wait_alert_sent_at IS NULL;
-    IF FOUND THEN
-      PERFORM public._support_alert(v_id, 'wait');
-      v_n := v_n + 1;
+  -- The digest, in a block of its own: a failure in it must not take back the pushes above.
+  BEGIN
+    v_to_raw := public.get_platform_config_text('support_alert_email', '');
+    IF position('@' IN COALESCE(v_to_raw, '')) > 0 THEN
+      FOR v_rec IN
+        SELECT r.id, r.pickup_address, r.dropoff_address,
+               (ra.help_alert_sent_at IS NOT NULL) AS is_help,
+               GREATEST(0, floor(extract(epoch FROM now() - GREATEST(r.created_at, r.scheduled_at)) / 60))::int AS wait_min
+        FROM public.ride_assist ra
+        JOIN public.rides r ON r.id = ra.ride_id
+        WHERE r.status = 'searching'
+          AND ((ra.help_alert_sent_at IS NOT NULL AND ra.help_email_sent_at IS NULL)
+               OR (v_enabled AND ra.help_alert_sent_at IS NULL
+                   AND ra.wait_alert_sent_at IS NOT NULL AND ra.wait_email_sent_at IS NULL))
+        ORDER BY (ra.help_alert_sent_at IS NULL), GREATEST(r.created_at, r.scheduled_at)
+        LIMIT 20
+      LOOP
+        IF v_rec.is_help THEN
+          v_help_ids := v_help_ids || v_rec.id;
+        ELSE
+          v_wait_ids := v_wait_ids || v_rec.id;
+        END IF;
+        -- What the rider typed is escaped; format() writes a NULL as ''.
+        v_rows := v_rows || format(
+          '<tr><td style="%1$s"><b>%2$s</b></td><td style="%1$s">%3$s</td><td style="%1$s">%4$s min</td>'
+          || '<td style="%1$s">%5$s → %6$s</td><td style="%1$s"><a href="%7$s">Asistir</a></td></tr>',
+          v_cell, public._ride_short_code(v_rec.id),
+          CASE WHEN v_rec.is_help THEN 'Pidió ayuda' ELSE 'Sin conductor' END,
+          v_rec.wait_min,
+          public._html_escape(COALESCE(v_rec.pickup_address, '—')),
+          public._html_escape(COALESCE(v_rec.dropoff_address, '—')),
+          'https://admin.tricigo.com/rides/' || v_rec.id::text || '/assist');
+      END LOOP;
+      v_count := cardinality(v_help_ids) + cardinality(v_wait_ids);
+
+      IF v_count > 0 THEN
+        v_key := public.get_service_role_key();
+        IF v_key IS NULL OR v_key = '' THEN
+          RAISE WARNING 'notify_support_waiting_rides: no service role key, the alert e-mail for % rides was not sent', v_count;
+          PERFORM public.log_rpc_attempt('notify_support_waiting_rides', NULL, NULL, 'alert_failed',
+            jsonb_build_object('kind', 'digest', 'rides', to_jsonb(v_help_ids || v_wait_ids),
+                               'error', 'no service role key'));
+        ELSE
+          v_subject := v_count || CASE WHEN v_count = 1 THEN ' viaje necesita' ELSE ' viajes necesitan' END
+                       || ' soporte';
+          -- Every value is non-null: one NULL in a || chain blanks the whole body (CLAUDE.md, 00577).
+          v_html := '<!DOCTYPE html><html lang="es"><body style="font-family:system-ui,sans-serif;max-width:720px;margin:0 auto;padding:24px;color:#111">'
+            || '<h2 style="color:#ff4d00;border-bottom:2px solid #ff4d00;padding-bottom:8px">' || v_subject || '</h2>'
+            || '<p>Viajes cuyo pasajero tocó <b>Pedir ayuda</b>, y viajes que llevan más de ' || v_after
+            || ' segundos sin conductor. Cada viaje aparece una vez por motivo.</p>'
+            || '<table style="width:100%;border-collapse:collapse;margin:16px 0">'
+            || '<tr style="text-align:left;color:#555"><th style="padding:6px">Código</th><th style="padding:6px">Motivo</th>'
+            || '<th style="padding:6px">Espera</th><th style="padding:6px">Recorrido</th><th style="padding:6px"></th></tr>'
+            || v_rows
+            || '</table>'
+            || '<p style="color:#777;font-size:12px">Aviso automático de TriciGo (00628): un correo por minuto como máximo. No responder.</p>'
+            || '</body></html>';
+          IF v_html IS NULL THEN
+            RAISE EXCEPTION 'empty alert e-mail';
+          END IF;
+          FOR v_rcpt IN
+            SELECT btrim(x) FROM unnest(string_to_array(v_to_raw, ',')) AS t(x) WHERE position('@' IN x) > 0
+          LOOP
+            PERFORM public.cron_http_post('support-alert-email',
+              url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-email',
+              headers := jsonb_build_object('Content-Type', 'application/json',
+                                            'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
+              body    := jsonb_build_object('recipient_email', v_rcpt, 'subject', '[TriciGo] ' || v_subject,
+                                            -- raw HTML: the legacy path of send-email's resolveTemplate (00503, 00538)
+                                            'template', v_html, 'data', '{}'::jsonb));
+          END LOOP;
+          UPDATE public.ride_assist SET help_email_sent_at = now() WHERE ride_id = ANY (v_help_ids);
+          UPDATE public.ride_assist SET wait_email_sent_at = now() WHERE ride_id = ANY (v_wait_ids);
+        END IF;
+      END IF;
     END IF;
-  END LOOP;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'notify_support_waiting_rides: the alert e-mail failed: % %', SQLSTATE, SQLERRM;
+    PERFORM public.log_rpc_attempt('notify_support_waiting_rides', NULL, NULL, 'alert_failed',
+      jsonb_build_object('kind', 'digest', 'rides', to_jsonb(v_help_ids || v_wait_ids), 'error', SQLERRM));
+  END;
+
   RETURN v_n;
 END;
 $$;
@@ -1266,11 +1451,14 @@ BEGIN
 END
 $patch$;
 
--- 10. What this migration promises, checked in the database it just changed.
+-- 10. What this migration promises, checked in the database it just changed. Every list is
+--     counted, so a renamed or missing object fails here instead of going unchecked.
 DO $assert$
 DECLARE
-  r record;
+  r   record;
+  v_n integer;
 BEGIN
+  v_n := 0;
   FOR r IN
     SELECT p.oid::regprocedure AS fn FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
@@ -1278,11 +1466,16 @@ BEGIN
       '_html_escape', '_write_ride_estimate_snapshot', '_ride_service_change_error',
       '_apply_ride_service_change', '_support_alert', 'notify_support_waiting_rides')
   LOOP
+    v_n := v_n + 1;
     IF has_function_privilege('anon', r.fn, 'EXECUTE') OR has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
       RAISE EXCEPTION '00628: % is executable by a client role', r.fn;
     END IF;
   END LOOP;
+  IF v_n <> 10 THEN
+    RAISE EXCEPTION '00628: expected 10 internal functions, found %', v_n;
+  END IF;
 
+  v_n := 0;
   FOR r IN
     SELECT p.oid::regprocedure AS fn FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
@@ -1290,6 +1483,7 @@ BEGIN
       'admin_support_waiting_rides', 'admin_ride_assist_context', 'admin_ride_assist_candidates',
       'admin_offer_ride_to_driver', 'admin_assign_ride_to_driver', 'admin_change_ride_service')
   LOOP
+    v_n := v_n + 1;
     IF has_function_privilege('anon', r.fn, 'EXECUTE') THEN
       RAISE EXCEPTION '00628: % is executable by anon', r.fn;
     END IF;
@@ -1297,12 +1491,28 @@ BEGIN
       RAISE EXCEPTION '00628: % is not executable by authenticated', r.fn;
     END IF;
   END LOOP;
+  IF v_n <> 9 THEN
+    RAISE EXCEPTION '00628: expected 9 client functions, found %', v_n;
+  END IF;
 
-  IF has_table_privilege('anon', 'public.ride_assist', 'SELECT')
-     OR has_table_privilege('authenticated', 'public.ride_assist', 'SELECT')
-     OR has_table_privilege('anon', 'public.ride_service_proposals', 'SELECT')
-     OR has_table_privilege('authenticated', 'public.ride_service_proposals', 'SELECT') THEN
-    RAISE EXCEPTION '00628: a client role can read a support table';
+  -- The support tables: row level security on, and no table privilege for a client role.
+  v_n := 0;
+  FOR r IN
+    SELECT c.oid::regclass AS tbl, c.relrowsecurity AS rls FROM pg_class c
+    WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
+      AND c.relname IN ('ride_assist', 'ride_service_proposals')
+  LOOP
+    v_n := v_n + 1;
+    IF NOT r.rls THEN
+      RAISE EXCEPTION '00628: % has no row level security', r.tbl;
+    END IF;
+    IF has_table_privilege('anon', r.tbl, 'select, insert, update, delete')
+       OR has_table_privilege('authenticated', r.tbl, 'select, insert, update, delete') THEN
+      RAISE EXCEPTION '00628: a client role has a privilege on %', r.tbl;
+    END IF;
+  END LOOP;
+  IF v_n <> 2 THEN
+    RAISE EXCEPTION '00628: expected 2 support tables, found %', v_n;
   END IF;
 
   IF position('_write_ride_estimate_snapshot' IN

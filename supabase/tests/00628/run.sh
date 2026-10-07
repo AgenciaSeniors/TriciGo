@@ -87,6 +87,14 @@ tx(){ printf "BEGIN; %s SET LOCAL request.jwt.claim.sub = '%s'; SET LOCAL ROLE a
 as(){ printf "RESET ROLE; SET LOCAL request.jwt.claim.sub = '%s'; SET LOCAL ROLE authenticated;" "$1"; }
 # calls LABEL: how many HTTP calls the label queued through cron_http_post
 calls(){ echo "(SELECT count(*) FROM public.cron_http_calls WHERE jobname = '$1')"; }
+# MAILS: every e-mail queued, whatever its label
+MAILS="(SELECT count(*) FROM net.calls WHERE url LIKE '%/send-email')"
+# The vault key missing, or failing (prod reads it from the vault). Rolled back with the test.
+NOKEY="CREATE OR REPLACE FUNCTION public.get_service_role_key() RETURNS text LANGUAGE sql AS \$k\$ SELECT ''::text \$k\$;"
+BADKEY="CREATE OR REPLACE FUNCTION public.get_service_role_key() RETURNS text LANGUAGE plpgsql AS \$k\$ BEGIN RAISE EXCEPTION 'vault unavailable'; END \$k\$;"
+# R1 scheduled 3 hours ahead (not due), or for 5 minutes ago (due)
+SCHED="UPDATE public.rides SET is_scheduled = true, scheduled_at = now() + interval '3 hours' WHERE id = '$R1';"
+DUE="UPDATE public.rides SET is_scheduled = true, scheduled_at = now() - interval '5 minutes' WHERE id = '$R1';"
 # pcheck: P1's status and R1's service type
 PCHECK="SELECT p.status || '|' || r.service_type FROM public.ride_service_proposals p JOIN public.rides r ON r.id = p.ride_id WHERE p.id = '$P1'"
 # rstate: R1's service type and fare
@@ -123,12 +131,13 @@ run $DB "$(ride $SNAP_OLD) UPDATE public.rides SET status = 'canceled' WHERE id 
 migrate $DB
 
 # --- H: the rider asks for help ----------------------------------------------------------
+# The push goes at once; the e-mail waits for the cron's digest (C6-C9).
 val H1 "$(tx "$(ride $R1)" $RIDER "SELECT public.request_ride_help('$R1')->>'code';" \
   "SELECT (SELECT help_requested_at IS NOT NULL FROM public.ride_assist WHERE ride_id = '$R1'),
-          $(calls support-help-alert), $(calls support-help-email),
+          $(calls support-help-alert), $MAILS,
           (SELECT c.body->>'category' || ':' || jsonb_array_length(c.body->'user_ids') || ':' || (c.body->'data'->>'event')
              FROM net.calls c JOIN public.cron_http_calls h ON h.request_id = c.id WHERE h.jobname = 'support-help-alert')")" \
-  "F1000000;t|1|2|system:2:support_help"
+  "F1000000;t|1|0|system:2:support_help"
 val H2 "$(tx "$(ride $R1)" $RIDER "SELECT public.request_ride_help('$R1')->>'success'; SELECT public.request_ride_help('$R1')->>'success';" \
   "SELECT $(calls support-help-alert)")" "true;true;1"
 val H3 "$(tx "$(ride $R1)" $OTHER "SELECT public.request_ride_help('$R1')->>'error';" "SELECT count(*) FROM public.ride_assist")" \
@@ -137,14 +146,19 @@ val H4 "$(tx "" $OTHER "SELECT public.request_ride_help('$RB')->>'error';" "SELE
   "ride_not_searching;0"
 err H5 "BEGIN; $(ride $R1) SET LOCAL ROLE anon; SELECT public.request_ride_help('$R1'); ROLLBACK;" \
   "permission denied for function request_ride_help"
+# No address: the push goes, no e-mail ever, and the ride stays owed an e-mail.
 val H6 "$(tx "$(ride $R1) UPDATE public.platform_config SET value = '\"\"' WHERE key = 'support_alert_email';" $RIDER \
-  "SELECT public.request_ride_help('$R1')->>'success';" "SELECT $(calls support-help-alert), $(calls support-help-email)")" \
-  "true;1|0"
+  "SELECT public.request_ride_help('$R1')->>'success';" \
+  "SELECT public.notify_support_waiting_rides(); SELECT $(calls support-help-alert), $MAILS,
+          (SELECT help_email_sent_at IS NULL FROM public.ride_assist WHERE ride_id = '$R1')")" \
+  "true;0;1|0|t"
+# The digest escapes what the rider typed and links the assist page.
 val H7 "$(tx "$(ride $R1) UPDATE public.rides SET pickup_address = '<script>x</script>' WHERE id = '$R1';" $RIDER \
   "SELECT public.request_ride_help('$R1')->>'success';" \
-  "SELECT bool_and(position('&lt;script&gt;' IN c.body->>'template') > 0 AND position('<script>' IN c.body->>'template') = 0
+  "SELECT public.notify_support_waiting_rides();
+   SELECT count(*) || '|' || bool_and(position('&lt;script&gt;' IN c.body->>'template') > 0 AND position('<script>' IN c.body->>'template') = 0
                    AND c.body->>'template' LIKE '%/rides/$R1/assist%')
-     FROM net.calls c WHERE c.url LIKE '%/send-email'")" "true;t"
+     FROM net.calls c WHERE c.url LIKE '%/send-email'")" "true;0;2|true"
 val H8 "$(tx "$(ride $R1) UPDATE public.rides SET customer_id = '$TESTER' WHERE id = '$R1';" $TESTER \
   "SELECT public.request_ride_help('$R1')->>'success';" "SELECT $(calls support-help-alert)")" "true;1"
 # cleanup_orphan_searching_rides (cron) cancels a search the app stopped refreshing. A rider who
@@ -163,11 +177,22 @@ val H10 "BEGIN; $(ride $R1 triciclo_basico 2000 '20 minutes') $STALE $(helped '5
   SELECT public.cleanup_orphan_searching_rides(); $CSTATE; ROLLBACK;" "0;searching|"
 val H11 "BEGIN; $(ride $R1 triciclo_basico 2000 '45 minutes') $STALE $(helped '40 minutes')
   SELECT public.cleanup_orphan_searching_rides(); $CSTATE; ROLLBACK;" "1;canceled|searching_abandoned"
+# A rider whose rides already alerted support 3 times in the last hour: the 4th request is
+# recorded (the keep-alive applies) but alerts nobody, and the rider gets the usual answer.
+val H12 "$(tx "$(ride $R1 triciclo_basico 2000 '30 seconds') $(ride $R2) $(ride $R3) $(ride $R4)
+  UPDATE public.rides SET status = 'canceled' WHERE id IN ('$R2', '$R3', '$R4');
+  INSERT INTO public.ride_assist (ride_id, help_requested_at, help_alert_sent_at)
+  SELECT id, now() - interval '20 minutes', now() - interval '20 minutes' FROM public.rides WHERE id IN ('$R2', '$R3', '$R4');" $RIDER \
+  "SELECT public.request_ride_help('$R1')::text;" \
+  "SELECT public.notify_support_waiting_rides(); SELECT $(calls support-help-alert), $MAILS,
+          (SELECT (help_requested_at IS NOT NULL) || ':' || (help_alert_sent_at IS NULL) FROM public.ride_assist WHERE ride_id = '$R1'),
+          (SELECT string_agg(outcome, ',') FROM public.rpc_attempt_log WHERE rpc_name = 'request_ride_help' AND target_id = '$R1')")" \
+  "{\"code\": \"F1000000\", \"success\": true};0;0|0|true:true|help_alert_capped"
 
 # --- C: the one-minute alert cron ---------------------------------------------------------
 val C1 "BEGIN; $(ride $R1) SELECT public.notify_support_waiting_rides();
-  SELECT (SELECT wait_alert_sent_at IS NOT NULL FROM public.ride_assist WHERE ride_id = '$R1'),
-         $(calls support-wait-alert), $(calls support-wait-email); ROLLBACK;" "1;t|1|2"
+  SELECT (SELECT (wait_alert_sent_at IS NOT NULL) || ':' || (wait_email_sent_at IS NOT NULL) FROM public.ride_assist WHERE ride_id = '$R1'),
+         $(calls support-wait-alert), $(calls support-alert-email); ROLLBACK;" "1;true:true|1|2"
 val C2 "BEGIN; $(ride $R1) SELECT public.notify_support_waiting_rides(); SELECT public.notify_support_waiting_rides(); ROLLBACK;" "1;0"
 val C3 "BEGIN; $(ride $R1) $(ride $R2 triciclo_basico 2000 '30 seconds') $(ride $R3 triciclo_basico 2000 '10 minutes') $(ride $R4 triciclo_basico 2000 '7 hours')
   UPDATE public.rides SET customer_id = '$TESTER' WHERE id = '$R1';
@@ -177,6 +202,46 @@ val C4 "BEGIN; $(ride $R1) UPDATE public.platform_config SET value = 'false' WHE
   SELECT public.notify_support_waiting_rides(); ROLLBACK;" "0"
 val C5 "SELECT schedule || ' / ' || command FROM cron.job WHERE jobname = 'notify-support-waiting-rides'" \
   "* * * * * / SELECT public.notify_support_waiting_rides()"
+# One e-mail per address per minute: 4 waiting rides and 3 addresses make 3 e-mails, each
+# listing the 4 rides (send-email allows 10 calls a minute per caller IP, shared by every
+# e-mail the database sends). Pushes stay one per ride.
+val C6 "BEGIN; $(ride $R1 triciclo_basico 2000 '5 minutes') $(ride $R2 triciclo_basico 2000 '4 minutes') $(ride $R3 triciclo_basico 2000 '3 minutes') $(ride $R4 triciclo_basico 2000 '2 minutes')
+  UPDATE public.platform_config SET value = '\"a@soporte.test, b@soporte.test, c@soporte.test\"' WHERE key = 'support_alert_email';
+  SELECT public.notify_support_waiting_rides();
+  SELECT $(calls support-wait-alert), $(calls support-alert-email),
+         (SELECT count(DISTINCT c.body->>'recipient_email') FROM net.calls c WHERE c.url LIKE '%/send-email'),
+         (SELECT bool_and(c.body->>'template' LIKE '%F1000000%' AND c.body->>'template' LIKE '%F2000000%'
+                      AND c.body->>'template' LIKE '%F3000000%' AND c.body->>'template' LIKE '%F4000000%')
+            FROM net.calls c WHERE c.url LIKE '%/send-email'); ROLLBACK;" "4;4|3|3|t"
+# Help, then the ride crosses the wait threshold: no wait alert on top of the help alert, and
+# the ride is in one digest only.
+val C7 "BEGIN; $(ride $R1 triciclo_basico 2000 '30 seconds')
+  $(as $RIDER) SELECT public.request_ride_help('$R1')->>'success'; RESET ROLE; SET LOCAL request.jwt.claim.sub = '';
+  SELECT public.notify_support_waiting_rides();
+  UPDATE public.rides SET created_at = now() - interval '5 minutes' WHERE id = '$R1';
+  SELECT public.notify_support_waiting_rides();
+  SELECT $(calls support-help-alert) + $(calls support-wait-alert), $MAILS,
+         (SELECT count(DISTINCT c.body->>'template') FROM net.calls c WHERE c.url LIKE '%/send-email'); ROLLBACK;" \
+  "true;0;0;1|2|1"
+# support_alert_enabled = false stops the automatic wait alerts only: a help request still gets
+# its push and its place in the digest.
+val C8 "BEGIN; $(ride $R1) $(ride $R2 triciclo_basico 2000 '5 minutes')
+  UPDATE public.platform_config SET value = 'false' WHERE key = 'support_alert_enabled';
+  $(as $RIDER) SELECT public.request_ride_help('$R1')->>'success'; RESET ROLE; SET LOCAL request.jwt.claim.sub = '';
+  SELECT public.notify_support_waiting_rides();
+  SELECT $(calls support-help-alert), $(calls support-wait-alert), $(calls support-alert-email),
+         (SELECT bool_and(c.body->>'template' LIKE '%F1000000%' AND c.body->>'template' NOT LIKE '%F2000000%')
+            FROM net.calls c WHERE c.url LIKE '%/send-email'); ROLLBACK;" "true;0;1|0|2|t"
+# A failed alert leaves an rpc_attempt_log row (not only a WARNING), and the digest keeps the
+# ride for the next minute.
+val C9 "BEGIN; $(ride $R1) $NOKEY SET LOCAL client_min_messages = error;
+  $(as $RIDER) SELECT public.request_ride_help('$R1')->>'success'; RESET ROLE; SET LOCAL request.jwt.claim.sub = '';
+  SELECT public.notify_support_waiting_rides();
+  SELECT (SELECT string_agg(rpc_name || ':' || outcome || ':' || coalesce(metadata->>'kind', ''), ',' ORDER BY rpc_name COLLATE \"C\")
+            FROM public.rpc_attempt_log WHERE outcome = 'alert_failed'),
+         (SELECT (help_alert_sent_at IS NOT NULL) || ':' || (help_email_sent_at IS NULL) FROM public.ride_assist WHERE ride_id = '$R1'),
+         (SELECT count(*) FROM net.calls); ROLLBACK;" \
+  "true;0;_support_alert:alert_failed:help,notify_support_waiting_rides:alert_failed:digest|true:true|0"
 
 # --- W: the banner's list -----------------------------------------------------------------
 WCOLS="ride_id, code, waiting_since, wait_s, help_requested_at, service_type, estimated_fare_cup, pickup_address, dropoff_address, pending_offers, is_test, ord"
@@ -235,6 +300,27 @@ val O10 "BEGIN; $(ride $R1) $BEAT $(as $ADMIN) SELECT public.admin_offer_ride_to
   $(as $U1) SELECT public.accept_ride_v2('$R1', '$D1')->>'success';
   RESET ROLE; SELECT status || ':' || left(driver_id::text, 2) FROM public.rides WHERE id = '$R1'; ROLLBACK;" \
   "created;true;accepted:d1"
+# An offer the driver already accepted (a ride put back to searching, 00542) is not re-armed:
+# moving it off 'accepted' would lower the driver's acceptance_rate for good.
+val O11 "$(tx "$(ride $R1) $(offer $D1 accepted '-1 minute') UPDATE public.driver_profiles SET acceptance_rate = 50.0 WHERE id = '$D1'; $QUIET" $ADMIN \
+  "SELECT public.admin_offer_ride_to_driver('$R1', '$D1')->>'error';" \
+  "SELECT o.status || '|' || dp.acceptance_rate || '|' || (SELECT count(*) FROM net.calls)
+     FROM public.ride_offers o JOIN public.driver_profiles dp ON dp.id = o.driver_profile_id
+    WHERE o.ride_id = '$R1' AND o.driver_profile_id = '$D1'")" "offer_already_accepted;accepted|50.0|0"
+# A ride scheduled for later is not offered yet; once due it is.
+val O12 "$(tx "$(ride $R1) $SCHED" $ADMIN "SELECT public.admin_offer_ride_to_driver('$R1', '$D1')->>'error';" \
+  "SELECT count(*) FROM public.ride_offers WHERE ride_id = '$R1'")" "scheduled_not_due;0"
+val O13 "$(tx "$(ride $R1) $DUE" $ADMIN "SELECT public.admin_offer_ride_to_driver('$R1', '$D1')->>'mode';" \
+  "SELECT count(*) FROM public.ride_offers WHERE ride_id = '$R1'")" "created;1"
+val O14 "$(tx "$(ride $R1) UPDATE public.corporate_accounts SET is_fleet_owner = true WHERE id = '$CORP';
+  INSERT INTO public.driver_fleets (id, corporate_account_id, name) VALUES ('$FLEET', '$CORP', 'Flota Uno');
+  INSERT INTO public.fleet_members (fleet_id, driver_id, driver_name, driver_phone, status) VALUES ('$FLEET', '$U5', 'Daniel Cinco', '+5350000205', 'active');
+  UPDATE public.rides SET corporate_account_id = '$CORP' WHERE id = '$R1';" $ADMIN \
+  "SELECT public.admin_offer_ride_to_driver('$R1', '$D1')->>'error';" \
+  "SELECT count(*) FROM public.ride_offers WHERE ride_id = '$R1'")" "not_in_fleet;0"
+val O15 "$(tx "$(ride $R1) UPDATE public.users SET is_active = false WHERE id = '$U1';" $ADMIN \
+  "SELECT public.admin_offer_ride_to_driver('$R1', '$D1')->>'error';" \
+  "SELECT count(*) FROM public.ride_offers WHERE ride_id = '$R1'")" "driver_inactive;0"
 
 # --- A: support assigns directly -----------------------------------------------------------
 ASTATE="SELECT status FROM public.rides WHERE id = '$R1'"
@@ -261,6 +347,15 @@ val A10 "$(tx "$(ride $R1) $BEAT UPDATE public.corporate_accounts SET is_fleet_o
   INSERT INTO public.driver_fleets (id, corporate_account_id, name) VALUES ('$FLEET', '$CORP', 'Flota Uno');
   INSERT INTO public.fleet_members (fleet_id, driver_id, driver_name, driver_phone, status) VALUES ('$FLEET', '$U5', 'Daniel Cinco', '+5350000205', 'active');
   UPDATE public.rides SET corporate_account_id = '$CORP' WHERE id = '$R1';" $ADMIN "$(assign $D1)" "$ASTATE")" "not_in_fleet;searching"
+val A11 "$(tx "$(ride $R1) $BEAT $SCHED" $ADMIN "$(assign $D1)" "$ASTATE")" "scheduled_not_due;searching"
+val A12 "$(tx "$(ride $R1) $BEAT $DUE" $ADMIN "$(assign $D1 'Lo coordiné por WhatsApp' success)" "$ASTATE")" "true;accepted"
+val A13 "$(tx "$(ride $R1) $BEAT UPDATE public.users SET is_active = false WHERE id = '$U1';" $ADMIN "$(assign $D1)" "$ASTATE")" \
+  "driver_inactive;searching"
+# The driver's push failing cannot take back the assignment; it leaves a trace.
+val A14 "$(tx "$(ride $R1) $BEAT $BADKEY SET LOCAL client_min_messages = error;" $ADMIN "$(assign $D1 'Lo coordiné por WhatsApp' success)" \
+  "SELECT r.status || '|' || (SELECT count(*) FROM net.calls) || '|'
+          || (SELECT string_agg(outcome, ',') FROM public.rpc_attempt_log WHERE rpc_name = 'admin_assign_ride_to_driver')
+     FROM public.rides r WHERE r.id = '$R1'")" "true;accepted|0|push_failed"
 
 # --- S: support switches the vehicle type with WhatsApp consent -----------------------------
 apply(){ echo "SELECT public.admin_change_ride_service('$R1', '$1', $2, 'apply', ${3:-'Aceptó por WhatsApp'})->>'${4:-error}';"; }
@@ -344,6 +439,33 @@ val S18 "BEGIN; $(ride $R1) $BEAT $(offerid $OF1 $D1) $QUIET
             AND c.body->>'body' LIKE '%2400 CUP')
     FROM public.ride_offers o WHERE o.ride_id = '$R1' AND o.driver_profile_id = '$D1'; ROLLBACK;" \
   "apply;expired;offer_not_found_or_expired;apply;t|pending|t|t|1"
+# A TriciCoin ride is charged from the rider's wallet at the end, uncapped: the new fare needs
+# the app's booking rule, 1.2 times the fare (3000 -> 3600). Cash and mixed do not.
+TRC="UPDATE public.rides SET payment_method = 'tricicoin' WHERE id = '$R1';"
+wallet(){ echo "INSERT INTO public.wallet_accounts (user_id, account_type, balance) VALUES ('$RIDER', 'customer_cash', $1);"; }
+PSTATE="SELECT service_type || '|' || estimated_fare_cup || '|' || (SELECT count(*) FROM public.ride_service_proposals) FROM public.rides WHERE id = '$R1'"
+val S19 "$(tx "$(ride $R1) $TRC $(wallet 3600)" $ADMIN "$(apply auto_standard 3000 "'Aceptó por WhatsApp'" mode)" "$RSTATE")" \
+  "apply;auto_standard|3000"
+val S20 "$(tx "$(ride $R1) $TRC $(wallet 3599)" $ADMIN \
+  "$(apply auto_standard 3000) SELECT public.admin_change_ride_service('$R1', 'auto_standard', 3000, 'propose', NULL)->>'error';" \
+  "$PSTATE")" "rider_balance_too_low;rider_balance_too_low;triciclo_basico|2000|0"
+val S21 "$(tx "$(ride $R1) UPDATE public.rides SET payment_method = 'mixed' WHERE id = '$R1';" $ADMIN \
+  "$(apply auto_standard 3000 "'Aceptó por WhatsApp'" mode)" "$RSTATE")" "apply;auto_standard|3000"
+# An accepted invitee would pay a share of a fare they never saw; a prepaid ride cannot change
+# its amount silently.
+val S22 "$(tx "$(ride $R1) INSERT INTO public.ride_splits (ride_id, user_id) VALUES ('$R1', '$OTHER');" $ADMIN \
+  "$(apply auto_standard 3000)" "$RSTATE")" "split_not_supported;triciclo_basico|2000"
+val S23 "$(tx "$(ride $R1) UPDATE public.rides SET payment_method = 'stripe' WHERE id = '$R1';" $ADMIN \
+  "$(apply auto_standard 3000)" "$RSTATE")" "payment_method_not_supported;triciclo_basico|2000"
+# A ride scheduled for later cannot change type (the change dispatches it); once due it can.
+val S24 "$(tx "$(ride $R1) $SCHED" $ADMIN \
+  "$(apply auto_standard 3000) SELECT public.admin_change_ride_service('$R1', 'auto_standard', 3000, 'propose', NULL)->>'error';" \
+  "$PSTATE")" "scheduled_not_due;scheduled_not_due;triciclo_basico|2000|0"
+val S25 "$(tx "$(ride $R1) $DUE" $ADMIN "$(apply auto_standard 3000 "'Aceptó por WhatsApp'" mode)" "$RSTATE")" \
+  "apply;auto_standard|3000"
+val S26 "$(tx "$(ride $R1)" $ADMIN "SELECT public.admin_change_ride_service('$R1', NULL, 3000, 'apply', 'ok')->>'error';
+  SELECT public.admin_change_ride_service('$R1', '  ', 3000, 'apply', 'ok')->>'error';" "$RSTATE")" \
+  "invalid_service_type;invalid_service_type;triciclo_basico|2000"
 
 # --- P: proposals the rider answers in the app ----------------------------------------------
 propose(){ echo "SELECT public.admin_change_ride_service('$R1', '$1', $2, 'propose', NULL)->>'mode';"; }
@@ -373,8 +495,11 @@ val P9 "$(tx "$(ride $R1) $(prop) $BEAT UPDATE public.rides SET status = 'accept
   "$(respond true)" "$PCHECK")" "ride_not_searching;pending|triciclo_basico"
 val P10 "BEGIN; $(ride $R1) $(prop) $(as $ADMIN) $(apply auto_confort 4000 "'Aceptó por WhatsApp'" mode)
   $(as $RIDER) $(respond true) RESET ROLE; $PCHECK; ROLLBACK;" "apply;proposal_not_pending;superseded|auto_confort"
+# A refused accept retires the proposal, so the rider's next poll does not show it again.
 val P11 "$(tx "$(ride $R1) $(prop) UPDATE public.service_type_configs SET min_fare_cup = 5000 WHERE slug = 'auto_standard';" $RIDER \
-  "$(respond true)" "$PCHECK")" "fare_below_minimum;pending|triciclo_basico"
+  "$(respond true) SELECT public.get_my_ride_service_proposal('$R1') IS NULL;" "$PCHECK")" \
+  "fare_below_minimum;t;superseded|triciclo_basico"
+val P13 "$(tx "$(ride $R1) $(prop)" $RIDER "$(respond NULL)" "$PCHECK")" "invalid_answer;pending|triciclo_basico"
 
 # --- G: who may call what -----------------------------------------------------------------
 err G1 "$(tx "$(ride $R1)" $ADMIN "SELECT public._apply_ride_service_change('$R1', 'auto_standard', 3000);" "SELECT 1")" \

@@ -295,6 +295,14 @@ CREATE TABLE public.ride_waypoints (
   created_at timestamptz DEFAULT now()
 );
 
+-- ride_splits: prod table, reduced to the columns 00628 and its tests use (00031 and later
+-- migrations add the share, payment and invitation columns and their triggers).
+CREATE TABLE public.ride_splits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ride_id uuid NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL
+);
+
 CREATE TABLE public.service_type_configs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slug text NOT NULL UNIQUE,
