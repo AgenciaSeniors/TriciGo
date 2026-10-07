@@ -69,6 +69,7 @@ vi.mock('@tricigo/utils', () => ({
     Math.round(fare * mult),
   ),
   matchPricingRule: vi.fn().mockReturnValue(null),
+  pricingClock: vi.fn().mockReturnValue({ hhmm: '12:00', day: 1 }),
   calculateFareRange: vi.fn().mockReturnValue({
     minFareCup: 400, maxFareCup: 600,
     minFareTrc: 4, maxFareTrc: 6,

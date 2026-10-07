@@ -176,6 +176,56 @@ describe('rideService.getLocalFareEstimate', () => {
       }),
     ).rejects.toBeDefined();
   });
+
+  it('reads the time band in the zone it is given (support quotes on Havana time)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // 03:30 UTC is 23:30 the evening before in Havana: the evening rule must win.
+    vi.setSystemTime(new Date('2026-10-07T03:30:00Z'));
+    const rules = [
+      { id: 'rule-dawn', service_type: 'triciclo_basico', base_fare_cup: 9000, per_km_rate_cup: 1000,
+        per_minute_rate_cup: 500, min_fare_cup: 3000, time_window_start: '00:00', time_window_end: '06:00',
+        day_of_week: null, is_active: true },
+      { id: 'rule-evening', service_type: 'triciclo_basico', base_fare_cup: 5000, per_km_rate_cup: 1000,
+        per_minute_rate_cup: 500, min_fare_cup: 3000, time_window_start: '18:00', time_window_end: '00:00',
+        day_of_week: null, is_active: true },
+    ];
+    const chain = createMockQueryChain({ data: rules, error: null });
+    chain.single.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+    chain.maybeSingle.mockResolvedValue({ data: null, error: null });
+    mockFrom.mockImplementation(() => chain);
+    try {
+      const estimate = await rideService.getLocalFareEstimate({
+        service_type: 'triciclo_basico',
+        pickup_lat: 23.1352, pickup_lng: -82.3599, dropoff_lat: 23.1375, dropoff_lng: -82.3964,
+        time_zone: 'America/Havana',
+      });
+      expect(estimate.pricing_rule_id).toBe('rule-evening');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('prices an experiment with the rider it is given and does not count the quote', async () => {
+    const experiment = { id: 'exp-1', variant_a_multiplier: 1, variant_b_multiplier: 2 };
+    const quote = async (userId: string) => {
+      const chain = createMockQueryChain();
+      chain.single.mockResolvedValue({ data: TRICICLO_CONFIG, error: null });
+      chain.maybeSingle.mockResolvedValue({ data: experiment, error: null });
+      mockFrom.mockImplementation(() => chain);
+      return rideService.getLocalFareEstimate({
+        service_type: 'triciclo_basico',
+        pickup_lat: 23.1352, pickup_lng: -82.3599, dropoff_lat: 23.1375, dropoff_lng: -82.3964,
+        for_user_id: userId,
+      });
+    };
+    // The variant is the parity of the sum of the id's char codes: 'b' (98) is A, 'a' (97) is B.
+    const variantA = await quote('b');
+    const variantB = await quote('a');
+
+    expect(variantB.estimated_fare_cup).toBe(variantA.estimated_fare_cup * 2);
+    expect(mockGetUser).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalledWith('increment_experiment_rides', expect.anything());
+  });
 });
 
 describe('rideService.addWaypointToActiveRide', () => {

@@ -39,6 +39,7 @@ import {
   calculateCargoFare,
   applySurge,
   matchPricingRule,
+  pricingClock,
   calculateFareRange,
   maskPhone,
   isLocationInCuba,
@@ -237,6 +238,14 @@ export const rideService = {
     dropoff_lat: number;
     dropoff_lng: number;
     waypoints?: { lat: number; lng: number }[];
+    /**
+     * Quote for this rider instead of the signed-in user (support re-quoting a rider's ride):
+     * a pricing experiment uses the rider's variant, and the quote is not counted as an
+     * experiment ride.
+     */
+    for_user_id?: string;
+    /** IANA zone for the time band. Default: the device's. Support passes 'America/Havana'. */
+    time_zone?: string;
   }): Promise<FareEstimate> {
     // Validate ride distance is within reasonable bounds (50km max)
     const directDistance = haversineDistance(
@@ -312,9 +321,7 @@ export const rideService = {
     const pricingRules = rulesResult.data;
 
     // Find matching time-based rule (using pure function)
-    const now = new Date();
-    const currentHour = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const currentDay = now.getDay(); // 0=Sun, 6=Sat
+    const { hhmm: currentHour, day: currentDay } = pricingClock(new Date(), params.time_zone);
 
     let baseFare = svcConfig.base_fare_cup;
     let perKmRate = svcConfig.per_km_rate_cup;
@@ -402,7 +409,7 @@ export const rideService = {
       const experiment = experimentResult.data;
       if (experiment) {
         // Only fetch user if we have an active experiment
-        const userId = (await supabase.auth.getUser()).data.user?.id;
+        const userId = params.for_user_id ?? (await supabase.auth.getUser()).data.user?.id;
         if (userId) {
           // Simple hash: sum of char codes mod 2
           const hash = userId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
@@ -415,11 +422,14 @@ export const rideService = {
             surgedFare = Math.round(surgedFare * multiplier);
           }
 
-          // Increment rides counter (non-blocking, fire-and-forget)
-          void supabase.rpc('increment_experiment_rides', {
-            p_experiment_id: experiment.id,
-            p_variant: variant,
-          });
+          // Increment rides counter (non-blocking, fire-and-forget). A quote made for someone
+          // else (support) is not an experiment ride.
+          if (!params.for_user_id) {
+            void supabase.rpc('increment_experiment_rides', {
+              p_experiment_id: experiment.id,
+              p_variant: variant,
+            });
+          }
         }
       }
     } catch { /* experiments are optional, don't break pricing */ }
