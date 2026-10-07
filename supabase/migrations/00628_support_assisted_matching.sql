@@ -593,3 +593,419 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.respond_ride_service_proposal(uuid, boolean) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.respond_ride_service_proposal(uuid, boolean) TO authenticated, service_role;
+
+-- 7. What support sees and does on a waiting ride.
+
+-- The banner: searching rides that waited longer than support_alert_after_s, or whose rider asked
+-- for help. Help first, then the longest wait. A scheduled ride waits from scheduled_at.
+-- Test riders are included and flagged, so the end-to-end check can use a test account.
+CREATE OR REPLACE FUNCTION public.admin_support_waiting_rides()
+RETURNS TABLE (
+  ride_id uuid, code text, waiting_since timestamptz, wait_s integer, help_requested_at timestamptz,
+  service_type text, estimated_fare_cup integer, pickup_address text, dropoff_address text,
+  pending_offers integer, is_test boolean)
+LANGUAGE plpgsql STABLE
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_after integer := GREATEST(15, public.get_platform_config_numeric('support_alert_after_s', 60)::int);
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY
+  SELECT r.id,
+         public._ride_short_code(r.id),
+         GREATEST(r.created_at, r.scheduled_at),
+         GREATEST(0, floor(extract(epoch FROM now() - GREATEST(r.created_at, r.scheduled_at))))::int,
+         ra.help_requested_at,
+         r.service_type,
+         r.estimated_fare_cup,
+         r.pickup_address,
+         r.dropoff_address,
+         (SELECT count(*)::int FROM public.ride_offers o
+           WHERE o.ride_id = r.id AND o.status = 'pending' AND o.expires_at > now()),
+         c.is_test
+  FROM public.rides r
+  JOIN public.users c ON c.id = r.customer_id
+  LEFT JOIN public.ride_assist ra ON ra.ride_id = r.id
+  WHERE r.status = 'searching'
+    AND GREATEST(r.created_at, r.scheduled_at) <= now()
+    AND (ra.help_requested_at IS NOT NULL
+         OR GREATEST(r.created_at, r.scheduled_at) <= now() - make_interval(secs => v_after))
+  ORDER BY (ra.help_requested_at IS NULL), GREATEST(r.created_at, r.scheduled_at)
+  LIMIT 50;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.admin_support_waiting_rides() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_support_waiting_rides() TO authenticated, service_role;
+
+-- The assist page: the ride, its rider, help, every offer and the latest proposal, in one call.
+CREATE OR REPLACE FUNCTION public.admin_ride_assist_context(p_ride_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql STABLE
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_ride public.rides%ROWTYPE;
+  v_out  jsonb;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+
+  SELECT jsonb_build_object(
+    'ride', jsonb_build_object(
+      'id', v_ride.id, 'code', public._ride_short_code(v_ride.id), 'status', v_ride.status,
+      'service_type', v_ride.service_type, 'ride_mode', v_ride.ride_mode,
+      'estimated_fare_cup', v_ride.estimated_fare_cup, 'discount_amount_cup', v_ride.discount_amount_cup,
+      'payment_method', v_ride.payment_method, 'passenger_count', v_ride.passenger_count,
+      'shared_ride', COALESCE(v_ride.shared_ride, false),
+      'is_corporate', v_ride.corporate_account_id IS NOT NULL,
+      'has_waypoints', EXISTS (SELECT 1 FROM public.ride_waypoints w WHERE w.ride_id = v_ride.id),
+      'pickup_address', v_ride.pickup_address, 'dropoff_address', v_ride.dropoff_address,
+      'pickup_lat', v_ride.pickup_lat, 'pickup_lng', v_ride.pickup_lng,
+      'dropoff_lat', v_ride.dropoff_lat, 'dropoff_lng', v_ride.dropoff_lng,
+      'created_at', v_ride.created_at,
+      'wait_s', GREATEST(0, floor(extract(epoch FROM now() - GREATEST(v_ride.created_at, v_ride.scheduled_at))))::int,
+      'customer_id', v_ride.customer_id, 'customer_name', c.full_name,
+      'customer_phone', c.phone, 'customer_is_test', c.is_test),
+    'help_requested_at', ra.help_requested_at,
+    'offers', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+               'driver_profile_id', o.driver_profile_id, 'driver_name', du.full_name, 'status', o.status,
+               'offered_at', o.offered_at, 'expires_at', o.expires_at, 'responded_at', o.responded_at)
+             ORDER BY o.offered_at DESC)
+      FROM public.ride_offers o
+      JOIN public.driver_profiles dp ON dp.id = o.driver_profile_id
+      JOIN public.users du ON du.id = dp.user_id
+      WHERE o.ride_id = v_ride.id), '[]'::jsonb),
+    'proposal', (
+      SELECT jsonb_build_object(
+               'id', p.id, 'from_service_type', p.from_service_type, 'to_service_type', p.to_service_type,
+               'from_fare_cup', p.from_fare_cup, 'to_fare_cup', p.to_fare_cup, 'status', p.status,
+               'expires_at', p.expires_at, 'responded_at', p.responded_at, 'created_at', p.created_at)
+      FROM public.ride_service_proposals p
+      WHERE p.ride_id = v_ride.id
+      ORDER BY p.created_at DESC
+      LIMIT 1))
+  INTO v_out
+  FROM public.users c
+  LEFT JOIN public.ride_assist ra ON ra.ride_id = v_ride.id
+  WHERE c.id = v_ride.customer_id;
+
+  RETURN v_out;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.admin_ride_assist_context(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_ride_assist_context(uuid) TO authenticated, service_role;
+
+-- The drivers support can call: approved, with a vehicle that can serve p_service_type (the
+-- ride's own type by default), online or seen in the last 7 days, not blocked with the rider.
+-- Online first, then by distance to the pickup.
+CREATE OR REPLACE FUNCTION public.admin_ride_assist_candidates(p_ride_id uuid, p_service_type text DEFAULT NULL)
+RETURNS TABLE (
+  driver_profile_id uuid, full_name text, phone text, vehicle_type public.vehicle_type, vehicle_label text,
+  is_online boolean, last_heartbeat_at timestamptz, distance_m integer, busy_ride_id uuid,
+  can_afford boolean, offer_status text, offer_expires_at timestamptz)
+LANGUAGE plpgsql STABLE
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_ride  public.rides%ROWTYPE;
+  v_type  text;
+  v_types public.vehicle_type[];
+  v_cargo boolean;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+  v_type  := COALESCE(p_service_type, v_ride.service_type);
+  v_types := public._vehicle_types_for_service(v_type);
+  v_cargo := (v_ride.ride_mode = 'cargo' OR v_type = 'mensajeria');
+
+  RETURN QUERY
+  SELECT dp.id,
+         u.full_name,
+         u.phone,
+         v.type,
+         v.make || ' ' || v.model || ' · ' || v.color || ' · ' || v.plate_number,
+         dp.is_online,
+         dp.last_heartbeat_at,
+         ST_Distance(dp.current_location, v_ride.pickup_location)::int,
+         (SELECT a.id FROM public.rides a
+           WHERE a.driver_id = dp.id
+             AND a.status IN ('accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination')
+           LIMIT 1),
+         COALESCE((public.driver_can_afford_commission(dp.id, v_ride.estimated_fare_cup)->>'ok')::boolean, false),
+         o.status,
+         o.expires_at
+  FROM public.driver_profiles dp
+  JOIN public.users u ON u.id = dp.user_id
+  JOIN LATERAL (
+    SELECT v2.* FROM public.vehicles v2
+    WHERE v2.driver_id = dp.id
+      AND v2.is_active
+      AND (v_types IS NULL OR v2.type = ANY (v_types))
+      AND (NOT v_cargo OR v2.accepts_cargo IS TRUE)
+    ORDER BY v2.created_at DESC
+    LIMIT 1
+  ) v ON true
+  LEFT JOIN public.ride_offers o ON o.ride_id = v_ride.id AND o.driver_profile_id = dp.id
+  WHERE dp.status = 'approved'
+    AND u.is_active
+    AND (dp.is_online OR dp.last_heartbeat_at > now() - interval '7 days')
+    AND NOT public._users_blocked(v_ride.customer_id, dp.user_id)
+  ORDER BY dp.is_online DESC, ST_Distance(dp.current_location, v_ride.pickup_location) ASC NULLS LAST, u.full_name
+  LIMIT 60;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.admin_ride_assist_candidates(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_ride_assist_candidates(uuid, text) TO authenticated, service_role;
+
+-- "Enviar oferta": the driver gets the ride as an offer with the support TTL and accepts it in
+-- the app (accept_ride_v2 checks online, free and balance then). Every path pushes the offer
+-- except a live one, which is only extended.
+CREATE OR REPLACE FUNCTION public.admin_offer_ride_to_driver(p_ride_id uuid, p_driver_profile_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_admin   uuid := auth.uid();
+  v_ride    public.rides%ROWTYPE;
+  v_dp      public.driver_profiles%ROWTYPE;
+  v_offer   public.ride_offers%ROWTYPE;
+  v_expires timestamptz;
+  v_dist    double precision;
+  v_mode    text;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+  IF v_ride.status <> 'searching' THEN
+    RETURN jsonb_build_object('error', 'ride_not_searching', 'status', v_ride.status);
+  END IF;
+
+  SELECT * INTO v_dp FROM public.driver_profiles WHERE id = p_driver_profile_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'driver_not_found');
+  END IF;
+  IF v_dp.status <> 'approved' THEN
+    RETURN jsonb_build_object('error', 'driver_not_approved', 'driver_status', v_dp.status);
+  END IF;
+  IF NOT public._driver_can_serve_ride(v_dp.id, v_ride.service_type,
+                                        v_ride.ride_mode = 'cargo' OR v_ride.service_type = 'mensajeria') THEN
+    RETURN jsonb_build_object('error', 'wrong_vehicle_type');
+  END IF;
+  IF public._users_blocked(v_ride.customer_id, v_dp.user_id) THEN
+    RETURN jsonb_build_object('error', 'blocked');
+  END IF;
+
+  v_expires := now() + make_interval(secs => GREATEST(30, public.get_platform_config_numeric('support_offer_ttl_s', 120)::int));
+  v_dist := ST_Distance(v_dp.current_location, v_ride.pickup_location);
+
+  SELECT * INTO v_offer FROM public.ride_offers
+   WHERE ride_id = p_ride_id AND driver_profile_id = p_driver_profile_id
+   FOR UPDATE;
+
+  IF NOT FOUND THEN
+    -- trg_notify_driver_new_offer pushes it like any dispatched offer.
+    INSERT INTO public.ride_offers (ride_id, driver_profile_id, distance_m, expires_at)
+    VALUES (p_ride_id, p_driver_profile_id, v_dist, v_expires);
+    v_mode := 'created';
+  ELSIF v_offer.status = 'pending' AND v_offer.expires_at > now() THEN
+    -- Already on the driver's screen: give it the support TTL, without a second push.
+    UPDATE public.ride_offers SET expires_at = GREATEST(expires_at, v_expires) WHERE id = v_offer.id;
+    v_mode := 'extended';
+  ELSE
+    -- Re-armed through 'expired', so trg_notify_driver_reoffer (expired -> pending) pushes it.
+    IF v_offer.status <> 'expired' THEN
+      UPDATE public.ride_offers SET status = 'expired' WHERE id = v_offer.id;
+    END IF;
+    UPDATE public.ride_offers
+       SET status = 'pending', expires_at = v_expires, distance_m = v_dist, responded_at = NULL
+     WHERE id = v_offer.id;
+    v_mode := 'rearmed';
+  END IF;
+
+  INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values)
+  VALUES (v_admin, 'support_offer_ride', 'ride', p_ride_id::text,
+          CASE WHEN v_offer.id IS NULL THEN NULL ELSE jsonb_build_object('offer_status', v_offer.status) END,
+          jsonb_build_object('driver_profile_id', p_driver_profile_id, 'mode', v_mode, 'expires_at', v_expires));
+
+  RETURN jsonb_build_object('success', true, 'mode', v_mode, 'expires_at', v_expires);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.admin_offer_ride_to_driver(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_offer_ride_to_driver(uuid, uuid) TO authenticated, service_role;
+
+-- "Asignar directo": accept_ride_v2's checks (live body, 00377) without the offer, plus the
+-- vehicle type and the block list, then accept_ride_v2's writes. No offer row is inserted: an
+-- INSERT would push "Viaje disponible cerca" for a ride that is already the driver's.
+CREATE OR REPLACE FUNCTION public.admin_assign_ride_to_driver(p_ride_id uuid, p_driver_profile_id uuid, p_reason text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_admin           uuid := auth.uid();
+  v_reason          text := NULLIF(btrim(COALESCE(p_reason, '')), '');
+  v_ride            public.rides%ROWTYPE;
+  v_dp              public.driver_profiles%ROWTYPE;
+  v_active_id       uuid;
+  v_afford          jsonb;
+  v_fleet_required  boolean := false;
+  v_driver_in_fleet boolean := false;
+  v_key             text;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+  IF v_reason IS NULL THEN
+    RETURN jsonb_build_object('error', 'reason_required');
+  END IF;
+
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+  IF v_ride.status <> 'searching' THEN
+    RETURN jsonb_build_object('error', 'ride_not_searching', 'status', v_ride.status);
+  END IF;
+
+  SELECT * INTO v_dp FROM public.driver_profiles WHERE id = p_driver_profile_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'driver_not_found');
+  END IF;
+  IF v_dp.status <> 'approved' THEN
+    RETURN jsonb_build_object('error', 'driver_not_approved', 'driver_status', v_dp.status);
+  END IF;
+  IF NOT v_dp.is_online THEN
+    RETURN jsonb_build_object('error', 'not_online');
+  END IF;
+  IF v_dp.last_heartbeat_at IS NOT NULL AND v_dp.last_heartbeat_at < now() - interval '3 minutes' THEN
+    RETURN jsonb_build_object('error', 'stale_heartbeat', 'last_heartbeat_at', v_dp.last_heartbeat_at);
+  END IF;
+  IF NOT public._driver_can_serve_ride(v_dp.id, v_ride.service_type,
+                                        v_ride.ride_mode = 'cargo' OR v_ride.service_type = 'mensajeria') THEN
+    RETURN jsonb_build_object('error', 'wrong_vehicle_type');
+  END IF;
+  IF public._users_blocked(v_ride.customer_id, v_dp.user_id) THEN
+    RETURN jsonb_build_object('error', 'blocked');
+  END IF;
+
+  -- Fleet gate, as accept_ride_v2 (00337).
+  IF v_ride.corporate_account_id IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM public.corporate_accounts ca
+      WHERE ca.id = v_ride.corporate_account_id
+        AND ca.is_fleet_owner = true
+        AND EXISTS (
+          SELECT 1 FROM public.fleet_members fm
+          JOIN public.driver_fleets df ON df.id = fm.fleet_id
+          WHERE df.corporate_account_id = ca.id
+            AND fm.status = 'active'
+            AND fm.driver_id IS NOT NULL)
+    ) INTO v_fleet_required;
+    IF v_fleet_required THEN
+      SELECT EXISTS (
+        SELECT 1 FROM public.fleet_members fm
+        JOIN public.driver_fleets df ON df.id = fm.fleet_id
+        WHERE df.corporate_account_id = v_ride.corporate_account_id
+          AND fm.driver_id = v_dp.user_id
+          AND fm.status = 'active'
+      ) INTO v_driver_in_fleet;
+      IF NOT v_driver_in_fleet THEN
+        RETURN jsonb_build_object('error', 'not_in_fleet');
+      END IF;
+    END IF;
+  END IF;
+
+  SELECT a.id INTO v_active_id FROM public.rides a
+   WHERE a.driver_id = v_dp.id
+     AND a.status IN ('accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination')
+     AND a.id <> p_ride_id
+   LIMIT 1;
+  IF v_active_id IS NOT NULL THEN
+    RETURN jsonb_build_object('error', 'busy', 'active_ride_id', v_active_id);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.service_type_configs WHERE slug = v_ride.service_type AND is_active) THEN
+    RETURN jsonb_build_object('error', 'service_config_missing');
+  END IF;
+
+  v_afford := public.driver_can_afford_commission(v_dp.id, v_ride.estimated_fare_cup);
+  IF NOT COALESCE((v_afford->>'ok')::boolean, true) THEN
+    RETURN jsonb_build_object('error', 'insufficient_balance',
+      'balance_trc', (v_afford->>'balance_trc')::int, 'required_trc', (v_afford->>'required_trc')::int);
+  END IF;
+
+  BEGIN
+    UPDATE public.rides
+       SET driver_id              = v_dp.id,
+           status                 = 'accepted',
+           accepted_at            = now(),
+           driver_custom_rate_cup = v_dp.custom_per_km_rate_cup
+     WHERE id = p_ride_id AND status = 'searching';
+  EXCEPTION WHEN unique_violation THEN
+    -- rides_one_active_per_driver: the driver took another ride a moment ago.
+    RETURN jsonb_build_object('error', 'busy', 'race', true);
+  END;
+
+  UPDATE public.ride_offers SET status = 'accepted', responded_at = now()
+   WHERE ride_id = p_ride_id AND driver_profile_id = v_dp.id AND status = 'pending';
+  UPDATE public.ride_offers SET status = 'superseded', responded_at = now()
+   WHERE ride_id = p_ride_id AND driver_profile_id <> v_dp.id AND status = 'pending';
+  UPDATE public.ride_service_proposals SET status = 'superseded', responded_at = now()
+   WHERE ride_id = p_ride_id AND status = 'pending';
+
+  INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values, reason)
+  VALUES (v_admin, 'support_assign_ride', 'ride', p_ride_id::text,
+          jsonb_build_object('status', 'searching'),
+          jsonb_build_object('status', 'accepted', 'driver_profile_id', v_dp.id),
+          v_reason);
+
+  -- The driver's push. Category system is always delivered; send-push overwrites data.type with
+  -- the category, so the event travels in data.event. Driver apps from 1.7.4 load the trip when
+  -- it arrives; older ones load it when the app comes back to the foreground.
+  v_key := public.get_service_role_key();
+  IF v_key IS NOT NULL AND v_key <> '' THEN
+    PERFORM public.cron_http_post('support-assign-push',
+      url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
+      headers := jsonb_build_object('Content-Type', 'application/json',
+                                    'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
+      body    := jsonb_build_object(
+        'user_id', v_dp.user_id::text,
+        'title', 'Soporte te asignó un viaje',
+        'body', 'Recogida: ' || left(COALESCE(v_ride.pickup_address, '—'), 60)
+                || ' · ' || COALESCE(v_ride.estimated_fare_cup, 0) || ' CUP. Abre la app.',
+        'category', 'system',
+        'data', jsonb_build_object('event', 'ride_assigned', 'ride_id', p_ride_id::text)));
+  END IF;
+
+  RETURN jsonb_build_object('success', true, 'ride_id', p_ride_id, 'driver_profile_id', v_dp.id);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_assign_ride_to_driver(uuid, uuid, text) TO authenticated, service_role;
