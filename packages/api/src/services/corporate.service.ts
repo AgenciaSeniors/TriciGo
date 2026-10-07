@@ -16,12 +16,36 @@ import type {
 import { logger } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { fleetService } from './fleet.service';
+import { readCorporateBalance } from './_corporate-balance';
 
 // PostgREST's signal that the database does not have the RPC. A generic
 // Postgres "function ... does not exist" (42883) is deliberately not matched:
 // it can come from inside the RPC body, and must surface.
 function isMissingFunctionError(error: { code?: string; message?: string }): boolean {
   return error.code === 'PGRST202' || /could not find the function/i.test(error.message ?? '');
+}
+
+/**
+ * Every employee row of the company, active and former, newest first, with
+ * each user's name and phone, through get_corporate_employees (00624): users
+ * is own-or-admin, so a direct users(...) embed hides everyone else's name
+ * from a company admin. Returns null when the function is not there yet or
+ * the caller is not an admin of the company; callers then read what RLS lets
+ * them see.
+ */
+async function listCompanyEmployees(accountId: string): Promise<CorporateEmployeeWithUser[] | null> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc('get_corporate_employees', { p_account_id: accountId });
+  if (error) {
+    if (isMissingFunctionError(error) || error.code === '42501') return null;
+    throw error;
+  }
+  return ((data ?? []) as Array<CorporateEmployee & { full_name: string | null; phone: string | null }>).map(
+    ({ full_name, phone, ...employee }) => ({
+      ...employee,
+      users: { full_name: full_name ?? '', phone: phone ?? '' },
+    }),
+  );
 }
 
 export const corporateService = {
@@ -231,13 +255,12 @@ export const corporateService = {
   ): Promise<CorporateEmployee> {
     const supabase = getSupabaseClient();
 
-    // Lookup user by phone
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('phone', userPhone)
-      .single();
-    if (userError || !user) throw new Error('USER_NOT_FOUND');
+    // The account that confirmed this number by SMS (00599). users is
+    // own-or-admin, so reading users.phone from here never found anyone.
+    const { data: found, error: findError } = await supabase.rpc('find_user_by_phone', { p_phone: userPhone });
+    if (findError) throw findError;
+    const user = (Array.isArray(found) ? found[0] : found) as { id?: string } | null | undefined;
+    if (!user?.id) throw new Error('USER_NOT_FOUND');
 
     const { data, error } = await supabase
       .from('corporate_employees')
@@ -271,6 +294,11 @@ export const corporateService = {
     page = 0,
     pageSize = 20,
   ): Promise<CorporateEmployeeWithUser[]> {
+    const listed = await listCompanyEmployees(accountId);
+    if (listed) {
+      return listed.filter((e) => e.is_active).slice(page * pageSize, (page + 1) * pageSize);
+    }
+
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('corporate_employees')
@@ -459,15 +487,20 @@ export const corporateService = {
       .lte('created_at', end);
     if (error) throw error;
 
-    // Fetch employees for this account to get names
-    const { data: employees } = await supabase
-      .from('corporate_employees')
-      .select('user_id, users(full_name, phone)')
-      .eq('corporate_account_id', accountId);
+    // Employee names, former employees included (they may have rides)
+    let employees: Array<{ user_id: string; users: { full_name: string; phone: string } | null }> | null =
+      await listCompanyEmployees(accountId);
+    if (!employees) {
+      const { data } = await supabase
+        .from('corporate_employees')
+        .select('user_id, users(full_name, phone)')
+        .eq('corporate_account_id', accountId);
+      employees = (data ?? []) as unknown as typeof employees;
+    }
 
     const empMap = new Map<string, { name: string; phone: string }>();
     for (const emp of employees ?? []) {
-      const u = emp.users as unknown as { full_name: string; phone: string } | null;
+      const u = emp.users;
       empMap.set(emp.user_id, {
         name: u?.full_name || 'Sin nombre',
         phone: u?.phone || '',
@@ -543,16 +576,22 @@ export const corporateService = {
     return count ?? 0;
   },
 
+  /**
+   * The available balance of the wallet that funds the company (its
+   * creator's corporate_cash). Only the company's admins may read it: anyone
+   * else, and any failure, gets 0, so a screen opened by a plain employee
+   * still loads.
+   */
   async getCorporateBalance(accountId: string): Promise<number> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('wallet_accounts')
-      .select('balance')
-      .eq('user_id', accountId)
-      .eq('account_type', 'corporate_cash')
-      .single();
-    if (error) return 0;
-    return data?.balance ?? 0;
+    try {
+      return (await readCorporateBalance(accountId)).available;
+    } catch (error) {
+      logger.warn('corporate_balance_unavailable', {
+        accountId,
+        error: String((error as { message?: string } | null)?.message ?? error),
+      });
+      return 0;
+    }
   },
 
   // ─────────────────────────── Client Request Flow (00235) ───────────────────────────

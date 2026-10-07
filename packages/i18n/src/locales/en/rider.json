@@ -619,7 +619,9 @@
     "allowed_services": "Allowed services",
     "allowed_hours": "Allowed hours",
     "contact": "Contact",
-    "policy_exceeded": "This ride exceeds your company's policies"
+    "policy_exceeded": "This ride exceeds your company's policies",
+    "employee_not_found": "There is no TriciGo account with that confirmed phone number.",
+    "employee_exists": "That person is already an employee of this company."
   },
 
   "lost_found": {
