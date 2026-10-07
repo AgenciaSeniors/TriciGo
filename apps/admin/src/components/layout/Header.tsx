@@ -19,6 +19,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   '': 'Pulso general',
   drivers: 'Conductores',
   rides: 'Viajes',
+  assist: 'Asistir',
   users: 'Pasajeros',
   wallet: 'Billeteras',
   incidents: 'Incidentes',
