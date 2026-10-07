@@ -2215,6 +2215,27 @@ GROUP BY v.id, v.driver_id, v.document_type, v.storage_path, v.verified_at;
 
 ---
 
+### Soporte asistido (00628): qué cambió en funciones vivas y cómo se diagnostica (aplicada 2026-10-07)
+
+Cuando el despacho no encuentra conductor, soporte ayuda desde el panel: banner con sonido en todo el admin, push a los admins y un resumen por correo cuando un viaje lleva más de 60 s buscando o el pasajero toca "Pedir ayuda"; página `/rides/[id]/assist` para mandar una oferta, asignar directo o cambiar el tipo de vehículo. Diseño: `docs/superpowers/specs/2026-10-07-support-assisted-matching-design.md`. Aplicada por MCP (`20261007210630`) y verificada función por función contra el ensayo local (22/22 md5 iguales).
+
+- **Parcheó tres funciones vivas. Un `CREATE OR REPLACE` futuro de cualquiera tiene que partir del cuerpo vivo y conservar el cambio**, o se pierde en silencio (la clase de 00124):
+  - `tg_rides_create_estimate_snapshot`: su cuerpo pasó a `_write_ride_estimate_snapshot(p_ride, p_replace)`, que también usa el cambio de tipo. md5 tras 00628: `cf0cdf98…/324`.
+  - `tg_rides_validate_promo_discount`: el bypass de super_admin no salta el recálculo mientras la transacción tenga `app.force_discount_recompute = '1'` (solo lo pone `_apply_ride_service_change`). Sin eso, un cambio de tipo aplicado por un super_admin cobraría el descuento viejo. md5: `ae9f33f1…/7877`.
+  - `cleanup_orphan_searching_rides`: no cancela por abandono un viaje cuyo pasajero pidió ayuda en los últimos `support_help_keepalive_s` (1800 s), porque "Pedir ayuda" lo manda a WhatsApp y la app deja de refrescar la búsqueda. md5: `51caf5f3…/992`.
+- **Ajustes** (`platform_config`, con texto de ayuda en el admin): `support_alert_after_s` (60), `support_offer_ttl_s` (120), `support_proposal_ttl_s` (180), `support_help_keepalive_s` (1800), `support_alert_enabled` (apaga solo el push de espera; un pedido de ayuda siempre avisa) y `support_alert_email`, que arrancó como copia de `business_notification_email` (5 direcciones). Vaciarlo apaga el correo.
+- **Diagnóstico de avisos.** Todo sale por `cron_http_post`: `support-help-alert`, `support-wait-alert` (push a admins), `support-alert-email` (resumen) y `support-assign-push` (push al conductor asignado). Un fallo antes del HTTP deja `rpc_attempt_log` con `alert_failed` (o `push_failed` en la asignación); un pasajero con 3 avisos de ayuda en la última hora queda `help_alert_capped`.
+  ```sql
+  SELECT c.jobname, r.status_code, c.called_at FROM cron_http_calls c
+  LEFT JOIN net._http_response r ON r.id = c.request_id
+  WHERE c.jobname LIKE 'support-%' ORDER BY c.called_at DESC LIMIT 20;
+  ```
+- **Una prueba con cuenta de prueba llega a conductores reales**: `dispatch_ride` y `find_best_drivers` no miran `is_test`. El push de espera sí saltea cuentas de prueba, y el banner las muestra marcadas "Prueba".
+- **`dispatch_ride` lo llama `_apply_ride_service_change` (SECURITY DEFINER, dueño `postgres`)**, así que 00630, que les quitó EXECUTE a los clientes, no lo afecta. Medido en prod con las dos aplicadas: `authenticated` ya no puede ejecutar `dispatch_ride`, su dueño sí, y las 6 funciones que lo llaman (`_apply_ride_service_change` incluida) son SECURITY DEFINER con dueño `postgres`.
+- **Verificar que una migración larga llegó intacta por MCP**: en el ensayo en prod se agregó al bloque final `md5(substring(current_query() FROM <inicio> FOR <largo>))`, que mide el texto que recibió el servidor, y se comparó con el md5 del archivo. Coincidió; si no coincide, algo se transcribió mal antes de que corra nada.
+
+---
+
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
 Un canal **público** de Realtime no pasa por ninguna regla: cualquiera con sesión que sepa el nombre puede unirse, leer los broadcasts y la presencia, y mandar mensajes. Las reglas de `realtime.messages` solo se aplican a los canales **privados** (`{ config: { private: true } }`). Un canal privado y uno público con el mismo nombre no se cruzan: lo que se manda en uno nunca llega al otro.
