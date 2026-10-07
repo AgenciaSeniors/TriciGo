@@ -2342,3 +2342,50 @@ describe('createRide — corporate rejections reach the rider in Spanish (00625)
     await expect(rideService.createRide(BASE)).rejects.toThrow('createRide failed: duplicate key value');
   });
 });
+
+describe('createRide — a fare above the tariff ceiling (00631)', () => {
+  const BASE = {
+    service_type: 'auto_standard' as const,
+    payment_method: 'cash' as const,
+    pickup_latitude: 23.1352,
+    pickup_longitude: -82.3599,
+    pickup_address: 'Capitolio',
+    dropoff_latitude: 23.1375,
+    dropoff_longitude: -82.3964,
+    dropoff_address: 'Hotel Nacional',
+    estimated_fare_cup: 900000,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+  });
+
+  it("is shown with the server's Spanish message and a stable code", async () => {
+    mockFrom.mockReturnValue({
+      insert: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: null,
+            error: {
+              code: 'P0001',
+              message: 'No pudimos confirmar el precio de este viaje. Vuelve a calcularlo e inténtalo de nuevo.',
+              details: 'fare_above_ceiling',
+              hint: 'estimated_fare_cup 900000 is above the ceiling 30000 for auto_standard',
+            },
+          }),
+        }),
+      }),
+    });
+    const err = await rideService.createRide(BASE).then(
+      () => { throw new Error('createRide did not reject'); },
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).message).toBe(
+      'No pudimos confirmar el precio de este viaje. Vuelve a calcularlo e inténtalo de nuevo.',
+    );
+    expect((err as AppError).code).toBe('FARE_ABOVE_CEILING');
+    expect((err as AppError).statusCode).toBe(400);
+  });
+});
