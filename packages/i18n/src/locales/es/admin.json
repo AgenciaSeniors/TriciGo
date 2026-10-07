@@ -2483,10 +2483,17 @@
     "error_driver_not_approved": "El conductor todavía no está aprobado.",
     "error_reason_required": "Escribe el motivo.",
     "error_fare_below_minimum": "El precio es menor que la tarifa mínima de ese tipo.",
-    "error_fare_out_of_range": "El precio parece un error: es más de 5 veces el actual.",
+    "error_fare_out_of_range": "El precio parece un error: es más de 5 veces el actual (o el mínimo de ese tipo, si es mayor).",
     "error_too_many_passengers": "Ese vehículo no lleva tantos pasajeros.",
     "error_same_service_type": "El viaje ya es de ese tipo.",
     "error_service_type_unavailable": "Ese tipo de vehículo no está disponible.",
+    "error_offer_already_accepted": "Este conductor ya había aceptado este viaje. Usa «Asignar directo».",
+    "error_driver_inactive": "La cuenta de este conductor está desactivada.",
+    "error_rider_balance_too_low": "El saldo TriciCoin del pasajero no alcanza para ese precio (necesita 1,2 veces la tarifa).",
+    "error_split_not_supported": "El viaje tiene la tarifa dividida con otras personas: no se puede cambiar el tipo.",
+    "error_payment_method_not_supported": "Con este método de pago no se puede cambiar el tipo del viaje.",
+    "error_scheduled_not_due": "Es un viaje programado para más adelante: todavía no se puede asistir.",
+    "error_invalid_service_type": "Elige un tipo de vehículo.",
     "error_forbidden": "No tienes permiso para esto.",
     "error_generic": "No se pudo completar la acción."
   }

@@ -2483,10 +2483,17 @@
     "error_driver_not_approved": "The driver is not approved yet.",
     "error_reason_required": "Write the reason.",
     "error_fare_below_minimum": "The price is below that type's minimum fare.",
-    "error_fare_out_of_range": "The price looks like a mistake: it is more than 5 times the current one.",
+    "error_fare_out_of_range": "The price looks like a mistake: it is more than 5 times the current one (or that type's minimum, if higher).",
     "error_too_many_passengers": "That vehicle does not carry that many passengers.",
     "error_same_service_type": "The ride is already of that type.",
     "error_service_type_unavailable": "That vehicle type is not available.",
+    "error_offer_already_accepted": "This driver had already accepted this ride. Use \"Assign directly\".",
+    "error_driver_inactive": "This driver's account is deactivated.",
+    "error_rider_balance_too_low": "The rider's TriciCoin balance does not cover that price (it needs 1.2 times the fare).",
+    "error_split_not_supported": "The ride's fare is split with other people: its type cannot be changed.",
+    "error_payment_method_not_supported": "The vehicle type cannot be changed with this payment method.",
+    "error_scheduled_not_due": "This ride is scheduled for later: it cannot be assisted yet.",
+    "error_invalid_service_type": "Choose a vehicle type.",
     "error_forbidden": "You do not have permission for this.",
     "error_generic": "The action could not be completed."
   }
