@@ -32,7 +32,7 @@ const db = vi.hoisted(() => ({
 
 vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
   // A query builder that records each step and resolves like PostgREST with no rows,
-  // except the full_name lookup on users, which returns db.fullName.
+  // except a users select that asks for full_name, which returns db.fullName.
   function query(table: string) {
     let selected = '';
     const q: Record<string, unknown> = {};
@@ -43,7 +43,7 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
     };
     for (const op of ['select', 'ilike', 'eq', 'delete', 'insert', 'update']) q[op] = step(op);
     const result = () =>
-      table === 'users' && selected === 'full_name'
+      table === 'users' && selected.includes('full_name')
         ? { data: { full_name: db.fullName }, error: null }
         : { data: null, error: null };
     q.maybeSingle = async () => result();
@@ -174,11 +174,25 @@ describe('add-email-with-verification', () => {
 
   it('counts the IP bucket before reading the body, so taken-address probes are capped too', async () => {
     buckets('add-email-ip:');
+    const req = addEmail({}, 'not-an-email');
 
-    const res = await handler(addEmail({}, 'not-an-email'));
+    const res = await handler(req);
 
     expect(res.status).toBe(429);
+    expect(req.bodyUsed).toBe(false);
     expect(db.calls).toHaveLength(0);
+  });
+
+  it('puts a request without x-forwarded-for in one shared bucket, and still enforces it', async () => {
+    buckets('add-email-ip:unknown');
+    const req = addEmail();
+    req.headers.delete('x-forwarded-for');
+
+    const res = await handler(req);
+
+    expect(limiter.rateLimit).toHaveBeenCalledWith('add-email-ip:unknown', 10, 3_600_000);
+    expect(res.status).toBe(429);
+    expect(relay).not.toHaveBeenCalled();
   });
 
   it('does not count a request without a session against the IP bucket', async () => {

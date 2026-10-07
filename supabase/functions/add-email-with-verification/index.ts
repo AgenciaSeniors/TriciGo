@@ -74,8 +74,10 @@ Deno.serve(async (req) => {
     // And per client IP, 10 an hour. Accounts are cheap (GoTrue's /signup is open
     // with autoconfirm), so the per-user cap alone does not bound how many
     // verification e-mails a caller can send to addresses of its choosing.
-    // send-email's 10-per-minute bucket on its caller's IP used to cap this relay
-    // by accident: every Edge Function reaches it from the same few egress IPs.
+    // send-email's 10-per-minute bucket on its caller's IP used to throttle this
+    // relay as a side effect: it counted the Edge Function's egress IP, which other
+    // functions share. A weak brake (156 distinct egress IPs reached send-email
+    // between June and October), but the only one on the number of addresses.
     // Since #1097 send-email does not count calls that carry the service key, so
     // the limit lives here, keyed on the end user's IP. Counted after the session check
     // and before the body is read, so it also caps "email_already_taken" probes.
