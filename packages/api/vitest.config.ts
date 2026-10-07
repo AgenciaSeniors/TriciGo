@@ -11,11 +11,14 @@ export default defineConfig({
       // with no Deno or remote imports, so they run here unmodified — and the backend
       // service layer is the closest thing they have to a home.
       // NOTE: an EF index.ts usually imports from https:// URLs and touches Deno.*,
-      // which vitest cannot resolve. send-email is the exception below.
+      // which vitest cannot resolve. The handlers below are the exceptions.
       '../../supabase/functions/_shared/**/*.test.ts',
       // send-email's handler: its only remote import (supabase-js, inside
       // _shared/rate-limiter.ts) is replaced with vi.mock, and the test stubs Deno.
       '../../supabase/functions/send-email/*.test.ts',
+      // add-email-with-verification's handler: same, plus its own esm.sh import of
+      // supabase-js, which the test also replaces with vi.mock.
+      '../../supabase/functions/add-email-with-verification/*.test.ts',
     ],
   },
 });
