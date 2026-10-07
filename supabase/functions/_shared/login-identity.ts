@@ -58,3 +58,15 @@ export function phoneConflictsWithAccount(
   const account = digits(accountPhone ?? '');
   return !account || account !== digits(loginPhone) || !accountPhoneConfirmedAt;
 }
+
+/**
+ * True while GoTrue's ban on the account has not ended. The admin panel bans
+ * a blocked account (admin_set_user_active, 00629); verify-otp checks this
+ * before minting a session so the person gets a clear "blocked" answer
+ * instead of a failed sign-in (GoTrue would refuse the password grant).
+ */
+export function isAccountBanned(bannedUntil: string | null | undefined, now: Date = new Date()): boolean {
+  if (!bannedUntil) return false;
+  const until = Date.parse(bannedUntil);
+  return Number.isFinite(until) && until > now.getTime();
+}

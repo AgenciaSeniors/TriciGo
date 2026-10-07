@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockQueryChain } from './helpers/mockSupabase';
+import { getErrorMessage } from '@tricigo/utils';
 
 // Mock the Supabase client — default to a full chainable
 const mockFrom = vi.fn(() => createMockQueryChain());
@@ -530,24 +531,103 @@ describe('adminService', () => {
     });
   });
 
+  // The panel used to write users.level / users.is_active with a plain UPDATE.
+  // users has no admin UPDATE policy, so PostgREST touched 0 rows and the page
+  // still said it worked; and is_active alone never stopped a login. Both go
+  // through audited RPCs now (00629).
   describe('updateUserLevel', () => {
-    it('updates user level', async () => {
-      const chain = createMockQueryChain({ data: null, error: null });
-      mockFrom.mockReturnValueOnce(chain);
+    it('calls admin_set_user_level', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { user_id: 'u-1', level: 'oro', previous_level: 'bronce' },
+        error: null,
+      });
 
       await adminService.updateUserLevel('u-1', 'oro');
 
-      expect(mockFrom).toHaveBeenCalledWith('users');
-      expect(chain.update).toHaveBeenCalledWith({ level: 'oro' });
-      expect(chain.eq).toHaveBeenCalledWith('id', 'u-1');
+      expect(mockRpc).toHaveBeenCalledWith('admin_set_user_level', { p_user_id: 'u-1', p_level: 'oro' });
+      expect(mockFrom).not.toHaveBeenCalled();
     });
 
-    it('throws on supabase error', async () => {
-      const err = { message: 'Update failed', code: '42P01' };
-      const chain = createMockQueryChain({ data: null, error: err });
-      mockFrom.mockReturnValueOnce(chain);
+    it('surfaces the server message when the caller is not a super admin', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: '42501',
+          message: 'Solo un super admin puede cambiar el nivel de una cuenta.',
+          details: 'not_super_admin',
+        },
+      });
 
-      await expect(adminService.updateUserLevel('u-1', 'plata')).rejects.toEqual(err);
+      await expect(adminService.updateUserLevel('u-1', 'plata')).rejects.toMatchObject({
+        code: 'not_super_admin',
+        message: 'Solo un super admin puede cambiar el nivel de una cuenta.',
+      });
+    });
+  });
+
+  describe('toggleUserActive', () => {
+    it('blocks through admin_set_user_active with the reason', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { user_id: 'u-1', is_active: false, sessions_closed: 2 },
+        error: null,
+      });
+
+      const res = await adminService.toggleUserActive('u-1', false, 'Fraude');
+
+      expect(mockRpc).toHaveBeenCalledWith('admin_set_user_active', {
+        p_user_id: 'u-1',
+        p_active: false,
+        p_reason: 'Fraude',
+      });
+      expect(res).toEqual({ isActive: false, sessionsClosed: 2 });
+      // The function writes the audit row itself.
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('unblocks without a reason', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { user_id: 'u-1', is_active: true, sessions_closed: 0 },
+        error: null,
+      });
+
+      const res = await adminService.toggleUserActive('u-1', true);
+
+      expect(mockRpc).toHaveBeenCalledWith('admin_set_user_active', {
+        p_user_id: 'u-1',
+        p_active: true,
+        p_reason: null,
+      });
+      expect(res).toEqual({ isActive: true, sessionsClosed: 0 });
+    });
+
+    it('surfaces the server message and its code', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: '42501',
+          message: 'Solo un super admin puede bloquear o desbloquear a otro administrador.',
+          details: 'target_is_staff',
+        },
+      });
+
+      const err = await adminService.toggleUserActive('u-2', false, 'x').catch((e: unknown) => e);
+      expect(err).toMatchObject({
+        code: 'target_is_staff',
+        message: 'Solo un super admin puede bloquear o desbloquear a otro administrador.',
+      });
+      // What the panel's toast shows: the server message, not "Sesión expirada".
+      expect(getErrorMessage(err)).toBe('Solo un super admin puede bloquear o desbloquear a otro administrador.');
+    });
+
+    it('says the database is not updated yet when the function is missing', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST202', message: 'Could not find the function public.admin_set_user_active', details: null },
+      });
+
+      const err = await adminService.toggleUserActive('u-1', false, 'x').catch((e: unknown) => e);
+      expect(err).toMatchObject({ code: 'RPC_MISSING' });
+      expect(getErrorMessage(err)).toMatch(/todavía no tiene esta función/);
     });
   });
 

@@ -108,7 +108,9 @@ export default function VerifyOTPScreen() {
               ? t('auth.otp_incorrect', { defaultValue: 'Código incorrecto. Revisa los dígitos.' })
               : reason === 'too_many_attempts'
                 ? t('auth.otp_too_many', { defaultValue: 'Demasiados intentos. Pide un código nuevo.' })
-                : t('errors.generic'),
+                : reason === 'account_blocked'
+                  ? t('auth.account_blocked')
+                  : t('errors.generic'),
         );
       }
     } finally {

@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
-import { phoneConflictsWithAccount } from '../_shared/login-identity.ts';
+import { isAccountBanned, phoneConflictsWithAccount } from '../_shared/login-identity.ts';
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -183,11 +183,13 @@ Deno.serve(async (req) => {
       // unconfirmed (signup is open). Fail closed if the account can't be read.
       let accountPhone: string | null | undefined;
       let accountPhoneConfirmedAt: string | null | undefined;
+      let accountBannedUntil: string | null | undefined;
       try {
         const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(userId);
         if (getErr || !existing?.user) throw getErr ?? new Error('user not found');
         accountPhone = existing.user.phone;
         accountPhoneConfirmedAt = existing.user.phone_confirmed_at;
+        accountBannedUntil = existing.user.banned_until;
       } catch (e) {
         console.error('getUserById before login failed:', e);
         return new Response(
@@ -203,6 +205,19 @@ Deno.serve(async (req) => {
             reason: 'account_conflict',
           }),
           { status: 409, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+        );
+      }
+      // Blocked from the admin panel (00629). Without this the password heal
+      // below would rewrite the password and the sign-in would still fail,
+      // ending in a generic 500.
+      if (isAccountBanned(accountBannedUntil)) {
+        console.warn(`verify-otp: account ${userId} is blocked; refusing login`);
+        return new Response(
+          JSON.stringify({
+            error: 'This account is blocked. Contact support.',
+            reason: 'account_blocked',
+          }),
+          { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
         );
       }
       // The account already has this phone (checked above), so nothing to write:
