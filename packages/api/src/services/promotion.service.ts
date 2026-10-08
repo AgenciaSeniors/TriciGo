@@ -28,6 +28,11 @@ export interface Promotion {
    * Still fully redeemable by whoever was given the code.
    */
   is_public: boolean;
+  /** 00641: true while a promotion marketing created or edited waits for an admin to turn it on. */
+  pending_approval?: boolean;
+  /** 00641: the admin who turned it on, and when. */
+  approved_by?: string | null;
+  approved_at?: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -37,7 +42,7 @@ export interface Promotion {
 // so no admin-created promo had an author on record).
 export type CreatePromotionInput = Omit<
   Promotion,
-  'id' | 'current_uses' | 'created_at' | 'created_by'
+  'id' | 'current_uses' | 'created_at' | 'created_by' | 'pending_approval' | 'approved_by' | 'approved_at'
 >;
 
 /**
@@ -152,5 +157,23 @@ export const promotionService = {
       .delete()
       .eq('id', id);
     if (error) throw error;
+  },
+
+  /**
+   * How many promotions marketing left waiting for an admin (00641). 0 when the column does
+   * not exist yet or the query fails: it only drives a menu dot and a notice.
+   */
+  async countPendingApproval(): Promise<number> {
+    try {
+      const supabase = getSupabaseClient();
+      const { count, error } = await supabase
+        .from('promotions')
+        .select('id', { count: 'exact', head: true })
+        .eq('pending_approval', true);
+      if (error) return 0;
+      return count ?? 0;
+    } catch {
+      return 0;
+    }
   },
 };
