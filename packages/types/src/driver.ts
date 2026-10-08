@@ -222,7 +222,12 @@ export interface DriverPeakHourCell {
   trip_count: number;
 }
 
-/** Nearby vehicle for map display (returned by find_nearby_vehicles RPC) */
+/**
+ * Nearby vehicle for map display (returned by find_nearby_vehicles RPC).
+ * Since 00645 the position is approximate (a point inside the vehicle's real
+ * cell of about 220 x 205 m) and `driver_profile_id` is an opaque id that
+ * changes every hour: use it as a marker key, never to look a driver up.
+ */
 export interface NearbyVehicle {
   driver_profile_id: string;
   latitude: number;

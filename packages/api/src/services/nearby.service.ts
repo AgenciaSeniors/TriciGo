@@ -9,7 +9,10 @@ import { getSupabaseClient } from '../client';
 export const nearbyService = {
   /**
    * Find nearby available vehicles for map display.
-   * Uses the find_nearby_vehicles RPC (PostGIS proximity query).
+   * Uses the find_nearby_vehicles RPC (PostGIS proximity query). Signed-in
+   * callers only; the server caps the radius at 5 km and the count at 50,
+   * leaves out the caller's own vehicle and returns approximate positions
+   * with hourly opaque ids (00645).
    */
   async findNearbyVehicles(params: {
     lat: number;

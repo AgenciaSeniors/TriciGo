@@ -11,8 +11,9 @@ interface UseNearbyDriversArgs {
   center: { lat: number; lng: number } | null;
   /** Gate — typically `isOnline && !hasActiveRide`. */
   enabled: boolean;
-  /** Own driver_profile.id — excluded from results so the driver
-   *  doesn't see themselves next to their own live marker. */
+  /** Own driver_profile.id. The server already leaves the caller's own
+   *  vehicle out (00645) and returns opaque ids, so this filter only matters
+   *  against a database without that migration. */
   myDriverProfileId: string | null;
 }
 
