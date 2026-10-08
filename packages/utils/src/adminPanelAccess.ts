@@ -8,9 +8,11 @@
  * Imported as `@tricigo/utils/adminPanelAccess` so the middleware does not load the utils barrel.
  * Spec: docs/superpowers/specs/2026-10-08-marketing-role-design.md
  */
-export type PanelRole = 'admin' | 'super_admin' | 'marketing';
+// Keep in sync with supabase/functions/_shared/panel-roles.ts (isPanelStaffRole): Edge Functions
+// run in Deno and cannot import @tricigo/utils.
+const PANEL_ROLES = ['admin', 'super_admin', 'marketing'] as const;
 
-const PANEL_ROLES: readonly string[] = ['admin', 'super_admin', 'marketing'];
+export type PanelRole = (typeof PANEL_ROLES)[number];
 
 /** The pages marketing may open. Each one also covers its sub-pages. */
 export const MARKETING_ROUTES: readonly string[] = [
@@ -30,7 +32,7 @@ export const MARKETING_ROUTES: readonly string[] = [
 export const MARKETING_HOME = '/launch-pulse';
 
 export function isPanelRole(role: unknown): role is PanelRole {
-  return typeof role === 'string' && PANEL_ROLES.includes(role);
+  return typeof role === 'string' && (PANEL_ROLES as readonly string[]).includes(role);
 }
 
 /** The role the menus use. When the role could not be read: the least privileged one. */

@@ -12,6 +12,8 @@
 //
 // Spec: docs/superpowers/specs/2026-10-08-marketing-role-design.md
 // Pure module: no remote imports, so packages/api's vitest runs it unmodified.
+// Keep the panel roles in sync with packages/utils/src/adminPanelAccess.ts (PANEL_ROLES), which
+// Deno cannot import.
 // ============================================================
 
 /** The push categories marketing's pages send. */
