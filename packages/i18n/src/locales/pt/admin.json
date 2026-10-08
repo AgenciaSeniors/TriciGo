@@ -38,7 +38,9 @@
   },
   "header": {
     "light_mode": "Modo claro",
-    "dark_mode": "Modo escuro"
+    "dark_mode": "Modo escuro",
+    "role_admin": "Administrador",
+    "role_marketing": "Marketing"
   },
   "notifications_bell": {
     "aria": "Novidades",
@@ -541,7 +543,8 @@
     "empty_filtered_body": "Tente limpar os filtros ou mudar de aba.",
     "empty_filtered_action": "Limpar filtros",
     "empty_zero_title": "Sem usuários ainda",
-    "empty_zero_body": "Quando alguém se registrar, aparecerá aqui."
+    "empty_zero_body": "Quando alguém se registrar, aparecerá aqui.",
+    "role_marketing": "Marketing"
   },
   "wallet_admin": {
     "title": "Créditos de viagem",
@@ -875,7 +878,17 @@
     "inactive_label": "Inativa",
     "confirm_delete": "Excluir a promoção \"{{code}}\"?",
     "error_creating": "Erro ao criar promoção",
-    "error_deleting": "Erro ao excluir"
+    "error_deleting": "Erro ao excluir",
+    "status_pending": "Aguardando aprovação",
+    "action_approve": "Aprovar e ativar",
+    "action_pause": "Pausar",
+    "pending_strip": "Promoções aguardando aprovação: {{count}}",
+    "pending_dot": "Há promoções aguardando aprovação",
+    "marketing_review_note": "É salva desativada. Um administrador revisa e ativa.",
+    "toast_sent_for_approval": "Salva. Um administrador revisa e ativa.",
+    "marketing_edit_active": "Pause a promoção para editá-la.",
+    "already_paused": "Esta promoção já está pausada.",
+    "marketing_notify_inactive": "Só é possível anunciar uma promoção ativa."
   },
   "service_types": {
     "title": "Tipos de serviço",
