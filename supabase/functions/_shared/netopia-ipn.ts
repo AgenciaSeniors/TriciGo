@@ -23,3 +23,18 @@ export function requeryOrderMismatch(parsed: unknown, orderId: string): boolean 
   if (typeof echoed !== 'string' || !echoed) return false;
   return echoed.trim().toLowerCase() !== orderId.trim().toLowerCase();
 }
+
+/**
+ * NETOPIA's transaction id (ntpID) from a /payment/card/start answer, or null.
+ *
+ * The webhook trusts an IPN only for the intent that stores its ntpID, so an
+ * order whose ntpID was never stored must not reach the payer: the create
+ * functions end the checkout when this is null or the id cannot be saved.
+ */
+export function startNtpId(resp: unknown): string | null {
+  const raw = (resp as { payment?: { ntpID?: unknown } } | null)?.payment?.ntpID;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw);
+  if (typeof raw !== 'string') return null;
+  const id = raw.trim();
+  return id ? id : null;
+}
