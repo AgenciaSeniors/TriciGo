@@ -3287,6 +3287,8 @@ La web y el admin usan React 19, que escapa el texto y bloquea `javascript:` en 
 
 Ensayo: `supabase/tests/00646/run.sh` (RED: 12 fallos; GREEN 25/25, con 2 pruebas negativas y una copia CRLF). Ensayo en prod dentro de un bloque revertido: los cuerpos quedan con los mismos md5 que en el local (`notify_dead_driver_alert` `7dd81bf1…`, `check_stuck_active_rides` `bb84304c…`).
 
+**Estado: 00646 aplicada en prod el 2026-10-08** por MCP (`20261008232943`). Verificado por objeto: los dos cuerpos tienen los md5 de arriba, sin `\r`, y conservan sus permisos (solo `postgres` y `service_role`).
+
 **Pendiente, con motivo:** el sanitizador del blog (`apps/web/src/lib/sanitize.ts`) deja el atributo `style`. No ejecuta código, pero quien escribe un post puede tapar la página con un enlace a otro sitio. Hoy no hay ninguna cuenta de marketing, y quitar `style` puede romper el formato de los 15 posts existentes.
 
 ### Edge Functions: quién puede llamarlas (revisión de las 48 desplegadas, 2026-10-06)
