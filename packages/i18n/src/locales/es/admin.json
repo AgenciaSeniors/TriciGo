@@ -888,7 +888,8 @@
     "toast_sent_for_approval": "Guardada. Un administrador la revisa y la activa.",
     "marketing_edit_active": "Pausa la promoción para editarla.",
     "already_paused": "Esta promoción ya está pausada.",
-    "marketing_notify_inactive": "Solo se puede avisar de una promoción activa."
+    "marketing_notify_inactive": "Solo se puede avisar de una promoción activa.",
+    "changed_since_loaded": "La promoción cambió mientras la revisabas. Revisa la versión nueva antes de activarla."
   },
   "service_types": {
     "title": "Tipos de servicio",
