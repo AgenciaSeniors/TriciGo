@@ -291,6 +291,16 @@ CREATE FUNCTION t.flagged() RETURNS text LANGUAGE sql AS $$
   FROM jsonb_array_elements(public.cron_sql_failures_now()) AS x
 $$;
 
+-- Whether a statement returning jsonb returned (and its "ok") or raised.
+CREATE FUNCTION t.outcome(p_sql text) RETURNS text LANGUAGE plpgsql AS $$
+DECLARE v jsonb;
+BEGIN
+  EXECUTE p_sql INTO v;
+  RETURN 'returned ok=' || COALESCE(v ->> 'ok', 'null');
+EXCEPTION WHEN OTHERS THEN
+  RETURN 'raised: ' || SQLERRM;
+END $$;
+
 -- p_n eligible rides named r1..rN (searching, round 1, last dispatched 2 min ago, no
 -- pending offer), plus two that must be skipped: one with a pending offer, and one
 -- passenger ride in round 0 (the insert trigger dispatches those in prod).

@@ -36,7 +36,7 @@ apply_err(){ local out; if out=$($BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1
              else echo "$out" | tr -d '\r' | grep -m1 ERROR; fi; }
 
 BODY="SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.retry_dispatch_expired_rides()'::regprocedure"
-NEW=8dea4e19ce66addaf1d19a4bbd3757e6
+NEW=12ae559c73b0f583f2fb64a5d971b98e
 R1=00000000-0000-4000-8000-000000000001
 R2=00000000-0000-4000-8000-000000000002
 R3=00000000-0000-4000-8000-000000000003
@@ -77,8 +77,10 @@ val "H2 with no eligible ride the run succeeds and returns 0" \
   "$(txn "CALL t.seed(0); SELECT public.retry_dispatch_expired_rides(); SELECT t.run_job('retry-dispatch-expired-rides');")" \
   "0;succeeded: 1 row"
 val "H3 a failed reactivation push still does not stop the re-dispatch (unchanged behaviour)" \
-  "$(txn "SET LOCAL test.push_fails = '1'; CALL t.seed(3); SELECT public.retry_dispatch_expired_rides(); SELECT t.state();")" \
-  "3;01:2:1,02:2:1,03:2:1,aa:1:1,bb:0:0"
+  "$(txn "SET LOCAL test.push_fails = '1'; CALL t.seed(3);
+          SELECT t.outcome('SELECT to_jsonb(public.notify_offline_drivers_for_searching_rides())');
+          SELECT public.retry_dispatch_expired_rides(); SELECT t.state();")" \
+  "raised: stub: reactivation push failed;3;01:2:1,02:2:1,03:2:1,aa:1:1,bb:0:0"
 
 echo "== one bad ride =="
 # RED: the error escapes, the whole statement rolls back and no ride is re-dispatched.
@@ -98,11 +100,13 @@ val "F3 once only the bad ride is left, each run fails and check_cron_sql_failur
           SELECT t.run_job('retry-dispatch-expired-rides'); SELECT t.run_job('retry-dispatch-expired-rides');
           SELECT t.run_job('retry-dispatch-expired-rides'); SELECT t.run_job('retry-dispatch-expired-rides');
           SELECT '[' || t.flagged() || ']'; SELECT t.state();")" \
-  "succeeded: 1 row;failed: $NONE_PREFIX 1 rides could be re-dispatched, last error: 23514 stub: dispatch_ride failed for ride $R2;failed: $NONE_PREFIX 1 rides could be re-dispatched, last error: 23514 stub: dispatch_ride failed for ride $R2;failed: $NONE_PREFIX 1 rides could be re-dispatched, last error: 23514 stub: dispatch_ride failed for ride $R2;[retry-dispatch-expired-rides];01:2:1,02:1:0,03:2:1,aa:1:1,bb:0:0"
-val "F4 if every eligible ride fails (a broken dispatch_ride), the run fails with the count" \
+  "succeeded: 1 row;failed: $NONE_PREFIX 1 rides could be re-dispatched, last error: ride $R2: 23514 stub: dispatch_ride failed for ride $R2;failed: $NONE_PREFIX 1 rides could be re-dispatched, last error: ride $R2: 23514 stub: dispatch_ride failed for ride $R2;failed: $NONE_PREFIX 1 rides could be re-dispatched, last error: ride $R2: 23514 stub: dispatch_ride failed for ride $R2;[retry-dispatch-expired-rides];01:2:1,02:1:0,03:2:1,aa:1:1,bb:0:0"
+# A failed run rolls back its rpc_attempt_log rows: the run's error text is the record.
+val "F4 if every eligible ride fails (a broken dispatch_ride), the run fails with the count and keeps no log row" \
   "$(txn "SET LOCAL test.poison = '$R1,$R2,$R3'; CALL t.seed(3);
-          SELECT split_part(t.run_job('retry-dispatch-expired-rides'), ', last error', 1); SELECT t.state();")" \
-  "failed: $NONE_PREFIX 3 rides could be re-dispatched;01:1:0,02:1:0,03:1:0,aa:1:1,bb:0:0"
+          SELECT split_part(t.run_job('retry-dispatch-expired-rides'), ', last error', 1); SELECT t.state();
+          SELECT count(*) FROM public.rpc_attempt_log;")" \
+  "failed: $NONE_PREFIX 3 rides could be re-dispatched;01:1:0,02:1:0,03:1:0,aa:1:1,bb:0:0;0"
 
 if [ "$MIG" != "none" ]; then
   echo "== negative proofs: the migration's own guards and checks catch a broken result =="
@@ -133,14 +137,19 @@ PYEOF
   r=$(apply_err ${DB}g "$MIG")
   echo "$r" | grep -q "has a body this migration does not know" && ok "G1 a body that drifted from prod aborts the migration" || ko "G1 a body that drifted from prod aborts the migration" "$r"
 
-  sabotage g2 "c_md5_new  CONSTANT text := '8dea4e19ce66addaf1d19a4bbd3757e6';" "c_md5_new  CONSTANT text := '00000000000000000000000000000000';"
+  sabotage g2 "c_md5_new  CONSTANT text := '12ae559c73b0f583f2fb64a5d971b98e';" "c_md5_new  CONSTANT text := '00000000000000000000000000000000';"
   fresh ${DB}g; r=$(apply_err ${DB}g "$T/g2.sql")
-  echo "$r" | grep -q "was patched to md5 8dea4e19ce66addaf1d19a4bbd3757e6, expected 00000000000000000000000000000000" && ok "G2 a patch that does not produce the expected body aborts the migration" || ko "G2 a patch that does not produce the expected body aborts the migration" "$r"
+  echo "$r" | grep -q "was patched to md5 12ae559c73b0f583f2fb64a5d971b98e, expected 00000000000000000000000000000000" && ok "G2 a patch that does not produce the expected body aborts the migration" || ko "G2 a patch that does not produce the expected body aborts the migration" "$r"
 
   fresh ${DB}g
   $BIN/psql $CONN -d ${DB}g -qAt -c "UPDATE cron.job SET active = false WHERE jobname = 'retry-dispatch-expired-rides'" >/dev/null 2>&1
   r=$(apply_err ${DB}g "$MIG")
   echo "$r" | grep -q "cron job retry-dispatch-expired-rides is missing or inactive" && ok "G3 an inactive job aborts the migration" || ko "G3 an inactive job aborts the migration" "$r"
+
+  fresh ${DB}g
+  $BIN/psql $CONN -d ${DB}g -qAt -c "GRANT EXECUTE ON FUNCTION public.retry_dispatch_expired_rides() TO authenticated" >/dev/null 2>&1
+  r=$(apply_err ${DB}g "$MIG")
+  echo "$r" | grep -q "retry_dispatch_expired_rides is executable by a client role" && ok "G4 a function a client can execute aborts the migration" || ko "G4 a function a client can execute aborts the migration" "$r"
 
   rm -rf "$T"
   $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}g" >/dev/null 2>&1

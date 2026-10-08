@@ -23,9 +23,13 @@
 --     The ride also keeps reaching support through notify_support_waiting_rides
 --     (00628), which alerts on any ride searching for more than 60 s.
 --   * If no ride could be re-dispatched and at least one failed, the run fails
---     with the count and the last error, so check_cron_sql_failures (00596) reports
---     it: that points at dispatch_ride itself, not at one ride. A run with no
---     eligible rides still succeeds and returns 0.
+--     with the count and the last error (with its ride id), so
+--     check_cron_sql_failures (00596) reports it. A run with no eligible rides
+--     still succeeds and returns 0. A failed run rolls back everything it did:
+--     the rpc_attempt_log rows (the error text is then the record) and the
+--     reactivation push of notify_offline_drivers_for_searching_rides, which
+--     goes out on the next run that succeeds. Before 00646 the run rolled back
+--     in those minutes too, and in every minute with a bad ride.
 --   * A statement timeout (query_canceled) is not caught by WHEN OTHERS, so it
 --     still fails the whole run, as before.
 --
@@ -42,14 +46,14 @@ DO $patch$
 DECLARE
   c_fn       CONSTANT text := 'public.retry_dispatch_expired_rides()';
   c_md5_live CONSTANT text := '44da5d968977eadfcec31e0f7dbd959e';
-  c_md5_new  CONSTANT text := '8dea4e19ce66addaf1d19a4bbd3757e6';
+  c_md5_new  CONSTANT text := '12ae559c73b0f583f2fb64a5d971b98e';
   c_old      CONSTANT text[] := ARRAY[
     E'  v_processed   int := 0;\n',
     E'    PERFORM dispatch_ride(r.id);\n    v_processed := v_processed + 1;\n  END LOOP;\n',
     E'  RETURN v_processed;\nEND;\n'];
   c_new      CONSTANT text[] := ARRAY[
     E'  v_processed   int := 0;\n  v_failed      int := 0;\n  v_last_error  text;\n',
-    E'    -- 00646: one ride per subtransaction, so a ride that makes dispatch_ride\n    -- fail does not stop the re-dispatch of the others.\n    BEGIN\n      PERFORM dispatch_ride(r.id);\n      v_processed := v_processed + 1;\n    EXCEPTION WHEN OTHERS THEN\n      v_failed := v_failed + 1;\n      v_last_error := SQLSTATE || '' '' || SQLERRM;\n      RAISE WARNING ''[retry_dispatch] ride % not re-dispatched: %'', r.id, v_last_error;\n      PERFORM log_rpc_attempt(''retry_dispatch_expired_rides'', NULL, r.id, ''dispatch_failed'',\n        jsonb_build_object(''sqlstate'', SQLSTATE, ''error'', SQLERRM));\n    END;\n  END LOOP;\n',
+    E'    -- 00646: one ride per subtransaction, so a ride that makes dispatch_ride\n    -- fail does not stop the re-dispatch of the others.\n    BEGIN\n      PERFORM dispatch_ride(r.id);\n      v_processed := v_processed + 1;\n    EXCEPTION WHEN OTHERS THEN\n      v_failed := v_failed + 1;\n      v_last_error := ''ride '' || r.id || '': '' || SQLSTATE || '' '' || SQLERRM;\n      RAISE WARNING ''[retry_dispatch] not re-dispatched, %'', v_last_error;\n      PERFORM log_rpc_attempt(''retry_dispatch_expired_rides'', NULL, r.id, ''dispatch_failed'',\n        jsonb_build_object(''sqlstate'', SQLSTATE, ''error'', SQLERRM));\n    END;\n  END LOOP;\n',
     E'  -- 00646: if no ride could be re-dispatched, fail the run, so that\n  -- check_cron_sql_failures reports a broken dispatch_ride.\n  IF v_failed > 0 AND v_processed = 0 THEN\n    RAISE EXCEPTION ''retry_dispatch_expired_rides: none of the % rides could be re-dispatched, last error: %'',\n      v_failed, v_last_error;\n  END IF;\n\n  RETURN v_processed;\nEND;\n'];
   v_oid oid;
   v_md5 text;
@@ -96,7 +100,7 @@ DECLARE
   v_src text;
 BEGIN
   SELECT prosrc INTO v_src FROM pg_proc WHERE oid = v_oid;
-  IF md5(v_src) <> '8dea4e19ce66addaf1d19a4bbd3757e6' THEN
+  IF md5(v_src) <> '12ae559c73b0f583f2fb64a5d971b98e' THEN
     RAISE EXCEPTION '00646: retry_dispatch_expired_rides has md5 %', md5(v_src);
   END IF;
   -- The per-ride guard and the reactivation-push guard, nothing else.
