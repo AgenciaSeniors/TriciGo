@@ -8,19 +8,19 @@
 
 **Tech Stack:** PostgreSQL 16 (Supabase), plpgsql, Deno Edge Functions tested with vitest, Next.js 15 admin panel, TypeScript, Tailwind.
 
-**Spec:** `docs/superpowers/specs/2026-10-08-marketing-role-design.md` (read the section "Changes found while planning").
+**Spec:** `docs/superpowers/specs/2026-10-08-marketing-role-design.md` (read the sections "Changes found while planning" and "Changes after review").
+
+**Execution notes (2026-10-08).** Reviews during execution changed the design; the spec's "Changes after review" lists what. Where this plan's task text differs, the code on the branch and the spec win. In particular:
+- The migrations are 00641 (enum) and 00642 (permissions); the rehearsal lives in `supabase/tests/00642`.
+- Marketing reads `panel_rides` / `panel_driver_profiles`, not `rides` / `driver_profiles`. The prod rehearsal in Task 20 must check the views (marketing reads them; direct reads of the base tables return 0 rows; the views have no `share_token` or GPS columns), not `count(*) FROM rides`.
+- Rollout order: Task 20 (apply) runs before Task 19 (merge), then Task 21 (deploy the Edge Functions), then Task 22 (accounts).
 
 ---
 
 ## Ground rules for whoever executes this
 
 - **Branch:** `claude/hopeful-shannon-g3theu`, draft PR AgenciaSeniors/TriciGo#1115. Never push elsewhere.
-- **Commits:** small, English, conventional (`feat:`, `fix:`, `test:`, `docs:`). Every commit message ends with:
-  ```
-  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-  Claude-Session: https://claude.ai/code/session_01EbnC6H75XT6LqrciPs9Gzi
-  ```
-  No model name anywhere else (code, comments, PR text).
+- **Commits:** small, English, conventional (`feat:`, `fix:`, `test:`, `docs:`). Every commit message ends with the attribution trailer lines the session gives (`Co-Authored-By` and `Claude-Session`). No model name anywhere else (code, comments, docs, PR text).
 - **Production:** Tasks 1–18 never write to prod. Reading prod through the Supabase MCP (`execute_sql` with SELECT only) is fine. Tasks 19–22 change prod and each needs the founder's explicit OK in this conversation first, asked with AskUserQuestion. Merging the PR needs its own OK.
 - **Migration numbers:** the plan was written for 00640/00641 (on 2026-10-08 master ended at 00638 and AgenciaSeniors/TriciGo#1117 held 00639). 00640 was then taken on master, so the files were renamed with `git mv` to 00641 (enum) and 00642 (permissions), and every mention in this plan follows. Re-check both right before pushing (Task 18, step 1). If either is taken, renumber the files and every `00641`/`00642` mention; the md5 values in this plan do not contain the number, so they stay valid.
 - **Local Postgres:** the rehearsal cluster of earlier sessions (user `pgtest`, port 5433, datadir `~pgtest/pg627`). If it is not running:

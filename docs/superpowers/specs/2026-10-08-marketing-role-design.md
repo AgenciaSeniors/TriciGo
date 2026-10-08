@@ -57,7 +57,8 @@ New permissions are **added**. No existing policy or grant is loosened for other
 
 | Object | Today | For marketing |
 |---|---|---|
-| `rides`, `users`, `driver_profiles`, `referrals` | SELECT `is_admin()` | New SELECT policy `is_marketing()`. Per the founder, marketing may see personal data. |
+| `users`, `referrals` | SELECT `is_admin()` | New SELECT policy `is_marketing()`. Per the founder, marketing may see personal data. |
+| `rides`, `driver_profiles` | SELECT `is_admin()` | No policy for marketing. It reads the views `panel_rides` and `panel_driver_profiles` instead (see "Changes after review"). |
 | `promotions` | ALL `is_admin()` | New SELECT, INSERT, UPDATE and DELETE policies for `is_marketing()`, plus the draft trigger in §4. |
 | `campaigns` | ALL, `role IN ('admin','super_admin')` hardcoded | New SELECT policy `is_marketing()` and INSERT policy `is_marketing() AND created_by = auth.uid()`. The page only reads and inserts. |
 | `home_announcements` | ALL `is_admin()` | New ALL policy `is_marketing()`. |
@@ -138,6 +139,23 @@ Reading the code and prod for the plan changed these points. None changes a deci
 
 ## Rollout
 
-1. PR. Then, with the founder's OK, merge.
-2. Apply the enum migration, then the permissions migration, each verified by object. Deploy `send-push` and `send-bulk-email`.
-3. Create the marketing accounts one by one, confirming each with the founder.
+Each step needs the founder's OK.
+
+1. Apply 00641 (enum), rehearse 00642 in prod inside a rolled-back transaction, then apply 00642. Both go in before the merge: the admin app deploys on merge and its pages read `panel_rides` / `panel_driver_profiles`. Applying first is safe with today's code: admins keep every capability and no marketing account exists yet.
+2. Merge the PR and confirm the admin deploy.
+3. Deploy `send-push` and `send-bulk-email`.
+4. Create the marketing accounts one by one, confirming each with the founder. Not before steps 2 and 3: the old panel has no approval flow and the old functions refuse marketing.
+
+A `40P01` (deadlock) or `55P03` (lock timeout) while applying 00642 aborts the whole transaction; run it again.
+
+## Changes after review (2026-10-08)
+
+Independent reviews of the implementation changed these points. All are in 00642 and the panel, and the rehearsal (`supabase/tests/00642/run.sh`) covers each with a negative proof.
+
+- **Live tracking and GPS stay hidden (founder's decision).** RLS cannot hide columns, so marketing gets no SELECT on `rides` or `driver_profiles`. Two views carry only what the panel pages use: `panel_rides` (no `share_token`, no locations) and `panel_driver_profiles` (`id`, `user_id`, `is_online`, ride counters; no GPS). They are `security_invoker = false` with `security_barrier` and the gate `WHERE (SELECT is_admin()) OR (SELECT is_marketing())`, so any other role gets 0 rows (anon gets a permission error). The funnel, segments, reports and campaigns pages and the code-performance stats read the views for every role. `count_power_users` reads `panel_rides`. Supabase's `security_definer_view` advisor flags both views; that is expected.
+- **Marketing can ride with a promo code.** The promo claim and the cancel rollback update `promotions` inside SECURITY DEFINER ride triggers with the passenger's JWT. The guard therefore applies the marketing rules only to direct client writes: `current_user IN ('anon', 'authenticated') AND is_marketing()`.
+- **Delete rule.** Marketing may delete a promotion only if it is inactive, unused and referenced by no ride, promotion use or campaign (`promotion_is_referenced`, SECURITY DEFINER, answers only for admins and marketing). Deleting a referenced one would strip the promo and its discount from past rides.
+- **Approval binds to what the admin saw.** `promotions.revision` goes up on every content change. Every admin activation in the panel runs `promotionService.approve(id, revision)`; if the promotion changed meanwhile it matches 0 rows and the panel says so and reloads.
+- **Pending state.** Turning a promotion on clears `pending_approval` for any caller; only an admin stamps `approved_by` / `approved_at`. A marketing write that changes no content (a second "Pausar") leaves `pending_approval` as it was. On an inactive promotion marketing cannot set `notified_at`, so it cannot arm the auto-push of a draft.
+- **Pushes.** `send-push` skips the marketing gate explicitly for internal (service key) calls. A marketing push carries only `deep_link`, `content_type` and `content_id` in `data`, so it cannot trigger ride handling in the apps. The server checks the category, not the recipients: a one-user `announcement` passes. The Notificaciones page stays admin-only through the menu and the middleware.
+- **Panel.** `canOpenPanelPath` opens nothing for a role that is not a panel role. The launch pulse page hides its link to `/incomplete-drivers` for marketing.
