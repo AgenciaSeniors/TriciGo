@@ -20,11 +20,11 @@ import { getErrorMessage } from '@tricigo/utils';
 
 const SECTORS = [
   { id: 'tourism', label: 'Turismo' },
-  { id: 'gastronomy', label: 'Gastronomia' },
+  { id: 'gastronomy', label: 'Gastronomía' },
   { id: 'health', label: 'Salud' },
-  { id: 'education', label: 'Educacion' },
-  { id: 'tech', label: 'Tecnologia' },
-  { id: 'logistics', label: 'Logistica' },
+  { id: 'education', label: 'Educación' },
+  { id: 'tech', label: 'Tecnología' },
+  { id: 'logistics', label: 'Logística' },
   { id: 'other', label: 'Otro' },
 ];
 
@@ -178,7 +178,7 @@ export default function EmpresasRegistroPage() {
           textAlign: 'center',
         }}
       >
-        <p style={{ color: 'var(--text-secondary)' }}>Verificando sesion...</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Verificando sesión...</p>
       </main>
     );
   }
@@ -213,8 +213,8 @@ export default function EmpresasRegistroPage() {
           }}
         >
           Recibimos tu solicitud para <strong>{name}</strong>. Un administrador
-          la revisara en menos de 24 horas habiles y recibiras una notificacion
-          cuando este aprobada.
+          la revisará en menos de 24 horas hábiles y recibirás una notificación
+          cuando esté aprobada.
         </p>
         <Link
           href="/profile/corporate"
@@ -256,7 +256,7 @@ export default function EmpresasRegistroPage() {
         }}
       >
         Llena este formulario para solicitar tu cuenta corporativa TriciGo. Un
-        admin revisa cada solicitud en menos de 24 horas habiles. Si tienes
+        admin revisa cada solicitud en menos de 24 horas hábiles. Si tienes
         dudas antes,{' '}
         <Link href="/contact" style={{ color: 'var(--primary)' }}>
           contáctanos
@@ -291,7 +291,7 @@ export default function EmpresasRegistroPage() {
             type="text"
             value={taxId}
             onChange={(e) => setTaxId(e.target.value)}
-            placeholder="Si tu empresa esta registrada"
+            placeholder="Si tu empresa está registrada"
             style={inputStyle}
           />
         </div>
@@ -333,7 +333,7 @@ export default function EmpresasRegistroPage() {
         {/* Contact phone */}
         <div style={{ marginBottom: '1.25rem' }}>
           <label style={labelStyle} htmlFor="phone">
-            Telefono de contacto *
+            Teléfono de contacto *
           </label>
           <input
             id="phone"
@@ -414,7 +414,7 @@ export default function EmpresasRegistroPage() {
 
         {/* Payment chips */}
         <div style={{ marginBottom: '1.25rem' }}>
-          <label style={labelStyle}>Metodo de pago preferido (opcional)</label>
+          <label style={labelStyle}>Método de pago preferido (opcional)</label>
           <div
             style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}
           >
@@ -446,7 +446,7 @@ export default function EmpresasRegistroPage() {
               checked={requiresInvoice}
               onChange={(e) => setRequiresInvoice(e.target.checked)}
             />
-            Necesito factura mensual con razon social
+            Necesito factura mensual con razón social
           </label>
         </div>
 
@@ -509,11 +509,11 @@ export default function EmpresasRegistroPage() {
         >
           Al enviar aceptas los{' '}
           <Link href="/terms" style={{ color: 'var(--primary)' }}>
-            terminos
+            términos
           </Link>{' '}
           y la{' '}
           <Link href="/privacy" style={{ color: 'var(--primary)' }}>
-            politica de privacidad
+            política de privacidad
           </Link>
           .
         </p>

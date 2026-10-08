@@ -160,7 +160,7 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
         onPress={() => { setEditing(true); setInputValue(''); }}
         style={cardStyle}
         accessibilityRole="button"
-        accessibilityLabel={t('earnings.set_goal', { defaultValue: 'Establecer meta del dia' })}
+        accessibilityLabel={t('earnings.set_goal', { defaultValue: 'Establecer meta del día' })}
       >
         <View className="flex-row items-center">
           <Text style={{ fontSize: 20, marginRight: 8 }}>🎯</Text>
@@ -169,14 +169,14 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
             className="font-semibold"
             style={{ color: midnightEmber.screen.text.primary }}
           >
-            {t('earnings.set_goal', { defaultValue: 'Establecer meta del dia' })}
+            {t('earnings.set_goal', { defaultValue: 'Establecer meta del día' })}
           </Text>
         </View>
         <Text
           variant="badge"
           style={{ color: midnightEmber.screen.text.secondary, marginTop: 4 }}
         >
-          {t('earnings.set_goal_hint', { defaultValue: 'Define cuanto quieres ganar hoy' })}
+          {t('earnings.set_goal_hint', { defaultValue: 'Define cuánto quieres ganar hoy' })}
         </Text>
       </Pressable>
     );
@@ -190,7 +190,7 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
           className="font-semibold mb-3"
           style={{ color: midnightEmber.screen.text.primary }}
         >
-          🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del dia' })} (CUP)
+          🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del día' })} (CUP)
         </Text>
         <View className="flex-row items-center gap-3">
           <TextInput
@@ -257,7 +257,7 @@ export function EarningsGoalCard({ currentEarnings }: EarningsGoalCardProps) {
           className="font-semibold"
           style={{ color: midnightEmber.screen.text.primary }}
         >
-          🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del dia' })}: {formatCUP(goal)}
+          🎯 {t('earnings.daily_goal', { defaultValue: 'Meta del día' })}: {formatCUP(goal)}
         </Text>
         {pct >= 100 && <Text style={{ fontSize: 18 }}>🎉</Text>}
       </View>

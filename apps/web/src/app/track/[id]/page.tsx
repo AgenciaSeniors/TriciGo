@@ -115,7 +115,7 @@ function useStatusSteps() {
     { key: 'searching' as RideStatus, label: t('track.step_searching', { defaultValue: 'Buscando el mejor conductor para ti...' }), stepNumber: 1 },
     { key: 'accepted' as RideStatus, label: t('track.step_accepted', { defaultValue: 'Conductor asignado' }), stepNumber: 2 },
     { key: 'driver_en_route' as RideStatus, label: t('track.step_en_route', { defaultValue: 'En camino a recogerte' }), stepNumber: 3 },
-    { key: 'arrived_at_pickup' as RideStatus, label: t('track.step_arrived', { defaultValue: 'Llego al punto' }), stepNumber: 4 },
+    { key: 'arrived_at_pickup' as RideStatus, label: t('track.step_arrived', { defaultValue: 'Llegó al punto' }), stepNumber: 4 },
     { key: 'in_progress' as RideStatus, label: t('track.step_in_progress', { defaultValue: 'Viaje en curso' }), stepNumber: 5 },
     { key: 'arrived_at_destination' as RideStatus, label: t('track.step_arrived_destination', { defaultValue: 'Llegando a destino' }), stepNumber: 6 },
     { key: 'completed' as RideStatus, label: t('track.step_completed', { defaultValue: 'Viaje completado' }), stepNumber: 7 },
@@ -857,7 +857,7 @@ export default function TrackRidePage() {
           <div className="track-panel-header">
             <div>
               <h1 className="track-panel-title">
-                {ride.ride_mode === 'cargo' ? 'Seguimiento de envio' : t('track.title', { defaultValue: 'Seguimiento de viaje' })}
+                {ride.ride_mode === 'cargo' ? 'Seguimiento de envío' : t('track.title', { defaultValue: 'Seguimiento de viaje' })}
               </h1>
               <span className="track-panel-id">ID: {ride.id.slice(0, 8)}</span>
             </div>
@@ -1311,7 +1311,7 @@ export default function TrackRidePage() {
             <div className="track-card track-delivery-card">
               <div className="track-delivery-header">
                 <IconPackage />
-                <span>Detalles del envio</span>
+                <span>Detalles del envío</span>
                 {deliveryDetails.client_accompanies && (
                   <span className="track-delivery-badge">Acompanando</span>
                 )}
@@ -1331,13 +1331,13 @@ export default function TrackRidePage() {
                   }}
                 >
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 2 }}>
-                    Codigo para el destinatario
+                    Código para el destinatario
                   </div>
                   <div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: 8, color: 'var(--primary)' }}>
                     {deliveryDetails.delivery_otp}
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 2 }}>
-                    El conductor lo pedira al entregar · toca para copiar
+                    El conductor lo pedirá al entregar · toca para copiar
                   </div>
                 </button>
               )}

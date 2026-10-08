@@ -1106,7 +1106,7 @@ export function DriverTripView() {
             variant="bodySmall"
             style={{ marginLeft: 8, flex: 1, color: midnightEmber.state.info }}
           >
-            {t('trip.next_ride_queued', { defaultValue: 'Proximo viaje asignado' })}
+            {t('trip.next_ride_queued', { defaultValue: 'Próximo viaje asignado' })}
           </Text>
         </View>
       )}

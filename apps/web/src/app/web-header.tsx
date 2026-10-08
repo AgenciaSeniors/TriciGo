@@ -312,7 +312,7 @@ export function WebHeader() {
           />
         </a>
 
-        <nav style={{ gap: '1.5rem', alignItems: 'center' }} className="nav-desktop" aria-label="Navegacion principal">
+        <nav style={{ gap: '1.5rem', alignItems: 'center' }} className="nav-desktop" aria-label="Navegación principal">
           <AuthNav />
           <DarkToggle />
         </nav>

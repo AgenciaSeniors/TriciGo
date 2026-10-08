@@ -33,7 +33,7 @@ const SERVICE_OPTIONS = [
   'auto_confort',
 ];
 
-const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 type ZoneRow = Omit<Zone, 'boundary'>;
 

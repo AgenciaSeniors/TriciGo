@@ -462,13 +462,13 @@
   "trusted_contacts": {
     "title": "Contactos de confianza",
     "desc": "Tus contactos de confianza. Marca como emergencia los que desees.",
-    "empty": "No tienes contactos de confianza aun",
+    "empty": "No tienes contactos de confianza aún",
     "mark_emergency": "Contacto de emergencia",
-    "auto_share": "Compartir viaje automaticamente",
+    "auto_share": "Compartir viaje automáticamente",
     "add": "+ Agregar contacto",
     "new": "Nuevo contacto",
     "adding": "Agregando...",
-    "max_reached": "Has alcanzado el maximo de {{max}} contactos."
+    "max_reached": "Has alcanzado el máximo de {{max}} contactos."
   },
   "notifications": {
     "title": "Notificaciones",
@@ -553,8 +553,8 @@
     "empty_description": "Tus movimientos de TriciCoin aparecerán aquí.",
     "show_all": "Mostrar todos",
     "recharge_balance": "Recargar saldo",
-    "load_more": "Cargar mas transacciones",
-    "load_more_aria": "Cargar mas transacciones",
+    "load_more": "Cargar más transacciones",
+    "load_more_aria": "Cargar más transacciones",
     "tx_recharge": "Recarga",
     "tx_ride_in": "Ingreso por viaje",
     "tx_ride_out": "Pago de viaje",

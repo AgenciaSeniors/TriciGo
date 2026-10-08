@@ -225,10 +225,10 @@
     "scheduled_rides": "Viajes programados",
     "no_scheduled_rides": "No tienes viajes programados",
     "scheduled_badge": "Programado para {{date}}",
-    "delivery_details": "Detalles del envio",
-    "package_description": "Descripcion del paquete",
+    "delivery_details": "Detalles del envío",
+    "package_description": "Descripción del paquete",
     "recipient_name": "Nombre del destinatario",
-    "recipient_phone": "Telefono del destinatario",
+    "recipient_phone": "Teléfono del destinatario",
     "estimated_weight": "Peso estimado (kg)",
     "special_instructions": "Instrucciones especiales",
     "use_my_location": "Usar mi ubicación",
@@ -255,7 +255,7 @@
     "add_stop": "Agregar parada",
     "remove_stop": "Quitar parada",
     "stop_n": "Parada {{n}}",
-    "max_stops_reached": "Maximo de paradas alcanzado",
+    "max_stops_reached": "Máximo de paradas alcanzado",
     "adding_stop": "Agregando parada...",
     "stop_added": "Parada agregada",
     "max_stops_active": "Máximo de paradas alcanzado",
@@ -431,9 +431,9 @@
     "driver_profile_member_since": "Miembro desde {{date}}",
     "driver_profile_trips": "{{count}} viajes",
     "driver_profile_verified": "Verificado",
-    "driver_profile_reviews": "Ultimas resenas",
-    "driver_profile_no_reviews": "Sin resenas aun",
-    "driver_profile_vehicle": "Vehiculo"
+    "driver_profile_reviews": "Últimas reseñas",
+    "driver_profile_no_reviews": "Sin reseñas aún",
+    "driver_profile_vehicle": "Vehículo"
   },
 
   "dispute": {
@@ -516,7 +516,7 @@
     "moto_standard": "Moto",
     "auto_standard": "Auto",
     "auto_confort": "Confort",
-    "mensajeria": "Mensajeria"
+    "mensajeria": "Mensajería"
   },
 
   "payment": {
@@ -530,7 +530,7 @@
     "pending_title": "Pago pendiente",
     "pending_desc": "Completa el pago de tu viaje",
     "pay_now": "Pagar ahora",
-    "waiting": "Esperando confirmacion...",
+    "waiting": "Esperando confirmación...",
     "confirmed": "Pago confirmado",
     "expired": "El enlace de pago ha expirado",
     "amount": "Monto a pagar",

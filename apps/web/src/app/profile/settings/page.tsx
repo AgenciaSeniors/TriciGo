@@ -7,9 +7,9 @@ import { useTranslation } from '@tricigo/i18n';
 import type { CustomerProfile, PaymentMethod } from '@tricigo/types';
 
 const languages = [
-  { code: 'es', label: 'Espanol' },
+  { code: 'es', label: 'Español' },
   { code: 'en', label: 'English' },
-  { code: 'pt', label: 'Portugues' },
+  { code: 'pt', label: 'Português' },
 ];
 
 const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'tricicoin', 'mixed'];
@@ -175,9 +175,9 @@ export default function SettingsPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required', { defaultValue: 'Inicia sesion para ver la configuracion' })}</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required', { defaultValue: 'Inicia sesión para ver la configuración' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          {t('web.login', { defaultValue: 'Iniciar sesion' })}
+          {t('web.login', { defaultValue: 'Iniciar sesión' })}
         </Link>
       </div>
     );
@@ -217,7 +217,7 @@ export default function SettingsPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </Link>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.settings', { defaultValue: 'Configuracion' })}</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{t('web.settings', { defaultValue: 'Configuración' })}</h1>
       </div>
 
       {/* Language Section */}
@@ -378,7 +378,7 @@ export default function SettingsPage() {
             borderBottom: '1px solid var(--border-light)',
           }}>
             <div>
-              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.email_notifications', { defaultValue: 'Correo electronico' })}</p>
+              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{t('web.email_notifications', { defaultValue: 'Correo electrónico' })}</p>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{t('web.receipts_promos', { defaultValue: 'Recibos y promociones' })}</p>
             </div>
             <button onClick={handleToggleEmail} disabled={prefsLoading} style={toggleStyle(emailNotifications)}>

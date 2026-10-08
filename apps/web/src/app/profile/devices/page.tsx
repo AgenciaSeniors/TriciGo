@@ -52,7 +52,7 @@ export default function DevicesPage() {
   }, [loadDevices]);
 
   async function handleRevoke(device: KnownDevice) {
-    if (!confirm(t('web.revoke_device_confirm', { defaultValue: 'Quitar este dispositivo? Tendras que volver a confirmarlo la proxima vez que inicies sesion desde el.' }))) return;
+    if (!confirm(t('web.revoke_device_confirm', { defaultValue: '¿Quitar este dispositivo? Tendrás que volver a confirmarlo la próxima vez que inicies sesión desde él.' }))) return;
     try {
       await deviceService.revokeDevice(device.id);
       await loadDevices();
@@ -63,7 +63,7 @@ export default function DevicesPage() {
   }
 
   async function handleSignOutAll() {
-    if (!confirm(t('web.sign_out_all_confirm', { defaultValue: 'Cerrar sesion en todos los dispositivos? Tendras que iniciar sesion de nuevo en cada uno.' }))) return;
+    if (!confirm(t('web.sign_out_all_confirm', { defaultValue: '¿Cerrar sesión en todos los dispositivos? Tendrás que iniciar sesión de nuevo en cada uno.' }))) return;
     setLoggingOut(true);
     try {
       // Global scope: this is the one action where the user explicitly
@@ -104,7 +104,7 @@ export default function DevicesPage() {
       </div>
 
       <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', margin: '0 0 1.5rem' }}>
-        {t('web.devices_subtitle', { defaultValue: 'Dispositivos desde los que has iniciado sesion en tu cuenta.' })}
+        {t('web.devices_subtitle', { defaultValue: 'Dispositivos desde los que has iniciado sesión en tu cuenta.' })}
       </p>
 
       {loading ? (
@@ -143,7 +143,7 @@ export default function DevicesPage() {
           marginBottom: '1.5rem',
         }}>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', margin: 0 }}>
-            {t('web.no_devices', { defaultValue: 'No hay dispositivos registrados todavia.' })}
+            {t('web.no_devices', { defaultValue: 'No hay dispositivos registrados todavía.' })}
           </p>
         </div>
       ) : (
@@ -203,7 +203,7 @@ export default function DevicesPage() {
                     <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{device.os_version}</p>
                   )}
                   <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
-                    {t('web.last_seen', { defaultValue: 'Visto por ultima vez {{date}}', date: formatLastSeen(device.last_seen_at) })}
+                    {t('web.last_seen', { defaultValue: 'Visto por última vez {{date}}', date: formatLastSeen(device.last_seen_at) })}
                   </p>
                 </div>
                 <button
@@ -232,8 +232,8 @@ export default function DevicesPage() {
         }}
       >
         {loggingOut
-          ? t('web.signing_out_all', { defaultValue: 'Cerrando sesion...' })
-          : t('web.sign_out_all', { defaultValue: 'Cerrar sesion en todos los dispositivos' })}
+          ? t('web.signing_out_all', { defaultValue: 'Cerrando sesión...' })
+          : t('web.sign_out_all', { defaultValue: 'Cerrar sesión en todos los dispositivos' })}
       </button>
     </main>
   );
