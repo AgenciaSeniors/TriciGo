@@ -17,7 +17,7 @@ CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 DB=pr641
 GUARD=pr641guard
-ENUM="$ROOT/supabase/migrations/00640_marketing_role_enum.sql"
+ENUM="$ROOT/supabase/migrations/00641_marketing_role_enum.sql"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = '';"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
