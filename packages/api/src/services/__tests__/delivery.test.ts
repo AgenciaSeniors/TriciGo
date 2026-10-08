@@ -161,3 +161,66 @@ describe('deliveryService.getDeliveryDetails', () => {
     await expect(deliveryService.getDeliveryDetails(RIDE)).rejects.toThrow('permission denied');
   });
 });
+
+// 00644: riders no longer read other drivers' vehicles (plates, photos). The
+// delivery selector gets per-type capabilities from get_cargo_vehicle_caps,
+// which returns no plate, photo or driver id.
+describe('deliveryService.getCargoVehicleCaps', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('reads the aggregated capabilities from get_cargo_vehicle_caps', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        { vehicle_type: 'moto', max_weight_kg: '15.5', max_length_cm: 60, max_width_cm: 40, max_height_cm: 40,
+          accepted_categories: ['documentos', 'comida'], available_count: 12 },
+        { vehicle_type: 'auto', max_weight_kg: null, max_length_cm: null, max_width_cm: null, max_height_cm: null,
+          accepted_categories: null, available_count: 3 },
+      ],
+      error: null,
+    });
+
+    const caps = await deliveryService.getCargoVehicleCaps();
+
+    expect(mockRpc).toHaveBeenCalledWith('get_cargo_vehicle_caps');
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(caps).toEqual([
+      { type: 'moto', maxWeightKg: 15.5, maxLengthCm: 60, maxWidthCm: 40, maxHeightCm: 40,
+        acceptedCategories: ['documentos', 'comida'], availableCount: 12 },
+      { type: 'auto', maxWeightKg: null, maxLengthCm: null, maxWidthCm: null, maxHeightCm: null,
+        acceptedCategories: [], availableCount: 3 },
+    ]);
+  });
+
+  it('falls back to aggregating the vehicles table while the function is missing', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    const chain = createMockQueryChain({
+      data: [
+        { type: 'moto', max_cargo_weight_kg: 10, max_cargo_length_cm: 50, max_cargo_width_cm: null, max_cargo_height_cm: 30, accepted_cargo_categories: ['documentos'] },
+        { type: 'moto', max_cargo_weight_kg: 20, max_cargo_length_cm: 40, max_cargo_width_cm: 35, max_cargo_height_cm: null, accepted_cargo_categories: ['comida', 'documentos'] },
+        { type: 'triciclo', max_cargo_weight_kg: null, max_cargo_length_cm: null, max_cargo_width_cm: null, max_cargo_height_cm: null, accepted_cargo_categories: null },
+      ],
+      error: null,
+    });
+    mockFrom.mockReturnValueOnce(chain);
+
+    const caps = await deliveryService.getCargoVehicleCaps();
+
+    expect(mockFrom).toHaveBeenCalledWith('vehicles');
+    expect(chain.eq).toHaveBeenCalledWith('accepts_cargo', true);
+    expect(chain.eq).toHaveBeenCalledWith('is_active', true);
+    expect(caps).toEqual([
+      { type: 'moto', maxWeightKg: 20, maxLengthCm: 50, maxWidthCm: 35, maxHeightCm: 30,
+        acceptedCategories: ['documentos', 'comida'], availableCount: 2 },
+      { type: 'triciclo', maxWeightKg: null, maxLengthCm: null, maxWidthCm: null, maxHeightCm: null,
+        acceptedCategories: [], availableCount: 1 },
+    ]);
+  });
+
+  it('throws any other error', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'permission denied for function get_cargo_vehicle_caps' } });
+    await expect(deliveryService.getCargoVehicleCaps()).rejects.toThrow('permission denied');
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});

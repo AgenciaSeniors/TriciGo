@@ -3230,12 +3230,31 @@ Revisión de las lecturas: políticas de SELECT, vistas, permisos de `anon`/`aut
 - **Ensayar una migración en prod sin dejar nada:** `DO $probe$ BEGIN EXECUTE $mig$<archivo entero>$mig$; <pruebas como anon / authenticated en subbloques que terminan con RAISE P0099>; RAISE EXCEPTION 'PROBE %', r; END $probe$;`. El bloque de verificación de la migración comprueba los md5 de los cuerpos, así que también confirma que el texto llegó igual. Después, confirmar por objeto que no quedó nada (md5 viejo, la tabla nueva sin crear).
 
 **Pendiente, con motivo:**
-- `vehicles.v_select` deja a cualquier usuario con sesión listar los 164 vehículos activos con patente, foto y `driver_id`. No se cerró porque `useDeliveryVehicles` (pasajero) lee todos los vehículos de carga para calcular capacidades, y con la tabla cerrada los builds instalados mostrarían "no hay vehículos" para envíos. Se cierra en dos pasos: una RPC que devuelva solo las capacidades por tipo y la lectura del vehículo del viaje propio, después el build nuevo, y recién ahí la política.
+- ~~`vehicles.v_select` dejaba a cualquier usuario con sesión listar los 164 vehículos activos con patente, modelo y `driver_id`.~~ **Cerrado por 00644** (ver abajo).
 - Un conductor con una oferta pendiente lee la fila completa del viaje (`r_select_driver`), notas de recogida incluidas. Es por diseño: decide si acepta con esos datos.
 
 Ensayo: `supabase/tests/00645/run.sh` (RED: 16 fallos; GREEN 40/40, con 3 pruebas negativas de sus guardas y una copia CRLF). Ensayo en prod dentro de un bloque revertido, con los datos reales: `anon` no llama a `find_nearby_vehicles`; un pasajero ve al conductor en línea, sin posición exacta ni id real; sin sesión se leen 0 de las 7 reseñas y un extraño lee las 5 de conductores.
 
 **Estado: aplicada en prod el 2026-10-08** por MCP (`20261008092039`). Verificado por objeto: los cuatro cuerpos coinciden con git (`find_nearby_vehicles` `84b19826…/2690`, `get_demand_hotspots` `40e675a5…/2545`, `get_destination_suggestions` `d4841a72…/4541`, `review_is_public` `ed85404a…/349`); `anon` sin EXECUTE en `find_nearby_vehicles`; `hourly_demand_cells` y `nearby_vehicle_salt` solo para `postgres` y `service_role`; las dos políticas nuevas. Las llamadas de la app del conductor a `find_nearby_vehicles` y `get_demand_hotspots` siguieron respondiendo 200 después del cambio.
+
+### Patentes de los vehículos: solo las ve quien viajó con ese conductor (00644, 2026-10-08)
+
+Hasta la 00644, `vehicles.v_select` dejaba a cualquier usuario con sesión listar todos los vehículos activos: patente, marca, modelo, color, año, foto y `driver_id`. Eran 164, todos con patente. Ahora la política deja leer:
+- **al conductor**, sus propios vehículos (sin cambios);
+- **a un pasajero**, los vehículos de los conductores con los que tiene un viaje, en cualquier estado. Así siguen andando la pantalla del viaje activo y el historial, que leen el vehículo del conductor asignado por `driver_id`. La subconsulta sobre `rides` corre con la RLS del propio pasajero;
+- **a los admins**, todos (sin cambios).
+
+**El selector de vehículo para envíos** leía todos los vehículos de carga de la tabla. Ahora lee `get_cargo_vehicle_caps()` (SECURITY DEFINER, solo `authenticated`), que agrega por tipo en el servidor (la mayor de cada medida, la unión de categorías y la cantidad) y no devuelve patente, foto ni id. La app usa `deliveryService.getCargoVehicleCaps()`, y si la función no existe (`PGRST202`) agrega la tabla como antes.
+
+**Decisión del dueño (2026-10-08): cerrar todo ya, sin esperar el build.** Los builds anteriores leen la tabla directo y ahora no ven ningún vehículo de carga, así que grisan los cuatro tipos en el selector de envíos hasta que actualicen. En toda la historia hubo 3 envíos (el último, el 2 de agosto), y desde la web se siguen pudiendo pedir: la web no usa esa lectura.
+
+**Si se agrega una política de SELECT en `vehicles`**, el chequeo de la 00644 la toma como fuga. No hay que abrir la tabla para mostrar un vehículo en otra pantalla: va una función que devuelva solo lo necesario.
+
+Ensayo: `supabase/tests/00644/run.sh` (RED: 7 fallos; GREEN 17/17, con 2 pruebas negativas y una copia CRLF). Ensayo en prod dentro de un bloque revertido: un pasajero sin viajes ve 0 vehículos; la función devuelve los 96 de carga (auto 15, confort 6, moto 31, triciclo 44); quien viajó ve el vehículo de su conductor; el admin ve 164 y `anon`, ninguno.
+
+**Estado: aplicada en prod el 2026-10-08** por MCP (`20261008095018`). Verificado por objeto: `get_cargo_vehicle_caps` con md5 `e4d06391…/617`, ejecutable solo por `postgres`, `authenticated` y `service_role`; `v_select` ya sin la rama `is_active`; en `vehicles` quedan las mismas cuatro políticas. Las sondas contra lo aplicado dan lo mismo que el ensayo.
+
+**Renumeración del 2026-10-08.** Tres PRs abiertas tenían 00640 y 00641 al mismo tiempo. #1122 conservó la 00640 porque ya estaba aplicada en prod (`00640_cron_errors_reach_watchdog`). #1115 (rol de marketing) pasó a 00641 (el enum) y 00642 (los permisos), en ese orden, porque los permisos necesitan el valor nuevo del enum. #1120 (aviso de correo) pasó a 00643. Las ramas de otras sesiones se tocaron con commits nuevos (`git mv`, sin reescribir historia) y se avisó a cada sesión dueña.
 
 ### Edge Functions: quién puede llamarlas (revisión de las 48 desplegadas, 2026-10-06)
 
