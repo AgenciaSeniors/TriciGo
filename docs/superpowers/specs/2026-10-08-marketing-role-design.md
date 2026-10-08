@@ -46,7 +46,7 @@ Choices made in the design that the founder can still reverse:
 - The client learns the role from a new `useCurrentRole()` hook. It reads the caller's own `users.role` row, which RLS allows.
 
 **Marketing allow-list:**
-- `/launch-pulse`, `/funnel`, `/code-performance`, `/segments`, `/competitors`, `/reports`, `/referrals` (read-only: the reward and invalidate buttons are hidden for marketing, and the server refuses them anyway)
+- `/launch-pulse`, `/funnel`, `/code-performance`, `/segments`, `/reports`, `/referrals` (read-only: the reward and invalidate buttons are hidden for marketing, and the server refuses them anyway)
 - `/promotions`
 - `/campaigns`, `/announcements`
 - `/blog`
@@ -63,12 +63,12 @@ New permissions are **added**. No existing policy or grant is loosened for other
 | `home_announcements` | ALL `is_admin()` | New ALL policy `is_marketing()`. |
 | `blog_posts` (created by hand, no migration) | ALL hardcoded admin list | New ALL policy `is_marketing()`. Read the live policies first. |
 | `acquisition_codes` | ALL `is_admin()` (00619) | New ALL policy `is_marketing()`. The codes pay no bonus. |
-| Metrics RPCs | `IF NOT is_admin() RAISE` / `WHERE is_admin()` | In-place patch to `is_admin() OR is_marketing()`, with an md5 guard on the live body. |
+| Metrics RPCs | `IF NOT is_admin() RAISE` / `WHERE is_admin()` | In-place patch to `(is_admin() OR is_marketing())`, with an md5 guard on the live body. Each live body has `is_admin()` exactly once (read from prod on 2026-10-08). |
 | `get_active_push_user_ids` | `is_admin()` | Same patch, so announcements, promotions and blog can push. |
 | `admin_reward_referral`, `admin_invalidate_referral` | hardcoded admin | Unchanged: they move money. |
 
 The metrics RPCs are:
-- `admin_launch_pulse`, `admin_signup_code_stats`, `get_competitor_summary`;
+- `admin_launch_pulse`, `admin_signup_code_stats`;
 - `get_admin_dashboard_metrics`, `get_admin_wallet_stats`, `get_platform_earnings`;
 - `get_rides_by_day`, `get_rides_by_service_type`, `get_rides_by_payment_method`, `get_top_drivers`.
 
@@ -105,6 +105,8 @@ Each policy name ends in `_marketing`, so a later rollback can drop exactly thes
 - Read the live RLS of `blog_posts` and `cms_content`, which were created by hand, before adding policies.
 
 ## Out of scope
+
+- **Competitors (`/competitors`).** The price observatory (00587–00590) is on master but was never applied in prod: on 2026-10-08 prod has no `competitor_*` table and no `get_competitor_summary` or `get_competitor_price_series`. The page fails for admins too. Opening it to marketing waits until the observatory is applied; it then needs its own migration, because applying 00589 as written recreates both functions admin-only.
 
 - SMS campaigns; there is no screen for them today.
 - Partner places, quests, the Notificaciones page, legal pages, referral rewards.
