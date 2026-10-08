@@ -35,6 +35,10 @@ import { authService, driverService, walletService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { useNotificationStore } from '@/stores/notification.store';
+import Toast from 'react-native-toast-message';
+import { triggerHaptic } from '@tricigo/utils';
+import { useEmailConfirmation } from '@/hooks/useEmailConfirmation';
+import { EmailConfirmRow } from '@/components/EmailConfirmRow';
 
 const TABULAR: { fontVariant: ('tabular-nums')[] } = { fontVariant: ['tabular-nums'] };
 
@@ -75,6 +79,19 @@ function NativeDriverProfileScreen() {
   const resetDriver = useDriverStore((s) => s.reset);
   const resetNotifications = useNotificationStore((s) => s.reset);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // "Confirma tu correo" (00640): shown under the phone while the address is
+  // unconfirmed; cannot be dismissed here (the home banner can).
+  const emailConfirm = useEmailConfirmation(user?.id);
+  const resendEmailLink = async () => {
+    const result = await emailConfirm.resend();
+    if (result.ok) {
+      triggerHaptic('success');
+      Toast.show({ type: 'success', text1: t('email_notice.sent_short', { defaultValue: 'Enlace enviado' }) });
+    } else {
+      Toast.show({ type: 'error', text1: t(result.errorKey) });
+    }
+  };
 
   // BUG-vehicle-type-mismatch: load the driver's real vehicle type so the
   // "Vehículo" menu row reflects it (moto/triciclo/auto) instead of a
@@ -427,6 +444,15 @@ function NativeDriverProfileScreen() {
                 <Text style={{ color: palette.ink.secondary, fontSize: 13, marginTop: 3 }}>
                   {user?.phone ?? ''}
                 </Text>
+                {emailConfirm.status?.status === 'unconfirmed' && emailConfirm.status.email && (
+                  <EmailConfirmRow
+                    email={emailConfirm.status.email}
+                    linkSent={emailConfirm.linkSent}
+                    resending={emailConfirm.resending}
+                    onResend={resendEmailLink}
+                    isDark={isDark}
+                  />
+                )}
                 {statusInfo && (
                   <View
                     style={{
