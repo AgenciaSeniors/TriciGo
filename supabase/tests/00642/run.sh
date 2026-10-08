@@ -103,13 +103,13 @@ val G2 "SELECT p.prosecdef, has_function_privilege('anon', p.oid, 'EXECUTE'), ha
 val G3 "SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND policyname LIKE '%\\_marketing'" "11"
 # G4: the promotions guard is SECURITY INVOKER (its marketing test reads current_user), with this body
 val G4 "SELECT prosecdef, md5(prosrc) FROM pg_proc WHERE oid = 'public.tg_promotions_marketing_guard()'::regprocedure" \
-  "f|afc29bdae032dbc90721e3e0ad228721"
+  "f|2b4dd44a23aaf0c01a47b28d6b09cae4"
 # G5: promotion_is_referenced(): definer, empty search_path, executable by authenticated only, this body
 val G5 "SELECT p.prosecdef, array_to_string(p.proconfig, ','), md5(p.prosrc), has_function_privilege('authenticated', p.oid, 'EXECUTE'),
   has_function_privilege('anon', p.oid, 'EXECUTE'), has_function_privilege('service_role', p.oid, 'EXECUTE'),
   EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0)
   FROM pg_proc p WHERE p.oid = 'public.promotion_is_referenced(uuid)'::regprocedure" \
-  "t|search_path=\"\"|0ecca19fbed155c5908ce88c62c719da|t|f|f|f"
+  "t|search_path=\"\"|d02d1233dcb808f809ff0dcf29818a02|t|f|f|f"
 val G6 "SELECT data_type, is_nullable, column_default FROM information_schema.columns
   WHERE table_schema = 'public' AND table_name = 'promotions' AND column_name = 'revision'" "integer|NO|0"
 # G7: the panel views read as their owner behind a barrier, and the API roles may only read them
@@ -202,10 +202,14 @@ val P5 "BEGIN; $(as_user $MARA) UPDATE public.promotions SET is_active = false W
 # P6: and stamp the push "Notificar ahora" just sent
 val P6 "BEGIN; $(as_user $MARA) UPDATE public.promotions SET notified_at = now() WHERE id = '$P_LIVE'; RESET ROLE;
   SELECT is_active, notified_at IS NOT NULL FROM public.promotions WHERE id = '$P_LIVE'; ROLLBACK;" "t|t"
-# P7: marketing cannot write the approval columns
+# P7: marketing cannot write the approval columns: on USED5, which nobody is waiting on, nothing it
+# wrote sticks (and no draft appears: see P17); on its own draft it cannot end the wait either
 val P7 "BEGIN; $(as_user $MARA) UPDATE public.promotions SET pending_approval = false, approved_by = '$ANA', approved_at = now()
   WHERE id = '$P_USED'; RESET ROLE;
-  SELECT pending_approval, approved_by IS NULL, approved_at IS NULL FROM public.promotions WHERE id = '$P_USED'; ROLLBACK;" "t|t|t"
+  SELECT pending_approval, approved_by IS NULL, approved_at IS NULL FROM public.promotions WHERE id = '$P_USED';
+  $(as_user $MARA) UPDATE public.promotions SET title_es = 'Borrador' WHERE id = '$P_USED';
+  UPDATE public.promotions SET pending_approval = false, approved_by = '$ANA', approved_at = now() WHERE id = '$P_USED'; RESET ROLE;
+  SELECT pending_approval, approved_by IS NULL, approved_at IS NULL FROM public.promotions WHERE id = '$P_USED'; ROLLBACK;" "f|t|t;t|t|t"
 val P8 "BEGIN; $(as_user $MARA) INSERT INTO public.promotions (code, type, discount_percent) VALUES ('MKT2', 'percentage_discount', 5);
   DELETE FROM public.promotions WHERE code = 'MKT2'; RESET ROLE;
   SELECT count(*) FROM public.promotions WHERE code = 'MKT2'; ROLLBACK;" "0"
@@ -232,6 +236,26 @@ val P15 "BEGIN; $(as_user $ANA) UPDATE public.promotions SET discount_percent = 
   SELECT discount_percent FROM public.promotions WHERE id = '$P_LIVE'; ROLLBACK;" "50"
 val P16 "BEGIN; $(as_user $ANA) DELETE FROM public.promotions WHERE id = '$P_USED'; RESET ROLE;
   SELECT count(*) FROM public.promotions WHERE id = '$P_USED'; ROLLBACK;" "0"
+# P17: a marketing write that changes nothing a promotion offers (a second pause, a save of the same
+# form) leaves it as it was: no draft appears for an admin to approve. A real edit after the pause
+# is a new draft and a new revision.
+val P17 "BEGIN; $(as_user $MARA) UPDATE public.promotions SET is_active = false WHERE id = '$P_LIVE';
+  UPDATE public.promotions SET is_active = false WHERE id = '$P_LIVE';
+  UPDATE public.promotions SET code = code, title_es = title_es, discount_percent = discount_percent WHERE id = '$P_LIVE'; RESET ROLE;
+  SELECT is_active, pending_approval, revision FROM public.promotions WHERE id = '$P_LIVE';
+  $(as_user $MARA) UPDATE public.promotions SET discount_percent = 15 WHERE id = '$P_LIVE'; RESET ROLE;
+  SELECT is_active, pending_approval, revision, discount_percent FROM public.promotions WHERE id = '$P_LIVE'; ROLLBACK;" \
+  "f|f|0;f|t|1|15"
+# P18: on a promotion that is off, marketing neither stamps nor clears the push stamp (a stamp on a
+# draft decides whether its approval sends the publish push); on a live one it may (P6)
+val P18 "BEGIN; UPDATE public.promotions SET notified_at = '2026-10-01 12:00+00' WHERE id = '$P_USED';
+  $(as_user $MARA) INSERT INTO public.promotions (id, code, type, discount_percent) VALUES ('$P_DRAFT', 'MKTN', 'percentage_discount', 5);
+  UPDATE public.promotions SET notified_at = now() WHERE id = '$P_DRAFT';
+  UPDATE public.promotions SET notified_at = NULL WHERE id = '$P_USED';
+  UPDATE public.promotions SET notified_at = now() WHERE id = '$P_LIVE'; RESET ROLE;
+  SELECT (SELECT notified_at IS NULL AND pending_approval AND revision = 0 FROM public.promotions WHERE id = '$P_DRAFT'),
+  (SELECT notified_at = '2026-10-01 12:00+00' AND NOT pending_approval AND revision = 0 FROM public.promotions WHERE id = '$P_USED'),
+  (SELECT is_active AND notified_at IS NOT NULL FROM public.promotions WHERE id = '$P_LIVE'); ROLLBACK;" "t|t|t"
 
 # --- V: the revision an approval binds to, and activation --------------------------------
 # V1: marketing editing a draft makes a new revision
@@ -412,6 +436,12 @@ val K10 "BEGIN; $(as_user $ANA) DELETE FROM public.promotions WHERE id = '$P_REF
   SELECT (SELECT count(*) FROM public.promotions WHERE id = '$P_REF'),
   (SELECT promo_code_id IS NULL FROM public.rides WHERE id = '$RIDE_K'),
   (SELECT discount_amount_cup FROM public.rides WHERE id = '$RIDE_K'); ROLLBACK;" "0|t|150"
+# K11: promotion_is_referenced() answers marketing and the admins only (REF15 is named by Carla's
+# canceled ride, LIVE10 by nothing): a customer gets false for both and learns nothing
+val K11 "BEGIN; $(as_user $CARLA) SELECT public.promotion_is_referenced('$P_REF'), public.promotion_is_referenced('$P_LIVE');
+  $(as_user $MARA) SELECT public.promotion_is_referenced('$P_REF'), public.promotion_is_referenced('$P_LIVE');
+  $(as_user $ANA) SELECT public.promotion_is_referenced('$P_REF'), public.promotion_is_referenced('$P_LIVE');
+  $(as_user $SARA) SELECT public.promotion_is_referenced('$P_REF'); ROLLBACK;" "f|f;t|f;t|f;t"
 
 # --- X: the tests above can fail (GREEN only) --------------------------------------------
 if [ "$MIG" != none ]; then
@@ -422,8 +452,8 @@ if [ "$MIG" != none ]; then
     BEGIN IF position(t IN v) = 0 THEN RAISE EXCEPTION 'X1: condition not found'; END IF; EXECUTE replace(v, t, ''); END \$d\$;
     $(as_user $MARA) INSERT INTO public.rides (id, customer_id, promo_code_id, estimated_fare_cup)
     VALUES ('$RIDE_P', '$MARA', '$P_LIVE', 1000); ROLLBACK;" "promo_active_locked"
-  # X1b: same, on the cancel after marketing paused the promotion: the use is not given back and the
-  # promotion turns into a pending draft (K3 would fail)
+  # X1b: same, on the cancel after marketing paused the promotion: the use is not given back
+  # (K3 would fail). It changes nothing the promotion offers, so no draft appears.
   val X1b "BEGIN; $(as_user $MARA) INSERT INTO public.rides (id, customer_id, promo_code_id, estimated_fare_cup)
     VALUES ('$RIDE_P', '$MARA', '$P_LIVE', 1000);
     UPDATE public.promotions SET is_active = false WHERE id = '$P_LIVE'; RESET ROLE;
@@ -431,7 +461,7 @@ if [ "$MIG" != none ]; then
     t text := 'current_user IN (''anon'', ''authenticated'') AND ';
     BEGIN IF position(t IN v) = 0 THEN RAISE EXCEPTION 'X1b: condition not found'; END IF; EXECUTE replace(v, t, ''); END \$d\$;
     $(as_user $MARA) UPDATE public.rides SET status = 'canceled' WHERE id = '$RIDE_P'; RESET ROLE;
-    SELECT is_active, current_uses, pending_approval FROM public.promotions WHERE id = '$P_LIVE'; ROLLBACK;" "f|1|t"
+    SELECT is_active, current_uses, pending_approval FROM public.promotions WHERE id = '$P_LIVE'; ROLLBACK;" "f|1|f"
   # X2: without the reference check, marketing deletes REF15 and Carla's canceled ride loses both its
   # promotion and its discount: the cascade runs with Mara's JWT, so the 00631 revert skips 00492
   val X2 "BEGIN; DO \$d\$ DECLARE v text := pg_get_functiondef('public.tg_promotions_marketing_guard()'::regprocedure);
@@ -458,6 +488,28 @@ if [ "$MIG" != none ]; then
     BEGIN IF position(t IN v) = 0 THEN RAISE EXCEPTION 'X4: view not found'; END IF; EXECUTE replace(v, t, 'FROM rides'); END \$d\$;
     SELECT md5(prosrc) = 'd03f94845bb47efb8183fba60754012d' FROM pg_proc WHERE oid = 'public.count_power_users(integer)'::regprocedure;
     $(as_user $ANA) $POWER_COUNTS $(as_user $MARA) $POWER_COUNTS ROLLBACK;" "t;1|2;0|0"
+  # X5: with the old rule (every marketing write to a promotion that is off makes it pending), a
+  # second pause turns a paused promotion into a draft waiting for approval (P17 would fail)
+  val X5 "BEGIN; DO \$d\$ DECLARE v text := pg_get_functiondef('public.tg_promotions_marketing_guard()'::regprocedure);
+    t text := 'NEW.pending_approval := OLD.pending_approval;';
+    BEGIN IF position(t IN v) = 0 THEN RAISE EXCEPTION 'X5: rule not found'; END IF;
+    EXECUTE replace(v, t, 'NEW.pending_approval := true;'); END \$d\$;
+    $(as_user $MARA) UPDATE public.promotions SET is_active = false WHERE id = '$P_LIVE';
+    UPDATE public.promotions SET is_active = false WHERE id = '$P_LIVE'; RESET ROLE;
+    SELECT is_active, pending_approval, revision FROM public.promotions WHERE id = '$P_LIVE'; ROLLBACK;" "f|t|0"
+  # X6: without keeping the stamp, marketing stamps its own draft (P18 would fail)
+  val X6 "BEGIN; DO \$d\$ DECLARE v text := pg_get_functiondef('public.tg_promotions_marketing_guard()'::regprocedure);
+    t text := 'NEW.notified_at := OLD.notified_at;';
+    BEGIN IF position(t IN v) = 0 THEN RAISE EXCEPTION 'X6: rule not found'; END IF; EXECUTE replace(v, t, ''); END \$d\$;
+    $(as_user $MARA) INSERT INTO public.promotions (id, code, type, discount_percent) VALUES ('$P_DRAFT', 'MKTN', 'percentage_discount', 5);
+    UPDATE public.promotions SET notified_at = now() WHERE id = '$P_DRAFT'; RESET ROLE;
+    SELECT notified_at IS NULL FROM public.promotions WHERE id = '$P_DRAFT'; ROLLBACK;" "f"
+  # X7: without the caller gate, a customer learns that REF15 was used (K11 would fail)
+  val X7 "BEGIN; DO \$d\$ DECLARE v text := pg_get_functiondef('public.promotion_is_referenced(uuid)'::regprocedure);
+    t text := 'WHEN NOT (public.is_marketing() OR public.is_admin()) THEN false';
+    BEGIN IF position(t IN v) = 0 THEN RAISE EXCEPTION 'X7: gate not found'; END IF;
+    EXECUTE replace(v, t, 'WHEN false THEN false'); END \$d\$;
+    $(as_user $CARLA) SELECT public.promotion_is_referenced('$P_REF'); ROLLBACK;" "t"
 fi
 
 # --- N: the guards refuse what they do not know (separate database, GREEN only) ----------
