@@ -34,3 +34,22 @@ export function canSendPush(role: unknown, category: string | null | undefined):
   if (isAdminRole(role)) return true;
   return role === 'marketing' && typeof category === 'string' && MARKETING_PUSH_CATEGORIES.has(category);
 }
+
+/**
+ * The `data` keys the panel's content pushes send (packages/api notification.service.ts:
+ * broadcastToActiveUsers and sendCampaignPush). The apps react to other keys on receipt and
+ * navigate on them when tapped (event, ride_id…), so a marketing push may carry only these.
+ */
+export const MARKETING_PUSH_DATA_KEYS: readonly string[] = ['deep_link', 'content_type', 'content_id'];
+
+/** The allowed keys of `data` that hold strings. Anything else, inherited keys included, is dropped. */
+export function marketingPushData(data: unknown): Record<string, string> {
+  const kept: Record<string, string> = {};
+  if (typeof data !== 'object' || data === null) return kept;
+  for (const key of MARKETING_PUSH_DATA_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+    const value = (data as Record<string, unknown>)[key];
+    if (typeof value === 'string') kept[key] = value;
+  }
+  return kept;
+}

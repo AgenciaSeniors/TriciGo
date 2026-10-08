@@ -17,7 +17,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
-import { canSendPush, isPanelStaffRole } from '../_shared/panel-roles.ts';
+import { canSendPush, isAdminRole, isPanelStaffRole, marketingPushData } from '../_shared/panel-roles.ts';
 
 // ── CORS: restrict to allowed origins ──
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
       serviceRoleKey,
     );
 
-    const { user_id, user_ids, title, body, data, category } =
+    const { user_id, user_ids, title, body, data: requestData, category } =
       (await req.json()) as PushRequest;
 
     // Support both single user_id and batch user_ids
@@ -281,6 +281,11 @@ Deno.serve(async (req) => {
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
+
+    // 00641: a marketing push keeps only the data keys the panel's content pushes send
+    // (deep_link, content_type, content_id). The apps react to other keys on receipt (event,
+    // ride_id…) and navigate on them when tapped. Admins and internal calls keep their data as is.
+    const data = !isInternalCall && !isAdminRole(callerRole) ? marketingPushData(requestData) : requestData;
 
     // Honor the user's category preferences. `deliverIds` is used for
     // everything downstream — tokens AND the inbox row — because opting

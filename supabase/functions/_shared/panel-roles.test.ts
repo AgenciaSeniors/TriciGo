@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { MARKETING_PUSH_CATEGORIES, canSendPush, isAdminRole, isPanelStaffRole } from './panel-roles';
+import {
+  MARKETING_PUSH_CATEGORIES,
+  MARKETING_PUSH_DATA_KEYS,
+  canSendPush,
+  isAdminRole,
+  isPanelStaffRole,
+  marketingPushData,
+} from './panel-roles';
 
 describe('panel roles', () => {
   it('knows the admin roles', () => {
@@ -29,5 +36,37 @@ describe('panel roles', () => {
   it('never lets anyone else send', () => {
     expect(canSendPush('customer', 'campaign')).toBe(false);
     expect(canSendPush(null, 'campaign')).toBe(false);
+  });
+});
+
+describe('marketingPushData', () => {
+  it("keeps only the keys the panel's content pushes send", () => {
+    expect([...MARKETING_PUSH_DATA_KEYS].sort()).toEqual(['content_id', 'content_type', 'deep_link']);
+    expect(
+      marketingPushData({
+        deep_link: 'tricigo://home',
+        content_type: 'promo',
+        content_id: 'p1',
+        event: 'ride_assigned',
+        ride_id: 'r1',
+        type: 'ride',
+      }),
+    ).toEqual({ deep_link: 'tricigo://home', content_type: 'promo', content_id: 'p1' });
+  });
+
+  it('drops values that are not strings', () => {
+    expect(marketingPushData({ deep_link: { path: '/x' }, content_id: 7, content_type: 'blog' })).toEqual({
+      content_type: 'blog',
+    });
+  });
+
+  it('returns an empty object for missing or non-object data', () => {
+    for (const data of [undefined, null, 'deep_link', 42, ['deep_link']]) expect(marketingPushData(data)).toEqual({});
+  });
+
+  it('ignores inherited keys', () => {
+    expect(marketingPushData(Object.create({ deep_link: 'inherited' }))).toEqual({});
+    const parsed = JSON.parse('{"__proto__": {"deep_link": "x"}, "content_type": "blog"}');
+    expect(marketingPushData(parsed)).toEqual({ content_type: 'blog' });
   });
 });
