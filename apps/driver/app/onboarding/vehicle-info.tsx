@@ -160,10 +160,10 @@ export default function VehicleInfoScreen() {
     if (!c || c < 1 || c > maxCap) e.capacity = t('onboarding.error_capacity_invalid');
     if (acceptsCargo) {
       if (!maxCargoWeight || parseFloat(maxCargoWeight) <= 0 || isNaN(parseFloat(maxCargoWeight))) {
-        e.cargo_weight = t('onboarding.error_cargo_weight_required', { defaultValue: 'Ingrese el peso máximo de carga' });
+        e.cargo_weight = t('onboarding.error_cargo_weight_required', { defaultValue: 'Ingresa el peso máximo de carga' });
       }
       if (acceptedCategories.length === 0) {
-        e.cargo_categories = t('onboarding.error_cargo_categories_required', { defaultValue: 'Seleccione al menos una categoría' });
+        e.cargo_categories = t('onboarding.error_cargo_categories_required', { defaultValue: 'Selecciona al menos una categoría' });
       }
     }
     setErrors(e);
