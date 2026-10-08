@@ -2664,6 +2664,17 @@ GROUP BY 1, 2 HAVING count(*) FILTER (WHERE d.status <> 'succeeded') > 0 ORDER B
 
 `job startup timeout` y `server restarted` son las caídas de septiembre y el paso a Micro, no bugs. **Un job con fallidas = corridas y un mensaje de error de SQL es un bug de código.**
 
+### Tuteo en el texto que sale de SQL: guard de CI y cómo escanear prod (verificado 2026-10-08)
+
+Dos pushes con voseo ("Intentalo nuevamente", "Abrí la app y confirmá si lo ves") vivieron meses dentro de funciones de prod porque ningún guard leía SQL. Los arregló 00638 (parche in-place desde `pg_get_functiondef`).
+
+- **El guard:** `packages/utils/src/__tests__/copyTuteo.test.ts` (corre en `pnpm test`) lee también las migraciones desde la **00639**, con la misma lista de formas que usa para las apps. Lee los literales, también dentro del cuerpo de funciones y bloques `DO` (el texto `$tag$` que viene después de `AS` o `DO`). Otro texto entre `$tag$` es un valor (un correo, un comando de cron) y se lee entero, `<!--` incluido. Saltea los comentarios (`--` y `/* */`), los identificadores entre comillas y el texto de `COMMENT ON … IS`, que es documentación. Las migraciones anteriores son historia: su voseo vive en cuerpos que ya se reemplazaron. Una migración que entre después con un número menor (un hueco reservado por un PR viejo) no se lee.
+- **Excepción:** `-- tuteo-exempt: <motivo>` dentro de un comentario. Al final de una línea, exime esa línea. Solo en su línea, exime la línea siguiente. Es para una migración-parche que tiene que citar el texto viejo que reemplaza (la 00638 lo hace sin marcador porque quedó bajo el umbral).
+- **No detecta voseo sin tildes:** "Abri la app y confirma" se escribe igual que el tuteo, y en SQL a veces se escribe sin acentos ("Acercate mas" estuvo en 00232).
+- **El guard no ve los datos.** Las páginas legales (`cms_content`), el blog, los anuncios y las promociones se editan desde el admin y nunca pasan por git. El 2026-10-08 `cms:privacy` publicada decía "ingresás" y "usás", y dos posts despublicados del blog tenían "elegís", "pagás" y "Sumate vos".
+- **Trampa al escanear prod: `pg_proc.prosrc` tiene collation `C`.** Con `C`, `[[:alpha:]]` solo reconoce letras ASCII, así que `regexp_matches(prosrc, '([[:alpha:]]+)')` parte "podés" en "pod" + "s" y ninguna forma con tilde aparece. Una `UNION ALL` hereda la collation de su primera rama: si empieza por `pg_proc`, las tablas que vienen después también se leen con `C`. Así, dos escaneos dieron "limpio" con la política de privacidad en voseo. Usar `prosrc COLLATE "default"`, y también `cron.job.command`. La prueba de que el escaneo ve tildes es que encuentre una forma conocida con tilde (por ejemplo, que un texto de prueba con "podés" salga marcado).
+- **Para buscar voseo en prod**, generar las formas dentro de la consulta a partir de las listas de verbos de `copyTuteo.test.ts`: las tildes como `chr(225)`/`chr(233)`/`chr(237)` y "añadir" como `'a' || chr(241) || 'adir'`. Tienen que salir 1.911 formas. Después tokenizar con `[[:alpha:]]+` sobre `normalize(t, NFC)` con collation `default` y comparar con `lower(token)`. Una lista corta escrita a mano con `\m…\M` se pierde formas: "aceptá" no encuentra "aceptás".
+
 ### Aplicar migraciones pesadas por MCP: pg-meta corta la conexión a ~4 min y un `ADD COLUMN` + backfill deja a las apps en cola (verificado 2026-09-07, 00579)
 
 **Tres límites distintos, medidos aplicando 00579 (110.289 filas de `cuba_pois`) — el primer intento murió por el 2.º, el segundo por el 3.º, y ambos se revirtieron completos:**
