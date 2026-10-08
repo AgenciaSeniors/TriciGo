@@ -5,6 +5,7 @@
 
 import { getSupabaseClient } from '../client';
 import type { PackageCategory, VehicleType } from '@tricigo/types';
+import type { VehicleCargoCapabilities } from '@tricigo/utils';
 
 export interface DeliveryDetails {
   id: string;
@@ -280,4 +281,87 @@ export const deliveryService = {
 
     return (data?.publicUrl ?? '') as string;
   },
+
+  /**
+   * Cargo capabilities per vehicle type, for the delivery vehicle selector.
+   *
+   * Since 00644 a rider reads only the vehicles of drivers they rode with, so
+   * the capabilities come from get_cargo_vehicle_caps(), which aggregates every
+   * active cargo vehicle server-side and returns no plate, photo or driver id.
+   * While that function is missing (migration not applied yet) this falls
+   * back to aggregating the vehicles table, as the app did before.
+   */
+  async getCargoVehicleCaps(): Promise<VehicleCargoCapabilities[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_cargo_vehicle_caps');
+    if (!error) {
+      return ((data ?? []) as CargoCapsRow[]).map((row) => ({
+        type: row.vehicle_type as VehicleType,
+        maxWeightKg: row.max_weight_kg == null ? null : Number(row.max_weight_kg),
+        maxLengthCm: row.max_length_cm,
+        maxWidthCm: row.max_width_cm,
+        maxHeightCm: row.max_height_cm,
+        acceptedCategories: (row.accepted_categories ?? []) as PackageCategory[],
+        availableCount: row.available_count,
+      }));
+    }
+    if (error.code !== 'PGRST202') throw new Error(error.message);
+
+    const { data: rows, error: fetchError } = await supabase
+      .from('vehicles')
+      .select('type, max_cargo_weight_kg, max_cargo_length_cm, max_cargo_width_cm, max_cargo_height_cm, accepted_cargo_categories')
+      .eq('accepts_cargo', true)
+      .eq('is_active', true);
+    if (fetchError) throw new Error(fetchError.message);
+    return aggregateCargoCaps((rows ?? []) as CargoVehicleRow[]);
+  },
 };
+
+interface CargoCapsRow {
+  vehicle_type: string;
+  max_weight_kg: number | string | null;
+  max_length_cm: number | null;
+  max_width_cm: number | null;
+  max_height_cm: number | null;
+  accepted_categories: string[] | null;
+  available_count: number;
+}
+
+interface CargoVehicleRow {
+  type: VehicleType;
+  max_cargo_weight_kg: number | null;
+  max_cargo_length_cm: number | null;
+  max_cargo_width_cm: number | null;
+  max_cargo_height_cm: number | null;
+  accepted_cargo_categories: PackageCategory[] | null;
+}
+
+/** Same aggregation as get_cargo_vehicle_caps: the largest of each dimension
+ *  (ignoring empty ones) and the union of categories, per vehicle type. */
+function aggregateCargoCaps(rows: CargoVehicleRow[]): VehicleCargoCapabilities[] {
+  const larger = (a: number | null, b: number | null) => (b == null ? a : a == null ? b : Math.max(a, b));
+  const byType = new Map<VehicleType, VehicleCargoCapabilities>();
+  for (const v of rows) {
+    const cats = v.accepted_cargo_categories ?? [];
+    const existing = byType.get(v.type);
+    if (!existing) {
+      byType.set(v.type, {
+        type: v.type,
+        maxWeightKg: v.max_cargo_weight_kg ?? null,
+        maxLengthCm: v.max_cargo_length_cm ?? null,
+        maxWidthCm: v.max_cargo_width_cm ?? null,
+        maxHeightCm: v.max_cargo_height_cm ?? null,
+        acceptedCategories: [...new Set(cats)],
+        availableCount: 1,
+      });
+      continue;
+    }
+    existing.availableCount += 1;
+    existing.maxWeightKg = larger(existing.maxWeightKg, v.max_cargo_weight_kg);
+    existing.maxLengthCm = larger(existing.maxLengthCm, v.max_cargo_length_cm);
+    existing.maxWidthCm = larger(existing.maxWidthCm, v.max_cargo_width_cm);
+    existing.maxHeightCm = larger(existing.maxHeightCm, v.max_cargo_height_cm);
+    existing.acceptedCategories = [...new Set([...existing.acceptedCategories, ...cats])];
+  }
+  return [...byType.values()];
+}

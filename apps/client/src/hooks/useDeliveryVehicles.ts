@@ -1,17 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getSupabaseClient } from '@tricigo/api';
+import { deliveryService } from '@tricigo/api';
 import { isPackageCompatible, type PackageSpecs, type VehicleCargoCapabilities, type CompatibilityResult } from '@tricigo/utils';
-import type { VehicleType, PackageCategory } from '@tricigo/types';
+import type { VehicleType } from '@tricigo/types';
 
-interface VehicleCapsSummary {
-  type: VehicleType;
-  maxWeightKg: number | null;
-  maxLengthCm: number | null;
-  maxWidthCm: number | null;
-  maxHeightCm: number | null;
-  acceptedCategories: PackageCategory[];
-  availableCount: number;
-}
+type VehicleCapsSummary = VehicleCargoCapabilities;
 
 interface DeliveryVehicleOption {
   type: VehicleType;
@@ -34,55 +26,12 @@ export function useDeliveryVehicles(packageSpecs: PackageSpecs) {
 
     async function fetchCaps() {
       try {
-        const supabase = getSupabaseClient();
-
-        // Get all active vehicles that accept cargo, grouped by type
-        const { data, error: fetchError } = await supabase
-          .from('vehicles')
-          .select('type, max_cargo_weight_kg, max_cargo_length_cm, max_cargo_width_cm, max_cargo_height_cm, accepted_cargo_categories')
-          .eq('accepts_cargo', true)
-          .eq('is_active', true);
-
-        if (fetchError) throw new Error(fetchError.message);
+        // Per-type capabilities from get_cargo_vehicle_caps (00644): riders no
+        // longer read other drivers' vehicles, and the function returns no
+        // plate, photo or driver id.
+        const caps = await deliveryService.getCargoVehicleCaps();
         if (!mounted) return;
-
-        // Aggregate by type
-        const byType = new Map<VehicleType, VehicleCapsSummary>();
-
-        for (const v of data ?? []) {
-          const existing = byType.get(v.type as VehicleType);
-          if (!existing) {
-            byType.set(v.type as VehicleType, {
-              type: v.type as VehicleType,
-              maxWeightKg: v.max_cargo_weight_kg ?? null,
-              maxLengthCm: v.max_cargo_length_cm ?? null,
-              maxWidthCm: v.max_cargo_width_cm ?? null,
-              maxHeightCm: v.max_cargo_height_cm ?? null,
-              acceptedCategories: (v.accepted_cargo_categories as PackageCategory[]) ?? [],
-              availableCount: 1,
-            });
-          } else {
-            existing.availableCount += 1;
-            // Take the max of each dimension across all vehicles of this type
-            if (v.max_cargo_weight_kg != null) {
-              existing.maxWeightKg = Math.max(existing.maxWeightKg ?? 0, v.max_cargo_weight_kg);
-            }
-            if (v.max_cargo_length_cm != null) {
-              existing.maxLengthCm = Math.max(existing.maxLengthCm ?? 0, v.max_cargo_length_cm);
-            }
-            if (v.max_cargo_width_cm != null) {
-              existing.maxWidthCm = Math.max(existing.maxWidthCm ?? 0, v.max_cargo_width_cm);
-            }
-            if (v.max_cargo_height_cm != null) {
-              existing.maxHeightCm = Math.max(existing.maxHeightCm ?? 0, v.max_cargo_height_cm);
-            }
-            // Union of accepted categories
-            const cats = new Set([...existing.acceptedCategories, ...((v.accepted_cargo_categories as PackageCategory[]) ?? [])]);
-            existing.acceptedCategories = Array.from(cats);
-          }
-        }
-
-        setVehicleCaps(Array.from(byType.values()));
+        setVehicleCaps(caps);
         setError(null);
       } catch (err) {
         if (mounted) {
