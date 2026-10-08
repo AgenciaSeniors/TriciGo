@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 00646: one bad ride no longer stops the re-dispatch of the others
+-- Migration 00647: one bad ride no longer stops the re-dispatch of the others
 --
 -- retry_dispatch_expired_rides (cron retry-dispatch-expired-rides, every minute)
 -- called dispatch_ride for every eligible searching ride in one transaction,
@@ -28,7 +28,7 @@
 --     still succeeds and returns 0. A failed run rolls back everything it did:
 --     the rpc_attempt_log rows (the error text is then the record) and the
 --     reactivation push of notify_offline_drivers_for_searching_rides, which
---     goes out on the next run that succeeds. Before 00646 the run rolled back
+--     goes out on the next run that succeeds. Before 00647 the run rolled back
 --     in those minutes too, and in every minute with a bad ride.
 --   * A statement timeout (query_canceled) is not caught by WHEN OTHERS, so it
 --     still fails the whole run, as before.
@@ -46,15 +46,15 @@ DO $patch$
 DECLARE
   c_fn       CONSTANT text := 'public.retry_dispatch_expired_rides()';
   c_md5_live CONSTANT text := '44da5d968977eadfcec31e0f7dbd959e';
-  c_md5_new  CONSTANT text := '12ae559c73b0f583f2fb64a5d971b98e';
+  c_md5_new  CONSTANT text := '1782a21256deceb7288892daae968729';
   c_old      CONSTANT text[] := ARRAY[
     E'  v_processed   int := 0;\n',
     E'    PERFORM dispatch_ride(r.id);\n    v_processed := v_processed + 1;\n  END LOOP;\n',
     E'  RETURN v_processed;\nEND;\n'];
   c_new      CONSTANT text[] := ARRAY[
     E'  v_processed   int := 0;\n  v_failed      int := 0;\n  v_last_error  text;\n',
-    E'    -- 00646: one ride per subtransaction, so a ride that makes dispatch_ride\n    -- fail does not stop the re-dispatch of the others.\n    BEGIN\n      PERFORM dispatch_ride(r.id);\n      v_processed := v_processed + 1;\n    EXCEPTION WHEN OTHERS THEN\n      v_failed := v_failed + 1;\n      v_last_error := ''ride '' || r.id || '': '' || SQLSTATE || '' '' || SQLERRM;\n      RAISE WARNING ''[retry_dispatch] not re-dispatched, %'', v_last_error;\n      PERFORM log_rpc_attempt(''retry_dispatch_expired_rides'', NULL, r.id, ''dispatch_failed'',\n        jsonb_build_object(''sqlstate'', SQLSTATE, ''error'', SQLERRM));\n    END;\n  END LOOP;\n',
-    E'  -- 00646: if no ride could be re-dispatched, fail the run, so that\n  -- check_cron_sql_failures reports a broken dispatch_ride.\n  IF v_failed > 0 AND v_processed = 0 THEN\n    RAISE EXCEPTION ''retry_dispatch_expired_rides: none of the % rides could be re-dispatched, last error: %'',\n      v_failed, v_last_error;\n  END IF;\n\n  RETURN v_processed;\nEND;\n'];
+    E'    -- 00647: one ride per subtransaction, so a ride that makes dispatch_ride\n    -- fail does not stop the re-dispatch of the others.\n    BEGIN\n      PERFORM dispatch_ride(r.id);\n      v_processed := v_processed + 1;\n    EXCEPTION WHEN OTHERS THEN\n      v_failed := v_failed + 1;\n      v_last_error := ''ride '' || r.id || '': '' || SQLSTATE || '' '' || SQLERRM;\n      RAISE WARNING ''[retry_dispatch] not re-dispatched, %'', v_last_error;\n      PERFORM log_rpc_attempt(''retry_dispatch_expired_rides'', NULL, r.id, ''dispatch_failed'',\n        jsonb_build_object(''sqlstate'', SQLSTATE, ''error'', SQLERRM));\n    END;\n  END LOOP;\n',
+    E'  -- 00647: if no ride could be re-dispatched, fail the run, so that\n  -- check_cron_sql_failures reports a broken dispatch_ride.\n  IF v_failed > 0 AND v_processed = 0 THEN\n    RAISE EXCEPTION ''retry_dispatch_expired_rides: none of the % rides could be re-dispatched, last error: %'',\n      v_failed, v_last_error;\n  END IF;\n\n  RETURN v_processed;\nEND;\n'];
   v_oid oid;
   v_md5 text;
   v_src text;
@@ -63,7 +63,7 @@ DECLARE
 BEGIN
   v_oid := to_regprocedure(c_fn);
   IF v_oid IS NULL THEN
-    RAISE EXCEPTION '00646: % is missing', c_fn;
+    RAISE EXCEPTION '00647: % is missing', c_fn;
   END IF;
 
   SELECT md5(prosrc), prosrc INTO v_md5, v_src FROM pg_proc WHERE oid = v_oid;
@@ -71,14 +71,14 @@ BEGIN
     RETURN;   -- already patched (second run)
   END IF;
   IF v_md5 <> c_md5_live THEN
-    RAISE EXCEPTION '00646: % has a body this migration does not know (md5 %), refusing to patch it', c_fn, v_md5;
+    RAISE EXCEPTION '00647: % has a body this migration does not know (md5 %), refusing to patch it', c_fn, v_md5;
   END IF;
 
   v_def := pg_get_functiondef(v_oid);
   FOR i IN 1 .. array_length(c_old, 1) LOOP
     IF (length(v_src) - length(replace(v_src, c_old[i], ''))) / length(c_old[i]) <> 1
        OR (length(v_def) - length(replace(v_def, c_old[i], ''))) / length(c_old[i]) <> 1 THEN
-      RAISE EXCEPTION '00646: patch text % does not appear exactly once in %', i, c_fn;
+      RAISE EXCEPTION '00647: patch text % does not appear exactly once in %', i, c_fn;
     END IF;
     v_src := replace(v_src, c_old[i], c_new[i]);
     v_def := replace(v_def, c_old[i], c_new[i]);
@@ -88,7 +88,7 @@ BEGIN
 
   SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = v_oid;
   IF v_md5 <> c_md5_new THEN
-    RAISE EXCEPTION '00646: % was patched to md5 %, expected %', c_fn, v_md5, c_md5_new;
+    RAISE EXCEPTION '00647: % was patched to md5 %, expected %', c_fn, v_md5, c_md5_new;
   END IF;
 END
 $patch$;
@@ -100,19 +100,19 @@ DECLARE
   v_src text;
 BEGIN
   SELECT prosrc INTO v_src FROM pg_proc WHERE oid = v_oid;
-  IF md5(v_src) <> '12ae559c73b0f583f2fb64a5d971b98e' THEN
-    RAISE EXCEPTION '00646: retry_dispatch_expired_rides has md5 %', md5(v_src);
+  IF md5(v_src) <> '1782a21256deceb7288892daae968729' THEN
+    RAISE EXCEPTION '00647: retry_dispatch_expired_rides has md5 %', md5(v_src);
   END IF;
   -- The per-ride guard and the reactivation-push guard, nothing else.
   IF (SELECT count(*) FROM regexp_matches(v_src, 'exception\s+when', 'gi')) <> 2 THEN
-    RAISE EXCEPTION '00646: retry_dispatch_expired_rides must have exactly two EXCEPTION handlers';
+    RAISE EXCEPTION '00647: retry_dispatch_expired_rides must have exactly two EXCEPTION handlers';
   END IF;
   IF has_function_privilege('anon', v_oid, 'EXECUTE') OR has_function_privilege('authenticated', v_oid, 'EXECUTE') THEN
-    RAISE EXCEPTION '00646: retry_dispatch_expired_rides is executable by a client role';
+    RAISE EXCEPTION '00647: retry_dispatch_expired_rides is executable by a client role';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'retry-dispatch-expired-rides'
                  AND command ILIKE '%retry_dispatch_expired_rides()%' AND active) THEN
-    RAISE EXCEPTION '00646: cron job retry-dispatch-expired-rides is missing or inactive';
+    RAISE EXCEPTION '00647: cron job retry-dispatch-expired-rides is missing or inactive';
   END IF;
 END
 $check$;

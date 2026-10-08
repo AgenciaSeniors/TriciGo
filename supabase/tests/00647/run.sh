@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00646 (local Postgres 16, no Supabase stack needed).
-#   supabase/tests/00646/run.sh none
+# Rehearsal runner for migration 00647 (local Postgres 16, no Supabase stack needed).
+#   supabase/tests/00647/run.sh none
 #       -> scaffold + tests on the live prod body of retry_dispatch_expired_rides (RED:
 #          one ride that makes dispatch_ride fail rolls back the whole run, so no
 #          ride is re-dispatched)
-#   supabase/tests/00646/run.sh supabase/migrations/00646_retry_dispatch_per_ride.sql
+#   supabase/tests/00647/run.sh supabase/migrations/00647_retry_dispatch_per_ride.sql
 #       -> scaffold + migration x2 (idempotency) + tests + negative proofs of the
 #          migration's own guards (GREEN)
 # The migration is applied as postgres, the scaffold's non-superuser owner (as in prod).
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
-# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00646/run.sh ...
+# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00647/run.sh ...
 set -u
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -17,7 +17,7 @@ MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 PY="${PYTHON:-python3}"
-DB=pr646
+DB=pr647
 P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = ''"
 PASS=0; FAIL=0
@@ -36,7 +36,7 @@ apply_err(){ local out; if out=$($BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1
              else echo "$out" | tr -d '\r' | grep -m1 ERROR; fi; }
 
 BODY="SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.retry_dispatch_expired_rides()'::regprocedure"
-NEW=12ae559c73b0f583f2fb64a5d971b98e
+NEW=1782a21256deceb7288892daae968729
 R1=00000000-0000-4000-8000-000000000001
 R2=00000000-0000-4000-8000-000000000002
 R3=00000000-0000-4000-8000-000000000003
@@ -137,9 +137,9 @@ PYEOF
   r=$(apply_err ${DB}g "$MIG")
   echo "$r" | grep -q "has a body this migration does not know" && ok "G1 a body that drifted from prod aborts the migration" || ko "G1 a body that drifted from prod aborts the migration" "$r"
 
-  sabotage g2 "c_md5_new  CONSTANT text := '12ae559c73b0f583f2fb64a5d971b98e';" "c_md5_new  CONSTANT text := '00000000000000000000000000000000';"
+  sabotage g2 "c_md5_new  CONSTANT text := '1782a21256deceb7288892daae968729';" "c_md5_new  CONSTANT text := '00000000000000000000000000000000';"
   fresh ${DB}g; r=$(apply_err ${DB}g "$T/g2.sql")
-  echo "$r" | grep -q "was patched to md5 12ae559c73b0f583f2fb64a5d971b98e, expected 00000000000000000000000000000000" && ok "G2 a patch that does not produce the expected body aborts the migration" || ko "G2 a patch that does not produce the expected body aborts the migration" "$r"
+  echo "$r" | grep -q "was patched to md5 1782a21256deceb7288892daae968729, expected 00000000000000000000000000000000" && ok "G2 a patch that does not produce the expected body aborts the migration" || ko "G2 a patch that does not produce the expected body aborts the migration" "$r"
 
   fresh ${DB}g
   $BIN/psql $CONN -d ${DB}g -qAt -c "UPDATE cron.job SET active = false WHERE jobname = 'retry-dispatch-expired-rides'" >/dev/null 2>&1

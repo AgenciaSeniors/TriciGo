@@ -1,12 +1,12 @@
--- Scaffold for the 00646 rehearsal (local Postgres 16, no Supabase stack needed).
+-- Scaffold for the 00647 rehearsal (local Postgres 16, no Supabase stack needed).
 -- Generated on 2026-10-08 from prod (pg_get_functiondef, information_schema, cron.job):
 --   * role postgres: NOT a superuser, BYPASSRLS. It owns every function and table
 --     here and applies the migration, as in prod.
---   * byte for byte the prod bodies of retry_dispatch_expired_rides (the one 00646
+--   * byte for byte the prod bodies of retry_dispatch_expired_rides (the one 00647
 --     patches), log_rpc_attempt and cron_sql_failures_now (check_cron_sql_failures'
 --     read-only helper); run.sh S0 compares md5(prosrc) with the values read from prod.
 --   * dispatch_ride and notify_offline_drivers_for_searching_rides are STUBS: the
---     real ones need PostGIS, drivers and pushes, and what 00646 changes is only how
+--     real ones need PostGIS, drivers and pushes, and what 00647 changes is only how
 --     retry_dispatch_expired_rides handles their errors. The dispatch_ride stub
 --     re-dispatches a ride (new pending offer, dispatch_round + 1) unless the ride
 --     id is listed in the session setting test.poison: then it first inserts a
