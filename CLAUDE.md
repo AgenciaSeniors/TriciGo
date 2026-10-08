@@ -2941,6 +2941,25 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 - Toda política RLS que llame a una función va envuelta en `(SELECT …)`, para que se evalúe una vez por consulta y no una vez por fila. Con `is_admin()` en plpgsql la diferencia es grande.
 - Para encontrar la próxima tabla de este tipo: `SELECT relname, n_live_tup, pg_size_pretty(pg_total_relation_size(relid)) FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 10` y preguntar, por cada una, quién la poda.
 
+### Cuarta tabla de historial sin retención: `rate_limits` (verificado 2026-10-07, mig 00636)
+
+**Qué había:** 90.248 filas (19 MB) desde el 2026-06-07. 72.668 eran de una sola llamada del keepwarm de NETOPIA (`create-netopia-pi:44.234.196.74`, cada 2 min). `cleanup_rate_limits()` existía desde la 00105, pero ningún cron la llamaba.
+
+**Tal como estaba, agendarla habría roto topes.** Borraba todo lo de más de 2 h, y `check_rate_limit` usa ventanas fijas de hasta 24 h: el tope diario de SMS al extranjero, el SOS por día, el aviso de dispositivo nuevo, y desde la 00635 los regalos y el correo a contactos de confianza. Borrar la fila de una ventana abierta reinicia su contador. En el ensayo (W2), un tope diario ya alcanzado pasaba de `allowed=false` a `allowed=true` después de una limpieza.
+
+**Desde la 00636:**
+- `cleanup_rate_limits(p_batch DEFAULT 20000)` conserva 30 días, borra lo más viejo primero, de a 20.000 por llamada, y devuelve cuántas filas borró.
+- La decisión de 30 días es del dueño: las filas son evidencia forense (count − límite = llamadas rechazadas con 429, por función e IP).
+- El cron `cleanup-rate-limits` corre a las :13 de cada hora. En régimen quedan ~45k filas (~1.490 por día × 30).
+- La migración no borró nada: el atraso de 59k filas lo drena el cron en tres corridas.
+- **Si se agrega un `check_rate_limit` con una ventana de más de un par de días**, revisar `c_keep` en la función: tiene que quedar muy por encima de la ventana más larga.
+
+**Una función que corre por cron no se traga sus errores.** Si su bloque principal tiene `EXCEPTION WHEN OTHERS` y devuelve normal, pg_cron registra la corrida como `succeeded` y `check_cron_sql_failures` (00596) no la ve. Por eso `cleanup_rate_limits` no tiene handler (prueba E1 del ensayo). Medido el 2026-10-07: 17 de los 28 crons SQL llaman a funciones con algún `EXCEPTION WHEN OTHERS`, entre ellas los tres `prune_*` de la 00576 y casi todos los vigilantes. No todos lo tienen en el bloque principal (en un despacho por viaje, atrapar el error de una fila es correcto), así que hay que revisarlos uno por uno antes de concluir que el vigilante no los ve.
+
+Ensayo: `supabase/tests/00636/run.sh` (RED: 14 fallos; GREEN 27/27, con 4 pruebas negativas de sus autochequeos).
+
+**Estado: aplicada en prod el 2026-10-07** por MCP (`20261007233934`), sin espera de aprobación pese al `DELETE` en el cuerpo y al `DROP FUNCTION`. El cuerpo en prod es idéntico al del ensayo (md5 `507797d7…/622`). Las tres primeras corridas del job 70 (00:13, 01:13 y 02:13 UTC del 08/10) salieron `succeeded` en 304, 466 y 539 ms y dejaron la tabla en 31.098 filas, la más vieja del 2026-09-08.
+
 ### Toda alarma del proyecto vivía dentro de pg_cron, así que ninguna puede avisar de una caída de disco (verificado 2026-09-21, `ops/supabase-watchdog/`)
 
 **El incidente.** El 2026-09-21, de 09:24 a 12:28 UTC (~3 h), la capa de almacenamiento se atascó. PostgREST devolvió 503 en `/rest/v1/rides` (215), `platform_config` (126), `driver_heartbeat` y `find_nearby_vehicles`; la latencia media por hora llegó a **51 s** y hubo respuestas de **125 s**. **No salió una sola alerta**: el dueño lo descubrió usando la app y reinició el proyecto a mano. Ya había pasado igual el **18** y el **20 de septiembre**.
