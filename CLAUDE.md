@@ -2531,6 +2531,11 @@ Detalles que hacen falta si algún día se toca:
 - Dispara primero y loguea después, con el INSERT en su propio bloque de excepción → el peor caso es "sin trackear", nunca "sin enviar".
 - Retención de `net._http_response` = **6 h** → la ventana del reconciliador es 90 min.
 
+**Los correos de los vigilantes también van por `cron_http_post` (00597, 00647).** No alcanza con que el job llame a una función SQL: si esa función manda su aviso con `net.http_post` crudo, un rechazo de `send-email` (sin clave de Resend, función caída, cualquier 4xx/5xx) no deja rastro. Etiquetas: `cron-sql-failure-alert` (00597); `cron-http-failure-alert`, `fx-stale-alert`, `poi-sync-stale-alert` y `db-health-email` (00647; la última cubre los avisos de `check_database_health` y el resumen diario). Los avisos de recuperación usan la misma etiqueta que los de falla.
+- Si `send-email` está caído, el aviso de `check_cron_http_failures` también falla: lo que se gana es el rastro en `platform_config.cron_http_health_*`. Mientras dure, su propia etiqueta entra y sale de la lista de fallas a medida que sus llamadas salen de la ventana de 90 min, así que reintenta su correo unas 2 veces cada 3 h. No le llega a nadie.
+- Siguen con `net.http_post` crudo a propósito los remitentes transaccionales (recibos, pagos, primer viaje, contactos de confianza, estado del conductor…), el aviso de conductor en revisión y `notify_ops_workflow_failure` (lo llaman los workflows de GitHub): no son vigilantes de cron.
+- El bloque de verificación de 00647 recorre `cron.job` y aborta si algún job llega a un `net.http_post` crudo, directo o a través de una función que llama. Para revisar a mano, copiar esa consulta de la migración: tiene que dar vacío. Ensayo: `supabase/tests/00647/run.sh` (RED: 9 fallos; GREEN: 26/26, con 10 pruebas negativas).
+
 **Diagnóstico canónico — NUNCA confiar en `cron.job_run_details` para saber si una EF anduvo:**
 ```sql
 -- Ahora con atribución por job (lo que antes era imposible):
