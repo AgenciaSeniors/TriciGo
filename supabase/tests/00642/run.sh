@@ -164,7 +164,7 @@ val W3 "SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM infor
   SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public'
   AND table_name IN ('panel_rides', 'panel_driver_profiles')
   AND column_name IN ('share_token', 'share_token_expires_at', 'current_location', 'current_heading', 'last_heartbeat_at')" \
-  "id,created_at,status,customer_id,driver_id,service_type,city_id,estimated_fare_cup,final_fare_cup,final_fare_trc,payment_method,pickup_address,dropoff_address,promo_code_id,discount_amount_cup,shared_ride_discount_cup;id,user_id,is_online;0"
+  "id,created_at,status,customer_id,driver_id,service_type,city_id,estimated_fare_cup,final_fare_cup,final_fare_trc,payment_method,pickup_address,dropoff_address,promo_code_id,discount_amount_cup,shared_ride_discount_cup,dispatch_round;id,user_id,is_online,total_rides_completed,total_rides;0"
 # W4: a customer gets no row from either view, not even its own ride
 val W4 "BEGIN; $(as_user $CARLA) SELECT (SELECT count(*) FROM public.panel_rides), (SELECT count(*) FROM public.panel_driver_profiles); ROLLBACK;" "0|0"
 # W5: anon may not read them at all
@@ -177,6 +177,9 @@ val W6 "BEGIN; $(as_user $ANA) SELECT (SELECT count(*) FROM public.panel_rides),
 # W7: nobody writes through them (they read as their owner, past the base tables' RLS)
 err W7a "BEGIN; $(as_user $MARA) UPDATE public.panel_rides SET status = 'canceled'; ROLLBACK;" "permission denied for view panel_rides"
 err W7b "BEGIN; $(as_user $ANA) DELETE FROM public.panel_driver_profiles; ROLLBACK;" "permission denied for view panel_driver_profiles"
+# W8: the dispatch round and the drivers' ride counters come through, as the base tables hold them
+val W8 "BEGIN; $(as_user $MARA) SELECT (SELECT dispatch_round FROM public.panel_rides WHERE id = '$RIDE_C'),
+  (SELECT total_rides_completed || '/' || total_rides FROM public.panel_driver_profiles WHERE id = '$DIEGO_DP'); ROLLBACK;" "2|12/9"
 
 # --- P: promotions, draft and approval --------------------------------------------------
 # P1: whatever marketing sends, a new promotion is an inactive draft of its own, unused, unapproved

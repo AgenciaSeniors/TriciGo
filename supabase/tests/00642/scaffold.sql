@@ -62,6 +62,8 @@ CREATE TABLE public.driver_profiles (
   status public.driver_status NOT NULL DEFAULT 'pending_verification',
   rating_avg numeric,
   is_online boolean NOT NULL DEFAULT false,
+  total_rides integer NOT NULL DEFAULT 0,
+  total_rides_completed integer NOT NULL DEFAULT 0,
   -- the live GPS the panel view must leave out (geography in prod)
   current_location text,
   current_heading numeric,
@@ -93,6 +95,7 @@ CREATE TABLE public.rides (
   shared_ride_discount_cup integer NOT NULL DEFAULT 0,
   partner_place_id uuid,
   partner_discount_cup integer NOT NULL DEFAULT 0,
+  dispatch_round integer NOT NULL DEFAULT 0,
   -- live tracking of the ride, which the panel view must leave out
   share_token text,
   share_token_expires_at timestamptz
@@ -658,12 +661,12 @@ INSERT INTO public.users (id, full_name, role) VALUES
   ('c0000000-0000-4000-8000-000000000003', 'Mara Marketing', 'customer');
 INSERT INTO public.customer_profiles (user_id) VALUES
   ('c0000000-0000-4000-8000-000000000001'), ('c0000000-0000-4000-8000-000000000003');
-INSERT INTO public.driver_profiles (id, user_id, status) VALUES
-  ('d0000000-0000-4000-8000-000000000002', 'c0000000-0000-4000-8000-000000000002', 'approved');
+INSERT INTO public.driver_profiles (id, user_id, status, total_rides_completed, total_rides) VALUES
+  ('d0000000-0000-4000-8000-000000000002', 'c0000000-0000-4000-8000-000000000002', 'approved', 12, 9);
 INSERT INTO public.wallet_accounts (user_id, account_type, balance) VALUES
   ('c0000000-0000-4000-8000-000000000001', 'customer_cash', 500);
-INSERT INTO public.rides (id, customer_id) VALUES
-  ('f0000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-000000000001');
+INSERT INTO public.rides (id, customer_id, dispatch_round) VALUES
+  ('f0000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-000000000001', 2);
 INSERT INTO public.referrals (referrer_id, referee_id) VALUES
   ('c0000000-0000-4000-8000-000000000002', 'c0000000-0000-4000-8000-000000000001');
 INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, reason) VALUES

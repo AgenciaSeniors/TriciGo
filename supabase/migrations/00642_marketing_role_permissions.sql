@@ -245,13 +245,13 @@ WITH (security_barrier = true, security_invoker = false) AS
 SELECT r.id, r.created_at, r.status, r.customer_id, r.driver_id, r.service_type, r.city_id,
        r.estimated_fare_cup, r.final_fare_cup, r.final_fare_trc, r.payment_method,
        r.pickup_address, r.dropoff_address, r.promo_code_id, r.discount_amount_cup,
-       r.shared_ride_discount_cup
+       r.shared_ride_discount_cup, r.dispatch_round
 FROM public.rides r
 WHERE (SELECT public.is_admin()) OR (SELECT public.is_marketing());
 
 CREATE OR REPLACE VIEW public.panel_driver_profiles
 WITH (security_barrier = true, security_invoker = false) AS
-SELECT dp.id, dp.user_id, dp.is_online
+SELECT dp.id, dp.user_id, dp.is_online, dp.total_rides_completed, dp.total_rides
 FROM public.driver_profiles dp
 WHERE (SELECT public.is_admin()) OR (SELECT public.is_marketing());
 
@@ -475,8 +475,8 @@ BEGIN
     SELECT * FROM (VALUES
       ('panel_rides', 'id,created_at,status,customer_id,driver_id,service_type,city_id,'
         || 'estimated_fare_cup,final_fare_cup,final_fare_trc,payment_method,pickup_address,'
-        || 'dropoff_address,promo_code_id,discount_amount_cup,shared_ride_discount_cup'),
-      ('panel_driver_profiles', 'id,user_id,is_online')
+        || 'dropoff_address,promo_code_id,discount_amount_cup,shared_ride_discount_cup,dispatch_round'),
+      ('panel_driver_profiles', 'id,user_id,is_online,total_rides_completed,total_rides')
     ) AS v(n, cols)
   LOOP
     IF (SELECT string_agg(attname, ',' ORDER BY attnum) FROM pg_attribute
