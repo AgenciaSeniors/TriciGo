@@ -32,7 +32,7 @@ describe('promotionService.countPendingApproval', () => {
     expect(eq).toHaveBeenCalledWith('pending_approval', true);
   });
 
-  it('is 0 when the column does not exist yet (00641 not applied)', async () => {
+  it('is 0 when the column does not exist yet (00642 not applied)', async () => {
     mockCountChain({ count: null, error: { message: 'column promotions.pending_approval does not exist' } });
     await expect(promotionService.countPendingApproval()).resolves.toBe(0);
   });
@@ -97,7 +97,7 @@ describe('promotionService.approve', () => {
     await expect(promotionService.approve('p1', 0)).rejects.toMatchObject({ code: 'PROMOTION_CHANGED' });
   });
 
-  it('falls back to a plain activation while the revision column does not exist (00641 not applied)', async () => {
+  it('falls back to a plain activation while the revision column does not exist (00642 not applied)', async () => {
     mockApproveChain({
       data: null,
       error: { code: '42703', message: 'column promotions.revision does not exist' },

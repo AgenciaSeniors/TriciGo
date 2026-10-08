@@ -32,7 +32,7 @@ function publicUrl(request: NextRequest, path: string): URL {
  *  - User does not have a panel role (admin, super_admin or marketing)
  *
  * Sends a marketing account that opens a page outside its allow-list to its home
- * (@tricigo/utils/adminPanelAccess, the same list the menus use, 00641).
+ * (@tricigo/utils/adminPanelAccess, the same list the menus use, 00642).
  */
 export async function middleware(request: NextRequest) {
   // Dev-only escape hatch for design previews: /foo?__preview=1

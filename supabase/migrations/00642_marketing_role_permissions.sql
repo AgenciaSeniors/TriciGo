@@ -1,8 +1,8 @@
 -- ============================================================
--- 00641 — marketing role: what a marketing account may read and write
+-- 00642 — marketing role: what a marketing account may read and write
 --
 -- Spec: docs/superpowers/specs/2026-10-08-marketing-role-design.md
--- Needs 00640 (the enum value) committed first: a value added by ALTER TYPE cannot be used in
+-- Needs 00641 (the enum value) committed first: a value added by ALTER TYPE cannot be used in
 -- the transaction that adds it.
 --
 --   1. is_marketing(): the twin of is_admin() (00592), anon-safe.
@@ -22,7 +22,7 @@
 -- against (md5 below), is skipped on the body it leaves, and refuses any other body.
 -- No statement here drops or removes anything.
 --
--- Rehearsal: supabase/tests/00641/run.sh (RED without this file, GREEN with it, applied twice)
+-- Rehearsal: supabase/tests/00642/run.sh (RED without this file, GREEN with it, applied twice)
 -- ============================================================
 
 -- Creating a policy locks its table. Waiting behind a long transaction would queue the app's
@@ -69,11 +69,11 @@ ALTER TABLE public.promotions
   ADD COLUMN IF NOT EXISTS revision integer NOT NULL DEFAULT 0;
 
 COMMENT ON COLUMN public.promotions.pending_approval IS
-  'true while a promotion created or edited by marketing waits for an admin to turn it on (00641).';
+  'true while a promotion created or edited by marketing waits for an admin to turn it on (00642).';
 COMMENT ON COLUMN public.promotions.revision IS
   'Counts changes to what a promotion offers. Only its trigger writes it. The panel approves with '
   '"WHERE revision = <the one the admin saw> AND NOT is_active", so an edit made while the admin '
-  'was looking matches no row (00641).';
+  'was looking matches no row (00642).';
 
 -- Whether anything points at a promotion. The guard below asks it before marketing deletes one:
 -- the guard runs as the caller, and RLS hides most of these rows from marketing. It answers
@@ -263,9 +263,9 @@ GRANT SELECT ON public.panel_rides TO authenticated, service_role;
 GRANT SELECT ON public.panel_driver_profiles TO authenticated, service_role;
 
 COMMENT ON VIEW public.panel_rides IS
-  'Rides as the admin panel lists them, for admins and marketing: no share_token (00641).';
+  'Rides as the admin panel lists them, for admins and marketing: no share_token (00642).';
 COMMENT ON VIEW public.panel_driver_profiles IS
-  'Driver profiles as the admin panel lists them, for admins and marketing: no GPS (00641).';
+  'Driver profiles as the admin panel lists them, for admins and marketing: no GPS (00642).';
 
 -- 5. Metrics RPCs ---------------------------------------------------------------------------
 -- The admin gate of each one becomes "admin or marketing". Two spellings exist in prod; the
@@ -296,17 +296,17 @@ BEGIN
     v_md5 := md5(v_src);
     CONTINUE WHEN v_md5 = r.new_md5;
     IF v_md5 <> r.old_md5 THEN
-      RAISE EXCEPTION '00641: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
+      RAISE EXCEPTION '00642: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
     END IF;
     v_target := CASE WHEN position('IF NOT public.is_admin() THEN' IN v_src) > 0
                      THEN 'IF NOT public.is_admin() THEN' ELSE 'IF NOT is_admin() THEN' END;
     IF (length(v_src) - length(replace(v_src, v_target, ''))) / length(v_target) <> 1 THEN
-      RAISE EXCEPTION '00641: the admin gate is not in % exactly once', r.fn;
+      RAISE EXCEPTION '00642: the admin gate is not in % exactly once', r.fn;
     END IF;
     EXECUTE replace(pg_get_functiondef(r.fn::regprocedure), v_target, c_gate);
     SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = r.fn::regprocedure;
     IF v_md5 <> r.new_md5 THEN
-      RAISE EXCEPTION '00641: % patched to an unexpected body (md5 %)', r.fn, v_md5;
+      RAISE EXCEPTION '00642: % patched to an unexpected body (md5 %)', r.fn, v_md5;
     END IF;
   END LOOP;
 END
@@ -352,15 +352,15 @@ $t$),
     v_md5 := md5(v_src);
     CONTINUE WHEN v_md5 = r.new_md5;
     IF v_md5 <> r.old_md5 THEN
-      RAISE EXCEPTION '00641: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
+      RAISE EXCEPTION '00642: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
     END IF;
     IF (length(v_src) - length(replace(v_src, r.target, ''))) / length(r.target) <> 1 THEN
-      RAISE EXCEPTION '00641: the role list is not in % exactly once', r.fn;
+      RAISE EXCEPTION '00642: the role list is not in % exactly once', r.fn;
     END IF;
     EXECUTE replace(pg_get_functiondef(r.fn::regprocedure), r.target, r.repl);
     SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = r.fn::regprocedure;
     IF v_md5 <> r.new_md5 THEN
-      RAISE EXCEPTION '00641: % patched to an unexpected body (md5 %)', r.fn, v_md5;
+      RAISE EXCEPTION '00642: % patched to an unexpected body (md5 %)', r.fn, v_md5;
     END IF;
   END LOOP;
 END
@@ -383,23 +383,23 @@ DECLARE
 BEGIN
   -- is_marketing(): invoker, callable by the API roles (policies call it), false without a JWT.
   IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.is_marketing()'::regprocedure) THEN
-    RAISE EXCEPTION '00641: is_marketing() must not be SECURITY DEFINER';
+    RAISE EXCEPTION '00642: is_marketing() must not be SECURITY DEFINER';
   END IF;
   IF NOT has_function_privilege('anon', 'public.is_marketing()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.is_marketing()', 'EXECUTE') THEN
-    RAISE EXCEPTION '00641: anon and authenticated must be able to call is_marketing()';
+    RAISE EXCEPTION '00642: anon and authenticated must be able to call is_marketing()';
   END IF;
   PERFORM set_config('request.jwt.claim.sub', '', true);
   SET LOCAL ROLE anon;
   IF public.is_marketing() THEN
-    RAISE EXCEPTION '00641: is_marketing() is true without a JWT';
+    RAISE EXCEPTION '00642: is_marketing() is true without a JWT';
   END IF;
   RESET ROLE;
 
   -- The guard reads current_user to tell marketing's own writes from the ride triggers' writes:
   -- as a SECURITY DEFINER it would always see its owner.
   IF (SELECT prosecdef FROM pg_proc WHERE oid = c_guard) THEN
-    RAISE EXCEPTION '00641: tg_promotions_marketing_guard() must be SECURITY INVOKER';
+    RAISE EXCEPTION '00642: tg_promotions_marketing_guard() must be SECURITY INVOKER';
   END IF;
   -- On every write to promotions, row by row: no event, column list or WHEN missing, enabled.
   -- tgtype bits: ROW 1, BEFORE 2, INSERT 4, DELETE 8, UPDATE 16 (TRUNCATE 32, INSTEAD 64).
@@ -411,19 +411,19 @@ BEGIN
                    AND tgtype = (1 | 2 | 4 | 8 | 16)
                    AND cardinality(tgattr::int2[]) = 0
                    AND tgqual IS NULL) THEN
-    RAISE EXCEPTION '00641: trg_promotions_marketing_guard must fire BEFORE INSERT OR UPDATE OR DELETE FOR EACH ROW on promotions, on every column, enabled';
+    RAISE EXCEPTION '00642: trg_promotions_marketing_guard must fire BEFORE INSERT OR UPDATE OR DELETE FOR EACH ROW on promotions, on every column, enabled';
   END IF;
 
   -- promotion_is_referenced(): a definer with an empty search_path, callable by authenticated only.
   IF NOT EXISTS (SELECT 1 FROM pg_proc
                  WHERE oid = c_ref AND prosecdef AND proconfig = ARRAY['search_path=""']) THEN
-    RAISE EXCEPTION '00641: promotion_is_referenced(uuid) must be SECURITY DEFINER with search_path = ''''';
+    RAISE EXCEPTION '00642: promotion_is_referenced(uuid) must be SECURITY DEFINER with search_path = ''''';
   END IF;
   IF NOT has_function_privilege('authenticated', c_ref, 'EXECUTE')
      OR has_function_privilege('anon', c_ref, 'EXECUTE')
      OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
                 WHERE p.oid = c_ref AND a.grantee = 0 AND a.privilege_type = 'EXECUTE') THEN
-    RAISE EXCEPTION '00641: promotion_is_referenced(uuid) must be executable by authenticated and not by anon or PUBLIC';
+    RAISE EXCEPTION '00642: promotion_is_referenced(uuid) must be executable by authenticated and not by anon or PUBLIC';
   END IF;
 
   FOR v_tbl, v_name, v_cmd IN
@@ -445,17 +445,17 @@ BEGIN
       INTO v_pcmd, v_roles, v_perm, v_qual, v_check
     FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = v_tbl AND p.policyname = v_name;
     IF NOT FOUND THEN
-      RAISE EXCEPTION '00641: policy % on % is missing', v_name, v_tbl;
+      RAISE EXCEPTION '00642: policy % on % is missing', v_name, v_tbl;
     END IF;
     IF (v_cmd IN ('SELECT', 'UPDATE', 'DELETE', 'ALL') AND position('is_marketing()' IN v_qual) = 0)
        OR (v_cmd IN ('INSERT', 'UPDATE', 'ALL') AND position('is_marketing()' IN v_check) = 0) THEN
-      RAISE EXCEPTION '00641: policy % on % does not use is_marketing()', v_name, v_tbl;
+      RAISE EXCEPTION '00642: policy % on % does not use is_marketing()', v_name, v_tbl;
     END IF;
     IF v_pcmd <> v_cmd THEN
-      RAISE EXCEPTION '00641: policy % on % is FOR %, not FOR %', v_name, v_tbl, v_pcmd, v_cmd;
+      RAISE EXCEPTION '00642: policy % on % is FOR %, not FOR %', v_name, v_tbl, v_pcmd, v_cmd;
     END IF;
     IF v_roles <> ARRAY['authenticated']::name[] OR v_perm <> 'PERMISSIVE' THEN
-      RAISE EXCEPTION '00641: policy % on % must be PERMISSIVE and TO authenticated only (it is % TO %)',
+      RAISE EXCEPTION '00642: policy % on % must be PERMISSIVE and TO authenticated only (it is % TO %)',
         v_name, v_tbl, v_perm, v_roles;
     END IF;
   END LOOP;
@@ -466,7 +466,7 @@ BEGIN
     AND (position('is_marketing' IN coalesce(qual, '')) > 0
          OR position('is_marketing' IN coalesce(with_check, '')) > 0);
   IF v_def IS NOT NULL THEN
-    RAISE EXCEPTION '00641: % let marketing read rides or driver_profiles directly; it must use the panel views', v_def;
+    RAISE EXCEPTION '00642: % let marketing read rides or driver_profiles directly; it must use the panel views', v_def;
   END IF;
 
   -- The panel views: exactly their columns, read as the owner behind the admin-or-marketing
@@ -482,16 +482,16 @@ BEGIN
     IF (SELECT string_agg(attname, ',' ORDER BY attnum) FROM pg_attribute
         WHERE attrelid = ('public.' || v_name)::regclass AND attnum > 0 AND NOT attisdropped)
        IS DISTINCT FROM v_def THEN
-      RAISE EXCEPTION '00641: view % must have exactly the columns %', v_name, v_def;
+      RAISE EXCEPTION '00642: view % must have exactly the columns %', v_name, v_def;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_class
                    WHERE oid = ('public.' || v_name)::regclass AND relkind = 'v'
                      AND reloptions @> ARRAY['security_barrier=true', 'security_invoker=false']) THEN
-      RAISE EXCEPTION '00641: view % must be a security_barrier view that is not security_invoker', v_name;
+      RAISE EXCEPTION '00642: view % must be a security_barrier view that is not security_invoker', v_name;
     END IF;
     v_qual := pg_get_viewdef(('public.' || v_name)::regclass);
     IF position('is_admin()' IN v_qual) = 0 OR position('is_marketing()' IN v_qual) = 0 THEN
-      RAISE EXCEPTION '00641: view % does not gate its rows on is_admin() or is_marketing()', v_name;
+      RAISE EXCEPTION '00642: view % does not gate its rows on is_admin() or is_marketing()', v_name;
     END IF;
     IF NOT has_table_privilege('authenticated', 'public.' || v_name, 'SELECT')
        OR NOT has_table_privilege('service_role', 'public.' || v_name, 'SELECT')
@@ -501,7 +501,7 @@ BEGIN
                     AND (a.grantee = 0
                          OR (a.grantee IN ('anon'::regrole, 'authenticated'::regrole, 'service_role'::regrole)
                              AND a.privilege_type <> 'SELECT'))) THEN
-      RAISE EXCEPTION '00641: view % must be readable by authenticated and service_role only, and writable by none of them', v_name;
+      RAISE EXCEPTION '00642: view % must be readable by authenticated and service_role only, and writable by none of them', v_name;
     END IF;
   END LOOP;
 
@@ -509,7 +509,7 @@ BEGIN
   SELECT coalesce(with_check, '') INTO v_check FROM pg_policies
   WHERE schemaname = 'public' AND tablename = 'campaigns' AND policyname = 'campaigns_insert_marketing';
   IF v_check !~ 'created_by = \( SELECT auth\.uid\(\)' THEN
-    RAISE EXCEPTION '00641: policy campaigns_insert_marketing does not tie created_by to auth.uid()';
+    RAISE EXCEPTION '00642: policy campaigns_insert_marketing does not tie created_by to auth.uid()';
   END IF;
 
   FOR v_name, v_def IN
@@ -529,7 +529,7 @@ BEGIN
     ) AS v(fn, md5)
   LOOP
     IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_name::regprocedure) <> v_def THEN
-      RAISE EXCEPTION '00641: % does not have the patched body', v_name;
+      RAISE EXCEPTION '00642: % does not have the patched body', v_name;
     END IF;
   END LOOP;
 END

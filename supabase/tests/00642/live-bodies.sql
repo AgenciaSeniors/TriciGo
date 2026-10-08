@@ -1,5 +1,5 @@
 -- Live bodies dumped from prod on 2026-10-08 with pg_get_functiondef (read-only MCP query).
--- The 00641 rehearsal loads them as they run in prod; run.sh (L1) checks each md5.
+-- The 00642 rehearsal loads them as they run in prod; run.sh (L1) checks each md5.
 
 CREATE OR REPLACE FUNCTION public.admin_launch_pulse(p_weeks integer DEFAULT 12)
  RETURNS jsonb

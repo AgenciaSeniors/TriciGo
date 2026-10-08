@@ -110,9 +110,9 @@ Reading the code and prod for the plan changed these points. None changes a deci
 
 - **`get_platform_earnings` stays admin-only.** Only `/earnings` calls it, and marketing does not get that page.
 - **Three live functions list roles and need `marketing`:**
-  - `enforce_ride_transition` checks every ride status change against `valid_transitions.allowed_roles`, which lists customer, driver, admin and super_admin. A marketing account riding as a passenger could not even cancel its own search. 00641 treats marketing as `customer` there; the function already turns an owner of the approved driver profile into `driver`.
-  - `ensure_driver_role_and_tricicoin_on_approval` sets `role = 'driver'` on approval for everyone except driver, admin and super_admin. A marketing person approved as a driver would lose the marketing role. 00641 adds `marketing` to that list.
-  - `apply_user_rating` updates `customer_profiles` for customer, admin and super_admin. 00641 adds `marketing`.
+  - `enforce_ride_transition` checks every ride status change against `valid_transitions.allowed_roles`, which lists customer, driver, admin and super_admin. A marketing account riding as a passenger could not even cancel its own search. 00642 treats marketing as `customer` there; the function already turns an owner of the approved driver profile into `driver`.
+  - `ensure_driver_role_and_tricicoin_on_approval` sets `role = 'driver'` on approval for everyone except driver, admin and super_admin. A marketing person approved as a driver would lose the marketing role. 00642 adds `marketing` to that list.
+  - `apply_user_rating` updates `customer_profiles` for customer, admin and super_admin. 00642 adds `marketing`.
 - **Already safe:** `tg_users_protect_admin_fields` reverts a role change by anyone but a super_admin, and `promote_user_role` (super_admin only) can set `marketing`. Recharges and gifts treat any non-driver role as a passenger.
 - **Users list and user detail** show a "Marketing" role badge.
 

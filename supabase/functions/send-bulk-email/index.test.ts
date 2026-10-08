@@ -137,7 +137,7 @@ const campaignAs = (token: string) => handler(new Request('https://example.supab
   body: JSON.stringify({ user_ids: [VICTIM, PROVEN, NO_OPT], subject: 'Promo', body_html: '<p>Hola</p>' }),
 }));
 
-describe('send-bulk-email: who may send a campaign (00641)', () => {
+describe('send-bulk-email: who may send a campaign (00642)', () => {
   it('marketing may, and it still reaches only consenting, proven addresses', async () => {
     const res = await campaignAs('jwt-marketing');
     expect(res.status).toBe(200);

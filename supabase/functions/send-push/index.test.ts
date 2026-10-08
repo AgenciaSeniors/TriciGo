@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Runs the real send-push handler to check who may send which push (00641, marketing role).
+// Runs the real send-push handler to check who may send which push (00642, marketing role).
 // supabase-js (esm.sh) is replaced with a fake client: a session table for auth.getUser, a role
 // per user, the device tokens in db.devices (none unless a test sets them, so nothing reaches
 // Expo), and empty answers for everything else. fetch is stubbed so Expo calls are observed.

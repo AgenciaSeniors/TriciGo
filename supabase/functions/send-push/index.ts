@@ -11,7 +11,7 @@
 // and would happily send pushes to any `user_ids` array. A regular
 // rider could call it to phish drivers or admins via the inbox
 // (notifications table). Now requires service_role OR admin role.
-// 00641: marketing may call it too, only for the content categories its pages send
+// 00642: marketing may call it too, only for the content categories its pages send
 // (campaign, announcement, promo, blog). See _shared/panel-roles.ts.
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
@@ -271,7 +271,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 00641: marketing sends only the content categories its pages use (campaign, announcement,
+    // 00642: marketing sends only the content categories its pages use (campaign, announcement,
     // promo, blog). Any other category is refused, and so is an uncategorized push (sendToUser's
     // system notices). Recipients are not checked: the Notificaciones page's one-user push is an
     // 'announcement' and passes here; the panel keeps that page admin-only (menu + middleware).
@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 00641: a marketing push keeps only the data keys the panel's content pushes send
+    // 00642: a marketing push keeps only the data keys the panel's content pushes send
     // (deep_link, content_type, content_id). The apps react to other keys on receipt (event,
     // ride_id…) and navigate on them when tapped. Admins and internal calls keep their data as is.
     const data = !isInternalCall && !isAdminRole(callerRole) ? marketingPushData(requestData) : requestData;

@@ -22,7 +22,7 @@ type Filter = 'all' | ReferralStatus;
 
 export default function ReferralsPage() {
   const { t } = useTranslation('admin');
-  // 00641: marketing reads referrals; rewarding or invalidating one moves money, so it stays with admins.
+  // 00642: marketing reads referrals; rewarding or invalidating one moves money, so it stays with admins.
   const { role } = usePanelRole();
   const isMarketing = menuRole(role) === 'marketing';
 

@@ -61,7 +61,7 @@ function inputToIso(value: string): string | null {
 }
 
 // promotionService.approve matched nothing: the promotion was edited (a new revision) or
-// switched on by someone else after this list loaded it (00641).
+// switched on by someone else after this list loaded it (00642).
 function promotionChanged(e: unknown): boolean {
   return (e as { code?: string } | null)?.code === 'PROMOTION_CHANGED';
 }
@@ -86,7 +86,7 @@ export default function PromotionsAdminPage() {
   const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
   const [notifyTarget, setNotifyTarget] = useState<Promotion | null>(null);
   const [notifying, setNotifying] = useState(false);
-  // 00641: marketing writes drafts; an admin activates them (the server enforces it too).
+  // 00642: marketing writes drafts; an admin activates them (the server enforces it too).
   const { role } = usePanelRole();
   const isMarketing = menuRole(role) === 'marketing';
   const [pendingCount, setPendingCount] = useState(0);
@@ -228,7 +228,7 @@ export default function PromotionsAdminPage() {
         discount_percent: isPct ? Number(form.discount_percent) || 0 : null,
         discount_fixed_cup: isPct ? null : Number(form.discount_fixed_cup) || 0,
         max_uses: form.max_uses.trim() ? Number(form.max_uses) : null,
-        // Marketing's promotions are always saved off; the server forces it too (00641).
+        // Marketing's promotions are always saved off; the server forces it too (00642).
         is_active: isMarketing ? false : form.is_active,
         valid_from: inputToIso(form.valid_from) ?? new Date().toISOString(),
         valid_until: inputToIso(form.valid_until),
@@ -380,7 +380,7 @@ export default function PromotionsAdminPage() {
   };
 
   // Only admins reach this (marketing gets handlePause). Turning a promotion on is an approval of
-  // the version this list shows: approve() refuses one that changed since (00641).
+  // the version this list shows: approve() refuses one that changed since (00642).
   const handleToggleActive = useCallback(async (p: Promotion) => {
     try {
       if (p.is_active) {
@@ -408,7 +408,7 @@ export default function PromotionsAdminPage() {
     }
   }, [showToast, t, maybeNotifyOnPublish, loadItems]);
 
-  // Marketing's only switch: it can turn a live promotion off, never on (00641).
+  // Marketing's only switch: it can turn a live promotion off, never on (00642).
   const handlePause = async (p: Promotion) => {
     if (!p.is_active) {
       showToast('error', t('promotions.already_paused', { defaultValue: 'Esta promoción ya está pausada.' }));

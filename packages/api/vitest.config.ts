@@ -23,7 +23,7 @@ export default defineConfig({
       // supabase-js replaced with vi.mock.
       '../../supabase/functions/behavioral-emails/*.test.ts',
       '../../supabase/functions/send-bulk-email/*.test.ts',
-      // send-push's handler: role and category gate (00641). supabase-js and the rate limiter
+      // send-push's handler: role and category gate (00642). supabase-js and the rate limiter
       // replaced with vi.mock, Deno stubbed.
       '../../supabase/functions/send-push/*.test.ts',
       '../../supabase/functions/notify-document-rejection/*.test.ts',

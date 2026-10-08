@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Rehearsal runner for migrations 00640 + 00641 (marketing role in the admin panel).
+# Rehearsal runner for migrations 00641 + 00642 (marketing role in the admin panel).
 # Builds prod as of 2026-10-08 from scaffold.sql (tables, policies, triggers) and live-bodies.sql
-# (the live functions 00641 patches or calls; L1 checks each against prod's md5), applies 00640
+# (the live functions 00642 patches or calls; L1 checks each against prod's md5), applies 00641
 # twice (the enum value, harmless on its own) and turns Mara into a marketing account.
-#   supabase/tests/00641/run.sh none
-#       -> prod + 00640 + tests (RED: marketing reads nothing, cannot ride, loses its role as a driver)
+#   supabase/tests/00642/run.sh none
+#       -> prod + 00641 + tests (RED: marketing reads nothing, cannot ride, loses its role as a driver)
 #          The scaffold's last tests commit a canceled ride that names a promotion (K4): keep them last.
-#   supabase/tests/00641/run.sh supabase/migrations/00641_marketing_role_permissions.sql
-#       -> the same + 00641 applied twice, each time in one transaction (GREEN) + negative proofs
+#   supabase/tests/00642/run.sh supabase/migrations/00642_marketing_role_permissions.sql
+#       -> the same + 00642 applied twice, each time in one transaction (GREEN) + negative proofs
 # Cluster: user pgtest, port 5433. Other clusters: PGBIN=<dir with psql> PGPORT=<port>.
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -16,8 +16,8 @@ MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
-DB=pr641
-GUARD=pr641guard
+DB=pr642
+GUARD=pr642guard
 ENUM="$ROOT/supabase/migrations/00641_marketing_role_enum.sql"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = '';"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
@@ -57,7 +57,7 @@ LIVE_MD5="admin_launch_pulse=21c359c7427f75016c38b6b758ad23a7,admin_signup_code_
 PATCHED_NAMES="'admin_launch_pulse','admin_signup_code_stats','apply_user_rating','enforce_ride_transition',
   'ensure_driver_role_and_tricicoin_on_approval','get_active_push_user_ids','get_admin_dashboard_metrics',
   'get_admin_wallet_stats','get_rides_by_day','get_rides_by_payment_method','get_rides_by_service_type','get_top_drivers'"
-# Computed in prod on 2026-10-08 as md5(replace(prosrc, <target>, <replacement>)): the bodies 00641 must leave.
+# Computed in prod on 2026-10-08 as md5(replace(prosrc, <target>, <replacement>)): the bodies 00642 must leave.
 PATCHED_MD5="admin_launch_pulse=bb5d37a5bca57a64d3e3409ada2dd6b6,admin_signup_code_stats=16a8ed1ebe03aa82f2f75676783a9099,apply_user_rating=96be8c154990651738312ef44861242f,enforce_ride_transition=f806997fab31c18e7b369e69f5321c30,ensure_driver_role_and_tricicoin_on_approval=1940d4379a446c8afdf0d47434945c07,get_active_push_user_ids=875f787da6a1c0fcce8708404efd72d8,get_admin_dashboard_metrics=32cec76d3f079f6938b09f8bb7e919b2,get_admin_wallet_stats=0f937c94cda1d26e7dd2da7d574949dd,get_rides_by_day=fd5363b072a17da61325a23cfd1486af,get_rides_by_payment_method=2ecacefdfef6c96da84d3b2f20a0b138,get_rides_by_service_type=ffd6c633752a21bba4945625fc9aaaaf,get_top_drivers=03e7be0213769612782ed3bcb0183f3a"
 GATE='Admin only\|forbidden\|Forbidden'
 METRICS="admin_launch_pulse(4) admin_signup_code_stats() get_admin_dashboard_metrics() get_admin_wallet_stats()
@@ -71,7 +71,7 @@ load(){ local db=$1 i
     || { echo "scaffold failed:"; cat "$TMP/scaffold.out"; exit 1; }
   for i in 1 2; do
     $BIN/psql $CONN -d "$db" -q -v ON_ERROR_STOP=1 -c "$AS_OWNER" -f "$ENUM" >"$TMP/enum.out" 2>&1 \
-      || { echo "00640 failed on apply $i:"; cat "$TMP/enum.out"; exit 1; }
+      || { echo "00641 failed on apply $i:"; cat "$TMP/enum.out"; exit 1; }
   done
   $BIN/psql $CONN -d "$db" -q -v ON_ERROR_STOP=1 -c "UPDATE public.users SET role = 'marketing' WHERE id = '$MARA'" \
     >"$TMP/mara.out" 2>&1 || { echo "could not make Mara marketing:"; cat "$TMP/mara.out"; exit 1; }
@@ -89,7 +89,7 @@ load $DB
 # L1: the live bodies are prod's (md5 of prosrc read from prod on 2026-10-08)
 val L1 "SELECT string_agg(proname || '=' || md5(prosrc), ',' ORDER BY proname COLLATE \"C\")
   FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ($LIVE_NAMES)" "$LIVE_MD5"
-# E1: 00640 added the value at the end, twice without error, and Mara is marketing
+# E1: 00641 added the value at the end, twice without error, and Mara is marketing
 val E1 "SELECT string_agg(enumlabel, ',' ORDER BY enumsortorder) FROM pg_enum
   WHERE enumtypid = 'public.user_role'::regtype; SELECT role FROM public.users WHERE id = '$MARA'" \
   "customer,driver,admin,super_admin,marketing;marketing"

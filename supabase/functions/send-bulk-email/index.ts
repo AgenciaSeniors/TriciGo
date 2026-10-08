@@ -13,7 +13,7 @@
 // subject, and HTML body, sending phishing emails from our
 // noreply@tricigo.com address and burning the Resend quota.
 // Now requires admin role (or service_role for cron/automation).
-// 00641: marketing may send campaigns too. It still reaches only users who opted in, at a
+// 00642: marketing may send campaigns too. It still reaches only users who opted in, at a
 // proven address.
 // ============================================================
 

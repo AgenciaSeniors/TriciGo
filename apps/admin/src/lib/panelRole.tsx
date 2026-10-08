@@ -13,7 +13,7 @@ interface PanelRoleState {
 const PanelRoleContext = createContext<PanelRoleState>({ role: null, loading: true });
 
 /**
- * Reads the signed-in user's role once for the whole panel (00641, marketing role).
+ * Reads the signed-in user's role once for the whole panel (00642, marketing role).
  * The middleware already refused anyone without a panel role; this only shapes the UI.
  * The server enforces every permission on its own (RLS, RPC gates, Edge Functions).
  */

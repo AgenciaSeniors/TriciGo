@@ -1,5 +1,5 @@
 // ============================================================
-// Panel roles for Edge Functions (00641, marketing role).
+// Panel roles for Edge Functions (00642, marketing role).
 //
 // Admins and super_admins may call the panel's broadcast functions for anything. Marketing may
 // send bulk campaign e-mail, and pushes only in the categories its pages use (campaign,

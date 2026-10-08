@@ -1,5 +1,5 @@
 /**
- * Who may open which admin panel page (00641, marketing role).
+ * Who may open which admin panel page (00642, marketing role).
  *
  * One module for the middleware, the sidebar and the bottom bar, so a menu never offers a page
  * the middleware refuses. It only shapes the panel: every permission is also enforced on the

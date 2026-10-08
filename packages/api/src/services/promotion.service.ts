@@ -29,13 +29,13 @@ export interface Promotion {
    * Still fully redeemable by whoever was given the code.
    */
   is_public: boolean;
-  /** 00641: true while a promotion marketing created or edited waits for an admin to turn it on. */
+  /** 00642: true while a promotion marketing created or edited waits for an admin to turn it on. */
   pending_approval?: boolean;
-  /** 00641: the admin who turned it on, and when. */
+  /** 00642: the admin who turned it on, and when. */
   approved_by?: string | null;
   approved_at?: string | null;
   /**
-   * 00641: counts changes to what the promotion offers; only the database writes it. An admin
+   * 00642: counts changes to what the promotion offers; only the database writes it. An admin
    * approves the revision they saw (`approve`), so an edit made meanwhile is not switched on.
    */
   revision?: number;
@@ -73,7 +73,7 @@ function isMissingColumnError(err: unknown): boolean {
   );
 }
 
-/** `promotions.revision` (00641) is not there yet: PostgREST passes Postgres' 42703 through. */
+/** `promotions.revision` (00642) is not there yet: PostgREST passes Postgres' 42703 through. */
 function isMissingRevisionError(err: unknown): boolean {
   const e = (err ?? {}) as { code?: string; message?: string };
   const msg = String(e.message ?? '');
@@ -171,10 +171,10 @@ export const promotionService = {
   },
 
   /**
-   * An admin turns on the promotion they reviewed (00641). It only matches the revision they saw
+   * An admin turns on the promotion they reviewed (00642). It only matches the revision they saw
    * and only while it is still off, so an edit made in the meantime (a new revision) or someone
    * else's activation updates nothing, and this throws `PROMOTION_CHANGED` (409, not 401/403:
-   * `getErrorMessage` reads those as an expired session). Until 00641 adds the column it falls
+   * `getErrorMessage` reads those as an expired session). Until 00642 adds the column it falls
    * back to a plain activation, which is what the panel did before.
    */
   async approve(id: string, revision: number): Promise<void> {
@@ -210,7 +210,7 @@ export const promotionService = {
   },
 
   /**
-   * How many promotions marketing left waiting for an admin (00641). 0 when the column does
+   * How many promotions marketing left waiting for an admin (00642). 0 when the column does
    * not exist yet or the query fails: it only drives a menu dot and a notice.
    */
   async countPendingApproval(): Promise<number> {

@@ -4,7 +4,7 @@
 
 **Goal:** Give the marketing team their own `marketing` role in the admin panel: metrics, promotions as drafts that an admin approves, campaigns, announcements and blog, and nothing else.
 
-**Architecture:** A new `user_role` value (00640) and one permissions migration (00641). The migration adds `is_marketing()`, additive `*_marketing` RLS policies, a draft-and-approve trigger on `promotions`, and in-place patches (md5-guarded, from the live bodies) of the metrics RPCs plus three live functions that list roles. Two Edge Functions learn the role (`send-push` only for content categories). The admin panel gets one shared allow-list (`@tricigo/utils/adminPanelAccess`) used by the middleware, the sidebar and the bottom bar, and a role context that hides admin-only UI.
+**Architecture:** A new `user_role` value (00641) and one permissions migration (00642). The migration adds `is_marketing()`, additive `*_marketing` RLS policies, a draft-and-approve trigger on `promotions`, and in-place patches (md5-guarded, from the live bodies) of the metrics RPCs plus three live functions that list roles. Two Edge Functions learn the role (`send-push` only for content categories). The admin panel gets one shared allow-list (`@tricigo/utils/adminPanelAccess`) used by the middleware, the sidebar and the bottom bar, and a role context that hides admin-only UI.
 
 **Tech Stack:** PostgreSQL 16 (Supabase), plpgsql, Deno Edge Functions tested with vitest, Next.js 15 admin panel, TypeScript, Tailwind.
 
@@ -22,7 +22,7 @@
   ```
   No model name anywhere else (code, comments, PR text).
 - **Production:** Tasks 1–18 never write to prod. Reading prod through the Supabase MCP (`execute_sql` with SELECT only) is fine. Tasks 19–22 change prod and each needs the founder's explicit OK in this conversation first, asked with AskUserQuestion. Merging the PR needs its own OK.
-- **Migration numbers:** on 2026-10-08 master ends at 00638, AgenciaSeniors/TriciGo#1117 holds 00639 and the only other open PR with a migration uses 00569, so 00640 and 00641 are free. Re-check both right before pushing (Task 18, step 1). If either is taken, renumber the files and every `00640`/`00641` mention; the md5 values in this plan do not contain the number, so they stay valid.
+- **Migration numbers:** the plan was written for 00640/00641 (on 2026-10-08 master ended at 00638 and AgenciaSeniors/TriciGo#1117 held 00639). 00640 was then taken on master, so the files were renamed with `git mv` to 00641 (enum) and 00642 (permissions), and every mention in this plan follows. Re-check both right before pushing (Task 18, step 1). If either is taken, renumber the files and every `00641`/`00642` mention; the md5 values in this plan do not contain the number, so they stay valid.
 - **Local Postgres:** the rehearsal cluster of earlier sessions (user `pgtest`, port 5433, datadir `~pgtest/pg627`). If it is not running:
   ```bash
   rm -f ~pgtest/pg627/postmaster.pid 2>/dev/null
@@ -35,11 +35,11 @@
 
 | File | Status | Responsibility |
 |---|---|---|
-| `supabase/migrations/00640_marketing_role_enum.sql` | new | Adds `'marketing'` to `user_role`. Nothing else. |
-| `supabase/migrations/00641_marketing_role_permissions.sql` | new | `is_marketing()`, approval columns + trigger on `promotions`, 13 `*_marketing` policies, metrics RPC gate patches, role-list patches, self-checks. |
-| `supabase/tests/00641/live-bodies.sql` | new | `pg_get_functiondef` of the 17 live functions the rehearsal needs, dumped from prod. |
-| `supabase/tests/00641/scaffold.sql` | new | Prod's tables (reduced), policies, triggers and seed data for the rehearsal. |
-| `supabase/tests/00641/run.sh` | new | RED/GREEN rehearsal with negative proofs. |
+| `supabase/migrations/00641_marketing_role_enum.sql` | new | Adds `'marketing'` to `user_role`. Nothing else. |
+| `supabase/migrations/00642_marketing_role_permissions.sql` | new | `is_marketing()`, approval columns + trigger on `promotions`, 13 `*_marketing` policies, metrics RPC gate patches, role-list patches, self-checks. |
+| `supabase/tests/00642/live-bodies.sql` | new | `pg_get_functiondef` of the 17 live functions the rehearsal needs, dumped from prod. |
+| `supabase/tests/00642/scaffold.sql` | new | Prod's tables (reduced), policies, triggers and seed data for the rehearsal. |
+| `supabase/tests/00642/run.sh` | new | RED/GREEN rehearsal with negative proofs. |
 | `packages/types/src/enums.ts` | modify | `UserRole` gains `'marketing'`. |
 | `packages/utils/src/adminPanelAccess.ts` | new | Panel roles, marketing allow-list, home page, least-privilege fallback. |
 | `packages/utils/src/__tests__/adminPanelAccess.test.ts` | new | Tests of the allow-list. |
@@ -70,7 +70,7 @@
 ### Task 1: Dump the live function bodies for the rehearsal
 
 **Files:**
-- Create: `supabase/tests/00641/live-bodies.sql`
+- Create: `supabase/tests/00642/live-bodies.sql`
 
 - [ ] **Step 1: Read the 17 bodies from prod (read-only)**
 
@@ -93,13 +93,13 @@ Copy the JSON array the tool returns (the `[{"sql": "..."}]` text between the un
 
 ```bash
 SCRATCH=/tmp/claude-0/-home-user-TriciGo/d6301488-459d-5640-a247-d08312636658/scratchpad
-python3 - "$SCRATCH/live-bodies.json" supabase/tests/00641/live-bodies.sql <<'EOF'
+python3 - "$SCRATCH/live-bodies.json" supabase/tests/00642/live-bodies.sql <<'EOF'
 import json, sys
 src, dst = sys.argv[1], sys.argv[2]
 body = json.load(open(src, encoding='utf-8'))[0]['sql']
 assert '\r' not in body
 header = ("-- Live bodies dumped from prod on 2026-10-08 with pg_get_functiondef (read-only MCP query).\n"
-          "-- The 00641 rehearsal loads them as they run in prod; run.sh (L1) checks each md5.\n\n")
+          "-- The 00642 rehearsal loads them as they run in prod; run.sh (L1) checks each md5.\n\n")
 open(dst, 'w', encoding='utf-8', newline='\n').write(header + body + '\n')
 print(body.count('CREATE OR REPLACE FUNCTION'), 'functions')
 EOF
@@ -110,8 +110,8 @@ Expected: `17 functions`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/tests/00641/live-bodies.sql
-git commit -m "test(00641): dump the live function bodies the rehearsal needs"
+git add supabase/tests/00642/live-bodies.sql
+git commit -m "test(00642): dump the live function bodies the rehearsal needs"
 ```
 
 ---
@@ -119,14 +119,14 @@ git commit -m "test(00641): dump the live function bodies the rehearsal needs"
 ### Task 2: Rehearsal scaffold
 
 **Files:**
-- Create: `supabase/tests/00641/scaffold.sql`
+- Create: `supabase/tests/00642/scaffold.sql`
 
 - [ ] **Step 1: Write the scaffold**
 
 ```sql
--- Scaffold for the 00641 rehearsal (marketing role in the admin panel).
+-- Scaffold for the 00642 rehearsal (marketing role in the admin panel).
 -- Prod's tables as of 2026-10-08, reduced to the columns the code under test reads, prod's
--- policies on them, and the LIVE bodies of the functions 00641 patches or calls
+-- policies on them, and the LIVE bodies of the functions 00642 patches or calls
 -- (live-bodies.sql, dumped from prod; run.sh checks every body against prod's md5).
 -- No Supabase stack: auth.uid() reads request.jwt.claim.sub like PostgREST.
 -- Every object belongs to a NON-superuser role named postgres, as in prod, so RLS applies to
@@ -418,7 +418,7 @@ INSERT INTO public.valid_transitions (from_status, to_status, allowed_roles) VAL
   ('driver_en_route', 'searching', '{admin,super_admin}');
 
 -- Seed: Ana (admin), Sara (super_admin), Carla (customer), Diego (approved driver) and Mara,
--- who run.sh turns into marketing once 00640 has added the value.
+-- who run.sh turns into marketing once 00641 has added the value.
 INSERT INTO public.users (id, full_name, role) VALUES
   ('a0000000-0000-4000-8000-000000000001', 'Ana Admin', 'admin'),
   ('a0000000-0000-4000-8000-000000000002', 'Sara Super', 'super_admin'),
@@ -449,9 +449,9 @@ INSERT INTO public.blog_posts (slug, title_es, title_en, is_published) VALUES ('
 
 ```bash
 B=/usr/lib/postgresql/16/bin; C="-h 127.0.0.1 -p 5433 -U pgtest"
-$B/dropdb $C --if-exists pr641try; $B/createdb $C pr641try
-$B/psql $C -d pr641try -q -v ON_ERROR_STOP=1 -f supabase/tests/00641/scaffold.sql && echo LOADED
-$B/dropdb $C pr641try
+$B/dropdb $C --if-exists pr642try; $B/createdb $C pr642try
+$B/psql $C -d pr642try -q -v ON_ERROR_STOP=1 -f supabase/tests/00642/scaffold.sql && echo LOADED
+$B/dropdb $C pr642try
 ```
 
 Expected: `LOADED`. If a function in `live-bodies.sql` fails to create, its error names the missing type or table: add it to the scaffold with prod's definition (read it with a SELECT on `information_schema.columns`) and run again.
@@ -459,26 +459,26 @@ Expected: `LOADED`. If a function in `live-bodies.sql` fails to create, its erro
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/tests/00641/scaffold.sql
-git commit -m "test(00641): rehearsal scaffold with prod's tables, policies and triggers"
+git add supabase/tests/00642/scaffold.sql
+git commit -m "test(00642): rehearsal scaffold with prod's tables, policies and triggers"
 ```
 
 ---
 
-### Task 3: Migration 00640 (the enum value)
+### Task 3: Migration 00641 (the enum value)
 
 **Files:**
-- Create: `supabase/migrations/00640_marketing_role_enum.sql`
+- Create: `supabase/migrations/00641_marketing_role_enum.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
 -- ============================================================
--- 00640 — marketing role: the enum value
+-- 00641 — marketing role: the enum value
 --
 -- Spec: docs/superpowers/specs/2026-10-08-marketing-role-design.md
 -- A value added by ALTER TYPE ... ADD VALUE cannot be used in the transaction that adds it
--- (same split as 00370/00371), so everything that uses 'marketing' lives in 00641.
+-- (same split as 00370/00371), so everything that uses 'marketing' lives in 00642.
 -- On its own this changes nothing: no account has the role until a super_admin grants it with
 -- promote_user_role.
 -- ============================================================
@@ -488,7 +488,7 @@ ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'marketing';
 - [ ] **Step 2: Commit**
 
 ```bash
-git add supabase/migrations/00640_marketing_role_enum.sql
+git add supabase/migrations/00641_marketing_role_enum.sql
 git commit -m "feat(db): add the marketing value to user_role"
 ```
 
@@ -497,20 +497,20 @@ git commit -m "feat(db): add the marketing value to user_role"
 ### Task 4: Rehearsal suite (RED)
 
 **Files:**
-- Create: `supabase/tests/00641/run.sh`
+- Create: `supabase/tests/00642/run.sh`
 
 - [ ] **Step 1: Write the runner**
 
 ```bash
 #!/usr/bin/env bash
-# Rehearsal runner for migrations 00640 + 00641 (marketing role in the admin panel).
+# Rehearsal runner for migrations 00641 + 00642 (marketing role in the admin panel).
 # Builds prod as of 2026-10-08 from scaffold.sql (tables, policies, triggers) and live-bodies.sql
-# (the live functions 00641 patches or calls; L1 checks each against prod's md5), applies 00640
+# (the live functions 00642 patches or calls; L1 checks each against prod's md5), applies 00641
 # twice (the enum value, harmless on its own) and turns Mara into a marketing account.
-#   supabase/tests/00641/run.sh none
-#       -> prod + 00640 + tests (RED: marketing reads nothing, cannot ride, loses its role as a driver)
-#   supabase/tests/00641/run.sh supabase/migrations/00641_marketing_role_permissions.sql
-#       -> the same + 00641 applied twice, each time in one transaction (GREEN) + negative proofs
+#   supabase/tests/00642/run.sh none
+#       -> prod + 00641 + tests (RED: marketing reads nothing, cannot ride, loses its role as a driver)
+#   supabase/tests/00642/run.sh supabase/migrations/00642_marketing_role_permissions.sql
+#       -> the same + 00642 applied twice, each time in one transaction (GREEN) + negative proofs
 # Cluster: user pgtest, port 5433. Other clusters: PGBIN=<dir with psql> PGPORT=<port>.
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -519,9 +519,9 @@ MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
-DB=pr641
-GUARD=pr641guard
-ENUM="$ROOT/supabase/migrations/00640_marketing_role_enum.sql"
+DB=pr642
+GUARD=pr642guard
+ENUM="$ROOT/supabase/migrations/00641_marketing_role_enum.sql"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = '';"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
@@ -556,7 +556,7 @@ LIVE_MD5="admin_launch_pulse=21c359c7427f75016c38b6b758ad23a7,admin_signup_code_
 PATCHED_NAMES="'admin_launch_pulse','admin_signup_code_stats','apply_user_rating','enforce_ride_transition',
   'ensure_driver_role_and_tricicoin_on_approval','get_active_push_user_ids','get_admin_dashboard_metrics',
   'get_admin_wallet_stats','get_rides_by_day','get_rides_by_payment_method','get_rides_by_service_type','get_top_drivers'"
-# Computed in prod on 2026-10-08 as md5(replace(prosrc, <target>, <replacement>)): the bodies 00641 must leave.
+# Computed in prod on 2026-10-08 as md5(replace(prosrc, <target>, <replacement>)): the bodies 00642 must leave.
 PATCHED_MD5="admin_launch_pulse=bb5d37a5bca57a64d3e3409ada2dd6b6,admin_signup_code_stats=16a8ed1ebe03aa82f2f75676783a9099,apply_user_rating=96be8c154990651738312ef44861242f,enforce_ride_transition=f806997fab31c18e7b369e69f5321c30,ensure_driver_role_and_tricicoin_on_approval=1940d4379a446c8afdf0d47434945c07,get_active_push_user_ids=875f787da6a1c0fcce8708404efd72d8,get_admin_dashboard_metrics=32cec76d3f079f6938b09f8bb7e919b2,get_admin_wallet_stats=0f937c94cda1d26e7dd2da7d574949dd,get_rides_by_day=fd5363b072a17da61325a23cfd1486af,get_rides_by_payment_method=2ecacefdfef6c96da84d3b2f20a0b138,get_rides_by_service_type=ffd6c633752a21bba4945625fc9aaaaf,get_top_drivers=03e7be0213769612782ed3bcb0183f3a"
 GATE='Admin only\|forbidden\|Forbidden'
 METRICS="admin_launch_pulse(4) admin_signup_code_stats() get_admin_dashboard_metrics() get_admin_wallet_stats()
@@ -570,7 +570,7 @@ load(){ local db=$1 i
     || { echo "scaffold failed:"; cat "$TMP/scaffold.out"; exit 1; }
   for i in 1 2; do
     $BIN/psql $CONN -d "$db" -q -v ON_ERROR_STOP=1 -c "$AS_OWNER" -f "$ENUM" >"$TMP/enum.out" 2>&1 \
-      || { echo "00640 failed on apply $i:"; cat "$TMP/enum.out"; exit 1; }
+      || { echo "00641 failed on apply $i:"; cat "$TMP/enum.out"; exit 1; }
   done
   $BIN/psql $CONN -d "$db" -q -v ON_ERROR_STOP=1 -c "UPDATE public.users SET role = 'marketing' WHERE id = '$MARA'" \
     >"$TMP/mara.out" 2>&1 || { echo "could not make Mara marketing:"; cat "$TMP/mara.out"; exit 1; }
@@ -588,7 +588,7 @@ load $DB
 # L1: the live bodies are prod's (md5 of prosrc read from prod on 2026-10-08)
 val L1 "SELECT string_agg(proname || '=' || md5(prosrc), ',' ORDER BY proname COLLATE \"C\")
   FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ($LIVE_NAMES)" "$LIVE_MD5"
-# E1: 00640 added the value at the end, twice without error, and Mara is marketing
+# E1: 00641 added the value at the end, twice without error, and Mara is marketing
 val E1 "SELECT string_agg(enumlabel, ',' ORDER BY enumsortorder) FROM pg_enum
   WHERE enumtypid = 'public.user_role'::regtype; SELECT role FROM public.users WHERE id = '$MARA'" \
   "customer,driver,admin,super_admin,marketing;marketing"
@@ -773,11 +773,11 @@ echo "PASS $PASS  FAIL $FAIL"
 [ "$FAIL" -eq 0 ]
 ```
 
-- [ ] **Step 2: Run it without 00641 and confirm RED**
+- [ ] **Step 2: Run it without 00642 and confirm RED**
 
 ```bash
-chmod +x supabase/tests/00641/run.sh
-supabase/tests/00641/run.sh none 2>&1 | tail -60
+chmod +x supabase/tests/00642/run.sh
+supabase/tests/00642/run.sh none 2>&1 | tail -60
 ```
 
 Expected: L1 and E1 PASS (if L1 fails, a body in `live-bodies.sql` is not prod's: redo Task 1). FAIL on G1, G2, G3, M1, M2, M3, R1, P1–P13, C1, A1, B1, Q1, every F2, T1, D1, U1. PASS on R2–R6, P14, P14b, P15, P16, C2, C3, every F1 and F3, T2, T3, D2, PR1, PR2. The N section is skipped. Save the output: it goes into the PR body.
@@ -785,25 +785,25 @@ Expected: L1 and E1 PASS (if L1 fails, a body in `live-bodies.sql` is not prod's
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/tests/00641/run.sh
-git commit -m "test(00641): rehearsal for the marketing role, red without the migration"
+git add supabase/tests/00642/run.sh
+git commit -m "test(00642): rehearsal for the marketing role, red without the migration"
 ```
 
 ---
 
-### Task 5: Migration 00641 (GREEN)
+### Task 5: Migration 00642 (GREEN)
 
 **Files:**
-- Create: `supabase/migrations/00641_marketing_role_permissions.sql`
+- Create: `supabase/migrations/00642_marketing_role_permissions.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ````sql
 -- ============================================================
--- 00641 — marketing role: what a marketing account may read and write
+-- 00642 — marketing role: what a marketing account may read and write
 --
 -- Spec: docs/superpowers/specs/2026-10-08-marketing-role-design.md
--- Needs 00640 (the enum value) committed first: a value added by ALTER TYPE cannot be used in
+-- Needs 00641 (the enum value) committed first: a value added by ALTER TYPE cannot be used in
 -- the transaction that adds it.
 --
 --   1. is_marketing(): the twin of is_admin() (00592), anon-safe.
@@ -820,7 +820,7 @@ git commit -m "test(00641): rehearsal for the marketing role, red without the mi
 -- against (md5 below), is skipped on the body it leaves, and refuses any other body.
 -- No statement here drops or removes anything.
 --
--- Rehearsal: supabase/tests/00641/run.sh (RED without this file, GREEN with it, applied twice)
+-- Rehearsal: supabase/tests/00642/run.sh (RED without this file, GREEN with it, applied twice)
 -- ============================================================
 
 -- Creating a policy locks its table. Waiting behind a long transaction would queue the app's
@@ -853,7 +853,7 @@ ALTER TABLE public.promotions
   ADD COLUMN IF NOT EXISTS approved_at timestamptz;
 
 COMMENT ON COLUMN public.promotions.pending_approval IS
-  'true while a promotion created or edited by marketing waits for an admin to turn it on (00641).';
+  'true while a promotion created or edited by marketing waits for an admin to turn it on (00642).';
 
 CREATE OR REPLACE FUNCTION public.tg_promotions_marketing_guard()
 RETURNS trigger
@@ -988,17 +988,17 @@ BEGIN
     v_md5 := md5(v_src);
     CONTINUE WHEN v_md5 = r.new_md5;
     IF v_md5 <> r.old_md5 THEN
-      RAISE EXCEPTION '00641: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
+      RAISE EXCEPTION '00642: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
     END IF;
     v_target := CASE WHEN position('IF NOT public.is_admin() THEN' IN v_src) > 0
                      THEN 'IF NOT public.is_admin() THEN' ELSE 'IF NOT is_admin() THEN' END;
     IF (length(v_src) - length(replace(v_src, v_target, ''))) / length(v_target) <> 1 THEN
-      RAISE EXCEPTION '00641: the admin gate is not in % exactly once', r.fn;
+      RAISE EXCEPTION '00642: the admin gate is not in % exactly once', r.fn;
     END IF;
     EXECUTE replace(pg_get_functiondef(r.fn::regprocedure), v_target, c_gate);
     SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = r.fn::regprocedure;
     IF v_md5 <> r.new_md5 THEN
-      RAISE EXCEPTION '00641: % patched to an unexpected body (md5 %)', r.fn, v_md5;
+      RAISE EXCEPTION '00642: % patched to an unexpected body (md5 %)', r.fn, v_md5;
     END IF;
   END LOOP;
 END
@@ -1044,15 +1044,15 @@ $t$),
     v_md5 := md5(v_src);
     CONTINUE WHEN v_md5 = r.new_md5;
     IF v_md5 <> r.old_md5 THEN
-      RAISE EXCEPTION '00641: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
+      RAISE EXCEPTION '00642: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
     END IF;
     IF (length(v_src) - length(replace(v_src, r.target, ''))) / length(r.target) <> 1 THEN
-      RAISE EXCEPTION '00641: the role list is not in % exactly once', r.fn;
+      RAISE EXCEPTION '00642: the role list is not in % exactly once', r.fn;
     END IF;
     EXECUTE replace(pg_get_functiondef(r.fn::regprocedure), r.target, r.repl);
     SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = r.fn::regprocedure;
     IF v_md5 <> r.new_md5 THEN
-      RAISE EXCEPTION '00641: % patched to an unexpected body (md5 %)', r.fn, v_md5;
+      RAISE EXCEPTION '00642: % patched to an unexpected body (md5 %)', r.fn, v_md5;
     END IF;
   END LOOP;
 END
@@ -1067,23 +1067,23 @@ DECLARE
 BEGIN
   -- is_marketing(): invoker, callable by the API roles (policies call it), false without a JWT.
   IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.is_marketing()'::regprocedure) THEN
-    RAISE EXCEPTION '00641: is_marketing() must not be SECURITY DEFINER';
+    RAISE EXCEPTION '00642: is_marketing() must not be SECURITY DEFINER';
   END IF;
   IF NOT has_function_privilege('anon', 'public.is_marketing()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.is_marketing()', 'EXECUTE') THEN
-    RAISE EXCEPTION '00641: anon and authenticated must be able to call is_marketing()';
+    RAISE EXCEPTION '00642: anon and authenticated must be able to call is_marketing()';
   END IF;
   PERFORM set_config('request.jwt.claim.sub', '', true);
   SET LOCAL ROLE anon;
   IF public.is_marketing() THEN
-    RAISE EXCEPTION '00641: is_marketing() is true without a JWT';
+    RAISE EXCEPTION '00642: is_marketing() is true without a JWT';
   END IF;
   RESET ROLE;
 
   IF NOT EXISTS (SELECT 1 FROM pg_trigger
                  WHERE tgrelid = 'public.promotions'::regclass
                    AND tgname = 'trg_promotions_marketing_guard' AND tgenabled = 'O') THEN
-    RAISE EXCEPTION '00641: trg_promotions_marketing_guard is missing or disabled';
+    RAISE EXCEPTION '00642: trg_promotions_marketing_guard is missing or disabled';
   END IF;
 
   FOR v_tbl, v_name IN
@@ -1100,10 +1100,10 @@ BEGIN
     SELECT coalesce(qual, '') || ' ' || coalesce(with_check, '') INTO v_def
     FROM pg_policies WHERE schemaname = 'public' AND tablename = v_tbl AND policyname = v_name;
     IF v_def IS NULL THEN
-      RAISE EXCEPTION '00641: policy % on % is missing', v_name, v_tbl;
+      RAISE EXCEPTION '00642: policy % on % is missing', v_name, v_tbl;
     END IF;
     IF position('is_marketing()' IN v_def) = 0 THEN
-      RAISE EXCEPTION '00641: policy % on % does not use is_marketing()', v_name, v_tbl;
+      RAISE EXCEPTION '00642: policy % on % does not use is_marketing()', v_name, v_tbl;
     END IF;
   END LOOP;
 
@@ -1124,7 +1124,7 @@ BEGIN
     ) AS v(fn, md5)
   LOOP
     IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_name::regprocedure) <> v_def THEN
-      RAISE EXCEPTION '00641: % does not have the patched body', v_name;
+      RAISE EXCEPTION '00642: % does not have the patched body', v_name;
     END IF;
   END LOOP;
 END
@@ -1136,17 +1136,17 @@ RESET lock_timeout;
 - [ ] **Step 2: Run the rehearsal with it and confirm GREEN**
 
 ```bash
-supabase/tests/00641/run.sh supabase/migrations/00641_marketing_role_permissions.sql 2>&1 | tail -80
+supabase/tests/00642/run.sh supabase/migrations/00642_marketing_role_permissions.sql 2>&1 | tail -80
 ```
 
 Expected: every test PASS, including N1–N4, and the last line `PASS <n>  FAIL 0`. Save the output for the PR body.
 
-If G1 fails for one function, compare its body with the target by reading `pg_get_functiondef` in `pr641`: usually a whitespace difference in the dollar-quoted target or replacement. Do not change the expected md5 values: they were computed on prod's live bodies.
+If G1 fails for one function, compare its body with the target by reading `pg_get_functiondef` in `pr642`: usually a whitespace difference in the dollar-quoted target or replacement. Do not change the expected md5 values: they were computed on prod's live bodies.
 
 - [ ] **Step 3: Record the md5 of the two new functions (needed to verify prod in Task 20)**
 
 ```bash
-/usr/lib/postgresql/16/bin/psql -h 127.0.0.1 -p 5433 -U pgtest -d pr641 -qAt -c "
+/usr/lib/postgresql/16/bin/psql -h 127.0.0.1 -p 5433 -U pgtest -d pr642 -qAt -c "
 SELECT proname || '=' || md5(prosrc) FROM pg_proc
 WHERE proname IN ('is_marketing', 'tg_promotions_marketing_guard') ORDER BY proname"
 ```
@@ -1156,17 +1156,17 @@ Write both lines into the PR body draft (scratchpad), under "Expected in prod".
 - [ ] **Step 4: Check the migration has no destructive statement and no CR**
 
 ```bash
-grep -nE "\b(DROP|TRUNCATE)\b|DELETE FROM" supabase/migrations/00641_marketing_role_permissions.sql; echo "exit $?"
-tr -cd '\r' < supabase/migrations/00641_marketing_role_permissions.sql | wc -c
+grep -nE "\b(DROP|TRUNCATE)\b|DELETE FROM" supabase/migrations/00642_marketing_role_permissions.sql; echo "exit $?"
+tr -cd '\r' < supabase/migrations/00642_marketing_role_permissions.sql | wc -c
 pnpm check:migration-grants
 ```
 
-Expected: no grep match (`exit 1`), `0` carriage returns, and the grants check passes (00641 creates no table).
+Expected: no grep match (`exit 1`), `0` carriage returns, and the grants check passes (00642 creates no table).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/00641_marketing_role_permissions.sql
+git add supabase/migrations/00642_marketing_role_permissions.sql
 git commit -m "feat(db): marketing role permissions, promotion approval and role-list fixes"
 ```
 
@@ -1217,7 +1217,7 @@ describe('promotionService.countPendingApproval', () => {
     expect(eq).toHaveBeenCalledWith('pending_approval', true);
   });
 
-  it('is 0 when the column does not exist yet (00641 not applied)', async () => {
+  it('is 0 when the column does not exist yet (00642 not applied)', async () => {
     mockCountChain({ count: null, error: { message: 'column promotions.pending_approval does not exist' } });
     await expect(promotionService.countPendingApproval()).resolves.toBe(0);
   });
@@ -1250,9 +1250,9 @@ export type UserRole = 'customer' | 'driver' | 'admin' | 'super_admin' | 'market
 In `packages/api/src/services/promotion.service.ts`, add to `interface Promotion`, after `is_public: boolean;`:
 
 ```ts
-  /** 00641: true while a promotion marketing created or edited waits for an admin to turn it on. */
+  /** 00642: true while a promotion marketing created or edited waits for an admin to turn it on. */
   pending_approval?: boolean;
-  /** 00641: the admin who turned it on, and when. */
+  /** 00642: the admin who turned it on, and when. */
   approved_by?: string | null;
   approved_at?: string | null;
 ```
@@ -1270,7 +1270,7 @@ Add this method to `promotionService`, after `remove`:
 
 ```ts
   /**
-   * How many promotions marketing left waiting for an admin (00641). 0 when the column does
+   * How many promotions marketing left waiting for an admin (00642). 0 when the column does
    * not exist yet or the query fails: it only drives a menu dot and a notice.
    */
   async countPendingApproval(): Promise<number> {
@@ -1394,7 +1394,7 @@ Expected: FAIL, cannot resolve `../adminPanelAccess`.
 
 ```ts
 /**
- * Who may open which admin panel page (00641, marketing role).
+ * Who may open which admin panel page (00642, marketing role).
  *
  * One module for the middleware, the sidebar and the bottom bar, so a menu never offers a page
  * the middleware refuses. It only shapes the panel: every permission is also enforced on the
@@ -1524,7 +1524,7 @@ Expected: FAIL, cannot resolve `./panel-roles`.
 
 ```ts
 // ============================================================
-// Panel roles for Edge Functions (00641, marketing role).
+// Panel roles for Edge Functions (00642, marketing role).
 //
 // Admins and super_admins may call the panel's broadcast functions for anything. Marketing may
 // send the pushes its pages send (campaigns, home announcements, promotions, blog) and bulk
@@ -1584,7 +1584,7 @@ git commit -m "feat(ef): shared rules for which panel role may broadcast what"
 ```ts
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Runs the real send-push handler to check who may send which push (00641, marketing role).
+// Runs the real send-push handler to check who may send which push (00642, marketing role).
 // supabase-js (esm.sh) is replaced with a fake client: a session table for auth.getUser, a role
 // per user, and empty answers for everything else (no device tokens, so nothing reaches Expo).
 // The rate limiter is replaced too: it is DB-backed and imports supabase-js itself.
@@ -1714,7 +1714,7 @@ describe('send-push: who may send which push', () => {
 In `packages/api/vitest.config.ts`, add after the `send-bulk-email` line:
 
 ```ts
-      // send-push's handler: role and category gate (00641). supabase-js and the rate limiter
+      // send-push's handler: role and category gate (00642). supabase-js and the rate limiter
       // replaced with vi.mock, Deno stubbed.
       '../../supabase/functions/send-push/*.test.ts',
 ```
@@ -1741,7 +1741,7 @@ Replace the header comment's last line (`// (notifications table). Now requires 
 
 ```ts
 // (notifications table). Now requires service_role OR admin role.
-// 00641: marketing may call it too, only for the content categories its pages send
+// 00642: marketing may call it too, only for the content categories its pages send
 // (campaign, announcement, promo, blog). See _shared/panel-roles.ts.
 ```
 
@@ -1783,7 +1783,7 @@ with:
 After the `invalid_category` 400 block (the one that ends with `{ status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },\n      );\n    }` right after `if (category && !VALID_CATEGORIES.has(category)) {`), add:
 
 ```ts
-    // 00641: marketing sends only the content pushes its pages send. Never a ride, system or
+    // 00642: marketing sends only the content pushes its pages send. Never a ride, system or
     // safety push, and never an uncategorized one (the panel's one-user push is support's).
     if (callerRole !== null && !canSendPush(callerRole, category)) {
       return new Response(
@@ -1861,7 +1861,7 @@ const campaignAs = (token: string) => handler(new Request('https://example.supab
   body: JSON.stringify({ user_ids: [VICTIM, PROVEN, NO_OPT], subject: 'Promo', body_html: '<p>Hola</p>' }),
 }));
 
-describe('send-bulk-email: who may send a campaign (00641)', () => {
+describe('send-bulk-email: who may send a campaign (00642)', () => {
   it('marketing may, and it still reaches only consenting, proven addresses', async () => {
     const res = await campaignAs('jwt-marketing');
     expect(res.status).toBe(200);
@@ -1895,7 +1895,7 @@ Change the header line `// Now requires admin role (or service_role for cron/aut
 
 ```ts
 // Now requires admin role (or service_role for cron/automation).
-// 00641: marketing may send campaigns too. It still reaches only users who opted in, at a
+// 00642: marketing may send campaigns too. It still reaches only users who opted in, at a
 // proven address.
 ```
 
@@ -1958,7 +1958,7 @@ with
  *  - User does not have a panel role (admin, super_admin or marketing)
  *
  * Sends a marketing account that opens a page outside its allow-list to its home
- * (@tricigo/utils/adminPanelAccess, the same list the menus use, 00641).
+ * (@tricigo/utils/adminPanelAccess, the same list the menus use, 00642).
  */
 ```
 
@@ -2103,7 +2103,7 @@ interface PanelRoleState {
 const PanelRoleContext = createContext<PanelRoleState>({ role: null, loading: true });
 
 /**
- * Reads the signed-in user's role once for the whole panel (00641, marketing role).
+ * Reads the signed-in user's role once for the whole panel (00642, marketing role).
  * The middleware already refused anyone without a panel role; this only shapes the UI.
  * The server enforces every permission on its own (RLS, RPC gates, Edge Functions).
  */
@@ -2452,7 +2452,7 @@ import { usePanelRole } from '@/lib/panelRole';
 In `PromotionsAdminPage()`, after `const [notifying, setNotifying] = useState(false);` add:
 
 ```tsx
-  // 00641: marketing writes drafts; an admin activates them (the server enforces it too).
+  // 00642: marketing writes drafts; an admin activates them (the server enforces it too).
   const { role } = usePanelRole();
   const isMarketing = menuRole(role) === 'marketing';
   const [pendingCount, setPendingCount] = useState(0);
@@ -2473,7 +2473,7 @@ and change its dependency list `}, [page, t]);` to `}, [page, t, isMarketing]);`
 In `handleSave`, in the `base` object, change `is_active: form.is_active,` to:
 
 ```tsx
-        // Marketing's promotions are always saved off; the server forces it too (00641).
+        // Marketing's promotions are always saved off; the server forces it too (00642).
         is_active: isMarketing ? false : form.is_active,
 ```
 
@@ -2517,7 +2517,7 @@ At the start of `handleEdit`, before `setForm({`, add:
 After `handleToggleActive`, add:
 
 ```tsx
-  // Marketing's only switch: it can turn a live promotion off, never on (00641).
+  // Marketing's only switch: it can turn a live promotion off, never on (00642).
   const handlePause = async (p: Promotion) => {
     if (!p.is_active) {
       showToast('error', t('promotions.already_paused', { defaultValue: 'Esta promoción ya está pausada.' }));
@@ -2710,7 +2710,7 @@ import { usePanelRole } from '@/lib/panelRole';
 At the top of `ReferralsPage()`, add:
 
 ```tsx
-  // 00641: marketing reads referrals; rewarding or invalidating one moves money, so it stays with admins.
+  // 00642: marketing reads referrals; rewarding or invalidating one moves money, so it stays with admins.
   const { role } = usePanelRole();
   const isMarketing = menuRole(role) === 'marketing';
 ```
@@ -2776,8 +2776,8 @@ Expected: a line `ƒ Middleware` and no `error`. A build that drops the middlewa
 - [ ] **Step 3: Both rehearsal runs, from scratch**
 
 ```bash
-supabase/tests/00641/run.sh none 2>&1 | tail -3
-supabase/tests/00641/run.sh supabase/migrations/00641_marketing_role_permissions.sql 2>&1 | tail -3
+supabase/tests/00642/run.sh none 2>&1 | tail -3
+supabase/tests/00642/run.sh supabase/migrations/00642_marketing_role_permissions.sql 2>&1 | tail -3
 ```
 
 Expected: the first ends `FAIL <n>` with n > 0 (RED, as in Task 4); the second ends `FAIL 0`.
@@ -2805,14 +2805,14 @@ git fetch origin master
 git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -5
 ```
 
-Then list the migration files of every open PR (GitHub MCP `list_pull_requests` state open, then `pull_request_read` `get_files` for each). If 00640 or 00641 is taken, rename with `git mv`, update every mention, rerun Task 17 step 3, and commit.
+Then list the migration files of every open PR (GitHub MCP `list_pull_requests` state open, then `pull_request_read` `get_files` for each). If 00641 or 00642 is taken, rename with `git mv`, update every mention, rerun Task 17 step 3, and commit.
 
 - [ ] **Step 2: Add the section to CLAUDE.md**
 
 Insert before `### Recordatorio para Claude`:
 
 ```markdown
-### Rol marketing en el panel (00640/00641, 2026-10-08)
+### Rol marketing en el panel (00641/00642, 2026-10-08)
 
 Diseño: `docs/superpowers/specs/2026-10-08-marketing-role-design.md`. Plan: `docs/superpowers/plans/2026-10-08-marketing-role.md`.
 
@@ -2821,8 +2821,8 @@ Diseño: `docs/superpowers/specs/2026-10-08-marketing-role-design.md`. Plan: `do
 - **Promociones:** `tg_promotions_marketing_guard` hace que todo lo que marketing crea o edita quede apagado y `pending_approval = true`. Solo un admin o super_admin la activa, y eso estampa `approved_by`/`approved_at`. Con una activa, marketing solo puede pausarla o estampar `notified_at`. Errores: DETAIL `promo_active_locked`, `promo_activation_requires_admin`, `promo_delete_blocked`, con mensaje en español.
 - **Una página nueva del panel no la ve marketing** salvo que se agregue a `MARKETING_ROUTES` en `packages/utils/src/adminPanelAccess.ts` (lo usan el middleware y los menús) y se le den permisos en el servidor: políticas `*_marketing` con `(SELECT public.is_marketing())`, y en una RPC de admin el control `IF NOT (public.is_admin() OR public.is_marketing()) THEN`.
 - **Push:** `send-push` acepta marketing solo con categoría `campaign`, `announcement`, `promo` o `blog` (`supabase/functions/_shared/panel-roles.ts`). El push a un usuario (página Notificaciones) sigue siendo solo de admins.
-- **Funciones que listan roles:** si se agrega otro rol, revisar `valid_transitions` y `enforce_ride_transition` (00641 trata a marketing como pasajero), `ensure_driver_role_and_tricicoin_on_approval` y `apply_user_rating`.
-- **Ensayo:** `supabase/tests/00641/run.sh` (RED sin la 00641, GREEN con ella, con pruebas negativas).
+- **Funciones que listan roles:** si se agrega otro rol, revisar `valid_transitions` y `enforce_ride_transition` (00642 trata a marketing como pasajero), `ensure_driver_role_and_tricicoin_on_approval` y `apply_user_rating`.
+- **Ensayo:** `supabase/tests/00642/run.sh` (RED sin la 00642, GREEN con ella, con pruebas negativas).
 - **Estado:** pendiente de aplicar (se completa en el Task 20 del plan).
 ```
 
@@ -2861,9 +2861,9 @@ PR events arrive on their own. If CI fails, fix the cause, rerun Task 17, push a
 
 ### Task 20: Apply the migrations (needs the founder's OK, asked separately)
 
-- [ ] **Step 1: Ask** with AskUserQuestion, one option per action: "Aplicar 00640 (agrega el valor 'marketing'; no cambia nada más)", then later "Ensayar 00641 en prod dentro de una transacción revertida", then "Aplicar 00641".
+- [ ] **Step 1: Ask** with AskUserQuestion, one option per action: "Aplicar 00641 (agrega el valor 'marketing'; no cambia nada más)", then later "Ensayar 00642 en prod dentro de una transacción revertida", then "Aplicar 00642".
 
-- [ ] **Step 2: Apply 00640** with MCP `apply_migration` (name `00640_marketing_role_enum`, the file's content). Verify:
+- [ ] **Step 2: Apply 00641** with MCP `apply_migration` (name `00641_marketing_role_enum`, the file's content). Verify:
 
 ```sql
 SELECT string_agg(enumlabel, ',' ORDER BY enumsortorder) FROM pg_enum WHERE enumtypid = 'public.user_role'::regtype;
@@ -2871,15 +2871,15 @@ SELECT string_agg(enumlabel, ',' ORDER BY enumsortorder) FROM pg_enum WHERE enum
 
 Expected: `customer,driver,admin,super_admin,marketing`.
 
-- [ ] **Step 3: Rehearse 00641 in prod, rolled back**
+- [ ] **Step 3: Rehearse 00642 in prod, rolled back**
 
 Build the rehearsal SQL from the file (no hand-copy):
 
 ```bash
 SCRATCH=/tmp/claude-0/-home-user-TriciGo/d6301488-459d-5640-a247-d08312636658/scratchpad
-python3 - "$SCRATCH/rehearsal-00641.sql" <<'EOF'
+python3 - "$SCRATCH/rehearsal-00642.sql" <<'EOF'
 import sys, pathlib
-mig = pathlib.Path('supabase/migrations/00641_marketing_role_permissions.sql').read_text(encoding='utf-8')
+mig = pathlib.Path('supabase/migrations/00642_marketing_role_permissions.sql').read_text(encoding='utf-8')
 assert '$mig$' not in mig and '\r' not in mig
 sql = r"""DO $rehearsal$
 DECLARE
@@ -2950,7 +2950,7 @@ SELECT (SELECT count(*) FROM pg_proc WHERE proname = 'is_marketing') AS fn,
 
 Expected: `0|0|0`.
 
-- [ ] **Step 4: Apply 00641** with MCP `apply_migration` (name `00641_marketing_role_permissions`). If it times out, do not retry blindly: verify by object (next step) first.
+- [ ] **Step 4: Apply 00642** with MCP `apply_migration` (name `00642_marketing_role_permissions`). If it times out, do not retry blindly: verify by object (next step) first.
 
 - [ ] **Step 5: Verify by object**
 

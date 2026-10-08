@@ -1,6 +1,6 @@
--- Scaffold for the 00641 rehearsal (marketing role in the admin panel).
+-- Scaffold for the 00642 rehearsal (marketing role in the admin panel).
 -- Prod's tables as of 2026-10-08, reduced to the columns the code under test reads, prod's
--- policies on them, and the LIVE bodies of the functions 00641 patches or calls
+-- policies on them, and the LIVE bodies of the functions 00642 patches or calls
 -- (live-bodies.sql, dumped from prod; run.sh checks every body against prod's md5).
 -- No Supabase stack: auth.uid() reads request.jwt.claim.sub like PostgREST.
 -- Every object belongs to a NON-superuser role named postgres, as in prod, so RLS applies to
@@ -649,7 +649,7 @@ INSERT INTO public.valid_transitions (from_status, to_status, allowed_roles) VAL
   ('driver_en_route', 'searching', '{admin,super_admin}');
 
 -- Seed: Ana (admin), Sara (super_admin), Carla (customer), Diego (approved driver) and Mara,
--- who run.sh turns into marketing once 00640 has added the value.
+-- who run.sh turns into marketing once 00641 has added the value.
 INSERT INTO public.users (id, full_name, role) VALUES
   ('a0000000-0000-4000-8000-000000000001', 'Ana Admin', 'admin'),
   ('a0000000-0000-4000-8000-000000000002', 'Sara Super', 'super_admin'),
