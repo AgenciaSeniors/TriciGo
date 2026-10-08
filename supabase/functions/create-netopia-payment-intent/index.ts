@@ -28,6 +28,7 @@ import { realEmail } from '../_shared/email-guard.ts';
 import { getFreshFx, FX_UNAVAILABLE_DETAIL } from '../_shared/fx-freshness.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
 import { corporateFundingVerdict, type CorporateFundingVerdict } from '../_shared/corporate-funding.ts';
+import { startNtpId } from '../_shared/netopia-ipn.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -696,16 +697,32 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Store NETOPIA's ntpID alongside the existing column (today the
-    // generic "external provider intent id" column). A follow-up
-    // migration may rename it to provider_intent_id for clarity.
-    await supabase.from('payment_intents')
-      .update({
-        stripe_payment_intent_id: netopiaResp.payment.ntpID ?? null,
-        status: 'pending',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', intent.id);
+    // Store NETOPIA's ntpID (the column name is from the Stripe era). The
+    // webhook credits an IPN only for the intent that holds its ntpID
+    // (process-netopia-webhook §2a), so an order whose ntpID is not stored must
+    // not reach the payer: no ntpID, or a failed write, ends the checkout here.
+    const ntpId = startNtpId(netopiaResp);
+    const { data: stamped, error: stampError } = ntpId
+      ? await supabase.from('payment_intents')
+        .update({
+          stripe_payment_intent_id: ntpId,
+          status: 'pending',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', intent.id)
+        .select('id')
+      : { data: null, error: { message: 'NETOPIA did not return an ntpID' } };
+    if (stampError || !stamped || stamped.length === 0) {
+      const detail = stampError?.message ?? 'intent row not updated';
+      console.error(`[netopia] could not store ntpID for intent ${intent.id}: ${detail}`);
+      await supabase.from('payment_intents')
+        .update({ status: 'failed', error_message: `ntpid_not_stored: ${detail}`, updated_at: new Date().toISOString() })
+        .eq('id', intent.id);
+      return new Response(
+        JSON.stringify({ ok: false, error: 'netopia_error', detail: 'No se pudo iniciar el pago. Intenta de nuevo.' }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     // RECARGA V2 response shape — see RechargeIntentResult in
     // packages/types/src/payment.ts.
@@ -721,7 +738,7 @@ Deno.serve(async (req) => {
         exchangeRate,
         redirectUrl: netopiaResp.payment.paymentURL,
         environment: env,
-        netopiaNtpId: netopiaResp.payment.ntpID,
+        netopiaNtpId: ntpId,
         netopiaStatus: netopiaResp.payment.status,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

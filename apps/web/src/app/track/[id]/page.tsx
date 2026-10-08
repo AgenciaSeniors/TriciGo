@@ -1313,7 +1313,7 @@ export default function TrackRidePage() {
                 <IconPackage />
                 <span>Detalles del envío</span>
                 {deliveryDetails.client_accompanies && (
-                  <span className="track-delivery-badge">Acompanando</span>
+                  <span className="track-delivery-badge">Acompañando</span>
                 )}
               </div>
               {/* Delivery OTP — visible while the cargo ride is active so the
@@ -1346,7 +1346,7 @@ export default function TrackRidePage() {
                   <div className="track-delivery-row"><span>Destinatario: </span><strong>{deliveryDetails.recipient_name}</strong></div>
                 )}
                 {deliveryDetails.recipient_phone && (
-                  <div className="track-delivery-row"><span>Telefono: </span>{deliveryDetails.recipient_phone}</div>
+                  <div className="track-delivery-row"><span>Teléfono: </span>{deliveryDetails.recipient_phone}</div>
                 )}
                 {deliveryDetails.package_description && (
                   <div className="track-delivery-row"><span>Paquete: </span>{deliveryDetails.package_description}</div>

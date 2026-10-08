@@ -38,6 +38,7 @@ import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { translateNetopiaError } from '../_shared/netopia-errors.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
 import { requeryOrderMismatch } from '../_shared/netopia-ipn.ts';
+import { claimFilter, unclaimedReply } from '../_shared/payment-intent-claim.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -582,19 +583,49 @@ Deno.serve(async (req) => {
       if (existingIntent.status === 'expired') {
         console.warn(`[netopia] Recovering intent ${orderId} from 'expired' → 'paid' (ntpID=${ntpId}) — paid IPN arrived after the 1h expiry cron`);
       }
+      // Claim (see _shared/payment-intent-claim.ts): a claimable status, or a
+      // 'processing' row whose run died. A fresh 'processing' row belongs to a
+      // run that is still crediting it: NETOPIA must retry, not get the ACK.
+      const claimedAt = new Date();
       const { data: claimed, error: claimError } = await supabase
         .from('payment_intents')
         .update({
           status: 'processing',
           error_message: null,
-          updated_at: new Date().toISOString(),
+          updated_at: claimedAt.toISOString(),
         })
         .eq('id', orderId)
-        .in('status', ['pending', 'created', 'failed', 'expired'])
+        .or(claimFilter(claimedAt))
         .select();
 
-      if (claimError || !claimed || claimed.length === 0) {
-        console.log(`[netopia] Intent ${orderId} already claimed — replay skipped`);
+      if (claimError) {
+        console.error(`[netopia] Claim failed for intent ${orderId}:`, claimError.message);
+        return new Response(
+          JSON.stringify({ error: 'claim_error' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      if (!claimed || claimed.length === 0) {
+        const { data: current, error: readError } = await supabase
+          .from('payment_intents')
+          .select('status')
+          .eq('id', orderId)
+          .maybeSingle();
+        if (readError) {
+          console.error(`[netopia] Could not read intent ${orderId} after an empty claim:`, readError.message);
+          return new Response(
+            JSON.stringify({ error: 'claim_status_error' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        if (unclaimedReply(current?.status as string | undefined) === 'retry') {
+          console.warn(`[netopia] Intent ${orderId} is being processed by another run — asking NETOPIA to retry`);
+          return new Response(
+            JSON.stringify({ error: 'intent_processing' }),
+            { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        console.log(`[netopia] Intent ${orderId} is ${current?.status ?? 'gone'} — replay skipped`);
         return new Response(JSON.stringify(ACK_OK), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -636,6 +667,25 @@ Deno.serve(async (req) => {
 
       if (processError) {
         console.error('[netopia] Error processing recharge:', processError);
+        // Give the claim back so NETOPIA's retry can credit it. Only a row that
+        // is still 'processing': if the RPC committed and only its answer was
+        // lost, the row is 'completed' and stays so. 'pending', not the prior
+        // status: going back to 'failed' would fire the failure push and e-mail.
+        const { data: released, error: releaseError } = await supabase
+          .from('payment_intents')
+          .update({
+            status: 'pending',
+            error_message: `credit_failed: ${String(processError.message ?? '').slice(0, 300)}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', orderId)
+          .eq('status', 'processing')
+          .select('id');
+        if (releaseError) {
+          console.error(`[netopia] Could not release the claim on ${orderId} (it is claimable again in 10 min):`, releaseError.message);
+        } else {
+          console.warn(`[netopia] Released the claim on ${orderId}: ${released?.length ?? 0} row(s) back to pending`);
+        }
         return new Response(
           JSON.stringify({ error: 'process_error', detail: processError.message }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
