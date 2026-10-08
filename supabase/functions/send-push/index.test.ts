@@ -109,7 +109,10 @@ describe('send-push: who may send which push', () => {
     expect(db.inserts).toEqual([]);
   });
 
-  it("marketing may not send an uncategorized push (the panel's one-user push)", async () => {
+  // Uncategorized pushes are sendToUser's system notices (driver approval, documents). The
+  // Notificaciones page's one-user push is an 'announcement', which the server allows (see the
+  // tests above, which also target one user); the panel keeps that page admin-only.
+  it("marketing may not send an uncategorized push (sendToUser's system notices)", async () => {
     const res = await push('jwt-marketing');
     expect(res.status).toBe(403);
     expect(db.inserts).toEqual([]);

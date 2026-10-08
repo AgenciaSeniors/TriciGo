@@ -271,8 +271,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 00641: marketing sends only the content pushes its pages send. Never a ride, system or
-    // safety push, and never an uncategorized one (the panel's one-user push is support's).
+    // 00641: marketing sends only the content categories its pages use (campaign, announcement,
+    // promo, blog). Any other category is refused, and so is an uncategorized push (sendToUser's
+    // system notices). Recipients are not checked: the Notificaciones page's one-user push is an
+    // 'announcement' and passes here; the panel keeps that page admin-only (menu + middleware).
     if (!isInternalCall && !canSendPush(callerRole, category)) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: this push category needs an admin' }),
