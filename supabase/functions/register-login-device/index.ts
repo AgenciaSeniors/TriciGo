@@ -19,12 +19,14 @@
 // call use the service role. Best-effort: any failure returns 200 so a
 // flaky device-check never blocks the user's login.
 //
-// Imports ../_shared/service-key.ts and ../_shared/rate-limiter.ts, so it
-// deploys with them (CLI, or MCP with all three files).
+// Imports ../_shared/service-key.ts, ../_shared/rate-limiter.ts and
+// ../_shared/mailable-emails.ts (which imports ../_shared/email-guard.ts), so it
+// deploys with them (CLI, or MCP with all five files).
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey } from '../_shared/service-key.ts';
 import { rateLimit } from '../_shared/rate-limiter.ts';
+import { fetchMailableEmail } from '../_shared/mailable-emails.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
   .split(',')
@@ -136,20 +138,17 @@ Deno.serve(async (req) => {
     let emailed = false;
     if (hadPriorDevices) {
       // The auth email is a synthetic phone_<number>@tricigo.app; the
-      // real address (if any) lives in public.users.email. No email on
-      // file → record the device but skip the alert.
+      // real address (if any) lives in public.users.email. No proven
+      // address → record the device but skip the alert.
       //
-      // Only a CONFIRMED address gets the alert, and at most 3 a day. Before
-      // 2026-10-06 the address was whatever the user typed in
+      // Only an address its owner PROVED gets the alert, and at most 3 a day.
+      // Before 2026-10-06 the address was whatever the user typed in
       // add-email-with-verification, unconfirmed, and every new device_id sent
       // a mail, so any account could point unlimited "new login" mails, with
-      // its own text in the device fields, at someone else's inbox.
-      const { data: dbUser } = await admin
-        .from('users')
-        .select('email, email_verified_at')
-        .eq('id', user.id)
-        .maybeSingle();
-      const recipient = dbUser?.email_verified_at ? dbUser?.email?.trim() : undefined;
+      // its own text in the device fields, at someone else's inbox. "Proved"
+      // is mailable_user_emails (00635): confirmed, or carried by a verified
+      // Google/Apple identity. It fails closed: no answer, no mail.
+      const recipient = await fetchMailableEmail(admin, user.id);
       const alertBudget = recipient
         ? await rateLimit(`new-device-email:${user.id}`, 3, 24 * 60 * 60 * 1000)
         : null;
