@@ -6,6 +6,7 @@ import {
   isPanelRole,
   menuRole,
   panelHome,
+  type PanelRole,
 } from '../adminPanelAccess';
 
 describe('isPanelRole', () => {
@@ -43,6 +44,14 @@ describe('canOpenPanelPath', () => {
   it('does not take a longer name for a sub-page', () => {
     expect(canOpenPanelPath('marketing', '/promotionsx')).toBe(false);
     expect(canOpenPanelPath('marketing', '/blog-admin')).toBe(false);
+  });
+
+  it('lets no other role open anything, even if the middleware check is skipped', () => {
+    for (const role of ['customer', 'driver', '', 'Admin']) {
+      for (const path of ['/', '/wallet', '/promotions']) {
+        expect(canOpenPanelPath(role as PanelRole, path)).toBe(false);
+      }
+    }
   });
 });
 

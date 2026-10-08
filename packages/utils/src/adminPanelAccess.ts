@@ -42,7 +42,9 @@ export function panelHome(role: PanelRole): string {
   return role === 'marketing' ? MARKETING_HOME : '/';
 }
 
+/** Admins open everything, marketing its allow-list. Any other value opens nothing. */
 export function canOpenPanelPath(role: PanelRole, pathname: string): boolean {
-  if (role !== 'marketing') return true;
+  if (role === 'admin' || role === 'super_admin') return true;
+  if (role !== 'marketing') return false;
   return MARKETING_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
