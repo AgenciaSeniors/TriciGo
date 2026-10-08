@@ -121,7 +121,7 @@ function findMissingAccents(text: string): string[] {
   const tokens = [...copy.matchAll(TOKEN)].map(([t]) => t.replace(/[.\-/]+$/, '').toLowerCase());
   const spanish = tokens.some((t) => SPANISH.has(t));
   const hits = new Set<string>();
-  for (const [, word] of copy.matchAll(QUESTION)) hits.add(`¿${word.toLowerCase().replace(/\s+/g, ' ')}`);
+  for (const [, word = ''] of copy.matchAll(QUESTION)) hits.add(`¿${word.toLowerCase().replace(/\s+/g, ' ')}`);
   for (const token of tokens) {
     if (!/^[\p{L}]+$/u.test(token) || /[áéíóú]/.test(token)) continue; // identifier, or already accented
     if (BANNED.has(token)) hits.add(token);
