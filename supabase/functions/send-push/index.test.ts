@@ -125,3 +125,35 @@ describe('send-push: who may send which push', () => {
     expect(db.inserts).toEqual([]);
   });
 });
+
+// Internal calls (service key: database triggers, crons) carry no JWT and have no role.
+// The category gate must never apply to them: ride offers depend on it.
+const internalPush = (category?: string) =>
+  handler(
+    new Request('https://example.supabase.co/functions/v1/send-push', {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_ids: [TARGET], title: 'Hola', body: 'Cuerpo', ...(category ? { category } : {}) }),
+    }),
+  );
+
+describe('send-push: internal calls', () => {
+  it('a service-key call still sends a ride offer and saves it to the inbox', async () => {
+    const res = await internalPush('ride_offer');
+    expect(res.status).toBe(200);
+    expect(db.inserts).toEqual([
+      {
+        table: 'notifications',
+        rows: [{ user_id: TARGET, type: 'ride_offer', title: 'Hola', body: 'Cuerpo', data: { type: 'ride_offer' } }],
+      },
+    ]);
+  });
+
+  it('a service-key call still sends an uncategorized push, saved as system', async () => {
+    const res = await internalPush();
+    expect(res.status).toBe(200);
+    expect(db.inserts).toEqual([
+      { table: 'notifications', rows: [{ user_id: TARGET, type: 'system', title: 'Hola', body: 'Cuerpo', data: null }] },
+    ]);
+  });
+});

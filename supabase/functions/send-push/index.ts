@@ -273,7 +273,7 @@ Deno.serve(async (req) => {
 
     // 00641: marketing sends only the content pushes its pages send. Never a ride, system or
     // safety push, and never an uncategorized one (the panel's one-user push is support's).
-    if (callerRole !== null && !canSendPush(callerRole, category)) {
+    if (!isInternalCall && !canSendPush(callerRole, category)) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: this push category needs an admin' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
