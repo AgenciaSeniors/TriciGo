@@ -711,7 +711,7 @@ export default function DriverSettingsScreen() {
           <Card theme="light" variant="surface" padding="md">
             <Text variant="bodySmall" color="secondary" className="mb-3">
               {t('profile.delete_account_desc', {
-                defaultValue: 'Eliminar tu cuenta es permanente. Se perderan todos tus datos, historial de viajes y balance.',
+                defaultValue: 'Eliminar tu cuenta es permanente. Se perderán todos tus datos, historial de viajes y balance.',
               })}
             </Text>
             {/* V3 — destructive action gets explicit press feedback. The

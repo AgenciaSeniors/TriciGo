@@ -50,7 +50,7 @@ export function RidePaymentPending() {
       <View className="flex-row items-center gap-2 mt-2">
         <ActivityIndicator size="small" color={colors.neutral[400]} />
         <Text variant="caption" color="tertiary">
-          {t('payment.waiting', { defaultValue: 'Esperando confirmacion...' })}
+          {t('payment.waiting', { defaultValue: 'Esperando confirmación...' })}
         </Text>
       </View>
     </View>

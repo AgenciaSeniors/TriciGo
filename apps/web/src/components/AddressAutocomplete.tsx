@@ -685,8 +685,8 @@ export function AddressAutocomplete({ label, placeholder, value, onSelect, onCle
             }
           }}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || t('web.address_placeholder', { defaultValue: 'Buscar direccion...' })}
-          aria-label={label || t('web.address_placeholder', { defaultValue: 'Buscar direccion...' })}
+          placeholder={placeholder || t('web.address_placeholder', { defaultValue: 'Buscar dirección...' })}
+          aria-label={label || t('web.address_placeholder', { defaultValue: 'Buscar dirección...' })}
           aria-autocomplete="list"
           aria-controls={listId}
           aria-activedescendant={activeDescendant}

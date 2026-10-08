@@ -398,7 +398,7 @@ function WebWalletScreen() {
   // Stripe recharge for web (Expo web uses redirect flow — native uses payment sheet below)
   const submitRecharge = useCallback(async () => {
     if (!userId) return;
-    Toast.show({ type: 'info', text1: t('wallet.recharge_web_hint', { defaultValue: 'Usa la version web (tricigo.com/wallet) para recargar con tarjeta' }) });
+    Toast.show({ type: 'info', text1: t('wallet.recharge_web_hint', { defaultValue: 'Usa la versión web (tricigo.com/wallet) para recargar con tarjeta' }) });
   }, [t, userId]);
 
   // Login required
@@ -406,7 +406,7 @@ function WebWalletScreen() {
     return (
       <Screen bg="cuban" padded>
         <View className="flex-1 justify-center items-center">
-          <Text variant="body" color="secondary">{t('auth.login_required', { defaultValue: 'Inicia sesion para ver tus créditos de viaje' })}</Text>
+          <Text variant="body" color="secondary">{t('auth.login_required', { defaultValue: 'Inicia sesión para ver tus créditos de viaje' })}</Text>
         </View>
       </Screen>
     );
@@ -435,7 +435,7 @@ function WebWalletScreen() {
             </View>
             {balance.held > 0 && (
               <Text variant="caption" className="mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                {t('wallet.held_balance', { defaultValue: 'En retencion' })}: {formatTriciCoin(balance.held)}
+                {t('wallet.held_balance', { defaultValue: 'En retención' })}: {formatTriciCoin(balance.held)}
               </Text>
             )}
           </View>
@@ -607,7 +607,7 @@ function WebWalletScreen() {
                     <ActivityIndicator size="small" color={colors.primary[500]} />
                   ) : (
                     <Text variant="bodySmall" color="primary" className="font-medium">
-                      {t('wallet.load_more', { defaultValue: 'Cargar mas' })}
+                      {t('wallet.load_more', { defaultValue: 'Cargar más' })}
                     </Text>
                   )}
                 </Pressable>

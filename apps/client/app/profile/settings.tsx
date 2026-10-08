@@ -258,7 +258,7 @@ export default function SettingsScreen() {
   }, [userId]);
 
   const languageLabel =
-    currentLang === 'es' ? t('profile.spanish') : currentLang === 'en' ? t('profile.english') : t('profile.portuguese', { defaultValue: 'Portugues' });
+    currentLang === 'es' ? t('profile.spanish') : currentLang === 'en' ? t('profile.english') : t('profile.portuguese', { defaultValue: 'Portugués' });
 
   return (
     <Screen scroll bg="cuban" padded>

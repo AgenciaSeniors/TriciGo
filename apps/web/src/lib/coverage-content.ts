@@ -218,7 +218,7 @@ export const PROVINCE_CONTENT: Record<string, ProvinceContent> = {
     ],
   },
   isla_de_la_juventud: {
-    metaDescription: "Pide triciclo, moto, auto o mensajeria en Isla de la Juventud con TriciGo. Transporte bajo demanda en Nueva Gerona y Santa Fe, precio claro en CUP o TriciCoin.",
+    metaDescription: "Pide triciclo, moto, auto o mensajería en Isla de la Juventud con TriciGo. Transporte bajo demanda en Nueva Gerona y Santa Fe, precio claro en CUP o TriciCoin.",
     intro: "TriciGo acerca el transporte bajo demanda a Isla de la Juventud, el municipio especial situado al sur de la isla principal de Cuba: desde Nueva Gerona, a orillas del río Las Casas, pides un triciclo, una moto o un auto y conoces el precio antes de confirmar.",
     bodyParagraphs: [
       "Isla de la Juventud no es una provincia más: es un municipio especial separado de la Cuba continental por el golfo de Batabanó, al que se llega en catamarán desde el Surgidero de Batabanó o en vuelo hasta el aeropuerto Rafael Cabrera de Nueva Gerona. Ese aislamiento hace que la movilidad interna gane peso propio. Con TriciGo pides un triciclo para el casco urbano de Nueva Gerona, una moto cuando buscas rapidez o un auto para grupos y rutas más largas hacia Santa Fe o La Demajagua. También ofrecemos mensajería dentro de la cabecera. Ves el estimado en CUP antes de confirmar, sigues el viaje en tiempo real y pagas en efectivo o con TriciCoin.",

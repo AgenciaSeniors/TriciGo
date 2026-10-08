@@ -149,7 +149,7 @@ export default function EmpresasPage() {
       </Link>
 
       {/* Features grid */}
-      <Section title="Por que TriciGo Empresas">
+      <Section title="Por qué TriciGo Empresas">
         <div
           style={{
             display: 'grid',
@@ -160,13 +160,13 @@ export default function EmpresasPage() {
         >
           <FeatureCard
             emoji="💳"
-            title="Recarga via NETOPIA"
+            title="Recarga vía NETOPIA"
             description="Carga tu billetera corporativa con tarjeta (USD). $100 a $10,000 por recarga."
           />
           <FeatureCard
             emoji="📊"
             title="Control de presupuesto"
-            description="Define el limite mensual, el tope por viaje y los horarios permitidos."
+            description="Define el límite mensual, el tope por viaje y los horarios permitidos."
           />
           <FeatureCard
             emoji="🚖"
@@ -185,23 +185,23 @@ export default function EmpresasPage() {
           />
           <FeatureCard
             emoji="🏷️"
-            title="Comision reducida"
-            description="Para empresas calificadas, comision de plataforma reducida (descuento al pasajero)."
+            title="Comisión reducida"
+            description="Para empresas calificadas, comisión de plataforma reducida (descuento al pasajero)."
           />
         </div>
       </Section>
 
-      <Section title="Para que tipo de empresa">
+      <Section title="Para qué tipo de empresa">
         <p>
           TriciGo Empresas funciona para hoteles que mueven personal, agencias
           de turismo que llevan clientes a excursiones, restaurantes y bares
-          que necesitan traslado de equipo nocturno, hospitales y clinicas que
-          coordinan visitas medicas, oficinas que ofrecen movilidad a su
-          plantilla, y operadores logisticos que necesitan envios programados.
+          que necesitan traslado de equipo nocturno, hospitales y clínicas que
+          coordinan visitas médicas, oficinas que ofrecen movilidad a su
+          plantilla, y operadores logísticos que necesitan envíos programados.
         </p>
       </Section>
 
-      <Section title="Como funciona">
+      <Section title="Cómo funciona">
         <ol style={{ paddingLeft: '1.25rem', margin: 0 }}>
           <li style={{ marginBottom: '0.5rem' }}>
             <strong>Solicitas tu cuenta</strong> llenando el{' '}
@@ -214,20 +214,20 @@ export default function EmpresasPage() {
             . Necesitas tener una cuenta de cliente TriciGo (o crearla).
           </li>
           <li style={{ marginBottom: '0.5rem' }}>
-            <strong>Te aprobamos</strong> en menos de 24 horas habiles
+            <strong>Te aprobamos</strong> en menos de 24 horas hábiles
             (revisamos sector, tamaño y caso de uso).
           </li>
           <li style={{ marginBottom: '0.5rem' }}>
-            <strong>Recargas tu billetera</strong> via NETOPIA desde el panel
+            <strong>Recargas tu billetera</strong> vía NETOPIA desde el panel
             corporativo del cliente o desde la web.
           </li>
           <li style={{ marginBottom: '0.5rem' }}>
-            <strong>Agregas empleados</strong> (puede ser via auto-registro
-            con tu codigo o desde el admin).
+            <strong>Agregas empleados</strong> (puede ser vía auto-registro
+            con tu código o desde el admin).
           </li>
           <li>
             <strong>Tus empleados viajan</strong> seleccionando "Corporativo"
-            como metodo de pago. El costo se descuenta de tu billetera y
+            como método de pago. El costo se descuenta de tu billetera y
             recibes la factura al fin de mes.
           </li>
         </ol>
@@ -243,11 +243,11 @@ export default function EmpresasPage() {
             marginBottom: '0.3rem',
           }}
         >
-          ¿Que tipos de servicio puedo restringir?
+          ¿Qué tipos de servicio puedo restringir?
         </h3>
         <p>
-          Triciclo, moto, auto, confort y mensajeria. Defines en el panel
-          cuales estan habilitados para tu cuenta.
+          Triciclo, moto, auto, confort y mensajería. Defines en el panel
+          cuáles están habilitados para tu cuenta.
         </p>
 
         <h3
@@ -263,7 +263,7 @@ export default function EmpresasPage() {
         </h3>
         <p>
           No. Solo pagas por los viajes que tu empresa consume. Sin
-          mensualidad ni minimos.
+          mensualidad ni mínimos.
         </p>
 
         <h3
@@ -275,11 +275,11 @@ export default function EmpresasPage() {
             marginBottom: '0.3rem',
           }}
         >
-          ¿Que pasa con el saldo no consumido?
+          ¿Qué pasa con el saldo no consumido?
         </h3>
         <p>
           Tu saldo no expira. Se acumula entre meses y puedes pedir reembolso
-          en cualquier momento via el panel de admin.
+          en cualquier momento vía el panel de admin.
         </p>
 
         <h3
@@ -332,7 +332,7 @@ export default function EmpresasPage() {
             fontSize: '0.95rem',
           }}
         >
-          Te respondemos en menos de 24 horas habiles.
+          Te respondemos en menos de 24 horas hábiles.
         </p>
         <Link
           href="/empresas/registro"

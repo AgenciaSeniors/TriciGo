@@ -242,7 +242,7 @@ export default function WalletScreen() {
       if (!rows.length) {
         Alert.alert(
           t('wallet.export_empty_title', { defaultValue: 'Nada para exportar' }),
-          t('wallet.export_empty', { defaultValue: 'Aun no tienes transacciones.' }),
+          t('wallet.export_empty', { defaultValue: 'Aún no tienes transacciones.' }),
         );
         return;
       }
@@ -758,7 +758,7 @@ export default function WalletScreen() {
               <EmptyState
                 icon="wallet-outline"
                 title={t('wallet.no_transactions_title', { defaultValue: 'Sin transacciones' })}
-                description={t('wallet.no_transactions', { defaultValue: 'Aun no tienes transacciones. Completa viajes para empezar a ganar.' })}
+                description={t('wallet.no_transactions', { defaultValue: 'Aún no tienes transacciones. Completa viajes para empezar a ganar.' })}
               />
             </View>
           }

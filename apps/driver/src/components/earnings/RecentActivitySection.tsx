@@ -184,13 +184,13 @@ export function RecentActivitySection({
                 onPress={onLoadMore}
                 className="py-3 items-center min-h-[48px] justify-center"
                 accessibilityRole="button"
-                accessibilityLabel={t('earnings.view_more', { defaultValue: 'Ver mas' })}
+                accessibilityLabel={t('earnings.view_more', { defaultValue: 'Ver más' })}
               >
                 <Text
                   variant="bodySmall"
                   style={{ color: midnightEmber.accent[500] }}
                 >
-                  {loading ? '...' : t('earnings.view_more', { defaultValue: 'Ver mas' })}
+                  {loading ? '...' : t('earnings.view_more', { defaultValue: 'Ver más' })}
                 </Text>
               </Pressable>
             )}

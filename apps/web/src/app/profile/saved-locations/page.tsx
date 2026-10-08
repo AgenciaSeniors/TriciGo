@@ -106,13 +106,13 @@ export default function SavedLocationsPage() {
       setFormLng(0);
     } catch (err) {
       console.error('Error saving location:', err);
-      alert(t('web.save_location_error', { defaultValue: 'Error al guardar ubicacion. Intenta de nuevo.' }));
+      alert(t('web.save_location_error', { defaultValue: 'Error al guardar ubicación. Intenta de nuevo.' }));
     }
   }
 
   async function handleDelete(index: number) {
     if (!profileId) return;
-    if (!confirm(t('web.delete_location_confirm', { defaultValue: 'Eliminar ubicacion?' }))) return;
+    if (!confirm(t('web.delete_location_confirm', { defaultValue: '¿Eliminar ubicación?' }))) return;
     const updated = locations.filter((_, i) => i !== index);
     try {
       await customerService.updateProfile(profileId, { saved_locations: updated });
@@ -120,7 +120,7 @@ export default function SavedLocationsPage() {
       if (selectedIndex === index) setSelectedIndex(null);
     } catch (err) {
       console.error('Error deleting location:', err);
-      alert(t('web.delete_location_error', { defaultValue: 'Error al eliminar ubicacion.' }));
+      alert(t('web.delete_location_error', { defaultValue: 'Error al eliminar ubicación.' }));
     }
   }
 
@@ -168,9 +168,9 @@ export default function SavedLocationsPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_locations', { defaultValue: 'Inicia sesion para ver tus ubicaciones' })}</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_locations', { defaultValue: 'Inicia sesión para ver tus ubicaciones' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          {t('web.login', { defaultValue: 'Iniciar sesion' })}
+          {t('web.login', { defaultValue: 'Iniciar sesión' })}
         </Link>
       </div>
     );
@@ -239,7 +239,7 @@ export default function SavedLocationsPage() {
           />
           {selectMode && (
             <p style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 500, textAlign: 'center', margin: '0.5rem 0 0' }}>
-              {t('web.tap_map_to_select', { defaultValue: 'Toca el mapa para seleccionar la ubicacion' })}
+              {t('web.tap_map_to_select', { defaultValue: 'Toca el mapa para seleccionar la ubicación' })}
             </p>
           )}
         </div>
@@ -257,7 +257,7 @@ export default function SavedLocationsPage() {
           marginBottom: '1.5rem',
         }}>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', margin: '0 0 0.5rem' }}>
-            {t('web.no_saved_locations', { defaultValue: 'No tienes ubicaciones guardadas aun.' })}
+            {t('web.no_saved_locations', { defaultValue: 'No tienes ubicaciones guardadas aún.' })}
           </p>
         </div>
       ) : (
@@ -300,7 +300,7 @@ export default function SavedLocationsPage() {
               <div style={{ flex: 1 }}>
                 <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{loc.label}</p>
                 <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                  {loc.address || t('web.no_address', { defaultValue: 'Sin direccion' })}
+                  {loc.address || t('web.no_address', { defaultValue: 'Sin dirección' })}
                 </p>
               </div>
               <button onClick={(e) => { e.stopPropagation(); handleEdit(index); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}>
@@ -324,7 +324,7 @@ export default function SavedLocationsPage() {
           marginBottom: '1.5rem',
         }}>
           <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 1rem' }}>
-            {editingIndex !== null ? t('web.edit_location', { defaultValue: 'Editar ubicacion' }) : t('web.new_location', { defaultValue: 'Nueva ubicacion' })}
+            {editingIndex !== null ? t('web.edit_location', { defaultValue: 'Editar ubicación' }) : t('web.new_location', { defaultValue: 'Nueva ubicación' })}
           </h3>
 
           <div style={{ marginBottom: '1rem' }}>
@@ -372,8 +372,8 @@ export default function SavedLocationsPage() {
 
           <div style={{ marginBottom: '1rem' }}>
             <AddressAutocomplete
-              label={t('web.address', { defaultValue: 'Direccion' })}
-              placeholder="Buscar direccion..."
+              label={t('web.address', { defaultValue: 'Dirección' })}
+              placeholder="Buscar dirección..."
               value={formAddress}
               mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''}
               onSelect={(r) => {
@@ -490,7 +490,7 @@ export default function SavedLocationsPage() {
             borderRadius: '0.75rem', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer',
           }}
         >
-          {t('web.add_location', { defaultValue: '+ Agregar ubicacion' })}
+          {t('web.add_location', { defaultValue: '+ Agregar ubicación' })}
         </button>
       )}
     </main>

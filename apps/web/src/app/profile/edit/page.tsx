@@ -135,16 +135,16 @@ export default function EditProfilePage() {
 
   const handleSave = async () => {
     if (!fullName.trim()) {
-      alert(t('web.name_required', { defaultValue: 'El nombre no puede estar vacio' }));
+      alert(t('web.name_required', { defaultValue: 'El nombre no puede estar vacío' }));
       return;
     }
     const phoneDigits = phone.replace(/\D/g, '');
     if (phone.trim() && phoneDigits.length < 8) {
-      alert(t('web.phone_invalid', { defaultValue: 'El telefono debe tener al menos 8 digitos' }));
+      alert(t('web.phone_invalid', { defaultValue: 'El teléfono debe tener al menos 8 dígitos' }));
       return;
     }
     if (email.trim() && !email.includes('@')) {
-      alert(t('web.email_invalid', { defaultValue: 'Ingresa un correo electronico valido' }));
+      alert(t('web.email_invalid', { defaultValue: 'Ingresa un correo electrónico válido' }));
       return;
     }
     setSaving(true);
@@ -206,9 +206,9 @@ export default function EditProfilePage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_edit', { defaultValue: 'Inicia sesion para editar tu perfil' })}</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_edit', { defaultValue: 'Inicia sesión para editar tu perfil' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          {t('web.login', { defaultValue: 'Iniciar sesion' })}
+          {t('web.login', { defaultValue: 'Iniciar sesión' })}
         </Link>
       </div>
     );
@@ -356,7 +356,7 @@ export default function EditProfilePage() {
 
         <div>
           <label htmlFor="pe-email" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            {t('web.email', { defaultValue: 'Correo electronico' })}
+            {t('web.email', { defaultValue: 'Correo electrónico' })}
           </label>
           <input
             id="pe-email"
@@ -377,7 +377,7 @@ export default function EditProfilePage() {
 
         <div>
           <label htmlFor="pe-phone" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            {t('web.phone', { defaultValue: 'Telefono' })}
+            {t('web.phone', { defaultValue: 'Teléfono' })}
           </label>
           <input
             id="pe-phone"

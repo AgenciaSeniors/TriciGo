@@ -979,11 +979,11 @@ export default function WalletPage() {
                 <button
                   onClick={handleLoadMoreTx}
                   disabled={txLoadingMore}
-                  aria-label={t('wallet.load_more_aria', { defaultValue: 'Cargar mas transacciones' })}
+                  aria-label={t('wallet.load_more_aria', { defaultValue: 'Cargar más transacciones' })}
                   className="btn-base btn-secondary-outline"
                   style={{ width: '100%', marginTop: '0.25rem' }}
                 >
-                  {txLoadingMore ? <span className="spinner" style={{ width: 14, height: 14 }} /> : t('wallet.load_more', { defaultValue: 'Cargar mas transacciones' })}
+                  {txLoadingMore ? <span className="spinner" style={{ width: 14, height: 14 }} /> : t('wallet.load_more', { defaultValue: 'Cargar más transacciones' })}
                 </button>
               )}
             </div>

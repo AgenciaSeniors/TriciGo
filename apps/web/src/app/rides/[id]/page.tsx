@@ -29,7 +29,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }
   searching: { label: 'Buscando conductor', bg: '#fef3c7', color: '#d97706' },
   accepted: { label: 'Aceptado', bg: '#dbeafe', color: '#2563eb' },
   driver_en_route: { label: 'Conductor en camino', bg: '#dbeafe', color: '#2563eb' },
-  arrived_at_pickup: { label: 'Conductor llego', bg: '#dbeafe', color: '#2563eb' },
+  arrived_at_pickup: { label: 'Conductor llegó', bg: '#dbeafe', color: '#2563eb' },
   in_progress: { label: 'En curso', bg: '#dbeafe', color: '#2563eb' },
   completed: { label: 'Completado', bg: '#dcfce7', color: '#16a34a' },
   canceled: { label: 'Cancelado', bg: '#fee2e2', color: '#dc2626' },
@@ -45,10 +45,10 @@ const PAYMENT_LABELS: Record<string, string> = {
 };
 
 const SERVICE_LABELS: Record<string, string> = {
-  triciclo_basico: 'Triciclo Basico',
+  triciclo_basico: 'Triciclo Básico',
   triciclo_premium: 'Triciclo Premium',
-  moto_standard: 'Moto Estandar',
-  auto_standard: 'Auto Estandar',
+  moto_standard: 'Moto Estándar',
+  auto_standard: 'Auto Estándar',
   auto_premium: 'Auto Premium',
 };
 
@@ -448,7 +448,7 @@ export default function RideDetailPage() {
                 const timestamps: { label: string; time: string | null; icon: string }[] = [
                   { label: 'Solicitado', time: ride.created_at, icon: '📝' },
                   { label: 'Aceptado', time: ride.accepted_at, icon: '✅' },
-                  { label: 'Conductor llego', time: ride.driver_arrived_at, icon: '📍' },
+                  { label: 'Conductor llegó', time: ride.driver_arrived_at, icon: '📍' },
                   { label: 'Recogida', time: ride.pickup_at, icon: '🚗' },
                   { label: 'Completado', time: ride.completed_at, icon: '🏁' },
                   { label: 'Cancelado', time: ride.canceled_at, icon: '❌' },
@@ -550,7 +550,7 @@ export default function RideDetailPage() {
                 {/* Cancellation fee */}
                 {ride.cancellation_fee_cup > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--error)', fontWeight: 600 }}>Tarifa de cancelacion</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--error)', fontWeight: 600 }}>Tarifa de cancelación</span>
                     <span style={{ fontSize: '0.8rem', color: 'var(--error)', fontWeight: 600 }}>
                       {formatCUP(ride.cancellation_fee_cup)}
                     </span>
@@ -597,15 +597,15 @@ export default function RideDetailPage() {
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '0 0 0.75rem' }}>Detalles</p>
 
                 {[
-                  { label: 'Metodo de pago', value: PAYMENT_LABELS[ride.payment_method] ?? ride.payment_method },
+                  { label: 'Método de pago', value: PAYMENT_LABELS[ride.payment_method] ?? ride.payment_method },
                   { label: 'Fecha', value: `${formatDate(ride.created_at)} · ${formatTime(ride.created_at)}` },
                   { label: 'Tipo de servicio', value: SERVICE_LABELS[ride.service_type] ?? ride.service_type },
                   ride.actual_distance_m != null
                     ? { label: 'Distancia', value: `${(ride.actual_distance_m / 1000).toFixed(1)} km` }
                     : { label: 'Distancia estimada', value: `${(ride.estimated_distance_m / 1000).toFixed(1)} km` },
                   ride.actual_duration_s != null
-                    ? { label: 'Duracion', value: `${Math.round(ride.actual_duration_s / 60)} min` }
-                    : { label: 'Duracion estimada', value: `${Math.round(ride.estimated_duration_s / 60)} min` },
+                    ? { label: 'Duración', value: `${Math.round(ride.actual_duration_s / 60)} min` }
+                    : { label: 'Duración estimada', value: `${Math.round(ride.estimated_duration_s / 60)} min` },
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{item.label}</span>

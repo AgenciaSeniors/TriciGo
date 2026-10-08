@@ -133,7 +133,7 @@ export default function SavedLocationsScreen() {
       setSelectedAddress(null);
       setEditingIndex(null);
       setMapSelectMode(false);
-      Toast.show({ type: 'success', text1: t('profile.location_saved', { defaultValue: 'Ubicacion guardada' }) });
+      Toast.show({ type: 'success', text1: t('profile.location_saved', { defaultValue: 'Ubicación guardada' }) });
       triggerHaptic('success');
     } catch {
       Toast.show({ type: 'error', text1: t('errors.saved_locations_failed') });
@@ -248,7 +248,7 @@ export default function SavedLocationsScreen() {
                     onPress={() => handleOpenSheet(index)}
                     hitSlop={8}
                     accessibilityRole="button"
-                    accessibilityLabel={t('profile.edit_location', { defaultValue: 'Editar ubicacion' })}
+                    accessibilityLabel={t('profile.edit_location', { defaultValue: 'Editar ubicación' })}
                   >
                     <Ionicons name="pencil-outline" size={18} color={isDark ? darkColors.text.secondary : colors.neutral[500]} />
                   </Pressable>
@@ -275,7 +275,7 @@ export default function SavedLocationsScreen() {
               <EmptyState
                 icon="location-outline"
                 title={t('profile.no_saved_locations')}
-                description={t('profile.no_saved_locations_desc', { defaultValue: 'Guarda tus direcciones frecuentes para reservar mas rapido.' })}
+                description={t('profile.no_saved_locations_desc', { defaultValue: 'Guarda tus direcciones frecuentes para reservar más rápido.' })}
                 action={{ label: t('profile.add_location'), onPress: () => handleOpenSheet() }}
               />
             )
@@ -295,7 +295,7 @@ export default function SavedLocationsScreen() {
       <BottomSheet visible={sheetVisible} onClose={() => { setSheetVisible(false); setEditingIndex(null); setMapSelectMode(false); }}>
         <Text className="text-lg font-bold mb-4">
           {editingIndex !== null
-            ? t('profile.edit_location', { defaultValue: 'Editar ubicacion' })
+            ? t('profile.edit_location', { defaultValue: 'Editar ubicación' })
             : t('profile.add_location')}
         </Text>
         <Input
@@ -336,7 +336,7 @@ export default function SavedLocationsScreen() {
           {t('profile.location_address')}
         </Text>
         <AddressSearchInput
-          placeholder={t('profile.location_address_placeholder', { defaultValue: 'Buscar direccion...' })}
+          placeholder={t('profile.location_address_placeholder', { defaultValue: 'Buscar dirección...' })}
           selectedAddress={selectedAddress?.address ?? null}
           onSelect={(address, location) => setSelectedAddress({ address, location })}
           recentAddresses={recentAddresses}

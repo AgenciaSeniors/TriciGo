@@ -288,7 +288,7 @@ export default function PendingScreen() {
           </Text>
         </View>
         <Text variant="caption" color="inverse" className="mt-4 opacity-30">
-          {t('onboarding.checking_status', { defaultValue: 'Verificando estado automaticamente...' })}
+          {t('onboarding.checking_status', { defaultValue: 'Verificando estado automáticamente...' })}
         </Text>
 
         {/* Invite code entry — a friend's referral only pays if the code is

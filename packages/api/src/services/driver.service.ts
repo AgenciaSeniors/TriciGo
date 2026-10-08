@@ -671,8 +671,8 @@ export const driverService = {
       .single();
     if (rideData?.ride_mode === 'cargo') {
       const msgs: Record<string, { title: string; body: string }> = {
-        arrived_at_pickup: { title: 'Conductor en punto de recogida', body: 'El conductor llego al punto de recogida de tu paquete' },
-        in_progress: { title: 'Tu paquete esta en camino', body: 'El conductor recogio tu paquete y va en camino al destino' },
+        arrived_at_pickup: { title: 'Conductor en punto de recogida', body: 'El conductor llegó al punto de recogida de tu paquete' },
+        in_progress: { title: 'Tu paquete está en camino', body: 'El conductor recogió tu paquete y va en camino al destino' },
       };
       const msg = msgs[status];
       if (msg) {

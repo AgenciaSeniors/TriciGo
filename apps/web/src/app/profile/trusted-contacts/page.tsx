@@ -80,7 +80,7 @@ export default function TrustedContactsPage() {
   };
 
   const handleDelete = async (contact: TrustedContact) => {
-    if (!confirm(t('web.delete_contact_confirm', { defaultValue: 'Eliminar a {{name}}?', name: contact.name }))) return;
+    if (!confirm(t('web.delete_contact_confirm', { defaultValue: '¿Eliminar a {{name}}?', name: contact.name }))) return;
     try {
       await trustedContactService.deleteContact(contact.id);
       setContacts((prev) => prev.filter((c) => c.id !== contact.id));
@@ -127,9 +127,9 @@ export default function TrustedContactsPage() {
     } catch (err: any) {
       console.error('Error adding trusted contact:', err);
       if (err?.message === 'Maximum contacts reached') {
-        alert(t('web.max_contacts_reached', { defaultValue: 'Maximo de contactos alcanzado ({{max}}).', max: MAX_CONTACTS }));
+        alert(t('web.max_contacts_reached', { defaultValue: 'Máximo de contactos alcanzado ({{max}}).', max: MAX_CONTACTS }));
       } else if (err?.message?.includes('duplicate')) {
-        alert(t('web.duplicate_contact', { defaultValue: 'Este contacto ya existe. Verifica el numero de telefono.' }));
+        alert(t('web.duplicate_contact', { defaultValue: 'Este contacto ya existe. Verifica el número de teléfono.' }));
       } else {
         alert(t('web.add_contact_error', { defaultValue: 'Error al agregar contacto: {{error}}', error: err?.message || t('web.unknown_error', { defaultValue: 'Error desconocido. Intenta de nuevo.' }) }));
       }
@@ -164,7 +164,7 @@ export default function TrustedContactsPage() {
       </div>
 
       <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-        {t('web.trusted_contacts_desc', { defaultValue: 'Estas personas seran notificadas si activas el boton SOS durante un viaje.' })}
+        {t('web.trusted_contacts_desc', { defaultValue: 'Estas personas serán notificadas si activas el botón SOS durante un viaje.' })}
       </p>
 
       {error && (
@@ -182,8 +182,8 @@ export default function TrustedContactsPage() {
       ) : contacts.length === 0 ? (
         <WebEmptyState
           icon="👥"
-          title={t('web.no_trusted_contacts', { defaultValue: 'No tienes contactos de confianza aun' })}
-          description={t('web.trusted_contacts_desc', { defaultValue: 'Estas personas seran notificadas si activas el boton SOS durante un viaje.' })}
+          title={t('web.no_trusted_contacts', { defaultValue: 'No tienes contactos de confianza aún' })}
+          description={t('web.trusted_contacts_desc', { defaultValue: 'Estas personas serán notificadas si activas el botón SOS durante un viaje.' })}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -221,9 +221,9 @@ export default function TrustedContactsPage() {
               <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {/* Auto-share toggle */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('web.auto_share_trip', { defaultValue: 'Compartir viaje automaticamente' })}</span>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('web.auto_share_trip', { defaultValue: 'Compartir viaje automáticamente' })}</span>
                   <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
-                    <input type="checkbox" checked={contact.auto_share} onChange={() => handleToggleAutoShare(contact)} aria-label={t('web.auto_share_trip', { defaultValue: 'Compartir viaje automaticamente' })} style={{ opacity: 0, width: 0, height: 0 }} />
+                    <input type="checkbox" checked={contact.auto_share} onChange={() => handleToggleAutoShare(contact)} aria-label={t('web.auto_share_trip', { defaultValue: 'Compartir viaje automáticamente' })} style={{ opacity: 0, width: 0, height: 0 }} />
                     <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, borderRadius: 24, background: contact.auto_share ? 'var(--primary)' : 'var(--border)', transition: 'background 0.2s' }}>
                       <span style={{ position: 'absolute', height: 18, width: 18, left: contact.auto_share ? 22 : 3, bottom: 3, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
                     </span>
@@ -261,7 +261,7 @@ export default function TrustedContactsPage() {
 
       {contacts.length >= MAX_CONTACTS && (
         <p style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.85rem', marginTop: '1rem' }}>
-          {t('web.max_contacts_reached', { defaultValue: 'Has alcanzado el maximo de {{max}} contactos.', max: MAX_CONTACTS })}
+          {t('web.max_contacts_reached', { defaultValue: 'Has alcanzado el máximo de {{max}} contactos.', max: MAX_CONTACTS })}
         </p>
       )}
 
@@ -277,7 +277,7 @@ export default function TrustedContactsPage() {
             <input
               id="tc-name"
               type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-              placeholder="Juan Perez"
+              placeholder="Juan Pérez"
               style={{
                 width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--border)',
                 fontSize: '0.95rem', background: 'var(--bg-page)', color: 'var(--text-primary)', boxSizing: 'border-box',
@@ -286,7 +286,7 @@ export default function TrustedContactsPage() {
           </div>
 
           <div style={{ marginBottom: '1rem' }}>
-            <label htmlFor="tc-phone" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.phone', { defaultValue: 'Telefono' })}</label>
+            <label htmlFor="tc-phone" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.phone', { defaultValue: 'Teléfono' })}</label>
             <input
               id="tc-phone"
               type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
@@ -313,7 +313,7 @@ export default function TrustedContactsPage() {
           </div>
 
           <div style={{ marginBottom: '1.25rem' }}>
-            <label htmlFor="tc-relationship" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.relationship', { defaultValue: 'Relacion' })}</label>
+            <label htmlFor="tc-relationship" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('web.relationship', { defaultValue: 'Relación' })}</label>
             <input
               id="tc-relationship"
               type="text" value={newRelationship} onChange={(e) => setNewRelationship(e.target.value)}

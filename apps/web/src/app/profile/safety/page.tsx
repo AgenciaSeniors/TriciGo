@@ -89,9 +89,9 @@ export default function SafetyPage() {
   if (!userId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_safety', { defaultValue: 'Inicia sesion para ver la configuracion de seguridad' })}</p>
+        <p style={{ color: 'var(--text-secondary)' }}>{t('web.login_required_safety', { defaultValue: 'Inicia sesión para ver la configuración de seguridad' })}</p>
         <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
-          {t('web.login', { defaultValue: 'Iniciar sesion' })}
+          {t('web.login', { defaultValue: 'Iniciar sesión' })}
         </Link>
       </div>
     );
@@ -134,10 +134,10 @@ export default function SafetyPage() {
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
           </div>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#c53030' }}>{t('web.sos_button', { defaultValue: 'Boton SOS' })}</h2>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#c53030' }}>{t('web.sos_button', { defaultValue: 'Botón SOS' })}</h2>
         </div>
         <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 1rem', lineHeight: 1.5 }}>
-          {t('web.sos_description', { defaultValue: 'Durante un viaje, puedes presionar el boton SOS para alertar a tus contactos de confianza y compartir tu ubicacion en tiempo real. Tu seguridad es nuestra prioridad.' })}
+          {t('web.sos_description', { defaultValue: 'Durante un viaje, puedes presionar el botón SOS para alertar a tus contactos de confianza y compartir tu ubicación en tiempo real. Tu seguridad es nuestra prioridad.' })}
         </p>
         {/* Llamada directa a emergencias (parity con el botón tel:106 del safety móvil). */}
         <a
@@ -226,7 +226,7 @@ export default function SafetyPage() {
             <path d="M16 3.13a4 4 0 010 7.75" />
           </svg>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', margin: '0.75rem 0 0' }}>
-            {t('web.trusted_contacts_hint', { defaultValue: 'Agrega personas de confianza que seran notificadas si activas el boton SOS.' })}
+            {t('web.trusted_contacts_hint', { defaultValue: 'Agrega personas de confianza que serán notificadas si activas el botón SOS.' })}
           </p>
           <button
             onClick={() => router.push('/profile/trusted-contacts')}
@@ -323,10 +323,10 @@ export default function SafetyPage() {
           {t('web.safety_tips', { defaultValue: 'Consejos de seguridad' })}
         </h3>
         <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_1', { defaultValue: 'Verifica siempre la placa del vehiculo antes de abordar' })}</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_1', { defaultValue: 'Verifica siempre la placa del vehículo antes de abordar' })}</li>
           <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_2', { defaultValue: 'Comparte tu viaje en tiempo real con tus contactos' })}</li>
-          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_3', { defaultValue: 'Usa el boton SOS si te sientes en peligro' })}</li>
-          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_4', { defaultValue: 'Califica a tu conductor despues de cada viaje' })}</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_3', { defaultValue: 'Usa el botón SOS si te sientes en peligro' })}</li>
+          <li style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t('web.safety_tip_4', { defaultValue: 'Califica a tu conductor después de cada viaje' })}</li>
         </ul>
       </div>
     </main>

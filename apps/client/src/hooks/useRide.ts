@@ -974,7 +974,7 @@ export function useRideActions() {
             Toast.show({
               type: 'info',
               text1: i18next.t('rider:ride.expanding_search', {
-                defaultValue: 'Ampliando la busqueda de conductores...',
+                defaultValue: 'Ampliando la búsqueda de conductores...',
               }),
               visibilityTime: 3000,
             });

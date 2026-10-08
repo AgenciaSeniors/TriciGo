@@ -1067,7 +1067,7 @@ export default function BookPage() {
             type="button"
             onClick={handleResetMap}
             disabled={!pickup && !dropoff}
-            aria-label="Reiniciar seleccion de mapa"
+            aria-label="Reiniciar selección de mapa"
             style={{
               width: '100%',
               marginTop: '0.5rem',
@@ -1556,10 +1556,10 @@ export default function BookPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      Voy con el envio
+                      Voy con el envío
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
-                      Acompana tu paquete sin costo adicional
+                      Acompaña tu paquete sin costo adicional
                     </div>
                   </div>
                 </button>

@@ -33,8 +33,8 @@ export default function AboutPage() {
   }
 
   const linkItems = [
-    { label: 'Politica de privacidad', href: '/privacy' },
-    { label: 'Terminos y condiciones', href: '/terms' },
+    { label: 'Política de privacidad', href: '/privacy' },
+    { label: 'Términos y condiciones', href: '/terms' },
     { label: 'Blog', href: '/blog' },
   ];
 
@@ -63,7 +63,7 @@ export default function AboutPage() {
           T
         </div>
         <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>TriciGo</h2>
-        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Version 1.0.0</p>
+        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Versión 1.0.0</p>
         <p style={{ margin: '0.75rem 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           Plataforma de movilidad urbana. Conectamos pasajeros con conductores de triciclos y taxis de forma segura y conveniente.
         </p>
