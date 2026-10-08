@@ -31,10 +31,16 @@
 SET lock_timeout = '5s';
 
 -- Every table this file touches, locked up front in the order the app takes them (a ride first,
--- then its users and driver profiles), so the file cannot deadlock with live traffic by taking
--- them one by one in another order. Each gets the lock the file needs anyway: ACCESS EXCLUSIVE
--- where it creates a policy or alters the table, ACCESS SHARE where it only reads it (the panel
--- views and promotion_is_referenced). ACCESS SHARE blocks no reader or writer.
+-- then its users and driver profiles), instead of one by one in whatever order the statements
+-- below reach them. Each gets the lock the file needs anyway: ACCESS EXCLUSIVE where it creates a
+-- policy or alters the table, ACCESS SHARE where it only reads it (the panel views and
+-- promotion_is_referenced). ACCESS SHARE blocks no reader or writer.
+-- That makes a deadlock with live traffic unlikely, not impossible: a query can hold one of these
+-- tables and then need another through a policy subquery (an anon read of blog_posts reaches users
+-- that way) while this file holds the second and waits for the first. Postgres breaks the cycle
+-- by aborting one side. When that is this file (40P01, deadlock), or when the file gives up waiting
+-- (55P03, the lock_timeout above), the whole file rolls back cleanly, since it runs in one
+-- transaction, and the fix is to run it again.
 -- LOCK TABLE needs a transaction: apply_migration and db push run the file in one.
 LOCK TABLE public.rides IN ACCESS SHARE MODE;
 LOCK TABLE public.users IN ACCESS EXCLUSIVE MODE;
@@ -78,7 +84,8 @@ COMMENT ON COLUMN public.promotions.revision IS
 
 -- Whether anything points at a promotion. The guard below asks it before marketing deletes one:
 -- the guard runs as the caller, and RLS hides most of these rows from marketing. It answers
--- true or false and nothing else.
+-- true or false and nothing else, and only to marketing and the admins: anyone else gets false,
+-- so it tells nobody else which promotions were used.
 CREATE OR REPLACE FUNCTION public.promotion_is_referenced(p_promotion_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -86,9 +93,12 @@ STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $$
-  SELECT EXISTS (SELECT 1 FROM public.rides WHERE promo_code_id = p_promotion_id)
+  SELECT CASE
+    WHEN NOT (public.is_marketing() OR public.is_admin()) THEN false
+    ELSE EXISTS (SELECT 1 FROM public.rides WHERE promo_code_id = p_promotion_id)
       OR EXISTS (SELECT 1 FROM public.promotion_uses WHERE promotion_id = p_promotion_id)
-      OR EXISTS (SELECT 1 FROM public.campaigns WHERE promo_code_id = p_promotion_id);
+      OR EXISTS (SELECT 1 FROM public.campaigns WHERE promo_code_id = p_promotion_id)
+  END;
 $$;
 REVOKE ALL ON FUNCTION public.promotion_is_referenced(uuid) FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.promotion_is_referenced(uuid) TO authenticated;
@@ -158,15 +168,23 @@ BEGIN
           MESSAGE = 'Solo un administrador puede activar una promoción.',
           DETAIL = 'promo_activation_requires_admin';
       END IF;
-      -- An edited draft goes back to the admins. Marketing never writes the approval or the counters.
-      NEW.pending_approval := true;
+      -- Marketing never writes the approval or the counters. Nor the push stamp of a promotion
+      -- that is off: "Notificar ahora" is for live ones, and a stamp on a draft would decide
+      -- whether its approval sends the publish push.
+      NEW.pending_approval := OLD.pending_approval;
       NEW.approved_by := OLD.approved_by;
       NEW.approved_at := OLD.approved_at;
       NEW.created_by := OLD.created_by;
       NEW.current_uses := OLD.current_uses;
+      NEW.notified_at := OLD.notified_at;
     END IF;
     IF (to_jsonb(NEW) - c_bookkeeping) IS DISTINCT FROM (to_jsonb(OLD) - c_bookkeeping) THEN
       NEW.revision := OLD.revision + 1;
+      -- A draft marketing edited goes back to the admins. A marketing write that changes nothing
+      -- it offers (a second pause, a stale save) leaves the wait as it was.
+      IF v_marketing THEN
+        NEW.pending_approval := true;
+      END IF;
     END IF;
   END IF;
 
