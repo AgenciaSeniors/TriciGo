@@ -48,17 +48,17 @@ RIDE_P=f0000000-0000-4000-8000-000000000005  # a ride with a promo code, inside 
 # as ID: the rest of the transaction runs as an API user with that JWT subject
 as_user(){ echo "SET LOCAL request.jwt.claim.sub = '$1'; SET LOCAL ROLE authenticated;"; }
 
-LIVE_NAMES="'admin_launch_pulse','admin_signup_code_stats','apply_user_rating','current_user_role',
+LIVE_NAMES="'admin_launch_pulse','admin_signup_code_stats','apply_user_rating','count_power_users','current_user_role',
   'enforce_ride_transition','ensure_driver_role_and_tricicoin_on_approval','get_active_push_user_ids',
   'get_admin_dashboard_metrics','get_admin_wallet_stats','get_rides_by_day','get_rides_by_payment_method',
   'get_rides_by_service_type','get_top_drivers','is_admin','is_super_admin','promote_user_role',
   'tg_acquisition_codes_guard','tg_rides_rollback_promo_on_cancel','tg_rides_validate_promo_discount'"
-LIVE_MD5="admin_launch_pulse=21c359c7427f75016c38b6b758ad23a7,admin_signup_code_stats=079bc5a6c046e6896c62200f71fc7740,apply_user_rating=8d0b0de3bf82f6d15d8da36462cbbe9c,current_user_role=cb4a7c12d4e21fe2997135833f141e25,enforce_ride_transition=35bde4fd60a4a4fa0fc86a237ec4a414,ensure_driver_role_and_tricicoin_on_approval=ed41bc2fe192ceb6dbafd163507934f3,get_active_push_user_ids=e3d6f508efe28decb7141f3251410f50,get_admin_dashboard_metrics=0c99d4e89b08ad2da5989642e09ba5bf,get_admin_wallet_stats=86c6ef03c7c39d56e9f84cc8795dfbfd,get_rides_by_day=68dcc98aaa0919c942eafc22e6cfe06a,get_rides_by_payment_method=351484791e08451565cc6fbae34fef2e,get_rides_by_service_type=c94b1028a03b16d34d25f4a2a56d4bd6,get_top_drivers=cb273bf7da9f5c3d58b495ba08d6714b,is_admin=22cb75e91980d512498034cd33e1eda2,is_super_admin=5655a4615e92e8b1e323d06c7566b058,promote_user_role=6d7f90376c85173c104a86003e684e1e,tg_acquisition_codes_guard=383b43d28d0e0598a9233fafd1eba296,tg_rides_rollback_promo_on_cancel=02515bc12de7afbc36f60e709daa18ba,tg_rides_validate_promo_discount=b70dc359fccf82f5d5b3209ca03e9816"
-PATCHED_NAMES="'admin_launch_pulse','admin_signup_code_stats','apply_user_rating','enforce_ride_transition',
+LIVE_MD5="admin_launch_pulse=21c359c7427f75016c38b6b758ad23a7,admin_signup_code_stats=079bc5a6c046e6896c62200f71fc7740,apply_user_rating=8d0b0de3bf82f6d15d8da36462cbbe9c,count_power_users=d03f94845bb47efb8183fba60754012d,current_user_role=cb4a7c12d4e21fe2997135833f141e25,enforce_ride_transition=35bde4fd60a4a4fa0fc86a237ec4a414,ensure_driver_role_and_tricicoin_on_approval=ed41bc2fe192ceb6dbafd163507934f3,get_active_push_user_ids=e3d6f508efe28decb7141f3251410f50,get_admin_dashboard_metrics=0c99d4e89b08ad2da5989642e09ba5bf,get_admin_wallet_stats=86c6ef03c7c39d56e9f84cc8795dfbfd,get_rides_by_day=68dcc98aaa0919c942eafc22e6cfe06a,get_rides_by_payment_method=351484791e08451565cc6fbae34fef2e,get_rides_by_service_type=c94b1028a03b16d34d25f4a2a56d4bd6,get_top_drivers=cb273bf7da9f5c3d58b495ba08d6714b,is_admin=22cb75e91980d512498034cd33e1eda2,is_super_admin=5655a4615e92e8b1e323d06c7566b058,promote_user_role=6d7f90376c85173c104a86003e684e1e,tg_acquisition_codes_guard=383b43d28d0e0598a9233fafd1eba296,tg_rides_rollback_promo_on_cancel=02515bc12de7afbc36f60e709daa18ba,tg_rides_validate_promo_discount=b70dc359fccf82f5d5b3209ca03e9816"
+PATCHED_NAMES="'admin_launch_pulse','admin_signup_code_stats','apply_user_rating','count_power_users','enforce_ride_transition',
   'ensure_driver_role_and_tricicoin_on_approval','get_active_push_user_ids','get_admin_dashboard_metrics',
   'get_admin_wallet_stats','get_rides_by_day','get_rides_by_payment_method','get_rides_by_service_type','get_top_drivers'"
 # Computed in prod on 2026-10-08 as md5(replace(prosrc, <target>, <replacement>)): the bodies 00642 must leave.
-PATCHED_MD5="admin_launch_pulse=bb5d37a5bca57a64d3e3409ada2dd6b6,admin_signup_code_stats=16a8ed1ebe03aa82f2f75676783a9099,apply_user_rating=96be8c154990651738312ef44861242f,enforce_ride_transition=f806997fab31c18e7b369e69f5321c30,ensure_driver_role_and_tricicoin_on_approval=1940d4379a446c8afdf0d47434945c07,get_active_push_user_ids=875f787da6a1c0fcce8708404efd72d8,get_admin_dashboard_metrics=32cec76d3f079f6938b09f8bb7e919b2,get_admin_wallet_stats=0f937c94cda1d26e7dd2da7d574949dd,get_rides_by_day=fd5363b072a17da61325a23cfd1486af,get_rides_by_payment_method=2ecacefdfef6c96da84d3b2f20a0b138,get_rides_by_service_type=ffd6c633752a21bba4945625fc9aaaaf,get_top_drivers=03e7be0213769612782ed3bcb0183f3a"
+PATCHED_MD5="admin_launch_pulse=bb5d37a5bca57a64d3e3409ada2dd6b6,admin_signup_code_stats=16a8ed1ebe03aa82f2f75676783a9099,apply_user_rating=96be8c154990651738312ef44861242f,count_power_users=40b9c404e71ac2ef26042fe75bc955bc,enforce_ride_transition=f806997fab31c18e7b369e69f5321c30,ensure_driver_role_and_tricicoin_on_approval=1940d4379a446c8afdf0d47434945c07,get_active_push_user_ids=875f787da6a1c0fcce8708404efd72d8,get_admin_dashboard_metrics=32cec76d3f079f6938b09f8bb7e919b2,get_admin_wallet_stats=0f937c94cda1d26e7dd2da7d574949dd,get_rides_by_day=fd5363b072a17da61325a23cfd1486af,get_rides_by_payment_method=2ecacefdfef6c96da84d3b2f20a0b138,get_rides_by_service_type=ffd6c633752a21bba4945625fc9aaaaf,get_top_drivers=03e7be0213769612782ed3bcb0183f3a"
 GATE='Admin only\|forbidden\|Forbidden'
 METRICS="admin_launch_pulse(4) admin_signup_code_stats() get_admin_dashboard_metrics() get_admin_wallet_stats()
   get_rides_by_day(7) get_rides_by_service_type(7) get_rides_by_payment_method(7) get_top_drivers(5)
@@ -303,6 +303,21 @@ for f in $METRICS; do
   if past_gate "$r"; then ok "F3 admin passes the gate: $f"; else ko "F3 admin passes the gate: $f" "got [$r]"; fi
 done
 
+# --- CP: count_power_users counts through panel_rides ------------------------------------
+# Carla rides 3 times, Diego once: one rider above 1 ride, two above 0.
+POWER_SEED="INSERT INTO public.rides (customer_id) VALUES ('$CARLA'), ('$CARLA'), ('$DIEGO');"
+POWER_COUNTS="SELECT (SELECT count FROM public.count_power_users(1)), (SELECT count FROM public.count_power_users(0));"
+# CP1: marketing counts what an admin counts (RED: 0|0, only its own rides, and it has none)
+val CP1 "BEGIN; $POWER_SEED $(as_user $ANA) $POWER_COUNTS $(as_user $MARA) $POWER_COUNTS ROLLBACK;" "1|2;1|2"
+# CP2: a customer counts nobody, not even itself (RED: 1|1, its own three rides)
+val CP2 "BEGIN; $POWER_SEED $(as_user $CARLA) $POWER_COUNTS ROLLBACK;" "0|0"
+# CP3: anon may not read the view, so it gets no count (RED: 0)
+err CP3 "BEGIN; SET LOCAL request.jwt.claim.sub = ''; SET LOCAL ROLE anon; SELECT * FROM public.count_power_users(0); ROLLBACK;" \
+  "permission denied for view panel_rides"
+# CP4: the service role without a JWT passes no gate either and counts 0 (RED: 1, past RLS).
+# Nothing calls it that way: /segments calls it signed in.
+val CP4 "BEGIN; SET LOCAL request.jwt.claim.sub = ''; SET LOCAL ROLE service_role; SELECT count FROM public.count_power_users(0); ROLLBACK;" "0"
+
 # --- T, D, U: the live functions that list roles ----------------------------------------
 # T1: marketing rides as a passenger and cancels its own search (RED: "for role marketing")
 val T1 "BEGIN; $(as_user $MARA) INSERT INTO public.rides (id, customer_id) VALUES ('$RIDE_M', '$MARA');
@@ -436,6 +451,13 @@ if [ "$MIG" != none ]; then
       EXECUTE format('CREATE OR REPLACE VIEW public.%I WITH (security_barrier = true, security_invoker = false) AS %s', r, w);
     END LOOP; END \$d\$;
     $(as_user $CARLA) SELECT (SELECT count(*) FROM public.panel_rides), (SELECT count(*) FROM public.panel_driver_profiles); ROLLBACK;" "3|1"
+  # X4: with prod's body back (reading rides), marketing counts 0 again while an admin still counts (CP1 would fail)
+  val X4 "BEGIN; $POWER_SEED
+    DO \$d\$ DECLARE v text := pg_get_functiondef('public.count_power_users(integer)'::regprocedure);
+    t text := 'FROM public.panel_rides';
+    BEGIN IF position(t IN v) = 0 THEN RAISE EXCEPTION 'X4: view not found'; END IF; EXECUTE replace(v, t, 'FROM rides'); END \$d\$;
+    SELECT md5(prosrc) = 'd03f94845bb47efb8183fba60754012d' FROM pg_proc WHERE oid = 'public.count_power_users(integer)'::regprocedure;
+    $(as_user $ANA) $POWER_COUNTS $(as_user $MARA) $POWER_COUNTS ROLLBACK;" "t;1|2;0|0"
 fi
 
 # --- N: the guards refuse what they do not know (separate database, GREEN only) ----------
@@ -462,6 +484,17 @@ if [ "$MIG" != none ]; then
   run $GUARD "$AS_OWNER CREATE POLICY users_select_marketing ON public.users FOR SELECT TO authenticated USING (false);" >/dev/null
   r=$(apply_once $GUARD)
   if echo "$r" | grep -q "policy users_select_marketing on users does not use is_marketing()"; then ok N4; else ko N4 "got [$r]"; fi
+  # N11: count_power_users with a body this file does not know: the file stops
+  load $GUARD
+  run $GUARD "$AS_OWNER DO \$d\$ BEGIN EXECUTE replace(pg_get_functiondef('public.count_power_users(integer)'::regprocedure),
+    'GROUP BY customer_id', 'GROUP BY customer_id -- drift'); END \$d\$;" >/dev/null
+  r=$(apply_once $GUARD)
+  if echo "$r" | grep -q "count_power_users(integer) has a body this file does not know"; then ok N11; else ko N11 "got [$r]"; fi
+  # N12: count_power_users made SECURITY DEFINER (same body): the final check refuses it
+  load $GUARD
+  run $GUARD "$AS_OWNER ALTER FUNCTION public.count_power_users(integer) SECURITY DEFINER;" >/dev/null
+  r=$(apply_once $GUARD)
+  if echo "$r" | grep -q "count_power_users(integer) must stay SECURITY INVOKER"; then ok N12; else ko N12 "got [$r]"; fi
   # N5-N10: the final check refuses each way the trigger, the guard or a policy could be wrong.
   # One database: each failed apply rolls back, and the policy planted for it is removed after.
   load $GUARD

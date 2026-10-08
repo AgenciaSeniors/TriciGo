@@ -236,6 +236,23 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.count_power_users(min_rides integer DEFAULT 10)
+ RETURNS TABLE(count bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+  SELECT COUNT(*)::BIGINT AS count
+  FROM (
+    SELECT customer_id
+    FROM rides
+    WHERE customer_id IS NOT NULL
+    GROUP BY customer_id
+    HAVING COUNT(*) > min_rides
+  ) AS power_riders;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.current_user_role()
  RETURNS user_role
  LANGUAGE sql

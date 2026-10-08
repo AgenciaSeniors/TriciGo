@@ -13,7 +13,8 @@
 --      today is loosened for any other role.
 --   4. panel_rides and panel_driver_profiles: what the panel lists of rides and drivers, for
 --      admins and marketing, without the ride share token or the drivers' live GPS.
---   5. The metrics RPCs the marketing pages call let marketing through their admin gate.
+--   5. The metrics RPCs the marketing pages call let marketing through their admin gate, and
+--      count_power_users counts riders through panel_rides.
 --   6. Three live functions that list roles learn about marketing: it rides as a passenger, keeps
 --      its role when approved as a driver, and gets its passenger rating.
 --   7. Checks of everything above. A failed check aborts the whole file.
@@ -312,6 +313,39 @@ BEGIN
 END
 $patch$;
 
+-- count_power_users has no gate: it runs as its caller (SECURITY INVOKER) and counts the rides
+-- RLS shows them, so marketing, with no policy on rides, counted only its own. It reads the
+-- panel view instead: admins and marketing count every rider, anyone else counts none. A
+-- customer and the service role without a JWT get 0; anon, with no SELECT on the view, gets a
+-- permission error. It stays SECURITY INVOKER, as in prod. Only /segments calls it, signed in.
+DO $patch$
+DECLARE
+  c_fn constant regprocedure := 'public.count_power_users(integer)'::regprocedure;
+  c_old_md5 constant text := 'd03f94845bb47efb8183fba60754012d';
+  c_new_md5 constant text := '40b9c404e71ac2ef26042fe75bc955bc';
+  c_target constant text := 'FROM rides';
+  v_src text;
+  v_md5 text;
+BEGIN
+  SELECT prosrc INTO v_src FROM pg_proc WHERE oid = c_fn;
+  v_md5 := md5(v_src);
+  IF v_md5 = c_new_md5 THEN
+    RETURN;
+  END IF;
+  IF v_md5 <> c_old_md5 THEN
+    RAISE EXCEPTION '00642: % has a body this file does not know (md5 %); patch it from the live body', c_fn, v_md5;
+  END IF;
+  IF (length(v_src) - length(replace(v_src, c_target, ''))) / length(c_target) <> 1 THEN
+    RAISE EXCEPTION '00642: % does not read rides exactly once', c_fn;
+  END IF;
+  EXECUTE replace(pg_get_functiondef(c_fn), c_target, 'FROM public.panel_rides');
+  SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = c_fn;
+  IF v_md5 <> c_new_md5 THEN
+    RAISE EXCEPTION '00642: % patched to an unexpected body (md5 %)', c_fn, v_md5;
+  END IF;
+END
+$patch$;
+
 -- 6. Live functions that list roles ---------------------------------------------------------
 DO $patch$
 DECLARE
@@ -523,6 +557,7 @@ BEGIN
       ('public.get_rides_by_payment_method(integer)', '2ecacefdfef6c96da84d3b2f20a0b138'),
       ('public.get_top_drivers(integer)', '03e7be0213769612782ed3bcb0183f3a'),
       ('public.get_active_push_user_ids(integer)', '875f787da6a1c0fcce8708404efd72d8'),
+      ('public.count_power_users(integer)', '40b9c404e71ac2ef26042fe75bc955bc'),
       ('public.enforce_ride_transition()', 'f806997fab31c18e7b369e69f5321c30'),
       ('public.ensure_driver_role_and_tricicoin_on_approval()', '1940d4379a446c8afdf0d47434945c07'),
       ('public.apply_user_rating(uuid)', '96be8c154990651738312ef44861242f')
@@ -532,6 +567,12 @@ BEGIN
       RAISE EXCEPTION '00642: % does not have the patched body', v_name;
     END IF;
   END LOOP;
+
+  -- count_power_users stays as prod has it, SECURITY INVOKER: it counts what panel_rides shows
+  -- its caller, and a caller with no SELECT on the view (anon) gets no answer.
+  IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.count_power_users(integer)'::regprocedure) THEN
+    RAISE EXCEPTION '00642: count_power_users(integer) must stay SECURITY INVOKER';
+  END IF;
 END
 $check$;
 
