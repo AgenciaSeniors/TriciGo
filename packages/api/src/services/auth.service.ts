@@ -3,7 +3,7 @@
 // Phone-based OTP authentication via Supabase Auth
 // ============================================================
 
-import type { MarketingOptInSource, User } from '@tricigo/types';
+import type { EmailConfirmationStatus, MarketingOptInSource, User } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
 import { uploadFileFromUri } from './_storage-upload';
 
@@ -574,9 +574,11 @@ export const authService = {
    * 90 drivers had a real address stored that way, and during the 15h SMS
    * outage of 2026-08-15 not one of them could use it.
    *
-   * The `add-email-with-verification` Edge Function (deployed, and with zero
-   * callers until now) does the real work: writes auth.users.email and sends a
-   * magic link so the address is confirmed before it counts.
+   * The `add-email-with-verification` Edge Function does the work: it stores the
+   * address in public.users (unconfirmed) and mails a one-use confirmation link.
+   * auth.users.email is written only by `confirm-email`, once the link is opened,
+   * and that is also what stamps users.email_verified_at. Calling it again for the
+   * same address resends the link (the previous one stops working).
    *
    * SAFE FOR PHONE LOGIN: replacing the synthetic address does NOT strand the
    * user, because `lookup_auth_user_by_contact` (used by verify-otp) matches on
@@ -584,7 +586,8 @@ export const authService = {
    * have a confirmed auth.users.phone.
    *
    * Errors surface the EF's stable codes so the UI can explain itself:
-   * `email_already_taken`, `invalid_email`, `unauthorized`.
+   * `email_already_taken`, `invalid_email`, `unauthorized`, and `rate_limited`
+   * for its 429 (5 per account and 10 per IP an hour).
    */
   async addBackupEmail(email: string) {
     const supabase = getSupabaseClient();
@@ -597,7 +600,10 @@ export const authService = {
       // raw Response on `context` — same unwrapping as verifyPhoneLink above.
       let efCode: string | null = null;
       const ctx = (error as { context?: Response } | null)?.context;
-      if (ctx) {
+      if (ctx?.status === 429) {
+        // The 429 body is a sentence ("Too many requests. Try again later."), not a code.
+        efCode = 'rate_limited';
+      } else if (ctx) {
         try {
           const body = await ctx.clone().json();
           if (typeof body?.error === 'string') efCode = body.error;
@@ -620,6 +626,34 @@ export const authService = {
       throw e;
     }
     return data;
+  },
+
+  /**
+   * Whether the caller's users.email is proven (00643 get_my_email_status, the 00635
+   * rule): `none` (no real address), `unconfirmed` or `proven`, plus when the newest
+   * still-valid confirmation link was sent. Null on any failure (the migration not
+   * applied yet, no network): callers then show no notice.
+   */
+  async getMyEmailStatus(): Promise<EmailConfirmationStatus | null> {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.rpc('get_my_email_status');
+      if (error) return null;
+      const row = (Array.isArray(data) ? data[0] : data) as
+        | { email?: unknown; status?: unknown; link_sent_at?: unknown }
+        | null
+        | undefined;
+      if (!row) return null;
+      const status = row.status;
+      if (status !== 'none' && status !== 'unconfirmed' && status !== 'proven') return null;
+      return {
+        email: typeof row.email === 'string' ? row.email : null,
+        status,
+        linkSentAt: typeof row.link_sent_at === 'string' ? row.link_sent_at : null,
+      };
+    } catch {
+      return null;
+    }
   },
 
   /**

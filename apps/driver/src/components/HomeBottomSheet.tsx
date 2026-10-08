@@ -91,6 +91,10 @@ export interface HomeBottomSheetProps {
   /** Invite link (falsy = feature off / dismissed → banner hidden). */
   whatsappGroupUrl?: string | null;
 
+  // ── E-mail confirmation ──
+  /** The driver's unconfirmed address (null = nothing to confirm, or snoozed). */
+  emailNotice?: { email: string; linkSent: boolean; resending: boolean } | null;
+
   // ── Callbacks ──
   onToggleOnline: () => void;
   onToggleBreak: () => void;
@@ -103,6 +107,10 @@ export interface HomeBottomSheetProps {
   onJoinWhatsapp?: () => void;
   /** Dismiss the WhatsApp group banner (persisted by the parent). */
   onDismissWhatsapp?: () => void;
+  /** Send a new confirmation link to the unconfirmed address. */
+  onResendEmailLink?: () => void;
+  /** "Ahora no": hide the e-mail banner for a while (persisted by the parent). */
+  onDismissEmailNotice?: () => void;
 
   // ── Animations ──
   ctaScaleAnim: Animated.Value;
@@ -243,6 +251,7 @@ function SheetContent({
   fatigueLevel,
   sessionHours,
   whatsappGroupUrl,
+  emailNotice,
   onToggleOnline,
   onToggleBreak,
   onSubmitSelfie,
@@ -251,6 +260,8 @@ function SheetContent({
   onOpenNotificationSettings,
   onJoinWhatsapp,
   onDismissWhatsapp,
+  onResendEmailLink,
+  onDismissEmailNotice,
   ctaScaleAnim,
   onCtaPressIn,
   onCtaPressOut,
@@ -395,6 +406,34 @@ function SheetContent({
           }
           actionLabel={t('home.fatigue_take_break', { defaultValue: 'Tomar descanso' })}
           onActionPress={onToggleBreak}
+          palette={palette}
+        />
+      )}
+      {/* Account housekeeping: without a confirmed address no receipt, status
+          mail or contract reaches the driver (00635). Not while working — only
+          offline or on a break — and dismissible for 7 days by the parent. */}
+      {!!emailNotice && (!isOnline || isOnBreak) && (
+        <Banner
+          variant="info"
+          icon="mail-unread-outline"
+          message={t('email_notice.title', { ns: 'common', defaultValue: 'Confirma tu correo' })}
+          subtitle={
+            emailNotice.linkSent
+              ? t('email_notice.sent', {
+                  ns: 'common',
+                  email: emailNotice.email,
+                  defaultValue: 'Enlace enviado a {{email}}. Revisa tu correo, también la carpeta de spam.',
+                })
+              : `${t('email_notice.body', {
+                  ns: 'common',
+                  defaultValue: 'Sin confirmarlo no te llegan recibos ni avisos de tu cuenta.',
+                })} ${emailNotice.email}`
+          }
+          actionLabel={t('email_notice.resend', { ns: 'common', defaultValue: 'Reenviar enlace' })}
+          onActionPress={onResendEmailLink}
+          actionDisabled={emailNotice.resending}
+          onDismiss={onDismissEmailNotice}
+          dismissLabel={t('email_notice.later', { ns: 'common', defaultValue: 'Ahora no' })}
           palette={palette}
         />
       )}
@@ -883,6 +922,7 @@ function Banner({
             disabled={actionDisabled}
             hitSlop={14}
             accessibilityRole="button"
+            accessibilityState={{ disabled: !!actionDisabled }}
           >
             <RNText
               style={{

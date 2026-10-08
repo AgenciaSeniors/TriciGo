@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { authService, getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
+import type { EmailConfirmationStatus } from '@tricigo/types';
 import { realEmail } from '@tricigo/utils';
+import { EmailConfirmNotice } from '@/components/EmailConfirmNotice';
 
 /* ── SVG Icons ── */
 function IconEdit() { return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>; }
@@ -93,6 +95,14 @@ export default function ProfilePage() {
   // Loyalty tier lives in users.level; auth metadata is never synced to it, so we
   // must read it from the DB (otherwise the badge is always missing/stale on web).
   const [level, setLevel] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<EmailConfirmationStatus | null>(null);
+  const emailStatusSeq = useRef(0);
+  const loadEmailStatus = useCallback(() => {
+    const req = ++emailStatusSeq.current;
+    authService.getMyEmailStatus().then((next) => {
+      if (req === emailStatusSeq.current) setEmailStatus(next);
+    });
+  }, []);
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(async ({ data: { session } }) => {
@@ -109,6 +119,22 @@ export default function ProfilePage() {
       }
     });
   }, []);
+
+  // The address can be confirmed in another tab or on the phone: reload the
+  // status when this tab comes back, like the apps do on focus.
+  useEffect(() => {
+    if (!userId) return;
+    loadEmailStatus();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadEmailStatus();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [userId, loadEmailStatus]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -145,7 +171,10 @@ export default function ProfilePage() {
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name || 'Usuario';
-  const email = realEmail(user?.email) ?? '';
+  // An address typed into the profile lives in users.email and reaches the
+  // session (auth.users) only once confirmed, so show the pending one.
+  const unconfirmedEmail = emailStatus?.status === 'unconfirmed' ? emailStatus.email : null;
+  const email = unconfirmedEmail ?? realEmail(user?.email) ?? '';
   const initial = fullName[0]?.toUpperCase() || '?';
 
   return (
@@ -168,6 +197,13 @@ export default function ProfilePage() {
         </div>
         <h1 className="profile-name">{fullName}</h1>
         <p className="profile-email">{email}</p>
+        {unconfirmedEmail && (
+          <EmailConfirmNotice
+            email={unconfirmedEmail}
+            linkSentAt={emailStatus?.linkSentAt ?? null}
+            onLinkSent={loadEmailStatus}
+          />
+        )}
         {level && (
           <span className="profile-level-badge">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>

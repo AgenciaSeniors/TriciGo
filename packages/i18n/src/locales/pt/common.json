@@ -754,5 +754,20 @@
     "settings_denied": "Ative para que o app abra sozinho quando chegar uma corrida",
     "settings_on": "Sim",
     "settings_off": "Não"
+  },
+
+  "email_notice": {
+    "title": "Confirme seu e-mail",
+    "body": "Sem confirmar, você não recebe recibos nem avisos da sua conta.",
+    "unconfirmed": "Não confirmado",
+    "resend": "Reenviar link",
+    "later": "Agora não",
+    "sent": "Link enviado para {{email}}. Confira sua caixa de entrada e o spam.",
+    "sent_short": "Link enviado",
+    "sent_alert_body": "Enviamos um link para {{email}}. Abra-o para confirmar seu e-mail.",
+    "resend_a11y": "Reenviar o link de confirmação para {{email}}",
+    "error_rate_limited": "Você já pediu vários links. Espere um pouco e tente de novo.",
+    "error_taken": "Outra conta já usa esse e-mail. Troque-o em Editar perfil.",
+    "error_generic": "Não conseguimos enviar o link. Tente mais tarde."
   }
 }

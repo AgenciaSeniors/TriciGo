@@ -754,5 +754,20 @@
     "settings_denied": "Enable it so the app opens by itself when a ride arrives",
     "settings_on": "Yes",
     "settings_off": "No"
+  },
+
+  "email_notice": {
+    "title": "Confirm your email",
+    "body": "Until you do, you won't get receipts or account notices.",
+    "unconfirmed": "Not confirmed",
+    "resend": "Resend link",
+    "later": "Not now",
+    "sent": "Link sent to {{email}}. Check your inbox and your spam folder.",
+    "sent_short": "Link sent",
+    "sent_alert_body": "We sent a link to {{email}}. Open it to confirm your email.",
+    "resend_a11y": "Resend the confirmation link to {{email}}",
+    "error_rate_limited": "You've asked for several links. Wait a while and try again.",
+    "error_taken": "Another account already uses that email. Change it in Edit profile.",
+    "error_generic": "We couldn't send the link. Try again later."
   }
 }

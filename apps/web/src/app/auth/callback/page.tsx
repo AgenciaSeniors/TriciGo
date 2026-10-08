@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient, authService, referralService } from '@tricigo/api';
 import { registerWebLoginDevice } from '@/lib/webDevice';
+import { safeInternalPath } from '@tricigo/utils/htmlSafety';
 
 // Mirror of LoginPage's PENDING_REFERRAL_KEY — the referral code may
 // have been stashed before the OAuth round-trip, and now (with a
@@ -19,8 +20,8 @@ function popReturnTo(): string | null {
   try {
     const v = sessionStorage.getItem(RETURN_TO_KEY);
     sessionStorage.removeItem(RETURN_TO_KEY);
-    if (!v || !v.startsWith('/') || v.startsWith('//') || v.includes(':')) return null;
-    return v;
+    // Same check as LoginPage's sanitizeReturnTo.
+    return safeInternalPath(v?.trim());
   } catch {
     return null;
   }

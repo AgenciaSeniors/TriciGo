@@ -96,3 +96,14 @@ export interface UserDevice {
   platform: 'ios' | 'android' | 'web';
   created_at: string;
 }
+
+/** What get_my_email_status (00643) says about the caller's users.email. */
+export type EmailConfirmationState = 'none' | 'unconfirmed' | 'proven';
+
+export interface EmailConfirmationStatus {
+  /** users.email trimmed, or null when empty or the phone-OTP placeholder. */
+  email: string | null;
+  status: EmailConfirmationState;
+  /** When the newest still-valid confirmation link was sent, or null. */
+  linkSentAt: string | null;
+}

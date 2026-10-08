@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { safeInternalPath } from '@tricigo/utils/htmlSafety';
 
 /**
  * OAuth callback handler for the admin panel.
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
 
   // Open-redirect guard: only same-origin relative paths (mirrors login page).
   const rawNext = url.searchParams.get('redirect') ?? '/';
-  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
+  const next = safeInternalPath(rawNext) ?? '/';
 
   // Behind nginx the internal request host is 127.0.0.1:3002; prefer the
   // forwarded host so redirects go back to the public admin.tricigo.com.

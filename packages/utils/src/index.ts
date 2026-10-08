@@ -19,6 +19,7 @@ export {
   type PassengerReceiptData,
   type DriverReceiptData,
 } from './receipt-template';
+export { escapeHtml, serializeJsonLd, safeInternalPath } from './htmlSafety';
 export { triggerHaptic, triggerSelection } from './haptics';
 export { playSound, triggerFeedback, registerSoundAssets } from './sounds';
 export type { SoundEvent } from './sounds';
@@ -190,3 +191,7 @@ export { equalSplitSharePct, splitAmountTrc, requesterShareTrc } from './fareSpl
 export type { SearchWaitStage, SearchWaitInput, SearchWaitView } from './searchWait';
 export { REQUIRED_DRIVER_DOCS, driverDocLabel, whatsAppDigits, waMeLink, incompleteSignupMessage } from './driverOutreach';
 export type { IncompleteSignupMessageInput } from './driverOutreach';
+export { EMAIL_NOTICE_SNOOZE_MS, emailNoticeVisible, emailNoticeErrorKey } from './emailNotice';
+export type { EmailNoticeErrorKey } from './emailNotice';
+export { createLatestLoader } from './latestLoader';
+export type { LatestLoader } from './latestLoader';
