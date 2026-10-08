@@ -3271,6 +3271,24 @@ Ensayo: `supabase/tests/00644/run.sh` (RED: 7 fallos; GREEN 17/17, con 2 pruebas
 
 **Renumeración del 2026-10-08.** Tres PRs abiertas tenían 00640 y 00641 al mismo tiempo. #1122 conservó la 00640 porque ya estaba aplicada en prod (`00640_cron_errors_reach_watchdog`). #1115 (rol de marketing) pasó a 00641 (el enum) y 00642 (los permisos), en ese orden, porque los permisos necesitan el valor nuevo del enum. #1120 (aviso de correo) pasó a 00643. Las ramas de otras sesiones se tocaron con commits nuevos (`git mv`, sin reescribir historia) y se avisó a cada sesión dueña.
 
+### Texto ajeno dentro de HTML, `<script>` o una redirección (00646, 2026-10-08)
+
+La web y el admin usan React 19, que escapa el texto y bloquea `javascript:` en `href`. Los agujeros estaban donde el HTML se arma a mano. Todos se reprodujeron en Chromium con el CSP real de la web, que permite `'unsafe-inline'`:
+- **JSON-LD del blog.** `JsonLd` metía `JSON.stringify(data)` en un `<script>`, y un título con `</script><script>…` corría como script de tricigo.com, donde la web guarda la sesión. Desde la 00642, el rol de marketing escribe `blog_posts`, y si un admin abre ese post con su sesión de la web, el script tiene permisos de admin. Ahora se usa `serializeJsonLd`, que escapa `<`, `>` y `&` y sigue siendo el mismo JSON para los buscadores.
+- **Recibo de la web.** `generateReceiptHTML` pegaba direcciones, nombres y el método de pago sin escapar, y la web lo escribe con `document.write` en una pestaña `window.open('')`, que comparte el origen de tricigo.com. Las direcciones las escribe el pasajero o salen de nombres de POI de OSM, Overture y Foursquare (dos POIs activos ya traen `->`). Ahora `row`, `totalRow` y `shell` escapan todo.
+- **Redirección después del login.** El admin (`?redirect=`) y la web (`?return=`) aceptaban `/\evil.example`, porque solo miraban que empezara con `/` y no con `//`. El navegador lee `\` como `/`, así que eso es `//evil.example` y el router de Next lo trata como sitio externo. Ahora pasan por `safeInternalPath`.
+- **Dos correos de operaciones** (`check_stuck_active_rides`, `notify_dead_driver_alert`) pegaban nombres, teléfono y direcciones en HTML crudo hacia la casilla de operaciones: un pasajero llamado `<a href="https://evil.example">Ver viaje</a>` metía un enlace en un aviso de noreply@tricigo.com. La 00646 los parchea con `public._html_escape` (00628).
+
+**Reglas:**
+- Todo HTML armado a mano (correos en SQL, recibos, marcadores de mapa con `innerHTML`, `document.write`) escapa el texto que no escribimos nosotros: `escapeHtml` de `@tricigo/utils/htmlSafety` en TS y `public._html_escape` en SQL. Las plantillas de `send-email` ya lo hacen con su propio `escapeHtml` (`_layout.ts`).
+- Datos dentro de un `<script>`: `serializeJsonLd`, nunca `JSON.stringify` solo.
+- Un destino de redirección que llega por URL o por `sessionStorage`: `safeInternalPath(raw) ?? '/'`. No alcanza con mirar el primer carácter.
+- Para encontrar más casos: `grep -rn "dangerouslySetInnerHTML\|innerHTML\|document.write" apps packages` y, en prod, las funciones con `send-email` en el cuerpo que concatenan columnas sin `_html_escape`.
+
+Ensayo: `supabase/tests/00646/run.sh` (RED: 12 fallos; GREEN 25/25, con 2 pruebas negativas y una copia CRLF). Ensayo en prod dentro de un bloque revertido: los cuerpos quedan con los mismos md5 que en el local (`notify_dead_driver_alert` `7dd81bf1…`, `check_stuck_active_rides` `bb84304c…`).
+
+**Pendiente, con motivo:** el sanitizador del blog (`apps/web/src/lib/sanitize.ts`) deja el atributo `style`. No ejecuta código, pero quien escribe un post puede tapar la página con un enlace a otro sitio. Hoy no hay ninguna cuenta de marketing, y quitar `style` puede romper el formato de los 15 posts existentes.
+
 ### Edge Functions: quién puede llamarlas (revisión de las 48 desplegadas, 2026-10-06)
 
 - **`verify_jwt=true` solo prueba que hay alguna sesión**, y cualquiera consigue una con un OTP. Una función que no decide adentro quién la llama queda abierta a todos los usuarios (así estaban `check-sms-balance`, `demand-heatmap` y `search-places-google`). De las 48 desplegadas, 26 tienen `verify_jwt=false`. La clave de servicio se reconoce con `isServiceKeyToken` (comparación exacta); un admin, con `auth.getUser` + `users.role`.
