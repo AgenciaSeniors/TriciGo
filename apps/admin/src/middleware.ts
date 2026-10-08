@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createMiddlewareClient } from '@/lib/supabase-server';
+import { canOpenPanelPath, isPanelRole, panelHome } from '@tricigo/utils/adminPanelAccess';
 
 /**
  * Absolute URL on the public admin host. Behind nginx the request URL Next.js
@@ -28,7 +29,10 @@ function publicUrl(request: NextRequest, path: string): URL {
  *
  * Redirects to /login if:
  *  - No valid Supabase session
- *  - User does not have admin or super_admin role
+ *  - User does not have a panel role (admin, super_admin or marketing)
+ *
+ * Sends a marketing account that opens a page outside its allow-list to its home
+ * (@tricigo/utils/adminPanelAccess, the same list the menus use, 00642).
  */
 export async function middleware(request: NextRequest) {
   // Dev-only escape hatch for design previews: /foo?__preview=1
@@ -58,10 +62,18 @@ export async function middleware(request: NextRequest) {
     .eq('id', user.id)
     .single();
 
-  if (!userData || !['admin', 'super_admin'].includes(userData.role)) {
+  const role: unknown = userData?.role;
+  if (!isPanelRole(role)) {
     const loginUrl = publicUrl(request, '/login');
     loginUrl.searchParams.set('error', 'unauthorized');
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (!canOpenPanelPath(role, request.nextUrl.pathname)) {
+    const redirect = NextResponse.redirect(publicUrl(request, panelHome(role)));
+    // Keep any session cookie Supabase refreshed while answering getUser().
+    for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+    return redirect;
   }
 
   return response;

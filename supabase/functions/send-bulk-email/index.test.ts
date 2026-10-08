@@ -14,17 +14,29 @@ const db = vi.hoisted(() => ({
   users: [] as UserRow[],
   proven: {} as Record<string, string>,
   rpcError: null as { message: string } | null,
+  sessions: {} as Record<string, string>,
+  roles: {} as Record<string, string>,
 }));
 
 vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
   function query(table: string) {
     let ids: string[] | null = null;
     let optIn: boolean | null = null;
+    let idEq: string | null = null;
     const q: Record<string, unknown> = {};
     q.select = () => q;
     q.not = () => q;
     q.in = (_col: string, val: string[]) => { ids = val; return q; };
-    q.eq = (col: string, val: unknown) => { if (col === 'marketing_opt_in') optIn = val as boolean; return q; };
+    q.eq = (col: string, val: unknown) => {
+      if (col === 'marketing_opt_in') optIn = val as boolean;
+      if (col === 'id') idEq = val as string;
+      return q;
+    };
+    q.single = () => Promise.resolve(
+      table === 'users' && idEq && db.roles[idEq]
+        ? { data: { role: db.roles[idEq] }, error: null }
+        : { data: null, error: { message: 'no rows' } },
+    );
     q.then = (ok: (v: unknown) => unknown, ko: (e: unknown) => unknown) => {
       const rows = table !== 'users' ? [] : db.users.filter((u) =>
         (!ids || ids.includes(u.id)) && u.email !== null && (optIn === null || u.marketing_opt_in === optIn));
@@ -34,6 +46,13 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
   }
   return {
     createClient: () => ({
+      auth: {
+        getUser: (token: string) => Promise.resolve(
+          db.sessions[token]
+            ? { data: { user: { id: db.sessions[token] } }, error: null }
+            : { data: { user: null }, error: { message: 'invalid JWT' } },
+        ),
+      },
       from: (table: string) => query(table),
       rpc: (fn: string, args: { p_user_ids: string[] }) => {
         if (fn !== 'mailable_user_emails') return Promise.resolve({ data: null, error: { message: `unknown ${fn}` } });
@@ -84,6 +103,8 @@ beforeEach(() => {
     { id: NO_OPT, email: 'noopt@x.test', full_name: 'Nora', marketing_opt_in: false },
   ];
   db.proven = { [PROVEN]: 'Proven@x.test', [NO_OPT]: 'noopt@x.test' };
+  db.sessions = { 'jwt-marketing': 'u-marketing', 'jwt-customer': 'u-customer' };
+  db.roles = { 'u-marketing': 'marketing', 'u-customer': 'customer' };
 });
 
 const campaign = () => handler(new Request('https://example.supabase.co/functions/v1/send-bulk-email', {
@@ -107,5 +128,24 @@ describe('send-bulk-email', () => {
     err.mockRestore();
     expect(sent).toEqual([]);
     expect((await res.json()).total_targets).toBe(0);
+  });
+});
+
+const campaignAs = (token: string) => handler(new Request('https://example.supabase.co/functions/v1/send-bulk-email', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ user_ids: [VICTIM, PROVEN, NO_OPT], subject: 'Promo', body_html: '<p>Hola</p>' }),
+}));
+
+describe('send-bulk-email: who may send a campaign (00642)', () => {
+  it('marketing may, and it still reaches only consenting, proven addresses', async () => {
+    const res = await campaignAs('jwt-marketing');
+    expect(res.status).toBe(200);
+    expect(sent.map((s) => s.to)).toEqual(['Proven@x.test']);
+  });
+
+  it('a customer may not', async () => {
+    expect((await campaignAs('jwt-customer')).status).toBe(403);
+    expect(sent).toEqual([]);
   });
 });

@@ -159,21 +159,21 @@ export default function CampaignsPage() {
     const supabase = getSupabaseClient();
     if (formAudience === 'customer') {
       const { data } = await supabase
-        .from('rides')
+        .from('panel_rides')
         .select('customer_id')
         .gte('created_at', sinceIso)
         .not('customer_id', 'is', null);
       return new Set((data ?? []).map((r) => r.customer_id as string));
     }
     const { data: rides } = await supabase
-      .from('rides')
+      .from('panel_rides')
       .select('driver_id')
       .gte('created_at', sinceIso)
       .not('driver_id', 'is', null);
     const profileIds = [...new Set((rides ?? []).map((r) => r.driver_id as string))];
     if (profileIds.length === 0) return new Set();
     const { data: profiles } = await supabase
-      .from('driver_profiles')
+      .from('panel_driver_profiles')
       .select('user_id')
       .in('id', profileIds);
     return new Set((profiles ?? []).map((p) => p.user_id as string));
@@ -199,7 +199,7 @@ export default function CampaignsPage() {
     if (formSegment === 'power_users') {
       if (formAudience === 'customer') {
         const { data: allRides } = await supabase
-          .from('rides')
+          .from('panel_rides')
           .select('customer_id')
           .not('customer_id', 'is', null);
         const rideCounts: Record<string, number> = {};
@@ -214,7 +214,7 @@ export default function CampaignsPage() {
       // "stale precomputed field" pattern — total_rides_completed is the
       // trigger-maintained one, total_rides is the legacy snapshot).
       const { data: profiles } = await supabase
-        .from('driver_profiles')
+        .from('panel_driver_profiles')
         .select('user_id, total_rides_completed, total_rides')
         .not('user_id', 'is', null);
       return (profiles ?? [])

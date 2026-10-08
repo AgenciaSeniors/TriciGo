@@ -13,11 +13,14 @@
 // subject, and HTML body, sending phishing emails from our
 // noreply@tricigo.com address and burning the Resend quota.
 // Now requires admin role (or service_role for cron/automation).
+// 00642: marketing may send campaigns too. It still reaches only users who opted in, at a
+// proven address.
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 import { fetchMailableEmails } from '../_shared/mailable-emails.ts';
+import { isPanelStaffRole } from '../_shared/panel-roles.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
@@ -50,7 +53,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // ── Auth gate: service_role OR authenticated admin ──
+    // ── Auth gate: service_role, an admin, or marketing ──
     const serviceRoleKey = getServiceKey();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const apiKey = req.headers.get('apikey') ?? '';
@@ -73,7 +76,7 @@ Deno.serve(async (req) => {
         });
       }
       const { data: roleRow } = await supabaseAuth.from('users').select('role').eq('id', user.id).single();
-      if (!roleRow || !['admin', 'super_admin'].includes(roleRow.role as string)) {
+      if (!isPanelStaffRole(roleRow?.role)) {
         return new Response(JSON.stringify({ error: 'Forbidden: admin role required' }), {
           status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

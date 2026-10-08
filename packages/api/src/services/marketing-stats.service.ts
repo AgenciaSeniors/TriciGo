@@ -118,7 +118,7 @@ export const marketingStatsService = {
           .order('created_at', { ascending: false }),
         fetchAllRows<RidePromoRow>((from, to) =>
           supabase
-            .from('rides')
+            .from('panel_rides')
             .select(
               'promo_code_id,status,discount_amount_cup,shared_ride_discount_cup,final_fare_cup,customer_id',
             )

@@ -38,7 +38,9 @@
   },
   "header": {
     "light_mode": "Light mode",
-    "dark_mode": "Dark mode"
+    "dark_mode": "Dark mode",
+    "role_admin": "Administrator",
+    "role_marketing": "Marketing"
   },
   "notifications_bell": {
     "aria": "Updates",
@@ -88,6 +90,7 @@
     "referrals": "Referrals",
     "code_performance": "Performance",
     "launch_pulse": "Launch pulse",
+    "launch_pulse_short": "Pulse",
     "incomplete_drivers": "Unfinished signups",
     "notifications": "Notifications",
     "content": "Content",
@@ -541,7 +544,8 @@
     "empty_filtered_body": "Try clearing filters or changing tab.",
     "empty_filtered_action": "Clear filters",
     "empty_zero_title": "No users yet",
-    "empty_zero_body": "When someone registers, they will appear here."
+    "empty_zero_body": "When someone registers, they will appear here.",
+    "role_marketing": "Marketing"
   },
   "wallet_admin": {
     "title": "Trip credits",
@@ -875,7 +879,18 @@
     "inactive_label": "Inactive",
     "confirm_delete": "Delete promotion \"{{code}}\"?",
     "error_creating": "Error creating promotion",
-    "error_deleting": "Error deleting"
+    "error_deleting": "Error deleting",
+    "status_pending": "Awaiting approval",
+    "action_approve": "Approve and activate",
+    "action_pause": "Pause",
+    "pending_strip": "Promotions awaiting approval: {{count}}",
+    "pending_dot": "Some promotions are awaiting approval",
+    "marketing_review_note": "It is saved switched off. An administrator reviews and activates it.",
+    "toast_sent_for_approval": "Saved. An administrator reviews and activates it.",
+    "marketing_edit_active": "Pause the promotion to edit it.",
+    "already_paused": "This promotion is already paused.",
+    "marketing_notify_inactive": "You can only announce an active promotion.",
+    "changed_since_loaded": "The promotion changed while you were reviewing it. Check the new version before activating it."
   },
   "service_types": {
     "title": "Service types",

@@ -6,9 +6,11 @@ import { AlertTriangle, ArrowUpRight, Download, RefreshCw } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import { launchPulseService, type LaunchPulse, type LaunchPulseWeek } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
+import { canOpenPanelPath } from '@tricigo/utils/adminPanelAccess';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { exportToCsv } from '@/lib/exportCsv';
 import { formatAdminDate } from '@/lib/formatDate';
+import { usePanelRole } from '@/lib/panelRole';
 
 // The founder's Monday screen: what limited the service last week (requests
 // nobody took, drivers online per hour) next to what fed it (signups,
@@ -119,6 +121,10 @@ function NowStat({ label, value, sub, action }: { label: string; value: string; 
 
 export default function LaunchPulsePage() {
   const { t } = useTranslation('admin');
+  // 00642: marketing opens this page but not /incomplete-drivers; the middleware would bounce
+  // the link. No link while the role is loading or unknown.
+  const { role } = usePanelRole();
+  const canOpenIncompleteDrivers = role !== null && canOpenPanelPath(role, '/incomplete-drivers');
 
   const [weeks, setWeeks] = useState<WeekOption>(8);
   const [pulse, setPulse] = useState<LaunchPulse | null>(null);
@@ -736,13 +742,15 @@ export default function LaunchPulsePage() {
                   label={t('launch_pulse.now_drivers_pending', { defaultValue: 'Sin terminar el registro' })}
                   value={num(now.drivers_pending)}
                   action={
-                    <Link
-                      href="/incomplete-drivers"
-                      className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary-700 hover:underline dark:text-primary-400"
-                    >
-                      {t('launch_pulse.now_drivers_pending_link', { defaultValue: 'Ver la lista' })}
-                      <ArrowUpRight className="h-3 w-3" />
-                    </Link>
+                    canOpenIncompleteDrivers ? (
+                      <Link
+                        href="/incomplete-drivers"
+                        className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary-700 hover:underline dark:text-primary-400"
+                      >
+                        {t('launch_pulse.now_drivers_pending_link', { defaultValue: 'Ver la lista' })}
+                        <ArrowUpRight className="h-3 w-3" />
+                      </Link>
+                    ) : undefined
                   }
                 />
                 <NowStat
