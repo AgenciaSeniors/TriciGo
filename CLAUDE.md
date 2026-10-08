@@ -3213,6 +3213,8 @@ Revisión de las lecturas: políticas de SELECT, vistas, permisos de `anon`/`aut
 
 Ensayo: `supabase/tests/00645/run.sh` (RED: 16 fallos; GREEN 40/40, con 3 pruebas negativas de sus guardas y una copia CRLF). Ensayo en prod dentro de un bloque revertido, con los datos reales: `anon` no llama a `find_nearby_vehicles`; un pasajero ve al conductor en línea, sin posición exacta ni id real; sin sesión se leen 0 de las 7 reseñas y un extraño lee las 5 de conductores.
 
+**Estado: aplicada en prod el 2026-10-08** por MCP (`20261008092039`). Verificado por objeto: los cuatro cuerpos coinciden con git (`find_nearby_vehicles` `84b19826…/2690`, `get_demand_hotspots` `40e675a5…/2545`, `get_destination_suggestions` `d4841a72…/4541`, `review_is_public` `ed85404a…/349`); `anon` sin EXECUTE en `find_nearby_vehicles`; `hourly_demand_cells` y `nearby_vehicle_salt` solo para `postgres` y `service_role`; las dos políticas nuevas. Las llamadas de la app del conductor a `find_nearby_vehicles` y `get_demand_hotspots` siguieron respondiendo 200 después del cambio.
+
 ### Edge Functions: quién puede llamarlas (revisión de las 48 desplegadas, 2026-10-06)
 
 - **`verify_jwt=true` solo prueba que hay alguna sesión**, y cualquiera consigue una con un OTP. Una función que no decide adentro quién la llama queda abierta a todos los usuarios (así estaban `check-sms-balance`, `demand-heatmap` y `search-places-google`). De las 48 desplegadas, 26 tienen `verify_jwt=false`. La clave de servicio se reconoce con `isServiceKeyToken` (comparación exacta); un admin, con `auth.getUser` + `users.role`.
