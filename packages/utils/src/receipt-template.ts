@@ -10,7 +10,12 @@
 // no DB sequence required at this layer. (When/if Cuban audit
 // rules require strictly-sequential numbering, swap this for
 // a `rides.receipt_no text UNIQUE` column populated by trigger.)
+// Every label and value is escaped where it enters the markup (row, totalRow,
+// shell): addresses, names and the payment label are free text, and the web
+// writes this HTML into a window that shares tricigo.com's origin.
 // ============================================================
+
+import { escapeHtml } from './htmlSafety';
 
 export interface BaseReceiptData {
   /** Format: 'TR-2026-A1B2C3D4' — see deriveReceiptNo() */
@@ -220,15 +225,15 @@ function row(label: string, value: string, opts: { mute?: boolean; bold?: boolea
   const valueColor = opts.negative ? '#22c55e' : opts.positive ? '#1a1a1a' : '#1a1a1a';
   const valueWeight = opts.bold ? '700' : '500';
   return `<tr style="border-bottom:1px solid #f0f0f0;">
-    <td style="padding:8px 0;color:${labelColor};font-size:13px;">${label}</td>
-    <td style="padding:8px 0;text-align:right;color:${valueColor};font-weight:${valueWeight};font-size:13px;">${value}</td>
+    <td style="padding:8px 0;color:${labelColor};font-size:13px;">${escapeHtml(label)}</td>
+    <td style="padding:8px 0;text-align:right;color:${valueColor};font-weight:${valueWeight};font-size:13px;">${escapeHtml(value)}</td>
   </tr>`;
 }
 
 function totalRow(label: string, value: string): string {
   return `<tr>
-    <td style="padding:14px 0 4px;color:#1a1a1a;font-size:14px;font-weight:700;border-top:2px solid #F97316;">${label}</td>
-    <td style="padding:14px 0 4px;text-align:right;color:#F97316;font-size:22px;font-weight:800;border-top:2px solid #F97316;">${value}</td>
+    <td style="padding:14px 0 4px;color:#1a1a1a;font-size:14px;font-weight:700;border-top:2px solid #F97316;">${escapeHtml(label)}</td>
+    <td style="padding:14px 0 4px;text-align:right;color:#F97316;font-size:22px;font-weight:800;border-top:2px solid #F97316;">${escapeHtml(value)}</td>
   </tr>`;
 }
 
@@ -239,15 +244,15 @@ function shell(title: string, receiptNo: string, body: string, footer: string): 
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
     <div>
       <h1 style="color:#F97316;margin:0;font-size:30px;font-weight:800;letter-spacing:-0.02em;">TriciGo</h1>
-      <p style="margin:6px 0 0;font-size:15px;font-weight:600;color:#1a1a1a;">${title}</p>
+      <p style="margin:6px 0 0;font-size:15px;font-weight:600;color:#1a1a1a;">${escapeHtml(title)}</p>
     </div>
     <div style="text-align:right;">
       <p style="margin:0;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.08em;">N°</p>
-      <p style="margin:2px 0 0;font-size:13px;font-weight:700;color:#1a1a1a;font-family:monospace;">${receiptNo}</p>
+      <p style="margin:2px 0 0;font-size:13px;font-weight:700;color:#1a1a1a;font-family:monospace;">${escapeHtml(receiptNo)}</p>
     </div>
   </div>
   ${body}
-  <p style="text-align:center;color:#888;font-size:11px;margin-top:28px;">${footer}</p>
+  <p style="text-align:center;color:#888;font-size:11px;margin-top:28px;">${escapeHtml(footer)}</p>
   <p style="text-align:center;color:#bbb;font-size:9px;margin-top:4px;">TriciGo · Cuba · soporte@tricigo.com</p>
 </body></html>`;
 }

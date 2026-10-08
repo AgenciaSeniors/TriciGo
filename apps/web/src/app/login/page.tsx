@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getSupabaseClient, authService, referralService, isRateLimitError } from '@tricigo/api';
-import { isValidCubanPhone, normalizeCubanPhone } from '@tricigo/utils';
+import { isValidCubanPhone, normalizeCubanPhone, safeInternalPath } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuth } from '../providers';
 import { registerWebLoginDevice } from '@/lib/webDevice';
@@ -28,12 +28,9 @@ const APPLE_SIGN_IN_ENABLED = true;
 // OAuth round-trip, hence sessionStorage and not React state.
 const RETURN_TO_KEY = 'tricigo_return_to';
 
-/** Internal-path whitelist: same-origin absolute paths only (no '//' or scheme). */
+/** Same-site paths only. safeInternalPath also refuses "/\host", which browsers read as "//host". */
 function sanitizeReturnTo(value: string | null): string | null {
-  if (!value) return null;
-  const v = value.trim();
-  if (!v.startsWith('/') || v.startsWith('//') || v.includes(':')) return null;
-  return v;
+  return safeInternalPath(value?.trim());
 }
 
 /** Read + consume the stored return destination. */
