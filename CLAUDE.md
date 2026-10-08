@@ -2689,7 +2689,11 @@ GROUP BY 1, 2 HAVING count(*) FILTER (WHERE d.status <> 'succeeded') > 0 ORDER B
 - **una fila de un bucle**, para que un viaje malo no frene al resto (`activate_scheduled_rides`, `create_rides_for_recurring`, el correo por viaje de `check_stuck_active_rides`, el push por grupo de `notify_offline_drivers_for_searching_rides`);
 - **un aviso que corre después del trabajo real** (los push de `auto_offline_stale_drivers`, `release_rides_from_dead_drivers` y `retry_dispatch_expired_rides`, el resumen de `notify_support_waiting_rides`). Si el aviso sale por `cron_http_post`, sus fallas HTTP las ve `check_cron_http_failures`.
 
-Si el aviso es justo lo que hay que vigilar, va en su propio job, como `notify-dead-driver-alert`. Para auditar los crons SQL:
+Si el aviso es justo lo que hay que vigilar, va en su propio job, como `notify-dead-driver-alert`.
+
+**Un bucle por fila sin manejador tiene el problema contrario: una fila rota frena a todas.** Así estaba `retry_dispatch_expired_rides` hasta 00646: si `dispatch_ride` fallaba con un viaje, se deshacía la corrida entera y ningún viaje se redespachaba ese minuto. Desde 00646 cada viaje va en su propio bloque. El que falla se saltea, queda en `rpc_attempt_log` (`rpc_name = 'retry_dispatch_expired_rides'`, `outcome = 'dispatch_failed'`) y soporte lo sigue viendo por `notify_support_waiting_rides`. Si en una corrida no se pudo redespachar ninguno, la corrida falla igual, para que `check_cron_sql_failures` lo reporte. Ese es el patrón para un bucle por fila: aislar cada fila y fallar la corrida cuando no salió ninguna. Ensayo: `supabase/tests/00646/run.sh` (ROJO: 5 fallos; VERDE: 15/15).
+
+Para auditar los crons SQL:
 
 ```sql
 SELECT j.jobname, p.proname, (SELECT count(*) FROM regexp_matches(p.prosrc, 'exception\s+when', 'gi')) AS manejadores
