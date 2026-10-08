@@ -1,4 +1,4 @@
--- Scaffold for the 00640 rehearsal: the tables get_my_email_status reads (public.users,
+-- Scaffold for the 00643 rehearsal: the tables get_my_email_status reads (public.users,
 -- public.email_verification_tokens, auth.identities) with their prod columns, and the two
 -- 00635 helpers with their LIVE bodies (run.sh S0 compares md5/length with prod).
 --

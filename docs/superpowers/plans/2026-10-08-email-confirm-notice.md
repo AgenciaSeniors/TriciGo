@@ -4,7 +4,7 @@
 
 **Goal:** Tell users whose `users.email` is not proven to confirm it, let them resend the link, and make every path that saves an address actually send the link.
 
-**Architecture:** A caller-scoped RPC `get_my_email_status()` (migration 00640) answers with the 00635 rule. `@tricigo/api` wraps it (null on any error) and maps the 429 of `add-email-with-verification` to `rate_limited`; `@tricigo/utils` holds the 7-day snooze and the error-to-message mapping. Each app has a `useEmailConfirmation()` hook; the driver home renders a dismissible `Banner`; Profile on the rider app, the driver app and the web renders a non-dismissible row. The rider "Editar perfil" and driver onboarding start calling `addBackupEmail`.
+**Architecture:** A caller-scoped RPC `get_my_email_status()` (migration 00643) answers with the 00635 rule. `@tricigo/api` wraps it (null on any error) and maps the 429 of `add-email-with-verification` to `rate_limited`; `@tricigo/utils` holds the 7-day snooze and the error-to-message mapping. Each app has a `useEmailConfirmation()` hook; the driver home renders a dismissible `Banner`; Profile on the rider app, the driver app and the web renders a non-dismissible row. The rider "Editar perfil" and driver onboarding start calling `addBackupEmail`.
 
 **Tech Stack:** Postgres 16 (Supabase), TypeScript, vitest, Expo Router / React Native (NativeWind in the rider app, palette styles in the driver app), Next.js 14 (web), i18next.
 
@@ -16,8 +16,8 @@ Spec: `docs/superpowers/specs/2026-10-08-email-confirm-notice-design.md`.
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/00640_my_email_status.sql` (new) | `get_my_email_status()` + grants + self-checks |
-| `supabase/tests/00640/{run.sh,scaffold.sql,seed.sql}` (new) | Local rehearsal (RED without, GREEN with the migration) |
+| `supabase/migrations/00643_my_email_status.sql` (new) | `get_my_email_status()` + grants + self-checks |
+| `supabase/tests/00643/{run.sh,scaffold.sql,seed.sql}` (new) | Local rehearsal (RED without, GREEN with the migration) |
 | `packages/types/src/user.ts` | `EmailConfirmationStatus` type |
 | `packages/utils/src/emailNotice.ts` (new) + `__tests__/emailNotice.test.ts` | Snooze rule and error-key mapping |
 | `packages/utils/src/index.ts` | Export the above |
@@ -33,11 +33,11 @@ Spec: `docs/superpowers/specs/2026-10-08-email-confirm-notice-design.md`.
 
 ---
 
-### Task 1: Migration 00640 and its rehearsal
+### Task 1: Migration 00643 and its rehearsal
 
 **Files:**
-- Create: `supabase/tests/00640/scaffold.sql`, `supabase/tests/00640/seed.sql`, `supabase/tests/00640/run.sh`
-- Create: `supabase/migrations/00640_my_email_status.sql`
+- Create: `supabase/tests/00643/scaffold.sql`, `supabase/tests/00643/seed.sql`, `supabase/tests/00643/run.sh`
+- Create: `supabase/migrations/00643_my_email_status.sql`
 
 - [ ] **Step 1: Scaffold.** Roles `anon`/`authenticated`/`service_role`/`postgres` (non-superuser owner, member of the three API roles, as in prod), schema `auth` with `auth.uid()` reading `request.jwt.claim.sub`, `auth.identities (user_id, provider, identity_data jsonb)`, `public.users (id, email, email_verified_at)`, `public.email_verification_tokens (id, user_id, email, token_hash, expires_at, used_at, created_at)`, and the two 00635 helpers copied verbatim from `supabase/migrations/00635_mail_only_proven_addresses.sql` section 1 (`mailable_user_emails`, `_user_mailable_email`) with their REVOKE/GRANT. `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role` at the end, like prod.
 
@@ -58,16 +58,16 @@ E8  SPACE -> "Spaced@X.test|unconfirmed|"
 E9  a caller sees exactly one row, its own (count=1, email = its own)
 M1  (GREEN only) SECURITY DEFINER, search_path pg_catalog, public; EXECUTE anon=false authenticated=true service_role=true
 M2  (GREEN only) second apply leaves the body identical
-N1  (GREEN only) sabotage: drop "anon" from the REVOKE -> migration aborts with "00640: anon can execute public.get_my_email_status()"
-N2  (GREEN only) sabotage: drop the GRANT to authenticated -> aborts with "00640: authenticated cannot execute public.get_my_email_status()"
+N1  (GREEN only) sabotage: drop "anon" from the REVOKE -> migration aborts with "00643: anon can execute public.get_my_email_status()"
+N2  (GREEN only) sabotage: drop the GRANT to authenticated -> aborts with "00643: authenticated cannot execute public.get_my_email_status()"
 ```
 
-- [ ] **Step 4: Run RED.** `PGBIN=<scratchpad>/pgsql/bin PGPORT=<port> PYTHON=python bash supabase/tests/00640/run.sh none`. Expected: S0 passes, E1–E9 fail (function does not exist).
+- [ ] **Step 4: Run RED.** `PGBIN=<scratchpad>/pgsql/bin PGPORT=<port> PYTHON=python bash supabase/tests/00643/run.sh none`. Expected: S0 passes, E1–E9 fail (function does not exist).
 
 - [ ] **Step 5: Migration.**
 
 ```sql
--- 00640: let an account ask whether ITS e-mail address is proven, so the apps can tell it
+-- 00643: let an account ask whether ITS e-mail address is proven, so the apps can tell it
 -- to confirm the address (spec: docs/superpowers/specs/2026-10-08-email-confirm-notice-design.md).
 -- Same rule as 00635 (_user_mailable_email); about the caller only, no arguments.
 
@@ -104,7 +104,7 @@ AS $fn$
 $fn$;
 
 COMMENT ON FUNCTION public.get_my_email_status() IS
-  '00640: the caller''s users.email (NULL when empty or the phone placeholder), whether it is proven (00635 rule: none/unconfirmed/proven) and when the newest still-valid confirmation link was sent. About auth.uid() only.';
+  '00643: the caller''s users.email (NULL when empty or the phone placeholder), whether it is proven (00635 rule: none/unconfirmed/proven) and when the newest still-valid confirmation link was sent. About auth.uid() only.';
 
 REVOKE ALL ON FUNCTION public.get_my_email_status() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_my_email_status() TO authenticated, service_role;
@@ -112,18 +112,18 @@ GRANT EXECUTE ON FUNCTION public.get_my_email_status() TO authenticated, service
 DO $assert$
 BEGIN
   IF has_function_privilege('anon', 'public.get_my_email_status()'::regprocedure, 'EXECUTE') THEN
-    RAISE EXCEPTION '00640: anon can execute public.get_my_email_status()';
+    RAISE EXCEPTION '00643: anon can execute public.get_my_email_status()';
   END IF;
   IF NOT has_function_privilege('authenticated', 'public.get_my_email_status()'::regprocedure, 'EXECUTE') THEN
-    RAISE EXCEPTION '00640: authenticated cannot execute public.get_my_email_status()';
+    RAISE EXCEPTION '00643: authenticated cannot execute public.get_my_email_status()';
   END IF;
 END
 $assert$;
 ```
 
-- [ ] **Step 6: Run GREEN.** Same command with `supabase/migrations/00640_my_email_status.sql`. Expected: all pass.
+- [ ] **Step 6: Run GREEN.** Same command with `supabase/migrations/00643_my_email_status.sql`. Expected: all pass.
 
-- [ ] **Step 7: Commit.** `git add supabase/migrations/00640_my_email_status.sql supabase/tests/00640 && git commit -m "feat(email): get_my_email_status for the confirm-your-email notice (00640)"`
+- [ ] **Step 7: Commit.** `git add supabase/migrations/00643_my_email_status.sql supabase/tests/00643 && git commit -m "feat(email): get_my_email_status for the confirm-your-email notice (00643)"`
 
 ### Task 2: Type and pure rules
 
@@ -135,7 +135,7 @@ $assert$;
 - [ ] **Step 1: Type** (append to `packages/types/src/user.ts`):
 
 ```ts
-/** What get_my_email_status (00640) says about the caller's users.email. */
+/** What get_my_email_status (00643) says about the caller's users.email. */
 export type EmailConfirmationState = 'none' | 'unconfirmed' | 'proven';
 
 export interface EmailConfirmationStatus {
@@ -280,7 +280,7 @@ and, in `describe('addBackupEmail')`:
 
 ```ts
   /**
-   * Whether the caller's users.email is proven (00640 get_my_email_status, same rule as
+   * Whether the caller's users.email is proven (00643 get_my_email_status, same rule as
    * 00635). Null on any failure — callers show no notice then.
    */
   async getMyEmailStatus(): Promise<EmailConfirmationStatus | null> {
@@ -338,7 +338,7 @@ import { useRefreshOnFocus } from './useRefreshOnFocus';
 export type ResendResult = { ok: true } | { ok: false; errorKey: EmailNoticeErrorKey };
 
 /**
- * The caller's e-mail confirmation status (00640), reloaded on focus and when the app
+ * The caller's e-mail confirmation status (00643), reloaded on focus and when the app
  * returns to the foreground, so the notice goes away after the link is opened.
  * `enabled` false (no session) keeps it null.
  */
@@ -438,6 +438,6 @@ export function useEmailConfirmation(enabled: boolean) {
 
 ### Task 10: Verify and ship
 
-- `pnpm check-types`; `packages/api`, `packages/utils`, `apps/client`, `apps/driver` test suites; the 00640 rehearsal RED/GREEN.
+- `pnpm check-types`; `packages/api`, `packages/utils`, `apps/client`, `apps/driver` test suites; the 00643 rehearsal RED/GREEN.
 - CLAUDE.md: one bullet under the 00635 notes about `get_my_email_status`, the notice and the two fixed paths.
-- Re-check the migration number against master and open PRs; independent review; PR; after approval, merge, apply 00640 (dry run first), and an OTA for the apps.
+- Re-check the migration number against master and open PRs; independent review; PR; after approval, merge, apply 00643 (dry run first), and an OTA for the apps.

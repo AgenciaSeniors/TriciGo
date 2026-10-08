@@ -6,7 +6,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { emailNoticeErrorKey, type EmailNoticeErrorKey } from '@tricigo/utils';
 
 /**
- * "Confirma tu correo" (00640) under the address while it is unconfirmed: since
+ * "Confirma tu correo" (00643) under the address while it is unconfirmed: since
  * 00635 no receipt or account notice reaches an address its owner never proved.
  * Not dismissible. Colors are the paired light/dark warning surface tokens.
  */

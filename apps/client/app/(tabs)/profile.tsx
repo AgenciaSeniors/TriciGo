@@ -172,7 +172,7 @@ function NativeProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // "Confirma tu correo" (00640): shown under the phone while the address is
+  // "Confirma tu correo" (00643): shown under the phone while the address is
   // unconfirmed. Not dismissible: since 00635 receipts only reach a proven address.
   const emailConfirm = useEmailConfirmation(user?.id);
   const refreshEmailStatus = emailConfirm.refresh;

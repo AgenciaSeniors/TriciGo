@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00640 (local Postgres 16, no Supabase stack needed).
-#   supabase/tests/00640/run.sh none
+# Rehearsal runner for migration 00643 (local Postgres 16, no Supabase stack needed).
+#   supabase/tests/00643/run.sh none
 #       -> scaffold + seed + tests without the migration (RED: get_my_email_status does not exist)
-#   supabase/tests/00640/run.sh supabase/migrations/00640_my_email_status.sql
+#   supabase/tests/00643/run.sh supabase/migrations/00643_my_email_status.sql
 #       -> scaffold + seed + migration x2 (idempotency) + tests + negative proofs of the self-check (GREEN)
 # The migration is applied as postgres, the scaffold's non-superuser owner (as in prod).
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
-# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00640/run.sh ...
+# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00643/run.sh ...
 set -u
 unset MSYS_NO_PATHCONV
 export PGOPTIONS='-c lc_messages=C'
@@ -124,7 +124,7 @@ assert s2 != s
 open(sys.argv[2], 'w', encoding='utf-8').write(s2)
 PYEOF
   fresh ${DB}n seed; r=$(apply_err ${DB}n "$T/n1.sql")
-  echo "$r" | grep -qF "00640: anon can execute public.get_my_email_status()" \
+  echo "$r" | grep -qF "00643: anon can execute public.get_my_email_status()" \
     && ok "N1 a REVOKE that misses anon aborts the migration" || ko "N1 a REVOKE that misses anon aborts the migration" "$r"
   # N2: the GRANT forgets authenticated, on a base without default EXECUTE -> abort.
   "$PY" - "$MIG" "$T/n2.sql" <<'PYEOF'
@@ -137,7 +137,7 @@ assert s2 != s
 open(sys.argv[2], 'w', encoding='utf-8').write(s2)
 PYEOF
   fresh ${DB}n seed; no_fn_defaults ${DB}n; r=$(apply_err ${DB}n "$T/n2.sql")
-  echo "$r" | grep -qF "00640: authenticated cannot execute public.get_my_email_status()" \
+  echo "$r" | grep -qF "00643: authenticated cannot execute public.get_my_email_status()" \
     && ok "N2 a GRANT that misses authenticated aborts the migration" || ko "N2 a GRANT that misses authenticated aborts the migration" "$r"
   "$BIN/psql" $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}n" >/dev/null 2>&1
 fi

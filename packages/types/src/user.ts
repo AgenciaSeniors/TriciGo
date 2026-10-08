@@ -97,7 +97,7 @@ export interface UserDevice {
   created_at: string;
 }
 
-/** What get_my_email_status (00640) says about the caller's users.email. */
+/** What get_my_email_status (00643) says about the caller's users.email. */
 export type EmailConfirmationState = 'none' | 'unconfirmed' | 'proven';
 
 export interface EmailConfirmationStatus {

@@ -11,7 +11,7 @@ export type EmailResendResult =
   | { status: 'failed'; errorKey: EmailNoticeErrorKey };
 
 /**
- * Whether the signed-in account's e-mail address is confirmed (00640
+ * Whether the signed-in account's e-mail address is confirmed (00643
  * get_my_email_status), for the "Confirma tu correo" notice. Reloads when the
  * screen regains focus and when the app returns to the foreground, so the notice
  * goes away once the link is opened. Null without a session, or when the status

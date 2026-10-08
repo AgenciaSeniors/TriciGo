@@ -1,4 +1,4 @@
--- 00640: let an account ask whether ITS e-mail address is proven, so the apps can tell
+-- 00643: let an account ask whether ITS e-mail address is proven, so the apps can tell
 -- it to confirm the address (spec: docs/superpowers/specs/2026-10-08-email-confirm-notice-design.md).
 --
 -- Since 00635 TriciGo mails users.email only when its owner proved it: email_verified_at
@@ -15,7 +15,7 @@
 -- It reuses _user_mailable_email, so there is no second copy of "what counts as proven".
 -- Without a session, or without a users row, it returns no rows.
 --
--- Rehearsal: supabase/tests/00640/run.sh (RED without it, GREEN with it applied twice).
+-- Rehearsal: supabase/tests/00643/run.sh (RED without it, GREEN with it applied twice).
 
 CREATE OR REPLACE FUNCTION public.get_my_email_status()
 RETURNS TABLE (email text, status text, link_sent_at timestamptz)
@@ -50,7 +50,7 @@ AS $fn$
 $fn$;
 
 COMMENT ON FUNCTION public.get_my_email_status() IS
-  '00640: the caller''s users.email (NULL when empty or the phone placeholder), whether it is proven (00635 rule: none/unconfirmed/proven) and when the newest still-valid confirmation link was sent. About auth.uid() only.';
+  '00643: the caller''s users.email (NULL when empty or the phone placeholder), whether it is proven (00635 rule: none/unconfirmed/proven) and when the newest still-valid confirmation link was sent. About auth.uid() only.';
 
 REVOKE ALL ON FUNCTION public.get_my_email_status() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_my_email_status() TO authenticated, service_role;
@@ -58,10 +58,10 @@ GRANT EXECUTE ON FUNCTION public.get_my_email_status() TO authenticated, service
 DO $assert$
 BEGIN
   IF has_function_privilege('anon', 'public.get_my_email_status()'::regprocedure, 'EXECUTE') THEN
-    RAISE EXCEPTION '00640: anon can execute public.get_my_email_status()';
+    RAISE EXCEPTION '00643: anon can execute public.get_my_email_status()';
   END IF;
   IF NOT has_function_privilege('authenticated', 'public.get_my_email_status()'::regprocedure, 'EXECUTE') THEN
-    RAISE EXCEPTION '00640: authenticated cannot execute public.get_my_email_status()';
+    RAISE EXCEPTION '00643: authenticated cannot execute public.get_my_email_status()';
   END IF;
 END
 $assert$;

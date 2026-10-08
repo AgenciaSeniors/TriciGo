@@ -1,4 +1,4 @@
--- Seed for the 00640 rehearsal. Fixed timestamps (2026-01-01, UTC) so the tests can name
+-- Seed for the 00643 rehearsal. Fixed timestamps (2026-01-01, UTC) so the tests can name
 -- the token whose created_at must come back as link_sent_at.
 INSERT INTO public.users (id, full_name, email, email_verified_at) VALUES
   ('c0000000-0000-4000-8000-000000000001', 'Una', 'unc@x.test', NULL),                         -- UNC: typed, never confirmed

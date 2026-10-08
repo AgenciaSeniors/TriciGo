@@ -629,7 +629,7 @@ export const authService = {
   },
 
   /**
-   * Whether the caller's users.email is proven (00640 get_my_email_status, the 00635
+   * Whether the caller's users.email is proven (00643 get_my_email_status, the 00635
    * rule): `none` (no real address), `unconfirmed` or `proven`, plus when the newest
    * still-valid confirmation link was sent. Null on any failure (the migration not
    * applied yet, no network): callers then show no notice.

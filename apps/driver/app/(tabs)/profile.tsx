@@ -80,7 +80,7 @@ function NativeDriverProfileScreen() {
   const resetNotifications = useNotificationStore((s) => s.reset);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // "Confirma tu correo" (00640): shown under the phone while the address is
+  // "Confirma tu correo" (00643): shown under the phone while the address is
   // unconfirmed; cannot be dismissed here (the home banner can).
   const emailConfirm = useEmailConfirmation(user?.id);
   const resendEmailLink = async () => {
