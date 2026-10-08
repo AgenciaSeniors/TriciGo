@@ -26,6 +26,7 @@ import {
   getErrorMessage,
   triggerHaptic,
   havanaMidnightUtc,
+  emailNoticeVisible,
 } from '@tricigo/utils';
 import { openNavigation } from '@/utils/navigation';
 import { useLocationStore } from '@/stores/location.store';
@@ -46,6 +47,7 @@ import { useDriverLocationTracking } from '@/hooks/useDriverLocation';
 import { useOverlayBubble } from '@/hooks/useOverlayBubble';
 import DriverOverlay, { isDriverOverlayAvailable } from '../../modules/driver-overlay';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
+import { useEmailConfirmation } from '@/hooks/useEmailConfirmation';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDemandHotspots } from '@/hooks/useDemandHotspots';
@@ -754,6 +756,44 @@ function NativeDriverHomeScreen() {
     if (!whatsappGroupUrl) return;
     Linking.openURL(whatsappGroupUrl).catch(() => {});
   }, [whatsappGroupUrl]);
+
+  // ── "Confirma tu correo" ─────────────────────────────────────
+  // Since 00635 no receipt, status mail or contract reaches an address the
+  // driver never proved. "Ahora no" hides the banner for 7 days (stored per
+  // account); Profile keeps a row that cannot be dismissed.
+  const emailConfirm = useEmailConfirmation(user?.id);
+  const emailDismissKey = user?.id ? `email_notice_dismissed_at:${user.id}` : null;
+  const [emailDismissedAt, setEmailDismissedAt] = useState<number | null>(null);
+  useEffect(() => {
+    setEmailDismissedAt(null);
+    if (!emailDismissKey) return;
+    let cancelled = false;
+    AsyncStorage.getItem(emailDismissKey)
+      .then((raw) => {
+        if (!cancelled && raw) setEmailDismissedAt(Number(raw));
+      })
+      .catch(() => { /* unreadable → the banner just shows */ });
+    return () => { cancelled = true; };
+  }, [emailDismissKey]);
+  const dismissEmailNotice = useCallback(() => {
+    const now = Date.now();
+    setEmailDismissedAt(now);
+    if (emailDismissKey) AsyncStorage.setItem(emailDismissKey, String(now)).catch(() => {});
+  }, [emailDismissKey]);
+  const resendEmail = emailConfirm.resend;
+  const resendEmailLink = useCallback(async () => {
+    const result = await resendEmail();
+    if (result.ok) {
+      triggerHaptic('success');
+    } else {
+      Toast.show({ type: 'error', text1: t(result.errorKey, { ns: 'common' }) });
+    }
+  }, [resendEmail, t]);
+  const emailStatus = emailConfirm.status;
+  const emailNotice =
+    emailStatus?.email && emailNoticeVisible(emailStatus.status, emailDismissedAt, Date.now())
+      ? { email: emailStatus.email, linkSent: emailConfirm.linkSent, resending: emailConfirm.resending }
+      : null;
 
   // Pre-launch QA: synthetic moving vehicles to preview marker rendering.
   // Gated to dev/demo builds — never shown to real drivers in production.
@@ -1507,6 +1547,7 @@ function NativeDriverHomeScreen() {
         fatigueLevel={fatigueLevel}
         sessionHours={sessionHours}
         whatsappGroupUrl={whatsappBannerDismissed ? null : whatsappGroupUrl}
+        emailNotice={emailNotice}
         onToggleOnline={handleToggleOnline}
         onToggleBreak={handleToggleBreak}
         onSubmitSelfie={submitSelfie}
@@ -1526,6 +1567,8 @@ function NativeDriverHomeScreen() {
         }}
         onJoinWhatsapp={openWhatsappGroup}
         onDismissWhatsapp={dismissWhatsappBanner}
+        onResendEmailLink={resendEmailLink}
+        onDismissEmailNotice={dismissEmailNotice}
         ctaScaleAnim={ctaScaleAnim}
         onCtaPressIn={onCtaPressIn}
         onCtaPressOut={onCtaPressOut}
