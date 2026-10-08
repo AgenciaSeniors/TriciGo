@@ -158,8 +158,8 @@ END
 $patch$;
 
 -- The dead-driver e-mail in its own job, one minute after release-dead-driver-rides
--- (*/5): minutes 1, 6, 11, ... 56.
-SELECT cron.unschedule('notify-dead-driver-alert') WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'notify-dead-driver-alert');
+-- (*/5): minutes 1, 6, 11, ... 56. cron.schedule updates a job of the same name in
+-- place, so a second run keeps its jobid and run history.
 SELECT cron.schedule('notify-dead-driver-alert', '1-59/5 * * * *', 'SELECT public.notify_dead_driver_alert();');
 
 COMMENT ON FUNCTION public.notify_dead_driver_alert() IS
