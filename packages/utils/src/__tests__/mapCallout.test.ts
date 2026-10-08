@@ -44,14 +44,21 @@ describe('formatVehicleEtaMinutes', () => {
 });
 
 describe('formatVehicleDistance', () => {
-  it('uses metres below a kilometre, rounded to something readable', () => {
-    expect(formatVehicleDistance(120)).toBe('120 m');
-    expect(formatVehicleDistance(127)).toBe('130 m');
+  it('uses metres below a kilometre, rounded to 100 m (positions are approximate)', () => {
+    expect(formatVehicleDistance(120)).toBe('100 m');
+    expect(formatVehicleDistance(160)).toBe('200 m');
+    expect(formatVehicleDistance(940)).toBe('900 m');
+  });
+
+  it('never claims a vehicle is closer than 100 m', () => {
+    expect(formatVehicleDistance(0)).toBe('100 m');
+    expect(formatVehicleDistance(40)).toBe('100 m');
   });
 
   it('switches to kilometres with one decimal past 1000 m', () => {
     expect(formatVehicleDistance(1000)).toBe('1.0 km');
     expect(formatVehicleDistance(2450)).toBe('2.5 km');
+    expect(formatVehicleDistance(960)).toBe('1.0 km');
   });
 
   it('returns null rather than inventing a distance', () => {

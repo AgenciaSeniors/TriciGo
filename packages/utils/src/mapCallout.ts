@@ -36,9 +36,14 @@ export function formatVehicleEtaMinutes(minutes: number | null | undefined): str
  * Fallback label when an ETA can't be derived (no pickup set, so there is no
  * point to measure from). Metres up to a kilometre, then one decimal —
  * "2.5 km" carries as much as anyone needs from a marker on a map.
+ *
+ * Metres go in steps of 100 and never below 100: since 00645 the server shows
+ * each vehicle somewhere inside a cell of about 220 x 205 m around its real
+ * position, so "40 m" would claim a precision the map does not have.
  */
 export function formatVehicleDistance(metres: number | null | undefined): string | null {
   if (metres == null || !Number.isFinite(metres) || metres < 0) return null;
-  if (metres < 1000) return `${Math.round(metres / 10) * 10} m`;
+  const hundreds = Math.round(metres / 100) * 100;
+  if (hundreds < 1000) return `${Math.max(100, hundreds)} m`;
   return `${(metres / 1000).toFixed(1)} km`;
 }
