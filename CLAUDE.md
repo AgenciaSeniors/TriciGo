@@ -3252,6 +3252,8 @@ Hasta la 00644, `vehicles.v_select` dejaba a cualquier usuario con sesión lista
 
 Ensayo: `supabase/tests/00644/run.sh` (RED: 7 fallos; GREEN 17/17, con 2 pruebas negativas y una copia CRLF). Ensayo en prod dentro de un bloque revertido: un pasajero sin viajes ve 0 vehículos; la función devuelve los 96 de carga (auto 15, confort 6, moto 31, triciclo 44); quien viajó ve el vehículo de su conductor; el admin ve 164 y `anon`, ninguno.
 
+**Estado: aplicada en prod el 2026-10-08** por MCP (`20261008095018`). Verificado por objeto: `get_cargo_vehicle_caps` con md5 `e4d06391…/617`, ejecutable solo por `postgres`, `authenticated` y `service_role`; `v_select` ya sin la rama `is_active`; en `vehicles` quedan las mismas cuatro políticas. Las sondas contra lo aplicado dan lo mismo que el ensayo.
+
 **Renumeración del 2026-10-08.** Tres PRs abiertas tenían 00640 y 00641 al mismo tiempo. #1122 conservó la 00640 porque ya estaba aplicada en prod (`00640_cron_errors_reach_watchdog`). #1115 (rol de marketing) pasó a 00641 (el enum) y 00642 (los permisos), en ese orden, porque los permisos necesitan el valor nuevo del enum. #1120 (aviso de correo) pasó a 00643. Las ramas de otras sesiones se tocaron con commits nuevos (`git mv`, sin reescribir historia) y se avisó a cada sesión dueña.
 
 ### Edge Functions: quién puede llamarlas (revisión de las 48 desplegadas, 2026-10-06)
