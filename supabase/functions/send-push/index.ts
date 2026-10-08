@@ -11,10 +11,13 @@
 // and would happily send pushes to any `user_ids` array. A regular
 // rider could call it to phish drivers or admins via the inbox
 // (notifications table). Now requires service_role OR admin role.
+// 00641: marketing may call it too, only for the content categories its pages send
+// (campaign, announcement, promo, blog). See _shared/panel-roles.ts.
 // ============================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
+import { canSendPush, isPanelStaffRole } from '../_shared/panel-roles.ts';
 
 // ── CORS: restrict to allowed origins ──
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -175,11 +178,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // ── Auth gate: service_role OR authenticated admin ──
+    // ── Auth gate: service_role, an admin, or marketing (content categories only, below) ──
     const serviceRoleKey = getServiceKey();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const apiKey = req.headers.get('apikey') ?? '';
     const isInternalCall = isServiceKeyToken(apiKey);
+    // null for internal calls (service key); otherwise the caller's users.role.
+    let callerRole: string | null = null;
 
     // Rate limit: 30 requests per IP per minute, for everyone EXCEPT internal
     // calls. Every database trigger (one push per ride offer, offline notices,
@@ -213,14 +218,16 @@ Deno.serve(async (req) => {
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
-      // Only admins can craft pushes for arbitrary user_ids.
+      // Only panel staff can craft pushes for arbitrary user_ids: admins for any category,
+      // marketing for its content categories (checked once the body is read).
       // Regular users have no legitimate path to call send-push.
       const { data: roleRow } = await supabaseAuth
         .from('users')
         .select('role')
         .eq('id', user.id)
         .single();
-      if (!roleRow || !['admin', 'super_admin'].includes(roleRow.role as string)) {
+      callerRole = (roleRow?.role as string | undefined) ?? null;
+      if (!isPanelStaffRole(callerRole)) {
         return new Response(
           JSON.stringify({ error: 'Forbidden: admin role required' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -261,6 +268,15 @@ Deno.serve(async (req) => {
           detail: `category "${category}" is not in the curated list. See VALID_CATEGORIES in send-push/index.ts.`,
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // 00641: marketing sends only the content pushes its pages send. Never a ride, system or
+    // safety push, and never an uncategorized one (the panel's one-user push is support's).
+    if (callerRole !== null && !canSendPush(callerRole, category)) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: this push category needs an admin' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
