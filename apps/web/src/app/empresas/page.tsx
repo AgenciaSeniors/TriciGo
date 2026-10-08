@@ -176,7 +176,7 @@ export default function EmpresasPage() {
           <FeatureCard
             emoji="👥"
             title="Empleados ilimitados"
-            description="Agrega a todos tus empleados como pasajeros con role de admin o employee."
+            description="Agrega a todos tus empleados como pasajeros con rol de administrador o de empleado."
           />
           <FeatureCard
             emoji="📄"

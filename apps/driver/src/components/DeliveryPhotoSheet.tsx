@@ -109,7 +109,7 @@ export function DeliveryPhotoSheet({
     // their patience.
     if (otpLocked) return;
     if (otp.length !== 4) {
-      setOtpError(t('trip.otp_must_be_4_digits', { defaultValue: 'Ingrese 4 dígitos' }));
+      setOtpError(t('trip.otp_must_be_4_digits', { defaultValue: 'Ingresa 4 dígitos' }));
       return;
     }
     setValidatingOtp(true);
@@ -134,7 +134,7 @@ export function DeliveryPhotoSheet({
         });
       } else if (result.error === 'invalid_otp') {
         triggerHaptic('error');
-        setOtpError(t('trip.otp_invalid', { defaultValue: 'Código incorrecto. Pídalo al destinatario.' }));
+        setOtpError(t('trip.otp_invalid', { defaultValue: 'Código incorrecto. Pídeselo al destinatario.' }));
       } else if (result.error === 'too_many_attempts') {
         // The RPC locks this ride's OTP for 10 minutes after 5 failed tries.
         // Without this branch the driver saw a generic "error al validar" while
@@ -144,7 +144,7 @@ export function DeliveryPhotoSheet({
         setLockedUntil(Date.now() + DELIVERY_OTP_LOCKOUT_SECONDS * 1000);
         setOtpError(
           t('trip.otp_too_many_attempts', {
-            defaultValue: 'Demasiados intentos. Espere 10 minutos antes de reintentar.',
+            defaultValue: 'Demasiados intentos. Espera 10 minutos antes de reintentar.',
           }),
         );
       } else if (result.error === 'forbidden') {
@@ -179,7 +179,7 @@ export function DeliveryPhotoSheet({
       setPhotoUri(null);
       Toast.show({
         type: 'error',
-        text1: t('trip.delivery_photo_upload_failed', { defaultValue: 'Error al subir foto. Intente de nuevo.' }),
+        text1: t('trip.delivery_photo_upload_failed', { defaultValue: 'Error al subir la foto. Intenta de nuevo.' }),
       });
     } finally {
       setUploading(false);
@@ -228,8 +228,8 @@ export function DeliveryPhotoSheet({
       </Text>
       <Text variant="bodySmall" color="secondary" className="text-center mb-4" style={{ color: midnightEmber.map.text.secondary }}>
         {phase === 'pickup'
-          ? t('trip.pickup_photo_desc', { defaultValue: 'Tome una foto del paquete al recogerlo' })
-          : t('trip.delivery_photo_desc', { defaultValue: 'Tome una foto del paquete entregado como comprobante' })}
+          ? t('trip.pickup_photo_desc', { defaultValue: 'Toma una foto del paquete al recogerlo' })
+          : t('trip.delivery_photo_desc', { defaultValue: 'Toma una foto del paquete entregado como comprobante' })}
       </Text>
 
       {/* OTP step (delivery only) */}
@@ -238,11 +238,11 @@ export function DeliveryPhotoSheet({
           <View className="flex-row items-center mb-2">
             <Ionicons name="keypad" size={16} color="#F97316" />
             <Text variant="bodySmall" color="inverse" className="ml-2 font-semibold">
-              {t('trip.otp_request_title', { defaultValue: 'Pida el código al destinatario' })}
+              {t('trip.otp_request_title', { defaultValue: 'Pide el código al destinatario' })}
             </Text>
           </View>
           <Text variant="caption" color="secondary" className="mb-3 opacity-80" style={{ color: midnightEmber.map.text.secondary }}>
-            {t('trip.otp_request_desc', { defaultValue: 'El cliente le compartió un código de 4 dígitos al destinatario. Pídaselo para confirmar la entrega.' })}
+            {t('trip.otp_request_desc', { defaultValue: 'El cliente le compartió un código de 4 dígitos al destinatario. Pídeselo para confirmar la entrega.' })}
           </Text>
           <Input
             variant="dark"
@@ -262,7 +262,7 @@ export function DeliveryPhotoSheet({
           <Button
             title={
               otpLocked
-                ? t('trip.otp_retry_in', { defaultValue: 'Reintente en {{time}}', time: lockLabel })
+                ? t('trip.otp_retry_in', { defaultValue: 'Reintenta en {{time}}', time: lockLabel })
                 : validatingOtp
                   ? t('trip.validating_otp', { defaultValue: 'Validando...' })
                   : t('trip.validate_otp', { defaultValue: 'Validar código' })

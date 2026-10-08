@@ -97,11 +97,11 @@ export default function CargoSettingsScreen() {
     // Validate
     const weight = parseFloat(maxWeight);
     if (!maxWeight || isNaN(weight) || weight <= 0) {
-      setWeightError(t('onboarding.error_cargo_weight_required', { defaultValue: 'Ingrese el peso máximo' }));
+      setWeightError(t('onboarding.error_cargo_weight_required', { defaultValue: 'Ingresa el peso máximo' }));
       return;
     }
     if (categories.length === 0) {
-      setCategoriesError(t('onboarding.error_cargo_categories_required', { defaultValue: 'Seleccione al menos una categoría' }));
+      setCategoriesError(t('onboarding.error_cargo_categories_required', { defaultValue: 'Selecciona al menos una categoría' }));
       return;
     }
 
