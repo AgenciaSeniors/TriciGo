@@ -11,7 +11,14 @@
 //     packages (defaultValue strings included; comments are not copy and
 //     are skipped),
 //   - the store listings in apps/*/store-metadata/es and GoTrue's e-mail
-//     templates (supabase/templates, the subjects in supabase/config.toml).
+//     templates (supabase/templates, the subjects in supabase/config.toml),
+//   - string literals in SQL migrations from 00639 on, function bodies
+//     included: push, SMS and e-mail text built by trigger functions, and
+//     RAISE messages the apps show. Two pushes ("Intentalo nuevamente",
+//     "Abrí la app y confirmá si lo ves") lived in prod functions for months
+//     because nothing read SQL; 00638 fixed them.
+// Copy that admins edit in prod (CMS pages, blog, announcements) never goes
+// through git, so this test cannot see it.
 //
 // The forms are generated from a list of verbs instead of being listed one
 // by one, so a verb used in new copy is covered in every voseo shape:
@@ -129,6 +136,129 @@ function copyFragments(source: string, fileName: string): string[] {
   return out;
 }
 
+const BACKSLASH = '\\';
+const blankOut = (text: string) => text.replace(/[^\n]/g, ' ');
+
+/**
+ * SQL source with its comments, quoted identifiers and the text of COMMENT ON
+ * statements turned into spaces (same length, newlines kept); what is left is
+ * code and string literals. The body of a function or a DO block (dollar-quoted
+ * text right after AS or DO) is read as SQL too, so its comments are dropped
+ * and its literals kept. Any other dollar-quoted text is a value (an e-mail
+ * body, a cron command) and is kept whole, "--" and "<!--" included.
+ */
+function maskSql(source: string): string {
+  const scan = (s: string): string => {
+    let out = '';
+    let statement = ''; // code since the last ";", to tell a body from a value and spot COMMENT ON … IS
+    let i = 0;
+    while (i < s.length) {
+      if (s.startsWith('--', i)) {
+        const newline = s.indexOf('\n', i);
+        const stop = newline < 0 ? s.length : newline;
+        out += blankOut(s.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if (s.startsWith('/*', i)) {
+        // Postgres block comments nest.
+        let depth = 0;
+        let j = i;
+        while (j < s.length) {
+          if (s.startsWith('/*', j)) {
+            depth++;
+            j += 2;
+          } else if (s.startsWith('*/', j)) {
+            depth--;
+            j += 2;
+            if (depth === 0) break;
+          } else {
+            j++;
+          }
+        }
+        out += blankOut(s.slice(i, j));
+        i = j;
+        continue;
+      }
+
+      let literal: string | null = null;
+      let next = i;
+      if (s[i] === "'") {
+        // E'…' strings take backslash escapes; every string takes '' for a quote.
+        const escapes = /[eE]/.test(s[i - 1] ?? '') && !/[\w$]/.test(s[i - 2] ?? '');
+        let j = i + 1;
+        while (j < s.length) {
+          if (escapes && s[j] === BACKSLASH) {
+            j += 2;
+          } else if (s[j] === "'" && s[j + 1] === "'") {
+            j += 2;
+          } else if (s[j] === "'") {
+            break;
+          } else {
+            j++;
+          }
+        }
+        next = Math.min(j + 1, s.length);
+        literal = s.slice(i, next);
+      } else if (s[i] === '"') {
+        // A quoted identifier is a name, not copy.
+        let j = i + 1;
+        while (j < s.length && !(s[j] === '"' && s[j + 1] !== '"')) j += s[j] === '"' ? 2 : 1;
+        next = Math.min(j + 1, s.length);
+        out += blankOut(s.slice(i, next));
+        statement += '""';
+        i = next;
+        continue;
+      } else if (s[i] === '$' && !/[\w$]/.test(s[i - 1] ?? '')) {
+        const tag = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(s.slice(i, i + 64))?.[0];
+        if (tag) {
+          const close = s.indexOf(tag, i + tag.length);
+          const body = s.slice(i + tag.length, close < 0 ? s.length : close);
+          next = close < 0 ? s.length : close + tag.length;
+          const isCode = /\b(?:AS|DO)\s*$/i.test(statement);
+          literal = tag + (isCode ? scan(body) : body) + (close < 0 ? '' : tag);
+        }
+      }
+
+      if (literal !== null) {
+        const documentation = /\bCOMMENT\s+ON\b[^;]*\bIS\s*E?$/i.test(statement);
+        out += documentation ? blankOut(literal) : literal;
+        statement += "''";
+        i = next;
+        continue;
+      }
+
+      statement = s[i] === ';' ? '' : statement + s[i];
+      out += s[i];
+      i++;
+    }
+    return out;
+  };
+  return scan(source);
+}
+
+/**
+ * The lines of a migration that can hold copy, with their line numbers. A
+ * "tuteo-exempt" marker in a comment skips its own line, and the next line too
+ * when the marker's line is only a comment: a patch migration that quotes the
+ * old text it replaces marks it that way. The marker inside a string is text.
+ */
+function sqlCopyLines(source: string): { line: number; text: string }[] {
+  const text = source.replace(/\r\n?/g, '\n');
+  const original = text.split('\n');
+  const masked = maskSql(text).split('\n');
+  // maskSql blanked the marker only if it sits inside a comment.
+  const marked = original.map((line, k) =>
+    [...line.matchAll(/tuteo-exempt/g)].some((m) => (masked[k] ?? '')[m.index ?? 0] === ' '),
+  );
+  const commentOnly = (k: number) => (original[k] ?? '').trim() !== '' && (masked[k] ?? '').trim() === '';
+  const exempt = (k: number) => marked[k] || (k > 0 && marked[k - 1] && commentOnly(k - 1));
+  return masked
+    .map((maskedLine, k) => ({ line: k + 1, text: maskedLine, skip: exempt(k) }))
+    .filter(({ skip }) => !skip)
+    .map(({ line, text: copy }) => ({ line, text: copy }));
+}
+
 function jsonStrings(value: unknown): string[] {
   if (typeof value === 'string') return [value];
   if (Array.isArray(value)) return value.flatMap(jsonStrings);
@@ -148,6 +278,23 @@ function walk(dir: string, keep: (name: string) => boolean): string[] {
 }
 
 const isSource = (name: string) => /\.tsx?$/.test(name) && !/\.(test|spec)\.tsx?$/.test(name) && !name.endsWith('.d.ts');
+
+// Migrations are checked from this number on. The older ones are frozen
+// history: the voseo they still hold lives in function bodies that later
+// migrations replaced (a prod scan on 2026-10-08 found no voseo copy in any
+// live function, cron job or platform_config value), and 00638 quotes the two
+// push texts it patched.
+const SQL_SINCE = 639;
+const MIGRATIONS = join(REPO, 'supabase/migrations');
+
+function migrationsSince(since: number): string[] {
+  return readdirSync(MIGRATIONS)
+    .filter((name) => {
+      const match = /^(\d{5})_.*\.sql$/.exec(name);
+      return match !== null && Number(match[1]) >= since;
+    })
+    .sort();
+}
 
 function offenders(): string[] {
   const out: string[] = [];
@@ -228,8 +375,96 @@ describe('voseo detector', () => {
   });
 });
 
+const sqlVoseo = (sql: string) => sqlCopyLines(sql).flatMap(({ text }) => findVoseo(text)).sort();
+
+describe('SQL copy reader', () => {
+  it('reads literals inside function bodies, but not comments', () => {
+    const sql = [
+      '-- Revisá: un comentario no es copy',
+      '/* Probá el bloque /* anidado */ también */',
+      'CREATE FUNCTION public.f() RETURNS trigger LANGUAGE plpgsql AS $function$',
+      'BEGIN',
+      '  -- Confirmá que este comentario tampoco cuenta',
+      "  v_body := 'Tu recarga no pudo procesarse. Intentalo nuevamente.';",
+      "  PERFORM notify(jsonb_build_object('body', 'Abrí la app y confirmá si lo ves.'));",
+      "  RAISE EXCEPTION USING MESSAGE = 'Volvé a intentarlo', DETAIL = 'x';",
+      'END;',
+      '$function$;',
+    ].join('\n');
+    expect(sqlVoseo(sql)).toEqual(['confirmá', 'intentalo', 'volvé']);
+  });
+
+  it('keeps literal boundaries with doubled quotes, E-strings and dollar-quoted values', () => {
+    const sql = [
+      "SELECT 'it''s -- not a comment, revisá';",
+      "SELECT E'line\\'s -- still a string, tocá';",
+      "SELECT $m$Probá acá$m$, '-- dentro del literal: podés';",
+      '-- después del literal: podés',
+      // A dollar-quoted value is text, not SQL: "<!--" or "--" in it is not a comment.
+      "PERFORM send(body := $html$<!-- header --><p>Confirmá tu correo</p>$html$);",
+      'SELECT "vos" FROM t; -- a quoted identifier is a name, not copy',
+    ].join('\n');
+    expect(sqlVoseo(sql)).toEqual(['acá', 'confirmá', 'podés', 'probá', 'revisá', 'tocá']);
+  });
+
+  it('skips COMMENT ON text, which is documentation and not copy', () => {
+    const sql = [
+      "COMMENT ON FUNCTION public.f() IS 'Si lo tocás, revisá 00357 antes';",
+      'COMMENT ON TABLE public.t IS',
+      "  E'Mirá acá';",
+      "COMMENT ON TABLE public.u IS'Fijate en 00599';",
+      "DO $$ BEGIN COMMENT ON TABLE public.v IS 'Si lo cambiás, avisá'; END $$;",
+      "SELECT 'Revisá tu correo';",
+    ].join('\n');
+    expect(sqlVoseo(sql)).toEqual(['revisá']);
+  });
+
+  it('honors tuteo-exempt only inside a comment, and below a comment-only line', () => {
+    const sql = [
+      "SELECT replace(b, 'Intentalo', 'Inténtalo'); -- tuteo-exempt: the text being replaced",
+      "SELECT 'Llamá al 106';",
+      '-- tuteo-exempt: the old push text, quoted to patch it',
+      "SELECT 'Abrí la app y confirmá si lo ves.';",
+      "SELECT 'tuteo-exempt', 'Revisá';",
+      "SELECT 'Tocá';",
+    ].join('\n');
+    expect(sqlVoseo(sql)).toEqual(['llamá', 'revisá', 'tocá']);
+  });
+
+  it('keeps the length and the line numbers of the source', () => {
+    const sql = "a := 'x'; -- comentario\n/* bloque\nde dos líneas */ b := 'Revisá';\n";
+    expect(maskSql(sql)).toHaveLength(sql.length);
+    expect(sqlCopyLines(sql).find(({ text }) => findVoseo(text).length)?.line).toBe(3);
+  });
+
+  it('flags the two push texts that 00638 had to fix, in the migrations that shipped them', () => {
+    const read = (name: string) => readFileSync(join(REPO, 'supabase/migrations', name), 'utf8');
+    expect(sqlVoseo(read('00357_notify_rider_on_gps_override_request.sql'))).toContain('confirmá');
+    expect(sqlVoseo(read('00450_recharge_velocity_notif_currency_and_dead_grant.sql'))).toContain('intentalo');
+  });
+});
+
 describe('Spanish copy uses tuteo', () => {
   it('no locale string, app/package string, store listing or e-mail template has voseo', () => {
     expect(offenders()).toEqual([]);
   }, 30_000);
+
+  it('picks migrations by their number', () => {
+    // Guards the filter below: if it broke, every new migration would be
+    // skipped and the check would pass on an empty list.
+    const fromFix = migrationsSince(638);
+    expect(fromFix).toContain('00638_tuteo_server_push_texts.sql');
+    expect(fromFix).not.toContain('00637_wallet_shortfall_pays_cash.sql');
+    expect(migrationsSince(SQL_SINCE).every((name) => Number(name.slice(0, 5)) >= SQL_SINCE)).toBe(true);
+  });
+
+  it(`no migration from ${String(SQL_SINCE).padStart(5, '0')} on has voseo in its copy`, () => {
+    const files = migrationsSince(SQL_SINCE);
+    const out = files.flatMap((file) =>
+      sqlCopyLines(readFileSync(join(MIGRATIONS, file), 'utf8')).flatMap(({ line, text }) =>
+        findVoseo(text).map((form) => `supabase/migrations/${file}:${line}: ${form}`),
+      ),
+    );
+    expect(out).toEqual([]);
+  });
 });
