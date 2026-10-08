@@ -1614,6 +1614,77 @@ a.bento-tile:hover {
   color: var(--text-secondary);
 }
 
+/* "Confirma tu correo": paired light/dark warning surface tokens; the state is
+   text plus a dot (never color alone), the action a real <button>. */
+.profile-email-notice {
+  margin: var(--space-sm) auto 0;
+  max-width: 22rem;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  text-align: left;
+}
+
+.profile-email-notice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.profile-email-notice-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.profile-email-notice-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.profile-email-notice-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 var(--space-xs);
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.profile-email-notice-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.profile-email-notice-action:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.profile-email-notice-message {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .profile-level-badge {
   display: inline-flex;
   align-items: center;

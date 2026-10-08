@@ -754,5 +754,20 @@
     "settings_denied": "Actívalo para que la app se abra sola al llegar un viaje",
     "settings_on": "Sí",
     "settings_off": "No"
+  },
+
+  "email_notice": {
+    "title": "Confirma tu correo",
+    "body": "Sin confirmarlo no te llegan recibos ni avisos de tu cuenta.",
+    "unconfirmed": "Sin confirmar",
+    "resend": "Reenviar enlace",
+    "later": "Ahora no",
+    "sent": "Enlace enviado a {{email}}. Revisa tu correo, también la carpeta de spam.",
+    "sent_short": "Enlace enviado",
+    "sent_alert_body": "Te enviamos un enlace a {{email}}. Ábrelo para confirmar tu correo.",
+    "resend_a11y": "Reenviar el enlace de confirmación a {{email}}",
+    "error_rate_limited": "Ya pediste varios enlaces. Espera un rato y vuelve a intentarlo.",
+    "error_taken": "Ese correo ya lo usa otra cuenta. Cámbialo en Editar perfil.",
+    "error_generic": "No pudimos enviar el enlace. Inténtalo más tarde."
   }
 }

@@ -10,7 +10,10 @@ import { MenuRow } from '@tricigo/ui/MenuRow';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuthStore } from '@/stores/auth.store';
 import { authService } from '@tricigo/api';
-import { realEmail } from '@tricigo/utils';
+import { realEmail, triggerHaptic } from '@tricigo/utils';
+import Toast from 'react-native-toast-message';
+import { useEmailConfirmation } from '@/hooks/useEmailConfirmation';
+import { EmailConfirmRow } from '@/components/EmailConfirmRow';
 import { router } from 'expo-router';
 import type { UserLevel } from '@tricigo/types';
 import { StatusBadge } from '@tricigo/ui/StatusBadge';
@@ -169,6 +172,20 @@ function NativeProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // "Confirma tu correo" (00643): shown under the phone while the address is
+  // unconfirmed. Not dismissible: since 00635 receipts only reach a proven address.
+  const emailConfirm = useEmailConfirmation(user?.id);
+  const refreshEmailStatus = emailConfirm.refresh;
+  const resendEmailLink = async () => {
+    const result = await emailConfirm.resend();
+    if (result.status === 'sent') {
+      triggerHaptic('success');
+      Toast.show({ type: 'success', text1: t('email_notice.sent_short', { defaultValue: 'Enlace enviado' }) });
+    } else if (result.status === 'failed') {
+      Toast.show({ type: 'error', text1: t(result.errorKey) });
+    }
+  };
+
   // Cuban Modern shadows (mirror driver profile).
   const HERO_SHADOW = {
     shadowColor: '#FF4D00',
@@ -208,8 +225,9 @@ function NativeProfileScreen() {
       const freshUser = await authService.getCurrentUser();
       if (freshUser) setUser(freshUser);
     } catch { /* best effort */ }
+    refreshEmailStatus();
     setRefreshing(false);
-  }, [setUser]);
+  }, [setUser, refreshEmailStatus]);
 
   if (isLoading) {
     return (
@@ -358,6 +376,15 @@ function NativeProfileScreen() {
                     <Text style={{ color: tokens.ink.secondary, fontSize: 13, marginTop: 3 }}>
                       {user?.phone ?? '+53 5XXXXXXX o 6XXXXXXX'}
                     </Text>
+                    {emailConfirm.status?.status === 'unconfirmed' && emailConfirm.status.email && (
+                      <EmailConfirmRow
+                        email={emailConfirm.status.email}
+                        linkSent={emailConfirm.linkSent}
+                        resending={emailConfirm.resending}
+                        onResend={resendEmailLink}
+                        isDark={isDark}
+                      />
+                    )}
                     {/* Tier badge sits below (own row, hugs content) — driver parity. */}
                     {user?.level && (
                       <View style={{ alignSelf: 'flex-start', marginTop: 8 }}>
