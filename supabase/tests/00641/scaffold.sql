@@ -235,6 +235,10 @@ CREATE POLICY dp_select_own ON public.driver_profiles FOR SELECT TO authenticate
   USING ((user_id = (SELECT auth.uid())) OR is_admin());
 CREATE POLICY r_admin_select ON public.rides FOR SELECT USING (is_admin());
 CREATE POLICY r_select_customer ON public.rides FOR SELECT USING ((customer_id = (SELECT auth.uid())) OR is_admin());
+-- Prod's r_select_driver also lets a driver read a ride it has a pending offer for (ride_offers);
+-- that table is not in this scaffold, so only the assigned-driver part is reproduced.
+CREATE POLICY r_select_driver ON public.rides FOR SELECT USING (driver_id IN (SELECT driver_profiles.id
+  FROM public.driver_profiles WHERE driver_profiles.user_id = (SELECT auth.uid())));
 CREATE POLICY r_insert ON public.rides FOR INSERT WITH CHECK (customer_id = (SELECT auth.uid()));
 CREATE POLICY r_update ON public.rides FOR UPDATE USING ((customer_id = (SELECT auth.uid()))
   OR (driver_id IN (SELECT driver_profiles.id FROM public.driver_profiles WHERE driver_profiles.user_id = (SELECT auth.uid())))
