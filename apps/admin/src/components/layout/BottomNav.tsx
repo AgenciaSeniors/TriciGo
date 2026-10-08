@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Headphones, LayoutDashboard, Map, MapPin, MoreHorizontal } from 'lucide-react';
+import { Headphones, LayoutDashboard, Map, MapPin, Megaphone, MoreHorizontal, Newspaper, Rocket, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
+import { menuRole } from '@tricigo/utils/adminPanelAccess';
 import { useSidebar } from './SidebarContext';
+import { usePanelRole } from '@/lib/panelRole';
 
 type Item = {
   href: string;
@@ -22,10 +24,20 @@ const ITEMS: Item[] = [
   { href: '/support', labelKey: 'sidebar.support', defaultLabel: 'Soporte', icon: Headphones, matchPrefix: true },
 ];
 
+/** Marketing's tabs: its home and the three pages it works in most. */
+const MARKETING_ITEMS: Item[] = [
+  { href: '/launch-pulse', labelKey: 'sidebar.launch_pulse', defaultLabel: 'Pulso', icon: Rocket, matchPrefix: true },
+  { href: '/promotions', labelKey: 'sidebar.promotions', defaultLabel: 'Promociones', icon: Ticket, matchPrefix: true },
+  { href: '/campaigns', labelKey: 'sidebar.campaigns', defaultLabel: 'Campañas', icon: Megaphone, matchPrefix: true },
+  { href: '/blog', labelKey: 'sidebar.blog', defaultLabel: 'Bitácora', icon: Newspaper, matchPrefix: true },
+];
+
 export function BottomNav() {
   const pathname = usePathname();
   const { toggle } = useSidebar();
   const { t } = useTranslation('admin');
+  const { role } = usePanelRole();
+  const items = menuRole(role) === 'marketing' ? MARKETING_ITEMS : ITEMS;
 
   return (
     <nav
@@ -33,7 +45,7 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface-elevated/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
     >
       <ul className="grid grid-cols-5">
-        {ITEMS.map((item) => {
+        {items.map((item) => {
           const active = item.matchPrefix
             ? pathname.startsWith(item.href)
             : pathname === item.href;

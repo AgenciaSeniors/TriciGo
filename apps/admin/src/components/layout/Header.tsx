@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, Menu, Moon, Search, Sun, User as UserIcon } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
+import { menuRole } from '@tricigo/utils/adminPanelAccess';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { usePanelRole } from '@/lib/panelRole';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { useSidebar } from './SidebarContext';
 import { useTheme } from './ThemeProvider';
@@ -67,6 +69,8 @@ export function Header() {
   const { toggle } = useSidebar();
   const { theme, toggle: toggleTheme } = useTheme();
   const { t } = useTranslation('admin');
+  const { role } = usePanelRole();
+  const isMarketing = menuRole(role) === 'marketing';
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -168,7 +172,7 @@ export function Header() {
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        <NotificationBell />
+        {!isMarketing && <NotificationBell />}
 
         {/* User menu */}
         <div ref={menuRef} className="relative">
@@ -198,17 +202,21 @@ export function Header() {
                 <div className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-medium text-ink">{email || '—'}</span>
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-subtle">
-                    Administrador
+                    {isMarketing
+                      ? t('header.role_marketing', { defaultValue: 'Marketing' })
+                      : t('header.role_admin', { defaultValue: 'Administrador' })}
                   </span>
                 </div>
               </div>
-              <button
-                onClick={() => router.push('/settings')}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-ink-muted hover:bg-surface-sunken hover:text-ink"
-                role="menuitem"
-              >
-                <UserIcon className="h-4 w-4" /> {t('header.profile', { defaultValue: 'Mi perfil' })}
-              </button>
+              {!isMarketing && (
+                <button
+                  onClick={() => router.push('/settings')}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-ink-muted hover:bg-surface-sunken hover:text-ink"
+                  role="menuitem"
+                >
+                  <UserIcon className="h-4 w-4" /> {t('header.profile', { defaultValue: 'Mi perfil' })}
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-error hover:bg-error-light/60 dark:hover:bg-error/10"

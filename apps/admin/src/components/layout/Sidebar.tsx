@@ -1,8 +1,11 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
+import { promotionService } from '@tricigo/api';
+import { canOpenPanelPath, menuRole, panelHome } from '@tricigo/utils/adminPanelAccess';
 import {
   LayoutDashboard,
   Car,
@@ -42,6 +45,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
+import { usePanelRole } from '@/lib/panelRole';
 
 type NavItem = {
   href: string;
@@ -162,6 +166,29 @@ export function Sidebar() {
   const pathname = usePathname();
   const { t } = useTranslation('admin');
   const { isOpen, close, isCollapsed, toggleCollapsed } = useSidebar();
+  const { role } = usePanelRole();
+  const panelRole = menuRole(role);
+  const groups = useMemo(
+    () =>
+      NAV_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.filter((item) => canOpenPanelPath(panelRole, item.href)),
+      })).filter((group) => group.items.length > 0),
+    [panelRole],
+  );
+
+  // Promotions marketing left waiting: a dot on the menu item, for the people who approve them.
+  const [pendingPromotions, setPendingPromotions] = useState(0);
+  useEffect(() => {
+    if (panelRole === 'marketing') return;
+    let cancelled = false;
+    promotionService.countPendingApproval().then((n) => {
+      if (!cancelled) setPendingPromotions(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [panelRole, pathname]);
 
   const width = isCollapsed ? 'md:w-[72px]' : 'md:w-[272px]';
 
@@ -188,7 +215,7 @@ export function Sidebar() {
       >
         {/* Brand */}
         <div className="relative flex items-center gap-2.5 px-4 py-5 border-b border-line">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5" aria-label="TriciGo Admin">
+          <Link href={panelHome(panelRole)} className="flex min-w-0 items-center gap-2.5" aria-label="TriciGo Admin">
             <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 font-display text-lg font-bold text-white shadow-glow-primary">
               T
               <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5" aria-hidden="true">
@@ -223,7 +250,7 @@ export function Sidebar() {
         {/* Navigation */}
         <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="space-y-6">
-            {NAV_GROUPS.map((group) => (
+            {groups.map((group) => (
               <li key={group.id}>
                 {!isCollapsed && (
                   <div className="mb-2 flex items-baseline gap-2 px-3">
@@ -269,6 +296,17 @@ export function Sidebar() {
                           <span className={`truncate ${isCollapsed ? 'md:hidden' : ''}`}>
                             {label}
                           </span>
+                          {item.href === '/promotions' && pendingPromotions > 0 && (
+                            <>
+                              <span
+                                aria-hidden="true"
+                                className={`ml-auto h-2 w-2 shrink-0 rounded-full bg-amber-600 dark:bg-amber-400 ${isCollapsed ? 'md:absolute md:right-2 md:top-2 md:ml-0' : ''}`}
+                              />
+                              <span className="sr-only">
+                                {t('promotions.pending_dot', { defaultValue: 'Hay promociones esperando aprobación' })}
+                              </span>
+                            </>
+                          )}
                         </Link>
                       </li>
                     );
