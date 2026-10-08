@@ -6,6 +6,7 @@ import { referralService } from '@tricigo/api/services/referral';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import type { Referral, ReferralStatus } from '@tricigo/types';
+import { menuRole } from '@tricigo/utils/adminPanelAccess';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
@@ -13,6 +14,7 @@ import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { formatAdminDate } from '@/lib/formatDate';
+import { usePanelRole } from '@/lib/panelRole';
 
 const PAGE_SIZE = 20;
 
@@ -20,6 +22,9 @@ type Filter = 'all' | ReferralStatus;
 
 export default function ReferralsPage() {
   const { t } = useTranslation('admin');
+  // 00641: marketing reads referrals; rewarding or invalidating one moves money, so it stays with admins.
+  const { role } = usePanelRole();
+  const isMarketing = menuRole(role) === 'marketing';
 
   const TABS: StatusTab<Filter>[] = useMemo(() => [
     { id: 'all', label: t('referrals.filter_all', { defaultValue: 'Todos' }) },
@@ -239,7 +244,7 @@ export default function ReferralsPage() {
         onSortChange={setSort}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: referrals.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
-        rowActions={[
+        rowActions={isMarketing ? undefined : [
           {
             label: t('referrals.action_reward', { defaultValue: 'Premiar' }),
             onClick: (r) => {

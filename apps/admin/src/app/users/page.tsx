@@ -22,6 +22,7 @@ const ROLE_CLASS: Record<string, string> = {
   driver: 'bg-amber-500/10 text-amber-800 dark:text-amber-400',
   admin: 'bg-primary-500/10 text-primary-700 dark:text-primary-400',
   super_admin: 'bg-red-500/10 text-red-700 dark:text-red-400',
+  marketing: 'bg-violet-500/10 text-violet-700 dark:text-violet-400',
 };
 
 const EMPTY_FILTERS = {
@@ -52,7 +53,7 @@ export default function UsersPage() {
 
   const roleLabel = useCallback((r: string): string => {
     const fallbacks: Record<string, string> = {
-      customer: 'Pasajero', driver: 'Conductor', admin: 'Admin', super_admin: 'Super admin',
+      customer: 'Pasajero', driver: 'Conductor', admin: 'Admin', super_admin: 'Super admin', marketing: 'Marketing',
     };
     return t(`users.role_${r}`, { defaultValue: fallbacks[r] ?? r });
   }, [t]);

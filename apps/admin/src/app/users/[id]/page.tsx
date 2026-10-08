@@ -42,6 +42,7 @@ const roleBadgeClasses: Record<string, string> = {
   driver: 'bg-amber-50 text-amber-700',
   admin: 'bg-purple-50 text-purple-700',
   super_admin: 'bg-red-50 text-red-700',
+  marketing: 'bg-violet-50 text-violet-700',
 };
 
 function formatCurrency(amount: number): string {
