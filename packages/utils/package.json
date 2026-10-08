@@ -21,6 +21,7 @@
     "./fareCalculator": "./src/fareCalculator.ts",
     "./geo": "./src/geo.ts",
     "./haptics": "./src/haptics.ts",
+    "./htmlSafety": "./src/htmlSafety.ts",
     "./historyExport": "./src/historyExport.ts",
     "./mapStyles": "./src/mapStyles.ts",
     "./mapboxOffline": "./src/mapboxOffline.ts",

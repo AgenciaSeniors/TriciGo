@@ -5,14 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslation } from '@tricigo/i18n';
 import { createBrowserClient } from '@/lib/supabase-server';
+import { safeInternalPath } from '@tricigo/utils/htmlSafety';
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useTranslation('admin');
   const rawRedirect = searchParams.get('redirect') ?? '/';
-  // BUG-018 fix: prevent open redirect attacks — only allow relative paths
-  const redirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/';
+  // BUG-018: only paths on this site. safeInternalPath also refuses "/\host", which
+  // browsers read as "//host" (another site).
+  const redirect = safeInternalPath(rawRedirect) ?? '/';
   const errorParam = searchParams.get('error');
 
   const [email, setEmail] = useState('');
