@@ -31,7 +31,7 @@ Only the driver app's "Editar perfil" and the web profile edit call
 
 ## Design
 
-### 1. Server: `public.get_my_email_status()` (migration 00639)
+### 1. Server: `public.get_my_email_status()` (migration 00640)
 
 Returns one row about the caller only, from `auth.uid()`:
 
@@ -104,7 +104,7 @@ Copy goes in `common.json` (es/en/pt) under `email_notice.*`, in tú (never vose
 
 ## Testing
 
-- SQL rehearsal `supabase/tests/00639/run.sh`, RED without the migration, GREEN with it applied
+- SQL rehearsal `supabase/tests/00640/run.sh`, RED without the migration, GREEN with it applied
   twice: anon cannot execute; each status (`none`, placeholder, `unconfirmed`, proven by flag,
   proven by Google) for the caller; `link_sent_at` ignores used, expired and other-address
   tokens; a session sees only its own row; negative proofs of the migration's grant checks.
@@ -114,5 +114,5 @@ Copy goes in `common.json` (es/en/pt) under `email_notice.*`, in tú (never vose
 
 ## Rollout
 
-Apply 00639 first; the apps tolerate its absence (no notice). The web ships with the merge. The
+Apply 00640 first; the apps tolerate its absence (no notice). The web ships with the merge. The
 two apps need an OTA update or a new build.
