@@ -11,6 +11,7 @@ import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber } from '@tricigo/theme';
 import { authService, driverService } from '@tricigo/api';
+import { realEmail } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { useOnboardingStore } from '@/stores/onboarding.store';
@@ -102,11 +103,26 @@ export default function ReviewScreen() {
     setError('');
     try {
       // 1. Update user profile (name, email on users table)
+      const typedEmail = (personalInfo.email ?? '').trim();
+      const emailChanged =
+        !!typedEmail && typedEmail.toLowerCase() !== (realEmail(user.email) ?? '').toLowerCase();
       await authService.updateProfile(user.id, {
         full_name: personalInfo.full_name,
         email: personalInfo.email || null,
         phone: personalInfo.phone || undefined,
       });
+
+      // 1a. Since 00635 no receipt, status mail or contract reaches an address the
+      // driver never confirmed, and onboarding saved it without sending the link.
+      // Its own try/catch: a failure never blocks the submission (the home banner
+      // and Profile offer "Reenviar enlace").
+      if (emailChanged) {
+        try {
+          await authService.addBackupEmail(typedEmail);
+        } catch (err) {
+          console.warn('Onboarding confirmation link error:', err);
+        }
+      }
 
       // 1b. Marketing consent (optional). Written only when it differs from
       // what is on record, so an unchanged answer keeps its original date

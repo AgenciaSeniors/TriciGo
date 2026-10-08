@@ -11,7 +11,7 @@ import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
-import { triggerHaptic, realEmail } from '@tricigo/utils';
+import { triggerHaptic, realEmail, emailNoticeErrorKey } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -200,18 +200,45 @@ export default function EditProfileScreen() {
       });
       return;
     }
+    // realEmail() drops the synthetic phone_<n>@tricigo.app, so a first address on a
+    // phone account counts as a change.
+    const newEmail = email.trim();
+    const emailChanged = newEmail.toLowerCase() !== (realEmail(user.email) ?? '').toLowerCase();
     setSaving(true);
     try {
       const updated = await authService.updateProfile(user.id, {
         full_name: fullName.trim(),
-        email: email.trim() || null,
+        email: newEmail || null,
       });
       setUser(updated);
-      Toast.show({
-        type: 'success',
-        text1: t('profile.profile_saved', { defaultValue: 'Perfil guardado' }),
-      });
       triggerHaptic('success');
+
+      // Since 00635 nothing is mailed to an address its owner never confirmed, and
+      // this screen used to save it without ever sending the link (nobody could
+      // confirm). After the save, with its own catch: if the link fails, the
+      // profile is already saved and Profile offers "Reenviar enlace".
+      if (emailChanged && newEmail) {
+        try {
+          await authService.addBackupEmail(newEmail);
+          Alert.alert(
+            t('email_notice.title', { defaultValue: 'Confirma tu correo' }),
+            t('email_notice.sent_alert_body', {
+              email: newEmail,
+              defaultValue: 'Te enviamos un enlace a {{email}}. Ábrelo para confirmar tu correo.',
+            }),
+          );
+        } catch (err) {
+          Alert.alert(
+            t('email_notice.title', { defaultValue: 'Confirma tu correo' }),
+            t(emailNoticeErrorKey((err as { code?: string } | null)?.code)),
+          );
+        }
+      } else {
+        Toast.show({
+          type: 'success',
+          text1: t('profile.profile_saved', { defaultValue: 'Perfil guardado' }),
+        });
+      }
       router.back();
     } catch {
       Alert.alert(t('error'), t('errors.profile_save_failed'));
