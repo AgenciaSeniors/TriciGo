@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00639 (local Postgres 16, no Supabase stack needed).
-#   supabase/tests/00639/run.sh none
+# Rehearsal runner for migration 00640 (local Postgres 16, no Supabase stack needed).
+#   supabase/tests/00640/run.sh none
 #       -> scaffold + tests on the live prod bodies (RED: an error inside the
 #          watchdogs, the prune jobs and the dead-driver e-mail leaves the cron
 #          run "succeeded", so check_cron_sql_failures never reports it)
-#   supabase/tests/00639/run.sh supabase/migrations/00639_cron_errors_reach_watchdog.sql
+#   supabase/tests/00640/run.sh supabase/migrations/00640_cron_errors_reach_watchdog.sql
 #       -> scaffold + migration x2 (idempotency) + tests + negative proofs of the
 #          migration's own guards and self-checks (GREEN)
 # The migration is applied as postgres, the scaffold's non-superuser owner (as in prod).
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
-# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00639/run.sh ...
+# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00640/run.sh ...
 set -u
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -17,7 +17,7 @@ MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 PY="${PYTHON:-python3}"
-DB=pr639
+DB=pr640
 P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = ''"
 PASS=0; FAIL=0
@@ -42,7 +42,7 @@ FNS="'check_cron_http_failures','check_database_health','check_exchange_rate_fre
 BODIES="SELECT string_agg(proname || ':' || md5(prosrc), ',' ORDER BY proname) FROM pg_proc
         WHERE pronamespace = 'public'::regnamespace AND proname IN ($FNS)"
 # The 14 live bodies minus the handler (or, for release_rides_from_dead_drivers, minus the e-mail call).
-NEW="check_cron_http_failures:3bcacc073b307c74b8ef7e137865de32,check_database_health:9b430de3b750510e0079ea5b122f110f,check_exchange_rate_freshness:658b8be4592ab74821ee0df845579437,check_poi_sync_freshness:c9434e9e1c75a6504f84de2074369a88,check_sms_delivery_health:bf6f70fa0eccf6204f901585a6231ff3,check_sms_delivery_rate:b4a1e7798ef2ad6b78c2722591b2137a,check_stuck_active_rides:8478bba2e479523f4d52855adf7454ca,notify_dead_driver_alert:aa6a768cbd67d7b2cd7bfa4e135875f3,prune_audit_log:31047360d4acebcd77df5ac5f8466829,prune_cron_job_run_details:d36caf9ff0b05e0dda2dc39bd7d49740,prune_driver_heartbeat_log:3d773de2f38ded589e5789be92577d5b,release_rides_from_dead_drivers:368d21afc6920a4afcc51475ae460200,sample_database_health:a783d40d937aa44aba84f1ba31e819fe,send_db_health_digest:56da1c243a370de9cdfd077870069ada"
+NEW="check_cron_http_failures:3bcacc073b307c74b8ef7e137865de32,check_database_health:9b430de3b750510e0079ea5b122f110f,check_exchange_rate_freshness:658b8be4592ab74821ee0df845579437,check_poi_sync_freshness:c9434e9e1c75a6504f84de2074369a88,check_sms_delivery_health:bf6f70fa0eccf6204f901585a6231ff3,check_sms_delivery_rate:b4a1e7798ef2ad6b78c2722591b2137a,check_stuck_active_rides:8478bba2e479523f4d52855adf7454ca,notify_dead_driver_alert:aa6a768cbd67d7b2cd7bfa4e135875f3,prune_audit_log:31047360d4acebcd77df5ac5f8466829,prune_cron_job_run_details:d36caf9ff0b05e0dda2dc39bd7d49740,prune_driver_heartbeat_log:3d773de2f38ded589e5789be92577d5b,release_rides_from_dead_drivers:c99dd7b82a9cddaa2bf21a48d9bff7f7,sample_database_health:a783d40d937aa44aba84f1ba31e819fe,send_db_health_digest:56da1c243a370de9cdfd077870069ada"
 
 echo "== reset database =="
 fresh $DB || { echo "scaffold failed"; exit 1; }

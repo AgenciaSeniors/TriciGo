@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 00639: let cron job errors reach check_cron_sql_failures
+-- Migration 00640: let cron job errors reach check_cron_sql_failures
 --
 -- check_cron_sql_failures (00596/00597) counts a run as failed only when
 -- cron.job_run_details.return_message starts with "ERROR:". Eleven SQL cron
@@ -125,33 +125,33 @@ BEGIN
      E'EXCEPTION WHEN OTHERS THEN\n  RAISE WARNING ''[notify_dead_driver_alert] failed: % %'', SQLSTATE, SQLERRM;\n  RETURN jsonb_build_object(''ok'', false, ''error'', SQLERRM);\n',
      E''),
     ('public.release_rides_from_dead_drivers()',
-     '0e18ee0004fdc8f6735fc93d17520eab', '368d21afc6920a4afcc51475ae460200',
+     '0e18ee0004fdc8f6735fc93d17520eab', 'c99dd7b82a9cddaa2bf21a48d9bff7f7',
      E'  PERFORM public.notify_dead_driver_alert();\n',
-     E'  -- 00639: the e-mail runs in its own cron job (notify-dead-driver-alert), so a\n  -- failure there fails that job and never rolls back the releases above.\n')
+     E'  -- 00640: the e-mail runs in its own cron job (notify-dead-driver-alert), so a\n  -- failure there fails that job and never rolls back the releases above.\n')
     ) AS t(fn, md5_live, md5_new, old_text, new_text)
   LOOP
     v_oid := to_regprocedure(r.fn);
     IF v_oid IS NULL THEN
-      RAISE EXCEPTION '00639: % is missing', r.fn;
+      RAISE EXCEPTION '00640: % is missing', r.fn;
     END IF;
 
     SELECT md5(prosrc), prosrc INTO v_md5, v_src FROM pg_proc WHERE oid = v_oid;
     CONTINUE WHEN v_md5 = r.md5_new;   -- already patched (second run)
     IF v_md5 <> r.md5_live THEN
-      RAISE EXCEPTION '00639: % has a body this migration does not know (md5 %), refusing to patch it', r.fn, v_md5;
+      RAISE EXCEPTION '00640: % has a body this migration does not know (md5 %), refusing to patch it', r.fn, v_md5;
     END IF;
 
     v_def := pg_get_functiondef(v_oid);
     IF (length(v_src) - length(replace(v_src, r.old_text, ''))) / length(r.old_text) <> 1
        OR (length(v_def) - length(replace(v_def, r.old_text, ''))) / length(r.old_text) <> 1 THEN
-      RAISE EXCEPTION '00639: the text to patch in % does not appear exactly once', r.fn;
+      RAISE EXCEPTION '00640: the text to patch in % does not appear exactly once', r.fn;
     END IF;
 
     EXECUTE replace(v_def, r.old_text, r.new_text);
 
     SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = v_oid;
     IF v_md5 <> r.md5_new THEN
-      RAISE EXCEPTION '00639: % was patched to md5 %, expected %', r.fn, v_md5, r.md5_new;
+      RAISE EXCEPTION '00640: % was patched to md5 %, expected %', r.fn, v_md5, r.md5_new;
     END IF;
   END LOOP;
 END
@@ -163,9 +163,9 @@ $patch$;
 SELECT cron.schedule('notify-dead-driver-alert', '1-59/5 * * * *', 'SELECT public.notify_dead_driver_alert();');
 
 COMMENT ON FUNCTION public.notify_dead_driver_alert() IS
-  '00555 + 00639: e-mails the dead_driver_app alerts that release_rides_from_dead_drivers (00542) records. '
+  '00555 + 00640: e-mails the dead_driver_app alerts that release_rides_from_dead_drivers (00542) records. '
   'It looks for the pending ones (emailed_at IS NULL), so it catches up after a failure. Without a recipient '
-  'configured it does not stamp emailed_at, so the next run retries. Since 00639 it runs in its own cron job '
+  'configured it does not stamp emailed_at, so the next run retries. Since 00640 it runs in its own cron job '
   '(notify-dead-driver-alert, 1-59/5) with no EXCEPTION handler: a failure fails that job, which '
   'check_cron_sql_failures reports, and never rolls back the releases.';
 
@@ -187,10 +187,10 @@ BEGIN
   WHERE p.pronamespace = 'public'::regnamespace AND p.proname = ANY (c_no_handler)
     AND p.prosrc ~* 'exception\s+when';
   IF v_bad IS NOT NULL THEN
-    RAISE EXCEPTION '00639: still an EXCEPTION handler in %', v_bad;
+    RAISE EXCEPTION '00640: still an EXCEPTION handler in %', v_bad;
   END IF;
   IF (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = ANY (c_no_handler)) <> 12 THEN
-    RAISE EXCEPTION '00639: expected 12 functions without a handler';
+    RAISE EXCEPTION '00640: expected 12 functions without a handler';
   END IF;
 
   -- check_stuck_active_rides keeps only its per-ride e-mail handler.
@@ -199,7 +199,7 @@ BEGIN
         'exception\s+when', 'gi')) <> 1
      OR (SELECT prosrc FROM pg_proc WHERE oid = 'public.check_stuck_active_rides()'::regprocedure)
         NOT LIKE '%stuck-ride email failed for ride%' THEN
-    RAISE EXCEPTION '00639: check_stuck_active_rides must keep exactly its per-ride e-mail handler';
+    RAISE EXCEPTION '00640: check_stuck_active_rides must keep exactly its per-ride e-mail handler';
   END IF;
 
   -- Nothing but the new job calls notify_dead_driver_alert; the release keeps its rider-push handler.
@@ -208,22 +208,22 @@ BEGIN
   WHERE p.pronamespace = 'public'::regnamespace AND p.proname <> 'notify_dead_driver_alert'
     AND p.prosrc ~ 'notify_dead_driver_alert\s*\(';
   IF v_bad IS NOT NULL THEN
-    RAISE EXCEPTION '00639: notify_dead_driver_alert is still called from %', v_bad;
+    RAISE EXCEPTION '00640: notify_dead_driver_alert is still called from %', v_bad;
   END IF;
   IF (SELECT count(*) FROM regexp_matches(
         (SELECT prosrc FROM pg_proc WHERE oid = 'public.release_rides_from_dead_drivers()'::regprocedure),
         'exception\s+when', 'gi')) <> 1 THEN
-    RAISE EXCEPTION '00639: release_rides_from_dead_drivers must keep exactly its rider-push handler';
+    RAISE EXCEPTION '00640: release_rides_from_dead_drivers must keep exactly its rider-push handler';
   END IF;
 
   SELECT string_agg(schedule || '|' || command, ',') INTO v_jobs
   FROM cron.job WHERE jobname = 'notify-dead-driver-alert';
   IF v_jobs IS DISTINCT FROM '1-59/5 * * * *|SELECT public.notify_dead_driver_alert();' THEN
-    RAISE EXCEPTION '00639: cron job notify-dead-driver-alert is %', COALESCE(v_jobs, 'missing');
+    RAISE EXCEPTION '00640: cron job notify-dead-driver-alert is %', COALESCE(v_jobs, 'missing');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'release-dead-driver-rides'
                  AND command ILIKE '%release_rides_from_dead_drivers()%') THEN
-    RAISE EXCEPTION '00639: cron job release-dead-driver-rides is missing';
+    RAISE EXCEPTION '00640: cron job release-dead-driver-rides is missing';
   END IF;
 
   SELECT string_agg(p.proname, ', ') INTO v_bad
@@ -232,7 +232,7 @@ BEGIN
     AND p.proname = ANY (c_no_handler || ARRAY['check_stuck_active_rides', 'release_rides_from_dead_drivers'])
     AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'));
   IF v_bad IS NOT NULL THEN
-    RAISE EXCEPTION '00639: executable by a client role: %', v_bad;
+    RAISE EXCEPTION '00640: executable by a client role: %', v_bad;
   END IF;
 
   -- Probes: an error inside the functions now reaches the caller. A retention of
@@ -259,15 +259,15 @@ BEGIN
       v_probe2 := 'raised';
     END;
 
-    RAISE EXCEPTION 'zz_00639_probe_rollback';
+    RAISE EXCEPTION 'zz_00640_probe_rollback';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM <> 'zz_00639_probe_rollback' THEN
+    IF SQLERRM <> 'zz_00640_probe_rollback' THEN
       RAISE;
     END IF;
   END;
 
   IF v_probe1 IS DISTINCT FROM 'raised' OR v_probe2 IS DISTINCT FROM 'raised' THEN
-    RAISE EXCEPTION '00639: probe failed (prune_driver_heartbeat_log %, check_database_health %)', v_probe1, v_probe2;
+    RAISE EXCEPTION '00640: probe failed (prune_driver_heartbeat_log %, check_database_health %)', v_probe1, v_probe2;
   END IF;
 END
 $check$;

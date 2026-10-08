@@ -1,11 +1,11 @@
--- Scaffold for the 00639 rehearsal (local Postgres 16, no Supabase stack needed).
+-- Scaffold for the 00640 rehearsal (local Postgres 16, no Supabase stack needed).
 -- Generated on 2026-10-08 from prod (pg_get_functiondef, information_schema,
 -- pg_constraint, cron.job):
 --   * role postgres: NOT a superuser, BYPASSRLS. It owns every function and
 --     table here and applies the migration, as in prod.
 --   * the 20 function bodies below are byte for byte the ones running in prod;
 --     run.sh S0 compares md5(prosrc) with the values read from prod. 14 of them
---     are the ones 00639 patches; the other 6 are what they call.
+--     are the ones 00640 patches; the other 6 are what they call.
 --   * the tables carry prod's columns for the ones these functions read and
 --     write whole (db_health_samples, stuck_ride_alerts, sms_deliveries, ...).
 --     rides, driver_profiles, users and cuba_pois carry only the columns these
