@@ -15,6 +15,8 @@ type Item = {
   defaultLabel: string;
   icon: LucideIcon;
   matchPrefix?: boolean;
+  /** Shown under the icon when the full name does not fit a fifth of a phone screen. */
+  shortLabelKey?: string;
 };
 
 const ITEMS: Item[] = [
@@ -26,7 +28,14 @@ const ITEMS: Item[] = [
 
 /** Marketing's tabs: its home and the three pages it works in most. */
 const MARKETING_ITEMS: Item[] = [
-  { href: '/launch-pulse', labelKey: 'sidebar.launch_pulse', defaultLabel: 'Pulso', icon: Rocket, matchPrefix: true },
+  {
+    href: '/launch-pulse',
+    labelKey: 'sidebar.launch_pulse',
+    defaultLabel: 'Pulso del lanzamiento',
+    shortLabelKey: 'sidebar.launch_pulse_short',
+    icon: Rocket,
+    matchPrefix: true,
+  },
   { href: '/promotions', labelKey: 'sidebar.promotions', defaultLabel: 'Promociones', icon: Ticket, matchPrefix: true },
   { href: '/campaigns', labelKey: 'sidebar.campaigns', defaultLabel: 'Campañas', icon: Megaphone, matchPrefix: true },
   { href: '/blog', labelKey: 'sidebar.blog', defaultLabel: 'Bitácora', icon: Newspaper, matchPrefix: true },
@@ -50,6 +59,8 @@ export function BottomNav() {
             ? pathname.startsWith(item.href)
             : pathname === item.href;
           const label = t(item.labelKey, { defaultValue: item.defaultLabel });
+          // The full name stays in aria-label; only the visible text is shortened.
+          const shortLabel = item.shortLabelKey ? t(item.shortLabelKey, { defaultValue: label }) : label;
           return (
             <li key={item.href}>
               <Link
@@ -69,7 +80,7 @@ export function BottomNav() {
                     />
                   )}
                 </span>
-                <span className="truncate">{label}</span>
+                <span className="truncate">{shortLabel}</span>
               </Link>
             </li>
           );
