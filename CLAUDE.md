@@ -3306,6 +3306,11 @@ La política `r_update` deja al pasajero y al conductor asignado hacer UPDATE de
   El abono es idempotente, así que tomarlo dos veces nunca acredita dos veces. La lógica está en `_shared/payment-intent-claim.ts`, y el handler tiene tests en `process-netopia-webhook/index.test.ts`.
 - **#842** (autenticar los IPN de fallo) quedó cubierto por el cambio del 2026-10-06: un IPN de fallo con otro ntpID se ignora.
 - **Ensayo:** `supabase/tests/00639/run.sh` (RED: 11 fallos; GREEN 27/27, con 4 pruebas negativas y una copia CRLF).
+- **Estado (2026-10-08).** La parte sin borrados entró por MCP como `00639_recharge_intents_server_only_part1_additive`: el REVOKE, el índice único, la alerta y el parche de `process_recharge_refund` (md5 `f9a2baa4…`; la alerta, `03ef5e2f…`). Con eso los clientes ya no pueden insertar, porque no tienen el GRANT. La parte 2 (`DROP POLICY pi_own_insert` y `DROP INDEX idx_payment_intents_stripe_pi_id`, el índice viejo no único) se cortó dos veces por MCP esperando la aprobación y quedó para el SQL Editor. Para saber si ya se aplicó, revisar `pg_policy` de `payment_intents`: debe quedar solo `pi_own_select`. Edge Functions desplegadas: `process-netopia-webhook` v39, `create-netopia-payment-intent` v37 y `create-netopia-recharge-intent` v12, las tres idénticas al repo. Ese deploy también subió el texto en tuteo de `_shared/fx-freshness.ts`, que #1106 cambió sin redesplegar. Probado en prod en bloques revertidos:
+  - el insert de un cliente da `42501`;
+  - una devolución de $100 sobre una billetera de 46.593 CUP descuenta lo que hay, registra 30.407 de faltante, deja la billetera en 0 sin ancla y encola 5 correos;
+  - una devolución que la billetera cubre queda igual que antes.
+- **Cuando la parte destructiva de una migración de seguridad tiene que esperar, separar el cierre del agujero de la limpieza.** Si el cierre es un REVOKE, entra sin aprobación, y los DROP pueden esperar sin dejar nada abierto.
 
 ### `users.phone` no prueba que el número sea del usuario (00599, 2026-09-26)
 
