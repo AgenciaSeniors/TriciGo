@@ -90,11 +90,11 @@ export default function ReportsPage() {
       try {
         const [healthRes, dbRes, activeRes, driversRes] = await Promise.all([
           fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/health-check`).catch(() => null),
-          supabase.from('rides').select('*', { count: 'exact', head: true }),
-          supabase.from('rides')
+          supabase.from('panel_rides').select('*', { count: 'exact', head: true }),
+          supabase.from('panel_rides')
             .select('*', { count: 'exact', head: true })
             .in('status', ['in_progress', 'driver_en_route', 'arrived_at_pickup']),
-          supabase.from('driver_profiles')
+          supabase.from('panel_driver_profiles')
             .select('*', { count: 'exact', head: true })
             .eq('is_online', true),
         ]);
@@ -236,7 +236,7 @@ export default function ReportsPage() {
     try {
       const supabase = createBrowserClient();
       let csvQuery = supabase
-        .from('rides')
+        .from('panel_rides')
         .select('created_at, service_type, status, estimated_fare_cup, final_fare_trc, payment_method, pickup_address, dropoff_address')
         .order('created_at', { ascending: false })
         .limit(1000);

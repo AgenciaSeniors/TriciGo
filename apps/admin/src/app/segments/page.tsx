@@ -100,7 +100,7 @@ export default function SegmentsPage() {
       let powerCount = (powerData as { count?: number } | null)?.count ?? 0;
       if (!powerData) {
         const { data: rideGroups } = await supabase
-          .from('rides')
+          .from('panel_rides')
           .select('customer_id')
           .not('customer_id', 'is', null);
         if (rideGroups) {
@@ -113,7 +113,7 @@ export default function SegmentsPage() {
       }
 
       const { data: activeRiders } = await supabase
-        .from('rides')
+        .from('panel_rides')
         .select('customer_id')
         .gte('created_at', thirtyDaysAgo)
         .not('customer_id', 'is', null);
@@ -162,7 +162,7 @@ export default function SegmentsPage() {
           userIds = (data ?? []).map((u) => u.id);
         } else if (segment === 'power_users') {
           const { data: allRides } = await supabase
-            .from('rides')
+            .from('panel_rides')
             .select('customer_id')
             .not('customer_id', 'is', null);
           if (allRides) {
@@ -177,7 +177,7 @@ export default function SegmentsPage() {
           }
         } else if (segment === 'inactive') {
           const { data: activeRiders } = await supabase
-            .from('rides')
+            .from('panel_rides')
             .select('customer_id')
             .gte('created_at', thirtyDaysAgo)
             .not('customer_id', 'is', null);
@@ -210,7 +210,7 @@ export default function SegmentsPage() {
           .in('id', userIds);
 
         const { data: rides } = await supabase
-          .from('rides')
+          .from('panel_rides')
           .select('customer_id, created_at')
           .in('customer_id', userIds);
 

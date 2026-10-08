@@ -58,26 +58,26 @@ export default function FunnelPage() {
       //   5. Completadas          = status = 'completed'
       const [allRes, quotedRes, dispatchedRes, acceptedRes, completedRes] = await Promise.all([
         supabase
-          .from('rides')
+          .from('panel_rides')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', since),
         supabase
-          .from('rides')
+          .from('panel_rides')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', since)
           .gt('estimated_fare_cup', 0),
         supabase
-          .from('rides')
+          .from('panel_rides')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', since)
           .gt('dispatch_round', 0),
         supabase
-          .from('rides')
+          .from('panel_rides')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', since)
           .in('status', ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination', 'completed']),
         supabase
-          .from('rides')
+          .from('panel_rides')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', since)
           .eq('status', 'completed'),
