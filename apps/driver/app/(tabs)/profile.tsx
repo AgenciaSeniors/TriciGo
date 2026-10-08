@@ -85,10 +85,10 @@ function NativeDriverProfileScreen() {
   const emailConfirm = useEmailConfirmation(user?.id);
   const resendEmailLink = async () => {
     const result = await emailConfirm.resend();
-    if (result.ok) {
+    if (result.status === 'sent') {
       triggerHaptic('success');
       Toast.show({ type: 'success', text1: t('email_notice.sent_short', { defaultValue: 'Enlace enviado' }) });
-    } else {
+    } else if (result.status === 'failed') {
       Toast.show({ type: 'error', text1: t(result.errorKey) });
     }
   };

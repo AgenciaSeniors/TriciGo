@@ -192,3 +192,5 @@ export { REQUIRED_DRIVER_DOCS, driverDocLabel, whatsAppDigits, waMeLink, incompl
 export type { IncompleteSignupMessageInput } from './driverOutreach';
 export { EMAIL_NOTICE_SNOOZE_MS, emailNoticeVisible, emailNoticeErrorKey } from './emailNotice';
 export type { EmailNoticeErrorKey } from './emailNotice';
+export { createLatestLoader } from './latestLoader';
+export type { LatestLoader } from './latestLoader';

@@ -783,9 +783,9 @@ function NativeDriverHomeScreen() {
   const resendEmail = emailConfirm.resend;
   const resendEmailLink = useCallback(async () => {
     const result = await resendEmail();
-    if (result.ok) {
+    if (result.status === 'sent') {
       triggerHaptic('success');
-    } else {
+    } else if (result.status === 'failed') {
       Toast.show({ type: 'error', text1: t(result.errorKey, { ns: 'common' }) });
     }
   }, [resendEmail, t]);

@@ -10,7 +10,16 @@ import { emailNoticeErrorKey, type EmailNoticeErrorKey } from '@tricigo/utils';
  * 00635 no receipt or account notice reaches an address its owner never proved.
  * Not dismissible. Colors are the paired light/dark warning surface tokens.
  */
-export function EmailConfirmNotice({ email, onLinkSent }: { email: string; onLinkSent: () => void }) {
+export function EmailConfirmNotice({
+  email,
+  linkSentAt,
+  onLinkSent,
+}: {
+  email: string;
+  /** When the newest still-valid link was sent (get_my_email_status), or null. */
+  linkSentAt: string | null;
+  onLinkSent: () => void;
+}) {
   const { t } = useTranslation('common');
   const [resending, setResending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -55,7 +64,7 @@ export function EmailConfirmNotice({ email, onLinkSent }: { email: string; onLin
       <p className="profile-email-notice-message" role={errorKey ? 'alert' : 'status'} aria-live="polite">
         {errorKey
           ? t(errorKey)
-          : sent
+          : sent || linkSentAt
             ? t('email_notice.sent', {
                 email,
                 defaultValue: 'Enlace enviado a {{email}}. Revisa tu correo, también la carpeta de spam.',

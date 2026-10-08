@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { authService, getSupabaseClient } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
@@ -96,6 +96,13 @@ export default function ProfilePage() {
   // must read it from the DB (otherwise the badge is always missing/stale on web).
   const [level, setLevel] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailConfirmationStatus | null>(null);
+  const emailStatusSeq = useRef(0);
+  const loadEmailStatus = useCallback(() => {
+    const req = ++emailStatusSeq.current;
+    authService.getMyEmailStatus().then((next) => {
+      if (req === emailStatusSeq.current) setEmailStatus(next);
+    });
+  }, []);
 
   useEffect(() => {
     getSupabaseClient().auth.getSession().then(async ({ data: { session } }) => {
@@ -103,7 +110,6 @@ export default function ProfilePage() {
       setUser(session?.user ?? null);
       setAuthLoading(false);
       if (session?.user?.id) {
-        authService.getMyEmailStatus().then(setEmailStatus);
         const { data } = await getSupabaseClient()
           .from('users')
           .select('level')
@@ -113,6 +119,22 @@ export default function ProfilePage() {
       }
     });
   }, []);
+
+  // The address can be confirmed in another tab or on the phone: reload the
+  // status when this tab comes back, like the apps do on focus.
+  useEffect(() => {
+    if (!userId) return;
+    loadEmailStatus();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadEmailStatus();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [userId, loadEmailStatus]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -178,7 +200,8 @@ export default function ProfilePage() {
         {unconfirmedEmail && (
           <EmailConfirmNotice
             email={unconfirmedEmail}
-            onLinkSent={() => { authService.getMyEmailStatus().then((s) => { if (s) setEmailStatus(s); }); }}
+            linkSentAt={emailStatus?.linkSentAt ?? null}
+            onLinkSent={loadEmailStatus}
           />
         )}
         {level && (

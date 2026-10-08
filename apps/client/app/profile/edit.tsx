@@ -206,20 +206,22 @@ export default function EditProfileScreen() {
     const emailChanged = newEmail.toLowerCase() !== (realEmail(user.email) ?? '').toLowerCase();
     setSaving(true);
     try {
+      // users.email is written here only to clear it. Rewriting the same address
+      // with other capitals would clear its confirmation (00611), and a new one goes
+      // through add-email-with-verification below, which checks that no other
+      // account holds it, stores it lowercased and mails the confirmation link:
+      // since 00635 nothing is mailed to an address its owner never confirmed.
       const updated = await authService.updateProfile(user.id, {
         full_name: fullName.trim(),
-        email: newEmail || null,
+        ...(emailChanged && !newEmail ? { email: null } : {}),
       });
       setUser(updated);
       triggerHaptic('success');
 
-      // Since 00635 nothing is mailed to an address its owner never confirmed, and
-      // this screen used to save it without ever sending the link (nobody could
-      // confirm). After the save, with its own catch: if the link fails, the
-      // profile is already saved and Profile offers "Reenviar enlace".
       if (emailChanged && newEmail) {
         try {
           await authService.addBackupEmail(newEmail);
+          setUser({ ...updated, email: newEmail.toLowerCase() });
           Alert.alert(
             t('email_notice.title', { defaultValue: 'Confirma tu correo' }),
             t('email_notice.sent_alert_body', {
@@ -228,10 +230,12 @@ export default function EditProfileScreen() {
             }),
           );
         } catch (err) {
+          // The name is saved; the address is not. Stay here so it can be retried.
           Alert.alert(
             t('email_notice.title', { defaultValue: 'Confirma tu correo' }),
             t(emailNoticeErrorKey((err as { code?: string } | null)?.code)),
           );
+          return;
         }
       } else {
         Toast.show({

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Image, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -55,6 +55,10 @@ export default function ReviewScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  // The address a confirmation link was already sent to from this screen. The store's
+  // user is only refreshed at the end of a successful submission, so without this a
+  // retry after a later step fails would send (and invalidate) a new link each time.
+  const linkSentForRef = useRef<string | null>(null);
   // Optional marketing consent. Unchecked for anyone who never answered
   // (null/undefined). A person who already answered — in the client app,
   // which shares this users row, or on an earlier submission of this form
@@ -116,9 +120,10 @@ export default function ReviewScreen() {
       // driver never confirmed, and onboarding saved it without sending the link.
       // Its own try/catch: a failure never blocks the submission (the home banner
       // and Profile offer "Reenviar enlace").
-      if (emailChanged) {
+      if (emailChanged && linkSentForRef.current !== typedEmail.toLowerCase()) {
         try {
           await authService.addBackupEmail(typedEmail);
+          linkSentForRef.current = typedEmail.toLowerCase();
         } catch (err) {
           console.warn('Onboarding confirmation link error:', err);
         }
