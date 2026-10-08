@@ -46,6 +46,8 @@ export interface Promotion {
 // current_uses / created_at are server/DB-owned. `created_by` IS accepted on
 // create — the service stamps it from the session (it used to be left NULL,
 // so no admin-created promo had an author on record).
+// `is_active` is optional: marketing never sends it, because the database
+// keeps every promotion marketing creates off until an admin approves it (00642).
 export type CreatePromotionInput = Omit<
   Promotion,
   | 'id'
@@ -56,7 +58,8 @@ export type CreatePromotionInput = Omit<
   | 'approved_by'
   | 'approved_at'
   | 'revision'
->;
+  | 'is_active'
+> & { is_active?: boolean };
 
 /**
  * Columns added by migrations that may not be applied yet. On a
@@ -168,6 +171,23 @@ export const promotionService = {
       .update({ is_active: isActive })
       .eq('id', id);
     if (error) throw error;
+  },
+
+  /**
+   * Marketing's pause (00642): turns the promotion off only while it is on right now, so it acts
+   * on the promotion as it is, not as a list loaded earlier shows it (an admin may have switched it
+   * on since). Returns false when it was already off and nothing changed.
+   */
+  async pause(id: string): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('promotions')
+      .update({ is_active: false })
+      .eq('id', id)
+      .eq('is_active', true)
+      .select('id');
+    if (error) throw error;
+    return Array.isArray(data) && data.length > 0;
   },
 
   /**

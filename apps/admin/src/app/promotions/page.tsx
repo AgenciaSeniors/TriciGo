@@ -228,8 +228,6 @@ export default function PromotionsAdminPage() {
         discount_percent: isPct ? Number(form.discount_percent) || 0 : null,
         discount_fixed_cup: isPct ? null : Number(form.discount_fixed_cup) || 0,
         max_uses: form.max_uses.trim() ? Number(form.max_uses) : null,
-        // Marketing's promotions are always saved off; the server forces it too (00642).
-        is_active: isMarketing ? false : form.is_active,
         valid_from: inputToIso(form.valid_from) ?? new Date().toISOString(),
         valid_until: inputToIso(form.valid_until),
         title_es: form.title_es.trim() || null,
@@ -240,23 +238,30 @@ export default function PromotionsAdminPage() {
         first_ride_only: form.first_ride_only,
         is_public: form.is_public,
       };
+      // Marketing never sends is_active (00642): the database keeps its drafts off anyway, and a
+      // form opened before an admin approved the promotion must not switch it back off on save.
+      const payload = isMarketing ? base : { ...base, is_active: form.is_active };
       // The column-missing retry for `first_ride_only` (00482) / `is_public`
       // (00519) lives in promotionService — it strips those columns and
       // retries so the promo still saves before the migration lands.
       if (editingId) {
-        await promotionService.update(editingId, base);
+        await promotionService.update(editingId, payload);
         showToast('success', isMarketing
           ? t('promotions.toast_sent_for_approval', { defaultValue: 'Guardada. Un administrador la revisa y la activa.' })
           : t('promotions.toast_updated', { defaultValue: 'Promoción actualizada' }));
-        const prev = items.find((i) => i.id === editingId);
-        await maybeNotifyOnPublish({
-          ...(prev as Promotion),
-          ...base,
-          id: editingId,
-          notified_at: prev?.notified_at ?? null,
-        });
+        // Marketing's saves are drafts: the publish push goes out when an admin approves one, and
+        // `prev` may be a copy older than that approval.
+        if (!isMarketing) {
+          const prev = items.find((i) => i.id === editingId);
+          await maybeNotifyOnPublish({
+            ...(prev as Promotion),
+            ...payload,
+            id: editingId,
+            notified_at: prev?.notified_at ?? null,
+          });
+        }
       } else {
-        const created = await promotionService.create({ ...base, notified_at: null });
+        const created = await promotionService.create({ ...payload, notified_at: null });
         showToast('success', isMarketing
           ? t('promotions.toast_sent_for_approval', { defaultValue: 'Guardada. Un administrador la revisa y la activa.' })
           : t('promotions.toast_created', { defaultValue: 'Promoción creada' }));
@@ -408,15 +413,16 @@ export default function PromotionsAdminPage() {
     }
   }, [showToast, t, maybeNotifyOnPublish, loadItems]);
 
-  // Marketing's only switch: it can turn a live promotion off, never on (00642).
+  // Marketing's only switch: it can turn a live promotion off, never on (00642). It asks the
+  // server, not this list: an admin may have switched the promotion on since the list loaded.
   const handlePause = async (p: Promotion) => {
-    if (!p.is_active) {
-      showToast('error', t('promotions.already_paused', { defaultValue: 'Esta promoción ya está pausada.' }));
-      return;
-    }
     try {
-      await promotionService.setActive(p.id, false);
-      showToast('success', t('promotions.toast_deactivated', { defaultValue: 'Promoción desactivada' }));
+      const paused = await promotionService.pause(p.id);
+      if (paused) {
+        showToast('success', t('promotions.toast_deactivated', { defaultValue: 'Promoción desactivada' }));
+      } else {
+        showToast('error', t('promotions.already_paused', { defaultValue: 'Esta promoción ya está pausada.' }));
+      }
       await loadItems();
     } catch (err) {
       showToast('error', getErrorMessage(err));

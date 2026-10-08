@@ -118,3 +118,49 @@ describe('promotionService.approve', () => {
     expect(mockFrom).toHaveBeenCalledTimes(1);
   });
 });
+
+/** from('promotions').update(...).eq('id', id).eq('is_active', true).select('id') → result */
+function mockPauseChain(result: { data: unknown; error: unknown }) {
+  const select = vi.fn().mockResolvedValue(result);
+  const eq = vi.fn();
+  const chain = { eq, select };
+  eq.mockReturnValue(chain);
+  const update = vi.fn(() => chain);
+  mockFrom.mockReturnValueOnce({ update });
+  return { update, eq, select };
+}
+
+describe('promotionService.pause', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('turns off the promotion only while it is on, and says it did', async () => {
+    const { update, eq, select } = mockPauseChain({ data: [{ id: 'p1' }], error: null });
+
+    await expect(promotionService.pause('p1')).resolves.toBe(true);
+
+    expect(mockFrom).toHaveBeenCalledWith('promotions');
+    expect(update).toHaveBeenCalledWith({ is_active: false });
+    expect(eq).toHaveBeenCalledWith('id', 'p1');
+    expect(eq).toHaveBeenCalledWith('is_active', true);
+    expect(select).toHaveBeenCalledWith('id');
+  });
+
+  it('is false when the promotion was already off (no row matched)', async () => {
+    mockPauseChain({ data: [], error: null });
+    await expect(promotionService.pause('p1')).resolves.toBe(false);
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it('is false when PostgREST returns no data at all', async () => {
+    mockPauseChain({ data: null, error: null });
+    await expect(promotionService.pause('p1')).resolves.toBe(false);
+  });
+
+  it('rethrows an error', async () => {
+    const boom = { code: 'P0001', message: 'Pausa la promoción para editarla.' };
+    mockPauseChain({ data: null, error: boom });
+    await expect(promotionService.pause('p1')).rejects.toBe(boom);
+  });
+});
