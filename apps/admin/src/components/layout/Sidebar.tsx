@@ -182,11 +182,19 @@ export function Sidebar() {
   useEffect(() => {
     if (panelRole === 'marketing') return;
     let cancelled = false;
-    promotionService.countPendingApproval().then((n) => {
-      if (!cancelled) setPendingPromotions(n);
-    });
+    let latest = 0;
+    const recount = () => {
+      const call = ++latest;
+      promotionService.countPendingApproval().then((n) => {
+        if (!cancelled && call === latest) setPendingPromotions(n);
+      });
+    };
+    recount();
+    // The promotions page announces an approval, a saved draft or a delete, so the dot clears right away.
+    window.addEventListener('tricigo:promotions-changed', recount);
     return () => {
       cancelled = true;
+      window.removeEventListener('tricigo:promotions-changed', recount);
     };
   }, [panelRole, pathname]);
 
