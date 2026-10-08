@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../client';
+import { AppError } from '../errors';
 
 export type PromotionType = 'percentage_discount' | 'fixed_discount' | 'bonus_credit';
 
@@ -33,6 +34,11 @@ export interface Promotion {
   /** 00641: the admin who turned it on, and when. */
   approved_by?: string | null;
   approved_at?: string | null;
+  /**
+   * 00641: counts changes to what the promotion offers; only the database writes it. An admin
+   * approves the revision they saw (`approve`), so an edit made meanwhile is not switched on.
+   */
+  revision?: number;
   created_by: string | null;
   created_at: string;
 }
@@ -42,7 +48,14 @@ export interface Promotion {
 // so no admin-created promo had an author on record).
 export type CreatePromotionInput = Omit<
   Promotion,
-  'id' | 'current_uses' | 'created_at' | 'created_by' | 'pending_approval' | 'approved_by' | 'approved_at'
+  | 'id'
+  | 'current_uses'
+  | 'created_at'
+  | 'created_by'
+  | 'pending_approval'
+  | 'approved_by'
+  | 'approved_at'
+  | 'revision'
 >;
 
 /**
@@ -58,6 +71,13 @@ function isMissingColumnError(err: unknown): boolean {
     /schema cache/i.test(msg) ||
     TOLERATED_COLUMNS.some((c) => new RegExp(`column .*${c}|${c}.* does not exist`, 'i').test(msg))
   );
+}
+
+/** `promotions.revision` (00641) is not there yet: PostgREST passes Postgres' 42703 through. */
+function isMissingRevisionError(err: unknown): boolean {
+  const e = (err ?? {}) as { code?: string; message?: string };
+  const msg = String(e.message ?? '');
+  return /revision/i.test(msg) && (e.code === '42703' || /does not exist|schema cache/i.test(msg));
 }
 
 function stripTolerated<T extends Record<string, unknown>>(payload: T): T {
@@ -148,6 +168,36 @@ export const promotionService = {
       .update({ is_active: isActive })
       .eq('id', id);
     if (error) throw error;
+  },
+
+  /**
+   * An admin turns on the promotion they reviewed (00641). It only matches the revision they saw
+   * and only while it is still off, so an edit made in the meantime (a new revision) or someone
+   * else's activation updates nothing, and this throws `PROMOTION_CHANGED` (409, not 401/403:
+   * `getErrorMessage` reads those as an expired session). Until 00641 adds the column it falls
+   * back to a plain activation, which is what the panel did before.
+   */
+  async approve(id: string, revision: number): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('promotions')
+      .update({ is_active: true })
+      .eq('id', id)
+      .eq('revision', revision)
+      .eq('is_active', false)
+      .select('id');
+    if (error && isMissingRevisionError(error)) {
+      await promotionService.setActive(id, true);
+      return;
+    }
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new AppError(
+        `promotion ${id} changed since it was loaded (revision ${revision})`,
+        'PROMOTION_CHANGED',
+        409,
+      );
+    }
   },
 
   async remove(id: string): Promise<void> {
