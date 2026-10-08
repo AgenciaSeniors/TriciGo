@@ -24,6 +24,10 @@ export default defineConfig({
       '../../supabase/functions/behavioral-emails/*.test.ts',
       '../../supabase/functions/send-bulk-email/*.test.ts',
       '../../supabase/functions/notify-document-rejection/*.test.ts',
+      // register-login-device: supabase-js replaced with vi.mock, the rate limiter too.
+      '../../supabase/functions/register-login-device/*.test.ts',
+      // process-netopia-webhook: supabase-js and jose (both esm.sh) replaced with vi.mock.
+      '../../supabase/functions/process-netopia-webhook/*.test.ts',
     ],
   },
 });
