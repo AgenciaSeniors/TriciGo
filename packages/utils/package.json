@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./addressSearch": "./src/addressSearch.ts",
+    "./adminPanelAccess": "./src/adminPanelAccess.ts",
     "./driverOutreach": "./src/driverOutreach.ts",
     "./analytics": "./src/analytics.ts",
     "./animateCoordinate": "./src/animateCoordinate.ts",
