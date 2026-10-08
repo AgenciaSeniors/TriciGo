@@ -680,6 +680,66 @@ describe('authService', () => {
         code: 'add_email_failed',
       });
     });
+
+    it('turns the 429 of the Edge Function into rate_limited', async () => {
+      // The EF's 429 body is a sentence, not a code: the UI needs a stable one.
+      const ctx = new Response(JSON.stringify({ error: 'Too many requests. Try again later.', retryAfterSec: 600 }), {
+        status: 429,
+      });
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: Object.assign(new Error('429'), { context: ctx }) });
+
+      await expect(authService.addBackupEmail('a@b.com')).rejects.toMatchObject({ code: 'rate_limited' });
+    });
+
+    it('keeps the code of a non-429 error body', async () => {
+      const ctx = new Response(JSON.stringify({ error: 'email_already_taken' }), { status: 409 });
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: Object.assign(new Error('409'), { context: ctx }) });
+
+      await expect(authService.addBackupEmail('a@b.com')).rejects.toMatchObject({ code: 'email_already_taken' });
+    });
+  });
+
+  // ==================== getMyEmailStatus ====================
+  describe('getMyEmailStatus', () => {
+    it('maps the RPC row', async () => {
+      mockRpc.mockResolvedValue({
+        data: [{ email: 'a@x.test', status: 'unconfirmed', link_sent_at: '2026-10-08T10:00:00+00:00' }],
+        error: null,
+      });
+
+      await expect(authService.getMyEmailStatus()).resolves.toEqual({
+        email: 'a@x.test',
+        status: 'unconfirmed',
+        linkSentAt: '2026-10-08T10:00:00+00:00',
+      });
+      expect(mockRpc).toHaveBeenCalledWith('get_my_email_status');
+    });
+
+    it('maps an account without an address', async () => {
+      mockRpc.mockResolvedValue({ data: [{ email: null, status: 'none', link_sent_at: null }], error: null });
+
+      await expect(authService.getMyEmailStatus()).resolves.toEqual({ email: null, status: 'none', linkSentAt: null });
+    });
+
+    it('returns null when the RPC fails (migration not applied yet)', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'not found' } });
+
+      await expect(authService.getMyEmailStatus()).resolves.toBeNull();
+    });
+
+    it('returns null when the call throws', async () => {
+      mockRpc.mockRejectedValue(new Error('network'));
+
+      await expect(authService.getMyEmailStatus()).resolves.toBeNull();
+    });
+
+    it('returns null without a row or with an unknown status', async () => {
+      mockRpc.mockResolvedValue({ data: [], error: null });
+      await expect(authService.getMyEmailStatus()).resolves.toBeNull();
+
+      mockRpc.mockResolvedValue({ data: [{ email: 'a@x.test', status: 'weird', link_sent_at: null }], error: null });
+      await expect(authService.getMyEmailStatus()).resolves.toBeNull();
+    });
   });
 
   // ==================== sendEmailLoginLink ====================
