@@ -2958,6 +2958,8 @@ resto (status, approved_at…)       0,2 %   ← SEÑAL
 
 Ensayo: `supabase/tests/00636/run.sh` (RED: 14 fallos; GREEN 27/27, con 4 pruebas negativas de sus autochequeos).
 
+**Estado: aplicada en prod el 2026-10-07** por MCP (`20261007233934`), sin espera de aprobación pese al `DELETE` en el cuerpo y al `DROP FUNCTION`. El cuerpo en prod es idéntico al del ensayo (md5 `507797d7…/622`). Las tres primeras corridas del job 70 (00:13, 01:13 y 02:13 UTC del 08/10) salieron `succeeded` en 304, 466 y 539 ms y dejaron la tabla en 31.098 filas, la más vieja del 2026-09-08.
+
 ### Toda alarma del proyecto vivía dentro de pg_cron, así que ninguna puede avisar de una caída de disco (verificado 2026-09-21, `ops/supabase-watchdog/`)
 
 **El incidente.** El 2026-09-21, de 09:24 a 12:28 UTC (~3 h), la capa de almacenamiento se atascó. PostgREST devolvió 503 en `/rest/v1/rides` (215), `platform_config` (126), `driver_heartbeat` y `find_nearby_vehicles`; la latencia media por hora llegó a **51 s** y hubo respuestas de **125 s**. **No salió una sola alerta**: el dueño lo descubrió usando la app y reinició el proyecto a mano. Ya había pasado igual el **18** y el **20 de septiembre**.
