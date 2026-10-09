@@ -1909,7 +1909,20 @@
     "warn_sms_failed": "Guardada, pero falló el envío de SMS: {{error}}",
     "col_sent": "Enviados",
     "empty_title": "Sin campañas",
-    "empty_body": "Crea la primera para llegar a un grupo específico de usuarios."
+    "empty_body": "Crea la primera para llegar a un grupo específico de usuarios.",
+    "field_schedule_havana": "Programar para (hora de Cuba)",
+    "schedule_required": "Elige la fecha y la hora",
+    "col_scheduled": "Programada para",
+    "cancel_btn": "Cancelar",
+    "cancel_title": "Cancelar campaña",
+    "cancel_confirm": "La campaña «{{name}}» no se va a enviar. ¿La cancelas?",
+    "cancel_submit": "Sí, cancelar campaña",
+    "cancel_dismiss": "No, volver",
+    "toast_cancelled": "Campaña cancelada",
+    "toast_cancel_late": "Ya no se puede cancelar: el envío ya empezó o terminó.",
+    "toast_scheduled_at": "Campaña programada para el {{when}} (hora de Cuba)",
+    "toast_already_sending": "La campaña ya se está enviando. Revisa el estado en la lista.",
+    "warn_send_failed": "Guardada, pero el envío no respondió: {{error}}. Revisa el estado en la lista."
   },
   "status_registry": {
     "ride": {
@@ -1989,7 +2002,9 @@
       "paused": "Pausada",
       "cancelled": "Cancelada",
       "completed": "Finalizada",
-      "archived": "Archivada"
+      "archived": "Archivada",
+      "sending": "Enviando",
+      "failed": "Falló"
     },
     "quest": {
       "draft": "Borrador",

@@ -1909,7 +1909,20 @@
     "warn_sms_failed": "Saved, but SMS sending failed: {{error}}",
     "col_sent": "Sent",
     "empty_title": "No campaigns",
-    "empty_body": "Create the first to reach a specific user group."
+    "empty_body": "Create the first to reach a specific user group.",
+    "field_schedule_havana": "Schedule for (Cuba time)",
+    "schedule_required": "Choose the date and time",
+    "col_scheduled": "Scheduled for",
+    "cancel_btn": "Cancel",
+    "cancel_title": "Cancel campaign",
+    "cancel_confirm": "The campaign \"{{name}}\" will not be sent. Cancel it?",
+    "cancel_submit": "Yes, cancel campaign",
+    "cancel_dismiss": "No, go back",
+    "toast_cancelled": "Campaign cancelled",
+    "toast_cancel_late": "It can no longer be cancelled: sending has started or finished.",
+    "toast_scheduled_at": "Campaign scheduled for {{when}} (Cuba time)",
+    "toast_already_sending": "The campaign is already being sent. Check its status in the list.",
+    "warn_send_failed": "Saved, but sending did not respond: {{error}}. Check its status in the list."
   },
   "status_registry": {
     "ride": {
@@ -1989,7 +2002,9 @@
       "paused": "Paused",
       "cancelled": "Cancelled",
       "completed": "Completed",
-      "archived": "Archived"
+      "archived": "Archived",
+      "sending": "Sending",
+      "failed": "Failed"
     },
     "quest": {
       "draft": "Draft",
