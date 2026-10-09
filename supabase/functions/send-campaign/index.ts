@@ -5,14 +5,18 @@
 //   - the panel, right after inserting a campaign with "Enviar ahora":
 //       { campaign_id }   (an admin, or marketing for a campaign its own account created)
 //   - the cron job send-due-campaigns (dispatch_due_campaigns), with the service key:
-//       { due: true }     claims up to 5 due campaigns, answers 202 at once and sends them in the
-//                         background, so pg_net's 30 s timeout never cuts the call.
+//       { due: true }     answers 202 at once and, in the background (EdgeRuntime.waitUntil),
+//                         claims one due campaign, sends it, and claims the next, until none is
+//                         due or DUE_TIME_BUDGET_MS is spent. pg_net's 30 s timeout never cuts the
+//                         call, and a worker that is stopped mid-run leaves at most the campaign
+//                         it was sending in 'sending'; the rest stay 'scheduled' for the next
+//                         minute's call instead of being swept to failed/interrupted.
 //
 // A campaign is claimed (scheduled -> sending) by claim_campaigns, one statement with
 // FOR UPDATE SKIP LOCKED, so the button and the cron never send it twice. The recipients come
 // from campaign_recipient_ids (SQL, at send time). Push and e-mail go through the existing
-// send-push and send-bulk-email with the service key; their own rules (notification preferences,
-// marketing consent, proven addresses) still apply.
+// send-push and send-bulk-email with the service key, RECIPIENT_CHUNK ids per call; their own
+// rules (notification preferences, marketing consent, proven addresses) still apply.
 // ============================================================
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
@@ -27,7 +31,15 @@ import {
 } from '../_shared/campaign-send.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-const DUE_BATCH = 5;
+/**
+ * How long a due run keeps claiming campaigns, measured from the start of the request. The
+ * worker's wall clock is 400 s; stopping new claims at 300 s leaves the campaign in progress
+ * room to finish. A campaign that alone takes longer (a very large e-mail send) can still be cut;
+ * that is the stuck-send sweep's case. Unclaimed campaigns stay 'scheduled' and the cron calls
+ * again within a minute. Claims are exclusive (FOR UPDATE SKIP LOCKED), so two runs at once are
+ * safe.
+ */
+const DUE_TIME_BUDGET_MS = 300_000;
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('Origin') ?? '';
@@ -176,7 +188,41 @@ async function sendCampaignSafely(client: Client, url: string, serviceKey: strin
   }
 }
 
+/**
+ * The due run: claim one campaign, send it, repeat, until nothing is due or the time budget is
+ * spent. Never throws: a claim that fails ends the run (the next cron call retries), and
+ * sendCampaignSafely already turns a failed send into a 'failed' row.
+ */
+async function sendDueCampaigns(client: Client, url: string, serviceKey: string, requestStart: number) {
+  let sent = 0;
+  for (;;) {
+    if (Date.now() - requestStart >= DUE_TIME_BUDGET_MS) {
+      console.info(`[send-campaign] due run: time budget spent after ${sent} campaign(s); the rest wait for the next call`);
+      return;
+    }
+    let claimed: Campaign[];
+    try {
+      const { data, error } = await client.rpc('claim_campaigns', { p_campaign_id: null, p_limit: 1 });
+      if (error) {
+        console.error('[send-campaign] due run: claim failed', error.message);
+        return;
+      }
+      claimed = (data ?? []) as Campaign[];
+    } catch (err) {
+      console.error('[send-campaign] due run: claim failed', err);
+      return;
+    }
+    if (claimed.length === 0) {
+      if (sent > 0) console.info(`[send-campaign] due run: ${sent} campaign(s), nothing else due`);
+      return;
+    }
+    await sendCampaignSafely(client, url, serviceKey, claimed[0]);
+    sent += 1;
+  }
+}
+
 Deno.serve(async (req) => {
+  const requestStart = Date.now();
   const cors = getCorsHeaders(req);
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const json = (status: number, body: unknown) =>
@@ -205,15 +251,12 @@ Deno.serve(async (req) => {
 
     if (body.due === true) {
       if (!isInternal) return json(403, { error: 'Forbidden: due runs need the service key' });
-      const { data, error } = await client.rpc('claim_campaigns', { p_campaign_id: null, p_limit: DUE_BATCH });
-      if (error) throw new Error(error.message);
-      const claimed = (data ?? []) as Campaign[];
-      const work = (async () => {
-        for (const c of claimed) await sendCampaignSafely(client, url, serviceKey, c);
-      })();
+      // Nothing is claimed before answering, so the answer only says the run was accepted; each
+      // campaign's result is written to its row and logged.
+      const work = sendDueCampaigns(client, url, serviceKey, requestStart);
       if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(work);
       else await work;
-      return json(202, { claimed: claimed.map((c) => c.id) });
+      return json(202, { accepted: true });
     }
 
     const campaignId = typeof body.campaign_id === 'string' ? body.campaign_id : null;

@@ -20,6 +20,8 @@ const db = vi.hoisted(() => ({
   recipientsError: null as null | { message: string },
   // campaign id -> message: campaign_recipient_ids rejects (an unexpected throw, not a returned error).
   recipientsThrow: {} as Record<string, string>,
+  // claim_campaigns returns this error instead of claiming.
+  claimError: null as null | { message: string },
   rpcCalls: [] as Array<{ fn: string; args: unknown }>,
   updates: [] as Array<{ id: string; row: Record<string, unknown> }>,
 }));
@@ -70,6 +72,7 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
       rpc: (fn: string, args: Record<string, unknown>) => {
         db.rpcCalls.push({ fn, args });
         if (fn === 'claim_campaigns') {
+          if (db.claimError) return Promise.resolve({ data: null, error: db.claimError });
           const want = args.p_campaign_id as string | null;
           const ids = db.claimable.filter((id) => !want || id === want).slice(0, args.p_limit as number);
           db.claimable = db.claimable.filter((id) => !ids.includes(id));
@@ -134,6 +137,7 @@ beforeEach(() => {
   db.recipients = ['u1', 'u2', 'u3'];
   db.recipientsError = null;
   db.recipientsThrow = {};
+  db.claimError = null;
   db.rpcCalls = [];
   db.updates = [];
   pushResponse = new Response(JSON.stringify({ sent: 3, failed: 0 }), { status: 200 });
@@ -334,29 +338,77 @@ describe('send-campaign: large segments are sent in batches', () => {
 });
 
 describe('send-campaign: due runs (cron)', () => {
-  it('claims every due campaign, answers 202 and sends them', async () => {
+  const claims = () => db.rpcCalls.filter((c) => c.fn === 'claim_campaigns');
+
+  it('claims one campaign at a time and sends it, until nothing is due; answers 202', async () => {
     const res = await call({ due: true }, { internal: true });
     expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ claimed: [CAMP, CAMP2] });
-    expect(db.rpcCalls[0]).toEqual({ fn: 'claim_campaigns', args: { p_campaign_id: null, p_limit: 5 } });
+    expect(await res.json()).toEqual({ accepted: true });
+    // Two campaigns, then the empty claim that ends the run.
+    expect(claims()).toEqual([
+      { fn: 'claim_campaigns', args: { p_campaign_id: null, p_limit: 1 } },
+      { fn: 'claim_campaigns', args: { p_campaign_id: null, p_limit: 1 } },
+      { fn: 'claim_campaigns', args: { p_campaign_id: null, p_limit: 1 } },
+    ]);
+    // Each campaign is sent before the next one is claimed.
+    expect(db.rpcCalls.map((c) => c.fn)).toEqual([
+      'claim_campaigns', 'campaign_recipient_ids', 'claim_campaigns', 'campaign_recipient_ids', 'claim_campaigns',
+    ]);
     expect(db.campaigns[CAMP].status).toBe('sent');
     expect(db.campaigns[CAMP2].status).toBe('sent');
   });
 
-  it('an unexpected throw on one campaign fails only that one; the rest of the batch is sent', async () => {
+  it('stops claiming once the time budget (300 s from the request start) is spent', async () => {
+    const CAMP3 = 'ca000000-0000-4000-8000-000000000003';
+    db.campaigns[CAMP3] = campaign(CAMP3, 'push', MKT1);
+    db.claimable = [CAMP, CAMP2, CAMP3];
+    let now = 1_700_000_000_000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      let pushes = 0;
+      pushResponse = () => {
+        pushes += 1;
+        // The first campaign leaves 1 s of budget, so the second is still claimed; it uses that up.
+        now += pushes === 1 ? 299_000 : 2_000;
+        return new Response(JSON.stringify({ sent: 3 }), { status: 200 });
+      };
+      const res = await call({ due: true }, { internal: true });
+      expect(res.status).toBe(202);
+      expect(claims()).toHaveLength(2);
+      expect(db.campaigns[CAMP].status).toBe('sent');
+      expect(db.campaigns[CAMP2].status).toBe('sent');
+      // Never claimed: still scheduled, for the next minute's cron call.
+      expect(db.campaigns[CAMP3].status).toBe('scheduled');
+      expect(db.claimable).toEqual([CAMP3]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('an unexpected throw on one campaign fails only that one; the next one is still claimed and sent', async () => {
     db.recipientsThrow = { [CAMP]: 'socket hang up' };
     const res = await call({ due: true }, { internal: true });
     expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ claimed: [CAMP, CAMP2] });
     expect(db.campaigns[CAMP]).toMatchObject({ status: 'failed', last_error: 'unexpected: socket hang up' });
     expect(db.campaigns[CAMP2].status).toBe('sent');
+    expect(claims()).toHaveLength(3);
   });
 
-  it('nothing due: 202 with nothing claimed', async () => {
+  it('nothing due: 202, one empty claim, nothing sent', async () => {
     db.claimable = [];
     const res = await call({ due: true }, { internal: true });
     expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ claimed: [] });
+    expect(await res.json()).toEqual({ accepted: true });
+    expect(claims()).toHaveLength(1);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('the claim fails: still 202, the run stops, nothing sent', async () => {
+    db.claimError = { message: 'connection reset' };
+    const res = await call({ due: true }, { internal: true });
+    expect(res.status).toBe(202);
+    expect(claims()).toHaveLength(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.campaigns[CAMP].status).toBe('scheduled');
   });
 });
