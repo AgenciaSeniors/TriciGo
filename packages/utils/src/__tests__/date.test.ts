@@ -7,6 +7,8 @@ import {
   getRelativeTime,
   havanaMidnightUtc,
   havanaDayRangeUtc,
+  havanaLocalToUtcIso,
+  utcIsoToHavanaLocal,
 } from '../date';
 
 // ============================================================
@@ -253,5 +255,43 @@ describe('havanaDayRangeUtc', () => {
   it('throws on malformed input', () => {
     expect(() => havanaDayRangeUtc('15/01/2026')).toThrow();
     expect(() => havanaDayRangeUtc('')).toThrow();
+  });
+});
+
+describe('havanaLocalToUtcIso', () => {
+  it('reads a datetime-local value as Havana time in winter (UTC-5)', () => {
+    expect(havanaLocalToUtcIso('2026-01-15T10:00')).toBe('2026-01-15T15:00:00.000Z');
+  });
+
+  it('reads it as Havana time in summer (UTC-4)', () => {
+    expect(havanaLocalToUtcIso('2026-07-15T10:00')).toBe('2026-07-15T14:00:00.000Z');
+  });
+
+  it('crosses into the next UTC day', () => {
+    expect(havanaLocalToUtcIso('2026-01-15T22:30')).toBe('2026-01-16T03:30:00.000Z');
+  });
+
+  it('uses the offset in force on each side of the November change', () => {
+    expect(havanaLocalToUtcIso('2026-10-31T10:00')).toBe('2026-10-31T14:00:00.000Z');
+    expect(havanaLocalToUtcIso('2026-11-02T10:00')).toBe('2026-11-02T15:00:00.000Z');
+  });
+
+  it('rejects anything that is not YYYY-MM-DDTHH:mm', () => {
+    expect(() => havanaLocalToUtcIso('2026-01-15')).toThrow('YYYY-MM-DDTHH:mm');
+    expect(() => havanaLocalToUtcIso('')).toThrow('YYYY-MM-DDTHH:mm');
+  });
+});
+
+describe('utcIsoToHavanaLocal', () => {
+  it('gives the Havana wall clock as a datetime-local value', () => {
+    expect(utcIsoToHavanaLocal('2026-01-15T15:00:00.000Z')).toBe('2026-01-15T10:00');
+    expect(utcIsoToHavanaLocal('2026-07-15T14:00:00.000Z')).toBe('2026-07-15T10:00');
+    expect(utcIsoToHavanaLocal('2026-01-16T03:30:00.000Z')).toBe('2026-01-15T22:30');
+  });
+
+  it('round-trips with havanaLocalToUtcIso', () => {
+    for (const v of ['2026-03-20T08:15', '2026-12-24T23:59', '2026-06-01T00:00']) {
+      expect(utcIsoToHavanaLocal(havanaLocalToUtcIso(v))).toBe(v);
+    }
   });
 });

@@ -291,3 +291,55 @@ export function havanaDayRangeUtc(ymd: string): { start: Date; end: Date } {
   const end = havanaMidnightOf(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate());
   return { start, end };
 }
+
+/**
+ * Havana wall-clock parts of an instant, 1-based month. (Not `havanaParts` above: that one feeds
+ * formatTimestamp with a 0-based month.)
+ */
+function havanaWallClock(instant: Date): { y: number; mo: number; d: number; h: number; mi: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: HAVANA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  return { y: get('year'), mo: get('month'), d: get('day'), h: get('hour'), mi: get('minute') };
+}
+
+/**
+ * Minutes that UTC is ahead of Havana at an instant (300 in winter, 240 in summer).
+ * Seconds are dropped: datetime-local values have minute precision.
+ */
+function havanaOffsetMinutes(instant: Date): number {
+  const p = havanaWallClock(instant);
+  const wallAsUtc = Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi);
+  const instantToMinute = Math.floor(instant.getTime() / 60000) * 60000;
+  return Math.round((instantToMinute - wallAsUtc) / 60000);
+}
+
+/**
+ * A `datetime-local` value ('YYYY-MM-DDTHH:mm') read as Havana wall-clock time, as a UTC ISO
+ * string. Sent raw, Postgres reads that value as UTC: 4–5 hours off Cuba's clock.
+ */
+export function havanaLocalToUtcIso(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!m) throw new Error(`havanaLocalToUtcIso: expected YYYY-MM-DDTHH:mm, got "${value}"`);
+  const wallAsUtc = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+  // Correct by the offset at the guessed instant, then once more in case the guess fell on the
+  // other side of a DST change.
+  let utc = wallAsUtc + havanaOffsetMinutes(new Date(wallAsUtc)) * 60000;
+  const second = havanaOffsetMinutes(new Date(utc));
+  utc = wallAsUtc + second * 60000;
+  return new Date(utc).toISOString();
+}
+
+/** The Havana wall clock of a UTC instant, as a `datetime-local` value ('YYYY-MM-DDTHH:mm'). */
+export function utcIsoToHavanaLocal(iso: string): string {
+  const p = havanaWallClock(new Date(iso));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${p.y}-${pad(p.mo)}-${pad(p.d)}T${pad(p.h)}:${pad(p.mi)}`;
+}
