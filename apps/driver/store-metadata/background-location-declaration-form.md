@@ -99,7 +99,7 @@ The disclosure satisfies all four Google requirements:
 The Play Console reviewer needs to verify the disclosure flow themselves. Provide the same demo credentials documented in `apps/driver/store-metadata/app-store-review-notes.md`:
 
 - Phone: `+5355550101`
-- OTP code: `000000` (demo number — no real SMS sent)
+- OTP code: the value of the `DEMO_OTP_CODE` secret, typed in the console (demo number — no real SMS sent; never write it in this repo)
 
 The reviewer account is pre-onboarded as an approved driver, currently offline, with one example completed ride in earnings history. The first time the reviewer accepts a ride from the test dispatch tool, the prominent disclosure fires as documented in §4.
 

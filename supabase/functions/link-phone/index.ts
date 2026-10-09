@@ -35,8 +35,9 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
-import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { rateLimit, rateLimitResponse, refundRateLimit } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { OTP_DAY_MS, OTP_FAIL_DAILY_MAX, otpFailDayKey } from '../_shared/otp-budget.ts';
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -172,6 +173,16 @@ Deno.serve(async (req) => {
       return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
     }
 
+    // The day budget of failed checks per number, shared with verify-otp (see
+    // _shared/otp-budget.ts): a right code here is also a login there, through
+    // verify-otp's 3-minute re-mint. Given back below when the code is right.
+    const failKey = otpFailDayKey(normalizedPhone);
+    const rlFail = await rateLimit(failKey, OTP_FAIL_DAILY_MAX, OTP_DAY_MS);
+    if (!rlFail.allowed) {
+      await logAttempt(admin, user.id, 'rate_limited', { prefix: phonePrefix(normalizedPhone), window: 'day' });
+      return rateLimitResponse(rlFail.retryAfterMs, getCorsHeaders(req));
+    }
+
     // ─── 3. Validate the code against otp_codes — SAME source as verify-otp ───
     // send-sms-otp (D7) wrote the code there; verify_cuba_otp is the atomic
     // phone-agnostic check (lock row + verify + increment in one txn, BUG-184
@@ -182,6 +193,7 @@ Deno.serve(async (req) => {
     });
     if (rpcError) {
       console.error('[link-phone] verify_cuba_otp RPC failed:', rpcError);
+      await refundRateLimit(failKey, OTP_DAY_MS); // nothing was checked
       return jsonResponse(req, { error: 'Verification service unavailable' }, 503);
     }
     const result = rpcResult as { ok: boolean; error?: string; attempts_remaining?: number };
@@ -201,6 +213,7 @@ Deno.serve(async (req) => {
     }
     // Do not log the phone number (PII) — same policy as verify-otp.
     console.log('[link-phone] code verified for user', user.id);
+    await refundRateLimit(failKey, OTP_DAY_MS);
 
     // ─── 4. Anti-collision: phone must not belong to another ACTIVE user ───
     // Checked AFTER code validation so an authenticated attacker can't use

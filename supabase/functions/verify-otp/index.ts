@@ -1,7 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
-import { rateLimit, rateLimitResponse } from '../_shared/rate-limiter.ts';
+import { rateLimit, rateLimitResponse, refundRateLimit } from '../_shared/rate-limiter.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
 import { isAccountBanned, phoneConflictsWithAccount } from '../_shared/login-identity.ts';
+import { OTP_DAY_MS, OTP_FAIL_DAILY_MAX, otpFailDayKey } from '../_shared/otp-budget.ts';
 
 // ── CORS: restrict to allowed origins ──
 // BUG-090: No hardcoded fallback — if ALLOWED_ORIGINS is empty, reject all cross-origin requests
@@ -76,6 +77,28 @@ Deno.serve(async (req) => {
     const rlPhone = await rateLimit(`verify-otp:phone:${normalizedPhone}`, 10, 10 * 60 * 1000);
     if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
 
+    // And a day budget of FAILED checks per number, shared with link-phone (see
+    // _shared/otp-budget.ts). The token is taken here and given back below when the
+    // code turns out right, so only wrong, expired or exhausted codes count. Keyed
+    // on normalizedPhone because that exact string is what the code lookup matches.
+    const failKey = otpFailDayKey(normalizedPhone);
+    const rlFail = await rateLimit(failKey, OTP_FAIL_DAILY_MAX, OTP_DAY_MS);
+    if (!rlFail.allowed) {
+      const retryAfterSec = Math.ceil(rlFail.retryAfterMs / 1000);
+      return new Response(
+        JSON.stringify({ error: 'Too many attempts. Try again later.', reason: 'too_many_attempts', retryAfterSec }),
+        {
+          status: 429,
+          headers: {
+            ...getCorsHeaders(req),
+            'Content-Type': 'application/json',
+            'Retry-After': String(retryAfterSec),
+            'Access-Control-Expose-Headers': 'Retry-After',
+          },
+        },
+      );
+    }
+
     // Supabase client (needed for both Cuba and user creation)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -94,6 +117,7 @@ Deno.serve(async (req) => {
 
     if (rpcError) {
       console.error('verify_cuba_otp RPC failed:', rpcError);
+      await refundRateLimit(failKey, OTP_DAY_MS); // nothing was checked
       return new Response(
         JSON.stringify({ error: 'Verification service unavailable' }),
         { status: 503, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
@@ -141,6 +165,8 @@ Deno.serve(async (req) => {
       }
       console.log('OTP recently verified — idempotent session re-mint');
     }
+    // The code was right (now, or within the last 3 minutes): give the token back.
+    await refundRateLimit(failKey, OTP_DAY_MS);
 
     // Do not log the phone number (PII). The user id is logged later if needed.
     console.log('OTP verified');

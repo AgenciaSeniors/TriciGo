@@ -31,6 +31,11 @@ export default defineConfig({
       '../../supabase/functions/register-login-device/*.test.ts',
       // process-netopia-webhook: supabase-js and jose (both esm.sh) replaced with vi.mock.
       '../../supabase/functions/process-netopia-webhook/*.test.ts',
+      // send-sms-otp, verify-otp and link-phone: daily OTP budgets per number.
+      // supabase-js, the rate limiter and the D7 sender replaced with vi.mock.
+      '../../supabase/functions/send-sms-otp/*.test.ts',
+      '../../supabase/functions/verify-otp/*.test.ts',
+      '../../supabase/functions/link-phone/*.test.ts',
     ],
   },
 });

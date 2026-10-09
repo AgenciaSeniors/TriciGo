@@ -9,7 +9,7 @@
 ```
 Login type: SMS OTP (phone number)
 Phone: +5355550101
-OTP code: 000000
+OTP code: <value of the DEMO_OTP_CODE secret — paste it in the store console, never in this repo>
 (Demo number — no real SMS is sent. Enter the fixed code above directly.)
 
 Alternative:

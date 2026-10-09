@@ -29,7 +29,7 @@ Todos requieren **rebuild de APK** para llegar a los usuarios.
 
 ## Verificación
 - `pnpm check-types` verde (4 apps) en cada PR; los 3 JSON de locale parsean; keys de copy real presentes en es/en/pt.
-- **Visual:** los 3 fixes son mobile (cliente) → se ven en device tras el **rebuild de APK**. El avatar (#625) usa el mismo `AvatarCropModal` que el editar-perfil (ya en prod) → idéntico visualmente. La pasada de Metro+screenshots se hace junto con el rebuild (modo demo `DEMO_PHONE→000000`).
+- **Visual:** los 3 fixes son mobile (cliente) → se ven en device tras el **rebuild de APK**. El avatar (#625) usa el mismo `AvatarCropModal` que el editar-perfil (ya en prod) → idéntico visualmente. La pasada de Metro+screenshots se hace junto con el rebuild (modo demo `DEMO_PHONE` + `DEMO_OTP_CODE`).
 
 ## PRs
 - **#624** — `fix(client)`: persistir idioma del pasajero entre reinicios.
