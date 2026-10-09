@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00647 (local Postgres 16, no Supabase stack needed).
-#   supabase/tests/00647/run.sh none
+# Rehearsal runner for migration 00648 (local Postgres 16, no Supabase stack needed).
+#   supabase/tests/00648/run.sh none
 #       -> scaffold + tests on the live prod body of retry_dispatch_expired_rides (RED:
 #          one ride that makes dispatch_ride fail rolls back the whole run, so no
 #          ride is re-dispatched)
-#   supabase/tests/00647/run.sh supabase/migrations/00647_retry_dispatch_per_ride.sql
+#   supabase/tests/00648/run.sh supabase/migrations/00648_retry_dispatch_per_ride.sql
 #       -> scaffold + migration x2 (idempotency) + tests + negative proofs of the
 #          migration's own guards (GREEN)
 # The migration is applied as postgres, the scaffold's non-superuser owner (as in prod).
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
-# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00647/run.sh ...
+# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00648/run.sh ...
 set -u
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -17,7 +17,7 @@ MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 PY="${PYTHON:-python3}"
-DB=pr647
+DB=pr648
 P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = ''"
 PASS=0; FAIL=0

@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 00647: one bad ride no longer stops the re-dispatch of the others
+-- Migration 00648: one bad ride no longer stops the re-dispatch of the others
 --
 -- retry_dispatch_expired_rides (cron retry-dispatch-expired-rides, every minute)
 -- called dispatch_ride for every eligible searching ride in one transaction,
@@ -28,7 +28,7 @@
 --     still succeeds and returns 0. A failed run rolls back everything it did:
 --     the rpc_attempt_log rows (the error text is then the record) and the
 --     reactivation push of notify_offline_drivers_for_searching_rides, which
---     goes out on the next run that succeeds. Before 00647 the run rolled back
+--     goes out on the next run that succeeds. Before this migration the run rolled back
 --     in those minutes too, and in every minute with a bad ride.
 --   * A statement timeout (query_canceled) is not caught by WHEN OTHERS, so it
 --     still fails the whole run, as before.
@@ -36,6 +36,11 @@
 -- To see the skipped rides:
 --   SELECT target_id, metadata, created_at FROM rpc_attempt_log
 --   WHERE rpc_name = 'retry_dispatch_expired_rides' ORDER BY created_at DESC LIMIT 20;
+--
+-- Numbering: this was applied to prod as 00647_retry_dispatch_per_ride on 2026-10-08,
+-- two minutes after #1127 applied its own 00647, so the file became 00648. The
+-- comments inside the patched body still say 00647: that is the body prod runs,
+-- and the md5 checks below are of that body.
 --
 -- No new table: no GRANT rules apply (see CLAUDE.md, "Tablas nuevas en public").
 -- The patch texts are ASCII and written with E'' escapes, so pasting this file
@@ -63,7 +68,7 @@ DECLARE
 BEGIN
   v_oid := to_regprocedure(c_fn);
   IF v_oid IS NULL THEN
-    RAISE EXCEPTION '00647: % is missing', c_fn;
+    RAISE EXCEPTION '00648: % is missing', c_fn;
   END IF;
 
   SELECT md5(prosrc), prosrc INTO v_md5, v_src FROM pg_proc WHERE oid = v_oid;
@@ -71,14 +76,14 @@ BEGIN
     RETURN;   -- already patched (second run)
   END IF;
   IF v_md5 <> c_md5_live THEN
-    RAISE EXCEPTION '00647: % has a body this migration does not know (md5 %), refusing to patch it', c_fn, v_md5;
+    RAISE EXCEPTION '00648: % has a body this migration does not know (md5 %), refusing to patch it', c_fn, v_md5;
   END IF;
 
   v_def := pg_get_functiondef(v_oid);
   FOR i IN 1 .. array_length(c_old, 1) LOOP
     IF (length(v_src) - length(replace(v_src, c_old[i], ''))) / length(c_old[i]) <> 1
        OR (length(v_def) - length(replace(v_def, c_old[i], ''))) / length(c_old[i]) <> 1 THEN
-      RAISE EXCEPTION '00647: patch text % does not appear exactly once in %', i, c_fn;
+      RAISE EXCEPTION '00648: patch text % does not appear exactly once in %', i, c_fn;
     END IF;
     v_src := replace(v_src, c_old[i], c_new[i]);
     v_def := replace(v_def, c_old[i], c_new[i]);
@@ -88,7 +93,7 @@ BEGIN
 
   SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = v_oid;
   IF v_md5 <> c_md5_new THEN
-    RAISE EXCEPTION '00647: % was patched to md5 %, expected %', c_fn, v_md5, c_md5_new;
+    RAISE EXCEPTION '00648: % was patched to md5 %, expected %', c_fn, v_md5, c_md5_new;
   END IF;
 END
 $patch$;
@@ -101,18 +106,18 @@ DECLARE
 BEGIN
   SELECT prosrc INTO v_src FROM pg_proc WHERE oid = v_oid;
   IF md5(v_src) <> '1782a21256deceb7288892daae968729' THEN
-    RAISE EXCEPTION '00647: retry_dispatch_expired_rides has md5 %', md5(v_src);
+    RAISE EXCEPTION '00648: retry_dispatch_expired_rides has md5 %', md5(v_src);
   END IF;
   -- The per-ride guard and the reactivation-push guard, nothing else.
   IF (SELECT count(*) FROM regexp_matches(v_src, 'exception\s+when', 'gi')) <> 2 THEN
-    RAISE EXCEPTION '00647: retry_dispatch_expired_rides must have exactly two EXCEPTION handlers';
+    RAISE EXCEPTION '00648: retry_dispatch_expired_rides must have exactly two EXCEPTION handlers';
   END IF;
   IF has_function_privilege('anon', v_oid, 'EXECUTE') OR has_function_privilege('authenticated', v_oid, 'EXECUTE') THEN
-    RAISE EXCEPTION '00647: retry_dispatch_expired_rides is executable by a client role';
+    RAISE EXCEPTION '00648: retry_dispatch_expired_rides is executable by a client role';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'retry-dispatch-expired-rides'
                  AND command ILIKE '%retry_dispatch_expired_rides()%' AND active) THEN
-    RAISE EXCEPTION '00647: cron job retry-dispatch-expired-rides is missing or inactive';
+    RAISE EXCEPTION '00648: cron job retry-dispatch-expired-rides is missing or inactive';
   END IF;
 END
 $check$;
