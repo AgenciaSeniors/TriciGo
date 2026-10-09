@@ -80,8 +80,9 @@ val "P1 clients cannot run the server-only functions; authenticated can cancel" 
           has_function_privilege('anon', 'public.cancel_campaign(uuid)', 'EXECUTE') || ',' ||
           has_function_privilege('authenticated', 'public.cancel_campaign(uuid)', 'EXECUTE') || ',' ||
           has_function_privilege('service_role', 'public.claim_campaigns(uuid, integer)', 'EXECUTE') || ',' ||
-          has_function_privilege('service_role', 'public.cancel_campaign(uuid)', 'EXECUTE')" \
-  "false,false,false,false,true,true,false"
+          has_function_privilege('service_role', 'public.cancel_campaign(uuid)', 'EXECUTE') || ',' ||
+          has_function_privilege('authenticated', 'public.check_overdue_campaigns()', 'EXECUTE')" \
+  "false,false,false,false,true,true,false,false"
 val "P2 clients cannot UPDATE, TRUNCATE or add triggers to campaigns, anon cannot INSERT; service_role keeps UPDATE" \
   "SELECT has_table_privilege('authenticated', 'public.campaigns', 'UPDATE') || ',' ||
           has_table_privilege('authenticated', 'public.campaigns', 'TRUNCATE') || ',' ||
@@ -114,6 +115,15 @@ val "I3 legacy: an insert that says sent is kept as sent (old panel already deli
   "BEGIN; $(as $A) $NEW_ROW VALUES ('i3', 'all', 't', 'b', 'sent', 5, NULL, '$M2');
    SELECT status || ',' || sent_count || ',' || (created_by = '$A') FROM public.campaigns WHERE name = 'i3'; ROLLBACK;" \
   "sent,5,true"
+val "I3b the legacy sent path keeps sent_count and sent_at but resets what only the server fills" \
+  "BEGIN; $(as $M1) INSERT INTO public.campaigns (name, segment_type, message_title, message_body, status, sent_count, sent_at,
+     push_sent, email_sent, recipient_count, last_error, canceled_at, canceled_by, started_at)
+   VALUES ('i3b', 'all', 't', 'b', 'sent', 5, now(), 7, 8, 9, 'forged', now(), '$M2', now());
+   SELECT status || ',' || sent_count || ',' || (sent_at IS NOT NULL) || ',' || push_sent || ',' || email_sent || ',' ||
+          recipient_count || ',' || coalesce(last_error, 'NULL') || ',' || coalesce(canceled_at::text, 'NULL') || ',' ||
+          coalesce(canceled_by::text, 'NULL') || ',' || coalesce(started_at::text, 'NULL')
+   FROM public.campaigns WHERE name = 'i3b'; ROLLBACK;" \
+  "sent,5,true,0,0,0,NULL,NULL,NULL,NULL"
 val "I4 an admin insert that says sending becomes scheduled, a NULL scheduled_at becomes now()" \
   "BEGIN; $(as $A) $NEW_ROW VALUES ('i4', 'all', 't', 'b', 'sending', 0, NULL, NULL);
    SELECT status || ',' || coalesce((scheduled_at = now())::text, 'NULL') FROM public.campaigns WHERE name = 'i4'; ROLLBACK;" \
@@ -217,7 +227,7 @@ val "X7 cancelling a missing campaign returns not_found" \
 $P -c "SET ROLE postgres; $(mk $K1 x8 scheduled "now() - interval '1 minute'" NULL "'$M1'")" >/dev/null
 ( $P -c "BEGIN; $SVC SELECT count(*) FROM public.claim_campaigns('$K1', 1); SELECT pg_sleep(3); COMMIT;" >/dev/null 2>&1 ) &
 sleep 1
-val "X8 a cancel during a claim waits for it and returns sending; the campaign keeps sending" \
+val "X8 a cancel during a claim does not overwrite it: it returns sending and the campaign keeps sending" \
   "BEGIN; $(as $A) SELECT public.cancel_campaign('$K1'); COMMIT; SELECT status FROM public.campaigns WHERE id = '$K1'" \
   "sending;sending"
 wait
@@ -283,6 +293,22 @@ hasv "D8 a due campaign without the vault key fails the run (the watchdog sees i
 val "D9 without the vault key and nothing due, the run is quiet" \
   "BEGIN; $NO_KEY $SVC SELECT public.dispatch_due_campaigns(); RESET ROLE;
    SELECT count(*) FROM public.cron_http_post_calls; ROLLBACK;" "0;0"
+hasv "D10 a campaign due for more than 10 minutes makes the overdue job fail (the watchdog sees it)" \
+  "BEGIN; SET LOCAL ROLE postgres; $(mk $K1 d10 scheduled "now() - interval '11 minutes'" NULL "'$M1'") RESET ROLE;
+   $SVC SELECT public.check_overdue_campaigns(); ROLLBACK;" \
+  "ERROR: +P0001: check_overdue_campaigns: 1 campaign\\(s\\) due for more than 10 minutes and not sent DETAIL: +campaign_overdue"
+val "D11 a campaign due for 5 minutes, or a sending, sent or cancelled one, does not make it fail" \
+  "BEGIN; SET LOCAL ROLE postgres;
+   $(mk $K1 d11a scheduled "now() - interval '5 minutes'" NULL "'$M1'")
+   $(mk $K2 d11b sending "now() - interval '30 minutes'" "now() - interval '1 minute'" "'$M1'")
+   $(mk $K3 d11c cancelled "now() - interval '30 minutes'" NULL "'$M1'")
+   $(mk $K4 d11d sent "now() - interval '30 minutes'" "now() - interval '29 minutes'" "'$M1'") RESET ROLE;
+   $SVC SELECT public.check_overdue_campaigns(); ROLLBACK;" "0"
+val "D12 the overdue job runs every 5 minutes and swallows no error" \
+  "SELECT string_agg(j.jobname || '|' || j.schedule || '|' || j.command, ',') || ';' ||
+          (SELECT (prosrc !~* 'exception\\s+when')::text FROM pg_proc WHERE proname = 'check_overdue_campaigns')
+   FROM cron.job j WHERE j.jobname = 'check-overdue-campaigns'" \
+  "check-overdue-campaigns|*/5 * * * *|SELECT public.check_overdue_campaigns();;true"
 
 echo "== re-applying the migration =="
 if [ "$MIG" = "none" ]; then
@@ -295,7 +321,7 @@ else
     "SELECT active FROM cron.job WHERE jobname = 'send-due-campaigns'" "t"
   BODIES="SELECT string_agg(proname || ':' || md5(prosrc), ',' ORDER BY proname) FROM pg_proc
           WHERE proname IN ('tg_campaigns_client_insert', 'campaign_recipient_ids', 'claim_campaigns',
-                            'cancel_campaign', 'dispatch_due_campaigns')"
+                            'cancel_campaign', 'dispatch_due_campaigns', 'check_overdue_campaigns')"
   LF_BODIES=$($P -c "$BODIES")
   CRLF=$(mktemp); sed 's/$/\r/' "$MIG" > "$CRLF"
   if ! grep -q $'\r' "$CRLF"; then ko "A2 a copy pasted from Windows (CRLF) leaves the same function bodies" "the copy has no CR"
@@ -303,7 +329,7 @@ else
   else val "A2 a copy pasted from Windows (CRLF) leaves the same function bodies" "$BODIES" "$LF_BODIES"; fi
   val "A3 after the CRLF copy no body carries a carriage return" \
     "SELECT count(*) FROM pg_proc WHERE proname IN ('tg_campaigns_client_insert', 'campaign_recipient_ids',
-       'claim_campaigns', 'cancel_campaign', 'dispatch_due_campaigns') AND position(chr(13) IN prosrc) > 0" "0"
+       'claim_campaigns', 'cancel_campaign', 'dispatch_due_campaigns', 'check_overdue_campaigns') AND position(chr(13) IN prosrc) > 0" "0"
   rm -f "$CRLF"
 
   echo "== self-checks abort a broken migration (each on a fresh database) =="
@@ -342,6 +368,9 @@ else
   neg "N7 with cancel_campaign left to anon, the migration aborts" \
     's/^REVOKE ALL ON FUNCTION public.cancel_campaign(uuid) FROM PUBLIC, anon, service_role;$/REVOKE ALL ON FUNCTION public.cancel_campaign(uuid) FROM service_role;/' \
     "a client role can execute a server-only campaign function"
+  neg "N8 with the overdue job every 10 minutes, the migration aborts" \
+    "s#'check-overdue-campaigns', '\\*/5 \\* \\* \\* \\*'#'check-overdue-campaigns', '*/10 * * * *'#" \
+    "cron job check-overdue-campaigns is missing or inactive"
   $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $NEGDB" >/dev/null 2>&1
 fi
 

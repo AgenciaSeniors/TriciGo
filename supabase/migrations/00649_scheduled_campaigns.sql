@@ -82,8 +82,16 @@ BEGIN
   NEW.created_by := auth.uid();
   -- Legacy: the panel before 00649 sent from the browser and then stored the campaign as 'sent'.
   -- A tab opened before the deploy still does. Turning that row into 'scheduled' would send it
-  -- a second time, so it is kept as it comes.
+  -- a second time, so it stays 'sent' with what the old panel writes (sent_count, sent_at); the
+  -- columns that only the server fills are reset, so nobody can store a made-up send history.
   IF NEW.status = 'sent' THEN
+    NEW.started_at := NULL;
+    NEW.recipient_count := 0;
+    NEW.push_sent := 0;
+    NEW.email_sent := 0;
+    NEW.last_error := NULL;
+    NEW.canceled_at := NULL;
+    NEW.canceled_by := NULL;
     RETURN NEW;
   END IF;
   NEW.status := 'scheduled';
@@ -298,6 +306,32 @@ $$;
 REVOKE ALL ON FUNCTION public.dispatch_due_campaigns() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.dispatch_due_campaigns() TO service_role;
 
+-- Overdue watchdog. send-campaign answers the cron with 202 before it claims anything, so a run
+-- that cannot claim (claim_campaigns failing, the worker dying first) leaves the campaign
+-- 'scheduled' forever while both cron watchdogs see success. This job fails while any campaign
+-- has been due for more than 10 minutes, and check_cron_sql_failures (00596) reports it. It is a
+-- job of its own: a RAISE inside dispatch_due_campaigns would also roll back its HTTP call.
+CREATE OR REPLACE FUNCTION public.check_overdue_campaigns()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_overdue integer;
+BEGIN
+  SELECT count(*) INTO v_overdue FROM public.campaigns
+  WHERE status = 'scheduled' AND scheduled_at < now() - interval '10 minutes';
+  IF v_overdue > 0 THEN
+    RAISE EXCEPTION 'check_overdue_campaigns: % campaign(s) due for more than 10 minutes and not sent', v_overdue
+      USING DETAIL = 'campaign_overdue';
+  END IF;
+  RETURN 0;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.check_overdue_campaigns() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_overdue_campaigns() TO service_role;
+
 -- cron.schedule updates an existing job's schedule and command but keeps its active flag. This
 -- migration exists so the job runs: a job that someone paused is switched back on.
 DO $cron$
@@ -305,6 +339,10 @@ DECLARE
   v_job bigint;
 BEGIN
   v_job := cron.schedule('send-due-campaigns', '* * * * *', 'SELECT public.dispatch_due_campaigns();');
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobid = v_job AND NOT active) THEN
+    PERFORM cron.alter_job(v_job, active := true);
+  END IF;
+  v_job := cron.schedule('check-overdue-campaigns', '*/5 * * * *', 'SELECT public.check_overdue_campaigns();');
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobid = v_job AND NOT active) THEN
     PERFORM cron.alter_job(v_job, active := true);
   END IF;
@@ -320,7 +358,7 @@ BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'public.tg_campaigns_client_insert()', 'public.campaign_recipient_ids(uuid)',
     'public.claim_campaigns(uuid, integer)', 'public.cancel_campaign(uuid)',
-    'public.dispatch_due_campaigns()']::regprocedure[]
+    'public.dispatch_due_campaigns()', 'public.check_overdue_campaigns()']::regprocedure[]
   LOOP
     v_def := pg_get_functiondef(v_fn);
     IF position(chr(13) IN v_def) > 0 THEN
@@ -355,6 +393,8 @@ BEGIN
      OR has_function_privilege('authenticated', 'public.campaign_recipient_ids(uuid)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.dispatch_due_campaigns()', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.dispatch_due_campaigns()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.check_overdue_campaigns()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.check_overdue_campaigns()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.cancel_campaign(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION '00649: a client role can execute a server-only campaign function';
   END IF;
@@ -412,5 +452,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-due-campaigns' AND schedule = '* * * * *'
                  AND command = 'SELECT public.dispatch_due_campaigns();' AND active) THEN
     RAISE EXCEPTION '00649: cron job send-due-campaigns is missing or inactive';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-overdue-campaigns' AND schedule = '*/5 * * * *'
+                 AND command = 'SELECT public.check_overdue_campaigns();' AND active) THEN
+    RAISE EXCEPTION '00649: cron job check-overdue-campaigns is missing or inactive';
   END IF;
 END $check$;
