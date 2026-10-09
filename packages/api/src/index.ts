@@ -90,6 +90,15 @@ export { blogService, type BlogPost } from './services/blog.service';
 export { announcementService, type HomeAnnouncement } from './services/announcement.service';
 export { promotionService, type Promotion, type PromotionType, type ActivePromotion } from './services/promotion.service';
 export {
+  campaignService,
+  type NewCampaign,
+  type CampaignChannel,
+  type CampaignAudience,
+  type CampaignSegment,
+  type CampaignSendResult,
+  type CampaignChannelResult,
+} from './services/campaign.service';
+export {
   marketingStatsService,
   type PromoCodePerformance,
   type ReferralCodePerformance,
