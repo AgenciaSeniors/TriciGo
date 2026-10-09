@@ -3,14 +3,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Megaphone, Plus, X } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
-import { getSupabaseClient } from '@tricigo/api';
-import { notificationService } from '@tricigo/api';
+import {
+  getSupabaseClient,
+  campaignService,
+  AppError,
+  type CampaignChannel,
+  type CampaignSegment,
+  type CampaignSendResult,
+} from '@tricigo/api';
 import { cityService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
+import { havanaLocalToUtcIso } from '@tricigo/utils/date';
 import { useToast } from '@/components/ui/AdminToast';
+import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { formatAdminDate } from '@/lib/formatDate';
+import { usePanelRole } from '@/lib/panelRole';
+import { useAdminUser } from '@/lib/useAdminUser';
 
 type Campaign = {
   id: string;
@@ -29,6 +39,12 @@ type Campaign = {
   created_at: string;
   // mig 00478 — null on rows created before the column existed (= customer).
   audience_role?: string | null;
+  // mig 00649
+  started_at?: string | null;
+  recipient_count?: number;
+  push_sent?: number;
+  email_sent?: number;
+  last_error?: string | null;
 };
 
 type Promotion = {
@@ -91,9 +107,21 @@ export default function CampaignsPage() {
   const [cities, setCities] = useState<City[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
 
-  const loadCampaigns = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const { role } = usePanelRole();
+  const isAdminRole = role === 'admin' || role === 'super_admin';
+  // From the cookie session, like the other admin pages: the shared @tricigo/api client may
+  // not have its session synced yet when this page mounts.
+  const { userId: myId } = useAdminUser();
+  const [cancelTarget, setCancelTarget] = useState<Campaign | null>(null);
+  // Stable: the modal's effect depends on it, and re-running it (on every 30 s refresh) would
+  // reset the modal's double-click guard and move the focus.
+  const closeCancelDialog = useCallback(() => setCancelTarget(null), []);
+
+  const loadCampaigns = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const supabase = getSupabaseClient();
       const from = page * PAGE_SIZE;
@@ -106,16 +134,26 @@ export default function CampaignsPage() {
       if (dbError) throw dbError;
       setCampaigns((data ?? []) as Campaign[]);
     } catch (err) {
-      setCampaigns([]);
-      setError(getErrorMessage(err));
+      if (!silent) {
+        setCampaigns([]);
+        setError(getErrorMessage(err));
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [page]);
 
   useEffect(() => {
     void loadCampaigns();
   }, [loadCampaigns]);
+
+  // A scheduled or sending campaign changes on the server: refresh the list every 30 s meanwhile.
+  const hasPending = campaigns.some((c) => c.status === 'scheduled' || c.status === 'sending');
+  useEffect(() => {
+    if (!hasPending) return;
+    const timer = setInterval(() => void loadCampaigns(true), 30_000);
+    return () => clearInterval(timer);
+  }, [hasPending, loadCampaigns]);
 
   useEffect(() => {
     (async () => {
@@ -152,95 +190,6 @@ export default function CampaignsPage() {
     });
   }, [campaigns, sort]);
 
-  // Which user_ids have ridden/driven recently? For customers the rides row
-  // carries users.id directly; for drivers rides.driver_id references
-  // driver_profiles.id, so it needs the profile → user_id mapping.
-  const getActiveUserIdsSince = async (sinceIso: string): Promise<Set<string>> => {
-    const supabase = getSupabaseClient();
-    if (formAudience === 'customer') {
-      const { data } = await supabase
-        .from('panel_rides')
-        .select('customer_id')
-        .gte('created_at', sinceIso)
-        .not('customer_id', 'is', null);
-      return new Set((data ?? []).map((r) => r.customer_id as string));
-    }
-    const { data: rides } = await supabase
-      .from('panel_rides')
-      .select('driver_id')
-      .gte('created_at', sinceIso)
-      .not('driver_id', 'is', null);
-    const profileIds = [...new Set((rides ?? []).map((r) => r.driver_id as string))];
-    if (profileIds.length === 0) return new Set();
-    const { data: profiles } = await supabase
-      .from('panel_driver_profiles')
-      .select('user_id')
-      .in('id', profileIds);
-    return new Set((profiles ?? []).map((p) => p.user_id as string));
-  };
-
-  const getSegmentUserIds = async (): Promise<string[]> => {
-    const supabase = getSupabaseClient();
-    const now = new Date();
-
-    if (formSegment === 'all') {
-      const { data } = await supabase.from('users').select('id').eq('role', formAudience);
-      return (data ?? []).map((u) => u.id);
-    }
-    if (formSegment === 'new_users') {
-      const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data } = await supabase
-        .from('users')
-        .select('id')
-        .eq('role', formAudience)
-        .gte('created_at', since);
-      return (data ?? []).map((u) => u.id);
-    }
-    if (formSegment === 'power_users') {
-      if (formAudience === 'customer') {
-        const { data: allRides } = await supabase
-          .from('panel_rides')
-          .select('customer_id')
-          .not('customer_id', 'is', null);
-        const rideCounts: Record<string, number> = {};
-        for (const r of allRides ?? []) {
-          rideCounts[r.customer_id] = (rideCounts[r.customer_id] || 0) + 1;
-        }
-        return Object.entries(rideCounts)
-          .filter(([, c]) => c > 10)
-          .map(([id]) => id);
-      }
-      // Drivers: >10 completed trips, via the maintained counter (see the
-      // "stale precomputed field" pattern — total_rides_completed is the
-      // trigger-maintained one, total_rides is the legacy snapshot).
-      const { data: profiles } = await supabase
-        .from('panel_driver_profiles')
-        .select('user_id, total_rides_completed, total_rides')
-        .not('user_id', 'is', null);
-      return (profiles ?? [])
-        .filter((p) => ((p.total_rides_completed ?? p.total_rides ?? 0) as number) > 10)
-        .map((p) => p.user_id as string);
-    }
-    if (formSegment === 'inactive') {
-      const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const activeSet = await getActiveUserIdsSince(since);
-      const { data: allUsers } = await supabase
-        .from('users')
-        .select('id')
-        .eq('role', formAudience);
-      return (allUsers ?? []).filter((u) => !activeSet.has(u.id)).map((u) => u.id);
-    }
-    if (formSegment === 'by_city' && formCityId) {
-      const { data } = await supabase
-        .from('users')
-        .select('id')
-        .eq('role', formAudience)
-        .eq('city_id', formCityId);
-      return (data ?? []).map((u) => u.id);
-    }
-    return [];
-  };
-
   const validateForm = () => {
     const errors: Record<string, string> = {};
     const required = t('campaigns.required', { defaultValue: 'Requerido' });
@@ -248,9 +197,13 @@ export default function CampaignsPage() {
     if (!formTitle.trim()) errors.title = required;
     if (!formBody.trim()) errors.body = required;
     if (formSegment === 'by_city' && !formCityId) errors.city = t('campaigns.choose_city_error', { defaultValue: 'Elige una ciudad' });
-    if (!formSendNow && formSchedule) {
-      const d = new Date(formSchedule);
-      if (d <= new Date()) errors.schedule = t('campaigns.future_error', { defaultValue: 'Tiene que ser en el futuro' });
+    if (!formSendNow) {
+      const scheduledAt = scheduleToUtcIso(formSchedule);
+      if (!scheduledAt) {
+        errors.schedule = t('campaigns.schedule_required', { defaultValue: 'Elige la fecha y la hora' });
+      } else if (new Date(scheduledAt) <= new Date()) {
+        errors.schedule = t('campaigns.future_error', { defaultValue: 'Tiene que ser en el futuro' });
+      }
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -270,121 +223,88 @@ export default function CampaignsPage() {
     setFormErrors({});
   };
 
+  // The warnings the old browser send showed, now from send-campaign's per-channel result.
+  const warningsFor = (r: CampaignSendResult): string[] => {
+    const w: string[] = [];
+    // The send happened but its row could not record it (the stuck-send sweep got there first, or
+    // the write failed twice): the list will not show what went out.
+    if (r.recorded === false) {
+      w.push(t('campaigns.warn_not_recorded', { defaultValue: 'El envío salió, pero la lista no pudo guardar el resultado. Antes de volver a mandarla, revisa los contadores.' }));
+    }
+    // No channel result and 'failed': the recipients could not be read, or the send threw.
+    // Not "the segment is empty", which is a 'sent' campaign with zero recipients.
+    if (r.status === 'failed' && r.channels.length === 0) {
+      w.push([t('campaigns.send_error', { defaultValue: 'No pudimos enviar la campaña.' }), r.last_error].filter(Boolean).join(' '));
+      return w;
+    }
+    if (r.recipient_count === 0) {
+      w.push(t('campaigns.warn_no_recipients', { defaultValue: 'El segmento no tiene usuarios; no se envió nada.' }));
+      return w;
+    }
+    for (const ch of r.channels) {
+      if (ch.channel === 'push' && !ch.ok) {
+        w.push(t('campaigns.warn_push_failed', { defaultValue: 'Guardada, pero falló el envío de push: {{error}}', error: ch.error ?? '' }));
+      } else if (ch.channel === 'push' && ch.sent === 0) {
+        w.push(t('campaigns.warn_push_zero', { defaultValue: 'Guardada, pero el push no llegó a ningún dispositivo (sin tokens activos).' }));
+      } else if (ch.channel === 'email' && !ch.ok) {
+        w.push(t('campaigns.warn_email_failed', { defaultValue: 'Guardada, pero falló el envío de correo: {{error}}', error: ch.error ?? '' }));
+      } else if (ch.channel === 'email' && ch.sent === 0) {
+        w.push(t('campaigns.warn_email_zero_consent', { defaultValue: 'Guardada, pero el correo no se entregó: nadie del segmento tiene un correo válido y aceptó recibir novedades.' }));
+      }
+    }
+    return w;
+  };
+
   const handleSend = async () => {
     if (!validateForm()) return;
     setSending(true);
     try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const campaignData: Record<string, unknown> = {
+      // Throws on an unreadable value instead of falling back to "send now" (validateForm already
+      // refused it).
+      const scheduledAt = formSendNow ? null : havanaLocalToUtcIso(formSchedule);
+      const id = await campaignService.create({
         name: formName,
-        audience_role: formAudience,
-        segment_type: formSegment,
-        segment_city_id: formSegment === 'by_city' ? formCityId : null,
-        message_title: formTitle,
-        message_body: formBody,
-        promo_code_id: formPromoId || null,
-        channel: formChannel,
-        status: formSendNow ? 'sent' : 'scheduled',
-        scheduled_at: !formSendNow && formSchedule ? formSchedule : null,
-        created_by: user?.id ?? null,
-      };
-
-      // Track REAL per-channel delivery so the toast reflects what actually
-      // went out — not just how many user_ids we iterated. Warnings surface
-      // when a chosen channel delivered to nobody or the EF call failed,
-      // instead of silently reporting "enviada".
-      let sentCount = 0;
-      const warnings: string[] = [];
-
-      if (formSendNow) {
-        const userIds = await getSegmentUserIds();
-
-        if (userIds.length === 0) {
-          warnings.push(t('campaigns.warn_no_recipients', { defaultValue: 'El segmento no tiene usuarios; no se envió nada.' }));
-        }
-
-        // PUSH — route through the send-push edge function (service-role).
-        // Delivers server-side AND persists to the in-app inbox. The old
-        // browser→Expo path was blocked by CORS and never hit the inbox.
-        if ((formChannel === 'push' || formChannel === 'both') && userIds.length > 0) {
-          try {
-            const result = await notificationService.sendCampaignPush(userIds, {
-              title: formTitle,
-              body: formBody,
-            });
-            sentCount = Math.max(sentCount, result.sent);
-            if (result.sent === 0) {
-              warnings.push(t('campaigns.warn_push_zero', { defaultValue: 'Guardada, pero el push no llegó a ningún dispositivo (sin tokens activos).' }));
-            }
-          } catch (err) {
-            warnings.push(t('campaigns.warn_push_failed', { defaultValue: 'Guardada, pero falló el envío de push: {{error}}', error: getErrorMessage(err) }));
-          }
-        }
-
-        // EMAIL — for 'email' and 'both'. Call bulk edge function.
-        if ((formChannel === 'email' || formChannel === 'both') && userIds.length > 0) {
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-            const res = await fetch(`${supabaseUrl}/functions/v1/send-bulk-email`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${session?.access_token ?? ''}`,
-                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
-              },
-              body: JSON.stringify({
-                user_ids: userIds,
-                subject: formTitle,
-                body_html: `<p>${formBody.replace(/\n/g, '<br/>')}</p>`,
-                promo_code_id: formPromoId || null,
-              }),
-            });
-            const json = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-            const emailSent = Number(json.sent ?? 0);
-            sentCount = Math.max(sentCount, emailSent);
-            if (emailSent === 0) {
-              // send-bulk-email only targets users with a valid address who
-              // accepted marketing messages (mig 00618), so a zero no longer
-              // means "no valid addresses" alone.
-              warnings.push(t('campaigns.warn_email_zero_consent', { defaultValue: 'Guardada, pero el correo no se entregó: nadie del segmento tiene un correo válido y aceptó recibir novedades.' }));
-            }
-          } catch (err) {
-            warnings.push(t('campaigns.warn_email_failed', { defaultValue: 'Guardada, pero falló el envío de correo: {{error}}', error: getErrorMessage(err) }));
-          }
-        }
-
-        // Note: marketing SMS was intentionally removed. Per the SMS
-        // cost policy, SMS is reserved for authentication and emergency
-        // only — campaigns go out over push and/or email. The channel
-        // picker (CHANNEL_KEYS) offers push / email / both, never SMS.
-
-        campaignData.sent_at = new Date().toISOString();
-        campaignData.sent_count = sentCount;
-      }
-
-      let { error: dbError } = await supabase.from('campaigns').insert(campaignData);
-      // Tolerate mig 00478 not applied yet (canonical column-missing retry):
-      // the history row just loses the audience tag until the column exists.
-      if (dbError && /audience_role|schema cache|column/i.test(dbError.message ?? '')) {
-        const { audience_role: _a, ...withoutAudience } = campaignData;
-        ({ error: dbError } = await supabase.from('campaigns').insert(withoutAudience));
-      }
-      if (dbError) throw dbError;
+        audienceRole: formAudience,
+        segmentType: formSegment as CampaignSegment,
+        segmentCityId: formSegment === 'by_city' ? formCityId : null,
+        title: formTitle,
+        body: formBody,
+        promoCodeId: formPromoId || null,
+        channel: formChannel as CampaignChannel,
+        scheduledAt,
+      });
 
       resetForm();
       setShowForm(false);
       setPage(0);
-      await loadCampaigns();
-      if (warnings.length > 0) {
-        showToast('warning', warnings.join(' · '));
-      } else {
-        showToast('success', formSendNow
-          ? t('campaigns.toast_sent_n', { n: sentCount, defaultValue: 'Campaña enviada · {{n}} entregas' })
-          : t('campaigns.toast_scheduled', { defaultValue: 'Campaña programada' }));
+
+      if (scheduledAt) {
+        await loadCampaigns();
+        showToast('success', t('campaigns.toast_scheduled_at', {
+          defaultValue: 'Campaña programada para el {{when}} (hora de Cuba)',
+          when: formatAdminDate(scheduledAt),
+        }));
+        return;
+      }
+
+      try {
+        const result = await campaignService.sendNow(id);
+        const warnings = warningsFor(result);
+        await loadCampaigns();
+        if (warnings.length > 0) showToast(result.status === 'failed' ? 'error' : 'warning', warnings.join(' · '));
+        else showToast('success', t('campaigns.toast_sent_n', { n: result.sent_count, defaultValue: 'Campaña enviada · {{n}} entregas' }));
+      } catch (err) {
+        // The row is saved and due now: if send-campaign did not take it, the cron job does
+        // within a minute, and the list refreshes while it is pending.
+        await loadCampaigns();
+        if (err instanceof AppError && err.code === 'CAMPAIGN_NOT_CLAIMABLE') {
+          showToast('warning', t('campaigns.toast_already_sending', { defaultValue: 'La campaña ya se está enviando. Revisa el estado en la lista.' }));
+        } else {
+          showToast('warning', t('campaigns.warn_send_failed', {
+            defaultValue: 'Guardada, pero el envío no respondió: {{error}}. Revisa el estado en la lista.',
+            error: getErrorMessage(err),
+          }));
+        }
       }
     } catch (err) {
       showToast('error', getErrorMessage(err));
@@ -392,6 +312,21 @@ export default function CampaignsPage() {
       setSending(false);
     }
   };
+
+  const handleCancel = async (c: Campaign) => {
+    try {
+      const outcome = await campaignService.cancel(c.id);
+      if (outcome === 'cancelled') showToast('success', t('campaigns.toast_cancelled', { defaultValue: 'Campaña cancelada' }));
+      else if (outcome === 'not_found') showToast('warning', t('campaigns.toast_cancel_gone', { defaultValue: 'Esa campaña ya no existe.' }));
+      else showToast('warning', t('campaigns.toast_cancel_late', { defaultValue: 'Ya no se puede cancelar: el envío ya empezó o terminó.' }));
+    } catch (err) {
+      showToast('error', getErrorMessage(err));
+    } finally {
+      await loadCampaigns();
+    }
+  };
+
+  const canCancel = (c: Campaign) => c.status === 'scheduled' && (isAdminRole || (!!myId && c.created_by === myId));
 
   const columns: DataColumn<Campaign>[] = useMemo(
     () => [
@@ -433,8 +368,27 @@ export default function CampaignsPage() {
       {
         id: 'status',
         header: t('campaigns.col_status', { defaultValue: 'Estado' }),
-        cell: (c) => <StatusBadge domain="campaign" status={c.status} />,
+        cell: (c) => (
+          <span title={c.last_error ?? undefined}>
+            <StatusBadge domain="campaign" status={c.status} />
+          </span>
+        ),
         width: '130px',
+      },
+      {
+        id: 'scheduled_at',
+        header: t('campaigns.col_scheduled', { defaultValue: 'Programada para' }),
+        // "Enviar ahora" stores scheduled_at = created_at (both now() in the insert), which would
+        // read as a schedule nobody chose. Old rows have no scheduled_at at all.
+        cell: (c) => (
+          <span className="text-ink-muted">
+            {c.scheduled_at && c.created_at && c.scheduled_at === c.created_at
+              ? t('campaigns.scheduled_on_save', { defaultValue: 'Al guardar' })
+              : formatAdminDate(c.scheduled_at)}
+          </span>
+        ),
+        hideBelow: 'lg',
+        width: '170px',
       },
       {
         id: 'sent_count',
@@ -453,9 +407,29 @@ export default function CampaignsPage() {
         hideBelow: 'lg',
         width: '170px',
       },
+      {
+        id: 'actions',
+        header: '',
+        cell: (c) =>
+          canCancel(c) ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCancelTarget(c);
+              }}
+              className="rounded-md px-2 py-1 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-500/10 dark:text-red-400"
+            >
+              {t('campaigns.cancel_btn', { defaultValue: 'Cancelar' })}
+            </button>
+          ) : null,
+        align: 'right',
+        width: '100px',
+        hideInCard: false,
+      },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t],
+    [t, myId, isAdminRole],
   );
 
   return (
@@ -621,7 +595,7 @@ export default function CampaignsPage() {
                 {t('campaigns.send_now', { defaultValue: 'Enviar ahora' })}
               </label>
               {!formSendNow && (
-                <FormField label={t('campaigns.field_schedule', { defaultValue: 'Programar para' })} error={formErrors.schedule}>
+                <FormField label={t('campaigns.field_schedule_havana', { defaultValue: 'Programar para (hora de Cuba)' })} required error={formErrors.schedule}>
                   <input
                     type="datetime-local"
                     value={formSchedule}
@@ -676,6 +650,28 @@ export default function CampaignsPage() {
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: campaigns.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
       />
+
+      <AdminConfirmModal
+        open={!!cancelTarget}
+        title={t('campaigns.cancel_title', { defaultValue: 'Cancelar campaña' })}
+        message={t('campaigns.cancel_confirm', {
+          defaultValue: 'La campaña «{{name}}» no se va a enviar. ¿La cancelas?',
+          name: cancelTarget?.name ?? '',
+        })}
+        // The modal's default buttons read "Confirmar" / "Cancelar": here "Cancelar" would close
+        // the dialog without cancelling the campaign.
+        confirmLabel={t('campaigns.cancel_submit', { defaultValue: 'Sí, cancelar campaña' })}
+        cancelLabel={t('campaigns.cancel_dismiss', { defaultValue: 'No, volver' })}
+        variant="danger"
+        onConfirm={async () => {
+          if (cancelTarget) {
+            const target = cancelTarget;
+            setCancelTarget(null);
+            await handleCancel(target);
+          }
+        }}
+        onCancel={closeCancelDialog}
+      />
     </div>
   );
 }
@@ -703,6 +699,19 @@ function FormField({
       {error && <span className="text-[11px] text-red-500">{error}</span>}
     </label>
   );
+}
+
+/**
+ * The datetime-local value read as Havana time, as a UTC ISO string; null when empty or not
+ * 'YYYY-MM-DDTHH:mm' (havanaLocalToUtcIso throws on anything else).
+ */
+function scheduleToUtcIso(value: string): string | null {
+  if (!value) return null;
+  try {
+    return havanaLocalToUtcIso(value);
+  } catch {
+    return null;
+  }
 }
 
 function inputCls(hasError: boolean, multiline = false) {

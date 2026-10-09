@@ -291,3 +291,68 @@ export function havanaDayRangeUtc(ymd: string): { start: Date; end: Date } {
   const end = havanaMidnightOf(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate());
   return { start, end };
 }
+
+/**
+ * Havana wall-clock parts of an instant, 1-based month. (Not `havanaParts` above: that one feeds
+ * formatTimestamp with a 0-based month.)
+ */
+function havanaWallClock(instant: Date): { y: number; mo: number; d: number; h: number; mi: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: HAVANA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+  return { y: get('year'), mo: get('month'), d: get('day'), h: get('hour'), mi: get('minute') };
+}
+
+/**
+ * Minutes that UTC is ahead of Havana at an instant (300 in winter, 240 in summer).
+ * Seconds are dropped: datetime-local values have minute precision.
+ */
+function havanaOffsetMinutes(instant: Date): number {
+  const p = havanaWallClock(instant);
+  const wallAsUtc = Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi);
+  const instantToMinute = Math.floor(instant.getTime() / 60000) * 60000;
+  return Math.round((instantToMinute - wallAsUtc) / 60000);
+}
+
+/**
+ * A `datetime-local` value ('YYYY-MM-DDTHH:mm') read as Havana wall-clock time, as a UTC ISO
+ * string. Sent raw, Postgres reads that value as UTC: 4–5 hours off Cuba's clock.
+ *
+ * Throws on anything that is not that format or not a real date and time (2026-02-30, 24:00,
+ * 10:60). A time in the spring gap (00:00–00:59 on the March change day) does not exist and is
+ * moved forward an hour; a time in the repeated hour (00:00–00:59 on the November change day)
+ * happens twice and reads as the first one, still on summer time.
+ */
+export function havanaLocalToUtcIso(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!m) throw new Error(`havanaLocalToUtcIso: expected YYYY-MM-DDTHH:mm, got "${value}"`);
+  const [y, mo, d, h, mi] = [m[1], m[2], m[3], m[4], m[5]].map(Number) as [number, number, number, number, number];
+  const wallAsUtc = Date.UTC(y, mo - 1, d, h, mi);
+  // Date.UTC rolls an impossible value over (Feb 30 -> Mar 2, 24:00 -> next day): refuse it.
+  const probe = new Date(wallAsUtc);
+  if (h > 23 || mi > 59 || probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) {
+    throw new Error(`havanaLocalToUtcIso: not a real date and time: "${value}"`);
+  }
+  // Correct by the offset at the guessed instant, then once more in case the guess fell on the
+  // other side of a DST change.
+  const first = wallAsUtc + havanaOffsetMinutes(new Date(wallAsUtc)) * 60000;
+  const second = wallAsUtc + havanaOffsetMinutes(new Date(first)) * 60000;
+  // A wall clock in the spring gap (00:00–00:59 on the March change day) does not exist, so the
+  // second pass misses it; the first pass reads it with the winter offset, one hour later.
+  const utc = utcIsoToHavanaLocal(new Date(second).toISOString()) === value ? second : first;
+  return new Date(utc).toISOString();
+}
+
+/** The Havana wall clock of a UTC instant, as a `datetime-local` value ('YYYY-MM-DDTHH:mm'). */
+export function utcIsoToHavanaLocal(iso: string): string {
+  const p = havanaWallClock(new Date(iso));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${p.y}-${pad(p.mo)}-${pad(p.d)}T${pad(p.h)}:${pad(p.mi)}`;
+}
