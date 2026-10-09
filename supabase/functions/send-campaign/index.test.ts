@@ -22,6 +22,8 @@ const db = vi.hoisted(() => ({
   recipientsThrow: {} as Record<string, string>,
   // claim_campaigns returns this error instead of claiming.
   claimError: null as null | { message: string },
+  // The next campaign updates fail, in order: 'error' returns an error, 'throw' rejects.
+  updateFailures: [] as Array<'error' | 'throw'>,
   rpcCalls: [] as Array<{ fn: string; args: unknown }>,
   updates: [] as Array<{ id: string; row: Record<string, unknown> }>,
 }));
@@ -30,8 +32,13 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
   function query(table: string) {
     const filters: Record<string, string> = {};
     let pendingUpdate: Record<string, unknown> | null = null;
+    // update(...).select('id'): answer with the rows the update matched.
+    let returning = false;
     const q: Record<string, unknown> = {};
-    q.select = () => q;
+    q.select = () => {
+      if (pendingUpdate) returning = true;
+      return q;
+    };
     q.eq = (col: string, val: string) => {
       filters[col] = val;
       return q;
@@ -51,8 +58,13 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
     q.then = (ok: (v: unknown) => unknown, ko: (e: unknown) => unknown) => {
       if (pendingUpdate && table === 'campaigns') {
         db.updates.push({ id: filters.id, row: pendingUpdate });
+        const failure = db.updateFailures.shift();
+        if (failure === 'throw') return Promise.reject(new Error('fetch failed')).then(ok, ko);
+        if (failure === 'error') return Promise.resolve({ data: null, error: { message: 'connection reset' } }).then(ok, ko);
         const c = db.campaigns[filters.id];
-        if (c && (!filters.status || c.status === filters.status)) Object.assign(c, pendingUpdate);
+        const matched = !!c && (!filters.status || c.status === filters.status);
+        if (matched) Object.assign(c, pendingUpdate);
+        return Promise.resolve({ data: returning ? (matched ? [{ id: filters.id }] : []) : null, error: null }).then(ok, ko);
       }
       return Promise.resolve({ data: null, error: null }).then(ok, ko);
     };
@@ -138,6 +150,7 @@ beforeEach(() => {
   db.recipientsError = null;
   db.recipientsThrow = {};
   db.claimError = null;
+  db.updateFailures = [];
   db.rpcCalls = [];
   db.updates = [];
   pushResponse = new Response(JSON.stringify({ sent: 3, failed: 0 }), { status: 200 });
@@ -193,7 +206,9 @@ describe('send-campaign: sending', () => {
     const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toMatchObject({ id: CAMP, status: 'sent', recipient_count: 3, push_sent: 3, email_sent: 2, sent_count: 3 });
+    expect(body).toMatchObject({
+      id: CAMP, status: 'sent', recipient_count: 3, push_sent: 3, email_sent: 2, sent_count: 3, recorded: true,
+    });
 
     const [pushCall, emailCall] = fetchMock.mock.calls;
     expect(pushCall[0]).toBe('https://example.supabase.co/functions/v1/send-push');
@@ -282,11 +297,53 @@ describe('send-campaign: sending', () => {
       Object.assign(db.campaigns[CAMP], { status: 'failed', last_error: 'interrupted' });
       return new Response(JSON.stringify({ sent: 3, failed: 0 }), { status: 200 });
     };
-    await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
     expect(db.campaigns[CAMP]).toMatchObject({
       status: 'failed', last_error: 'interrupted', recipient_count: 0, push_sent: 0, email_sent: 0, sent_count: 0,
     });
     expect(db.campaigns[CAMP].sent_at).toBeUndefined();
+    // Not retried (no error, just no row left in 'sending'), and the answer says so.
+    expect(db.updates.filter((u) => u.id === CAMP)).toHaveLength(1);
+    expect(await res.json()).toMatchObject({ status: 'sent', push_sent: 3, recorded: false });
+  });
+
+  it('the result write fails once: retried, recorded', async () => {
+    db.updateFailures = ['error'];
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(await res.json()).toMatchObject({ status: 'sent', recorded: true });
+    expect(db.updates.filter((u) => u.id === CAMP)).toHaveLength(2);
+    expect(db.campaigns[CAMP]).toMatchObject({ status: 'sent', push_sent: 3, email_sent: 2 });
+  });
+
+  it('the result write fails twice: reported as not recorded, logged, never turned into a failure', async () => {
+    db.updateFailures = ['error', 'throw'];
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ id: CAMP, status: 'sent', push_sent: 3, email_sent: 2, recorded: false });
+      // Two attempts and nothing else: the send happened, so no 'failed' write follows.
+      expect(db.updates.filter((u) => u.id === CAMP)).toHaveLength(2);
+      expect(db.campaigns[CAMP].status).toBe('sending');
+      expect(errors.mock.calls.some((args) => String(args[0]).includes('NOT RECORDED'))).toBe(true);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('the single send is handed to EdgeRuntime.waitUntil, so it survives the response being cut', async () => {
+    const waitUntil = vi.fn();
+    (globalThis as Record<string, unknown>).EdgeRuntime = { waitUntil };
+    try {
+      const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+      expect(res.status).toBe(200);
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      const handed = waitUntil.mock.calls[0][0];
+      expect(handed).toBeInstanceOf(Promise);
+      await expect(handed).resolves.toMatchObject({ id: CAMP, status: 'sent', recorded: true });
+    } finally {
+      delete (globalThis as Record<string, unknown>).EdgeRuntime;
+    }
   });
 });
 

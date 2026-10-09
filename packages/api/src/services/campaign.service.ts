@@ -38,6 +38,12 @@ export interface CampaignSendResult {
   email_sent: number;
   sent_count: number;
   last_error: string | null;
+  /**
+   * false when the result could not be written to the campaign row (the stuck-send sweep had
+   * already marked it failed, or the write failed twice): the row then does not show what was
+   * sent. Absent from a send-campaign deployed before the field existed.
+   */
+  recorded?: boolean;
   channels: CampaignChannelResult[];
 }
 

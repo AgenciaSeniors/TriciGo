@@ -102,6 +102,43 @@ async function sendChannelInChunks(
   return mergeChannelResults(channel, parts);
 }
 
+/**
+ * Writes a campaign's result, only while it is still 'sending', so it never overwrites what the
+ * stuck-send sweep recorded. true when the row was updated. An error (or a throw) is retried
+ * once; 0 rows (the sweep already marked it failed/interrupted) is final. Never throws: a send
+ * that happened must not turn into a 'failed' write because the result write failed.
+ */
+async function recordResult(client: Client, id: string, row: Record<string, unknown>): Promise<boolean> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { data, error } = await client
+        .from('campaigns')
+        .update(row)
+        .eq('id', id)
+        .eq('status', 'sending')
+        .select('id');
+      if (!error) {
+        if (Array.isArray(data) && data.length > 0) return true;
+        console.error(
+          `[send-campaign] RESULT NOT RECORDED for ${id}: the campaign is no longer 'sending' ` +
+            '(the stuck-send sweep already marked it failed/interrupted). What was sent:',
+          JSON.stringify(row),
+        );
+        return false;
+      }
+      console.error(`[send-campaign] could not record the result of ${id} (attempt ${attempt}/2)`, error.message);
+    } catch (err) {
+      console.error(`[send-campaign] could not record the result of ${id} (attempt ${attempt}/2)`, err);
+    }
+  }
+  console.error(
+    `[send-campaign] RESULT NOT RECORDED for ${id}: the write failed twice; the row stays 'sending' until the ` +
+      'stuck-send sweep marks it interrupted. What was sent:',
+    JSON.stringify(row),
+  );
+  return false;
+}
+
 async function sendCampaign(client: Client, url: string, serviceKey: string, c: Campaign) {
   const results: ChannelResult[] = [];
   let recipientError: string | undefined;
@@ -145,18 +182,17 @@ async function sendCampaign(client: Client, url: string, serviceKey: string, c: 
     last_error: outcome.lastError,
     sent_at: new Date().toISOString(),
   };
-  const { error: updateError } = await client.from('campaigns').update(row).eq('id', c.id).eq('status', 'sending');
-  if (updateError) console.error('[send-campaign] could not record the result', c.id, updateError.message);
+  const recorded = await recordResult(client, c.id, row);
   console.info(
     `[send-campaign] ${c.id}: ${outcome.status} recipients=${ids.length} push=${outcome.pushSent} email=${outcome.emailSent}` +
       (outcome.lastError ? ` error=${outcome.lastError}` : ''),
   );
-  return { id: c.id, ...row, channels: results };
+  return { id: c.id, ...row, recorded, channels: results };
 }
 
 /**
  * sendCampaign, but an unexpected throw marks that campaign 'failed' instead of leaving it in
- * 'sending' or stopping the rest of a due batch. The write keeps the 'sending' filter, like
+ * 'sending' or stopping the rest of a due run. The write goes through recordResult, like
  * sendCampaign's, so it never overwrites what the stuck-send sweep already recorded.
  */
 async function sendCampaignSafely(client: Client, url: string, serviceKey: string, c: Campaign) {
@@ -174,17 +210,12 @@ async function sendCampaignSafely(client: Client, url: string, serviceKey: strin
       sent_at: new Date().toISOString(),
     };
     console.error('[send-campaign] unexpected error, marking the campaign failed', c.id, err);
-    try {
-      const { error: updateError } = await client
-        .from('campaigns')
-        .update({ status: row.status, last_error: row.last_error, sent_at: row.sent_at })
-        .eq('id', c.id)
-        .eq('status', 'sending');
-      if (updateError) console.error('[send-campaign] could not record the failure', c.id, updateError.message);
-    } catch (writeErr) {
-      console.error('[send-campaign] could not record the failure', c.id, writeErr);
-    }
-    return { id: c.id, ...row, channels: [] as ChannelResult[] };
+    const recorded = await recordResult(client, c.id, {
+      status: row.status,
+      last_error: row.last_error,
+      sent_at: row.sent_at,
+    });
+    return { id: c.id, ...row, recorded, channels: [] as ChannelResult[] };
   }
 }
 
@@ -276,7 +307,11 @@ Deno.serve(async (req) => {
       const { data: row } = await client.from('campaigns').select('status').eq('id', campaignId).single();
       return json(409, { error: 'not_claimable', status: (row as { status?: string } | null)?.status ?? null });
     }
-    return json(200, await sendCampaignSafely(client, url, serviceKey, claimed[0]));
+    // Handed to waitUntil as well: past 150 s the gateway answers 504, and the send must still
+    // finish and record its result.
+    const work = sendCampaignSafely(client, url, serviceKey, claimed[0]);
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(work);
+    return json(200, await work);
   } catch (err) {
     console.error('[send-campaign]', err);
     return json(500, { error: 'internal' });
