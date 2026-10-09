@@ -113,6 +113,9 @@ export default function CampaignsPage() {
   // not have its session synced yet when this page mounts.
   const { userId: myId } = useAdminUser();
   const [cancelTarget, setCancelTarget] = useState<Campaign | null>(null);
+  // Stable: the modal's effect depends on it, and re-running it (on every 30 s refresh) would
+  // reset the modal's double-click guard and move the focus.
+  const closeCancelDialog = useCallback(() => setCancelTarget(null), []);
 
   const loadCampaigns = useCallback(async (silent = false) => {
     if (!silent) {
@@ -309,6 +312,7 @@ export default function CampaignsPage() {
     try {
       const outcome = await campaignService.cancel(c.id);
       if (outcome === 'cancelled') showToast('success', t('campaigns.toast_cancelled', { defaultValue: 'Campaña cancelada' }));
+      else if (outcome === 'not_found') showToast('warning', t('campaigns.toast_cancel_gone', { defaultValue: 'Esa campaña ya no existe.' }));
       else showToast('warning', t('campaigns.toast_cancel_late', { defaultValue: 'Ya no se puede cancelar: el envío ya empezó o terminó.' }));
     } catch (err) {
       showToast('error', getErrorMessage(err));
@@ -369,7 +373,15 @@ export default function CampaignsPage() {
       {
         id: 'scheduled_at',
         header: t('campaigns.col_scheduled', { defaultValue: 'Programada para' }),
-        cell: (c) => <span className="text-ink-muted">{formatAdminDate(c.scheduled_at)}</span>,
+        // "Enviar ahora" stores scheduled_at = created_at (both now() in the insert), which would
+        // read as a schedule nobody chose. Old rows have no scheduled_at at all.
+        cell: (c) => (
+          <span className="text-ink-muted">
+            {c.scheduled_at && c.created_at && c.scheduled_at === c.created_at
+              ? t('campaigns.scheduled_on_save', { defaultValue: 'Al guardar' })
+              : formatAdminDate(c.scheduled_at)}
+          </span>
+        ),
         hideBelow: 'lg',
         width: '170px',
       },
@@ -653,7 +665,7 @@ export default function CampaignsPage() {
             await handleCancel(target);
           }
         }}
-        onCancel={() => setCancelTarget(null)}
+        onCancel={closeCancelDialog}
       />
     </div>
   );
