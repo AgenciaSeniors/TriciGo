@@ -17,12 +17,17 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 import { isAdminRole, isPanelStaffRole } from '../_shared/panel-roles.ts';
-import { campaignEmailHtml, campaignOutcome, type ChannelResult } from '../_shared/campaign-send.ts';
+import {
+  campaignEmailHtml,
+  campaignOutcome,
+  chunkIds,
+  MAX_ERROR,
+  mergeChannelResults,
+  type ChannelResult,
+} from '../_shared/campaign-send.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const DUE_BATCH = 5;
-// Same cap as campaignOutcome's last_error.
-const MAX_ERROR = 500;
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('Origin') ?? '';
@@ -69,6 +74,22 @@ async function callChannel(
   }
 }
 
+/**
+ * One channel to every recipient, RECIPIENT_CHUNK ids per call (see campaign-send.ts), the
+ * calls one after another, merged into one result for the channel.
+ */
+async function sendChannelInChunks(
+  channel: 'push' | 'email',
+  url: string,
+  serviceKey: string,
+  ids: string[],
+  payload: (chunk: string[]) => Record<string, unknown>,
+): Promise<ChannelResult> {
+  const parts: ChannelResult[] = [];
+  for (const chunk of chunkIds(ids)) parts.push(await callChannel(channel, url, serviceKey, payload(chunk)));
+  return mergeChannelResults(channel, parts);
+}
+
 async function sendCampaign(client: Client, url: string, serviceKey: string, c: Campaign) {
   const results: ChannelResult[] = [];
   let recipientError: string | undefined;
@@ -83,21 +104,22 @@ async function sendCampaign(client: Client, url: string, serviceKey: string, c: 
 
   if (!recipientError && ids.length > 0) {
     if (c.channel === 'push' || c.channel === 'both') {
-      results.push(await callChannel('push', url, serviceKey, {
-        user_ids: ids,
+      results.push(await sendChannelInChunks('push', url, serviceKey, ids, (chunk) => ({
+        user_ids: chunk,
         title: c.message_title,
         body: c.message_body,
         category: 'campaign',
         data: { deep_link: 'tricigo://home', content_type: 'campaign', content_id: c.id },
-      }));
+      })));
     }
     if (c.channel === 'email' || c.channel === 'both') {
-      results.push(await callChannel('email', url, serviceKey, {
-        user_ids: ids,
+      const bodyHtml = campaignEmailHtml(c.message_body);
+      results.push(await sendChannelInChunks('email', url, serviceKey, ids, (chunk) => ({
+        user_ids: chunk,
         subject: c.message_title,
-        body_html: campaignEmailHtml(c.message_body),
+        body_html: bodyHtml,
         promo_code_id: c.promo_code_id,
-      }));
+      })));
     }
   }
 

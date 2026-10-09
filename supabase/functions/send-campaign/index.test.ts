@@ -94,11 +94,12 @@ const env: Record<string, string> = {
 };
 
 let handler: (req: Request) => Promise<Response>;
-let pushResponse: Response | (() => Response);
-let emailResponse: Response | (() => Response);
-const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+type Responder = Response | ((init?: RequestInit) => Response | Promise<Response>);
+let pushResponse: Responder;
+let emailResponse: Responder;
+const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
   const pick = url.endsWith('/send-push') ? pushResponse : emailResponse;
-  return typeof pick === 'function' ? pick() : pick.clone();
+  return typeof pick === 'function' ? pick(init) : pick.clone();
 });
 
 beforeAll(async () => {
@@ -153,6 +154,8 @@ const call = (body: unknown, opts: { token?: string; internal?: boolean } = {}) 
   );
 
 const lastUpdate = (id: string) => [...db.updates].reverse().find((u) => u.id === id)?.row;
+const idsOf = (init?: RequestInit) => (JSON.parse(init?.body as string) as { user_ids: string[] }).user_ids;
+const callsTo = (fn: string) => fetchMock.mock.calls.filter(([u]) => u.endsWith(`/${fn}`));
 
 describe('send-campaign: who may send', () => {
   it('401 without a session', async () => {
@@ -280,6 +283,53 @@ describe('send-campaign: sending', () => {
       status: 'failed', last_error: 'interrupted', recipient_count: 0, push_sent: 0, email_sent: 0, sent_count: 0,
     });
     expect(db.campaigns[CAMP].sent_at).toBeUndefined();
+  });
+});
+
+describe('send-campaign: large segments are sent in batches', () => {
+  const many = Array.from({ length: 1000 }, (_, i) => `u${i}`);
+
+  it('1,000 recipients: 4 calls per channel with at most 300 ids each, every id once, counts summed', async () => {
+    db.recipients = many;
+    pushResponse = (init) => new Response(JSON.stringify({ sent: idsOf(init).length, failed: 0 }), { status: 200 });
+    emailResponse = (init) => new Response(JSON.stringify({ ok: true, sent: Math.floor(idsOf(init).length / 10) }), { status: 200 });
+
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(res.status).toBe(200);
+
+    for (const fn of ['send-push', 'send-bulk-email']) {
+      const sizes = callsTo(fn).map(([, init]) => idsOf(init).length);
+      expect(sizes).toEqual([300, 300, 300, 100]);
+      expect(callsTo(fn).flatMap(([, init]) => idsOf(init))).toEqual(many);
+    }
+    expect(lastUpdate(CAMP)).toMatchObject({
+      status: 'sent', recipient_count: 1000, push_sent: 1000, email_sent: 100, sent_count: 1000, last_error: null,
+    });
+  });
+
+  it('one push batch fails: the channel still counts, the other batches summed, the failure recorded', async () => {
+    db.recipients = many;
+    let n = 0;
+    pushResponse = (init) => {
+      n += 1;
+      return n === 2
+        ? new Response(JSON.stringify({ error: 'boom' }), { status: 500 })
+        : new Response(JSON.stringify({ sent: idsOf(init).length }), { status: 200 });
+    };
+    await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(lastUpdate(CAMP)).toMatchObject({
+      status: 'sent', push_sent: 700, email_sent: 8, sent_count: 700, last_error: 'push: 1/4 batches failed: boom',
+    });
+  });
+
+  it('every push batch fails on a push-only campaign: failed', async () => {
+    db.recipients = many;
+    pushResponse = new Response(JSON.stringify({ error: 'Bad Request' }), { status: 400 });
+    await call({ campaign_id: CAMP2 }, { token: 'jwt-admin' });
+    expect(callsTo('send-push')).toHaveLength(4);
+    expect(lastUpdate(CAMP2)).toMatchObject({
+      status: 'failed', push_sent: 0, sent_count: 0, last_error: 'push: 4/4 batches failed: Bad Request',
+    });
   });
 });
 
