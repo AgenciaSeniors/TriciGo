@@ -2329,6 +2329,29 @@ Marketing entra al panel con su propio rol, no como admin. Diseño y decisiones:
 - **Estado: 00641 y 00642 aplicadas en prod el 2026-10-08, antes del merge.** Primero se ensayó 00642 en prod dentro de un `DO` revertido, que comprobó con md5 que el texto llegó entero. Verificado después por objeto: `is_marketing` `1903156b…`, `tg_promotions_marketing_guard` `2b4dd44a…`, `promotion_is_referenced` `d02d1233…`, `count_power_users` `40b9c404…`, las dos vistas y las 11 políticas, idénticos al ensayo local.
 - **Si una página falla para marketing:** revisar que esté en `MARKETING_ROUTES`, que su consulta no lea `rides`/`driver_profiles` directo y que la RPC que use acepte `is_marketing()` (las de métricas se parchearon en 00642 con verja md5 sobre el cuerpo vivo).
 
+### Campañas: las manda el servidor, a la hora elegida (00649, PR #1129)
+
+Hasta la 00649, "Programar para" guardaba la campaña como `scheduled` y nada la mandaba nunca, y "Enviar ahora" corría en el navegador (calculaba los destinatarios por PostgREST, con tope de 1000 filas, y se cortaba si se cerraba la pestaña). Diseño: `docs/superpowers/specs/2026-10-09-scheduled-campaigns-design.md`. Ensayo: `supabase/tests/00649/run.sh` (con `none` falla casi todo; con la migración, aplicada dos veces, pasa entero).
+
+- **Ciclo de vida:** `scheduled → sending → sent | failed` y `scheduled → cancelled`. El panel solo inserta la campaña; la manda la Edge Function `send-campaign`, que llama el panel con `{campaign_id}` ("Enviar ahora") o el cron `send-due-campaigns` (cada minuto, `dispatch_due_campaigns()`) con `{due:true}` cuando hay alguna vencida. `due` responde 202 enseguida y manda en segundo plano (`EdgeRuntime.waitUntil`), así el cron nunca choca con los 30 s de pg_net.
+- **Nunca se manda dos veces.** `claim_campaigns` pasa `scheduled → sending` en una sola sentencia con `FOR UPDATE SKIP LOCKED` dentro de un CTE `MATERIALIZED`: escrito como `id IN (SELECT … LIMIT … FOR UPDATE SKIP LOCKED)`, el planificador lo re-escanea por cada fila y el `LIMIT` deja de valer. Una campaña que quedó más de 15 minutos en `sending` (la función murió) pasa a `failed` con `last_error = 'interrupted'` y **no se reintenta sola**: un reintento podría mandarla dos veces. Para reenviarla, crear una nueva.
+- **Los destinatarios salen de `campaign_recipient_ids` (SQL, al momento de mandar)**: los mismos segmentos que calculaba el navegador, sin cuentas bloqueadas (`is_active = false`). Devuelve un `uuid[]` y no un set a propósito: PostgREST corta un set en 1000 filas. Push por `send-push` (categoría `campaign`, `data` con `content_id` = id de la campaña) y correo por `send-bulk-email` (cuerpo escapado), los dos con la clave de servicio; sus reglas de preferencias, consentimiento y dirección probada siguen valiendo.
+- **El cliente no escribe estado ni contadores.** `anon`/`authenticated` no tienen UPDATE ni TRUNCATE en `campaigns`. `tg_campaigns_client_insert` fuerza en todo INSERT de cliente `status = 'scheduled'`, `scheduled_at` no anterior a ahora, contadores en 0 y `created_by = auth.uid()`. **Excepción heredada:** un INSERT que llega con `status = 'sent'` se guarda tal cual (solo se fuerza `created_by`), porque es el panel viejo, que ya mandó la campaña desde el navegador; convertirlo en `scheduled` la mandaría otra vez. Se puede quitar con otra migración cuando no quede ninguna pestaña vieja abierta.
+- **Cancelar:** `cancel_campaign(id)` (botón Cancelar del panel) solo mientras sigue `scheduled`; un admin cualquiera, marketing solo las que creó su cuenta (si no, 42501 con DETAIL `campaign_cancel_forbidden`). Devuelve el estado actual, así que una campaña que ya arrancó responde `sending` y no cambia.
+- **La hora elegida es hora de Cuba.** El panel la convierte con `havanaLocalToUtcIso` (`@tricigo/utils/date`; una hora que no existe por el cambio de horario de primavera se corre hacia adelante) y la muestra con `utcIsoToHavanaLocal`. El `datetime-local` crudo lo leía Postgres como UTC: 4 o 5 horas de diferencia. La página de promociones todavía tiene ese mismo bug en sus fechas.
+- **Límite conocido: un correo masivo grande.** `send-bulk-email` manda de a uno, con 50 ms de pausa, y `send-campaign` espera su respuesta. Con muchos destinatarios con correo probado (hoy son como mucho unos 150) puede pasar el límite de tiempo de una Edge Function: el correo queda a medio mandar y la campaña figura `failed`, o `interrupted` a los 15 minutos, aunque parte de los correos ya salieron. Si las listas crecen, `send-bulk-email` tiene que mandar en lotes (la API de Resend acepta 100 por llamada) antes de que alguien reintente una campaña "fallida".
+- **Diagnóstico:**
+  ```sql
+  SELECT id, status, scheduled_at, started_at, sent_at, recipient_count, push_sent, email_sent, last_error
+  FROM campaigns ORDER BY created_at DESC LIMIT 10;
+  -- ¿el cron llamó a la función y qué respondió?
+  SELECT c.called_at, r.status_code, left(r.content, 120) FROM cron_http_calls c
+  LEFT JOIN net._http_response r ON r.id = c.request_id
+  WHERE c.jobname = 'send-due-campaigns' ORDER BY c.called_at DESC LIMIT 10;
+  ```
+  El resultado de cada campaña lo escribe la función en la fila (`last_error` dice qué canal falló), y los logs de `send-campaign` imprimen una línea por campaña.
+- **Estado:** pendiente de aplicar 00649 y desplegar `send-campaign`.
+
 ### Checklist de paridad cross-app (auditoría 2026-06-10, PRs PARITY-1/2)
 
 **Regla:** toda feature de pasajero debe existir en paridad **web ↔ app móvil**, con contraparte **driver** (si interactúa) y **admin** (si se gestiona/configura). La auditoría 2026-06-10 (informe en `~/.claude/plans/necesito-un-analisis-para-bright-hamming.md`) encontró la paridad casi perfecta — el único gap funcional era recurrentes en web (cerrado en PARITY-1) — porque ~95% de la lógica vive en `packages/api` y ambas superficies consumen los mismos services.
