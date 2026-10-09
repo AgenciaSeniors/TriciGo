@@ -106,6 +106,12 @@ subquery per row and the `LIMIT` stops holding).
    without a key would get 401 every minute, unseen.
 3. No `EXCEPTION WHEN OTHERS` in the main block, so a failure reaches `check_cron_sql_failures` (00596).
 
+**`check_overdue_campaigns()`** (SECURITY DEFINER, `service_role` only), run by the cron job
+`check-overdue-campaigns` every 5 minutes: raises while any campaign has been due for more than 10 minutes.
+`send-campaign` answers the cron 202 before claiming, so a run that can never claim would otherwise look
+healthy to both cron watchdogs. A separate job, because a RAISE inside `dispatch_due_campaigns` would also roll
+back its HTTP call.
+
 New grants follow `pnpm check:migration-grants` (no new tables).
 
 ### Edge Function `send-campaign` (new)
@@ -125,7 +131,9 @@ For each claimed campaign:
 3. E-mail (channel `email` or `both`): internal call to `send-bulk-email` with the title as subject, the body
    HTML-escaped with line breaks as `<br/>`, and `promo_code_id`. `send-bulk-email` keeps its rules: opted-in
    users at a proven address only.
-4. Writes `recipient_count`, `push_sent`, `email_sent`, `sent_count = GREATEST(push_sent, email_sent)`,
+4. Saves progress while the row is still `sending`: the recipient count, then the running `push_sent` /
+   `email_sent` / `sent_count` after each batch, so a send swept as `interrupted` still shows what went out.
+5. Writes `recipient_count`, `push_sent`, `email_sent`, `sent_count = GREATEST(push_sent, email_sent)`,
    `sent_at = now()`, and `status = 'sent'`, or `'failed'` when every chosen channel call failed. A channel
    that failed while another worked leaves `sent` with its error in `last_error`. Zero recipients is `sent`
    with 0.
@@ -164,8 +172,11 @@ Errors never leave a campaign in `sending` on purpose: the function catches per 
 
 1. Deploy `send-campaign`. Nothing calls it until 00649 exists, and once 00649 is applied the cron job calls it
    within a minute of any due campaign, so it has to be there first.
-2. Apply 00649 (rehearsed in prod first inside a rolled-back transaction).
-3. Merge the panel (it deploys on merge). Until each open tab reloads, the old panel keeps working:
+2. Check that no campaign is `scheduled` in prod, then apply 00649 (rehearsed in prod first inside a rolled-back
+   transaction).
+3. Merge the panel right after (it deploys on merge). The new panel without 00649 would store "Enviar ahora" as
+   a draft that never sends, and marketing could not insert at all (its policy needs `created_by`, which the
+   trigger sets). Until each open tab reloads, the old panel keeps working:
    "Enviar ahora" still sends from the browser and is stored as `sent` (legacy exception, no second send).
    "Programar" from an old tab stores the raw local time, which Postgres reads as UTC, so that campaign would
    go out 4 to 5 hours early. Nobody has ever scheduled a campaign; the risk is accepted.
