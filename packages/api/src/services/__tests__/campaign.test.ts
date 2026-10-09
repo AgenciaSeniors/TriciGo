@@ -5,14 +5,12 @@ const mockInvoke = vi.fn();
 const mockSingle = vi.fn();
 const mockSelect = vi.fn(() => ({ single: mockSingle }));
 const mockInsert = vi.fn(() => ({ select: mockSelect }));
-const mockGetUser = vi.fn();
 
 vi.mock('../../client', () => ({
   getSupabaseClient: () => ({
     rpc: mockRpc,
     functions: { invoke: mockInvoke },
     from: () => ({ insert: mockInsert }),
-    auth: { getUser: mockGetUser },
   }),
 }));
 
@@ -31,16 +29,15 @@ describe('campaignService', () => {
     mockInvoke.mockReset();
     mockSingle.mockReset();
     mockInsert.mockClear();
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'u-1' } } });
   });
 
-  it('create inserts the row without status or counters and returns its id', async () => {
+  it('create inserts the row without status, counters or created_by (the server sets them) and returns its id', async () => {
     mockSingle.mockResolvedValueOnce({ data: { id: 'c-1' }, error: null });
     await expect(campaignService.create(INPUT)).resolves.toBe('c-1');
     expect(mockInsert).toHaveBeenCalledWith({
       name: 'Lluvia', audience_role: 'customer', segment_type: 'all', segment_city_id: null,
       message_title: 'Llueve', message_body: 'Pide tu triciclo', promo_code_id: null, channel: 'push',
-      scheduled_at: '2026-10-10T14:00:00.000Z', created_by: 'u-1',
+      scheduled_at: '2026-10-10T14:00:00.000Z',
     });
   });
 

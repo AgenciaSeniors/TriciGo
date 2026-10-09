@@ -50,9 +50,7 @@ export interface CampaignSendResult {
 export const campaignService = {
   /** Inserts the campaign. Status, counters and created_by are set by the server. */
   async create(input: NewCampaign): Promise<string> {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase
+    const { data, error } = await getSupabaseClient()
       .from('campaigns')
       .insert({
         name: input.name,
@@ -64,7 +62,6 @@ export const campaignService = {
         promo_code_id: input.promoCodeId,
         channel: input.channel,
         scheduled_at: input.scheduledAt,
-        created_by: user?.id ?? null,
       })
       .select('id')
       .single();
