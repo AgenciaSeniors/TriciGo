@@ -19,6 +19,8 @@ GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
 GRANT CREATE ON SCHEMA public TO postgres;
 
 -- pg_cron stub: cron.job column for column, schedule/unschedule upsert by name (as 00636).
+-- Like pg_cron 1.6, schedule updates an existing job's schedule and command but not its active flag;
+-- alter_job changes only what it is given.
 CREATE SCHEMA cron AUTHORIZATION postgres;
 SET ROLE postgres;
 CREATE TABLE cron.job (
@@ -42,6 +44,17 @@ $$;
 CREATE FUNCTION cron.unschedule(job_name text) RETURNS boolean
 LANGUAGE sql AS $$
   WITH d AS (DELETE FROM cron.job WHERE jobname = job_name RETURNING 1) SELECT count(*) > 0 FROM d
+$$;
+CREATE FUNCTION cron.alter_job(job_id bigint, schedule text DEFAULT NULL, command text DEFAULT NULL,
+  database text DEFAULT NULL, username text DEFAULT NULL, active boolean DEFAULT NULL) RETURNS void
+LANGUAGE sql AS $$
+  UPDATE cron.job j
+     SET schedule = COALESCE(alter_job.schedule, j.schedule),
+         command  = COALESCE(alter_job.command, j.command),
+         database = COALESCE(alter_job.database, j.database),
+         username = COALESCE(alter_job.username, j.username),
+         active   = COALESCE(alter_job.active, j.active)
+   WHERE j.jobid = alter_job.job_id
 $$;
 
 -- Until 2026-10-30 Supabase grants every new function and table of public to the API roles.

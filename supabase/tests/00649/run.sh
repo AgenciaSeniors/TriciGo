@@ -40,6 +40,7 @@ echo "== reset database =="
 $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB" >/dev/null 2>&1
 $P -f "$DIR/scaffold.sql" >/dev/null 2>&1 || { echo "scaffold failed"; exit 1; }
 $P -f "$DIR/seed.sql" >/dev/null 2>&1 || { echo "seed failed"; exit 1; }
+$P -c "GRANT UPDATE (name) ON public.campaigns TO authenticated" >/dev/null || { echo "column grant failed"; exit 1; }
 
 if [ "$MIG" != "none" ]; then
   echo "== apply migration (1st, one transaction, as postgres) =="
@@ -60,7 +61,13 @@ R "R7 all drivers, blocked excluded"               ca000000-0000-4000-8000-00000
 R "R8 new drivers, blocked excluded"               ca000000-0000-4000-8000-000000000008 "d_idle"
 R "R9 power drivers (>10 completed), blocked excluded" ca000000-0000-4000-8000-000000000009 "d_power"
 R "R10 inactive drivers (drove no ride in 30 days), blocked excluded" ca000000-0000-4000-8000-000000000010 "d_idle"
-R "R11 an unknown segment reaches nobody"          ca000000-0000-4000-8000-000000000011 "-"
+# R11: 00649's CHECK refuses an unknown segment, so the row is planted with the CHECK dropped, inside
+# the test's own transaction. It proves the function's own fallback, should the CHECK ever go.
+val "R11 an unknown segment reaches nobody" \
+  "BEGIN; SET LOCAL ROLE postgres; ALTER TABLE public.campaigns DROP CONSTRAINT IF EXISTS campaigns_segment_type_chk;
+   INSERT INTO public.campaigns (id, name, segment_type, audience_role, message_title, message_body, status)
+   VALUES ('ca000000-0000-4000-8000-000000000011', 'unknown', 'whatever', 'customer', 't', 'b', 'draft');
+   RESET ROLE; $SVC $(rcp ca000000-0000-4000-8000-000000000011) ROLLBACK;" "-"
 val "R12 a missing campaign reaches nobody" \
   "BEGIN; $SVC $(rcp 00000000-0000-4000-8000-000000000000) ROLLBACK;" "-"
 R "R13 drivers in La Habana, blocked and customers excluded" ca000000-0000-4000-8000-000000000012 "d_hav"
@@ -72,14 +79,20 @@ val "P1 clients cannot run the server-only functions; authenticated can cancel" 
           has_function_privilege('authenticated', 'public.dispatch_due_campaigns()', 'EXECUTE') || ',' ||
           has_function_privilege('anon', 'public.cancel_campaign(uuid)', 'EXECUTE') || ',' ||
           has_function_privilege('authenticated', 'public.cancel_campaign(uuid)', 'EXECUTE') || ',' ||
-          has_function_privilege('service_role', 'public.claim_campaigns(uuid, integer)', 'EXECUTE')" \
-  "false,false,false,false,true,true"
-val "P2 clients cannot UPDATE or TRUNCATE campaigns, anon cannot INSERT; service_role keeps UPDATE" \
+          has_function_privilege('service_role', 'public.claim_campaigns(uuid, integer)', 'EXECUTE') || ',' ||
+          has_function_privilege('service_role', 'public.cancel_campaign(uuid)', 'EXECUTE')" \
+  "false,false,false,false,true,true,false"
+val "P2 clients cannot UPDATE, TRUNCATE or add triggers to campaigns, anon cannot INSERT; service_role keeps UPDATE" \
   "SELECT has_table_privilege('authenticated', 'public.campaigns', 'UPDATE') || ',' ||
           has_table_privilege('authenticated', 'public.campaigns', 'TRUNCATE') || ',' ||
+          has_table_privilege('authenticated', 'public.campaigns', 'TRIGGER') || ',' ||
           has_table_privilege('anon', 'public.campaigns', 'INSERT') || ',' ||
           has_table_privilege('service_role', 'public.campaigns', 'UPDATE')" \
-  "false,false,false,true"
+  "false,false,false,false,true"
+# P3: the scaffold grants UPDATE (name) to authenticated before the migration runs; revoking the
+# table privilege revokes the column privileges too (in RED the grant simply stays).
+val "P3 a column-level UPDATE grant given before the migration does not survive it" \
+  "SELECT has_any_column_privilege('authenticated', 'public.campaigns', 'UPDATE')::text" "false"
 
 echo "== client inserts (insert guard) =="
 NEW_ROW="INSERT INTO public.campaigns (name, segment_type, message_title, message_body, status, sent_count, scheduled_at, created_by)"
@@ -118,6 +131,30 @@ has "I7 marketing cannot UPDATE a campaign directly" \
 has "I8 the status CHECK rejects an unknown status" \
   "BEGIN; SET LOCAL ROLE postgres; $NEW_ROW VALUES ('i8', 'all', 't', 'b', 'bogus', 0, NULL, NULL); ROLLBACK;" \
   "campaigns_status_chk"
+OWN_ROW="INSERT INTO public.campaigns (name, segment_type, audience_role, channel, message_title, message_body, status, scheduled_at)"
+has "I9 a scheduled campaign without a time is refused (it would never be due)" \
+  "BEGIN; SET LOCAL ROLE postgres; $OWN_ROW VALUES ('i9', 'all', 'customer', 'push', 't', 'b', 'scheduled', NULL); ROLLBACK;" \
+  "campaigns_scheduled_at_chk"
+has "I10 an unknown channel is refused" \
+  "BEGIN; SET LOCAL ROLE postgres; $OWN_ROW VALUES ('i10', 'all', 'customer', 'sms', 't', 'b', 'draft', NULL); ROLLBACK;" \
+  "campaigns_channel_chk"
+has "I11 an unknown segment is refused" \
+  "BEGIN; SET LOCAL ROLE postgres; $OWN_ROW VALUES ('i11', 'whatever', 'customer', 'push', 't', 'b', 'draft', NULL); ROLLBACK;" \
+  "campaigns_segment_type_chk"
+has "I12 an unknown audience is refused" \
+  "BEGIN; SET LOCAL ROLE postgres; $OWN_ROW VALUES ('i12', 'all', 'admin', 'push', 't', 'b', 'draft', NULL); ROLLBACK;" \
+  "campaigns_audience_role_chk"
+has "I13 canceled_by must be an existing account" \
+  "BEGIN; SET LOCAL ROLE postgres; INSERT INTO public.campaigns (name, segment_type, message_title, message_body, status, canceled_by)
+   VALUES ('i13', 'all', 't', 'b', 'cancelled', '00000000-0000-4000-8000-0000000000ff'); ROLLBACK;" \
+  "campaigns_canceled_by_fkey"
+val "I14 deleting the account that cancelled keeps the campaign, with canceled_by emptied" \
+  "BEGIN; SET LOCAL ROLE postgres; INSERT INTO auth.users (id) VALUES ('00000000-0000-4000-8000-0000000000fe');
+   INSERT INTO public.campaigns (name, segment_type, message_title, message_body, status, canceled_by)
+   VALUES ('i14', 'all', 't', 'b', 'cancelled', '00000000-0000-4000-8000-0000000000fe');
+   DELETE FROM auth.users WHERE id = '00000000-0000-4000-8000-0000000000fe';
+   SELECT status || ',' || coalesce(canceled_by::text, 'NULL') FROM public.campaigns WHERE name = 'i14'; ROLLBACK;" \
+  "cancelled,NULL"
 
 echo "== claim =="
 K1=cb000000-0000-4000-8000-000000000001; K2=cb000000-0000-4000-8000-000000000002
@@ -175,6 +212,28 @@ has "X6 anon cannot call cancel" \
   "BEGIN; SET LOCAL ROLE anon; SELECT public.cancel_campaign('$K1'); ROLLBACK;" "permission denied for function cancel_campaign"
 val "X7 cancelling a missing campaign returns not_found" \
   "BEGIN; $(as $A) SELECT public.cancel_campaign('00000000-0000-4000-8000-000000000000'); ROLLBACK;" "not_found"
+# X8: a claim holds the row (scheduled -> sending, not committed) for 3 s; a cancel in the meantime
+# must wait for it and then see 'sending', not overwrite it with 'cancelled'.
+$P -c "SET ROLE postgres; $(mk $K1 x8 scheduled "now() - interval '1 minute'" NULL "'$M1'")" >/dev/null
+( $P -c "BEGIN; $SVC SELECT count(*) FROM public.claim_campaigns('$K1', 1); SELECT pg_sleep(3); COMMIT;" >/dev/null 2>&1 ) &
+sleep 1
+val "X8 a cancel during a claim waits for it and returns sending; the campaign keeps sending" \
+  "BEGIN; $(as $A) SELECT public.cancel_campaign('$K1'); COMMIT; SELECT status FROM public.campaigns WHERE id = '$K1'" \
+  "sending;sending"
+wait
+$P -c "SET ROLE postgres; DELETE FROM public.campaigns WHERE id = '$K1'" >/dev/null
+# X9: the other order. The cancel holds the row for 3 s; the claim skips it (SKIP LOCKED), and once
+# the cancel commits the campaign stays cancelled and nobody can claim it.
+$P -c "SET ROLE postgres; $(mk $K1 x9 scheduled "now() - interval '1 minute'" NULL "'$M1'")" >/dev/null
+( $P -c "BEGIN; $(as $A) SELECT public.cancel_campaign('$K1'); SELECT pg_sleep(3); COMMIT;" >/dev/null 2>&1 ) &
+sleep 1
+val "X9 a claim during a cancel gets nothing at once" \
+  "BEGIN; $SVC SELECT count(*) FROM public.claim_campaigns('$K1', 1); ROLLBACK;" "0"
+wait
+val "X10 after the cancel commits, the campaign is cancelled and cannot be claimed" \
+  "BEGIN; $SVC SELECT count(*) FROM public.claim_campaigns('$K1', 1); RESET ROLE;
+   SELECT status FROM public.campaigns WHERE id = '$K1'; ROLLBACK;" "0;cancelled"
+$P -c "SET ROLE postgres; DELETE FROM public.campaigns WHERE id = '$K1'" >/dev/null
 
 echo "== dispatcher and cron job =="
 val "D1 nothing due (one scheduled for later): returns 0 and calls nothing" \
@@ -198,7 +257,93 @@ val "D4 the cron job runs the dispatcher every minute" \
   "SELECT string_agg(jobname || '|' || schedule || '|' || command, ',') FROM cron.job WHERE jobname = 'send-due-campaigns'" \
   "send-due-campaigns|* * * * *|SELECT public.dispatch_due_campaigns();"
 val "D5 the dispatcher swallows no error (its failures reach check_cron_sql_failures)" \
-  "SELECT (prosrc !~* 'exception')::text FROM pg_proc WHERE proname = 'dispatch_due_campaigns'" "true"
+  "SELECT (prosrc !~* 'exception\\s+when')::text FROM pg_proc WHERE proname = 'dispatch_due_campaigns'" "true"
+val "D6 the sweep leaves sent, cancelled and failed campaigns alone, however old their started_at" \
+  "BEGIN; SET LOCAL ROLE postgres;
+   $(mk $K1 d6a sent "now() - interval '30 minutes'" "now() - interval '20 minutes'" "'$M1'")
+   $(mk $K2 d6b cancelled "now() - interval '30 minutes'" "now() - interval '20 minutes'" "'$M1'")
+   $(mk $K3 d6c failed "now() - interval '30 minutes'" "now() - interval '20 minutes'" "'$M1'") RESET ROLE;
+   $SVC SELECT public.dispatch_due_campaigns(); RESET ROLE;
+   SELECT string_agg(name || ':' || status || ':' || coalesce(last_error, '-'), ',' ORDER BY name)
+   FROM public.campaigns WHERE name LIKE 'd6_'; ROLLBACK;" \
+  "0;d6a:sent:-,d6b:cancelled:-,d6c:failed:-"
+val "D7 two due campaigns make exactly one call (send-campaign takes them one at a time)" \
+  "BEGIN; SET LOCAL ROLE postgres;
+   $(mk $K1 d7a scheduled "now() - interval '2 minutes'" NULL "'$M1'")
+   $(mk $K2 d7b scheduled "now() - interval '1 minute'" NULL "'$M1'") RESET ROLE;
+   $SVC SELECT public.dispatch_due_campaigns(); RESET ROLE;
+   SELECT count(*) FROM public.cron_http_post_calls; ROLLBACK;" "2;1"
+# NO_KEY: the vault has no service role key, for the rest of the transaction.
+NO_KEY="CREATE OR REPLACE FUNCTION public.get_service_role_key() RETURNS text
+  LANGUAGE sql SECURITY DEFINER AS \$\$ SELECT NULL::text \$\$;"
+hasv "D8 a due campaign without the vault key fails the run (the watchdog sees it) and calls nothing" \
+  "BEGIN; $NO_KEY SET LOCAL ROLE postgres; $(mk $K1 d8 scheduled "now() - interval '1 minute'" NULL "'$M1'") RESET ROLE;
+   $SVC SELECT public.dispatch_due_campaigns(); ROLLBACK;" \
+  "ERROR: +P0001: dispatch_due_campaigns: no service role key in the vault, 1 due campaign\\(s\\) not sent DETAIL: +campaign_dispatch_no_service_key"
+val "D9 without the vault key and nothing due, the run is quiet" \
+  "BEGIN; $NO_KEY $SVC SELECT public.dispatch_due_campaigns(); RESET ROLE;
+   SELECT count(*) FROM public.cron_http_post_calls; ROLLBACK;" "0;0"
+
+echo "== re-applying the migration =="
+if [ "$MIG" = "none" ]; then
+  ko "A1 a paused cron job is switched back on" "no migration"
+  ko "A2 a copy pasted from Windows (CRLF) leaves the same function bodies" "no migration"
+else
+  $P -c "UPDATE cron.job SET active = false WHERE jobname = 'send-due-campaigns'" >/dev/null
+  $P -1 -c "SET ROLE postgres" -f "$MIG" >/dev/null 2>&1 || ko "A1 a paused cron job is switched back on" "re-apply failed"
+  val "A1 a paused cron job is switched back on" \
+    "SELECT active FROM cron.job WHERE jobname = 'send-due-campaigns'" "t"
+  BODIES="SELECT string_agg(proname || ':' || md5(prosrc), ',' ORDER BY proname) FROM pg_proc
+          WHERE proname IN ('tg_campaigns_client_insert', 'campaign_recipient_ids', 'claim_campaigns',
+                            'cancel_campaign', 'dispatch_due_campaigns')"
+  LF_BODIES=$($P -c "$BODIES")
+  CRLF=$(mktemp); sed 's/$/\r/' "$MIG" > "$CRLF"
+  if ! grep -q $'\r' "$CRLF"; then ko "A2 a copy pasted from Windows (CRLF) leaves the same function bodies" "the copy has no CR"
+  elif ! $P -1 -c "SET ROLE postgres" -f "$CRLF" >/dev/null 2>&1; then ko "A2 a copy pasted from Windows (CRLF) leaves the same function bodies" "CRLF apply failed"
+  else val "A2 a copy pasted from Windows (CRLF) leaves the same function bodies" "$BODIES" "$LF_BODIES"; fi
+  val "A3 after the CRLF copy no body carries a carriage return" \
+    "SELECT count(*) FROM pg_proc WHERE proname IN ('tg_campaigns_client_insert', 'campaign_recipient_ids',
+       'claim_campaigns', 'cancel_campaign', 'dispatch_due_campaigns') AND position(chr(13) IN prosrc) > 0" "0"
+  rm -f "$CRLF"
+
+  echo "== self-checks abort a broken migration (each on a fresh database) =="
+  # neg LABEL SED_EXPR REGEX: apply a mutated copy of the migration to a fresh scaffold and expect it to
+  # abort with REGEX. The mutation must change the file, or the test proves nothing.
+  NEGDB="${DB}_neg"
+  neg(){
+    local copy out
+    copy=$(mktemp); sed "$2" "$MIG" > "$copy"
+    if cmp -s "$copy" "$MIG"; then ko "$1" "the mutation changed nothing"; rm -f "$copy"; return; fi
+    $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $NEGDB" -c "CREATE DATABASE $NEGDB" >/dev/null 2>&1
+    $BIN/psql $CONN -d $NEGDB -qAt -v ON_ERROR_STOP=1 -f "$DIR/scaffold.sql" >/dev/null 2>&1 || { ko "$1" "scaffold failed"; rm -f "$copy"; return; }
+    $BIN/psql $CONN -d $NEGDB -qAt -v ON_ERROR_STOP=1 -f "$DIR/seed.sql" >/dev/null 2>&1 || { ko "$1" "seed failed"; rm -f "$copy"; return; }
+    out=$($BIN/psql $CONN -d $NEGDB -qAt -v ON_ERROR_STOP=1 -1 -c "SET ROLE postgres" -f "$copy" 2>&1 | tr -d '\r' | paste -sd' ' -)
+    if echo "$out" | grep -Eq "$3"; then ok "$1"; else ko "$1" "no /$3/ in: $out"; fi
+    rm -f "$copy"
+  }
+  neg "N1 without the REVOKE on the table, the migration aborts" \
+    '/^REVOKE UPDATE, TRUNCATE, TRIGGER ON public.campaigns FROM PUBLIC, anon, authenticated;$/d' \
+    "a client role can still write public.campaigns outside the functions"
+  neg "N2 without the REVOKE on claim_campaigns, the migration aborts" \
+    '/^REVOKE ALL ON FUNCTION public.claim_campaigns(uuid, integer) FROM PUBLIC, anon, authenticated;$/d' \
+    "a client role can execute a server-only campaign function"
+  neg "N3 with a cron job every 5 minutes, the migration aborts" \
+    "/v_job := cron.schedule/s/'\\* \\* \\* \\* \\*'/'*\\/5 * * * *'/" \
+    "cron job send-due-campaigns is missing or inactive"
+  neg "N4 with an AFTER insert trigger, the migration aborts" \
+    's/^  BEFORE INSERT ON public.campaigns$/  AFTER INSERT ON public.campaigns/' \
+    "trigger trg_campaigns_client_insert is missing or disabled"
+  neg "N5 with the channel CHECK under another name, the migration aborts" \
+    "s/('campaigns_channel_chk', \\\$c/('campaigns_channel_chk_x', \\\$c/" \
+    "CHECK campaigns_channel_chk is missing"
+  neg "N6 with the foreign key under another name, the migration aborts" \
+    's/ADD CONSTRAINT campaigns_canceled_by_fkey/ADD CONSTRAINT campaigns_canceled_by_fk_x/' \
+    "foreign key campaigns_canceled_by_fkey is missing"
+  neg "N7 with cancel_campaign left to anon, the migration aborts" \
+    's/^REVOKE ALL ON FUNCTION public.cancel_campaign(uuid) FROM PUBLIC, anon, service_role;$/REVOKE ALL ON FUNCTION public.cancel_campaign(uuid) FROM service_role;/' \
+    "a client role can execute a server-only campaign function"
+  $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $NEGDB" >/dev/null 2>&1
+fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"

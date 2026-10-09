@@ -51,7 +51,8 @@ INSERT INTO public.rides (customer_id, driver_id, created_at) VALUES
   ('a0000000-0000-4000-8000-000000000c03', 'dd000000-0000-4000-8000-000000000004', now() - interval '2 days'),
   ('a0000000-0000-4000-8000-0000000000e1', NULL, now() - interval '1 day');
 
--- One campaign per segment, as drafts so the dispatcher never sees them.
+-- One campaign per segment, as drafts so the dispatcher never sees them. An unknown segment cannot be
+-- stored once 00649's CHECK exists: R11 plants one inside its own transaction.
 INSERT INTO public.campaigns (id, name, segment_type, segment_city_id, audience_role, message_title, message_body, status) VALUES
   ('ca000000-0000-4000-8000-000000000001', 'all_c',      'all',         NULL, 'customer', 't', 'b', 'draft'),
   ('ca000000-0000-4000-8000-000000000002', 'new_c',      'new_users',   NULL, 'customer', 't', 'b', 'draft'),
@@ -63,6 +64,5 @@ INSERT INTO public.campaigns (id, name, segment_type, segment_city_id, audience_
   ('ca000000-0000-4000-8000-000000000008', 'new_d',      'new_users',   NULL, 'driver',   't', 'b', 'draft'),
   ('ca000000-0000-4000-8000-000000000009', 'power_d',    'power_users', NULL, 'driver',   't', 'b', 'draft'),
   ('ca000000-0000-4000-8000-000000000010', 'inactive_d', 'inactive',    NULL, 'driver',   't', 'b', 'draft'),
-  ('ca000000-0000-4000-8000-000000000011', 'unknown',    'whatever',    NULL, 'customer', 't', 'b', 'draft'),
   ('ca000000-0000-4000-8000-000000000012', 'city_hav_d', 'by_city', 'c1000000-0000-4000-8000-000000000001', 'driver', 't', 'b', 'draft');
 RESET ROLE;
