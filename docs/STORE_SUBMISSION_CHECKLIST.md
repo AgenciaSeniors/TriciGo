@@ -168,7 +168,7 @@ cd apps/driver && npx eas-cli build --profile production --platform ios --non-in
 2. App Information → App Review → Notes: copiar contenido de `apps/client/store-metadata/app-store-review-notes.md` o `apps/driver/store-metadata/app-store-review-notes.md` según app.
 3. App Information → App Review → Demo credentials:
    - Phone: `+5355550100` (rider) / `+5355550101` (driver)
-   - OTP code: `000000` (override DEV/Apple Review)
+   - OTP code: el valor del secret `DEMO_OTP_CODE` (se escribe solo en la consola de la tienda, nunca en este repo)
 4. App Privacy → Data Types: usar el archivo `data-safety.md` como referencia para llenar los toggles de Apple.
 5. Pricing → Free (las 2 apps).
 6. Build → seleccionar el IPA recién subido por EAS.

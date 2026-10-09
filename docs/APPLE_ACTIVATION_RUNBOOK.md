@@ -107,7 +107,7 @@ Reflejar exactamente `apps/<app>/store-metadata/data-safety.md` + `apps/<app>/Pr
 
 ### App Review Information → Notes
 Pegar el contenido de `apps/<app>/store-metadata/app-store-review-notes.md`.
-- **Demo principal (funciona en prod, verificado):** Pasajero `+5355550100` / `000000` · Conductor `+5355550101` / `000000` (no se envía SMS real; el código fijo se siembra server-side).
+- **Demo principal (funciona en prod, verificado):** Pasajero `+5355550100` · Conductor `+5355550101`, con el código fijo del secret `DEMO_OTP_CODE` (no se envía SMS real; el código se siembra server-side). El código se escribe solo en las consolas de las tiendas, nunca en este repo: es público.
 - El campo "Alternative email/password" de las notas es **opcional** — el demo phone alcanza. Si se quiere el email/password, crear `reviewer-rider@tricigo.com` / `reviewer-driver@tricigo.com` en Supabase Auth con contraseña y pegarla; si no, borrar esa línea de las notas antes de enviar.
 
 ### Screenshots

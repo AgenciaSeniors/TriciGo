@@ -505,7 +505,7 @@ Notación: ✅ Cumple / ⚠️ Verificar / 🔴 Gap / N/A No aplica
 ### Performance / Quality
 | Policy | Estado | Evidencia |
 |---|---|---|
-| Pre-Launch Report (Firebase Test Lab automatic) | ⚠️ | Necesita demo credentials configuradas en Play Console (`+5355550100` / OTP `000000` según `app-store-review-notes.md`). Verificar override en backend (secret `DEMO_PHONE`). |
+| Pre-Launch Report (Firebase Test Lab automatic) | ⚠️ | Necesita demo credentials configuradas en Play Console (`+5355550100` / OTP del secret `DEMO_OTP_CODE`). Verificar override en backend (secret `DEMO_PHONE`). |
 | Crash-free rate >99.94% | ⚠️ | Sentry activo, monitoring on. Validar post-launch. |
 | ANR rate <0.47% | ⚠️ | Hermes + New Arch ayudan; sin métrica current. |
 | Core App Quality (UI) | ✅ | Touch targets 48dp+, contrast checks documentados en `IOS_APPSTORE_COMPLIANCE.md` |
@@ -575,7 +575,7 @@ Stack actual TriciGo:
 - [ ] `curl -i https://tricigo.com/.well-known/apple-app-site-association` → 200 OK
 
 ### Cuentas de revisor + datos seed
-- [ ] Test account `+5355550100` activo en backend (override OTP `000000` operativo vía secret `DEMO_PHONE`)
+- [ ] Test account `+5355550100` activo en backend (código fijo del secret `DEMO_OTP_CODE`, número en `DEMO_PHONE`)
 - [ ] Wallet seed: $50 demo balance
 - [ ] Historial: 1 ride completado para que el reviewer vea la lista populated
 - [ ] Email alternative `reviewer-rider@tricigo.com` creado con password
