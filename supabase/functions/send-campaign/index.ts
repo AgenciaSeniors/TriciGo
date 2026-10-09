@@ -91,7 +91,8 @@ async function callChannel(
 
 /**
  * One channel to every recipient, RECIPIENT_CHUNK ids per call (see campaign-send.ts), the
- * calls one after another, merged into one result for the channel.
+ * calls one after another, merged into one result for the channel. afterChunk gets the running
+ * total sent through this channel after each call.
  */
 async function sendChannelInChunks(
   channel: 'push' | 'email',
@@ -99,10 +100,32 @@ async function sendChannelInChunks(
   serviceKey: string,
   ids: string[],
   payload: (chunk: string[]) => Record<string, unknown>,
+  afterChunk: (sentSoFar: number) => Promise<void>,
 ): Promise<ChannelResult> {
   const parts: ChannelResult[] = [];
-  for (const chunk of chunkIds(ids)) parts.push(await callChannel(channel, url, serviceKey, payload(chunk)));
+  let sentSoFar = 0;
+  for (const chunk of chunkIds(ids)) {
+    const part = await callChannel(channel, url, serviceKey, payload(chunk));
+    parts.push(part);
+    sentSoFar += part.sent;
+    await afterChunk(sentSoFar);
+  }
   return mergeChannelResults(channel, parts);
+}
+
+/**
+ * Saves how far a send got, while the campaign is still 'sending'. If the worker dies halfway,
+ * the stuck-send sweep marks the row failed/interrupted and these counters still show what went
+ * out, so whoever recreates the campaign can see that part of it was already sent. Best effort:
+ * a failed progress write is logged and the send goes on.
+ */
+async function recordProgress(client: Client, id: string, row: Record<string, unknown>): Promise<void> {
+  try {
+    const { error } = await client.from('campaigns').update(row).eq('id', id).eq('status', 'sending');
+    if (error) console.warn(`[send-campaign] progress of ${id} not saved`, error.message);
+  } catch (err) {
+    console.warn(`[send-campaign] progress of ${id} not saved`, err);
+  }
 }
 
 /**
@@ -124,7 +147,7 @@ async function recordResult(client: Client, id: string, row: Record<string, unkn
         if (Array.isArray(data) && data.length > 0) return true;
         console.error(
           `[send-campaign] RESULT NOT RECORDED for ${id}: the campaign is no longer 'sending' ` +
-            '(the stuck-send sweep already marked it failed/interrupted). What was sent:',
+            '(the stuck-send sweep already marked it failed/interrupted, or the row was deleted). What was sent:',
           JSON.stringify(row),
         );
         return false;
@@ -161,6 +184,15 @@ async function sendCampaign(client: Client, url: string, serviceKey: string, c: 
   }
 
   if (channels && !fatalError && ids.length > 0) {
+    const progress = { push_sent: 0, email_sent: 0 };
+    const saveProgress = () =>
+      recordProgress(client, c.id, {
+        recipient_count: ids.length,
+        push_sent: progress.push_sent,
+        email_sent: progress.email_sent,
+        sent_count: Math.max(progress.push_sent, progress.email_sent),
+      });
+    await saveProgress();
     if (channels.includes('push')) {
       results.push(await sendChannelInChunks('push', url, serviceKey, ids, (chunk) => ({
         user_ids: chunk,
@@ -168,7 +200,10 @@ async function sendCampaign(client: Client, url: string, serviceKey: string, c: 
         body: c.message_body,
         category: 'campaign',
         data: { deep_link: 'tricigo://home', content_type: 'campaign', content_id: c.id },
-      })));
+      }), (sent) => {
+        progress.push_sent = sent;
+        return saveProgress();
+      }));
     }
     if (channels.includes('email')) {
       const bodyHtml = campaignEmailHtml(c.message_body);
@@ -177,7 +212,10 @@ async function sendCampaign(client: Client, url: string, serviceKey: string, c: 
         subject: c.message_title,
         body_html: bodyHtml,
         promo_code_id: c.promo_code_id,
-      })));
+      }), (sent) => {
+        progress.email_sent = sent;
+        return saveProgress();
+      }));
     }
   }
 

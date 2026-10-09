@@ -226,6 +226,11 @@ export default function CampaignsPage() {
   // The warnings the old browser send showed, now from send-campaign's per-channel result.
   const warningsFor = (r: CampaignSendResult): string[] => {
     const w: string[] = [];
+    // The send happened but its row could not record it (the stuck-send sweep got there first, or
+    // the write failed twice): the list will not show what went out.
+    if (r.recorded === false) {
+      w.push(t('campaigns.warn_not_recorded', { defaultValue: 'El envío salió, pero la lista no pudo guardar el resultado. Antes de volver a mandarla, revisa los contadores.' }));
+    }
     // No channel result and 'failed': the recipients could not be read, or the send threw.
     // Not "the segment is empty", which is a 'sent' campaign with zero recipients.
     if (r.status === 'failed' && r.channels.length === 0) {

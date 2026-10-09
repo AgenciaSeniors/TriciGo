@@ -27,7 +27,11 @@ const db = vi.hoisted(() => ({
   // The next campaign updates fail, in order: 'error' returns an error, 'throw' rejects.
   updateFailures: [] as Array<'error' | 'throw'>,
   rpcCalls: [] as Array<{ fn: string; args: unknown }>,
+  // Result writes (rows with a status). Progress writes (no status) go to `progress` instead and
+  // never consume updateFailures; progressFailures makes the next ones fail.
   updates: [] as Array<{ id: string; row: Record<string, unknown> }>,
+  progress: [] as Array<{ id: string; row: Record<string, unknown> }>,
+  progressFailures: [] as Array<'error' | 'throw'>,
 }));
 
 vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
@@ -59,8 +63,9 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
     };
     q.then = (ok: (v: unknown) => unknown, ko: (e: unknown) => unknown) => {
       if (pendingUpdate && table === 'campaigns') {
-        db.updates.push({ id: filters.id, row: pendingUpdate });
-        const failure = db.updateFailures.shift();
+        const isProgress = !('status' in pendingUpdate);
+        (isProgress ? db.progress : db.updates).push({ id: filters.id, row: pendingUpdate });
+        const failure = (isProgress ? db.progressFailures : db.updateFailures).shift();
         if (failure === 'throw') return Promise.reject(new Error('fetch failed')).then(ok, ko);
         if (failure === 'error') return Promise.resolve({ data: null, error: { message: 'connection reset' } }).then(ok, ko);
         const c = db.campaigns[filters.id];
@@ -157,6 +162,8 @@ beforeEach(() => {
   db.updateFailures = [];
   db.rpcCalls = [];
   db.updates = [];
+  db.progress = [];
+  db.progressFailures = [];
   pushResponse = new Response(JSON.stringify({ sent: 3, failed: 0 }), { status: 200 });
   emailResponse = new Response(JSON.stringify({ ok: true, sent: 2, failed: 0 }), { status: 200 });
 });
@@ -338,8 +345,10 @@ describe('send-campaign: sending', () => {
       return new Response(JSON.stringify({ sent: 3, failed: 0 }), { status: 200 });
     };
     const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    // recipient_count was saved as progress before the push, while the row was still sending;
+    // nothing written after the sweep reaches the row.
     expect(db.campaigns[CAMP]).toMatchObject({
-      status: 'failed', last_error: 'interrupted', recipient_count: 0, push_sent: 0, email_sent: 0, sent_count: 0,
+      status: 'failed', last_error: 'interrupted', recipient_count: 3, push_sent: 0, email_sent: 0, sent_count: 0,
     });
     expect(db.campaigns[CAMP].sent_at).toBeUndefined();
     // Not retried (no error, just no row left in 'sending'), and the answer says so.
@@ -440,6 +449,56 @@ describe('send-campaign: large segments are sent in batches', () => {
     expect(lastUpdate(CAMP2)).toMatchObject({
       status: 'failed', push_sent: 0, sent_count: 0, last_error: 'push: 4/4 batches failed: Bad Request',
     });
+  });
+});
+
+describe('send-campaign: progress is saved as the send goes', () => {
+  it('after the recipients and after each batch, the running counts are written while the row is sending', async () => {
+    db.recipients = Array.from({ length: 650 }, (_, i) => `u${i}`);
+    pushResponse = (init) => new Response(JSON.stringify({ sent: idsOf(init).length }), { status: 200 });
+    emailResponse = (init) => new Response(JSON.stringify({ sent: Math.floor(idsOf(init).length / 2) }), { status: 200 });
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(res.status).toBe(200);
+    const rows = db.progress.filter((p) => p.id === CAMP).map((p) => p.row);
+    expect(rows).toEqual([
+      { recipient_count: 650, push_sent: 0, email_sent: 0, sent_count: 0 },
+      { recipient_count: 650, push_sent: 300, email_sent: 0, sent_count: 300 },
+      { recipient_count: 650, push_sent: 600, email_sent: 0, sent_count: 600 },
+      { recipient_count: 650, push_sent: 650, email_sent: 0, sent_count: 650 },
+      { recipient_count: 650, push_sent: 650, email_sent: 150, sent_count: 650 },
+      { recipient_count: 650, push_sent: 650, email_sent: 300, sent_count: 650 },
+      { recipient_count: 650, push_sent: 650, email_sent: 325, sent_count: 650 },
+    ]);
+    expect(lastUpdate(CAMP)).toMatchObject({ status: 'sent', push_sent: 650, email_sent: 325, sent_count: 650 });
+  });
+
+  it('the worker is swept mid-send: the row keeps the push that already went out', async () => {
+    emailResponse = () => {
+      // The stuck-send sweep runs while the e-mail is going out.
+      Object.assign(db.campaigns[CAMP], { status: 'failed', last_error: 'interrupted' });
+      return new Response(JSON.stringify({ sent: 2 }), { status: 200 });
+    };
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(await res.json()).toMatchObject({ recorded: false });
+    expect(db.campaigns[CAMP]).toMatchObject({
+      status: 'failed', last_error: 'interrupted', recipient_count: 3, push_sent: 3, sent_count: 3,
+    });
+  });
+
+  it('a progress write that fails does not stop the send', async () => {
+    db.progressFailures = ['throw', 'error', 'throw', 'error'];
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(res.status).toBe(200);
+    expect(callsTo('send-push')).toHaveLength(1);
+    expect(callsTo('send-bulk-email')).toHaveLength(1);
+    expect(lastUpdate(CAMP)).toMatchObject({ status: 'sent', push_sent: 3, email_sent: 2 });
+  });
+
+  it('nobody in the segment: no progress write, only the result', async () => {
+    db.recipients = [];
+    await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(db.progress).toHaveLength(0);
+    expect(lastUpdate(CAMP)).toMatchObject({ status: 'sent', recipient_count: 0 });
   });
 });
 

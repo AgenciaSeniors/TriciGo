@@ -1922,7 +1922,8 @@
     "toast_cancel_gone": "Esa campaña ya no existe.",
     "toast_scheduled_at": "Campaña programada para el {{when}} (hora de Cuba)",
     "toast_already_sending": "La campaña ya se está enviando. Revisa el estado en la lista.",
-    "warn_send_failed": "Guardada, pero el envío no respondió: {{error}}. Revisa el estado en la lista."
+    "warn_send_failed": "Guardada, pero el envío no respondió: {{error}}. Revisa el estado en la lista.",
+    "warn_not_recorded": "El envío salió, pero la lista no pudo guardar el resultado. Antes de volver a mandarla, revisa los contadores."
   },
   "status_registry": {
     "ride": {

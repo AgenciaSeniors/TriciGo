@@ -1922,7 +1922,8 @@
     "toast_cancel_gone": "That campaign no longer exists.",
     "toast_scheduled_at": "Campaign scheduled for {{when}} (Cuba time)",
     "toast_already_sending": "The campaign is already being sent. Check its status in the list.",
-    "warn_send_failed": "Saved, but sending did not respond: {{error}}. Check its status in the list."
+    "warn_send_failed": "Saved, but sending did not respond: {{error}}. Check its status in the list.",
+    "warn_not_recorded": "The send went out, but the list could not save the result. Check the counts before sending it again."
   },
   "status_registry": {
     "ride": {
