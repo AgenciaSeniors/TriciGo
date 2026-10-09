@@ -21,6 +21,8 @@ import { campaignEmailHtml, campaignOutcome, type ChannelResult } from '../_shar
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const DUE_BATCH = 5;
+// Same cap as campaignOutcome's last_error.
+const MAX_ERROR = 500;
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('Origin') ?? '';
@@ -118,6 +120,40 @@ async function sendCampaign(client: Client, url: string, serviceKey: string, c: 
   return { id: c.id, ...row, channels: results };
 }
 
+/**
+ * sendCampaign, but an unexpected throw marks that campaign 'failed' instead of leaving it in
+ * 'sending' or stopping the rest of a due batch. The write keeps the 'sending' filter, like
+ * sendCampaign's, so it never overwrites what the stuck-send sweep already recorded.
+ */
+async function sendCampaignSafely(client: Client, url: string, serviceKey: string, c: Campaign) {
+  try {
+    return await sendCampaign(client, url, serviceKey, c);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const row = {
+      status: 'failed' as const,
+      recipient_count: 0,
+      push_sent: 0,
+      email_sent: 0,
+      sent_count: 0,
+      last_error: `unexpected: ${message}`.slice(0, MAX_ERROR),
+      sent_at: new Date().toISOString(),
+    };
+    console.error('[send-campaign] unexpected error, marking the campaign failed', c.id, err);
+    try {
+      const { error: updateError } = await client
+        .from('campaigns')
+        .update({ status: row.status, last_error: row.last_error, sent_at: row.sent_at })
+        .eq('id', c.id)
+        .eq('status', 'sending');
+      if (updateError) console.error('[send-campaign] could not record the failure', c.id, updateError.message);
+    } catch (writeErr) {
+      console.error('[send-campaign] could not record the failure', c.id, writeErr);
+    }
+    return { id: c.id, ...row, channels: [] as ChannelResult[] };
+  }
+}
+
 Deno.serve(async (req) => {
   const cors = getCorsHeaders(req);
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -151,7 +187,7 @@ Deno.serve(async (req) => {
       if (error) throw new Error(error.message);
       const claimed = (data ?? []) as Campaign[];
       const work = (async () => {
-        for (const c of claimed) await sendCampaign(client, url, serviceKey, c);
+        for (const c of claimed) await sendCampaignSafely(client, url, serviceKey, c);
       })();
       if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(work);
       else await work;
@@ -175,7 +211,7 @@ Deno.serve(async (req) => {
       const { data: row } = await client.from('campaigns').select('status').eq('id', campaignId).single();
       return json(409, { error: 'not_claimable', status: (row as { status?: string } | null)?.status ?? null });
     }
-    return json(200, await sendCampaign(client, url, serviceKey, claimed[0]));
+    return json(200, await sendCampaignSafely(client, url, serviceKey, claimed[0]));
   } catch (err) {
     console.error('[send-campaign]', err);
     return json(500, { error: 'internal' });

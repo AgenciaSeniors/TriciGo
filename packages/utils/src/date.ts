@@ -331,9 +331,11 @@ export function havanaLocalToUtcIso(value: string): string {
   const wallAsUtc = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
   // Correct by the offset at the guessed instant, then once more in case the guess fell on the
   // other side of a DST change.
-  let utc = wallAsUtc + havanaOffsetMinutes(new Date(wallAsUtc)) * 60000;
-  const second = havanaOffsetMinutes(new Date(utc));
-  utc = wallAsUtc + second * 60000;
+  const first = wallAsUtc + havanaOffsetMinutes(new Date(wallAsUtc)) * 60000;
+  const second = wallAsUtc + havanaOffsetMinutes(new Date(first)) * 60000;
+  // A wall clock in the spring gap (00:00–00:59 on the March change day) does not exist, so the
+  // second pass misses it; the first pass reads it with the winter offset, one hour later.
+  const utc = utcIsoToHavanaLocal(new Date(second).toISOString()) === value ? second : first;
   return new Date(utc).toISOString();
 }
 

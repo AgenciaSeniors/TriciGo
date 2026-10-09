@@ -276,6 +276,17 @@ describe('havanaLocalToUtcIso', () => {
     expect(havanaLocalToUtcIso('2026-11-02T10:00')).toBe('2026-11-02T15:00:00.000Z');
   });
 
+  it('uses the offset in force right after each change, even when the first guess is on the other side', () => {
+    // March: 00:00 CST jumps to 01:00 CDT. November: 01:00 CDT falls back to 00:00 CST.
+    expect(havanaLocalToUtcIso('2026-03-08T02:00')).toBe('2026-03-08T06:00:00.000Z');
+    expect(havanaLocalToUtcIso('2026-11-01T02:00')).toBe('2026-11-01T07:00:00.000Z');
+    expect(havanaLocalToUtcIso('2026-11-01T01:30')).toBe('2026-11-01T06:30:00.000Z');
+  });
+
+  it('moves a time inside the spring gap (Havana 00:00–00:59 on the March change day) forward an hour', () => {
+    expect(havanaLocalToUtcIso('2026-03-08T00:30')).toBe('2026-03-08T05:30:00.000Z');
+  });
+
   it('rejects anything that is not YYYY-MM-DDTHH:mm', () => {
     expect(() => havanaLocalToUtcIso('2026-01-15')).toThrow('YYYY-MM-DDTHH:mm');
     expect(() => havanaLocalToUtcIso('')).toThrow('YYYY-MM-DDTHH:mm');

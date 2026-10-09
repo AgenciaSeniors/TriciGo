@@ -7,6 +7,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 interface FakeCampaign {
   id: string; name: string; channel: string; message_title: string; message_body: string;
   promo_code_id: string | null; created_by: string | null; status: string;
+  recipient_count: number; push_sent: number; email_sent: number; sent_count: number;
+  last_error: string | null; sent_at?: string;
 }
 
 const db = vi.hoisted(() => ({
@@ -16,6 +18,8 @@ const db = vi.hoisted(() => ({
   claimable: [] as string[],
   recipients: [] as string[],
   recipientsError: null as null | { message: string },
+  // campaign id -> message: campaign_recipient_ids rejects (an unexpected throw, not a returned error).
+  recipientsThrow: {} as Record<string, string>,
   rpcCalls: [] as Array<{ fn: string; args: unknown }>,
   updates: [] as Array<{ id: string; row: Record<string, unknown> }>,
 }));
@@ -73,6 +77,8 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
           return Promise.resolve({ data: ids.map((id) => ({ ...db.campaigns[id] })), error: null });
         }
         if (fn === 'campaign_recipient_ids') {
+          const boom = db.recipientsThrow[args.p_campaign_id as string];
+          if (boom) return Promise.reject(new Error(boom));
           return Promise.resolve(db.recipientsError ? { data: null, error: db.recipientsError } : { data: db.recipients, error: null });
         }
         return Promise.resolve({ data: null, error: { message: `unexpected rpc ${fn}` } });
@@ -115,7 +121,7 @@ const CAMP2 = 'ca000000-0000-4000-8000-000000000002';
 
 const campaign = (id: string, channel: string, created_by: string): FakeCampaign => ({
   id, name: id, channel, message_title: 'Viaja hoy', message_body: 'Hola <b>Ana</b>\nVen', promo_code_id: null,
-  created_by, status: 'scheduled',
+  created_by, status: 'scheduled', recipient_count: 0, push_sent: 0, email_sent: 0, sent_count: 0, last_error: null,
 });
 
 beforeEach(() => {
@@ -126,6 +132,7 @@ beforeEach(() => {
   db.claimable = [CAMP, CAMP2];
   db.recipients = ['u1', 'u2', 'u3'];
   db.recipientsError = null;
+  db.recipientsThrow = {};
   db.rpcCalls = [];
   db.updates = [];
   pushResponse = new Response(JSON.stringify({ sent: 3, failed: 0 }), { status: 200 });
@@ -246,6 +253,34 @@ describe('send-campaign: sending', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(lastUpdate(CAMP)).toMatchObject({ status: 'failed', last_error: 'recipients: boom' });
   });
+
+  it('an unexpected throw while sending: 200 with a failed result, row failed, error cut to 500', async () => {
+    const long = 'x'.repeat(600);
+    db.recipientsThrow = { [CAMP]: long };
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(res.status).toBe(200);
+    const expected = `unexpected: ${long}`.slice(0, 500);
+    expect(await res.json()).toMatchObject({
+      id: CAMP, status: 'failed', recipient_count: 0, push_sent: 0, email_sent: 0, sent_count: 0,
+      last_error: expected, channels: [],
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(lastUpdate(CAMP)).toMatchObject({ status: 'failed', last_error: expected });
+    expect(db.campaigns[CAMP].status).toBe('failed');
+  });
+
+  it('writes the result only while the campaign is still sending', async () => {
+    pushResponse = () => {
+      // The 15-minute sweep gave up on the campaign while its push was in flight.
+      Object.assign(db.campaigns[CAMP], { status: 'failed', last_error: 'interrupted' });
+      return new Response(JSON.stringify({ sent: 3, failed: 0 }), { status: 200 });
+    };
+    await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(db.campaigns[CAMP]).toMatchObject({
+      status: 'failed', last_error: 'interrupted', recipient_count: 0, push_sent: 0, email_sent: 0, sent_count: 0,
+    });
+    expect(db.campaigns[CAMP].sent_at).toBeUndefined();
+  });
 });
 
 describe('send-campaign: due runs (cron)', () => {
@@ -255,6 +290,15 @@ describe('send-campaign: due runs (cron)', () => {
     expect(await res.json()).toEqual({ claimed: [CAMP, CAMP2] });
     expect(db.rpcCalls[0]).toEqual({ fn: 'claim_campaigns', args: { p_campaign_id: null, p_limit: 5 } });
     expect(db.campaigns[CAMP].status).toBe('sent');
+    expect(db.campaigns[CAMP2].status).toBe('sent');
+  });
+
+  it('an unexpected throw on one campaign fails only that one; the rest of the batch is sent', async () => {
+    db.recipientsThrow = { [CAMP]: 'socket hang up' };
+    const res = await call({ due: true }, { internal: true });
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ claimed: [CAMP, CAMP2] });
+    expect(db.campaigns[CAMP]).toMatchObject({ status: 'failed', last_error: 'unexpected: socket hang up' });
     expect(db.campaigns[CAMP2].status).toBe('sent');
   });
 
