@@ -22,6 +22,7 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import { getServiceKey, isServiceKeyToken } from '../_shared/service-key.ts';
 import { isAdminRole, isPanelStaffRole } from '../_shared/panel-roles.ts';
 import {
+  campaignChannels,
   campaignEmailHtml,
   campaignOutcome,
   chunkIds,
@@ -31,6 +32,8 @@ import {
 } from '../_shared/campaign-send.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+// Canonical form only. Anything else would reach claim_campaigns and fail there with 22P02 (500).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * How long a due run keeps claiming campaigns, measured from the start of the request. The
  * worker's wall clock is 400 s; stopping new claims at 300 s leaves the campaign in progress
@@ -141,18 +144,24 @@ async function recordResult(client: Client, id: string, row: Record<string, unkn
 
 async function sendCampaign(client: Client, url: string, serviceKey: string, c: Campaign) {
   const results: ChannelResult[] = [];
-  let recipientError: string | undefined;
+  let fatalError: string | undefined;
   let ids: string[] = [];
 
-  const { data, error } = await client.rpc('campaign_recipient_ids', { p_campaign_id: c.id });
-  if (error) {
-    recipientError = `recipients: ${error.message}`;
+  const channels = campaignChannels(c.channel);
+  if (!channels) {
+    // Nothing to send it through: fail it without reading the segment.
+    fatalError = `unknown channel: ${String(c.channel)}`;
   } else {
-    ids = Array.isArray(data) ? data.filter((x): x is string => typeof x === 'string') : [];
+    const { data, error } = await client.rpc('campaign_recipient_ids', { p_campaign_id: c.id });
+    if (error) {
+      fatalError = `recipients: ${error.message}`;
+    } else {
+      ids = Array.isArray(data) ? data.filter((x): x is string => typeof x === 'string') : [];
+    }
   }
 
-  if (!recipientError && ids.length > 0) {
-    if (c.channel === 'push' || c.channel === 'both') {
+  if (channels && !fatalError && ids.length > 0) {
+    if (channels.includes('push')) {
       results.push(await sendChannelInChunks('push', url, serviceKey, ids, (chunk) => ({
         user_ids: chunk,
         title: c.message_title,
@@ -161,7 +170,7 @@ async function sendCampaign(client: Client, url: string, serviceKey: string, c: 
         data: { deep_link: 'tricigo://home', content_type: 'campaign', content_id: c.id },
       })));
     }
-    if (c.channel === 'email' || c.channel === 'both') {
+    if (channels.includes('email')) {
       const bodyHtml = campaignEmailHtml(c.message_body);
       results.push(await sendChannelInChunks('email', url, serviceKey, ids, (chunk) => ({
         user_ids: chunk,
@@ -172,7 +181,7 @@ async function sendCampaign(client: Client, url: string, serviceKey: string, c: 
     }
   }
 
-  const outcome = campaignOutcome(results, recipientError);
+  const outcome = campaignOutcome(results, fatalError);
   const row = {
     status: outcome.status,
     recipient_count: ids.length,
@@ -292,6 +301,7 @@ Deno.serve(async (req) => {
 
     const campaignId = typeof body.campaign_id === 'string' ? body.campaign_id : null;
     if (!campaignId) return json(400, { error: 'campaign_id required' });
+    if (!UUID_RE.test(campaignId)) return json(400, { error: 'campaign_id must be a uuid' });
 
     if (!isInternal && !isAdminRole(callerRole)) {
       const { data: own } = await client.from('campaigns').select('created_by').eq('id', campaignId).single();

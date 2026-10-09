@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  campaignChannels,
   campaignEmailHtml,
   campaignOutcome,
   chunkIds,
@@ -60,6 +61,18 @@ describe('campaignOutcome', () => {
       status: 'sent', pushSent: 300, emailSent: 0, sentCount: 300,
       lastError: 'push: 1/2 batches failed: boom · email: resend_not_configured',
     });
+  });
+});
+
+describe('campaignChannels', () => {
+  it('maps each known channel to the channels it sends, push first', () => {
+    expect(campaignChannels('push')).toEqual(['push']);
+    expect(campaignChannels('email')).toEqual(['email']);
+    expect(campaignChannels('both')).toEqual(['push', 'email']);
+  });
+
+  it('anything else is unknown (the column has no CHECK)', () => {
+    for (const v of ['sms', 'PUSH', '', null, undefined, 3]) expect(campaignChannels(v)).toBeNull();
   });
 });
 

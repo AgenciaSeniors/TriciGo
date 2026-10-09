@@ -35,6 +35,17 @@ export const MAX_ERROR = 500;
  */
 export const RECIPIENT_CHUNK = 300;
 
+/**
+ * The channels a campaign's `channel` column sends, push first; null for any other value
+ * (campaigns.channel has no CHECK, so the row can hold anything).
+ */
+export function campaignChannels(channel: unknown): Array<ChannelResult['channel']> | null {
+  if (channel === 'push') return ['push'];
+  if (channel === 'email') return ['email'];
+  if (channel === 'both') return ['push', 'email'];
+  return null;
+}
+
 /** The ids in order, in chunks of at most `size`. */
 export function chunkIds(ids: readonly string[], size: number = RECIPIENT_CHUNK): string[][] {
   if (!Number.isInteger(size) || size < 1) throw new Error(`chunkIds: size must be a positive integer, got ${size}`);

@@ -199,6 +199,15 @@ describe('send-campaign: who may send', () => {
   it('400 without a campaign id', async () => {
     expect((await call({}, { token: 'jwt-admin' })).status).toBe(400);
   });
+
+  it('400 when the campaign id is not a uuid, before any query', async () => {
+    for (const bad of ['abc', `${CAMP}x`, ' ' + CAMP, "1' OR '1'='1"]) {
+      const res = await call({ campaign_id: bad }, { token: 'jwt-admin' });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'campaign_id must be a uuid' });
+    }
+    expect(db.rpcCalls).toEqual([]);
+  });
 });
 
 describe('send-campaign: sending', () => {
@@ -267,6 +276,17 @@ describe('send-campaign: sending', () => {
     expect(res.status).toBe(200);
     expect(lastUpdate(CAMP)).toMatchObject({ status: 'failed', sent_count: 0 });
     expect(String(lastUpdate(CAMP)?.last_error)).toContain('email: network down');
+  });
+
+  it('an unknown channel on the row: failed, nobody read, nothing sent', async () => {
+    db.campaigns[CAMP].channel = 'sms';
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(res.status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.rpcCalls.map((c) => c.fn)).toEqual(['claim_campaigns']);
+    expect(lastUpdate(CAMP)).toMatchObject({
+      status: 'failed', recipient_count: 0, sent_count: 0, last_error: 'unknown channel: sms',
+    });
   });
 
   it('the recipients cannot be read: failed, no channel call', async () => {
