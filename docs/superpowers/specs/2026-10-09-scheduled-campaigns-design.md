@@ -69,8 +69,8 @@ all `sent`.
   `sent` row with invented counts, which only affects the history list. A later migration can remove the
   exception once no old tab can be open.
 
-**`campaign_recipient_ids(p_campaign_id uuid) RETURNS SETOF uuid`** (SECURITY DEFINER, `search_path = ''`,
-EXECUTE for `service_role` only). Same segments as today's browser code, evaluated at send time, never
+**`campaign_recipient_ids(p_campaign_id uuid) RETURNS uuid[]`** (SECURITY DEFINER, `search_path = ''`,
+EXECUTE for `service_role` only). An array, not a set: PostgREST cuts a set-returning function at 1000 rows. Same segments as today's browser code, evaluated at send time, never
 including `is_active = false` accounts:
 
 | segment_type | customer audience | driver audience |
@@ -81,23 +81,29 @@ including `is_active = false` accounts:
 | `inactive` | role match and no ride as customer in 30 days | role match and no ride as driver (`rides.driver_id → driver_profiles.user_id`) in 30 days |
 | `by_city` | role match and `users.city_id = segment_city_id` (NULL city → nobody) | same |
 
-Any other value returns nobody.
+Any other value returns nobody. CHECKs on `channel`, `segment_type` and `audience_role`, and one that a
+`scheduled` row has a `scheduled_at`, keep such rows out; the fallback stays in case a CHECK is ever dropped.
 
 **`claim_campaigns(p_campaign_id uuid DEFAULT NULL, p_limit int DEFAULT 5) RETURNS SETOF campaigns`**
 (SECURITY DEFINER, `service_role` only): moves due campaigns (`status = 'scheduled' AND scheduled_at <= now()`,
-optionally only `p_campaign_id`) to `sending`, sets `started_at`, oldest first, `FOR UPDATE SKIP LOCKED`.
+optionally only `p_campaign_id`) to `sending`, sets `started_at`, oldest first, `FOR UPDATE SKIP LOCKED` inside a
+`MATERIALIZED` CTE (written as `id IN (SELECT … LIMIT … FOR UPDATE SKIP LOCKED)` the planner re-runs the
+subquery per row and the `LIMIT` stops holding).
 
 **`cancel_campaign(p_campaign_id uuid) RETURNS text`** (SECURITY DEFINER, `authenticated` only):
 - Allowed when `is_admin()`, or `is_marketing()` and `created_by = auth.uid()`; otherwise 42501 with
   DETAIL `campaign_cancel_forbidden`.
-- Locks the row; if it is still `scheduled`, sets `cancelled`, `canceled_at`, `canceled_by` and returns
-  `'cancelled'`. Otherwise returns the current status (`'sending'`, `'sent'`, …) and changes nothing.
+- Locks the row (`FOR UPDATE`, so a claim in progress makes it wait and then read `sending`); if it is still
+  `scheduled`, sets `cancelled`, `canceled_at`, `canceled_by` (FK to `auth.users`, `ON DELETE SET NULL`) and
+  returns `'cancelled'`. Otherwise returns the current status (`'sending'`, `'sent'`, …) and changes nothing.
 
 **`dispatch_due_campaigns() RETURNS integer`** (SECURITY DEFINER, `service_role` only), run by the cron job
 `send-due-campaigns` every minute:
 1. Marks `sending` rows older than 15 minutes as `failed` / `interrupted`.
 2. Only if a due `scheduled` campaign exists, calls
    `public.cron_http_post('send-due-campaigns', '<project>/functions/v1/send-campaign', <service-key headers>, '{"due":true}')`.
+   If the vault has no service key it raises instead (DETAIL `campaign_dispatch_no_service_key`): a call
+   without a key would get 401 every minute, unseen.
 3. No `EXCEPTION WHEN OTHERS` in the main block, so a failure reaches `check_cron_sql_failures` (00596).
 
 New grants follow `pnpm check:migration-grants` (no new tables).
@@ -109,10 +115,11 @@ New grants follow `pnpm check:migration-grants` (no new tables).
 | Call | Who | What |
 |---|---|---|
 | `{ "campaign_id": "…" }` | panel user (admin, or marketing for its own campaign) or service key | claims that campaign, sends it, answers with the counts |
-| `{ "due": true }` | service key only (cron) | claims up to 5 due campaigns, answers 202 at once and sends them in the background (`EdgeRuntime.waitUntil`), so the cron call never hits pg_net's 30 s timeout |
+| `{ "due": true }` | service key only (cron) | answers 202 at once and, in the background (`EdgeRuntime.waitUntil`), claims one due campaign, sends it and claims the next, until none is due or 300 s are spent. The cron call never hits pg_net's 30 s timeout, and a worker stopped mid-run leaves at most one campaign in `sending`; the rest stay `scheduled` for the next minute |
 
 For each claimed campaign:
-1. `campaign_recipient_ids` → user ids.
+1. `campaign_recipient_ids` → user ids, sent to each channel in batches of 300 (`send-push` and
+   `send-bulk-email` filter with `.in()`, and 700 or more uuids exceed PostgREST's URL limit).
 2. Push (channel `push` or `both`): internal call to `send-push`, category `campaign`, data
    `{ deep_link: 'tricigo://home', content_type: 'campaign', content_id: <campaign id> }`.
 3. E-mail (channel `email` or `both`): internal call to `send-bulk-email` with the title as subject, the body
@@ -155,8 +162,9 @@ Errors never leave a campaign in `sending` on purpose: the function catches per 
 
 ### Rollout (each step with the founder's OK)
 
-1. Apply 00649 (rehearsed in prod first inside a rolled-back transaction).
-2. Deploy `send-campaign`.
+1. Deploy `send-campaign`. Nothing calls it until 00649 exists, and once 00649 is applied the cron job calls it
+   within a minute of any due campaign, so it has to be there first.
+2. Apply 00649 (rehearsed in prod first inside a rolled-back transaction).
 3. Merge the panel (it deploys on merge). Until each open tab reloads, the old panel keeps working:
    "Enviar ahora" still sends from the browser and is stored as `sent` (legacy exception, no second send).
    "Programar" from an old tab stores the raw local time, which Postgres reads as UTC, so that campaign would
