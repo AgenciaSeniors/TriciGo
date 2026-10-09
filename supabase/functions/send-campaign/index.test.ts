@@ -20,6 +20,8 @@ const db = vi.hoisted(() => ({
   recipientsError: null as null | { message: string },
   // campaign id -> message: campaign_recipient_ids rejects (an unexpected throw, not a returned error).
   recipientsThrow: {} as Record<string, string>,
+  // Runs when campaign_recipient_ids is called, before it answers (e.g. the sweep flips the row).
+  beforeRecipients: null as null | ((campaignId: string) => void),
   // claim_campaigns returns this error instead of claiming.
   claimError: null as null | { message: string },
   // The next campaign updates fail, in order: 'error' returns an error, 'throw' rejects.
@@ -92,6 +94,7 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => {
           return Promise.resolve({ data: ids.map((id) => ({ ...db.campaigns[id] })), error: null });
         }
         if (fn === 'campaign_recipient_ids') {
+          db.beforeRecipients?.(args.p_campaign_id as string);
           const boom = db.recipientsThrow[args.p_campaign_id as string];
           if (boom) return Promise.reject(new Error(boom));
           return Promise.resolve(db.recipientsError ? { data: null, error: db.recipientsError } : { data: db.recipients, error: null });
@@ -149,6 +152,7 @@ beforeEach(() => {
   db.recipients = ['u1', 'u2', 'u3'];
   db.recipientsError = null;
   db.recipientsThrow = {};
+  db.beforeRecipients = null;
   db.claimError = null;
   db.updateFailures = [];
   db.rpcCalls = [];
@@ -180,9 +184,15 @@ describe('send-campaign: who may send', () => {
     expect(db.rpcCalls).toEqual([]);
   });
 
-  it('403 for a customer', async () => {
-    expect((await call({ campaign_id: CAMP }, { token: 'jwt-customer' })).status).toBe(403);
+  it('403 for a customer, even on a campaign its own account created (the role gate, not ownership)', async () => {
+    const OWN = 'ca000000-0000-4000-8000-0000000000c1';
+    db.campaigns[OWN] = campaign(OWN, 'push', CUSTOMER);
+    db.claimable = [OWN];
+    const res = await call({ campaign_id: OWN }, { token: 'jwt-customer' });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'Forbidden: panel role required' });
     expect(db.rpcCalls).toEqual([]);
+    expect(db.campaigns[OWN].status).toBe('scheduled');
   });
 
   it("403 for marketing on another account's campaign, before any claim", async () => {
@@ -220,9 +230,12 @@ describe('send-campaign: sending', () => {
     });
 
     const [pushCall, emailCall] = fetchMock.mock.calls;
+    // Both channels are called with the service key: send-push and send-bulk-email trust nothing else.
+    for (const [, init] of [pushCall, emailCall]) {
+      expect((init as RequestInit).headers).toMatchObject({ apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` });
+    }
     expect(pushCall[0]).toBe('https://example.supabase.co/functions/v1/send-push');
     const pushInit = pushCall[1] as RequestInit;
-    expect((pushInit.headers as Record<string, string>).apikey).toBe(SERVICE_KEY);
     expect(JSON.parse(pushInit.body as string)).toEqual({
       user_ids: ['u1', 'u2', 'u3'], title: 'Viaja hoy', body: 'Hola <b>Ana</b>\nVen', category: 'campaign',
       data: { deep_link: 'tricigo://home', content_type: 'campaign', content_id: CAMP },
@@ -259,6 +272,13 @@ describe('send-campaign: sending', () => {
     expect(res.status).toBe(200);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(lastUpdate(CAMP)).toMatchObject({ status: 'sent', recipient_count: 0, sent_count: 0 });
+  });
+
+  it('"Enviados" (sent_count) is the larger of push and e-mail, whichever it is', async () => {
+    pushResponse = new Response(JSON.stringify({ sent: 1 }), { status: 200 });
+    emailResponse = new Response(JSON.stringify({ ok: true, sent: 3 }), { status: 200 });
+    await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(lastUpdate(CAMP)).toMatchObject({ push_sent: 1, email_sent: 3, sent_count: 3 });
   });
 
   it('push fails and e-mail works: sent, with the push error noted', async () => {
@@ -325,6 +345,15 @@ describe('send-campaign: sending', () => {
     // Not retried (no error, just no row left in 'sending'), and the answer says so.
     expect(db.updates.filter((u) => u.id === CAMP)).toHaveLength(1);
     expect(await res.json()).toMatchObject({ status: 'sent', push_sent: 3, recorded: false });
+  });
+
+  it('an unexpected throw after the sweep flipped the row: the failure write leaves it as the sweep left it', async () => {
+    db.beforeRecipients = (id) => Object.assign(db.campaigns[id], { status: 'failed', last_error: 'interrupted' });
+    db.recipientsThrow = { [CAMP]: 'socket hang up' };
+    const res = await call({ campaign_id: CAMP }, { token: 'jwt-mkt1' });
+    expect(await res.json()).toMatchObject({ status: 'failed', last_error: 'unexpected: socket hang up', recorded: false });
+    expect(db.campaigns[CAMP]).toMatchObject({ status: 'failed', last_error: 'interrupted' });
+    expect(db.campaigns[CAMP].sent_at).toBeUndefined();
   });
 
   it('the result write fails once: retried, recorded', async () => {
@@ -433,6 +462,37 @@ describe('send-campaign: due runs (cron)', () => {
     ]);
     expect(db.campaigns[CAMP].status).toBe('sent');
     expect(db.campaigns[CAMP2].status).toBe('sent');
+  });
+
+  it('with EdgeRuntime.waitUntil, answers 202 while the sends are still running, and they finish', async () => {
+    const waitUntil = vi.fn();
+    (globalThis as Record<string, unknown>).EdgeRuntime = { waitUntil };
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    pushResponse = async () => {
+      await gate;
+      return new Response(JSON.stringify({ sent: 3 }), { status: 200 });
+    };
+    try {
+      const res = await Promise.race([
+        call({ due: true }, { internal: true }),
+        new Promise<'blocked'>((r) => setTimeout(() => r('blocked'), 200)),
+      ]);
+      expect(res).not.toBe('blocked');
+      expect((res as Response).status).toBe(202);
+      // Claimed and stuck in its push: not sent yet when the answer came back.
+      expect(db.campaigns[CAMP].status).toBe('sending');
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      release();
+      await waitUntil.mock.calls[0][0];
+      expect(db.campaigns[CAMP].status).toBe('sent');
+      expect(db.campaigns[CAMP2].status).toBe('sent');
+    } finally {
+      release();
+      delete (globalThis as Record<string, unknown>).EdgeRuntime;
+    }
   });
 
   it('stops claiming once the time budget (300 s from the request start) is spent', async () => {
