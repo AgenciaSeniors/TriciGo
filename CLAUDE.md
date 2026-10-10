@@ -3280,6 +3280,21 @@ Ensayo: `supabase/tests/00644/run.sh` (RED: 7 fallos; GREEN 17/17, con 2 pruebas
 
 **Renumeración del 2026-10-08.** Tres PRs abiertas tenían 00640 y 00641 al mismo tiempo. #1122 conservó la 00640 porque ya estaba aplicada en prod (`00640_cron_errors_reach_watchdog`). #1115 (rol de marketing) pasó a 00641 (el enum) y 00642 (los permisos), en ese orden, porque los permisos necesitan el valor nuevo del enum. #1120 (aviso de correo) pasó a 00643. Las ramas de otras sesiones se tocaron con commits nuevos (`git mv`, sin reescribir historia) y se avisó a cada sesión dueña.
 
+### Vehículo del conductor: el tipo y la placa se revisan (00650, 2026-10-10)
+
+Hasta la 00650, `vehicles` no tenía ningún trigger. Medido en prod con la cuenta demo del conductor, en un bloque revertido: aprobado con triciclo, cambió su vehículo a Confort con otra placa y al instante recibía ofertas Confort y Auto; además agregó una moto activa y recibía ofertas de moto. La pantalla "Editar vehículo" decía "Pendiente de verificación", pero el admin nunca veía el cambio.
+
+- **Un conductor aprobado que cambia el tipo o la placa vuelve a revisión** (`under_review`, sin conexión) y el admin lo aprueba de nuevo desde el panel. La placa se compara solo por letras y dígitos, sin mayúsculas (`plateKey` en `@tricigo/utils`, igual que el trigger). Marca, modelo, año, color, capacidad, foto y carga se guardan sin revisión. Con un viaje en curso o suspendido, se rechaza.
+- **El cambio de estado lo hace `tg_vehicles_client_guard`** con `app.vehicle_rereview` = id del perfil, que `tg_driver_profiles_protect_admin_fields` deja pasar. Un cliente no puede fijar `app.*` por PostgREST. Si se reescribe ese guard del perfil, hay que conservar ese paso, o el conductor queda aprobado con el vehículo nuevo.
+- **Un conductor aprobado antes y de nuevo en revisión no puede cambiar su identidad** (carnet, antecedentes): se congela cuando `approved_at` no es nulo.
+- **Un cliente no agrega vehículos después de la aprobación, ni activa o desactiva uno, ni lo pasa a otra cuenta.** Antes de la aprobación, registrar un vehículo desactiva el anterior: el despacho usa todos los activos y el admin ve uno solo.
+- **Confort solo a Confort.** La 00263 lo había hecho estricto y la 00326 copió un cuerpo viejo de `find_best_drivers` y volvió a ofrecer los pedidos Confort a autos comunes (la clase de regresión de las cadenas `CREATE OR REPLACE`). Desde la 00650, `auto_confort` va solo a `confort`; `auto_standard` sigue yendo a `auto` y `confort`. El aviso a conductores fuera de línea sigue la misma regla.
+- **Un documento de un conductor apunta a su propia carpeta** (`driver-docs/<driver_id>/`, sin `..`). Antes podía apuntar al archivo de otro conductor y el admin lo revisaba como propio.
+- **Una selfie que abre un conductor nace pendiente y sin resultado.** Solo `verify-selfie` (service role) o un admin escriben un resultado.
+- Los errores traen el motivo en español en MESSAGE y un código en DETAIL (`vehicle_*`, `document_path_not_own`). `driver.service` los convierte en `AppError` con ese mensaje.
+
+Ensayo: `supabase/tests/00650/run.sh` (RED: 18 fallos; GREEN 42/42, con copia CRLF y 6 pruebas negativas). Ensayo en prod, en un bloque revertido, con la cuenta demo: los mismos resultados.
+
 ### Texto ajeno dentro de HTML, `<script>` o una redirección (00646, 2026-10-08)
 
 La web y el admin usan React 19, que escapa el texto y bloquea `javascript:` en `href`. Los agujeros estaban donde el HTML se arma a mano. Todos se reprodujeron en Chromium con el CSP real de la web, que permite `'unsafe-inline'`:

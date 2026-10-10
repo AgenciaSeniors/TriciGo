@@ -67,6 +67,24 @@ async function skipWithoutSession(supabase: ReturnType<typeof getSupabaseClient>
 
 import { transformRideCoordinates } from './_ride-coordinates';
 
+// 00650: the vehicle and document guards refuse with a Spanish MESSAGE and a
+// code in DETAIL. Surface that reason instead of the generic error toast.
+const DRIVER_GUARD_CODES = new Set([
+  'vehicle_add_after_approval',
+  'vehicle_active_locked',
+  'vehicle_owner_locked',
+  'vehicle_change_during_ride',
+  'vehicle_change_while_suspended',
+  'document_path_not_own',
+]);
+
+function driverGuardError(error: { message?: string; details?: string | null }): AppError | null {
+  if (error.details && DRIVER_GUARD_CODES.has(error.details) && error.message) {
+    return new AppError(error.message, error.details.toUpperCase(), 400);
+  }
+  return null;
+}
+
 /**
  * Ceiling for the courtesy round-trips that run BEFORE accept_ride_v2.
  *
@@ -204,7 +222,7 @@ export const driverService = {
       })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw driverGuardError(error) ?? error;
     return data as DriverDocument;
   },
 
@@ -248,7 +266,7 @@ export const driverService = {
       .insert(vehicle)
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw driverGuardError(error) ?? error;
     return data as Vehicle;
   },
 
@@ -294,7 +312,7 @@ export const driverService = {
       .eq('id', vehicleId)
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw driverGuardError(error) ?? error;
     return data as Vehicle;
   },
 
