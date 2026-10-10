@@ -54,6 +54,26 @@ export function isValidPlateNumber(plate: string): boolean {
 }
 
 /**
+ * A plate reduced to its letters and digits, uppercase. Same rule as
+ * tg_vehicles_client_guard (00650): rewriting a plate with spaces, dashes or
+ * lowercase is not a change.
+ */
+export function plateKey(plate: string): string {
+  return plate.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+}
+
+/**
+ * Whether saving this vehicle sends an approved driver back to review
+ * (00650): a new type or a different plate. Everything else saves directly.
+ */
+export function vehicleChangeNeedsReview(
+  before: { type: string; plate: string },
+  after: { type: string; plate: string },
+): boolean {
+  return before.type !== after.type || plateKey(before.plate) !== plateKey(after.plate);
+}
+
+/**
  * Validates a Cuban identity card number (Carnet de Identidad).
  * Format: 11 digits where first 6 are birth date (YYMMDD).
  */
