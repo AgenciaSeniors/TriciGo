@@ -2403,6 +2403,85 @@ describe('createRide — a fare above the tariff ceiling (00631)', () => {
   });
 });
 
+describe('createRide — other rides the server refuses (00655)', () => {
+  const BASE = {
+    service_type: 'triciclo_basico' as const,
+    payment_method: 'cash' as const,
+    pickup_latitude: 23.1352,
+    pickup_longitude: -82.3599,
+    pickup_address: 'Capitolio',
+    dropoff_latitude: 23.1375,
+    dropoff_longitude: -82.3964,
+    dropoff_address: 'Hotel Nacional',
+    estimated_fare_cup: 1500,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+  });
+
+  it.each([
+    ['fare_required', 'FARE_REQUIRED', 'No pudimos calcular el precio de este viaje. Vuelve a calcularlo e inténtalo de nuevo.'],
+    ['scheduled_limit', 'SCHEDULED_LIMIT', 'Puedes tener hasta 5 viajes programados pendientes. Cancela alguno para programar otro.'],
+  ])("%s is shown with the server's Spanish message", async (details, code, message) => {
+    mockFrom.mockReturnValue({
+      insert: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: null, error: { code: 'P0001', message, details } }),
+        }),
+      }),
+    });
+    const err = await rideService.createRide(BASE).then(
+      () => { throw new Error('createRide did not reject'); },
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).message).toBe(message);
+    expect((err as AppError).code).toBe(code);
+    expect((err as AppError).statusCode).toBe(400);
+  });
+});
+
+describe('addWaypointToActiveRide — the server decides about stops (00655)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function rejectInsertWith(error: Record<string, unknown>) {
+    mockFrom.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          order: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue({ data: [{ sort_order: 1 }], error: null }),
+          }),
+        }),
+      }),
+      insert: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: null, error }),
+        }),
+      }),
+    });
+  }
+
+  it('a fourth stop the app did not see reads as the stops limit', async () => {
+    rejectInsertWith({ code: 'P0001', message: 'Un viaje puede tener como máximo 3 paradas.', details: 'waypoint_limit' });
+    await expect(rideService.addWaypointToActiveRide('r-1', 'Stop', 23.14, -82.37)).rejects.toThrow('MAX_WAYPOINTS_REACHED');
+  });
+
+  it("a ride whose stops are closed is shown with the server's message", async () => {
+    rejectInsertWith({ code: 'P0001', message: 'Ya no puedes cambiar las paradas de este viaje.', details: 'waypoint_locked' });
+    const err = await rideService.addWaypointToActiveRide('r-1', 'Stop', 23.14, -82.37).then(
+      () => { throw new Error('did not reject'); },
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).message).toBe('Ya no puedes cambiar las paradas de este viaje.');
+    expect((err as AppError).code).toBe('WAYPOINT_LOCKED');
+  });
+});
+
 describe('getLocalFareEstimate — a booking with stops is the direct fare + the server surcharge (00633)', () => {
   const CAPITOLIO = { lat: 23.1352, lng: -82.3599 };
   const NACIONAL = { lat: 23.1375, lng: -82.3964 };

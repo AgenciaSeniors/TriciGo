@@ -712,8 +712,14 @@ export const rideService = {
       if (corporateRejection) throw corporateRejection;
       // An estimate above what the tariff could produce (00631): the server's
       // message is a sentence for the rider; the HINT carries the numbers.
-      if (error.details === 'fare_above_ceiling' && error.message) {
-        throw new AppError(error.message, 'FARE_ABOVE_CEILING', 400);
+      // A ride without a price, or a sixth pending scheduled ride (00655): same.
+      if (
+        (error.details === 'fare_above_ceiling'
+          || error.details === 'fare_required'
+          || error.details === 'scheduled_limit')
+        && error.message
+      ) {
+        throw new AppError(error.message, error.details.toUpperCase(), 400);
       }
       // PostgrestError from Supabase is a plain object, not an Error
       // instance. If we throw it raw, callers that do `String(err)` or
@@ -2198,7 +2204,14 @@ export const rideService = {
       })
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      // 00655: the server caps a ride at 3 stops and closes them once the trip ends.
+      if (error.details === 'waypoint_limit') throw new ValidationError('MAX_WAYPOINTS_REACHED');
+      if (error.details === 'waypoint_locked' && error.message) {
+        throw new AppError(error.message, 'WAYPOINT_LOCKED', 409);
+      }
+      throw error;
+    }
     return data as Waypoint;
   },
 
