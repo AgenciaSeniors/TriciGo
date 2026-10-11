@@ -124,8 +124,10 @@ cuando falla una tarea programada SQL, y que nada dentro de la base vigila. Ese
 job escribe `platform_config.cron_sql_health_at` en cada corrida (cada hora a
 los :45). Si el valor tiene más de 150 min, el workflow abre el issue
 `[watchdog] El vigilante de las tareas SQL dejó de correr`, que trae las
-consultas para revisar, y hace fallar la corrida. Lo cierra solo cuando vuelve
-a correr. Ese valor deja de moverse en tres casos: el vigilante falla, deja de
+consultas para revisar, y hace fallar esa corrida. Mientras siga abierto, las
+corridas siguientes solo lo anotan en el log, sin comentar ni fallar. Lo cierra
+solo cuando vuelve a correr. La lectura se reintenta 3 veces, así que una falla
+momentánea no dispara el aviso. Ese valor deja de moverse en tres casos: el vigilante falla, deja de
 estar programado, o pg_cron deja de arrancar tareas. Para probar el aviso, se
 corre el workflow a mano con `heartbeat_max_age_min` en 1: abre un issue de
 verdad, y la siguiente corrida programada lo cierra.

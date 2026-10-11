@@ -138,15 +138,23 @@ jobs:
 
       # Only while the database answers: when it does not, the uptime issue above
       # already says so, and the timestamp could not be read anyway.
+      # !cancelled(): a failure in an earlier step (say, closing the uptime issue)
+      # must not skip this check.
       - name: Check that the SQL cron watchdog still runs
         id: heartbeat
-        if: steps.probe.outputs.healthy == 'true'
+        if: ${{ !cancelled() && steps.probe.outputs.healthy == 'true' }}
         run: |
           set -uo pipefail
+          # A manual run can pass any text; anything but a whole number falls back to 150.
+          [[ "$HEARTBEAT_MAX_AGE_MIN" =~ ^[0-9]+$ ]] || HEARTBEAT_MAX_AGE_MIN=150
+          # Retried, so one transient 5xx or timeout does not read as "the watchdog stopped".
+          # curl leaves the output file alone when it cannot connect: start without one.
+          rm -f /tmp/hb.json
           code=$(curl -s -o /tmp/hb.json -w '%{http_code}' --max-time 20 \
+            --retry 3 --retry-delay 5 --retry-all-errors \
             -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" \
-            "$SUPABASE_URL/rest/v1/platform_config?select=value&key=eq.cron_sql_health_at" || echo 000)
-          at=$(sed -n 's/.*"value":"\([^"]*\)".*/\1/p' /tmp/hb.json | head -1)
+            "$SUPABASE_URL/rest/v1/platform_config?select=value&key=eq.cron_sql_health_at") || true
+          at=$(sed -n 's/.*"value":"\([^"]*\)".*/\1/p' /tmp/hb.json 2>/dev/null | head -1)
           if [[ "$code" =~ ^2 ]] && [[ -n "$at" ]] && ts=$(date -u -d "$at" +%s 2>/dev/null); then
             age_min=$(( ($(date -u +%s) - ts) / 60 ))
             if (( age_min > HEARTBEAT_MAX_AGE_MIN )); then stale=true; else stale=false; fi
@@ -155,14 +163,18 @@ jobs:
             # A read that fails while the database answers means this check is broken
             # (a renamed key, a policy that hides it): report it rather than stay quiet.
             stale=true
-            detail="no se pudo leer cron_sql_health_at: http=${code} body=$(head -c 200 /tmp/hb.json | tr -d '\n' | tr -d '`$"'"'"'\\')"
+            detail="no se pudo leer cron_sql_health_at: http=${code} body=$(head -c 200 /tmp/hb.json 2>/dev/null | tr -d '\n' | tr -d '`$"'"'"'\\')"
           fi
           echo "stale=$stale" >> "$GITHUB_OUTPUT"
           echo "detail=$detail" >> "$GITHUB_OUTPUT"
           echo "$detail"
 
+      # Opens the issue and fails the run only the first time. While the issue stays
+      # open, later runs just log it: a broken watchdog needs a person and can last
+      # days, and a comment plus a red run every 10 minutes would only be noise.
       - name: Open a watchdog issue if it stopped
-        if: steps.heartbeat.outputs.stale == 'true'
+        id: hbissue
+        if: ${{ !cancelled() && steps.heartbeat.outputs.stale == 'true' }}
         env:
           DETAIL: ${{ steps.heartbeat.outputs.detail }}
         run: |
@@ -186,18 +198,23 @@ jobs:
              revisar **Disk IO** en el panel de Supabase.
           3. Que el job exista y esté activo: \`SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'check-cron-sql-failures';\`
 
+          Si la base acaba de volver de una caída de más de hora y media, puede ser
+          solo eso: el vigilante escribe su registro a los :45, así que conviene esperar
+          esa corrida.
+
           Este issue se cierra solo cuando vuelve a correr.
           EOF
           )
           if [[ -n "$existing" ]]; then
-            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
-            echo "commented on #$existing"
+            echo "still stale; #$existing is already open: $DETAIL"
+            echo "created=false" >> "$GITHUB_OUTPUT"
           else
             gh issue create --repo "$GITHUB_REPOSITORY" --title "$HEARTBEAT_ISSUE_TITLE" --body "$body"
+            echo "created=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Close the watchdog issue once it runs again
-        if: steps.heartbeat.outputs.stale == 'false'
+        if: ${{ !cancelled() && steps.heartbeat.outputs.stale == 'false' }}
         env:
           DETAIL: ${{ steps.heartbeat.outputs.detail }}
         run: |
@@ -210,7 +227,7 @@ jobs:
           fi
 
       - name: Fail the run if the SQL cron watchdog stopped
-        if: steps.heartbeat.outputs.stale == 'true'
+        if: ${{ !cancelled() && steps.hbissue.outputs.created == 'true' }}
         env:
           DETAIL: ${{ steps.heartbeat.outputs.detail }}
         run: |
