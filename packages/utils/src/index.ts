@@ -40,6 +40,8 @@ export {
   makeSentryBeforeSend,
 } from './sentryNoise';
 export type { MinimalSentryEvent, MinimalSentryHint } from './sentryNoise';
+// URL fragments that carry a personal token (team digest opt-out link) never reach Sentry.
+export { PRIVATE_FRAGMENT_PATHS, scrubPrivateFragments } from './sentryPrivacy';
 export { isNetworkError } from './networkError';
 export { useDebouncePress } from './useDebouncePress';
 // BUG-marker-position-lag: smooth coordinate interpolation for Uber-style
