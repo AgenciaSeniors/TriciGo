@@ -14,7 +14,15 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { authService, driverService } from '@tricigo/api';
-import { isValidEmail, isValidCubanPhone, normalizeCubanPhone, PACKAGE_CATEGORY_LABELS, realEmail } from '@tricigo/utils';
+import {
+  isValidEmail,
+  isValidCubanPhone,
+  normalizeCubanPhone,
+  PACKAGE_CATEGORY_LABELS,
+  realEmail,
+  emailNoticeErrorKey,
+  profileEmailSavePlan,
+} from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
@@ -249,10 +257,10 @@ export default function EditProfileScreen() {
     }
 
     const phoneChanged = phone.trim() !== (user.phone ?? '');
-    // realEmail() descarta el sintético phone_<n>@tricigo.app, así que estrenar
-    // correo en una cuenta creada por teléfono cuenta como cambio.
-    const emailChanged =
-      email.trim().toLowerCase() !== (realEmail(user.email) ?? '').toLowerCase();
+    // The placeholder phone_<n>@tricigo.app counts as no address, so a first one on
+    // a phone account is a change. See profileEmailSavePlan for why users.email is
+    // written here only to clear it.
+    const emailPlan = profileEmailSavePlan(email, user.email);
 
     if (phoneChanged) {
       const normalized = normalizeCubanPhone(phone.trim());
@@ -291,7 +299,7 @@ export default function EditProfileScreen() {
     try {
       const updated = await authService.updateProfile(user.id, {
         full_name: fullName.trim(),
-        email: email.trim() || null,
+        ...(emailPlan.clear ? { email: null } : {}),
       });
       setUser(updated);
 
@@ -303,31 +311,32 @@ export default function EditProfileScreen() {
       // identidad real y el conductor lo confirma por correo.
       //
       // Va DESPUÉS del guardado y con su propio catch a propósito: si esto falla,
-      // el perfil ya quedó guardado y no se pierde el trabajo del conductor.
-      if (emailChanged && email.trim()) {
+      // el nombre ya quedó guardado y no se pierde el trabajo del conductor. El
+      // correo nuevo solo lo escribe add-email-with-verification, así que si falla
+      // no queda guardado: la pantalla sigue abierta para reintentar.
+      if (emailPlan.send) {
         try {
-          await authService.addBackupEmail(email.trim());
+          await authService.addBackupEmail(emailPlan.send);
+          setUser({ ...updated, email: emailPlan.send.toLowerCase() });
           Alert.alert(
             td('profile.backup_email_sent_title', { defaultValue: 'Confirma tu correo' }),
             td('profile.backup_email_sent_body', {
-              email: email.trim(),
+              email: emailPlan.send,
               defaultValue:
                 'Te enviamos un enlace a {{email}}. Confírmalo y vas a poder entrar con tu correo cuando no te lleguen los códigos por SMS.',
             }),
           );
         } catch (err) {
-          const code = (err as { code?: string })?.code;
+          const code = (err as { code?: string } | null)?.code;
           Alert.alert(
             td('profile.backup_email_failed_title', { defaultValue: 'Correo no confirmado' }),
             code === 'email_already_taken'
               ? td('profile.backup_email_taken', {
                   defaultValue: 'Ese correo ya pertenece a otra cuenta de TriciGo. Prueba con otro.',
                 })
-              : td('profile.backup_email_retry', {
-                  defaultValue:
-                    'Guardamos tu perfil, pero no pudimos enviarte el enlace de confirmación. Vuelve a intentarlo más tarde.',
-                }),
+              : t(emailNoticeErrorKey(code)),
           );
+          return;
         }
       }
 
