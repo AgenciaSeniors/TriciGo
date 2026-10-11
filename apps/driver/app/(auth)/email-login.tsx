@@ -19,6 +19,7 @@ import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
+import { markLoginStarted } from '@/lib/authLink';
 import { isValidEmail } from '@tricigo/utils';
 import { colors, midnightEmber } from '@tricigo/theme';
 
@@ -40,6 +41,8 @@ export default function EmailLoginScreen() {
     setLoading(true);
     try {
       await authService.sendEmailLoginLink(value, 'driver');
+      // The link that comes back opens without asking only if it is for this email.
+      await markLoginStarted('email_link', value);
       // Se muestra el mismo acuse exista o no la cuenta: la EF no distingue, y
       // que la pantalla lo hiciera reintroduciría el oráculo de enumeración.
       setSent(true);

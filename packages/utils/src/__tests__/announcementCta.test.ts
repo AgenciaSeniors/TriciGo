@@ -140,3 +140,28 @@ describe('isValidAnnouncementCta', () => {
     expect(isValidAnnouncementCta('/does-not-exist')).toBe(false);
   });
 });
+
+describe('sign-in links are never a CTA', () => {
+  // Opening `tricigo://auth/callback#access_token=…` from the app hands it to
+  // the app's own sign-in handler; on the web, any page takes `#access_token=…`.
+  // An announcement must not be able to carry an account's tokens to everyone.
+  const carriers = [
+    'tricigo://auth/callback#access_token=a.b.c&refresh_token=r',
+    'TRICIGO://Auth/callback#access_token=a.b.c&refresh_token=r',
+    'tricigo://auth/callback',
+    'https://tricigo.com/#access_token=a.b.c&refresh_token=r&expires_in=3600&token_type=bearer',
+    'https://tricigo.com/auth/callback?refresh_token=r',
+    '/(tabs)#access_token=a.b.c',
+  ];
+
+  it.each(carriers)('drops %s', (url) => {
+    expect(resolveAnnouncementCta(url)).toEqual({ kind: 'none' });
+    expect(isValidAnnouncementCta(url)).toBe(false);
+    expect(announcementCtaWebHref(url)).toBeNull();
+  });
+
+  it('still opens ordinary app links', () => {
+    expect(resolveAnnouncementCta('tricigo://promo/VERANO')).toEqual({ kind: 'external', url: 'tricigo://promo/VERANO' });
+    expect(resolveAnnouncementCta('https://tricigo.com/blog/authors')).toEqual({ kind: 'external', url: 'https://tricigo.com/blog/authors' });
+  });
+});

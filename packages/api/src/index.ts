@@ -22,6 +22,8 @@ export { queryKeys } from './queries/keys';
 export { createStorageAdapter } from './storage';
 export type { StorageAdapter, StorageAdapterOptions } from './storage';
 export { configureStorage, didAuthStorageReadFail, AUTH_STORAGE_KEY } from './client';
+export { completeAuthCallback } from './authCallback';
+export type { AuthCallbackHooks, AuthCallbackOutcome } from './authCallback';
 export { uploadFileFromUri } from './services/_storage-upload';
 export { customerService } from './services/customer.service';
 export { chatService } from './services/chat.service';

@@ -2438,6 +2438,17 @@ Hasta la 00649, "Programar para" guardaba la campaña como `scheduled` y nada la
 
 **Pendiente / residual:** `OTP_PASSWORD_SECRET` no se pudo setear desde el sandbox (sin CLI auth) → queda para el usuario (dashboard EF secrets o `npx supabase secrets set OTP_PASSWORD_SECRET=$(openssl rand -hex 32) --project-ref lqaufszburqvlslpcuac` desde un dir vacío tras `supabase login`); el fallback a service-role key funciona mientras tanto. Residual aceptado: el 1er login post-deploy de cada usuario existente escribe el password 1 vez (heal → revoca su única sesión previa; invisible). Conflicto latente documentado en el código: el password determinístico clobbea cualquier password propio de `set-password-after-otp` (inactivo hoy: sin login-por-password para phone users).
 
+### Enlaces de login: nunca cambian la sesión de otra cuenta (verificado 2026-10-11)
+
+Google, Apple y el enlace de login por correo vuelven a las apps como `tricigo://auth/callback#access_token=…&refresh_token=…` (conductor: `tricigo-driver://`) y a la web como `…#access_token=…`. Cualquiera puede armar ese enlace con los tokens de su propia cuenta. Hasta octubre de 2026 las dos apps y la web lo tomaban siempre y reemplazaban la sesión, aunque hubiera otra cuenta abierta (las apps solo miraban `url.includes('auth/callback')`). Quien lo tocaba seguía usando la app dentro de la cuenta ajena, y sus viajes, lugares guardados, contactos de confianza y recargas con tarjeta quedaban ahí. Un anuncio del inicio (`home_announcements.cta_url`, que escriben admins y marketing) podía llevar ese enlace a todos.
+
+- **La regla** está en `packages/utils/src/authCallback.ts` (`decideAuthCallback`). Un enlace nunca reemplaza la sesión de otra cuenta. Se toma sin preguntar solo si este dispositivo empezó un login hace poco: la marca `tricigo_pending_login` dura 10 min para Google y Apple y 60 min para el enlace por correo, que además tiene que abrir la cuenta del correo escrito. Si no hay marca, la app pregunta y muestra la cuenta; la web lo rechaza.
+- **Apps:** todo pasa por `apps/<app>/src/lib/authLink.ts` (`handleAuthLink`): el listener de enlaces y el resultado del navegador interno. Un login con Google o Apple llama a `markLoginStarted('oauth')` antes de abrir el navegador, y el de correo a `markLoginStarted('email_link', email)`.
+- **Web:** `detectSessionInUrl` es una función (`detectWebSessionInUrl` en `packages/api/src/client.ts`), y la página de login escribe la marca antes de `signInWithOAuth`. **Un flujo nuevo que vuelva con tokens en la URL tiene que escribir la marca**, o no inicia sesión.
+- `resolveAnnouncementCta` descarta los enlaces de login y toda URL con `access_token` o `refresh_token`.
+- `packages/api/src/__tests__/web-url-session.test.ts` corre el GoTrueClient real en jsdom: con el cliente anterior, sus cuatro pruebas fallan.
+- Las versiones instaladas aceptan cualquier enlace hasta que se actualicen.
+
 ### Sembrar un viaje de prueba para UN conductor específico (patrón canónico, verificado 2026-07-16)
 
 Para QA manual ("lanzale un viaje al conductor X y que le suene el celu") **sin** que la oferta les llegue a otros conductores reales que estén online.

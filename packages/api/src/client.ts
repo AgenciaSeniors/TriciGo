@@ -7,6 +7,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { StorageAdapter } from './storage';
+import { PENDING_LOGIN_STORAGE_KEY, shouldAcceptUrlSession } from '@tricigo/utils/authCallback';
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -36,6 +37,28 @@ export function configureStorage(adapter: StorageAdapter): void {
 
 /** The key GoTrue persists the session under (createClient `auth.storageKey`). */
 export const AUTH_STORAGE_KEY = 'sb-tricigo-auth';
+
+/**
+ * Web: whether GoTrue may take the session that arrives in the URL
+ * (`#access_token=…` after Google/Apple). Any page of the site parses it, and
+ * anyone can build such a link with the tokens of their own account, so it is
+ * taken only for a login this browser started minutes ago (the marker the login
+ * page writes) and never over another account's session. See
+ * @tricigo/utils/authCallback.
+ */
+function detectWebSessionInUrl(_url: URL, params: { [parameter: string]: string }): boolean {
+  try {
+    const accept = shouldAcceptUrlSession(params, {
+      pendingRaw: window.localStorage.getItem(PENDING_LOGIN_STORAGE_KEY),
+      storedSessionRaw: window.localStorage.getItem(AUTH_STORAGE_KEY),
+      now: Date.now(),
+    });
+    if (accept) window.localStorage.removeItem(PENDING_LOGIN_STORAGE_KEY);
+    return accept;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Whether the last attempt to READ the persisted session threw, as opposed to
@@ -187,7 +210,9 @@ export function getSupabaseClient(): SupabaseClient {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: _isWeb, // Enable on web for OAuth redirects, disable on native
+      // Web: only the redirect of a login this browser started. Native apps
+      // handle their sign-in links themselves (authCallback.ts).
+      detectSessionInUrl: _isWeb ? detectWebSessionInUrl : false,
       ...(_isWeb ? { flowType: 'implicit' as const } : {}),
       storageKey: AUTH_STORAGE_KEY,
       // On web, provide no-op lock to prevent navigator.locks deadlock
