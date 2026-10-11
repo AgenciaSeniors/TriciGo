@@ -7,6 +7,8 @@ import {
   getRelativeTime,
   havanaMidnightUtc,
   havanaDayRangeUtc,
+  havanaLocalToUtcIso,
+  utcIsoToHavanaLocal,
 } from '../date';
 
 // ============================================================
@@ -253,5 +255,72 @@ describe('havanaDayRangeUtc', () => {
   it('throws on malformed input', () => {
     expect(() => havanaDayRangeUtc('15/01/2026')).toThrow();
     expect(() => havanaDayRangeUtc('')).toThrow();
+  });
+});
+
+describe('havanaLocalToUtcIso', () => {
+  it('reads a datetime-local value as Havana time in winter (UTC-5)', () => {
+    expect(havanaLocalToUtcIso('2026-01-15T10:00')).toBe('2026-01-15T15:00:00.000Z');
+  });
+
+  it('reads it as Havana time in summer (UTC-4)', () => {
+    expect(havanaLocalToUtcIso('2026-07-15T10:00')).toBe('2026-07-15T14:00:00.000Z');
+  });
+
+  it('crosses into the next UTC day', () => {
+    expect(havanaLocalToUtcIso('2026-01-15T22:30')).toBe('2026-01-16T03:30:00.000Z');
+  });
+
+  it('uses the offset in force on each side of the November change', () => {
+    expect(havanaLocalToUtcIso('2026-10-31T10:00')).toBe('2026-10-31T14:00:00.000Z');
+    expect(havanaLocalToUtcIso('2026-11-02T10:00')).toBe('2026-11-02T15:00:00.000Z');
+  });
+
+  it('uses the offset in force right after each change, even when the first guess is on the other side', () => {
+    // March: 00:00 CST jumps to 01:00 CDT. November: 01:00 CDT falls back to 00:00 CST.
+    expect(havanaLocalToUtcIso('2026-03-08T02:00')).toBe('2026-03-08T06:00:00.000Z');
+    expect(havanaLocalToUtcIso('2026-11-01T02:00')).toBe('2026-11-01T07:00:00.000Z');
+    expect(havanaLocalToUtcIso('2026-11-01T01:30')).toBe('2026-11-01T06:30:00.000Z');
+  });
+
+  it('moves a time inside the spring gap (Havana 00:00–00:59 on the March change day) forward an hour', () => {
+    expect(havanaLocalToUtcIso('2026-03-08T00:30')).toBe('2026-03-08T05:30:00.000Z');
+  });
+
+  it('rejects anything that is not YYYY-MM-DDTHH:mm', () => {
+    expect(() => havanaLocalToUtcIso('2026-01-15')).toThrow('YYYY-MM-DDTHH:mm');
+    expect(() => havanaLocalToUtcIso('')).toThrow('YYYY-MM-DDTHH:mm');
+  });
+
+  it('reads a time in the repeated November hour as the first one, still on summer time', () => {
+    // 01:00 CDT falls back to 00:00 CST: 00:30 happens at 04:30Z and again at 05:30Z.
+    expect(havanaLocalToUtcIso('2026-11-01T00:30')).toBe('2026-11-01T04:30:00.000Z');
+  });
+
+  it('rejects a date or time that does not exist instead of rolling it over', () => {
+    expect(() => havanaLocalToUtcIso('2026-02-30T10:00')).toThrow('not a real date and time');
+    expect(() => havanaLocalToUtcIso('2026-13-01T10:00')).toThrow('not a real date and time');
+    expect(() => havanaLocalToUtcIso('2026-00-10T10:00')).toThrow('not a real date and time');
+    expect(() => havanaLocalToUtcIso('2026-01-15T24:00')).toThrow('not a real date and time');
+    expect(() => havanaLocalToUtcIso('2026-01-15T10:60')).toThrow('not a real date and time');
+    expect(() => havanaLocalToUtcIso('2026-04-31T10:00')).toThrow('not a real date and time');
+  });
+
+  it('accepts the last valid values', () => {
+    expect(havanaLocalToUtcIso('2028-02-29T23:59')).toBe('2028-03-01T04:59:00.000Z');
+  });
+});
+
+describe('utcIsoToHavanaLocal', () => {
+  it('gives the Havana wall clock as a datetime-local value', () => {
+    expect(utcIsoToHavanaLocal('2026-01-15T15:00:00.000Z')).toBe('2026-01-15T10:00');
+    expect(utcIsoToHavanaLocal('2026-07-15T14:00:00.000Z')).toBe('2026-07-15T10:00');
+    expect(utcIsoToHavanaLocal('2026-01-16T03:30:00.000Z')).toBe('2026-01-15T22:30');
+  });
+
+  it('round-trips with havanaLocalToUtcIso', () => {
+    for (const v of ['2026-03-20T08:15', '2026-12-24T23:59', '2026-06-01T00:00']) {
+      expect(utcIsoToHavanaLocal(havanaLocalToUtcIso(v))).toBe(v);
+    }
   });
 });

@@ -1884,7 +1884,6 @@
     "field_title": "Message title",
     "field_body": "Body",
     "field_promo": "Promo code (optional)",
-    "field_schedule": "Schedule for",
     "placeholder_name": "Internal campaign name",
     "placeholder_city": "Choose a city",
     "placeholder_title": "What appears in the notification",
@@ -1898,7 +1897,6 @@
     "send_now_btn": "Send now",
     "toast_sent": "Campaign sent",
     "toast_sent_n": "Campaign sent · {{n}} delivered",
-    "toast_scheduled": "Campaign scheduled",
     "warn_no_recipients": "The segment has no users; nothing was sent.",
     "warn_push_zero": "Saved, but the push reached no devices (no active tokens).",
     "warn_push_failed": "Saved, but push sending failed: {{error}}",
@@ -1909,7 +1907,23 @@
     "warn_sms_failed": "Saved, but SMS sending failed: {{error}}",
     "col_sent": "Sent",
     "empty_title": "No campaigns",
-    "empty_body": "Create the first to reach a specific user group."
+    "empty_body": "Create the first to reach a specific user group.",
+    "field_schedule_havana": "Schedule for (Cuba time)",
+    "schedule_required": "Choose the date and time",
+    "col_scheduled": "Scheduled for",
+    "scheduled_on_save": "On save",
+    "cancel_btn": "Cancel",
+    "cancel_title": "Cancel campaign",
+    "cancel_confirm": "The campaign \"{{name}}\" will not be sent. Cancel it?",
+    "cancel_submit": "Yes, cancel campaign",
+    "cancel_dismiss": "No, go back",
+    "toast_cancelled": "Campaign cancelled",
+    "toast_cancel_late": "It can no longer be cancelled: sending has started or finished.",
+    "toast_cancel_gone": "That campaign no longer exists.",
+    "toast_scheduled_at": "Campaign scheduled for {{when}} (Cuba time)",
+    "toast_already_sending": "The campaign is already being sent. Check its status in the list.",
+    "warn_send_failed": "Saved, but sending did not respond: {{error}}. Check its status in the list.",
+    "warn_not_recorded": "The send went out, but the list could not save the result. Check the counts before sending it again."
   },
   "status_registry": {
     "ride": {
@@ -1989,7 +2003,9 @@
       "paused": "Paused",
       "cancelled": "Cancelled",
       "completed": "Completed",
-      "archived": "Archived"
+      "archived": "Archived",
+      "sending": "Sending",
+      "failed": "Failed"
     },
     "quest": {
       "draft": "Draft",

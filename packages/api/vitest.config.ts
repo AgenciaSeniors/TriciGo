@@ -26,6 +26,8 @@ export default defineConfig({
       // send-push's handler: role and category gate (00642). supabase-js and the rate limiter
       // replaced with vi.mock, Deno stubbed.
       '../../supabase/functions/send-push/*.test.ts',
+      // send-campaign's handler (00649): supabase-js and fetch are mocked, Deno is stubbed.
+      '../../supabase/functions/send-campaign/*.test.ts',
       '../../supabase/functions/notify-document-rejection/*.test.ts',
       // register-login-device: supabase-js replaced with vi.mock, the rate limiter too.
       '../../supabase/functions/register-login-device/*.test.ts',

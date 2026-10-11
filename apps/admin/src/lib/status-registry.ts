@@ -138,7 +138,9 @@ const REGISTRY: Record<Domain, Record<string, StatusMeta>> = {
   campaign: {
     draft: { label: 'Borrador', i18nKey: 'status_registry.campaign.draft', tone: 'default', icon: Clock },
     scheduled: { label: 'Programada', i18nKey: 'status_registry.campaign.scheduled', tone: 'info', icon: Clock },
+    sending: { label: 'Enviando', i18nKey: 'status_registry.campaign.sending', tone: 'info', icon: Clock },
     sent: { label: 'Enviada', i18nKey: 'status_registry.campaign.sent', tone: 'success', icon: CheckCircle2 },
+    failed: { label: 'Falló', i18nKey: 'status_registry.campaign.failed', tone: 'danger', icon: XCircle },
     active: { label: 'Activa', i18nKey: 'status_registry.campaign.active', tone: 'success', icon: Radio },
     paused: { label: 'Pausada', i18nKey: 'status_registry.campaign.paused', tone: 'warning', icon: Clock },
     cancelled: { label: 'Cancelada', i18nKey: 'status_registry.campaign.cancelled', tone: 'danger', icon: XCircle },
