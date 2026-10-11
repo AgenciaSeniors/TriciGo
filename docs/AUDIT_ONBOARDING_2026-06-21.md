@@ -66,7 +66,7 @@ Aparte del P0, el resto del wizard está **bien construido** (grounding confirm�
 
 ## Verificación
 - `pnpm check-types` verde (4 apps) en cada PR; los 3 JSON de locale parsean; keys de copy real presentes en es/en/pt (cliente).
-- **Límite honesto:** verificación **solo-código** (sin correr las apps) → se validó lo estructural (gates, navegación, manejo de error, tokens, keys i18n), **no** pixel-por-pixel. Tras el rebuild de APK, conviene una **pasada visual** del flujo de conductor (modo demo `DEMO_PHONE→000000`) para confirmar que el Submit se habilita con los 4 docs.
+- **Límite honesto:** verificación **solo-código** (sin correr las apps) → se validó lo estructural (gates, navegación, manejo de error, tokens, keys i18n), **no** pixel-por-pixel. Tras el rebuild de APK, conviene una **pasada visual** del flujo de conductor (modo demo `DEMO_PHONE` + `DEMO_OTP_CODE`) para confirmar que el Submit se habilita con los 4 docs.
 
 ## PRs
 - **#619** — `fix(client-onboarding)`: i18n en/pt + errores específicos en verify-phone + dark-mode icon bg.

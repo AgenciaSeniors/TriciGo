@@ -755,7 +755,11 @@
     "plate_photo": "Foto da placa",
     "select_photo": "Selecionar foto",
     "vehicle_photo_label": "Foto do veículo",
-    "vehicle_update_success": "Veículo atualizado. Pendente de verificação.",
+    "vehicle_update_success": "Veículo atualizado.",
+    "vehicle_review_confirm_title": "Mudar o tipo ou a placa?",
+    "vehicle_review_confirm_body": "Sua conta volta para revisão: você não receberá viagens até aprovarmos a mudança.",
+    "vehicle_review_confirm_ok": "Enviar para revisão",
+    "vehicle_review_sent": "Enviamos a mudança para revisão. Avisaremos quando for aprovada.",
     "verification_photos": "Fotos de verificação",
     "verification_photos_desc": "Envie as fotos necessárias para verificar a alteração",
     "verify_phone": "Verificar telefone"

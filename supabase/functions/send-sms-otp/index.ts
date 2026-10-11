@@ -3,6 +3,7 @@ import { rateLimit, rateLimitResponse, refundRateLimit } from '../_shared/rate-l
 import { resolveDemoOtp } from '../_shared/demo-otp.ts';
 import { sendSmsViaD7 } from '../_shared/d7.ts';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { OTP_DAY_MS, OTP_SEND_DAILY_MAX, generateOtpCode, otpSendDayKey } from '../_shared/otp-budget.ts';
 
 // ── OTP send rate limits ──────────────────────────────────────────────
 // Two tumbling-window budgets gate every send. Tuned for Cuba (2026-07-10):
@@ -177,6 +178,7 @@ Deno.serve(async (req) => {
     let foreignCapped = isForeign; // narrowed below, before any refund can run
     const refundOtpBudget = async () => {
       await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
+      await refundRateLimit(otpSendDayKey(normalizedPhone), OTP_DAY_MS);
       await refundRateLimit(`send-sms-otp:${clientIP}`, IP_WINDOW_MS);
       if (foreignCapped) await refundRateLimit(FOREIGN_KEY, FOREIGN_WINDOW_MS);
     };
@@ -185,6 +187,15 @@ Deno.serve(async (req) => {
     // (an attacker rotating IPs). See PHONE_MAX above.
     const rlPhone = await rateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_MAX, PHONE_WINDOW_MS);
     if (!rlPhone.allowed) return rateLimitResponse(rlPhone.retryAfterMs, getCorsHeaders(req));
+
+    // And a day cap per number (see _shared/otp-budget.ts): the 10-minute bucket
+    // alone let one number receive 864 codes a day, and every code is 5 more
+    // guesses at it. This send goes out on no SMS, so give back the 10-minute token.
+    const rlPhoneDay = await rateLimit(otpSendDayKey(normalizedPhone), OTP_SEND_DAILY_MAX, OTP_DAY_MS);
+    if (!rlPhoneDay.allowed) {
+      await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
+      return rateLimitResponse(rlPhoneDay.retryAfterMs, getCorsHeaders(req));
+    }
 
     // Numbers an account already holds CONFIRMED skip the shared foreign
     // budget (still bound by the per-phone and per-IP limits): pumping bots use
@@ -210,8 +221,9 @@ Deno.serve(async (req) => {
       const rlForeign = await rateLimit(FOREIGN_KEY, FOREIGN_DAILY_MAX, FOREIGN_WINDOW_MS);
       if (!rlForeign.allowed) {
         console.warn('[send-sms-otp] daily budget for foreign numbers used up');
-        // This send went out on no SMS, so give back the per-phone token it took.
+        // This send went out on no SMS, so give back the per-phone tokens it took.
         await refundRateLimit(`send-sms-otp:phone:${normalizedPhone}`, PHONE_WINDOW_MS);
+        await refundRateLimit(otpSendDayKey(normalizedPhone), OTP_DAY_MS);
         return rateLimitResponse(rlForeign.retryAfterMs, getCorsHeaders(req));
       }
     }
@@ -227,8 +239,7 @@ Deno.serve(async (req) => {
     }
 
     // Generate 6-digit OTP — verify-otp reads otp_codes via verify_cuba_otp RPC
-    const code = Array.from(crypto.getRandomValues(new Uint8Array(6)))
-      .map(b => b % 10).join('');
+    const code = generateOtpCode();
 
     // Store in otp_codes table (expires in 10 min)
     const { error: insertError } = await supabase.from('otp_codes').insert({

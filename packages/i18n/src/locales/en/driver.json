@@ -755,7 +755,11 @@
     "plate_photo": "License plate photo",
     "select_photo": "Select photo",
     "vehicle_photo_label": "Vehicle photo",
-    "vehicle_update_success": "Vehicle updated. Pending verification.",
+    "vehicle_update_success": "Vehicle updated.",
+    "vehicle_review_confirm_title": "Change the type or the plate?",
+    "vehicle_review_confirm_body": "Your account goes back to review: you will not get rides until we approve the change.",
+    "vehicle_review_confirm_ok": "Send for review",
+    "vehicle_review_sent": "We sent the change for review. We will let you know when it is approved.",
     "verification_photos": "Verification photos",
     "verification_photos_desc": "Upload the required photos to verify the change",
     "verify_phone": "Verify phone"

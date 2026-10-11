@@ -505,8 +505,8 @@ En el edge function de SMS OTP, agregar bypass:
 // demo deben empezar con +53 (la rama Cuba del EF es la que aplica el bypass).
 const REVIEWER_PHONES = ['+5355550100', '+5355550101'];
 if (REVIEWER_PHONES.includes(phone)) {
-  // Aceptar OTP "000000" sin enviar SMS real
-  return { otp: '000000', skip_send: true };
+  // Aceptar el código del secret DEMO_OTP_CODE sin enviar SMS real
+  return { otp: Deno.env.get('DEMO_OTP_CODE'), skip_send: true };
 }
 ```
 

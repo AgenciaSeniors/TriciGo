@@ -2557,6 +2557,11 @@ Detalles que hacen falta si algún día se toca:
 - Dispara primero y loguea después, con el INSERT en su propio bloque de excepción → el peor caso es "sin trackear", nunca "sin enviar".
 - Retención de `net._http_response` = **6 h** → la ventana del reconciliador es 90 min.
 
+**Los correos de los vigilantes también van por `cron_http_post` (00597, 00647).** No alcanza con que el job llame a una función SQL: si esa función manda su aviso con `net.http_post` crudo, un rechazo de `send-email` (sin clave de Resend, función caída, cualquier 4xx/5xx) no deja rastro. Etiquetas: `cron-sql-failure-alert` (00597); `cron-http-failure-alert`, `fx-stale-alert`, `poi-sync-stale-alert` y `db-health-email` (00647; la última cubre los avisos de `check_database_health` y el resumen diario). Los avisos de recuperación usan la misma etiqueta que los de falla.
+- Si `send-email` está caído, el aviso de `check_cron_http_failures` también falla: lo que se gana es el rastro en `platform_config.cron_http_health_*`. Mientras dure, su propia etiqueta entra y sale de la lista de fallas a medida que sus llamadas salen de la ventana de 90 min, así que reintenta su correo unas 2 veces cada 3 h. No le llega a nadie.
+- Siguen con `net.http_post` crudo a propósito los remitentes transaccionales (recibos, pagos, primer viaje, contactos de confianza, estado del conductor…), el aviso de conductor en revisión y `notify_ops_workflow_failure` (lo llaman los workflows de GitHub): no son vigilantes de cron.
+- El bloque de verificación de 00647 recorre `cron.job` y aborta si algún job llega a un `net.http_post` crudo, directo o a través de una función que llama. Para revisar a mano, copiar esa consulta de la migración: tiene que dar vacío. Ensayo: `supabase/tests/00647/run.sh` (RED: 9 fallos; GREEN: 26/26, con 10 pruebas negativas). Aplicada en prod el 2026-10-08 por MCP (`20261008235602`) y verificada por objeto: los 4 md5 esperados, el barrido vacío y sin restos de la prueba.
+
 **Diagnóstico canónico — NUNCA confiar en `cron.job_run_details` para saber si una EF anduvo:**
 ```sql
 -- Ahora con atribución por job (lo que antes era imposible):
@@ -2715,7 +2720,11 @@ GROUP BY 1, 2 HAVING count(*) FILTER (WHERE d.status <> 'succeeded') > 0 ORDER B
 - **una fila de un bucle**, para que un viaje malo no frene al resto (`activate_scheduled_rides`, `create_rides_for_recurring`, el correo por viaje de `check_stuck_active_rides`, el push por grupo de `notify_offline_drivers_for_searching_rides`);
 - **un aviso que corre después del trabajo real** (los push de `auto_offline_stale_drivers`, `release_rides_from_dead_drivers` y `retry_dispatch_expired_rides`, el resumen de `notify_support_waiting_rides`). Si el aviso sale por `cron_http_post`, sus fallas HTTP las ve `check_cron_http_failures`.
 
-Si el aviso es justo lo que hay que vigilar, va en su propio job, como `notify-dead-driver-alert`. Para auditar los crons SQL:
+Si el aviso es justo lo que hay que vigilar, va en su propio job, como `notify-dead-driver-alert`.
+
+**Un bucle por fila sin manejador tiene el problema contrario: una fila rota frena a todas.** Así estaba `retry_dispatch_expired_rides` hasta 00648: si `dispatch_ride` fallaba con un viaje, se deshacía la corrida entera y ningún viaje se redespachaba ese minuto. Desde 00648 cada viaje va en su propio bloque. El que falla se saltea, queda en `rpc_attempt_log` (`rpc_name = 'retry_dispatch_expired_rides'`, `outcome = 'dispatch_failed'`) y soporte lo sigue viendo por `notify_support_waiting_rides`. Si en una corrida no se pudo redespachar ninguno, la corrida falla igual, para que `check_cron_sql_failures` lo reporte. Ese es el patrón para un bucle por fila: aislar cada fila y fallar la corrida cuando no salió ninguna. Ensayo: `supabase/tests/00648/run.sh` (ROJO: 5 fallos; VERDE: 16/16).
+
+Para auditar los crons SQL:
 
 ```sql
 SELECT j.jobname, p.proname, (SELECT count(*) FROM regexp_matches(p.prosrc, 'exception\s+when', 'gi')) AS manejadores
@@ -3297,6 +3306,21 @@ Ensayo: `supabase/tests/00644/run.sh` (RED: 7 fallos; GREEN 17/17, con 2 pruebas
 
 **Renumeración del 2026-10-08.** Tres PRs abiertas tenían 00640 y 00641 al mismo tiempo. #1122 conservó la 00640 porque ya estaba aplicada en prod (`00640_cron_errors_reach_watchdog`). #1115 (rol de marketing) pasó a 00641 (el enum) y 00642 (los permisos), en ese orden, porque los permisos necesitan el valor nuevo del enum. #1120 (aviso de correo) pasó a 00643. Las ramas de otras sesiones se tocaron con commits nuevos (`git mv`, sin reescribir historia) y se avisó a cada sesión dueña.
 
+### Vehículo del conductor: el tipo y la placa se revisan (00650, 2026-10-10)
+
+Hasta la 00650, `vehicles` no tenía ningún trigger. Medido en prod con la cuenta demo del conductor, en un bloque revertido: aprobado con triciclo, cambió su vehículo a Confort con otra placa y al instante recibía ofertas Confort y Auto; además agregó una moto activa y recibía ofertas de moto. La pantalla "Editar vehículo" decía "Pendiente de verificación", pero el admin nunca veía el cambio.
+
+- **Un conductor aprobado que cambia el tipo o la placa vuelve a revisión** (`under_review`, sin conexión) y el admin lo aprueba de nuevo desde el panel. La placa se compara solo por letras y dígitos, sin mayúsculas (`plateKey` en `@tricigo/utils`, igual que el trigger). Marca, modelo, año, color, capacidad, foto y carga se guardan sin revisión. Con un viaje en curso o suspendido, se rechaza.
+- **El cambio de estado lo hace `tg_vehicles_client_guard`** con `app.vehicle_rereview` = id del perfil, que `tg_driver_profiles_protect_admin_fields` deja pasar. Un cliente no puede fijar `app.*` por PostgREST. Si se reescribe ese guard del perfil, hay que conservar ese paso, o el conductor queda aprobado con el vehículo nuevo.
+- **Un conductor aprobado antes y de nuevo en revisión no puede cambiar su identidad** (carnet, antecedentes): se congela cuando `approved_at` no es nulo.
+- **Un cliente no agrega vehículos después de la aprobación, ni activa o desactiva uno, ni lo pasa a otra cuenta.** Antes de la aprobación, registrar un vehículo desactiva el anterior: el despacho usa todos los activos y el admin ve uno solo.
+- **Confort solo a Confort.** La 00263 lo había hecho estricto y la 00326 copió un cuerpo viejo de `find_best_drivers` y volvió a ofrecer los pedidos Confort a autos comunes (la clase de regresión de las cadenas `CREATE OR REPLACE`). Desde la 00650, `auto_confort` va solo a `confort`; `auto_standard` sigue yendo a `auto` y `confort`. El aviso a conductores fuera de línea sigue la misma regla.
+- **Un documento de un conductor apunta a su propia carpeta** (`driver-docs/<driver_id>/`, sin `..`). Antes podía apuntar al archivo de otro conductor y el admin lo revisaba como propio.
+- **Una selfie que abre un conductor nace pendiente y sin resultado.** Solo `verify-selfie` (service role) o un admin escriben un resultado.
+- Los errores traen el motivo en español en MESSAGE y un código en DETAIL (`vehicle_*`, `document_path_not_own`). `driver.service` los convierte en `AppError` con ese mensaje.
+
+Ensayo: `supabase/tests/00650/run.sh` (RED: 18 fallos; GREEN 42/42, con copia CRLF y 6 pruebas negativas). Ensayo en prod, en un bloque revertido, con la cuenta demo: los mismos resultados.
+
 ### Texto ajeno dentro de HTML, `<script>` o una redirección (00646, 2026-10-08)
 
 La web y el admin usan React 19, que escapa el texto y bloquea `javascript:` en `href`. Los agujeros estaban donde el HTML se arma a mano. Todos se reprodujeron en Chromium con el CSP real de la web, que permite `'unsafe-inline'`:
@@ -3338,6 +3362,22 @@ Ensayo: `supabase/tests/00646/run.sh` (RED: 12 fallos; GREEN 25/25, con 2 prueba
   - **`register-login-device`** gateaba solo con `email_verified_at`, que no tiene ninguna cuenta de prod (0 de 284 con correo), así que el aviso de dispositivo nuevo no le llegaba a nadie. Desde #1116 usa `fetchMailableEmail` y llega a las 156 con la dirección probada por Google o Apple; conserva el tope de 3 avisos por día y cuenta (`new-device-email:<user>`). Ensayo de la migración: `supabase/tests/00635/run.sh` (ROJO 18 fallos, VERDE 45/45). En Windows, el texto de `psql -c` llega en la página de códigos de la consola: los acentos en una prueba van como `U&'Mar\00EDa'`.
   - **El aviso "Confirma tu correo" (00643, 2026-10-08).** Hasta acá nadie había confirmado nunca un correo (`email_verification_tokens` sin filas en toda su historia): "Editar perfil" del pasajero y el onboarding del conductor guardaban `users.email` sin pedir el enlace, y ninguna pantalla sabía si la dirección estaba probada. `get_my_email_status()` responde eso **solo para quien llama** (`auth.uid()`, sin argumentos; `anon` no la ejecuta): la dirección (NULL si está vacía o es `phone_<n>@tricigo.app`), `none`/`unconfirmed`/`proven` con la misma regla de 00635, y cuándo se mandó el último enlace todavía válido. Las apps la leen con `authService.getMyEmailStatus()`, que devuelve `null` ante cualquier error, así que sin la migración no se muestra nada. Dónde se ve: banner en el inicio del conductor (solo fuera de línea o en descanso; "Ahora no" lo esconde 7 días, clave `email_notice_dismissed_at:<user>` en AsyncStorage) y una fila que no se puede cerrar en Perfil del pasajero, del conductor y de la web. "Reenviar enlace" llama a `add-email-with-verification` con la misma dirección (5 por cuenta y 10 por IP por hora; su 429 llega como código `rate_limited`). Ensayo: `supabase/tests/00643/run.sh` (ROJO 10 fallos, VERDE 17/17).
 - **Quedaron sin tocar, con motivo:** `verify-selfie` compara caras de mentira, pero `selfie_checks` está vacía; `mint-netopia-proxy-credential` da un proxy HTTPS general (ya en `PROXY_AUDIT_2026-07-02.md`); el PDF que recibe quien paga una recarga de la diáspora trae correo y teléfono del destinatario; `directions-google` no tiene límite por IP pero está apagado; `request-password-reset` y `send-login-email-link` revelan por el tiempo de respuesta si una cuenta existe; diez códigos equivocados en `verify-otp` traban 10 minutos el login de un número.
+
+### Códigos de login: topes por día y por número (2026-10-09)
+
+Hasta acá solo había topes cada 10 minutos: 6 códigos por número en `send-sms-otp`, y 10 comprobaciones por número en `verify-otp` y otras 10 en `link-phone`, en baldes separados. Por día no había tope:
+- **Un número podía recibir 864 SMS por día** (la factura de D7 y el celular del dueño sonando todo el día).
+- **Se podían probar ~2.880 códigos por día contra un número.** Los dos endpoints usan `verify_cuba_otp`, y un acierto en `link-phone` se convierte en login por la re-emisión de 3 minutos de `verify-otp`. Con un millón de códigos posibles, eso es ~0,3 % por día de quedarse con la cuenta, ~8 % por mes.
+
+**Ahora** (`supabase/functions/_shared/otp-budget.ts`):
+- `send-sms-otp` manda como mucho **15 códigos por número por día** (`otp-send-day:<teléfono>`). Si no sale el SMS, devuelve el cupo. Los números demo de las tiendas quedan afuera, igual que del tope de 10 minutos.
+- `verify-otp` y `link-phone` comparten **20 comprobaciones fallidas por número por día** (`otp-fail-day:<teléfono>`). Toman el cupo antes de comprobar y lo devuelven si el código es correcto (o si la base no respondió), así que solo cuentan los equivocados, vencidos o agotados. Cuando se acaba, `verify-otp` responde 429 con `reason: 'too_many_attempts'`.
+- Medido en prod antes de ponerlos (30 días de `rate_limits`): como mucho 9 envíos y 7 comprobaciones de `link-phone` por número en un día, y 6 en `verify-otp` fuera de los números demo.
+- Las claves no empiezan con `send-sms-otp:` ni `verify-otp:` a propósito: el vigilante de SMS (00556) y `sms-delivery-health-check.sql` leen `send-sms-otp:phone:%` como "un envío real".
+- Quien gasta el cupo de un número deja a su dueño sin login por OTP hasta que cambia el día UTC. Ya se podía hacer llenando los baldes de 10 minutos sin parar; es el precio de bajar las adivinanzas de miles a 20 por día.
+- Los dígitos del código ya no salen de `byte % 10` (que hacía 0-5 más probables que 6-9): `generateOtpCode` descarta los bytes 250-255.
+
+**Cuentas demo de las tiendas** (`+5355550100` pasajero, `+5355550101` conductor): su código fijo vive solo en el secret `DEMO_OTP_CODE`. El que estaba activo el 2026-10-09 figuraba en varios documentos de este repo, que es público, y sigue en el historial de git: hay que rotarlo (cambiar el secret y cargarlo en las dos consolas). Con ese código cualquiera entraba como el pasajero demo, que tenía 46.593 CUP y podía regalarlos a cualquier cuenta (probado en un bloque revertido), o como el conductor demo, que está aprobado y recibiría ofertas de pasajeros reales (`find_best_drivers` no mira `is_test`). El código no se escribe nunca en el repo: se carga a mano en App Store Connect y Play Console. Rotarlo deja en el aire una revisión que esté en curso, así que se coordina con las tiendas.
 
 ### Escrituras directas de clientes que decidían dinero o una revisión (00612, 2026-10-06)
 
