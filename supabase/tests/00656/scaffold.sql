@@ -5,7 +5,8 @@
 -- PostGIS function directly (only _poi_admin_area, whose search_path covers both schemas).
 -- Enum columns use prod's enum types and labels (2026-10-11), so a literal that is not a label fails here too.
 -- Live bodies, byte for byte from prod (pg_get_functiondef, 2026-10-11): _poi_admin_area,
--- mailable_user_emails, get_platform_config_text; run.sh S0 compares their md5 with prod.
+-- mailable_user_emails, get_platform_config_text; run.sh S0 compares their md5 with prod, S2 the
+-- ACL of the last two.
 -- Stubs: pg_cron, cron_http_post (records each call), get_service_role_key (empty when the
 -- session setting test.no_key = '1').
 DO $$ BEGIN
@@ -120,7 +121,7 @@ CREATE TABLE public.cuba_admin_areas (id bigserial PRIMARY KEY, admin_level inte
 CREATE TABLE public.incident_reports (id bigserial PRIMARY KEY, type public.incident_type NOT NULL, status public.incident_status NOT NULL);
 CREATE TABLE public.ride_disputes (id bigserial PRIMARY KEY, resolved_at timestamptz, sla_resolution_deadline timestamptz);
 CREATE TABLE public.acquisition_codes (code text PRIMARY KEY, label text NOT NULL);
-CREATE TABLE public.referrals (id bigserial PRIMARY KEY, created_at timestamptz NOT NULL);
+CREATE TABLE public.referrals (id bigserial PRIMARY KEY, referrer_id uuid NOT NULL, referee_id uuid NOT NULL, created_at timestamptz NOT NULL);
 CREATE TABLE public.campaigns (
   id         uuid PRIMARY KEY,
   name       text NOT NULL,
@@ -130,7 +131,7 @@ CREATE TABLE public.campaigns (
   email_sent integer NOT NULL DEFAULT 0
 );
 CREATE TABLE public.promotions (id uuid PRIMARY KEY, code text NOT NULL);
-CREATE TABLE public.promotion_uses (id bigserial PRIMARY KEY, promotion_id uuid NOT NULL, created_at timestamptz NOT NULL);
+CREATE TABLE public.promotion_uses (id bigserial PRIMARY KEY, promotion_id uuid NOT NULL, user_id uuid NOT NULL, created_at timestamptz NOT NULL);
 CREATE TABLE public.platform_config (key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now());
 
 -- LIVE bodies (prod, 2026-10-11). _poi_admin_area's argument is an unqualified geography: prod finds it
@@ -188,6 +189,10 @@ BEGIN
   RETURN COALESCE(v_raw #>> '{}', p_fallback);
 END;
 $function$;
+
+-- Prod's ACL on the two live helpers (2026-10-11): EXECUTE only for postgres and service_role.
+REVOKE ALL ON FUNCTION public.mailable_user_emails(uuid[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_platform_config_text(text, text) FROM PUBLIC, anon, authenticated;
 
 -- Stubs: the vault key and the cron HTTP helper. cron_http_post records each call.
 CREATE OR REPLACE FUNCTION public.get_service_role_key() RETURNS text

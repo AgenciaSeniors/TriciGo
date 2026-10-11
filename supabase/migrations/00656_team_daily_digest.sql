@@ -48,10 +48,13 @@ INSERT INTO public.platform_config (key, value) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 -- 2. The numbers ---------------------------------------------------------------------------
--- One Havana calendar day. Test accounts and the platform account never count. Ride outcomes use
--- the rides REQUESTED that day, read now; "canceled by the rider" and "by the driver" only count
--- rides that had a driver, and a ride nobody accepted is "no driver" whoever canceled it, so no
--- ride is counted twice.
+-- One Havana calendar day. A ride is real when its customer is real: not a test account and not
+-- the platform account. Who drove it does not matter, because a real customer's request is real
+-- demand; test drivers only leave the driver-side numbers (online, coverage, registered, approved,
+-- with a ride). Test accounts also leave the referrals and promotion uses. Ride outcomes use the
+-- rides REQUESTED that day, read now; "canceled by the rider" and "by the driver" only count rides
+-- that had a driver, and a ride nobody accepted is "no driver" whoever canceled it, so no ride is
+-- counted twice.
 CREATE OR REPLACE FUNCTION public._team_digest_totals(p_day date)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -65,12 +68,19 @@ DECLARE
   v_end   timestamptz := ((p_day + 1)::timestamp AT TIME ZONE 'America/Havana');
   v_hours integer;
   v_rides jsonb;
+  v_drivers_with_ride integer;
+  v_charged bigint;
+  v_commission bigint;
+  v_first_rides integer;
   v_signups jsonb;
   v_money jsonb;
   v_marketing jsonb;
   v_online integer;
   v_covered integer;
 BEGIN
+  IF p_day IS NULL THEN
+    RAISE EXCEPTION '_team_digest_totals: p_day is required' USING DETAIL = 'team_digest_bad_day';
+  END IF;
   -- Havana falls back from 01:00 to 00:00 on the first Sunday of November, so that day's local
   -- midnight happens twice and Postgres reads p_day::timestamp as the later one. The day starts
   -- at the first: step back an hour when the hour before is still the same Havana date.
@@ -84,37 +94,57 @@ BEGIN
   -- 23, 24 or 25: the daylight-saving days are shorter or longer.
   v_hours := round(extract(epoch FROM (v_end - v_start)) / 3600)::integer;
 
-  WITH r AS (
-    SELECT r.id, r.status, r.driver_id, r.canceled_by, r.customer_id, dp.user_id AS driver_user_id
+  -- Every ride number reads this one set of real rides requested or completed that day.
+  WITH real_rides AS (
+    SELECT r.id, r.status, r.driver_id, r.canceled_by, r.customer_id, r.created_at, r.completed_at,
+           r.final_fare_cup, dp.user_id AS driver_user_id, coalesce(du.is_test, false) AS driver_is_test
     FROM public.rides r
-    JOIN public.users cu ON cu.id = r.customer_id AND NOT cu.is_test
+    JOIN public.users cu ON cu.id = r.customer_id
     LEFT JOIN public.driver_profiles dp ON dp.id = r.driver_id
     LEFT JOIN public.users du ON du.id = dp.user_id
-    WHERE r.created_at >= v_start AND r.created_at < v_end
-      AND r.customer_id <> c_platform
-      AND NOT coalesce(du.is_test, false)
+    WHERE NOT cu.is_test AND cu.id <> c_platform
+      AND ((r.created_at >= v_start AND r.created_at < v_end)
+           OR (r.completed_at >= v_start AND r.completed_at < v_end))
+  ),
+  requested AS (
+    SELECT rr.* FROM real_rides rr WHERE rr.created_at >= v_start AND rr.created_at < v_end
+  ),
+  completed AS (
+    SELECT rr.* FROM real_rides rr
+    WHERE rr.status = 'completed' AND rr.completed_at >= v_start AND rr.completed_at < v_end
   )
-  SELECT jsonb_build_object(
-    'requested', count(*),
-    'completed', count(*) FILTER (WHERE r.status = 'completed'),
-    'canceled_by_rider', count(*) FILTER (WHERE r.status = 'canceled' AND r.driver_id IS NOT NULL
-                                            AND r.canceled_by = r.customer_id),
-    'canceled_by_driver', count(*) FILTER (WHERE r.status = 'canceled' AND r.driver_id IS NOT NULL
-                                             AND r.canceled_by = r.driver_user_id),
-    'no_driver', count(*) FILTER (WHERE r.status = 'canceled' AND r.driver_id IS NULL),
-    'no_driver_with_offer', count(*) FILTER (WHERE r.status = 'canceled' AND r.driver_id IS NULL
-                                               AND EXISTS (SELECT 1 FROM public.ride_offers o WHERE o.ride_id = r.id)),
-    'no_driver_without_offer', count(*) FILTER (WHERE r.status = 'canceled' AND r.driver_id IS NULL
-                                                  AND NOT EXISTS (SELECT 1 FROM public.ride_offers o WHERE o.ride_id = r.id))
-  ) INTO v_rides
-  FROM r;
+  SELECT
+    (SELECT jsonb_build_object(
+       'requested', count(*),
+       'completed', count(*) FILTER (WHERE q.status = 'completed'),
+       'canceled_by_rider', count(*) FILTER (WHERE q.status = 'canceled' AND q.driver_id IS NOT NULL
+                                               AND q.canceled_by = q.customer_id),
+       'canceled_by_driver', count(*) FILTER (WHERE q.status = 'canceled' AND q.driver_id IS NOT NULL
+                                                AND q.canceled_by = q.driver_user_id),
+       'no_driver', count(*) FILTER (WHERE q.status = 'canceled' AND q.driver_id IS NULL),
+       'no_driver_with_offer', count(*) FILTER (WHERE q.status = 'canceled' AND q.driver_id IS NULL
+                                                  AND EXISTS (SELECT 1 FROM public.ride_offers o WHERE o.ride_id = q.id)),
+       'no_driver_without_offer', count(*) FILTER (WHERE q.status = 'canceled' AND q.driver_id IS NULL
+                                                     AND NOT EXISTS (SELECT 1 FROM public.ride_offers o WHERE o.ride_id = q.id)))
+     FROM requested q),
+    (SELECT count(DISTINCT c.driver_id) FROM completed c WHERE NOT c.driver_is_test),
+    (SELECT coalesce(sum(c.final_fare_cup), 0) FROM completed c),
+    (SELECT coalesce(sum(s.commission_amount), 0) FROM public.ride_pricing_snapshots s
+     JOIN completed c ON c.id = s.ride_id WHERE s.snapshot_type = 'final'),
+    -- A first ride: no earlier ride of that customer finished before the day, whatever its status
+    -- is now (a ride disputed later still happened).
+    (SELECT count(DISTINCT c.customer_id) FROM completed c
+     WHERE NOT EXISTS (SELECT 1 FROM public.rides p
+                       WHERE p.customer_id = c.customer_id AND p.completed_at < v_start))
+  INTO v_rides, v_drivers_with_ride, v_charged, v_commission, v_first_rides;
 
-  -- Havana's offsets are whole hours, so an hour bucket is the same in UTC and in Havana.
-  SELECT count(DISTINCT h.driver_profile_id), count(DISTINCT date_trunc('hour', h.beat_at))
+  -- Hour buckets in UTC (the three-argument date_trunc), so the count does not depend on the
+  -- session time zone. Havana's offsets are whole hours, so a UTC hour is a Havana hour.
+  SELECT count(DISTINCT h.driver_profile_id), count(DISTINCT date_trunc('hour', h.beat_at, 'UTC'))
     INTO v_online, v_covered
   FROM public.driver_heartbeat_log h
   JOIN public.driver_profiles dp ON dp.id = h.driver_profile_id
-  JOIN public.users u ON u.id = dp.user_id AND NOT u.is_test
+  JOIN public.users hu ON hu.id = dp.user_id AND NOT hu.is_test
   WHERE h.is_online AND h.beat_at >= v_start AND h.beat_at < v_end;
   v_rides := v_rides || jsonb_build_object('hours_without_coverage', v_hours - v_covered);
 
@@ -123,53 +153,37 @@ BEGIN
                    WHERE u.created_at >= v_start AND u.created_at < v_end AND NOT u.is_test AND u.id <> c_platform
                      AND NOT EXISTS (SELECT 1 FROM public.driver_profiles dp WHERE dp.user_id = u.id)),
     'drivers_registered', (SELECT count(*) FROM public.driver_profiles dp
-                           JOIN public.users u ON u.id = dp.user_id AND NOT u.is_test
+                           JOIN public.users ru ON ru.id = dp.user_id AND NOT ru.is_test
                            WHERE dp.created_at >= v_start AND dp.created_at < v_end),
     'drivers_approved', (SELECT count(*) FROM public.driver_profiles dp
-                         JOIN public.users u ON u.id = dp.user_id AND NOT u.is_test
+                         JOIN public.users au ON au.id = dp.user_id AND NOT au.is_test
                          WHERE dp.approved_at >= v_start AND dp.approved_at < v_end),
     'drivers_online', v_online,
-    'drivers_with_ride', (SELECT count(DISTINCT r.driver_id) FROM public.rides r
-                          JOIN public.users cu ON cu.id = r.customer_id AND NOT cu.is_test
-                          JOIN public.driver_profiles dp ON dp.id = r.driver_id
-                          JOIN public.users du ON du.id = dp.user_id AND NOT du.is_test
-                          WHERE r.status = 'completed' AND r.completed_at >= v_start AND r.completed_at < v_end)
+    'drivers_with_ride', v_drivers_with_ride
   ) INTO v_signups;
 
-  WITH done AS (
-    SELECT r.id, r.final_fare_cup
-    FROM public.rides r
-    JOIN public.users cu ON cu.id = r.customer_id AND NOT cu.is_test
-    LEFT JOIN public.driver_profiles dp ON dp.id = r.driver_id
-    LEFT JOIN public.users du ON du.id = dp.user_id
-    WHERE r.status = 'completed' AND r.completed_at >= v_start AND r.completed_at < v_end
-      AND r.customer_id <> c_platform AND NOT coalesce(du.is_test, false)
-  )
-  SELECT jsonb_build_object(
-    'charged', coalesce((SELECT sum(d.final_fare_cup) FROM done d), 0)::bigint,
-    'commission', coalesce((SELECT sum(s.commission_amount) FROM public.ride_pricing_snapshots s
-                            JOIN done d ON d.id = s.ride_id WHERE s.snapshot_type = 'final'), 0)::bigint,
+  v_money := jsonb_build_object(
+    'charged', v_charged,
+    'commission', v_commission,
     'recharged', coalesce((SELECT sum(pi.amount_cup) FROM public.payment_intents pi
                            LEFT JOIN public.users u ON u.id = pi.user_id
                            WHERE pi.status = 'completed' AND pi.paid_at >= v_start AND pi.paid_at < v_end
-                             AND NOT coalesce(u.is_test, false)), 0)::bigint
-  ) INTO v_money;
+                             AND NOT coalesce(u.is_test, false)), 0)::bigint);
 
   SELECT jsonb_build_object(
     'signups_with_code', (SELECT count(*) FROM public.users u
                           WHERE u.created_at >= v_start AND u.created_at < v_end AND NOT u.is_test
                             AND u.signup_code IS NOT NULL),
-    'referrals', (SELECT count(*) FROM public.referrals rf WHERE rf.created_at >= v_start AND rf.created_at < v_end),
-    'first_rides', (SELECT count(DISTINCT r.customer_id) FROM public.rides r
-                    JOIN public.users cu ON cu.id = r.customer_id AND NOT cu.is_test
-                    WHERE r.status = 'completed' AND r.completed_at >= v_start AND r.completed_at < v_end
-                      AND NOT EXISTS (SELECT 1 FROM public.rides p
-                                      WHERE p.customer_id = r.customer_id AND p.status = 'completed'
-                                        AND p.completed_at < v_start)),
+    'referrals', (SELECT count(*) FROM public.referrals rf
+                  WHERE rf.created_at >= v_start AND rf.created_at < v_end
+                    AND NOT EXISTS (SELECT 1 FROM public.users tu
+                                    WHERE tu.id IN (rf.referee_id, rf.referrer_id) AND tu.is_test)),
+    'first_rides', v_first_rides,
     'campaigns_sent', (SELECT count(*) FROM public.campaigns c
                        WHERE c.status = 'sent' AND c.sent_at >= v_start AND c.sent_at < v_end),
     'promotion_uses', (SELECT count(*) FROM public.promotion_uses pu
-                       WHERE pu.created_at >= v_start AND pu.created_at < v_end)
+                       WHERE pu.created_at >= v_start AND pu.created_at < v_end
+                         AND NOT EXISTS (SELECT 1 FROM public.users pu_u WHERE pu_u.id = pu.user_id AND pu_u.is_test))
   ) INTO v_marketing;
 
   RETURN jsonb_build_object('rides', v_rides, 'signups', v_signups, 'money', v_money, 'marketing', v_marketing);
@@ -205,15 +219,14 @@ BEGIN
     v_end := v_end - interval '1 hour';
   END IF;
 
+  -- The real rides requested that day: the rule of _team_digest_totals (a real customer, any driver).
   WITH r AS (
     SELECT r.id, r.status, r.driver_id, r.service_type, r.pickup_location,
            extract(hour FROM (r.created_at AT TIME ZONE 'America/Havana'))::integer AS hh
     FROM public.rides r
-    JOIN public.users cu ON cu.id = r.customer_id AND NOT cu.is_test
-    LEFT JOIN public.driver_profiles dp ON dp.id = r.driver_id
-    LEFT JOIN public.users du ON du.id = dp.user_id
+    JOIN public.users cu ON cu.id = r.customer_id
     WHERE r.created_at >= v_start AND r.created_at < v_end
-      AND r.customer_id <> c_platform AND NOT coalesce(du.is_test, false)
+      AND NOT cu.is_test AND cu.id <> c_platform
   ),
   places AS (
     SELECT a.municipality AS name, r.status, r.driver_id
@@ -245,7 +258,7 @@ BEGIN
                                   'completed', m.completed, 'no_driver', m.no_driver) ORDER BY m.requested DESC, m.name)
                                 FROM muni m), '[]'::jsonb),
     'vehicles', coalesce((SELECT jsonb_agg(jsonb_build_object('slug', v.slug, 'name', v.name, 'requested', v.requested,
-                            'completed', v.completed, 'no_driver', v.no_driver) ORDER BY v.requested DESC, v.name)
+                            'completed', v.completed, 'no_driver', v.no_driver) ORDER BY v.requested DESC, v.name, v.slug)
                           FROM veh v), '[]'::jsonb),
     'bands', (SELECT jsonb_agg(jsonb_build_object('band', b.band, 'requested', b.requested, 'no_driver', b.no_driver)
                                ORDER BY b.ord) FROM bands b)
@@ -278,6 +291,7 @@ BEGIN
         SELECT jsonb_build_object('code', p.code, 'uses', count(*)) AS x
         FROM public.promotion_uses pu JOIN public.promotions p ON p.id = pu.promotion_id
         WHERE pu.created_at >= v_start AND pu.created_at < v_end
+          AND NOT EXISTS (SELECT 1 FROM public.users lu WHERE lu.id = pu.user_id AND lu.is_test)
         GROUP BY p.code ORDER BY count(*) DESC, p.code LIMIT 10) t), '[]'::jsonb)
   ) INTO v_lists;
 
@@ -299,8 +313,8 @@ GRANT EXECUTE ON FUNCTION public.team_daily_metrics(date) TO service_role;
 
 -- 3. Recipients, run log and opt-outs ------------------------------------------------------
 -- Every active panel account with a provable address (00635: mailable_user_emails), minus the
--- platform account and whoever opted out. With team_digest_preview_to set, only that account; a
--- value that is no account's id sends to nobody.
+-- platform account and whoever opted out. With team_digest_preview_to set, only that account (case
+-- and surrounding spaces ignored); a value that is no account's id sends to nobody.
 CREATE OR REPLACE FUNCTION public.team_digest_recipients()
 RETURNS TABLE (user_id uuid, role text, email text, full_name text)
 LANGUAGE plpgsql
@@ -311,7 +325,7 @@ AS $$
 #variable_conflict use_column
 DECLARE
   c_platform CONSTANT uuid := '00000000-0000-0000-0000-000000000001';
-  v_preview text := btrim(coalesce(public.get_platform_config_text('team_digest_preview_to', ''), ''));
+  v_preview text := lower(btrim(coalesce(public.get_platform_config_text('team_digest_preview_to', ''), '')));
 BEGIN
   RETURN QUERY
   WITH staff AS (
@@ -321,7 +335,7 @@ BEGIN
       AND coalesce(u.is_active, true)
       AND u.id <> c_platform
       AND NOT EXISTS (SELECT 1 FROM public.team_digest_optouts o WHERE o.user_id = u.id AND o.opted_out)
-      AND (v_preview = '' OR u.id::text = v_preview)
+      AND (v_preview = '' OR lower(btrim(u.id::text)) = v_preview)
   )
   SELECT s.id, s.role, m.email, s.full_name
   FROM staff s
@@ -353,8 +367,9 @@ BEGIN
 END;
 $$;
 
--- The outcome, only while the day is still 'sending'. Nothing sent to anyone (with recipients or
--- with an error) is 'failed'; anything else is 'sent', with its failures counted.
+-- The outcome, only while the day is still 'sending'. Nothing sent is 'failed': with recipients,
+-- after an error, or with nobody to send to (last_error 'no_recipients'), so the 09:00 overdue
+-- check alerts. Anything sent is 'sent', with its failures counted.
 CREATE OR REPLACE FUNCTION public.finish_team_digest(p_day date, p_recipients integer, p_sent integer, p_failed integer, p_error text)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -365,13 +380,12 @@ DECLARE
   v_n integer;
 BEGIN
   UPDATE public.team_digest_runs
-     SET status = CASE WHEN coalesce(p_sent, 0) = 0 AND (coalesce(p_recipients, 0) > 0 OR p_error IS NOT NULL)
-                       THEN 'failed' ELSE 'sent' END,
+     SET status = CASE WHEN coalesce(p_sent, 0) = 0 THEN 'failed' ELSE 'sent' END,
          finished_at = now(),
          recipients = coalesce(p_recipients, 0),
          sent = coalesce(p_sent, 0),
          failed = coalesce(p_failed, 0),
-         last_error = left(p_error, 500)
+         last_error = left(coalesce(p_error, CASE WHEN coalesce(p_recipients, 0) = 0 THEN 'no_recipients' END), 500)
    WHERE day = p_day AND status = 'sending';
   GET DIAGNOSTICS v_n = ROW_COUNT;
   RETURN v_n = 1;
@@ -405,9 +419,11 @@ REVOKE ALL ON FUNCTION public.set_team_digest_optout(uuid, boolean) FROM PUBLIC,
 GRANT EXECUTE ON FUNCTION public.set_team_digest_optout(uuid, boolean) TO service_role;
 
 -- 4. Dispatch and overdue check ------------------------------------------------------------
--- Hourly at :05. Between 7:00 and 8:59 Havana time, with the switch on and no run for the day
--- before, calls send-team-digest with that day. No EXCEPTION handler: a failure must reach
--- check_cron_sql_failures (00596). p_now exists for the rehearsal; the cron passes nothing.
+-- Hourly at :05. Between 7:00 and 8:59 Havana time (so at 07:05 and 08:05), with the switch on and
+-- no run for the day before, calls send-team-digest with that day. No EXCEPTION handler, so a
+-- failure shows in cron.job_run_details. check_cron_sql_failures (00596) needs 3 failures in a row
+-- and this job fails at most twice a day, so the alert comes from check_team_digest_overdue, which
+-- also names a missing vault key. p_now exists for the rehearsal; the cron passes nothing.
 CREATE OR REPLACE FUNCTION public.dispatch_team_digest(p_now timestamptz DEFAULT now())
 RETURNS text
 LANGUAGE plpgsql
@@ -452,8 +468,10 @@ $$;
 
 -- Every 15 minutes. From 9:00 Havana time, with the switch on, fails while the day before is not
 -- 'sent', so check_cron_sql_failures (00596) e-mails the business address. Its own job: a RAISE
--- inside dispatch_team_digest would also roll back its HTTP call. Turning the switch on after
--- 9:00 makes this fail once for that day, since nothing was dispatched.
+-- inside dispatch_team_digest would also roll back its HTTP call. The last dispatch of a day is at
+-- 08:05: turning the switch on after that makes this job fail every 15 minutes until Havana
+-- midnight, since nothing was dispatched (the watchdog sends one alert, then one recovery the next
+-- day). Switch it on before 08:05 Havana time.
 CREATE OR REPLACE FUNCTION public.check_team_digest_overdue(p_now timestamptz DEFAULT now())
 RETURNS text
 LANGUAGE plpgsql
@@ -472,6 +490,10 @@ BEGIN
     RETURN 'not_yet';
   END IF;
   SELECT r.status INTO v_status FROM public.team_digest_runs r WHERE r.day = v_day;
+  IF v_status IS NULL AND coalesce(public.get_service_role_key(), '') = '' THEN
+    RAISE EXCEPTION 'check_team_digest_overdue: the digest for % is not sent: no service role key in the vault', v_day
+      USING DETAIL = 'team_digest_overdue';
+  END IF;
   IF v_status IS DISTINCT FROM 'sent' THEN
     RAISE EXCEPTION 'check_team_digest_overdue: the digest for % is %', v_day, coalesce(v_status, 'not sent')
       USING DETAIL = 'team_digest_overdue';
@@ -524,6 +546,7 @@ END $crlf$;
 DO $check$
 DECLARE
   v_fn regprocedure;
+  v_tbl regclass;
 BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'public._team_digest_totals(date)', 'public.team_daily_metrics(date)', 'public.team_digest_recipients()',
@@ -544,12 +567,16 @@ BEGIN
       RAISE EXCEPTION '00656: % kept a carriage return', v_fn;
     END IF;
   END LOOP;
-  IF has_table_privilege('anon', 'public.team_digest_runs', 'SELECT')
-     OR has_table_privilege('authenticated', 'public.team_digest_runs', 'SELECT')
-     OR has_table_privilege('anon', 'public.team_digest_optouts', 'SELECT')
-     OR has_table_privilege('authenticated', 'public.team_digest_optouts', 'SELECT') THEN
-    RAISE EXCEPTION '00656: a client role can read the digest tables';
-  END IF;
+  FOREACH v_tbl IN ARRAY ARRAY['public.team_digest_runs', 'public.team_digest_optouts']::regclass[]
+  LOOP
+    IF NOT (SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = v_tbl) THEN
+      RAISE EXCEPTION '00656: % has row level security disabled', v_tbl;
+    END IF;
+    IF has_table_privilege('anon', v_tbl, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
+       OR has_table_privilege('authenticated', v_tbl, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE') THEN
+      RAISE EXCEPTION '00656: a client role has privileges on %', v_tbl;
+    END IF;
+  END LOOP;
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-team-digest' AND schedule = '5 * * * *'
                    AND command = 'SELECT public.dispatch_team_digest();' AND active)
      OR NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-team-digest-overdue' AND schedule = '*/15 * * * *'
