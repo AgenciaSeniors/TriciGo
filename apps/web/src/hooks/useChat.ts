@@ -23,7 +23,7 @@
  *   - Toast in mobile → caller decides (we surface a `pendingCount`).
  */
 import { useEffect, useCallback, useRef, useState } from 'react';
-import { chatService } from '@tricigo/api';
+import { AppError, chatService, isFinalChatSendError } from '@tricigo/api';
 import type { ChatMessage } from '@tricigo/types';
 
 const QUEUE_KEY = 'tricigo_chat_outgoing_queue';
@@ -85,6 +85,9 @@ export interface UseChatResult {
   remotePresent: boolean;
   sendMessage: (body: string) => Promise<void>;
   notifyTyping: () => void;
+  /** Why the last message was not sent and will not be retried (the ride's
+   *  chat closed, or it was too long); null otherwise. */
+  sendError: string | null;
 }
 
 export function useChat(rideId: string | undefined, userId: string | null): UseChatResult {
@@ -92,6 +95,7 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
   const [loading, setLoading] = useState(true);
   const [remoteTyping, setRemoteTyping] = useState(false);
   const [remotePresent, setRemotePresent] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const messagesRef = useRef<ChatMessageUI[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -191,7 +195,13 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
             if (without.some((m) => m.id === msg.id)) return without;
             return [...without, msg];
           });
-        } catch {
+        } catch (err) {
+          if (isFinalChatSendError(err)) {
+            // Retrying would get the same answer: forget it.
+            removeFromQueue(item.localId);
+            if (item.rideId === rideId) setMessages((prev) => prev.filter((m) => m.id !== item.localId));
+            continue;
+          }
           // Still failing — bump attempt count and leave queued.
           const all = readQueue();
           writeQueue(all.map((m) => (m.localId === item.localId
@@ -210,6 +220,7 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
     if (!rideId || !userId || !body.trim()) return;
     const trimmed = body.trim();
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setSendError(null);
 
     // Optimistic insert.
     setMessages((prev) => [
@@ -231,7 +242,13 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
         if (without.some((m) => m.id === msg.id)) return without;
         return [...without, msg];
       });
-    } catch {
+    } catch (err) {
+      // The server gives the same answer on every retry: drop the bubble, say why.
+      if (isFinalChatSendError(err)) {
+        setMessages((prev) => prev.filter((m) => m.id !== localId));
+        setSendError(err instanceof AppError ? err.message : 'No se pudo enviar el mensaje.');
+        return;
+      }
       enqueue({
         localId,
         rideId,
@@ -254,5 +271,5 @@ export function useChat(rideId: string | undefined, userId: string | null): UseC
     chatService.broadcastTyping(rideId, userId);
   }, [rideId, userId]);
 
-  return { messages, loading, remoteTyping, remotePresent, sendMessage, notifyTyping };
+  return { messages, loading, remoteTyping, remotePresent, sendMessage, notifyTyping, sendError };
 }

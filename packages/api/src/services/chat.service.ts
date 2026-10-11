@@ -6,6 +6,17 @@ import { getSupabaseClient } from '../client';
 import type { ChatMessage } from '@tricigo/types';
 import { realtimeStatusLogger } from './_realtime-status';
 import { validate, sendMessageSchema } from '../schemas';
+import { AppError } from '../errors';
+
+/**
+ * Whether a failed send should be dropped instead of queued for retry: the
+ * ride's chat closed, the message is too long, or it did not pass validation.
+ * Retrying gives the same answer, so the offline queues would hold it forever.
+ */
+export function isFinalChatSendError(err: unknown): boolean {
+  if (err instanceof AppError) return err.code === 'CHAT_CLOSED' || err.code === 'CHAT_MESSAGE_LENGTH';
+  return err instanceof Error && err.message.startsWith('Validation error');
+}
 
 export const chatService = {
   /**
@@ -99,7 +110,17 @@ export const chatService = {
       .insert({ ride_id: valid.rideId, sender_id: valid.senderId, body: valid.body })
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      // 00653: the chat closes when the ride ends, and a message is at most
+      // 1000 characters. The server's message is a sentence for the user.
+      if (error.details === 'chat_closed' && error.message) {
+        throw new AppError(error.message, 'CHAT_CLOSED', 409);
+      }
+      if (error.details === 'chat_message_length' && error.message) {
+        throw new AppError(error.message, 'CHAT_MESSAGE_LENGTH', 400);
+      }
+      throw error;
+    }
     return data as ChatMessage;
   },
 

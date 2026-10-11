@@ -2241,6 +2241,28 @@ Cuando el despacho no encuentra conductor, soporte ayuda desde el panel: banner 
 
 ---
 
+### Chat, soporte, objetos perdidos e incidentes: qué escribe un cliente (00653, 2026-10-11)
+
+Hasta la 00653, las políticas de estas cinco tablas solo miraban quién escribía, nunca qué. Medido en prod como cuentas reales, en bloques revertidos:
+- **Chat:** las dos partes de un viaje terminado hace días seguían mandándose mensajes, y cada uno salía como push con el nombre del remitente. El conductor ni siquiera puede leerlos (00295).
+- **Objetos perdidos:** un extraño creaba un reporte sobre un viaje ajeno (con push al conductor) y después reescribía estado, notas del admin, tarifa y conductor.
+- **Soporte:** un usuario publicaba mensajes marcados `is_admin` (la app los muestra como respuesta de soporte), y un ticket podía nacer resuelto, urgente y asignado.
+- **Incidentes:** un extraño reportaba un viaje ajeno contra su conductor, y el reporte nacía resuelto. Un SOS con el `ride_id` de otro viaje le mandaba por SMS, a los contactos de quien lo disparaba, el enlace de seguimiento de ese viaje.
+
+**La regla.** Hay un trigger BEFORE por tabla (`tg_<tabla>_client_guard`), que se aplica solo a las escrituras de clientes (`current_user` `anon` o `authenticated`) que no son admin:
+- **Chat:** solo con el viaje en curso (`accepted` … `arrived_at_destination`) y de 1 a 1000 caracteres.
+- **Objetos perdidos:** el reporte lo hace el pasajero del viaje, como mucho 5 por viaje, y `driver_id` sale del viaje. Después, el conductor responde, coordina y marca devuelto (`resolved_by` = él), y el pasajero edita la descripción mientras siga `reported`.
+- **Tickets:** nacen `open`/`normal`/sin asignar, y solo pueden apuntar a viajes propios. Un mensaje de un no admin nunca es `is_admin`.
+- **Incidentes:** nacen `open`, sin resolución; `critical` si son SOS y `medium` si no. El viaje tiene que ser propio y el acusado, la otra parte.
+- **Un SOS nunca se rechaza:** con un viaje ajeno o un acusado equivocado, se borra ese dato y el SOS se registra igual.
+
+`_ride_context_for_caller(ride)` (SECURITY DEFINER) le dice a quien llama su lado de un viaje, y no devuelve nada si no es parte. Las funciones SECURITY DEFINER (`report_review`, `settle_and_scrub_for_deletion`), el cron y el service role no pasan por estas verjas.
+
+- **Una escritura nueva desde la app sobre estas tablas** (otra columna, otro estado) tiene que agregarse al trigger correspondiente, o falla con DETAIL `lost_item_column`, `lost_item_status`, `chat_closed`, etc.
+- **Un error que no cambia al reintentar no va a la cola offline del chat.** `chatService.sendMessage` convierte `chat_closed` y `chat_message_length` en `AppError` (`CHAT_CLOSED`, `CHAT_MESSAGE_LENGTH`), y los tres `useChat` (cliente, conductor, web) los descartan con `isFinalChatSendError` en vez de encolarlos. Antes, cualquier error dejaba el mensaje "en cola" y se reintentaba en cada reconexión.
+- Ensayo: `supabase/tests/00653/run.sh` (RED: 34 fallos; GREEN 49/49, con 4 pruebas negativas y una copia CRLF).
+- **Estado: aplicada en prod el 2026-10-11** por MCP (`20261011115417`). Se aplicó con el número 00652 y se renumeró después, porque #1137 había tomado ese número minutos antes: en `schema_migrations` figura como `00652_chat_support_lost_items_guards`. Ningún cuerpo de función menciona el número, así que lo aplicado es idéntico al archivo 00653. Los seis cuerpos tienen el mismo md5 que en el ensayo y los cinco triggers están activos. Probado después con cuentas reales, en un bloque revertido: un conductor no puede escribir en el chat de un viaje terminado (`chat_closed`), un ticket que se manda resuelto y urgente nace `open`/`normal`, un mensaje `is_admin` de un usuario queda `false`, el reporte del pasajero contra su conductor nace `open`/`medium` y un SOS de un extraño queda sin el viaje y sin el acusado.
+
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
 Un canal **público** de Realtime no pasa por ninguna regla: cualquiera con sesión que sepa el nombre puede unirse, leer los broadcasts y la presencia, y mandar mensajes. Las reglas de `realtime.messages` solo se aplican a los canales **privados** (`{ config: { private: true } }`). Un canal privado y uno público con el mismo nombre no se cruzan: lo que se manda en uno nunca llega al otro.
