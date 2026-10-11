@@ -8,6 +8,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./authCallback": "./src/authCallback.ts",
     "./client": "./src/client.ts",
     "./services/auth": "./src/services/auth.service.ts",
     "./services/wallet": "./src/services/wallet.service.ts",

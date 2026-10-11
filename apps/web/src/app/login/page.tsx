@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getSupabaseClient, authService, referralService, isRateLimitError } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone, safeInternalPath } from '@tricigo/utils';
+import { PENDING_LOGIN_STORAGE_KEY, serializePendingLogin } from '@tricigo/utils/authCallback';
 import { useTranslation } from '@tricigo/i18n';
 import { useAuth } from '../providers';
 import { registerWebLoginDevice } from '@/lib/webDevice';
@@ -41,6 +42,20 @@ function popReturnTo(): string | null {
     return v;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Lets the Google/Apple redirect sign this browser in. The client takes a
+ * session from the URL only within minutes of this call (see
+ * detectWebSessionInUrl in @tricigo/api), so a link built with someone else's
+ * tokens cannot swap the account.
+ */
+function markLoginStarted(): void {
+  try {
+    localStorage.setItem(PENDING_LOGIN_STORAGE_KEY, serializePendingLogin('oauth', Date.now()));
+  } catch {
+    // Storage blocked: the redirect will not sign in, and the user can retry.
   }
 }
 
@@ -255,6 +270,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
+      markLoginStarted();
       const supabase = getSupabaseClient();
       const { error: googleError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -275,6 +291,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
+      markLoginStarted();
       const supabase = getSupabaseClient();
       const { error: appleError } = await supabase.auth.signInWithOAuth({
         provider: 'apple',

@@ -76,6 +76,14 @@ const KNOWN_ROUTE_PREFIXES: readonly string[] = [
 
 const EXTERNAL_SCHEME = /^(?:https?:|mailto:|tel:|tricigo:)/i;
 
+/**
+ * A sign-in link, or any URL carrying session tokens. Opened from the app it
+ * reaches the app's own sign-in handler, and on the web every page reads
+ * `#access_token=…`: an announcement must never hand everyone the tokens of one
+ * account (packages/utils/src/authCallback.ts).
+ */
+const CARRIES_SESSION = /^tricigo(?:-driver)?:\/\/auth(?:[/?#]|$)|[#?&](?:access_token|refresh_token)=/i;
+
 function parseServiceParam(qs: string | undefined): ServiceTypeSlug | undefined {
   if (!qs) return undefined;
   const match = qs.match(/(?:^|&)service=([^&]+)/);
@@ -94,7 +102,7 @@ export function resolveAnnouncementCta(
   url: string | null | undefined,
 ): AnnouncementCtaAction {
   const trimmed = url?.trim();
-  if (!trimmed) return { kind: 'none' };
+  if (!trimmed || CARRIES_SESSION.test(trimmed)) return { kind: 'none' };
 
   if (EXTERNAL_SCHEME.test(trimmed)) return { kind: 'external', url: trimmed };
   if (!trimmed.startsWith('/')) return { kind: 'none' };

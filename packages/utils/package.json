@@ -12,6 +12,7 @@
     "./adminPanelAccess": "./src/adminPanelAccess.ts",
     "./driverOutreach": "./src/driverOutreach.ts",
     "./analytics": "./src/analytics.ts",
+    "./authCallback": "./src/authCallback.ts",
     "./animateCoordinate": "./src/animateCoordinate.ts",
     "./chatQuickReplies": "./src/chatQuickReplies.ts",
     "./cuba-geo": "./src/cuba-geo.ts",

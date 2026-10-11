@@ -13,7 +13,8 @@ import { Input } from '@tricigo/ui/Input';
 import { Button } from '@tricigo/ui/Button';
 import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useTranslation } from '@tricigo/i18n';
-import { authService, getSupabaseClient } from '@tricigo/api';
+import { handleAuthLink, markLoginStarted } from '@/lib/authLink';
+import { authService } from '@tricigo/api';
 import { isValidCubanPhone, normalizeCubanPhone, triggerHaptic } from '@tricigo/utils';
 import {
   DEMO_MODE,
@@ -38,17 +39,10 @@ const vehicleRow = require('../../assets/login-hero.png');
 // useDeepLinkHandler never runs and the session is silently lost. Parse the
 // tokens out of the returned URL and set the session manually.
 async function setSessionFromAuthResult(result: WebBrowser.WebBrowserAuthSessionResult) {
-  if (result.type !== 'success' || !('url' in result) || !result.url?.includes('auth/callback')) return;
-  const hashIdx = result.url.indexOf('#');
-  if (hashIdx < 0) return;
-  const params = new URLSearchParams(result.url.substring(hashIdx + 1));
-  const accessToken = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
-  if (accessToken && refreshToken) {
-    const supabase = getSupabaseClient();
-    await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-    console.log('[OAuth] Session set from openAuthSessionAsync result');
-  }
+  if (result.type !== 'success' || !('url' in result) || !result.url) return;
+  // Same path as the OS link listener: never replaces another account's
+  // session; the login started below is taken without asking.
+  await handleAuthLink(result.url);
 }
 
 export default function LoginScreen() {
@@ -290,6 +284,7 @@ export default function LoginScreen() {
                     const redirectTo = Platform.OS === 'web'
                       ? window.location.origin
                       : 'tricigo://auth/callback';
+                    await markLoginStarted('oauth');
                     const data = await authService.signInWithGoogle(redirectTo);
                     // BUG-201/202 (1+2): use openAuthSessionAsync (in-app
                     // ASWebAuthenticationSession / Custom Tabs) so the OAuth
@@ -357,6 +352,7 @@ export default function LoginScreen() {
                       // in an in-app browser, mirroring Google. Returns via the
                       // tricigo:// deep link; BUG-201 fallback sets the session.
                       const redirectTo = 'tricigo://auth/callback';
+                      await markLoginStarted('oauth');
                       const data = await authService.signInWithApple(redirectTo);
                       if (data?.url) {
                         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);

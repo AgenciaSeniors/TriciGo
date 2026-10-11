@@ -5,6 +5,9 @@
  * getting the Google Cloud Armor 403.
  *
  * Route: /dev/proxy-test  (not linked from the UI; navigate manually).
+ * Development builds only: Expo Router ships every file under app/, so a
+ * release build would open this screen from a `tricigo://dev/proxy-test` link.
+ * There it redirects home instead.
  *
  * How to use on a real (flagged) Android device:
  *  1. "Proxy OFF + Load"  → baseline: should show 403 Forbidden (flagged IP).
@@ -25,6 +28,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Redirect } from 'expo-router';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import WebViewProxy from '../../modules/webview-proxy';
 
@@ -34,7 +38,7 @@ const DEFAULT_URL = 'https://secure.mobilpay.ro/ui/card';
 // The recharge return URL prefix the WebView should detect to close + poll.
 const RETURN_PREFIXES = ['https://tricigo.com/', 'tricigo://', 'tricigo-driver://'];
 
-export default function ProxyTestScreen() {
+function ProxyTestScreen() {
   const [host, setHost] = useState(DEFAULT_PROXY_HOST);
   const [port, setPort] = useState(DEFAULT_PROXY_PORT);
   const [user, setUser] = useState('tricigo');
@@ -171,3 +175,9 @@ const styles = StyleSheet.create({
   logWrap: { flex: 1, backgroundColor: '#000', borderRadius: 8, padding: 8, marginTop: 4 },
   logLine: { color: '#7CFC00', fontSize: 11, fontFamily: 'monospace', marginBottom: 2 },
 });
+
+function NotInRelease() {
+  return <Redirect href="/" />;
+}
+
+export default __DEV__ ? ProxyTestScreen : NotInRelease;
