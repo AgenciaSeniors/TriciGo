@@ -7,6 +7,7 @@ import { promotionService, notificationService } from '@tricigo/api';
 import type { Promotion, PromotionType } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { menuRole } from '@tricigo/utils/adminPanelAccess';
+import { havanaLocalToUtcIso, utcIsoToHavanaLocal } from '@tricigo/utils/date';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
@@ -49,15 +50,22 @@ const emptyForm: FormState = {
 
 const PAGE_SIZE = 20;
 
+// The datetime-local fields are Havana wall-clock time, whatever the browser's time zone.
+// Before, the form showed the stored UTC time and saved what it showed in the browser's zone,
+// so every untouched save moved the date 4-5 hours later.
 function isoToInput(iso: string | null): string {
   if (!iso) return '';
-  return iso.slice(0, 16);
+  return utcIsoToHavanaLocal(iso);
 }
 
+/** Null when empty or not 'YYYY-MM-DDTHH:mm' (havanaLocalToUtcIso throws on anything else). */
 function inputToIso(value: string): string | null {
   if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  try {
+    return havanaLocalToUtcIso(value);
+  } catch {
+    return null;
+  }
 }
 
 // promotionService.approve matched nothing: the promotion was edited (a new revision) or
@@ -653,7 +661,7 @@ export default function PromotionsAdminPage() {
                 className={inputCls}
               />
             </Field>
-            <Field label={t('promotions.field_valid_from', { defaultValue: 'Vigente desde' })}>
+            <Field label={t('promotions.field_valid_from', { defaultValue: 'Vigente desde (hora de Cuba)' })}>
               <input
                 type="datetime-local"
                 value={form.valid_from}
@@ -661,7 +669,7 @@ export default function PromotionsAdminPage() {
                 className={inputCls}
               />
             </Field>
-            <Field label={t('promotions.field_valid_until', { defaultValue: 'Vigente hasta (opcional)' })}>
+            <Field label={t('promotions.field_valid_until', { defaultValue: 'Vigente hasta (hora de Cuba, opcional)' })}>
               <input
                 type="datetime-local"
                 value={form.valid_until}

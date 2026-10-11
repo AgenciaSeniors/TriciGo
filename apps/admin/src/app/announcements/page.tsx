@@ -6,6 +6,7 @@ import { useTranslation } from '@tricigo/i18n';
 import { announcementService, notificationService } from '@tricigo/api';
 import type { HomeAnnouncement } from '@tricigo/api';
 import { ANNOUNCEMENT_CTA_TARGETS, getErrorMessage, isValidAnnouncementCta } from '@tricigo/utils';
+import { havanaLocalToUtcIso, utcIsoToHavanaLocal } from '@tricigo/utils/date';
 import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
@@ -39,17 +40,22 @@ const emptyForm: FormState = {
 
 const PAGE_SIZE = 20;
 
+// The datetime-local fields are Havana wall-clock time, whatever the browser's time zone.
+// Before, the form showed the stored UTC time and saved what it showed in the browser's zone,
+// so every untouched save moved the date 4-5 hours later.
 function isoToInput(iso: string | null): string {
   if (!iso) return '';
-  // Convert "2026-05-01T11:11:19+00:00" -> "2026-05-01T11:11" (datetime-local)
-  return iso.slice(0, 16);
+  return utcIsoToHavanaLocal(iso);
 }
 
+/** Null when empty or not 'YYYY-MM-DDTHH:mm' (havanaLocalToUtcIso throws on anything else). */
 function inputToIso(value: string): string | null {
   if (!value) return null;
-  // datetime-local has no timezone, treat as local; Date will serialize to UTC.
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  try {
+    return havanaLocalToUtcIso(value);
+  } catch {
+    return null;
+  }
 }
 
 export default function AnnouncementsAdminPage() {
@@ -436,7 +442,7 @@ export default function AnnouncementsAdminPage() {
                 className={inputCls}
               />
             </Field>
-            <Field label={t('announcements.field_starts', { defaultValue: 'Inicio (opcional)' })}>
+            <Field label={t('announcements.field_starts', { defaultValue: 'Inicio (hora de Cuba, opcional)' })}>
               <input
                 type="datetime-local"
                 value={form.starts_at}
@@ -444,7 +450,7 @@ export default function AnnouncementsAdminPage() {
                 className={inputCls}
               />
             </Field>
-            <Field label={t('announcements.field_ends', { defaultValue: 'Fin (opcional)' })}>
+            <Field label={t('announcements.field_ends', { defaultValue: 'Fin (hora de Cuba, opcional)' })}>
               <input
                 type="datetime-local"
                 value={form.ends_at}
