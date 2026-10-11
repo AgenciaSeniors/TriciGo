@@ -67,10 +67,27 @@ jobs:
 
       - name: Resolve bbox
         id: cfg
+        env:
+          # Free-text inputs: through the environment, never pasted into the
+          # script, and validated before they become outputs that later steps
+          # paste into their own scripts.
+          IN_BBOX: ${{ github.event.inputs.bbox }}
+          IN_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          IN_FSQ_RELEASE: ${{ github.event.inputs.foursquare_release }}
         run: |
-          BBOX="${{ github.event.inputs.bbox || '-85.0,19.5,-74.0,23.5' }}"
-          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
-          FSQ_RELEASE="${{ github.event.inputs.foursquare_release || 'latest' }}"
+          BBOX="${IN_BBOX:--85.0,19.5,-74.0,23.5}"
+          DRY_RUN="${IN_DRY_RUN:-false}"
+          FSQ_RELEASE="${IN_FSQ_RELEASE:-latest}"
+          num='-?[0-9]+(\.[0-9]+)?'
+          if ! [[ "$BBOX" =~ ^$num,$num,$num,$num$ ]]; then
+            echo "::error::bbox must be four numbers: minLon,minLat,maxLon,maxLat"; exit 1
+          fi
+          if ! [[ "$FSQ_RELEASE" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::foursquare_release must be letters, digits, dots, dashes or underscores"; exit 1
+          fi
+          if [[ "$DRY_RUN" != true && "$DRY_RUN" != false ]]; then
+            echo "::error::dry_run must be true or false"; exit 1
+          fi
           echo "bbox=$BBOX" >> "$GITHUB_OUTPUT"
           echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
           echo "fsq_release=$FSQ_RELEASE" >> "$GITHUB_OUTPUT"
