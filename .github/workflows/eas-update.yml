@@ -173,6 +173,9 @@ jobs:
 
       - name: Publish the verified bundle to the production channel
         working-directory: apps/${{ inputs.app }}
+        env:
+          # Free text: through the environment, never pasted into the script.
+          UPDATE_MESSAGE: ${{ inputs.message }}
         run: |
           # --input-dir + --skip-bundler publish EXACTLY the artifact verified
           # in the step above. Letting `eas update` re-bundle would mean
@@ -205,7 +208,7 @@ jobs:
           # and a quoted one would pass an empty argument when it is 100.
           eas update \
             --channel production \
-            --message "${{ inputs.message }}" \
+            --message "$UPDATE_MESSAGE" \
             "${ROLLOUT_FLAG[@]}" \
             --input-dir dist \
             --skip-bundler \

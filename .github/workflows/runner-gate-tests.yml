@@ -1,0 +1,31 @@
+# TriciGo — test suite of the self-hosted runner gate (ops/actions-runner/).
+#
+# GitHub-hosted runner on purpose: the gate protects the self-hosted one, and a
+# test run there would be refused by the very hook under test.
+name: Runner gate tests
+
+on:
+  pull_request:
+    paths:
+      - 'ops/actions-runner/**'
+      - 'ops/vps-integrity/tests/mock.py'
+      - '.github/workflows/runner-gate-tests.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'ops/actions-runner/**'
+      - 'ops/vps-integrity/tests/mock.py'
+      - '.github/workflows/runner-gate-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the suite
+        run: bash ops/actions-runner/tests/run.sh

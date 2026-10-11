@@ -14,6 +14,11 @@ on:
       - 'packages/**'
       - '.github/workflows/deploy-admin.yml'
 
+# One deploy at a time: two runs restarting PM2 together clobber each other.
+concurrency:
+  group: deploy-admin-vps
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build admin (GitHub-hosted)
@@ -60,6 +65,10 @@ jobs:
   deploy:
     name: Deploy to VPS (self-hosted)
     needs: build
+    # Only master deploys. The runner's job-started hook refuses anything else
+    # anyway (ops/actions-runner/job-gate.sh); this keeps a dispatch from another
+    # branch from reaching it at all.
+    if: github.ref == 'refs/heads/master'
     runs-on: self-hosted
     timeout-minutes: 10
     steps:
@@ -72,6 +81,11 @@ jobs:
       - name: Deploy locally + restart PM2
         run: |
           set -e
+          # At the end of a job the runner kills every process that carries its
+          # RUNNER_TRACKING_ID, and PM2 hands this environment to the app it
+          # starts: each deploy saw "Terminate orphan process: ... next-server"
+          # and PM2 restarting the server a second after it came up.
+          export RUNNER_TRACKING_ID=""
           APP_DIR=/var/www/tricigo-admin
           SRC="$(pwd)/admin-build"
 
