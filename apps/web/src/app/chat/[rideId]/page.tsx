@@ -88,7 +88,7 @@ export default function ChatPage() {
     return () => { cancelled = true; };
   }, [rideId]);
 
-  const { messages, loading, remoteTyping, remotePresent, sendMessage, notifyTyping } = useChat(rideId, userId);
+  const { messages, loading, remoteTyping, remotePresent, sendMessage, notifyTyping, sendError } = useChat(rideId, userId);
 
   // Opening the chat IS reading it: stamp read_at server-side (00516), which
   // clears this rider's unread badge AND turns the driver's bubbles
@@ -315,6 +315,12 @@ export default function ChatPage() {
       {text.length >= CHAR_WARN && (
         <div style={{ padding: '0.25rem 1rem 0', textAlign: 'right', fontSize: '0.7rem', color: text.length >= MAX_CHARS ? 'var(--error, #dc2626)' : 'var(--text-tertiary)', background: 'var(--bg-card)' }}>
           {text.length}/{MAX_CHARS}
+        </div>
+      )}
+
+      {sendError && (
+        <div role="alert" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', color: 'var(--error, #dc2626)', background: 'var(--bg-card)' }}>
+          {sendError}
         </div>
       )}
 

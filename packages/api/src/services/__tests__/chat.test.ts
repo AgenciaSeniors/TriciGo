@@ -14,7 +14,8 @@ vi.mock('../../client', () => ({
 }));
 
 // Import after mock is set up
-import { chatService } from '../chat.service';
+import { chatService, isFinalChatSendError } from '../chat.service';
+import { AppError } from '../../errors';
 
 describe('chatService', () => {
   beforeEach(() => {
@@ -107,6 +108,43 @@ describe('chatService', () => {
       await expect(
         chatService.sendMessage(UUID.RIDE_1, UUID.USER_1, 'Hola'),
       ).rejects.toEqual({ message: 'Insert failed', code: '23505' });
+    });
+
+    // 00653: the server closes a ride's chat when the ride ends and caps a
+    // message at 1000 characters. Those answers do not change on retry, so the
+    // hooks must drop the message instead of queueing it.
+    function failWith(error: Record<string, unknown>) {
+      const mockSingle = vi.fn().mockResolvedValue({ data: null, error });
+      mockFrom.mockReturnValueOnce({ insert: vi.fn(() => ({ select: vi.fn(() => ({ single: mockSingle })) })) });
+    }
+
+    it('turns a closed chat into a final CHAT_CLOSED error with the server sentence', async () => {
+      failWith({ message: 'El chat de este viaje ya está cerrado.', details: 'chat_closed', code: 'P0001' });
+      const err = await chatService.sendMessage(UUID.RIDE_1, UUID.USER_1, 'Hola').catch((e) => e);
+      expect(err).toBeInstanceOf(AppError);
+      expect(err.code).toBe('CHAT_CLOSED');
+      expect(err.message).toBe('El chat de este viaje ya está cerrado.');
+      expect(isFinalChatSendError(err)).toBe(true);
+    });
+
+    it('turns an over-long message into a final CHAT_MESSAGE_LENGTH error', async () => {
+      failWith({ message: 'El mensaje debe tener entre 1 y 1000 caracteres.', details: 'chat_message_length', code: 'P0001' });
+      const err = await chatService.sendMessage(UUID.RIDE_1, UUID.USER_1, 'Hola').catch((e) => e);
+      expect(err.code).toBe('CHAT_MESSAGE_LENGTH');
+      expect(isFinalChatSendError(err)).toBe(true);
+    });
+
+    it('rejects a message over 1000 characters before sending it', async () => {
+      const err = await chatService.sendMessage(UUID.RIDE_1, UUID.USER_1, 'x'.repeat(1001)).catch((e) => e);
+      expect(mockFrom).not.toHaveBeenCalled();
+      expect(isFinalChatSendError(err)).toBe(true);
+    });
+
+    it('keeps network and other errors retryable', async () => {
+      failWith({ message: 'Failed to fetch', code: '' });
+      const err = await chatService.sendMessage(UUID.RIDE_1, UUID.USER_1, 'Hola').catch((e) => e);
+      expect(isFinalChatSendError(err)).toBe(false);
+      expect(isFinalChatSendError(new TypeError('Network request failed'))).toBe(false);
     });
   });
 

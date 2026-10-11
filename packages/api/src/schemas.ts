@@ -184,7 +184,7 @@ export const createDisputeSchema = z.object({
 export const sendMessageSchema = z.object({
   rideId: uuidSchema,
   senderId: uuidSchema,
-  body: z.string().min(1).max(5000).regex(/^[^\x00-\x08\x0B\x0C\x0E-\x1F]*$/, 'Caracteres no permitidos'),
+  body: z.string().min(1).max(1000).regex(/^[^\x00-\x08\x0B\x0C\x0E-\x1F]*$/, 'Caracteres no permitidos'),
 });
 
 // Notification schema

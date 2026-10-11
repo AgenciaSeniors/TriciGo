@@ -3,7 +3,7 @@ import i18next from 'i18next';
 import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { chatService } from '@tricigo/api';
+import { AppError, chatService, isFinalChatSendError } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
 import { useChatStore } from '@/stores/chat.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -162,7 +162,18 @@ export function useChatActions(rideId: string) {
         const cur = useChatStore.getState().messages;
         useChatStore.getState().setMessages(cur.filter((m) => m.id !== localId));
         addMessage(msg);
-      } catch {
+      } catch (err) {
+        // The server gives the same answer on every retry (the ride's chat
+        // closed, or the message is too long): drop the bubble, say why.
+        if (isFinalChatSendError(err)) {
+          const cur = useChatStore.getState().messages;
+          useChatStore.getState().setMessages(cur.filter((m) => m.id !== localId));
+          Toast.show({
+            type: 'error',
+            text1: err instanceof AppError ? err.message : i18next.t('common:errors.generic'),
+          });
+          return;
+        }
         // Queue locally + flag pending. Drained on NetInfo `connected` event.
         await enqueue({
           localId,
@@ -211,7 +222,16 @@ export function useChatActions(rideId: string) {
           const cur = useChatStore.getState().messages;
           useChatStore.getState().setMessages(cur.filter((m) => m.id !== item.localId));
           addMessage(msg);
-        } catch {
+        } catch (err) {
+          if (isFinalChatSendError(err)) {
+            // Retrying would get the same answer: forget it.
+            await removeFromQueue(item.localId);
+            if (item.rideId === rideId) {
+              const cur = useChatStore.getState().messages;
+              useChatStore.getState().setMessages(cur.filter((m) => m.id !== item.localId));
+            }
+            continue;
+          }
           // Still failing; leave in queue, increment attempt count
           const all = await readQueue();
           await writeQueue(all.map((m) => m.localId === item.localId ? { ...m, attemptCount: m.attemptCount + 1 } : m));

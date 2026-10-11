@@ -26,7 +26,7 @@ export { completeAuthCallback } from './authCallback';
 export type { AuthCallbackHooks, AuthCallbackOutcome } from './authCallback';
 export { uploadFileFromUri } from './services/_storage-upload';
 export { customerService } from './services/customer.service';
-export { chatService } from './services/chat.service';
+export { chatService, isFinalChatSendError } from './services/chat.service';
 export { incidentService } from './services/incident.service';
 export { notificationService } from './services/notification.service';
 export { deviceService } from './services/device.service';
