@@ -4,6 +4,8 @@ import {
   normalizeCubanPhone,
   isValidEmail,
   isValidPlateNumber,
+  plateKey,
+  vehicleChangeNeedsReview,
   isValidCubaLatitude,
   isValidCubaLongitude,
   isLocationInCuba,
@@ -386,5 +388,32 @@ describe('realEmail', () => {
   it('returns the trimmed real email unchanged', () => {
     expect(realEmail('user@example.com')).toBe('user@example.com');
     expect(realEmail('  eduardo@tricigo.com  ')).toBe('eduardo@tricigo.com');
+  });
+});
+
+// ============================================================
+// plateKey / vehicleChangeNeedsReview (mirror tg_vehicles_client_guard, 00650)
+// ============================================================
+describe('plateKey', () => {
+  it('ignores case, spaces, dashes and any other symbol, like the server', () => {
+    expect(plateKey('p 123-456')).toBe('P123456');
+    expect(plateKey(' P.123_456 ')).toBe('P123456');
+    expect(plateKey('')).toBe('');
+  });
+});
+
+describe('vehicleChangeNeedsReview', () => {
+  const before = { type: 'triciclo', plate: 'P123456' };
+
+  it('is true when the type changes', () => {
+    expect(vehicleChangeNeedsReview(before, { type: 'confort', plate: 'P123456' })).toBe(true);
+  });
+
+  it('is true when the plate changes', () => {
+    expect(vehicleChangeNeedsReview(before, { type: 'triciclo', plate: 'P123465' })).toBe(true);
+  });
+
+  it('is false when the plate is only rewritten', () => {
+    expect(vehicleChangeNeedsReview(before, { type: 'triciclo', plate: 'p 123-456' })).toBe(false);
   });
 });

@@ -372,6 +372,68 @@ describe('driverService', () => {
 
       await expect(driverService.registerVehicle({} as any)).rejects.toEqual(err);
     });
+
+    it('surfaces the vehicle guard\'s Spanish reason as an AppError (00650)', async () => {
+      const chain = createMockQueryChain();
+      chain.single.mockResolvedValue({
+        data: null,
+        error: {
+          code: 'P0001',
+          message: 'Ya tienes un vehículo registrado. Para cambiarlo, edita el que tienes.',
+          details: 'vehicle_add_after_approval',
+        },
+      });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await expect(driverService.registerVehicle({} as any)).rejects.toMatchObject({
+        name: 'AppError',
+        code: 'VEHICLE_ADD_AFTER_APPROVAL',
+        message: 'Ya tienes un vehículo registrado. Para cambiarlo, edita el que tienes.',
+      });
+    });
+  });
+
+  // ==================== updateVehicle ====================
+  describe('updateVehicle', () => {
+    it('updates the vehicle and returns it', async () => {
+      const chain = createMockQueryChain();
+      chain.single.mockResolvedValue({ data: { id: 'v-1', type: 'confort' }, error: null });
+      mockFrom.mockReturnValueOnce(chain);
+
+      const result = await driverService.updateVehicle('v-1', { type: 'confort' });
+
+      expect(chain.update).toHaveBeenCalledWith({ type: 'confort' });
+      expect(chain.eq).toHaveBeenCalledWith('id', 'v-1');
+      expect(result).toEqual({ id: 'v-1', type: 'confort' });
+    });
+
+    it('surfaces the vehicle guard\'s Spanish reason as an AppError (00650)', async () => {
+      const chain = createMockQueryChain();
+      chain.single.mockResolvedValue({
+        data: null,
+        error: {
+          code: 'P0001',
+          message: 'Termina el viaje en curso antes de cambiar el tipo o la placa del vehículo.',
+          details: 'vehicle_change_during_ride',
+        },
+      });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await expect(driverService.updateVehicle('v-1', { type: 'confort' })).rejects.toMatchObject({
+        name: 'AppError',
+        code: 'VEHICLE_CHANGE_DURING_RIDE',
+        message: 'Termina el viaje en curso antes de cambiar el tipo o la placa del vehículo.',
+      });
+    });
+
+    it('rethrows any other error unchanged', async () => {
+      const err = { code: '42501', message: 'permission denied', details: null };
+      const chain = createMockQueryChain();
+      chain.single.mockResolvedValue({ data: null, error: err });
+      mockFrom.mockReturnValueOnce(chain);
+
+      await expect(driverService.updateVehicle('v-1', { color: 'azul' })).rejects.toEqual(err);
+    });
   });
 
   // ==================== submitForVerification ====================

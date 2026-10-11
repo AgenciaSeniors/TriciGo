@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Pressable, Alert, Image, Platform, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -13,9 +13,10 @@ import { Card } from '@tricigo/ui/Card';
 import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
-import { driverService } from '@tricigo/api';
-import { isValidPlateNumber } from '@tricigo/utils';
+import { AppError, driverService } from '@tricigo/api';
+import { isValidPlateNumber, vehicleChangeNeedsReview } from '@tricigo/utils';
 import { useDriverStore } from '@/stores/driver.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { ensurePickerPermission } from '@/lib/ensurePickerPermission';
 import {
   markPickerLaunch,
@@ -94,6 +95,12 @@ export default function EditVehicleScreen() {
   const isDark = colorScheme === 'dark';
   const palette = isDark ? cubanDark : cubanLight;
   const driverId = useDriverStore((s) => s.profile?.id);
+  const driverStatus = useDriverStore((s) => s.profile?.status);
+  const setProfile = useDriverStore((s) => s.setProfile);
+  const userId = useAuthStore((s) => s.user?.id);
+  // Type and plate as loaded: changing either sends an approved driver back to
+  // review (00650), so the screen asks first.
+  const savedRef = useRef<{ type: string; plate: string } | null>(null);
 
   // Vehicle fields
   const [vehicleId, setVehicleId] = useState<string | null>(null);
@@ -137,6 +144,7 @@ export default function EditVehicleScreen() {
         setColor(v.color);
         setPlateNumber(v.plate_number);
         setCapacity(String(v.capacity));
+        savedRef.current = { type: v.type, plate: v.plate_number };
       }
       return v?.id ?? null;
     } catch {
@@ -284,6 +292,27 @@ export default function EditVehicleScreen() {
       }
     }
 
+    // A new type or plate goes back to review (00650): say so before saving.
+    const saved = savedRef.current;
+    const needsReview = driverStatus === 'approved' && saved !== null
+      && vehicleChangeNeedsReview(saved, { type: vehicleType, plate: plateNumber });
+    if (!needsReview) {
+      await saveVehicle(vId, false);
+      return;
+    }
+    const confirmedId = vId;
+    Alert.alert(
+      t('profile.vehicle_review_confirm_title'),
+      t('profile.vehicle_review_confirm_body'),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
+        { text: t('profile.vehicle_review_confirm_ok'), onPress: () => { void saveVehicle(confirmedId, true); } },
+      ],
+    );
+  };
+
+  const saveVehicle = async (vId: string, needsReview: boolean) => {
+    if (!driverId || !vehicleType) return;
     setSaving(true);
     try {
       // 1. Upload all verification photos
@@ -322,13 +351,28 @@ export default function EditVehicleScreen() {
         capacity: parseInt(capacity, 10),
       });
 
+      if (needsReview) {
+        // The server put the account back in review: refresh it so the app
+        // moves to the review screen (the root layout routes by status).
+        savedRef.current = { type: vehicleType, plate: plateNumber };
+        Alert.alert('', t('profile.vehicle_review_sent'));
+        if (userId) {
+          // Best effort: the change is saved either way, and the next profile
+          // load moves the app to the review screen too.
+          try {
+            const profile = await driverService.getProfile(userId);
+            if (profile) setProfile(profile);
+          } catch { /* keep the success message */ }
+        }
+        return;
+      }
       Alert.alert(
         '',
-        t('profile.vehicle_update_success', { defaultValue: 'Vehículo actualizado. Pendiente de verificación.' }),
+        t('profile.vehicle_update_success', { defaultValue: 'Vehículo actualizado.' }),
         [{ text: 'OK', onPress: () => router.back() }],
       );
-    } catch {
-      Alert.alert('Error', tc('errors.generic'));
+    } catch (err) {
+      Alert.alert('Error', err instanceof AppError ? err.message : tc('errors.generic'));
     } finally {
       setSaving(false);
     }
