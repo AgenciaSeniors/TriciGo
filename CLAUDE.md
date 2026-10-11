@@ -2283,6 +2283,14 @@ Medido en prod como cuentas reales, en bloques revertidos:
 
 Ensayo: `supabase/tests/00655/run.sh` (RED: 24 fallos; GREEN 39/39, con 5 pruebas negativas y una copia CRLF). Los tres cuerpos parcheados se copiaron de prod byte a byte, y la migración se niega a tocar uno que no conoce.
 
+**Estado: aplicada en prod el 2026-10-11** por MCP (`20261011124834`). Los ocho cuerpos tienen el mismo md5 que en el ensayo, sin `\r`: los tres parcheados (`tg_rides_normalize_scheduling` `334490de…`, `tg_rides_validate_estimated_fare` `7640f613…`, `create_rides_for_recurring` `5ace384a…`) y los cinco nuevos. Los cinco triggers están activos, y las funciones nuevas solo las ejecutan `postgres` y `service_role`. Probado después con cuentas reales, en un bloque revertido:
+- el viaje de empresa de 3000 CUP declarado a 1 TRC da `corporate_over_ride_cap`, y uno sin precio da `fare_required`;
+- mover una parada visitada da `waypoint_column` y la tarifa sigue en 3914;
+- el cron no crea viajes recurrentes con el flag apagado;
+- la reseña nace sin destacar y visible;
+- el sexto viaje programado da `scheduled_limit`;
+- el envío nace con el OTP del servidor y sin foto.
+
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
 Un canal **público** de Realtime no pasa por ninguna regla: cualquiera con sesión que sepa el nombre puede unirse, leer los broadcasts y la presencia, y mandar mensajes. Las reglas de `realtime.messages` solo se aplican a los canales **privados** (`{ config: { private: true } }`). Un canal privado y uno público con el mismo nombre no se cruzan: lo que se manda en uno nunca llega al otro.
