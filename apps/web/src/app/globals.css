@@ -1627,6 +1627,11 @@ a.bento-tile:hover {
   text-align: left;
 }
 
+.profile-email-notice--field {
+  margin: var(--space-sm) 0 0;
+  max-width: none;
+}
+
 .profile-email-notice-row {
   display: flex;
   flex-wrap: wrap;

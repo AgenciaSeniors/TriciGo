@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { authService, getSupabaseClient } from '@tricigo/api';
-import { getErrorMessage, realEmail } from '@tricigo/utils';
+import type { EmailConfirmationStatus } from '@tricigo/types';
+import { getErrorMessage, profileEmailSavePlan, realEmail } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
 import { AvatarCropModal } from '@/components/AvatarCropModal';
+import { EmailConfirmNotice } from '@/components/EmailConfirmNotice';
 
 export default function EditProfilePage() {
   const { t } = useTranslation();
@@ -16,6 +18,15 @@ export default function EditProfilePage() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [originalEmail, setOriginalEmail] = useState('');
+  // users.email and whether it is confirmed (get_my_email_status). The session's
+  // address (auth.users) changes only once a link is opened, so a pending address
+  // lives here and not in the session.
+  const [emailStatus, setEmailStatus] = useState<EmailConfirmationStatus | null>(null);
+  const loadEmailStatus = useCallback(() => {
+    authService.getMyEmailStatus().then((s) => {
+      if (s) setEmailStatus(s);
+    });
+  }, []);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [toastIsSuccess, setToastIsSuccess] = useState(false);
@@ -43,9 +54,20 @@ export default function EditProfilePage() {
         const meta = session.user.user_metadata;
         setFullName(meta?.full_name || meta?.name || '');
         setPhone(session.user.phone || meta?.phone || '');
-        setEmail(realEmail(session.user.email) ?? '');
-        setOriginalEmail(realEmail(session.user.email) ?? '');
+        const sessionEmail = realEmail(session.user.email) ?? '';
+        setEmail(sessionEmail);
+        setOriginalEmail(sessionEmail);
         setAvatarUrlState((meta?.avatar_url as string | undefined) ?? null);
+        // Prefer users.email, which holds an address still waiting for its link.
+        // Without the status (RPC unavailable) the session's address stays.
+        authService.getMyEmailStatus().then((s) => {
+          if (!s) return;
+          setEmailStatus(s);
+          const stored = s.email ?? '';
+          setOriginalEmail(stored);
+          // Keep whatever the user already typed while this loaded.
+          setEmail((typed) => (typed === sessionEmail ? stored : typed));
+        });
       }
     });
   }, []);
@@ -147,6 +169,10 @@ export default function EditProfilePage() {
       alert(t('web.email_invalid', { defaultValue: 'Ingresa un correo electrónico válido' }));
       return;
     }
+    // users.email is written directly only to clear it; a new address goes through
+    // add-email-with-verification (see profileEmailSavePlan). An unchanged address,
+    // even with other capitals, sends nothing and keeps its confirmation.
+    const emailPlan = profileEmailSavePlan(email, originalEmail);
     setSaving(true);
     try {
       const supabase = getSupabaseClient();
@@ -166,16 +192,23 @@ export default function EditProfilePage() {
       // immediately and GoTrue marked it confirmed (autoconfirm is on), so an
       // account could claim someone else's address.
       let emailPending = false;
-      if (email.trim() !== originalEmail && email.trim()) {
-        await authService.addBackupEmail(email.trim());
+      if (emailPlan.clear && userId) {
+        await authService.updateProfile(userId, { email: null });
+        setOriginalEmail('');
+        setEmailStatus(null);
+      }
+      if (emailPlan.send) {
+        await authService.addBackupEmail(emailPlan.send);
         emailPending = true;
+        setOriginalEmail(emailPlan.send.toLowerCase());
+        loadEmailStatus();
       }
 
       setToastIsSuccess(true);
       setToast(
         emailPending
           ? t('web.email_confirm_sent', {
-              email: email.trim(),
+              email: emailPlan.send,
               defaultValue: 'Guardado. Te enviamos un enlace a {{email}} para confirmar tu correo.',
             })
           : t('web.saved', { defaultValue: 'Guardado' }),
@@ -194,6 +227,14 @@ export default function EditProfilePage() {
       setSaving(false);
     }
   };
+
+  // The notice shows while the field still holds the address waiting for its link.
+  const pendingEmail =
+    emailStatus?.status === 'unconfirmed' &&
+    emailStatus.email &&
+    email.trim().toLowerCase() === emailStatus.email.toLowerCase()
+      ? emailStatus.email
+      : null;
 
   if (authLoading) {
     return (
@@ -363,6 +404,7 @@ export default function EditProfilePage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-describedby={pendingEmail ? 'pe-email-notice' : undefined}
             style={{
               width: '100%',
               padding: '0.75rem 1rem',
@@ -373,6 +415,15 @@ export default function EditProfilePage() {
               boxSizing: 'border-box',
             }}
           />
+          {pendingEmail && (
+            <EmailConfirmNotice
+              id="pe-email-notice"
+              variant="field"
+              email={pendingEmail}
+              linkSentAt={emailStatus?.linkSentAt ?? null}
+              onLinkSent={loadEmailStatus}
+            />
+          )}
         </div>
 
         <div>
