@@ -17,7 +17,7 @@ import {
 } from '@/hooks/useNotifications';
 import { useTranslation } from '@tricigo/i18n';
 import { i18n } from '@tricigo/i18n';
-import { notificationService, authService, customerService } from '@tricigo/api';
+import { notificationService, authService, customerService, isAccountDeletionRefusal } from '@tricigo/api';
 import { triggerHaptic, logger } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -431,10 +431,14 @@ export default function SettingsScreen() {
                       try {
                         await authService.deleteAccount();
                         reset();
-                      } catch {
+                      } catch (err) {
+                        // A refusal (ride in progress, open report, debt...) carries
+                        // the server's Spanish text: show it instead of the generic one.
                         Alert.alert(
                           t('errors.generic_title', { defaultValue: 'Error' }),
-                          t('profile.delete_account_error', { defaultValue: 'No se pudo eliminar la cuenta. Intenta de nuevo más tarde.' }),
+                          isAccountDeletionRefusal(err)
+                            ? err.message
+                            : t('profile.delete_account_error', { defaultValue: 'No se pudo eliminar la cuenta. Intenta de nuevo más tarde.' }),
                         );
                       }
                     },

@@ -5,6 +5,7 @@
 
 import type { EmailConfirmationStatus, MarketingOptInSource, User } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { AppError } from '../errors';
 import { uploadFileFromUri } from './_storage-upload';
 
 /**
@@ -16,6 +17,15 @@ export interface RateLimitError extends Error {
   code: 'rate_limited';
   /** Seconds the caller should wait before retrying. */
   retryAfterSec: number;
+}
+
+/**
+ * True for an account deletion the server refused with a message the person can
+ * act on (DELETION_ACTIVE_RIDE, DELETION_OPEN_CASE, DELETION_DEBT, ...). Show
+ * `err.message` as is: it is the server's Spanish text.
+ */
+export function isAccountDeletionRefusal(err: unknown): err is AppError {
+  return err instanceof AppError && err.code.startsWith('DELETION_');
 }
 
 export function isRateLimitError(err: unknown): err is RateLimitError {
@@ -361,6 +371,11 @@ export const authService = {
    * On success, the local session is signed out and the
    * RootNavigator in `_layout.tsx` redirects to `/(auth)/login`
    * (detects `!isAuthenticated`).
+   *
+   * When the server refuses (a ride in progress, an open report or
+   * dispute, a debt, a payment in flight), it throws an AppError whose
+   * code starts with DELETION_ and whose message is the server's Spanish
+   * text, ready to show (see isAccountDeletionRefusal).
    */
   async deleteAccount() {
     const supabase = getSupabaseClient();
@@ -368,7 +383,26 @@ export const authService = {
       method: 'POST',
       body: {},
     });
-    if (error) throw error;
+    if (error) {
+      const ctx = (error as { context?: Response } | null)?.context;
+      if (ctx && typeof ctx.clone === 'function') {
+        try {
+          const body = await ctx.clone().json();
+          if (
+            typeof body?.error === 'string' &&
+            body.error.startsWith('deletion_') &&
+            typeof body?.message === 'string' &&
+            body.message.trim()
+          ) {
+            throw new AppError(body.message, body.error.toUpperCase(), ctx.status);
+          }
+        } catch (e) {
+          if (e instanceof AppError) throw e;
+          /* body unreadable/consumed — fall through to the raw error */
+        }
+      }
+      throw error;
+    }
     // Sign out locally after server hard-delete succeeds.
     await this.signOut();
   },

@@ -33,7 +33,7 @@
 
 import { useState } from 'react';
 import { useTranslation } from '@tricigo/i18n';
-import { authService } from '@tricigo/api';
+import { authService, isAccountDeletionRefusal } from '@tricigo/api';
 import { useAuth } from '../../providers';
 
 const SUPPORT_EMAIL = 'soporte@tricigo.com';
@@ -59,12 +59,16 @@ export default function AccountDeletePage() {
       // from the JWT, so the browser cannot delete anyone else.
       await authService.deleteAccount();
       window.location.href = '/';
-    } catch {
+    } catch (err) {
       setDeleting(false);
+      // A refusal (ride in progress, open report, debt...) carries the
+      // server's Spanish text: show it instead of the generic one.
       setDeleteError(
-        t('account_delete.delete_error', {
-          defaultValue: 'No pudimos eliminar la cuenta. Intenta de nuevo o escríbenos a soporte.',
-        }),
+        isAccountDeletionRefusal(err)
+          ? err.message
+          : t('account_delete.delete_error', {
+              defaultValue: 'No pudimos eliminar la cuenta. Intenta de nuevo o escríbenos a soporte.',
+            }),
       );
     }
   }
