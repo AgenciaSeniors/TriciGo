@@ -863,6 +863,16 @@ DECLARE
   v_online integer;
   v_covered integer;
 BEGIN
+  -- Havana falls back from 01:00 to 00:00 on the first Sunday of November, so that day's local
+  -- midnight happens twice and Postgres reads p_day::timestamp as the later one. The day starts
+  -- at the first: step back an hour when the hour before is still the same Havana date.
+  IF ((v_start - interval '1 hour') AT TIME ZONE 'America/Havana')::date = p_day THEN
+    v_start := v_start - interval '1 hour';
+  END IF;
+  IF ((v_end - interval '1 hour') AT TIME ZONE 'America/Havana')::date = p_day + 1 THEN
+    v_end := v_end - interval '1 hour';
+  END IF;
+
   -- 23, 24 or 25: the daylight-saving days are shorter or longer.
   v_hours := round(extract(epoch FROM (v_end - v_start)) / 3600)::integer;
 
@@ -978,6 +988,13 @@ DECLARE
 BEGIN
   IF p_day IS NULL THEN
     RAISE EXCEPTION 'team_daily_metrics: p_day is required' USING DETAIL = 'team_digest_bad_day';
+  END IF;
+  -- Same first-midnight rule as _team_digest_totals (Havana falls back at 01:00 in November).
+  IF ((v_start - interval '1 hour') AT TIME ZONE 'America/Havana')::date = p_day THEN
+    v_start := v_start - interval '1 hour';
+  END IF;
+  IF ((v_end - interval '1 hour') AT TIME ZONE 'America/Havana')::date = p_day + 1 THEN
+    v_end := v_end - interval '1 hour';
   END IF;
 
   WITH r AS (
