@@ -4,7 +4,7 @@
 
 **Goal:** Every day at 7:00 Havana time, each panel account (super_admin, admin, marketing) gets an e-mail with the previous day's numbers; marketing never sees money or the admins' pending work.
 
-**Architecture:** One migration (`00655`) holds every number in SQL (`team_daily_metrics(day)`), the recipient list, a run log that makes each day send once, an opt-out table, an hourly dispatcher and an overdue watchdog (both pg_cron). A new Edge Function `send-team-digest` renders each person's e-mail from a shared template and sends it through the existing `send-email` (raw-HTML path, so `send-email` needs no redeploy). A second Edge Function `team-digest-unsubscribe` records opt-outs from a signed link; the page with the button lives on tricigo.com, because Supabase rewrites HTML from Edge Functions to text/plain.
+**Architecture:** One migration (`00656`) holds every number in SQL (`team_daily_metrics(day)`), the recipient list, a run log that makes each day send once, an opt-out table, an hourly dispatcher and an overdue watchdog (both pg_cron). A new Edge Function `send-team-digest` renders each person's e-mail from a shared template and sends it through the existing `send-email` (raw-HTML path, so `send-email` needs no redeploy). A second Edge Function `team-digest-unsubscribe` records opt-outs from a signed link; the page with the button lives on tricigo.com, because Supabase rewrites HTML from Edge Functions to text/plain.
 
 **Tech Stack:** Postgres 16 + PostGIS (plpgsql, pg_cron), Deno Edge Functions (TypeScript, supabase-js 2.108.2), vitest (run from `packages/api`), Next.js 14 App Router (web page), the admin settings page.
 
@@ -16,10 +16,10 @@
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/00655_team_daily_digest.sql` | Tables, settings, metrics, recipients, run log, dispatch, overdue check, cron jobs, self-checks |
-| `supabase/tests/00655/scaffold.sql` | Local Postgres copy of the prod tables and live helper bodies the migration needs |
-| `supabase/tests/00655/seed.sql` | Rows with known answers for 2026-10-07 (D), D−1 and D−7 |
-| `supabase/tests/00655/run.sh` | Rehearsal: RED without the migration, GREEN with it, negative proofs of its own checks |
+| `supabase/migrations/00656_team_daily_digest.sql` | Tables, settings, metrics, recipients, run log, dispatch, overdue check, cron jobs, self-checks |
+| `supabase/tests/00656/scaffold.sql` | Local Postgres copy of the prod tables and live helper bodies the migration needs |
+| `supabase/tests/00656/seed.sql` | Rows with known answers for 2026-10-07 (D), D−1 and D−7 |
+| `supabase/tests/00656/run.sh` | Rehearsal: RED without the migration, GREEN with it, negative proofs of its own checks |
 | `supabase/functions/_shared/team-digest.ts` | Pure helpers: unsubscribe token and URL, the Havana day, input checks |
 | `supabase/functions/_shared/team-digest.test.ts` | Tests for those helpers |
 | `supabase/functions/_shared/email-templates/team_daily_digest.ts` | The e-mail (subject + HTML) per role |
@@ -37,8 +37,8 @@
 ### Task 1: Rehearsal scaffold and seed
 
 **Files:**
-- Create: `supabase/tests/00655/scaffold.sql`
-- Create: `supabase/tests/00655/seed.sql`
+- Create: `supabase/tests/00656/scaffold.sql`
+- Create: `supabase/tests/00656/seed.sql`
 
 - [ ] **Step 1: Confirm the migration number is still free**
 
@@ -47,7 +47,7 @@ Run:
 cd /home/user/TriciGo && git fetch -q origin master
 git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -3
 ```
-Expected: the newest file is `00654_gate_panel_analytics_rpcs.sql` or older. Then list the migration files of every open PR (GitHub MCP `list_pull_requests` state=open, then `pull_request_read` method `get_files` for each) and confirm none adds `00655_*`. If 00655 is taken, use the next free number everywhere this plan says 00655 (file names, `pr655`, the `00655:` messages).
+Expected: the newest file is `00654_gate_panel_analytics_rpcs.sql` or older. Then list the migration files of every open PR (GitHub MCP `list_pull_requests` state=open, then `pull_request_read` method `get_files` for each) and confirm none adds `00656_*`. If 00656 is taken, use the next free number everywhere this plan says 00656 (file names, `pr655`, the `00656:` messages).
 
 - [ ] **Step 2: Make sure the local cluster runs and has PostGIS**
 
@@ -58,11 +58,11 @@ ls /usr/lib/postgresql/16/lib/postgis-3.so
 ```
 Expected: `server is running` (or `server started`) and the `.so` path. If PostGIS is missing: `apt-get install -y postgresql-16-postgis-3`.
 
-- [ ] **Step 3: Write `supabase/tests/00655/scaffold.sql`**
+- [ ] **Step 3: Write `supabase/tests/00656/scaffold.sql`**
 
 ```sql
--- Scaffold for the 00655 rehearsal (team daily digest).
--- Prod's tables as of 2026-10-11, reduced to the columns 00655 reads. Every object belongs to a
+-- Scaffold for the 00656 rehearsal (team daily digest).
+-- Prod's tables as of 2026-10-11, reduced to the columns 00656 reads. Every object belongs to a
 -- NON-superuser role named postgres, as in prod. PostGIS lives in the extensions schema, as in prod.
 -- Live bodies, byte for byte from prod (pg_get_functiondef, 2026-10-11): _poi_admin_area,
 -- mailable_user_emails, get_platform_config_text; run.sh S0 compares their md5 with prod.
@@ -286,10 +286,10 @@ CREATE FUNCTION t.eq(a jsonb, b jsonb) RETURNS text LANGUAGE sql AS $e$
 $e$;
 ```
 
-- [ ] **Step 4: Write `supabase/tests/00655/seed.sql`**
+- [ ] **Step 4: Write `supabase/tests/00656/seed.sql`**
 
 ```sql
--- Seed for the 00655 rehearsal. D = 2026-10-07 (Havana, UTC-4 that day), D-1 = 2026-10-06,
+-- Seed for the 00656 rehearsal. D = 2026-10-07 (Havana, UTC-4 that day), D-1 = 2026-10-06,
 -- D-7 = 2026-09-30. Every expected number in run.sh comes from these rows; the comments say which
 -- rows count where.
 SET ROLE postgres;
@@ -406,8 +406,8 @@ Run:
 ```bash
 B=/usr/lib/postgresql/16/bin; C="-h 127.0.0.1 -p 5433 -U pgtest"
 $B/psql $C -d postgres -qAt -c "DROP DATABASE IF EXISTS pr655" -c "CREATE DATABASE pr655"
-$B/psql $C -d pr655 -qAt -v ON_ERROR_STOP=1 -f supabase/tests/00655/scaffold.sql >/dev/null && \
-$B/psql $C -d pr655 -qAt -v ON_ERROR_STOP=1 -f supabase/tests/00655/seed.sql >/dev/null && \
+$B/psql $C -d pr655 -qAt -v ON_ERROR_STOP=1 -f supabase/tests/00656/scaffold.sql >/dev/null && \
+$B/psql $C -d pr655 -qAt -v ON_ERROR_STOP=1 -f supabase/tests/00656/seed.sql >/dev/null && \
 $B/psql $C -d pr655 -qAt -c "SELECT string_agg(proname || ':' || md5(prosrc), ',' ORDER BY proname) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('_poi_admin_area', 'mailable_user_emails', 'get_platform_config_text')"
 ```
 Expected: `_poi_admin_area:f8f7725ad687b5fbea5429d1bcfd23aa,get_platform_config_text:407a7b835c527164a4aa8b3aa8525ba5,mailable_user_emails:58def9245ceb43b710a57ef01c450572`
@@ -415,8 +415,8 @@ Expected: `_poi_admin_area:f8f7725ad687b5fbea5429d1bcfd23aa,get_platform_config_
 - [ ] **Step 6: Commit**
 
 ```bash
-git add supabase/tests/00655/scaffold.sql supabase/tests/00655/seed.sql
-git commit -m "test(db): scaffold and seed for the team daily digest rehearsal (00655)"
+git add supabase/tests/00656/scaffold.sql supabase/tests/00656/seed.sql
+git commit -m "test(db): scaffold and seed for the team daily digest rehearsal (00656)"
 ```
 (End every commit message in this plan with the two trailer lines the session requires: `Co-Authored-By: …` and `Claude-Session: …`.)
 
@@ -425,20 +425,20 @@ git commit -m "test(db): scaffold and seed for the team daily digest rehearsal (
 ### Task 2: Rehearsal runner (RED)
 
 **Files:**
-- Create: `supabase/tests/00655/run.sh`
+- Create: `supabase/tests/00656/run.sh`
 
-- [ ] **Step 1: Write `supabase/tests/00655/run.sh`**
+- [ ] **Step 1: Write `supabase/tests/00656/run.sh`**
 
 ```bash
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00655 (team daily digest; local Postgres 16 + PostGIS).
-#   supabase/tests/00655/run.sh none
+# Rehearsal runner for migration 00656 (team daily digest; local Postgres 16 + PostGIS).
+#   supabase/tests/00656/run.sh none
 #       -> scaffold + seed + tests without the migration (RED: none of the objects exist)
-#   supabase/tests/00655/run.sh supabase/migrations/00655_team_daily_digest.sql
+#   supabase/tests/00656/run.sh supabase/migrations/00656_team_daily_digest.sql
 #       -> scaffold + seed + migration x2 (idempotency) + tests + negative proofs (GREEN)
 # The migration is applied as postgres, the scaffold's non-superuser owner (as in prod).
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
-# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00655/run.sh ...
+# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00656/run.sh ...
 set -u
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -638,14 +638,14 @@ echo "== $PASS passed, $FAIL failed =="
 
 - [ ] **Step 2: Make it executable and run it without the migration**
 
-Run: `chmod +x supabase/tests/00655/run.sh && bash supabase/tests/00655/run.sh none`
+Run: `chmod +x supabase/tests/00656/run.sh && bash supabase/tests/00656/run.sh none`
 Expected: `S0` and `S1` pass, every other test fails (the objects do not exist yet), last line `== 2 passed, 42 failed ==` or close (the exact count is printed; what matters is that only S0 and S1 pass). If S0 fails, fix the scaffold before going on.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/tests/00655/run.sh
-git commit -m "test(db): RED rehearsal for the team daily digest (00655)"
+git add supabase/tests/00656/run.sh
+git commit -m "test(db): RED rehearsal for the team daily digest (00656)"
 ```
 
 ---
@@ -653,12 +653,12 @@ git commit -m "test(db): RED rehearsal for the team daily digest (00655)"
 ### Task 3: Migration — tables, settings, recipients, run log, opt-outs
 
 **Files:**
-- Create: `supabase/migrations/00655_team_daily_digest.sql`
+- Create: `supabase/migrations/00656_team_daily_digest.sql`
 
 - [ ] **Step 1: Create the file with the header, section 1 and section 3**
 
 ```sql
--- 00655: team daily digest (docs/superpowers/specs/2026-10-11-team-daily-digest-design.md).
+-- 00656: team daily digest (docs/superpowers/specs/2026-10-11-team-daily-digest-design.md).
 --
 -- At 7:00 Havana time every panel account (super_admin, admin, marketing) gets an e-mail with the
 -- previous day's numbers. The send-team-digest Edge Function renders and sends it; this file holds
@@ -671,7 +671,7 @@ git commit -m "test(db): RED rehearsal for the team daily digest (00655)"
 --      set_team_digest_optout(user, out).
 --   4. dispatch_team_digest() (cron, hourly at :05) and check_team_digest_overdue() (cron, */15).
 -- Functions the cron calls let their errors through (CLAUDE.md, "Una función de cron no atrapa sus
--- propios errores"). Rehearsal: supabase/tests/00655/run.sh.
+-- propios errores"). Rehearsal: supabase/tests/00656/run.sh.
 
 SET lock_timeout = '10s';
 
@@ -819,14 +819,14 @@ RESET lock_timeout;
 
 - [ ] **Step 2: Run the rehearsal with the migration**
 
-Run: `bash supabase/tests/00655/run.sh supabase/migrations/00655_team_daily_digest.sql 2>&1 | grep -E "^(PASS|FAIL)  (O1|O2|R|C)"`
+Run: `bash supabase/tests/00656/run.sh supabase/migrations/00656_team_daily_digest.sql 2>&1 | grep -E "^(PASS|FAIL)  (O1|O2|R|C)"`
 Expected: O1, O2, R1–R6 and C1–C5 all `PASS`. (The M, DS, OV, O3–O5 and G tests still fail: their functions come in Tasks 4 and 5.)
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00655_team_daily_digest.sql
-git commit -m "feat(db): team digest run log, opt-outs and recipients (00655)"
+git add supabase/migrations/00656_team_daily_digest.sql
+git commit -m "feat(db): team digest run log, opt-outs and recipients (00656)"
 ```
 
 ---
@@ -834,7 +834,7 @@ git commit -m "feat(db): team digest run log, opt-outs and recipients (00655)"
 ### Task 4: Migration — the numbers
 
 **Files:**
-- Modify: `supabase/migrations/00655_team_daily_digest.sql` (insert before the line `-- 3. Recipients, run log and opt-outs ---…`)
+- Modify: `supabase/migrations/00656_team_daily_digest.sql` (insert before the line `-- 3. Recipients, run log and opt-outs ---…`)
 
 - [ ] **Step 1: Insert section 2 immediately before the `-- 3. Recipients…` line**
 
@@ -1076,14 +1076,14 @@ GRANT EXECUTE ON FUNCTION public.team_daily_metrics(date) TO service_role;
 
 - [ ] **Step 2: Run the rehearsal**
 
-Run: `bash supabase/tests/00655/run.sh supabase/migrations/00655_team_daily_digest.sql 2>&1 | grep -E "^(PASS|FAIL)  (O1|O2|O4|M|R|C)"`
+Run: `bash supabase/tests/00656/run.sh supabase/migrations/00656_team_daily_digest.sql 2>&1 | grep -E "^(PASS|FAIL)  (O1|O2|O4|M|R|C)"`
 Expected: every line `PASS`. If an M test fails, the runner prints the actual JSON: compare it with the seed comments to find whether the SQL or the expectation is wrong; never change an expectation without tracing it back to the seed rows.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/00655_team_daily_digest.sql
-git commit -m "feat(db): team daily digest numbers (00655)"
+git add supabase/migrations/00656_team_daily_digest.sql
+git commit -m "feat(db): team daily digest numbers (00656)"
 ```
 
 ---
@@ -1091,7 +1091,7 @@ git commit -m "feat(db): team daily digest numbers (00655)"
 ### Task 5: Migration — dispatch, overdue check, cron jobs, self-checks (GREEN)
 
 **Files:**
-- Modify: `supabase/migrations/00655_team_daily_digest.sql` (insert before the final `RESET lock_timeout;`)
+- Modify: `supabase/migrations/00656_team_daily_digest.sql` (insert before the final `RESET lock_timeout;`)
 
 - [ ] **Step 1: Insert section 4 and the closing blocks immediately before the last line `RESET lock_timeout;`**
 
@@ -1224,32 +1224,32 @@ BEGIN
     'public.check_team_digest_overdue(timestamptz)']::regprocedure[]
   LOOP
     IF has_function_privilege('anon', v_fn, 'EXECUTE') OR has_function_privilege('authenticated', v_fn, 'EXECUTE') THEN
-      RAISE EXCEPTION '00655: % is executable by a client role', v_fn;
+      RAISE EXCEPTION '00656: % is executable by a client role', v_fn;
     END IF;
     IF NOT has_function_privilege('service_role', v_fn, 'EXECUTE') THEN
-      RAISE EXCEPTION '00655: service_role cannot execute %', v_fn;
+      RAISE EXCEPTION '00656: service_role cannot execute %', v_fn;
     END IF;
     IF NOT (SELECT p.prosecdef FROM pg_proc p WHERE p.oid = v_fn) THEN
-      RAISE EXCEPTION '00655: % must be SECURITY DEFINER', v_fn;
+      RAISE EXCEPTION '00656: % must be SECURITY DEFINER', v_fn;
     END IF;
     IF (SELECT position(chr(13) IN p.prosrc) FROM pg_proc p WHERE p.oid = v_fn) > 0 THEN
-      RAISE EXCEPTION '00655: % kept a carriage return', v_fn;
+      RAISE EXCEPTION '00656: % kept a carriage return', v_fn;
     END IF;
   END LOOP;
   IF has_table_privilege('anon', 'public.team_digest_runs', 'SELECT')
      OR has_table_privilege('authenticated', 'public.team_digest_runs', 'SELECT')
      OR has_table_privilege('anon', 'public.team_digest_optouts', 'SELECT')
      OR has_table_privilege('authenticated', 'public.team_digest_optouts', 'SELECT') THEN
-    RAISE EXCEPTION '00655: a client role can read the digest tables';
+    RAISE EXCEPTION '00656: a client role can read the digest tables';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-team-digest' AND schedule = '5 * * * *'
                    AND command = 'SELECT public.dispatch_team_digest();' AND active)
      OR NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-team-digest-overdue' AND schedule = '*/15 * * * *'
                       AND command = 'SELECT public.check_team_digest_overdue();' AND active) THEN
-    RAISE EXCEPTION '00655: a team digest cron job is missing or inactive';
+    RAISE EXCEPTION '00656: a team digest cron job is missing or inactive';
   END IF;
   IF (SELECT count(*) FROM public.platform_config WHERE key IN ('team_digest_enabled', 'team_digest_preview_to')) <> 2 THEN
-    RAISE EXCEPTION '00655: the team digest settings are missing';
+    RAISE EXCEPTION '00656: the team digest settings are missing';
   END IF;
 END $check$;
 
@@ -1259,8 +1259,8 @@ END $check$;
 
 Run:
 ```bash
-bash supabase/tests/00655/run.sh none 2>&1 | tail -1
-bash supabase/tests/00655/run.sh supabase/migrations/00655_team_daily_digest.sql
+bash supabase/tests/00656/run.sh none 2>&1 | tail -1
+bash supabase/tests/00656/run.sh supabase/migrations/00656_team_daily_digest.sql
 ```
 Expected: the first prints only S0/S1 passing (`== 2 passed, … failed ==`); the second ends `== N passed, 0 failed ==` with G0–G3 among the passes.
 
@@ -1272,8 +1272,8 @@ Expected: `✓ Migrations >= 00587 grant every new public table/view explicitly 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/00655_team_daily_digest.sql
-git commit -m "feat(db): dispatch and overdue check for the team daily digest (00655)"
+git add supabase/migrations/00656_team_daily_digest.sql
+git commit -m "feat(db): dispatch and overdue check for the team daily digest (00656)"
 ```
 
 ---
@@ -1362,7 +1362,7 @@ Expected: FAIL — `Failed to resolve import "./team-digest.ts"`.
 
 ```ts
 // ============================================================
-// Team daily digest (00655) — pure helpers shared by send-team-digest and
+// Team daily digest (00656) — pure helpers shared by send-team-digest and
 // team-digest-unsubscribe: the signed unsubscribe link, the Havana day the digest covers,
 // and input checks. No remote imports and no Deno, so packages/api's vitest runs them.
 // ============================================================
@@ -1585,7 +1585,7 @@ Expected: FAIL — `Failed to resolve import "./team_daily_digest.ts"`.
 
 ```ts
 // ============================================================
-// TriciGo — Team daily digest e-mail (00655)
+// TriciGo — Team daily digest e-mail (00656)
 //
 // The 7:00 Havana e-mail to every panel account with the previous day's numbers
 // (docs/superpowers/specs/2026-10-11-team-daily-digest-design.md). metrics is what
@@ -1903,7 +1903,7 @@ git commit -m "feat(ef): team daily digest e-mail template"
 
 In `packages/api/vitest.config.ts`, after the line `'../../supabase/functions/send-campaign/*.test.ts',` add:
 ```ts
-      // send-team-digest and team-digest-unsubscribe (00655): supabase-js, fetch and the rate
+      // send-team-digest and team-digest-unsubscribe (00656): supabase-js, fetch and the rate
       // limiter are mocked, Deno is stubbed.
       '../../supabase/functions/send-team-digest/*.test.ts',
       '../../supabase/functions/team-digest-unsubscribe/*.test.ts',
@@ -2113,7 +2113,7 @@ Expected: FAIL — `Failed to resolve import "./index.ts"`.
 // ============================================================
 // supabase/functions/send-team-digest/index.ts
 //
-// The team daily digest sender (00655). The cron job send-team-digest runs dispatch_team_digest()
+// The team daily digest sender (00656). The cron job send-team-digest runs dispatch_team_digest()
 // every hour; at 7–8 Havana time, with team_digest_enabled on and the day not sent yet, it calls
 // this function with the service key and { day: 'YYYY-MM-DD' }. This function answers 202 at once
 // and, in the background (EdgeRuntime.waitUntil):
@@ -2402,7 +2402,7 @@ Expected: FAIL — `Failed to resolve import "./index.ts"`.
 // ============================================================
 // supabase/functions/team-digest-unsubscribe/index.ts
 //
-// Opt-out and opt-in for the team daily digest (00655). The e-mail's footer links to
+// Opt-out and opt-in for the team daily digest (00656). The e-mail's footer links to
 // tricigo.com/resumen-diario/baja?u=<account>&t=<token>; that page POSTs here
 // { u, t, action: 'out' | 'in' } when the person taps the button. Only POST changes anything:
 // mail scanners and link previews follow links with GET. The token is
@@ -2504,7 +2504,7 @@ export default function TeamDigestUnsubscribeLayout({ children }: { children: Re
 ```tsx
 'use client';
 
-// Page behind "Dejar de recibir este resumen" in the team daily digest (00655). The link
+// Page behind "Dejar de recibir este resumen" in the team daily digest (00656). The link
 // carries u (account id) and t (its signed token). Nothing happens on load: mail scanners and
 // link previews open links by themselves, so the opt-out waits for the button. The
 // team-digest-unsubscribe Edge Function checks the token and records the choice.
@@ -2642,7 +2642,7 @@ git commit -m "feat(web): page to stop or resume the team daily digest"
 
 Right after the line that defines `support_alert_email` in `KNOWN_KEYS`, add:
 ```ts
-  // ── Resumen diario del equipo (00655) ──
+  // ── Resumen diario del equipo (00656) ──
   team_digest_enabled: { type: 'select', helpKey: 'platform_config.team_digest_enabled_help', options: [{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }] },
   team_digest_preview_to: { type: 'text', helpKey: 'platform_config.team_digest_preview_to_help' },
 ```
@@ -2711,9 +2711,9 @@ Change `team_digest_optouts` to mention the `opted_out` flag (coming back is an 
 
 Insert right after the "### Campañas: las manda el servidor, a la hora elegida (00649, PR #1129)" section (before the next `###`):
 ```markdown
-### Resumen diario del equipo (00655)
+### Resumen diario del equipo (00656)
 
-A las 7:00 de Cuba, cada cuenta con rol de panel (super_admin, admin, marketing) recibe un correo con los números del día anterior: viajes, altas, desgloses por municipio, vehículo y franja, marketing, y, solo para super_admin y admin, dinero y pendientes. Diseño: `docs/superpowers/specs/2026-10-11-team-daily-digest-design.md`. Ensayo: `supabase/tests/00655/run.sh`.
+A las 7:00 de Cuba, cada cuenta con rol de panel (super_admin, admin, marketing) recibe un correo con los números del día anterior: viajes, altas, desgloses por municipio, vehículo y franja, marketing, y, solo para super_admin y admin, dinero y pendientes. Diseño: `docs/superpowers/specs/2026-10-11-team-daily-digest-design.md`. Ensayo: `supabase/tests/00656/run.sh`.
 
 - **Cómo sale:** el job `send-team-digest` corre `dispatch_team_digest()` a los :05 de cada hora. Entre las 7:00 y las 8:59 de Cuba, con `team_digest_enabled` = `true` y sin fila del día en `team_digest_runs`, llama a la función de borde `send-team-digest`, que toma el día (`claim_team_digest`, una sola vez), calcula los números (`team_daily_metrics`), arma la versión de cada persona y la manda por `send-email` como HTML. El resultado queda en `team_digest_runs` (`sent`, `failed`, `last_error`).
 - **Nunca se reenvía solo:** un envío que se cae a mitad queda `sending` y a los 30 minutos pasa a `failed`. Desde las 9:00, `check_team_digest_overdue` (cada 15 min) falla mientras el día no esté `sent`, y lo reporta `check_cron_sql_failures`. Para reenviar a mano: borrar la fila del día en `team_digest_runs` y llamar a `send-team-digest` con la clave de servicio y `{"day":"YYYY-MM-DD"}`.
@@ -2732,8 +2732,8 @@ A las 7:00 de Cuba, cada cuenta con rol de panel (super_admin, admin, marketing)
 
 Run:
 ```bash
-bash supabase/tests/00655/run.sh none 2>&1 | tail -1
-bash supabase/tests/00655/run.sh supabase/migrations/00655_team_daily_digest.sql 2>&1 | tail -1
+bash supabase/tests/00656/run.sh none 2>&1 | tail -1
+bash supabase/tests/00656/run.sh supabase/migrations/00656_team_daily_digest.sql 2>&1 | tail -1
 (cd packages/api && npx vitest run 2>&1 | tail -4)
 pnpm check-types 2>&1 | tail -3
 pnpm --filter @tricigo/admin lint 2>&1 | tail -2
@@ -2769,9 +2769,9 @@ No step here runs without an AskUserQuestion answer for that step.
   - `team-digest-unsubscribe`, `verify_jwt: false`, files: `index.ts`, `../_shared/service-key.ts`, `../_shared/rate-limiter.ts`, `../_shared/team-digest.ts`.
   Verify with `get_edge_function` that the deployed files match the repo.
 
-- [ ] **Step 3: Rehearse 00655 in prod inside a rolled-back block.** One `execute_sql` with `DO $probe$ … v_mig := $mig655$<file>$mig655$; IF md5(v_mig) <> '<md5 of the file>' THEN RAISE …; EXECUTE v_mig; <checks>; RAISE EXCEPTION 'PROBE %', v_r; END $probe$;` Checks: the 8 function md5s equal the local GREEN run's; `team_daily_metrics(<yesterday>)` returns the seven keys; `team_digest_recipients()` lists the expected staff; with the switch on, `dispatch_team_digest('<today> 11:05+00')` (or 12:05 in winter) returns `dispatched` (the HTTP call is rolled back with the block).
+- [ ] **Step 3: Rehearse 00656 in prod inside a rolled-back block.** One `execute_sql` with `DO $probe$ … v_mig := $mig655$<file>$mig655$; IF md5(v_mig) <> '<md5 of the file>' THEN RAISE …; EXECUTE v_mig; <checks>; RAISE EXCEPTION 'PROBE %', v_r; END $probe$;` Checks: the 8 function md5s equal the local GREEN run's; `team_daily_metrics(<yesterday>)` returns the seven keys; `team_digest_recipients()` lists the expected staff; with the switch on, `dispatch_team_digest('<today> 11:05+00')` (or 12:05 in winter) returns `dispatched` (the HTTP call is rolled back with the block).
 
-- [ ] **Step 4: Apply 00655** with `apply_migration` (name `00655_team_daily_digest`). Verify by object: the 8 md5s, both cron jobs active, both settings present, the tables locked.
+- [ ] **Step 4: Apply 00656** with `apply_migration` (name `00656_team_daily_digest`). Verify by object: the 8 md5s, both cron jobs active, both settings present, the tables locked.
 
 - [ ] **Step 5: Preview to the owner.** Ask which account; set `team_digest_preview_to` to its id and `team_digest_enabled` to `true` before 7:00 Havana. Next morning: `team_digest_runs` shows the day `sent` with 1 recipient, and the owner confirms the e-mail and that the unsubscribe page works (opt out and back in).
 
