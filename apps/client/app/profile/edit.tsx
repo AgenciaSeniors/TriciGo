@@ -11,7 +11,7 @@ import { Avatar } from '@tricigo/ui/Avatar';
 import { useTranslation } from '@tricigo/i18n';
 import { authService } from '@tricigo/api';
 import { useAuthStore } from '@/stores/auth.store';
-import { triggerHaptic, realEmail, emailNoticeErrorKey } from '@tricigo/utils';
+import { triggerHaptic, realEmail, emailNoticeErrorKey, profileEmailSavePlan } from '@tricigo/utils';
 import Toast from 'react-native-toast-message';
 import { AvatarCropModal } from '@tricigo/ui/AvatarCropModal';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -200,25 +200,20 @@ export default function EditProfileScreen() {
       });
       return;
     }
-    // realEmail() drops the synthetic phone_<n>@tricigo.app, so a first address on a
-    // phone account counts as a change.
-    const newEmail = email.trim();
-    const emailChanged = newEmail.toLowerCase() !== (realEmail(user.email) ?? '').toLowerCase();
+    // users.email is written here only to clear it; a new address goes through
+    // add-email-with-verification below (see profileEmailSavePlan).
+    const emailPlan = profileEmailSavePlan(email, user.email);
     setSaving(true);
     try {
-      // users.email is written here only to clear it. Rewriting the same address
-      // with other capitals would clear its confirmation (00611), and a new one goes
-      // through add-email-with-verification below, which checks that no other
-      // account holds it, stores it lowercased and mails the confirmation link:
-      // since 00635 nothing is mailed to an address its owner never confirmed.
       const updated = await authService.updateProfile(user.id, {
         full_name: fullName.trim(),
-        ...(emailChanged && !newEmail ? { email: null } : {}),
+        ...(emailPlan.clear ? { email: null } : {}),
       });
       setUser(updated);
       triggerHaptic('success');
 
-      if (emailChanged && newEmail) {
+      if (emailPlan.send) {
+        const newEmail = emailPlan.send;
         try {
           await authService.addBackupEmail(newEmail);
           setUser({ ...updated, email: newEmail.toLowerCase() });

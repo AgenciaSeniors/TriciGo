@@ -729,7 +729,6 @@
     "backup_email_sent_body": "Te enviamos un enlace a {{email}}. Confírmalo y vas a poder entrar con tu correo cuando no te lleguen los códigos por SMS.",
     "backup_email_failed_title": "Correo no confirmado",
     "backup_email_taken": "Ese correo ya pertenece a otra cuenta de TriciGo. Prueba con otro.",
-    "backup_email_retry": "Guardamos tu perfil, pero no pudimos enviarte el enlace de confirmación. Vuelve a intentarlo más tarde.",
     "accepts_deliveries_desc": "Recibe pedidos de envío de paquetes",
     "all_photos_required": "Debes subir las 3 fotos de verificación",
     "cargo_disabled_confirm": "¿Dejar de aceptar envíos?",
