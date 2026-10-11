@@ -8,6 +8,7 @@
 # The migration is applied as postgres, the scaffold's non-superuser owner (as in prod).
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
 # Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00656/run.sh ...
+# Another rehearsal running on the same cluster: RUN_DB=<own name> supabase/tests/00656/run.sh ...
 set -u
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,7 +16,7 @@ MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 PY="${PYTHON:-python3}"
-DB=pr656
+DB="${RUN_DB:-pr656}"   # RUN_DB=<name> keeps two rehearsals on one cluster apart (it also names <name>g)
 P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = ''"
 PASS=0; FAIL=0
@@ -135,9 +136,9 @@ val "C3 a partial send is 'sent' with its failures; a second finish does nothing
 val "C4 nothing sent to anyone is 'failed'" \
   "$(txn "SELECT public.claim_team_digest('$D'); SELECT public.finish_team_digest('$D', 2, 0, 2, 'all bad'); SELECT status FROM public.team_digest_runs;")" \
   "t;t;failed"
-val "C5 nothing sent is 'failed': after an error, and with nobody to send to (no_recipients)" \
-  "$(txn "SELECT public.claim_team_digest('$D'); SELECT public.finish_team_digest('$D', 0, 0, 0, 'metrics: x'); SELECT public.claim_team_digest('2026-10-08'); SELECT public.finish_team_digest('2026-10-08', 0, 0, 0, NULL); SELECT string_agg(status || ':' || coalesce(last_error, ''), ',' ORDER BY day) FROM public.team_digest_runs;")" \
-  "t;t;t;t;failed:metrics: x,failed:no_recipients"
+val "C5 zero recipients is 'failed': with no error the cause is no_recipients, with an error the error is kept" \
+  "$(txn "SELECT public.claim_team_digest('$D'); SELECT public.finish_team_digest('$D', 0, 0, 0, NULL); SELECT public.claim_team_digest('2026-10-08'); SELECT public.finish_team_digest('2026-10-08', 0, 0, 0, 'metrics: boom'); SELECT public.claim_team_digest('2026-10-09'); SELECT public.finish_team_digest('2026-10-09', 0, 0, 0, 'recipients: boom'); SELECT string_agg(status || ':' || coalesce(last_error, ''), ',' ORDER BY day) FROM public.team_digest_runs;")" \
+  "t;t;t;t;t;t;failed:no_recipients,failed:metrics: boom,failed:recipients: boom"
 
 echo "== dispatch (p_now: 11:05 UTC = 07:05 Havana in October) =="
 CALLS="SELECT coalesce(string_agg(jobname || '|' || url || '|' || body::text || '|' || (headers->>'apikey'), ','), '<none>') FROM public.cron_http_post_calls;"
