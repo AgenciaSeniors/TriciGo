@@ -14,11 +14,17 @@ export function EmailConfirmNotice({
   email,
   linkSentAt,
   onLinkSent,
+  variant = 'header',
+  id,
 }: {
   email: string;
   /** When the newest still-valid link was sent (get_my_email_status), or null. */
   linkSentAt: string | null;
   onLinkSent: () => void;
+  /** 'header' sits centered under the address in Profile; 'field' spans a form field. */
+  variant?: 'header' | 'field';
+  /** For the field's aria-describedby. */
+  id?: string;
 }) {
   const { t } = useTranslation('common');
   const [resending, setResending] = useState(false);
@@ -41,7 +47,7 @@ export function EmailConfirmNotice({
   };
 
   return (
-    <div className="profile-email-notice">
+    <div id={id} className={variant === 'field' ? 'profile-email-notice profile-email-notice--field' : 'profile-email-notice'}>
       <div className="profile-email-notice-row">
         <span className="profile-email-notice-state">
           <span className="profile-email-notice-dot" aria-hidden="true" />
