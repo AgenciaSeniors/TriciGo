@@ -40,14 +40,14 @@
 - Create: `supabase/tests/00656/scaffold.sql`
 - Create: `supabase/tests/00656/seed.sql`
 
-- [ ] **Step 1: Confirm the migration number is still free**
+- [ ] **Step 1: Confirm the migration number is still free (done by the controller on 2026-10-11: 00655 is taken by #1143, so this plan uses 00656)**
 
 Run:
 ```bash
 cd /home/user/TriciGo && git fetch -q origin master
 git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -3
 ```
-Expected: the newest file is `00654_gate_panel_analytics_rpcs.sql` or older. Then list the migration files of every open PR (GitHub MCP `list_pull_requests` state=open, then `pull_request_read` method `get_files` for each) and confirm none adds `00656_*`. If 00656 is taken, use the next free number everywhere this plan says 00656 (file names, `pr655`, the `00656:` messages).
+Expected: the newest file is `00654_gate_panel_analytics_rpcs.sql` or older. Then list the migration files of every open PR (GitHub MCP `list_pull_requests` state=open, then `pull_request_read` method `get_files` for each) and confirm none adds `00656_*`. If 00656 is taken, use the next free number everywhere this plan says 00656 (file names, `pr656`, the `00656:` messages).
 
 - [ ] **Step 2: Make sure the local cluster runs and has PostGIS**
 
@@ -405,10 +405,10 @@ RESET ROLE;
 Run:
 ```bash
 B=/usr/lib/postgresql/16/bin; C="-h 127.0.0.1 -p 5433 -U pgtest"
-$B/psql $C -d postgres -qAt -c "DROP DATABASE IF EXISTS pr655" -c "CREATE DATABASE pr655"
-$B/psql $C -d pr655 -qAt -v ON_ERROR_STOP=1 -f supabase/tests/00656/scaffold.sql >/dev/null && \
-$B/psql $C -d pr655 -qAt -v ON_ERROR_STOP=1 -f supabase/tests/00656/seed.sql >/dev/null && \
-$B/psql $C -d pr655 -qAt -c "SELECT string_agg(proname || ':' || md5(prosrc), ',' ORDER BY proname) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('_poi_admin_area', 'mailable_user_emails', 'get_platform_config_text')"
+$B/psql $C -d postgres -qAt -c "DROP DATABASE IF EXISTS pr656" -c "CREATE DATABASE pr656"
+$B/psql $C -d pr656 -qAt -v ON_ERROR_STOP=1 -f supabase/tests/00656/scaffold.sql >/dev/null && \
+$B/psql $C -d pr656 -qAt -v ON_ERROR_STOP=1 -f supabase/tests/00656/seed.sql >/dev/null && \
+$B/psql $C -d pr656 -qAt -c "SELECT string_agg(proname || ':' || md5(prosrc), ',' ORDER BY proname) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ('_poi_admin_area', 'mailable_user_emails', 'get_platform_config_text')"
 ```
 Expected: `_poi_admin_area:f8f7725ad687b5fbea5429d1bcfd23aa,get_platform_config_text:407a7b835c527164a4aa8b3aa8525ba5,mailable_user_emails:58def9245ceb43b710a57ef01c450572`
 
@@ -446,7 +446,7 @@ MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 PY="${PYTHON:-python3}"
-DB=pr655
+DB=pr656
 P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = ''"
 PASS=0; FAIL=0
