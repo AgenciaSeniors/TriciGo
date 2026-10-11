@@ -404,4 +404,161 @@ GRANT EXECUTE ON FUNCTION public.finish_team_digest(date, integer, integer, inte
 REVOKE ALL ON FUNCTION public.set_team_digest_optout(uuid, boolean) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.set_team_digest_optout(uuid, boolean) TO service_role;
 
+-- 4. Dispatch and overdue check ------------------------------------------------------------
+-- Hourly at :05. Between 7:00 and 8:59 Havana time, with the switch on and no run for the day
+-- before, calls send-team-digest with that day. No EXCEPTION handler: a failure must reach
+-- check_cron_sql_failures (00596). p_now exists for the rehearsal; the cron passes nothing.
+CREATE OR REPLACE FUNCTION public.dispatch_team_digest(p_now timestamptz DEFAULT now())
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_day date := (p_now AT TIME ZONE 'America/Havana')::date - 1;
+  v_hour integer := extract(hour FROM (p_now AT TIME ZONE 'America/Havana'))::integer;
+  v_key text;
+BEGIN
+  UPDATE public.team_digest_runs
+     SET status = 'failed', finished_at = now(), last_error = coalesce(last_error, 'interrupted')
+   WHERE status = 'sending' AND started_at < now() - interval '30 minutes';
+
+  IF coalesce(public.get_platform_config_text('team_digest_enabled', 'false'), 'false') <> 'true' THEN
+    RETURN 'disabled';
+  END IF;
+  IF v_hour < 7 OR v_hour >= 9 THEN
+    RETURN 'not_now';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.team_digest_runs r WHERE r.day = v_day) THEN
+    RETURN 'already';
+  END IF;
+
+  v_key := public.get_service_role_key();
+  IF v_key IS NULL OR v_key = '' THEN
+    RAISE EXCEPTION 'dispatch_team_digest: no service role key in the vault, the digest for % was not sent', v_day
+      USING DETAIL = 'team_digest_no_service_key';
+  END IF;
+  PERFORM public.cron_http_post('send-team-digest',
+    url := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-team-digest',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || v_key,
+      'apikey', v_key),
+    body := jsonb_build_object('day', to_char(v_day, 'YYYY-MM-DD')),
+    timeout_milliseconds := 30000);
+  RETURN 'dispatched';
+END;
+$$;
+
+-- Every 15 minutes. From 9:00 Havana time, with the switch on, fails while the day before is not
+-- 'sent', so check_cron_sql_failures (00596) e-mails the business address. Its own job: a RAISE
+-- inside dispatch_team_digest would also roll back its HTTP call. Turning the switch on after
+-- 9:00 makes this fail once for that day, since nothing was dispatched.
+CREATE OR REPLACE FUNCTION public.check_team_digest_overdue(p_now timestamptz DEFAULT now())
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_day date := (p_now AT TIME ZONE 'America/Havana')::date - 1;
+  v_hour integer := extract(hour FROM (p_now AT TIME ZONE 'America/Havana'))::integer;
+  v_status text;
+BEGIN
+  IF coalesce(public.get_platform_config_text('team_digest_enabled', 'false'), 'false') <> 'true' THEN
+    RETURN 'disabled';
+  END IF;
+  IF v_hour < 9 THEN
+    RETURN 'not_yet';
+  END IF;
+  SELECT r.status INTO v_status FROM public.team_digest_runs r WHERE r.day = v_day;
+  IF v_status IS DISTINCT FROM 'sent' THEN
+    RAISE EXCEPTION 'check_team_digest_overdue: the digest for % is %', v_day, coalesce(v_status, 'not sent')
+      USING DETAIL = 'team_digest_overdue';
+  END IF;
+  RETURN 'ok';
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.dispatch_team_digest(timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.dispatch_team_digest(timestamptz) TO service_role;
+REVOKE ALL ON FUNCTION public.check_team_digest_overdue(timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_team_digest_overdue(timestamptz) TO service_role;
+
+-- cron.schedule updates an existing job's schedule and command but keeps its active flag: a job
+-- that someone paused is switched back on.
+DO $cron$
+DECLARE
+  v_job bigint;
+BEGIN
+  v_job := cron.schedule('send-team-digest', '5 * * * *', 'SELECT public.dispatch_team_digest();');
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobid = v_job AND NOT active) THEN
+    PERFORM cron.alter_job(v_job, active := true);
+  END IF;
+  v_job := cron.schedule('check-team-digest-overdue', '*/15 * * * *', 'SELECT public.check_team_digest_overdue();');
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobid = v_job AND NOT active) THEN
+    PERFORM cron.alter_job(v_job, active := true);
+  END IF;
+END $cron$;
+
+-- 5. Pasted from Windows (CRLF), the bodies would carry \r: recreate them from the catalog without it.
+DO $crlf$
+DECLARE
+  v_fn regprocedure;
+  v_def text;
+BEGIN
+  FOREACH v_fn IN ARRAY ARRAY[
+    'public._team_digest_totals(date)', 'public.team_daily_metrics(date)', 'public.team_digest_recipients()',
+    'public.claim_team_digest(date)', 'public.finish_team_digest(date, integer, integer, integer, text)',
+    'public.set_team_digest_optout(uuid, boolean)', 'public.dispatch_team_digest(timestamptz)',
+    'public.check_team_digest_overdue(timestamptz)']::regprocedure[]
+  LOOP
+    v_def := pg_get_functiondef(v_fn);
+    IF position(chr(13) IN v_def) > 0 THEN
+      EXECUTE replace(v_def, chr(13), '');
+    END IF;
+  END LOOP;
+END $crlf$;
+
+-- 6. Self-checks ---------------------------------------------------------------------------
+DO $check$
+DECLARE
+  v_fn regprocedure;
+BEGIN
+  FOREACH v_fn IN ARRAY ARRAY[
+    'public._team_digest_totals(date)', 'public.team_daily_metrics(date)', 'public.team_digest_recipients()',
+    'public.claim_team_digest(date)', 'public.finish_team_digest(date, integer, integer, integer, text)',
+    'public.set_team_digest_optout(uuid, boolean)', 'public.dispatch_team_digest(timestamptz)',
+    'public.check_team_digest_overdue(timestamptz)']::regprocedure[]
+  LOOP
+    IF has_function_privilege('anon', v_fn, 'EXECUTE') OR has_function_privilege('authenticated', v_fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00656: % is executable by a client role', v_fn;
+    END IF;
+    IF NOT has_function_privilege('service_role', v_fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00656: service_role cannot execute %', v_fn;
+    END IF;
+    IF NOT (SELECT p.prosecdef FROM pg_proc p WHERE p.oid = v_fn) THEN
+      RAISE EXCEPTION '00656: % must be SECURITY DEFINER', v_fn;
+    END IF;
+    IF (SELECT position(chr(13) IN p.prosrc) FROM pg_proc p WHERE p.oid = v_fn) > 0 THEN
+      RAISE EXCEPTION '00656: % kept a carriage return', v_fn;
+    END IF;
+  END LOOP;
+  IF has_table_privilege('anon', 'public.team_digest_runs', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.team_digest_runs', 'SELECT')
+     OR has_table_privilege('anon', 'public.team_digest_optouts', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.team_digest_optouts', 'SELECT') THEN
+    RAISE EXCEPTION '00656: a client role can read the digest tables';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'send-team-digest' AND schedule = '5 * * * *'
+                   AND command = 'SELECT public.dispatch_team_digest();' AND active)
+     OR NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-team-digest-overdue' AND schedule = '*/15 * * * *'
+                      AND command = 'SELECT public.check_team_digest_overdue();' AND active) THEN
+    RAISE EXCEPTION '00656: a team digest cron job is missing or inactive';
+  END IF;
+  IF (SELECT count(*) FROM public.platform_config WHERE key IN ('team_digest_enabled', 'team_digest_preview_to')) <> 2 THEN
+    RAISE EXCEPTION '00656: the team digest settings are missing';
+  END IF;
+END $check$;
+
 RESET lock_timeout;
