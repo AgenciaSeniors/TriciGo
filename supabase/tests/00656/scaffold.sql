@@ -106,7 +106,7 @@ CREATE TABLE public.rides (
   status          public.ride_status NOT NULL,
   canceled_by     uuid,
   service_type    text NOT NULL,
-  pickup_location extensions.geography(Point, 4326),
+  pickup_location extensions.geography(Point, 4326) NOT NULL,
   final_fare_cup  integer,
   created_at      timestamptz NOT NULL,
   completed_at    timestamptz

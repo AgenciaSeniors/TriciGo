@@ -45,13 +45,14 @@ INSERT INTO public.cuba_admin_areas (admin_level, name_es, geom) VALUES
 
 -- Rides. D cohort (created on D, not test): R1 R2 R3 R4 R5 R6 R9. R7 is a test customer's.
 -- R8 was requested on D-1 and completed on D. R10 is D-1's, R11 is D-7's, R0 is C1's first ride.
+-- R5's pickup is in the sea north of Havana and R9's far to the south-east: both outside every polygon.
 INSERT INTO public.rides (id, customer_id, driver_id, status, canceled_by, service_type, pickup_location, final_fare_cup, created_at, completed_at) VALUES
   ('f0000000-0000-4000-8000-000000000000', 'c1000000-0000-4000-8000-000000000001', 'e1000000-0000-4000-8000-000000000001', 'completed', NULL, 'triciclo_basico', pg_temp.pt(-82.39, 23.13), 100, pg_temp.h('2026-09-20 10:00'), pg_temp.h('2026-09-20 10:30')),
   ('f0000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000001', 'e1000000-0000-4000-8000-000000000001', 'completed', NULL, 'triciclo_basico', pg_temp.pt(-82.39, 23.13), 1000, pg_temp.h('2026-10-07 08:10'), pg_temp.h('2026-10-07 08:40')),
   ('f0000000-0000-4000-8000-000000000002', 'c1000000-0000-4000-8000-000000000002', 'e1000000-0000-4000-8000-000000000001', 'completed', NULL, 'auto_standard',   pg_temp.pt(-82.37, 23.15), 2000, pg_temp.h('2026-10-07 13:00'), pg_temp.h('2026-10-07 13:30')),
   ('f0000000-0000-4000-8000-000000000003', 'c1000000-0000-4000-8000-000000000003', 'e1000000-0000-4000-8000-000000000002', 'canceled', 'c1000000-0000-4000-8000-000000000003', 'auto_standard', pg_temp.pt(-82.39, 23.13), NULL, pg_temp.h('2026-10-07 19:00'), NULL),
   ('f0000000-0000-4000-8000-000000000004', 'c1000000-0000-4000-8000-000000000001', 'e1000000-0000-4000-8000-000000000002', 'canceled', 'd1000000-0000-4000-8000-000000000002', 'triciclo_basico', pg_temp.pt(-82.39, 23.13), NULL, pg_temp.h('2026-10-07 20:00'), NULL),
-  ('f0000000-0000-4000-8000-000000000005', 'c1000000-0000-4000-8000-000000000002', NULL, 'canceled', 'c1000000-0000-4000-8000-000000000002', 'moto_standard', NULL, NULL, pg_temp.h('2026-10-07 02:00'), NULL),
+  ('f0000000-0000-4000-8000-000000000005', 'c1000000-0000-4000-8000-000000000002', NULL, 'canceled', 'c1000000-0000-4000-8000-000000000002', 'moto_standard', pg_temp.pt(-82.40, 23.25), NULL, pg_temp.h('2026-10-07 02:00'), NULL),
   ('f0000000-0000-4000-8000-000000000006', 'c1000000-0000-4000-8000-000000000003', NULL, 'canceled', NULL, 'moto_standard', pg_temp.pt(-82.37, 23.15), NULL, pg_temp.h('2026-10-07 23:59'), NULL),
   ('f0000000-0000-4000-8000-000000000007', 'c1000000-0000-4000-8000-0000000000ff', 'e1000000-0000-4000-8000-000000000001', 'completed', NULL, 'auto_standard', pg_temp.pt(-82.39, 23.13), 9999, pg_temp.h('2026-10-07 10:00'), pg_temp.h('2026-10-07 10:30')),
   ('f0000000-0000-4000-8000-000000000008', 'c1000000-0000-4000-8000-000000000001', 'e1000000-0000-4000-8000-000000000001', 'completed', NULL, 'triciclo_basico', pg_temp.pt(-82.39, 23.13), 500, pg_temp.h('2026-10-06 23:59'), pg_temp.h('2026-10-07 00:20')),
