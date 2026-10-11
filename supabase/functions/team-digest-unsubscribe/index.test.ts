@@ -54,6 +54,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  delete env.TEAM_DIGEST_SECRET;
   vi.restoreAllMocks();
 });
 
@@ -72,6 +73,8 @@ describe('team-digest-unsubscribe', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://tricigo.com');
     expect(res.headers.get('Access-Control-Allow-Methods')).toContain('POST');
     expect(res.headers.get('Access-Control-Allow-Headers')).toContain('content-type');
+    // The allowed origin is echoed per request, so caches must key on Origin.
+    expect(res.headers.get('Vary')).toBe('Origin');
   });
 
   it('does not allow an origin outside ALLOWED_ORIGINS', async () => {
@@ -79,6 +82,7 @@ describe('team-digest-unsubscribe', () => {
       method: 'OPTIONS', headers: { Origin: 'https://evil.example' },
     }));
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('');
+    expect(res.headers.get('Vary')).toBe('Origin');
   });
 
   it('refuses GET: a link scanner must never opt anyone out', async () => {
@@ -91,6 +95,7 @@ describe('team-digest-unsubscribe', () => {
     const res = await post({ u: USER, t: TOKEN, action: 'out' });
     expect(res.status).toBe(200);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://tricigo.com');
+    expect(res.headers.get('Vary')).toBe('Origin');
     expect(await res.json()).toEqual({ ok: true, subscribed: false });
     expect(db.rpcCalls).toEqual([{ fn: 'set_team_digest_optout', args: { p_user: USER, p_out: true } }]);
   });
@@ -108,6 +113,18 @@ describe('team-digest-unsubscribe', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://tricigo.com');
     expect(await res.json()).toEqual({ error: 'bad_link' });
     expect(db.rpcCalls).toEqual([]);
+  });
+
+  it('with TEAM_DIGEST_SECRET set, only a token signed with it works, not one signed with the service key', async () => {
+    env.TEAM_DIGEST_SECRET = 'own-digest-secret';
+    const withServiceKey = await unsubscribeToken(SERVICE_KEY, USER);
+    const rejected = await post({ u: USER, t: withServiceKey, action: 'out' });
+    expect(rejected.status).toBe(403);
+    expect(db.rpcCalls).toEqual([]);
+    const withSecret = await unsubscribeToken('own-digest-secret', USER);
+    const accepted = await post({ u: USER, t: withSecret, action: 'out' });
+    expect(accepted.status).toBe(200);
+    expect(db.rpcCalls).toEqual([{ fn: 'set_team_digest_optout', args: { p_user: USER, p_out: true } }]);
   });
 
   it('400 for malformed input', async () => {

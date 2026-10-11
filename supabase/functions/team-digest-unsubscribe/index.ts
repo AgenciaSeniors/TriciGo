@@ -2,11 +2,12 @@
 // supabase/functions/team-digest-unsubscribe/index.ts
 //
 // Opt-out and opt-in for the team daily digest (00656). The e-mail's footer links to
-// tricigo.com/resumen-diario/baja?u=<account>&t=<token>; that page POSTs here
-// { u, t, action: 'out' | 'in' } when the person taps the button. Only POST changes anything:
-// mail scanners and link previews follow links with GET. The page lives on tricigo.com because an
-// Edge Function on the default domain cannot serve HTML, so every answer is JSON with the CORS
-// headers of ALLOWED_ORIGINS (tricigo.com is one), errors included, for the page to read them.
+// tricigo.com/resumen-diario/baja#u=<account>&t=<token> (fragment, so neither reaches server logs
+// or analytics); that page POSTs here { u, t, action: 'out' | 'in' } when the person taps the
+// button. Only POST changes anything: mail scanners and link previews follow links with GET.
+// The page lives on tricigo.com because an Edge Function on the default domain cannot serve
+// HTML, so every answer is JSON with the CORS headers of ALLOWED_ORIGINS (tricigo.com is one),
+// errors included, for the page to read them.
 // The token is HMAC-SHA256(TEAM_DIGEST_SECRET or the service key, 'team-digest:' + account id),
 // checked in constant time, so a link only works for its own account. verify_jwt is off: the
 // person may not be signed in. Each client address gets 20 calls an hour. Tokens are never logged.
@@ -27,6 +28,8 @@ function corsHeaders(req: Request): Record<string, string> {
     'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : '',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    // Allow-Origin echoes the caller's origin, so a cache must not reuse one answer for another.
+    Vary: 'Origin',
   };
 }
 
