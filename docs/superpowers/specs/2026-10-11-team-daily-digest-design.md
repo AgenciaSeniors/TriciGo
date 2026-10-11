@@ -5,15 +5,17 @@ Date: 2026-10-11. Status: approved in conversation, pending written-spec review.
 ## Goal
 
 Every morning at 7:00 Havana time, each member of the team with a panel role receives an email
-summarising the previous day: rides, sign-ups, drivers, money, operations and marketing. Each role
-gets its own version; marketing never sees money, as in the panel.
+summarising the previous day: rides, sign-ups, drivers, breakdowns, money, pending work and marketing. Marketing
+sees every ride number (it uses them to decide where to focus) but never money, as in the panel,
+nor the admins' work queue.
 
 ## Decisions taken with the owner
 
 | Topic | Decision |
 |---|---|
-| Blocks | Business, Operations, Marketing, and a comparison with earlier days on every number |
-| Who gets what | Directors and admins: everything. Marketing: Marketing block plus rides and sign-ups, no money |
+| Blocks | Rides, sign-ups, breakdowns, money, pending work, marketing, and a comparison with earlier days on every total |
+| Who gets what | Directors and admins: everything. Marketing: everything except money and the admins' pending work (all ride numbers included) |
+| Breakdowns | Rides by pickup municipality (top 5), by vehicle type and by time band, for every role |
 | When | 7:00 Havana time, every day, weekends included. Covers the previous day, 00:00–24:00 Havana |
 | Recipients | Automatic: every active account with a panel role. One-tap unsubscribe link, with a way back |
 | Build | Metrics in one SQL function (single definition of each number); rendering and sending in an Edge Function |
@@ -25,11 +27,20 @@ Alejandro and Eduardo `super_admin`; Lucía, Liannah and Luis `admin`; the Baco 
 ## Content
 
 All numbers are for day **D** (the Havana calendar day before the send), excluding test accounts
-(`users.is_test`) and the platform account (`…0001`). Each number of the Business, Operations and
-Marketing blocks carries its change against **D−1** and against **D−7** (arrow and percent; "—" when
-the base is 0). The "pending now" figures are a snapshot at send time and carry no comparison.
+(`users.is_test`) and the platform account (`…0001`). Each total carries its change against **D−1**
+and against **D−7** (arrow and percent; "—" when the base is 0). Breakdowns show day D only, to keep
+the email readable. "Pending now" is a snapshot at send time and carries no comparison.
 
-### Business (directors, admins; marketing without the money lines)
+| Block | Directors and admins | Marketing |
+|---|---|---|
+| Rides | yes | yes |
+| Sign-ups and drivers | yes | yes |
+| Breakdowns | yes | yes |
+| Marketing | yes | yes |
+| Money | yes | no |
+| Pending now | yes | no |
+
+### Rides (everyone)
 
 Ride outcomes use the cohort of rides **requested on D** (`rides.created_at` in D), read at send time:
 
@@ -37,32 +48,51 @@ Ride outcomes use the cohort of rides **requested on D** (`rides.created_at` in 
 |---|---|
 | Requested | rides created on D |
 | Completed | of those, `status = 'completed'` |
+| Completion rate | completed / requested |
 | Canceled by the rider | `status = 'canceled'`, `canceled_by = customer_id` |
 | Canceled by the driver | `status = 'canceled'`, `canceled_by` = the user of the assigned driver profile |
 | No driver | `status = 'canceled'` and `driver_id IS NULL` (nobody accepted; rider gave up or cleanup canceled it) |
-| Completion rate | completed / requested |
+| No driver, with an offer / without any | the "no driver" rides split by whether any `ride_offers` row exists |
+| Hours without coverage | how many of the 24 Havana hours of D had no online beat in `driver_heartbeat_log` |
+
+Rides canceled by an admin or by nobody after a driver accepted are counted in "requested" only;
+the outcome lines are not required to add up to "requested" (rides can still be active).
+
+### Sign-ups and drivers (everyone)
+
+| Number | Definition |
+|---|---|
 | New riders | users created on D with no driver profile |
 | Drivers registered | driver profiles created on D |
 | Drivers approved | driver profiles with `approved_at` in D |
 | Drivers online | distinct `driver_heartbeat_log.driver_profile_id` with an online beat in D |
 | Drivers with a ride | distinct drivers of rides with `completed_at` in D |
-| **Money (directors and admins only)** | |
+
+### Breakdowns (everyone; day D only)
+
+Over the same cohort of rides requested on D:
+
+| Breakdown | Rows | Columns |
+|---|---|---|
+| Pickup municipality | top 5 by requested, from `_poi_admin_area(pickup_location)`; rides with no location or outside every polygon go to "Sin ubicación" | requested, completed, no driver |
+| Vehicle type | each `service_type` with at least one ride, with its display name | requested, completed, no driver |
+| Time band (Havana) | madrugada 00–06, mañana 06–12, tarde 12–18, noche 18–24 (the pricing bands) | requested, no driver |
+
+### Money (directors and admins only)
+
+| Number | Definition |
+|---|---|
 | Charged in rides | sum of `final_fare_cup` of rides with `completed_at` in D |
 | Platform commission | sum of `commission_amount` of the `final` pricing snapshots of rides completed in D (same as `get_platform_earnings`) |
 | Recharged | sum of `amount_cup` of `payment_intents` with `status = 'completed'` and `paid_at` in D |
 
-Rides canceled by an admin or by nobody after a driver accepted are counted in "requested" only;
-the four outcome lines are not required to add up to "requested" (rides can still be active).
-
-### Operations (directors, admins)
+### Pending now (directors and admins only)
 
 | Number | Definition |
 |---|---|
-| No-driver rides with an offer / without any | the "no driver" rides of D split by whether any `ride_offers` row exists |
-| Hours without coverage | how many of the 24 Havana hours of D had no online beat in `driver_heartbeat_log` |
-| Drivers awaiting approval (now) | `driver_profiles.status = 'under_review'` |
-| Open incidents (now) | `incident_reports.status IN ('open', 'investigating')`, SOS counted apart |
-| Open disputes (now) | `ride_disputes.resolved_at IS NULL`, and how many are past `sla_resolution_deadline` |
+| Drivers awaiting approval | `driver_profiles.status = 'under_review'` |
+| Open incidents | `incident_reports.status IN ('open', 'investigating')`, SOS counted apart |
+| Open disputes | `ride_disputes.resolved_at IS NULL`, and how many are past `sla_resolution_deadline` |
 
 ### Marketing (everyone)
 
@@ -74,7 +104,7 @@ the four outcome lines are not required to add up to "requested" (rides can stil
 | Campaigns sent | campaigns with `sent_at` in D: name, status, `push_sent`, `email_sent` |
 | Promotions used | `promotion_uses` created on D, grouped by promotion code |
 
-Campaign names, codes and labels are written by people: they are escaped in the HTML.
+Campaign names, codes, labels and municipality names are escaped in the HTML.
 
 A day with no activity still sends, with zeros.
 
@@ -103,8 +133,9 @@ email footer link      →  team-digest-unsubscribe (Edge Function, signed link)
 - `team_digest_optouts` — `user_id uuid PRIMARY KEY REFERENCES users ON DELETE CASCADE`,
   `created_at`. Same lock-table treatment.
 - `team_daily_metrics(p_day date) RETURNS jsonb` — SECURITY DEFINER, executable by `service_role`
-  only. Computes D, D−1 and D−7 from one inner query set and returns
-  `{day, business: {…, money: {…}}, operations: {…}, marketing: {…}, previous: {…}, week_ago: {…}}`.
+  only. Computes the totals for D, D−1 and D−7 from one inner query set, the breakdowns and the
+  pending snapshot for D only, and returns
+  `{day, rides, signups, breakdowns, money, pending, marketing, previous, week_ago}`.
 - `team_digest_recipients() RETURNS TABLE(user_id, role, email, full_name)` — active users with role
   `super_admin`, `admin` or `marketing`, not the platform account, not opted out, with a provable
   address from `public._user_mailable_email(id)` (00635). When `team_digest_preview_to` is set, only
@@ -146,7 +177,7 @@ see CLAUDE.md § "Una función de cron no atrapa sus propios errores").
 `supabase/functions/_shared/email-templates/team_daily_digest.ts`, registered in `index.ts`.
 Input: the metrics JSON, the recipient's role, name, panel URL and unsubscribe URL. Output: subject
 "TriciGo · resumen del <weekday> <day> de <month>" and the HTML on the shared layout. For `marketing`
-the money lines and the Operations block are not rendered at all. Spanish (neutral, tuteo); dates in
+the Money and Pending now blocks are not rendered at all; every ride number and breakdown is. Spanish (neutral, tuteo); dates in
 Havana time; amounts with `formatCUP`-equivalent formatting in the Edge runtime.
 
 ## Errors
@@ -163,12 +194,13 @@ Havana time; amounts with `formatCUP`-equivalent formatting in the Edge runtime.
 ## Testing
 
 - **SQL rehearsal** (`supabase/tests/<n>/run.sh`, local Postgres): seeded rides, users, heartbeats,
-  offers, campaigns and promotions with known answers for D, D−1 and D−7; recipients by role,
+  offers, campaigns and promotions with known answers for D, D−1 and D−7, and for each breakdown
+  (including rides with no location and a ride at 23:59 / 00:00 Havana); recipients by role,
   opt-out, preview mode and the mailable-address rule; claim idempotency; dispatch only at Havana
   7–8 (including both DST offsets); overdue check; grants (`anon` and `authenticated` cannot execute
   any of the new functions); negative proofs of the migration's own checks; CRLF copy.
-- **Template tests** (vitest): the marketing version contains no money line and no Operations block;
-  user-written text is escaped; arrows and percentages, including a 0 base.
+- **Template tests** (vitest): the marketing version contains every ride number and breakdown but no
+  Money or Pending now block; user-written text is escaped; arrows and percentages, including a 0 base.
 - **Edge Function tests** (vitest, `send-campaign` pattern): claim lost → nothing sent; one failed
   send does not stop the others; unsubscribe rejects a bad signature, opts out only on `POST`.
 - **Prod rehearsal** inside a rolled-back block with real data, then preview mode to the owner only.
