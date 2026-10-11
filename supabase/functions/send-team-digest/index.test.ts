@@ -155,7 +155,7 @@ describe('send-team-digest', () => {
   it('puts a signed unsubscribe link for that person in each e-mail', async () => {
     await call({ day: '2026-10-07' });
     const html = sentBodies()[0].template;
-    const m = html.match(/https:\/\/tricigo\.com\/resumen-diario\/baja\?u=([0-9a-f-]+)&amp;t=([0-9a-f]{64})/);
+    const m = html.match(/https:\/\/tricigo\.com\/resumen-diario\/baja#u=([0-9a-f-]+)&amp;t=([0-9a-f]{64})/);
     expect(m?.[1]).toBe(ADMIN);
     expect(await verifyUnsubscribeToken(SERVICE_KEY, ADMIN, m![2])).toBe(true);
   });

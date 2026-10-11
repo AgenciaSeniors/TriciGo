@@ -27,8 +27,13 @@ export async function verifyUnsubscribeToken(secret: string, userId: string, tok
   return diff === 0;
 }
 
+/**
+ * The account and the token go in the fragment (#u=…&t=…), never in the query string: a query
+ * string reaches nginx access logs and analytics, a fragment never leaves the browser. The page
+ * reads location.hash and POSTs both to team-digest-unsubscribe.
+ */
 export function unsubscribeUrl(webOrigin: string, userId: string, token: string): string {
-  return `${webOrigin.replace(/\/+$/, '')}${UNSUBSCRIBE_PATH}?u=${encodeURIComponent(userId)}&t=${token}`;
+  return `${webOrigin.replace(/\/+$/, '')}${UNSUBSCRIBE_PATH}#u=${encodeURIComponent(userId)}&t=${token}`;
 }
 
 /**
@@ -39,16 +44,27 @@ export function digestSecret(env: (name: string) => string | undefined, serviceK
   return env('TEAM_DIGEST_SECRET') || serviceKey;
 }
 
-/** The Havana calendar day before `now`, as YYYY-MM-DD. */
+const HAVANA_DAY = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Havana',
+  calendar: 'gregory',
+  numberingSystem: 'latn',
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+});
+
+/**
+ * The Havana calendar day before `now`, as YYYY-MM-DD. Built from formatToParts, so it does not
+ * depend on how a locale happens to order or punctuate a date.
+ */
 export function havanaYesterday(now: Date): string {
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Havana',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-  const [y, m, d] = today.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d) - 86_400_000).toISOString().slice(0, 10);
+  const parts = HAVANA_DAY.formatToParts(now);
+  const part = (type: 'year' | 'month' | 'day'): number => {
+    const value = Number(parts.find((p) => p.type === type)?.value);
+    if (!Number.isInteger(value)) throw new Error(`havanaYesterday: no ${type} in the formatted date`);
+    return value;
+  };
+  return new Date(Date.UTC(part('year'), part('month') - 1, part('day')) - 86_400_000).toISOString().slice(0, 10);
 }
 
 /** A real calendar day written as YYYY-MM-DD. */

@@ -48,8 +48,12 @@ const base = {
   name: 'Ana',
   metrics: METRICS,
   panel_url: 'https://admin.tricigo.com',
-  unsubscribe_url: 'https://tricigo.com/resumen-diario/baja?u=a1&t=ff',
+  unsubscribe_url: 'https://tricigo.com/resumen-diario/baja#u=a1&t=ff',
 };
+
+// wrapHtml turns every non-ASCII character into a numeric entity; decode them to read the text.
+const decode = (html: string) => html.replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)));
+const preheader = (html: string) => decode(html.match(/<div style="display: none;[^>]*>([^<]*)<\/div>/)?.[1] ?? '');
 
 describe('team daily digest template', () => {
   it('admins see the money and the pending work', () => {
@@ -96,7 +100,7 @@ describe('team daily digest template', () => {
 
   it('carries the unsubscribe link, escaped', () => {
     expect(teamDailyDigestHtml({ ...base, role: 'marketing' }))
-      .toContain('href="https://tricigo.com/resumen-diario/baja?u=a1&amp;t=ff"');
+      .toContain('href="https://tricigo.com/resumen-diario/baja#u=a1&amp;t=ff"');
   });
 
   it('greets by name, or without one', () => {
@@ -152,6 +156,39 @@ describe('team daily digest template', () => {
     expect(html).toContain('&lt;l&gt;');
     expect(html).toContain('&lt;q&gt;');
     for (const raw of ['<b>Ana', '<u>Moto', '<c>', '<l>', '<q>']) expect(html).not.toContain(raw);
+  });
+
+  it('preheader: plural for many rides', () => {
+    expect(preheader(teamDailyDigestHtml({ ...base, role: 'admin' })))
+      .toBe('7 viajes pedidos, 2 completados el miércoles 7 de octubre.');
+  });
+
+  it('preheader: singular for one ride, plural for zero', () => {
+    const one = { ...METRICS, current: totals(1, 1, 0) };
+    expect(preheader(teamDailyDigestHtml({ ...base, metrics: one, role: 'admin' })))
+      .toBe('1 viaje pedido, 1 completado el miércoles 7 de octubre.');
+    const mixed = { ...METRICS, current: totals(1, 0, 0) };
+    expect(preheader(teamDailyDigestHtml({ ...base, metrics: mixed, role: 'marketing' })))
+      .toBe('1 viaje pedido, 0 completados el miércoles 7 de octubre.');
+    const none = { ...METRICS, current: totals(0, 0, 0) };
+    expect(preheader(teamDailyDigestHtml({ ...base, metrics: none, role: 'marketing' })))
+      .toBe('0 viajes pedidos, 0 completados el miércoles 7 de octubre.');
+  });
+
+  it('labels the four time bands in Spanish', () => {
+    const text = decode(teamDailyDigestHtml({ ...base, role: 'marketing' }));
+    for (const label of ['Madrugada (0 a 6 h)', 'Mañana (6 a 12 h)', 'Tarde (12 a 18 h)', 'Noche (18 a 24 h)']) {
+      expect(text).toContain(label);
+    }
+    expect(text).not.toMatch(/>(dawn|morning|afternoon|night)</);
+  });
+
+  it('completion rate: a base day without requests shows a dash, not a division by zero', () => {
+    const metrics = { ...METRICS, previous: totals(0, 0, 0), week_ago: totals(4, 1, 0) };
+    const text = decode(teamDailyDigestHtml({ ...base, metrics, role: 'marketing' }));
+    expect(text).toContain('Se completó el 29 % de los pedidos (día anterior: —; hace 7 días: 25 %).');
+    expect(text).not.toContain('NaN');
+    expect(text).not.toContain('Infinity');
   });
 
   it('formats counts and changes', () => {

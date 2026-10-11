@@ -125,6 +125,14 @@ export function changeLabel(current: number, base: number): string {
   return `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)} %`;
 }
 
+/** '1 viaje pedido, 1 completado' / '7 viajes pedidos, 2 completados' (zero takes the plural). */
+export function ridesSummary(requested: number, completed: number): string {
+  const r = Math.round(Number(requested) || 0);
+  const c = Math.round(Number(completed) || 0);
+  return `${formatCount(r)} ${r === 1 ? 'viaje pedido' : 'viajes pedidos'}, ` +
+    `${formatCount(c)} ${c === 1 ? 'completado' : 'completados'}`;
+}
+
 export function seesMoney(role: string): boolean {
   return role === 'super_admin' || role === 'admin';
 }
@@ -283,7 +291,7 @@ export function teamDailyDigestHtml(d: TeamDailyDigestData): string {
   );
 
   return wrapHtml({
-    preheader: `${formatCount(c.rides.requested)} pedidos y ${formatCount(c.rides.completed)} completados el ${day}.`,
+    preheader: `${ridesSummary(c.rides.requested, c.rides.completed)} el ${day}.`,
     hero: { title: 'Resumen del día', subtitle: day.charAt(0).toUpperCase() + day.slice(1) },
     body: parts.join('\n'),
     cta: { label: 'Abrir el panel', href: d.panel_url },
