@@ -228,6 +228,12 @@ PYEOF
   r=$(apply_err ${DB}g "$MIG")
   echo "$r" | grep -q "00651: probe failed, the function returned .*vault unavailable" && ok "G8 an error the function swallows still aborts the migration" || ko "G8 an error the function swallows still aborts the migration" "$r"
 
+  # G9: a client role that can execute the function aborts the migration.
+  fresh ${DB}g
+  $BIN/psql $CONN -d ${DB}g -qAt -v ON_ERROR_STOP=1 -c "GRANT EXECUTE ON FUNCTION $FN TO anon" >/dev/null 2>&1
+  r=$(apply_err ${DB}g "$MIG")
+  echo "$r" | grep -q "00651: notify_ops_workflow_failure grants changed" && ok "G9 a function a client role can execute aborts the migration" || ko "G9 a function a client role can execute aborts the migration" "$r"
+
   rm -rf "$T"
   $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}g" >/dev/null 2>&1
 fi
