@@ -28,6 +28,10 @@ export default defineConfig({
       '../../supabase/functions/send-push/*.test.ts',
       // send-campaign's handler (00649): supabase-js and fetch are mocked, Deno is stubbed.
       '../../supabase/functions/send-campaign/*.test.ts',
+      // send-team-digest and team-digest-unsubscribe (00656): supabase-js, fetch and the rate
+      // limiter are mocked, Deno is stubbed.
+      '../../supabase/functions/send-team-digest/*.test.ts',
+      '../../supabase/functions/team-digest-unsubscribe/*.test.ts',
       '../../supabase/functions/notify-document-rejection/*.test.ts',
       // register-login-device: supabase-js replaced with vi.mock, the rate limiter too.
       '../../supabase/functions/register-login-device/*.test.ts',
