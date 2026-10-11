@@ -147,6 +147,10 @@ const KNOWN_KEYS: Record<string, KnownKey> = {
   support_proposal_ttl_s: { type: 'number', helpKey: 'platform_config.support_proposal_ttl_s_help' },
   support_alert_email: { type: 'text', helpKey: 'platform_config.support_alert_email_help' },
   support_help_keepalive_s: { type: 'number', helpKey: 'platform_config.support_help_keepalive_s_help' },
+
+  // ── Resumen diario del equipo (00656) ──
+  team_digest_enabled: { type: 'select', helpKey: 'platform_config.team_digest_enabled_help', options: [{ label: 'true', value: 'true' }, { label: 'false', value: 'false' }] },
+  team_digest_preview_to: { type: 'text', helpKey: 'platform_config.team_digest_preview_to_help' },
 };
 
 export default function PlatformConfigPage() {
