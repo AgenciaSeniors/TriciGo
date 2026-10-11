@@ -13,6 +13,13 @@
 # in-database watchdog (00503 / 00507 / 00577) is fired by pg_cron, and pg_cron
 # could not start its workers, so not one alert fired and the owner discovered
 # the outage by using the app. See ops/supabase-watchdog/README.md.
+#
+# It also watches the watcher of the SQL cron jobs. check_cron_sql_failures
+# (00596, every hour at :45) is the only thing that reports a failed SQL cron
+# job, and nothing inside the database watches it: if it raises, stops being
+# scheduled, or pg_cron stops starting jobs, nobody is told. On every run it
+# writes platform_config.cron_sql_health_at; when that stops moving, this
+# workflow opens its own issue.
 name: Supabase uptime
 
 on:
@@ -26,6 +33,11 @@ on:
     # the primary and does not depend on any scheduler.
     - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch:
+    inputs:
+      heartbeat_max_age_min:
+        description: 'Minutes before cron_sql_health_at counts as stale (lower it to test the alert)'
+        required: false
+        default: '150'
 
 permissions:
   issues: write
@@ -43,6 +55,9 @@ jobs:
       # overridable so a key rotation does not need a code change.
       SB_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_hSzDS_2ivar8CGqUm-yd3w_-65h1Zsc' }}
       ISSUE_TITLE: '[uptime] Supabase no responde'
+      HEARTBEAT_ISSUE_TITLE: '[watchdog] El vigilante de las tareas SQL dejó de correr'
+      # Two missed hourly runs. Scheduled runs have no inputs, so they get 150.
+      HEARTBEAT_MAX_AGE_MIN: ${{ inputs.heartbeat_max_age_min || '150' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Probe PostgREST and the health-check function
@@ -120,6 +135,87 @@ jobs:
             gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
               --comment "Recuperado $(date -u +%Y-%m-%dT%H:%M:%SZ) UTC — sonda: \`$DETAIL\`"
           fi
+
+      # Only while the database answers: when it does not, the uptime issue above
+      # already says so, and the timestamp could not be read anyway.
+      - name: Check that the SQL cron watchdog still runs
+        id: heartbeat
+        if: steps.probe.outputs.healthy == 'true'
+        run: |
+          set -uo pipefail
+          code=$(curl -s -o /tmp/hb.json -w '%{http_code}' --max-time 20 \
+            -H "apikey: $SB_KEY" -H "Authorization: Bearer $SB_KEY" \
+            "$SUPABASE_URL/rest/v1/platform_config?select=value&key=eq.cron_sql_health_at" || echo 000)
+          at=$(sed -n 's/.*"value":"\([^"]*\)".*/\1/p' /tmp/hb.json | head -1)
+          if [[ "$code" =~ ^2 ]] && [[ -n "$at" ]] && ts=$(date -u -d "$at" +%s 2>/dev/null); then
+            age_min=$(( ($(date -u +%s) - ts) / 60 ))
+            if (( age_min > HEARTBEAT_MAX_AGE_MIN )); then stale=true; else stale=false; fi
+            detail="cron_sql_health_at=${at}, hace ${age_min} min (límite ${HEARTBEAT_MAX_AGE_MIN})"
+          else
+            # A read that fails while the database answers means this check is broken
+            # (a renamed key, a policy that hides it): report it rather than stay quiet.
+            stale=true
+            detail="no se pudo leer cron_sql_health_at: http=${code} body=$(head -c 200 /tmp/hb.json | tr -d '\n' | tr -d '`$"'"'"'\\')"
+          fi
+          echo "stale=$stale" >> "$GITHUB_OUTPUT"
+          echo "detail=$detail" >> "$GITHUB_OUTPUT"
+          echo "$detail"
+
+      - name: Open a watchdog issue if it stopped
+        if: steps.heartbeat.outputs.stale == 'true'
+        env:
+          DETAIL: ${{ steps.heartbeat.outputs.detail }}
+        run: |
+          set -uo pipefail
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$HEARTBEAT_ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          body=$(cat <<EOF
+          El vigilante de las tareas programadas SQL dejó de registrar corridas.
+
+          **Detectado:** $(date -u +%Y-%m-%dT%H:%M:%SZ) UTC
+          **Último registro:** \`$DETAIL\`
+
+          \`check_cron_sql_failures\` (job \`check-cron-sql-failures\`, cada hora a los :45)
+          es lo único que avisa cuando falla una tarea programada SQL. Mientras esté
+          detenido, ninguna de esas fallas va a mandar aviso.
+
+          **Qué revisar, en este orden:**
+          1. Sus últimas corridas: \`SELECT d.status, d.return_message, d.start_time FROM cron.job_run_details d JOIN cron.job j USING (jobid) WHERE j.jobname = 'check-cron-sql-failures' ORDER BY d.start_time DESC NULLS LAST LIMIT 5;\`
+             Si dicen \`ERROR\`, el vigilante está roto y el mensaje dice por qué.
+          2. Si no hay corridas recientes de ningún job, pg_cron dejó de arrancar tareas:
+             revisar **Disk IO** en el panel de Supabase.
+          3. Que el job exista y esté activo: \`SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'check-cron-sql-failures';\`
+
+          Este issue se cierra solo cuando vuelve a correr.
+          EOF
+          )
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+            echo "commented on #$existing"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$HEARTBEAT_ISSUE_TITLE" --body "$body"
+          fi
+
+      - name: Close the watchdog issue once it runs again
+        if: steps.heartbeat.outputs.stale == 'false'
+        env:
+          DETAIL: ${{ steps.heartbeat.outputs.detail }}
+        run: |
+          set -uo pipefail
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$HEARTBEAT_ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [[ -n "$existing" ]]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+              --comment "Volvió a correr $(date -u +%Y-%m-%dT%H:%M:%SZ) UTC — \`$DETAIL\`"
+          fi
+
+      - name: Fail the run if the SQL cron watchdog stopped
+        if: steps.heartbeat.outputs.stale == 'true'
+        env:
+          DETAIL: ${{ steps.heartbeat.outputs.detail }}
+        run: |
+          echo "::error::El vigilante de las tareas SQL dejó de correr — $DETAIL"
+          exit 1
 
       - name: Fail the run so the outage is visible
         if: steps.probe.outputs.healthy == 'false'
