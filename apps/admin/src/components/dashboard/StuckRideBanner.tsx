@@ -3,8 +3,9 @@
  * stuck (migration 00538, Paso 4 of incident b428022b).
  *
  * Mirrors SosAlertBanner: silent when there is nothing, one click goes to
- * the ride detail. Amber (not red) — a stuck ride is operational trouble,
- * not a safety emergency like an SOS.
+ * the ride's assist page (00660), where support can act on it. Amber (not
+ * red) — a stuck ride is operational trouble, not a safety emergency like an
+ * SOS.
  */
 'use client';
 
@@ -28,7 +29,7 @@ export function StuckRideBanner() {
   if (count === 0) return null;
 
   const latest = alerts[0]!;
-  const href = count === 1 ? `/rides/${latest.ride_id}` : '/rides';
+  const href = count === 1 ? `/rides/${latest.ride_id}/assist` : '/rides';
 
   return (
     <Link

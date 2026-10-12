@@ -27,11 +27,22 @@ const CODES = new Set([
   'payment_method_not_supported',
   'scheduled_not_due',
   'invalid_service_type',
+  // Rides that already have a driver (00660).
+  'ride_changed',
+  'amount_changed',
+  'ride_not_releasable',
+  'ride_not_advanceable',
+  'ride_not_completable',
+  'no_agreed_price',
+  'self_ride',
+  'delivery_proof_missing',
   'forbidden',
 ]);
 
 export function assistErrorKey(err: unknown): string {
   const raw = (err as { code?: unknown } | null)?.code;
-  const code = raw === '42501' ? 'forbidden' : raw;
+  // 40P01: a deadlock with the driver's app writing at the same moment aborted the action.
+  // Support reads it like ride_changed: the page reloads and they try again.
+  const code = raw === '42501' ? 'forbidden' : raw === '40P01' ? 'ride_changed' : raw;
   return typeof code === 'string' && CODES.has(code) ? `ride_assist.error_${code}` : 'ride_assist.error_generic';
 }
