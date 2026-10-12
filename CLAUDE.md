@@ -2309,9 +2309,16 @@ Medido en prod con las cuentas demo, en un bloque revertido:
 
 **No cubierto, decisión pendiente:** "Llegué" con coordenadas inventadas (camino B.1) sigue arrancando la espera en el momento del aviso, aunque el conductor esté lejos. El servidor solo sabe lo que dice la app. Hacen falta pruebas que hoy no tiene: que el pasajero confirme la llegada, un código en la recogida, o que la app mande el aviso de ubicación simulada (`loc.mocked`), que la app del conductor ya lee para suavizar el rumbo en el mapa pero no reporta.
 
-Ensayo: `supabase/tests/00659/run.sh` (RED: 12 fallos; GREEN 23/23, con 5 pruebas negativas y una copia CRLF). Ensayo en prod dentro de un bloque revertido: punto ajeno descartado, llegada a 0 minutos, md5 esperados (`update_ride_status_v2` `1b51ff10…`, `tg_ride_location_events_guard` `a6af4796…`).
+Ensayo: `supabase/tests/00659/run.sh` (RED: 12 fallos; GREEN 23/23, con 5 pruebas negativas y una copia CRLF).
 
-**Trampa de herramienta:** un `í` escrito en el parámetro de una herramienta (Write, `execute_sql`, `apply_migration`) llega como el carácter "í", no como la secuencia `í`. Para mandar la barra hay que escribir `\\u00ed`. Dentro de un `E''` las dos formas dan la misma cadena, pero el md5 del texto transmitido cambia.
+**Estado: aplicada en prod el 2026-10-12** por MCP (`20261012115959`). Verificado por objeto:
+- **Funciones:** `update_ride_status_v2` `1b51ff10…`, sin `\r` y con los mismos permisos; `tg_ride_location_events_guard` `a6af4796…`, con el trigger activo.
+- **Permisos de la tabla:** `anon` solo lee y `authenticated` solo inserta y lee.
+- **Prueba con las cuentas demo, en un bloque revertido:** un punto en un viaje ajeno no se guarda, ni directo ni por `update_driver_position`, y un punto inventado de hace 24 minutos deja la llegada en el momento del aviso.
+
+Ese día no había viajes en curso (el último punto real era del 7/10). En el primer viaje, `SELECT count(*) FROM ride_location_events WHERE received_at IS NOT NULL` tiene que crecer; si queda en 0 con viajes en curso, la app no está pudiendo escribir.
+
+**Trampa de herramienta:** en el parámetro de una herramienta (Write, Edit, `execute_sql`, `apply_migration`), `\u00ed` llega como el carácter "í" y `\\u00ed` llega con las dos barras. Dentro de un `E''`, las dos barras son una barra literal: con eso, el primer intento de aplicar la 00659 no encontró el texto que tenía que reemplazar (frenó la guarda y no se aplicó nada). Para mandar una migración con `\u00ed` dentro de un `E''`, escribir el carácter en sí: da la misma cadena, aunque el md5 del texto mandado ya no coincide con el del archivo. Para escribir la secuencia en un archivo, armarla con `chr(92)` desde un script. Para saber qué se mandó exactamente, el registro de la sesión (`~/.claude/projects/<proyecto>/<sesión>.jsonl`) guarda el texto de cada llamada y se puede comparar con un diff.
 
 ### Eliminar una cuenta: todo o nada, y no con algo abierto (00657, 2026-10-11)
 
