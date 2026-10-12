@@ -54,7 +54,8 @@ jobs:
           cache-dependency-path: scripts/sync-pois/requirements.txt
 
       - name: Install Python deps
-        run: pip install -r scripts/sync-pois/requirements.txt
+        # Hash-locked, same file as sync-pois.yml (built from requirements.in).
+        run: pip install --require-hashes -r scripts/sync-pois/requirements.txt
 
       - name: Apply OSM delta
         id: apply

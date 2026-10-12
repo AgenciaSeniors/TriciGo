@@ -32,7 +32,9 @@ jobs:
           python-version: '3.12'
 
       - name: Install Python deps
-        run: pip install supabase
+        # Hash-locked (built from requirements.in): this job holds the
+        # service-role key.
+        run: pip install --require-hashes -r scripts/backfill-cuba-geo/requirements.txt
 
       - name: Fetch provincias (admin_level=4) from Overpass
         run: |

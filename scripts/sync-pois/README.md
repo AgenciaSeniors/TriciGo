@@ -20,13 +20,14 @@ Syncs POI data from 3 open-source datasets to the `cuba_pois` table in Supabase.
 | `merge_and_upsert.py` | Main weekly: dedup + categorize + upsert to Supabase |
 | `apply_osm_delta.py` | Daily OSM delta — applies Geofabrik replication diffs incrementally (PR 5 of POI parity) |
 | `download_wikidata.py` | SPARQL query → Wikidata GeoJSON for Cuban landmarks (PR 6 of POI parity) |
-| `requirements.txt` | Python deps |
+| `requirements.in` | Python deps (edit this one) |
+| `requirements.txt` | Hash-locked deps CI installs, generated from `requirements.in` |
 
 ## Run locally (test)
 
 ```bash
 cd scripts/sync-pois
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt   # Python 3.12, like CI
 
 # 1. Download Overture (Cuba bbox)
 overturemaps download --bbox=-85,19.5,-74,23.5 -t place -f geojson -o /tmp/overture.geojson
@@ -51,6 +52,26 @@ SUPABASE_URL=https://lqaufszburqvlslpcuac.supabase.co \
 SUPABASE_SERVICE_ROLE=$SERVICE_ROLE \
 python merge_and_upsert.py
 ```
+
+## Python dependencies
+
+`sync-pois.yml` and `sync-osm-delta.yml` run with the service-role key, so
+they install `requirements.txt` with `pip install --require-hashes`: every
+package, transitive ones included, is pinned to one version and its sha256
+hashes. A file that changed on PyPI, or a package that is not in the lock,
+stops the install. `scripts/backfill-cuba-geo/` (used by
+`load-cuba-admin-areas.yml`) has its own pair of files and works the same way.
+
+To add or change a dependency, edit `requirements.in` and regenerate the lock
+from this directory with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv pip compile requirements.in --python-version 3.12 --python-platform x86_64-manylinux_2_28 --generate-hashes --annotation-style line -o requirements.txt
+```
+
+Re-running that command keeps every version already in the lock. To move a
+package, add `--upgrade-package <name>` (or `--upgrade` for all of them).
+Never edit `requirements.txt` by hand.
 
 ## Run via GitHub Actions
 
