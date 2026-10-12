@@ -2333,6 +2333,9 @@ Un código de promoción se podía usar una vez por **cuenta** (`promotion_uses`
   - `admin_reward_referral` rechaza un teléfono que ya cobró (DETAIL `referral_phone_already_rewarded`) y deja pagar a mano a alguien sin teléfono.
 - **Un bono nuevo de una vez por persona** (otra promo, otro tipo de bono) toma su registro con `_claim_reward(user, '<tipo>:<id>', ride, referral)` en la misma transacción que lo paga, y lo consulta con `_reward_claim_status`. Las dos funciones son SECURITY DEFINER y las ejecuta solo `service_role`.
 - Ensayo: `supabase/tests/00658/run.sh`. RED: 20 fallos. GREEN: 36/36, aplicada dos veces, con 4 pruebas negativas y una copia CRLF.
+- **Estado: aplicada en prod el 2026-10-12** por MCP (`20261012012732`), sin pedir aprobación (no tiene `DROP` ni `DELETE`).
+  - Verificado por objeto: los once cuerpos tienen el md5 del ensayo, hay 19 referidos registrados, la sal tiene 64 caracteres y las tablas y funciones nuevas son solo de `postgres` y `service_role`.
+  - Probado después en un bloque revertido: la cuenta demo valida BIENVENIDA y su viaje programado la obtiene. Tras mover sus usos a `…0099`, como hace la eliminación, el mismo teléfono ya no la obtiene. Una cuenta de Google sin teléfono recibe `phone_required`.
 
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
