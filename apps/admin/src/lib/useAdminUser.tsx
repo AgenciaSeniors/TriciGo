@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createBrowserClient } from './supabase-server';
-import { getSupabaseClient } from '@tricigo/api';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { createBrowserClient } from './supabase-server';
 
 interface AdminUser {
   user: SupabaseUser | null;
@@ -12,61 +11,65 @@ interface AdminUser {
   loading: boolean;
 }
 
-/**
- * Sync SSR cookie session to the shared @tricigo/api client.
- * The admin Next.js app uses @supabase/ssr (cookies), but @tricigo/api
- * uses a localStorage-based client. This bridges the gap so RLS queries
- * carry the correct JWT.
- */
-async function syncSessionToSharedClient(ssrClient: ReturnType<typeof createBrowserClient>) {
-  try {
-    const { data: { session } } = await ssrClient.auth.getSession();
-    if (session) {
-      const sharedClient = getSupabaseClient();
-      await sharedClient.auth.setSession({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      });
-    }
-  } catch {
-    // Best-effort: admin service will fallback to empty results
-  }
-}
+const LOADING: AdminUser = { user: null, userId: '', email: '', loading: true };
 
-/**
- * Hook to get the currently authenticated admin user.
- * Falls back to empty string for userId if not yet loaded
- * (middleware guarantees admin role, so this is safe).
- */
-export function useAdminUser(): AdminUser {
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [loading, setLoading] = useState(true);
+const AdminUserContext = createContext<AdminUser>(LOADING);
 
-  useEffect(() => {
-    const supabase = createBrowserClient();
-
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      // Sync session to shared @tricigo/api client for RLS
-      syncSessionToSharedClient(supabase);
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      // Re-sync on auth state change (token refresh, re-login)
-      if (session) syncSessionToSharedClient(supabase);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
+function toAdminUser(user: SupabaseUser | null): AdminUser {
   return {
     user,
     userId: user?.id ?? '',
     email: user?.email ?? user?.phone ?? 'Admin',
-    loading,
+    loading: false,
   };
+}
+
+/**
+ * Reads the signed-in user once for the whole panel (AdminShell mounts it).
+ *
+ * getSession() reads the session from the cookies: no network call unless the
+ * token has to be refreshed. The middleware already verified it on the server
+ * for this request, and the database checks every call again (RLS, RPC gates).
+ * Until 2026-10 each of the ~15 components using useAdminUser called getUser(),
+ * a network call, and then copied the session into @tricigo/api's client with
+ * setSession(), another one. Now @tricigo/api uses this same client
+ * (sharedClient.ts), so there is nothing to copy.
+ */
+export function AdminUserProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<AdminUser>(LOADING);
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    let cancelled = false;
+    // A token refresh hands over the same user: keep the same object so the
+    // pages' effects that depend on it do not run again.
+    const apply = (user: SupabaseUser | null) => {
+      if (cancelled) return;
+      const next = toAdminUser(user);
+      setState((prev) =>
+        !prev.loading && prev.userId === next.userId && prev.email === next.email ? prev : next,
+      );
+    };
+
+    supabase.auth
+      .getSession()
+      .then(({ data }) => apply(data.session?.user ?? null))
+      .catch(() => apply(null));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => apply(session?.user ?? null));
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  return <AdminUserContext.Provider value={state}>{children}</AdminUserContext.Provider>;
+}
+
+/** The signed-in user. `loading` is true until AdminUserProvider has read the session. */
+export function useAdminUser(): AdminUser {
+  return useContext(AdminUserContext);
 }

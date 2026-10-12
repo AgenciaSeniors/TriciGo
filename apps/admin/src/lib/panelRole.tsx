@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { isPanelRole, type PanelRole } from '@tricigo/utils/adminPanelAccess';
+import { isPanelRole, panelRoleFromCookies, type PanelRole } from '@tricigo/utils/adminPanelAccess';
 import { createBrowserClient } from './supabase-server';
 
 interface PanelRoleState {
@@ -13,9 +13,13 @@ interface PanelRoleState {
 const PanelRoleContext = createContext<PanelRoleState>({ role: null, loading: true });
 
 /**
- * Reads the signed-in user's role once for the whole panel (00642, marketing role).
+ * The signed-in user's role for the whole panel (00642, marketing role).
  * The middleware already refused anyone without a panel role; this only shapes the UI.
  * The server enforces every permission on its own (RLS, RPC gates, Edge Functions).
+ *
+ * It comes from the cookie the middleware writes on every page it lets through
+ * (PANEL_ROLE_COOKIE), so the panel draws without waiting for a database round trip.
+ * Without that cookie (a session opened before it existed) it is read from users.
  */
 export function PanelRoleProvider({
   userId,
@@ -27,12 +31,16 @@ export function PanelRoleProvider({
   initialRole?: PanelRole;
   children: React.ReactNode;
 }) {
-  const [state, setState] = useState<PanelRoleState>(
-    initialRole ? { role: initialRole, loading: false } : { role: null, loading: true },
+  const [cookieRole] = useState<PanelRole | null>(() =>
+    initialRole || typeof document === 'undefined' ? null : panelRoleFromCookies(document.cookie),
   );
+  const [state, setState] = useState<PanelRoleState>(() => {
+    const known = initialRole ?? cookieRole;
+    return known ? { role: known, loading: false } : { role: null, loading: true };
+  });
 
   useEffect(() => {
-    if (initialRole) return;
+    if (initialRole || cookieRole) return;
     if (!userId) {
       setState({ role: null, loading: false });
       return;
@@ -50,7 +58,7 @@ export function PanelRoleProvider({
     return () => {
       cancelled = true;
     };
-  }, [userId, initialRole]);
+  }, [userId, initialRole, cookieRole]);
 
   return <PanelRoleContext.Provider value={state}>{children}</PanelRoleContext.Provider>;
 }

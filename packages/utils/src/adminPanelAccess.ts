@@ -50,3 +50,28 @@ export function canOpenPanelPath(role: PanelRole, pathname: string): boolean {
   if (role !== 'marketing') return false;
   return MARKETING_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
+
+/**
+ * The cookie the middleware writes with the account's panel role, on every page it lets through.
+ * The browser reads it to draw the menus without asking the database again. It only shapes the UI:
+ * the middleware decides which pages open and the server enforces every permission, so editing
+ * this cookie gives nobody anything.
+ */
+export const PANEL_ROLE_COOKIE = 'tricigo_panel_role';
+
+/** The panel role in a Cookie header or document.cookie; null when absent or not a panel role. */
+export function panelRoleFromCookies(cookies: string | null | undefined): PanelRole | null {
+  if (!cookies) return null;
+  for (const part of cookies.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0 || part.slice(0, eq).trim() !== PANEL_ROLE_COOKIE) continue;
+    let value: string;
+    try {
+      value = decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      return null;
+    }
+    return isPanelRole(value) ? value : null;
+  }
+  return null;
+}
