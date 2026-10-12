@@ -62,8 +62,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends osmium-tool
 
       - name: Install Python deps
+        # Hash-locked (built from requirements.in): a package that changed on
+        # PyPI, or one that is not pinned, stops the install. This job holds
+        # the service-role key.
         run: |
-          pip install -r scripts/sync-pois/requirements.txt
+          pip install --require-hashes -r scripts/sync-pois/requirements.txt
 
       - name: Resolve bbox
         id: cfg

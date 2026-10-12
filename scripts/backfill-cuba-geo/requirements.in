@@ -1,0 +1,3 @@
+# Input for requirements.txt (the hash-locked file CI installs). Edit this,
+# then regenerate the lock as described in scripts/sync-pois/README.md.
+supabase>=2.5
