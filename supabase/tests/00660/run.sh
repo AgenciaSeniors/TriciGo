@@ -229,6 +229,28 @@ val "P1 a push without a service key keeps the action and logs push_failed" \
      SELECT public.admin_advance_active_ride('$R_IP', 'in_progress', 'sin gps')->>'status';
      RESET ROLE; SELECT outcome FROM public.rpc_attempt_log WHERE rpc_name = 'admin_advance_active_ride';")" "arrived_at_destination;push_failed"
 
+if [ "$MIG" != "none" ]; then
+  echo "== CRLF copy applies and leaves no carriage return =="
+  fresh pr660crlf >/dev/null && grid pr660crlf >/dev/null
+  CRLF_COPY=$(mktemp); sed 's/$/\r/' "$MIG" > "$CRLF_COPY"
+  apply pr660crlf "$CRLF_COPY" >/dev/null && ok "X1 a CRLF copy applies" || ko "X1 a CRLF copy applies" "migration failed"
+  val "X2 ...and no body keeps a carriage return" \
+    "SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND position(chr(13) IN prosrc) > 0;" "0" pr660crlf
+  rm -f "$CRLF_COPY"
+
+  echo "== the checks fail when their promise is broken =="
+  neg(){ fresh pr660neg >/dev/null && grid pr660neg >/dev/null
+         run pr660neg "$1" >/dev/null
+         local r; r=$(apply pr660neg "$MIG")
+         if echo "$r" | grep -q "$2"; then ok "$3"; else ko "$3" "expected [$2], got [$r]"; fi; }
+  neg "CREATE OR REPLACE FUNCTION public.calculate_wait_charge(p_ride_id uuid) RETURNS record LANGUAGE plpgsql AS \$f\$ DECLARE r record; BEGIN SELECT 0 AS a INTO r; RETURN r; END \$f\$;" \
+      "is not the body this migration replaces" "N1 refuses an unknown calculate_wait_charge"
+  neg "INSERT INTO public.valid_transitions VALUES ('accepted','arrived_at_pickup','{driver,admin,super_admin}');" \
+      "must be for admin and super_admin only" "N2 refuses a driver-open accepted -> arrived_at_pickup"
+  neg "CREATE OR REPLACE FUNCTION public._wait_charge_for(p text) RETURNS int LANGUAGE sql AS 'SELECT 1'; GRANT EXECUTE ON FUNCTION public._wait_charge_for(text) TO authenticated;" \
+      "executable by a client role" "N3 refuses a client-executable helper overload"
+fi
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ]

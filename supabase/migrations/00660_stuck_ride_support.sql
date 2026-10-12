@@ -522,3 +522,87 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public.admin_complete_active_ride(uuid, text, integer, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_complete_active_ride(uuid, text, integer, text) TO authenticated, service_role;
+
+-- A copy pasted with Windows line ends puts \r in the function bodies. They run
+-- the same, but their md5 no longer matches git. Rebuild them from the catalog.
+DO $crlf$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT p.oid FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
+      '_wait_charge_for', 'calculate_wait_charge', '_ride_gps_departure_at', '_active_ride_charge_preview',
+      '_support_ride_push', 'admin_active_ride_context', 'admin_release_active_ride',
+      'admin_advance_active_ride', 'admin_complete_active_ride')
+      AND position(chr(13) IN p.prosrc) > 0
+  LOOP
+    EXECUTE replace(pg_get_functiondef(r.oid), chr(13), '');
+  END LOOP;
+END
+$crlf$;
+
+-- What this migration promises, checked in the database it just changed.
+DO $verify$
+DECLARE
+  r record;
+  v_n integer;
+BEGIN
+  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.calculate_wait_charge(uuid)'::regprocedure)
+     IS DISTINCT FROM 'dcf518cffa45073e26fbd84833776bc5' THEN
+    RAISE EXCEPTION '00660 check: calculate_wait_charge has an unexpected body';
+  END IF;
+
+  IF (SELECT allowed_roles FROM public.valid_transitions
+       WHERE from_status = 'accepted' AND to_status = 'arrived_at_pickup')
+     IS DISTINCT FROM ARRAY['admin', 'super_admin']::public.user_role[] THEN
+    RAISE EXCEPTION '00660 check: accepted -> arrived_at_pickup must be for admin and super_admin only';
+  END IF;
+
+  v_n := 0;
+  FOR r IN
+    SELECT p.oid::regprocedure AS fn FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
+      '_wait_charge_for', '_ride_gps_departure_at', '_active_ride_charge_preview', '_support_ride_push')
+  LOOP
+    v_n := v_n + 1;
+    IF has_function_privilege('anon', r.fn, 'EXECUTE') OR has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00660 check: % is executable by a client role', r.fn;
+    END IF;
+  END LOOP;
+  IF v_n <> 4 THEN
+    RAISE EXCEPTION '00660 check: expected 4 internal functions, found %', v_n;
+  END IF;
+
+  v_n := 0;
+  FOR r IN
+    SELECT p.oid::regprocedure AS fn FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
+      'admin_active_ride_context', 'admin_release_active_ride', 'admin_advance_active_ride', 'admin_complete_active_ride')
+  LOOP
+    v_n := v_n + 1;
+    IF has_function_privilege('anon', r.fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00660 check: % is executable by anon', r.fn;
+    END IF;
+    IF NOT has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00660 check: % is not executable by authenticated', r.fn;
+    END IF;
+  END LOOP;
+  IF v_n <> 4 THEN
+    RAISE EXCEPTION '00660 check: expected 4 admin functions, found %', v_n;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
+      '_wait_charge_for', 'calculate_wait_charge', '_ride_gps_departure_at', '_active_ride_charge_preview',
+      '_support_ride_push', 'admin_active_ride_context', 'admin_release_active_ride',
+      'admin_advance_active_ride', 'admin_complete_active_ride')
+      AND position(chr(13) IN p.prosrc) > 0
+  ) THEN
+    RAISE EXCEPTION '00660 check: a function body still has a carriage return';
+  END IF;
+END
+$verify$;
+
+RESET lock_timeout;
