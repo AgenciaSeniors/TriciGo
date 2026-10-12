@@ -377,10 +377,9 @@ describe('scrubUrlSecrets: trip share links', () => {
     expect(out.spans[0]?.data['http.query']).toBe('?select=*&share_token=[Filtered]');
   });
 
-  it('scrubs a standalone span (INP) the way beforeSendSpan gets it', () => {
-    const span = { description: 'body > main > button', data: { transaction: SHARE_PATH, 'sentry.op': 'ui.interaction.click' } };
-    expect(scrubUrlSecrets(span)).toBe(span);
-    expect(span.data.transaction).toBe('/track/share/[token]');
+  it('cleans the route name the web hooks pass it (INP span attribute, DSC transaction)', () => {
+    expect(stripUrlSecrets(SHARE_PATH)).toBe('/track/share/[token]');
+    expect(stripUrlSecrets(`GET ${SHARE_PATH}`)).toBe('GET /track/share/[token]');
   });
 });
 

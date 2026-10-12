@@ -23,11 +23,17 @@
 // http.target / url.path / url.query / request.url / request.query_string, and every request header
 // as http.request.header.*: referer, next_url (the page the browser is on) and next_router_state_tree
 // (Next's router tree, URL-encoded JSON: a dynamic segment is ["token","<value>","d"] and a page's
-// query is __PAGE__?{"token":"<value>"}). The envelope's `trace` header is the event's
-// sdkProcessingMetadata.dynamicSamplingContext, whose `transaction` may be a raw path.
+// query is __PAGE__?{"token":"<value>"}, though outside dev Next strips the page query from that
+// header). The envelope's `trace` header is the event's sdkProcessingMetadata.dynamicSamplingContext,
+// whose `transaction` may be a raw path.
 // scrubUrlSecrets() cuts the fragment from every URL wherever it appears in an event, drops
 // 'http.fragment', blanks the value of every *token parameter and replaces the share token path
 // segment with [token]. A fragment has no diagnostic value, so it does not try to tell pages apart.
+// Two carriers never reach beforeSend/beforeSendTransaction, so apps/web cleans them with client hooks
+// and stripUrlSecrets: the INP span's `transaction` attribute (spanEnd; a beforeSendSpan would drop
+// every transaction's trace links) and the DSC where it is created (createDsc).
+// It works on strings: a token whose name sits in another string or key ({ token: '<v>' }, a console
+// argument list) is not caught. Nothing sends one today.
 // Pure and dependency-free, like sentryNoise.ts.
 // ============================================================
 
@@ -44,7 +50,7 @@ const RUN_RE = /[^\s"'`<>]+/g;
 const URL_START_AFTER = '(=:,;[{';
 
 /**
- * The value of any parameter whose name ends in `token`, wherever it sits: GoTrue's session
+ * The value of any parameter whose name ends in `token`, wherever it sits in a string: GoTrue's session
  * (access_token, refresh_token, provider_token, provider_refresh_token) in a fragment that is not part
  * of a URL, a query or a URL-encoded `return=`; ?token= of the e-mail confirmation;
  * share_token=eq.<value> in a PostgREST URL; "token","<value>" and \"token\":\"<value>\" in Next's
@@ -124,9 +130,9 @@ function scrubNode(node: object, seen: WeakSet<object>): void {
 }
 
 /**
- * Removes the secrets that URLs carry (see stripUrlSecrets) from a Sentry event, transaction or span,
- * in place, and returns the same object. Use it in `beforeSend` (after the noise filter),
- * `beforeSendTransaction` and `beforeSendSpan`.
+ * Removes the secrets that URLs carry (see stripUrlSecrets) from a Sentry event or transaction, in
+ * place, and returns the same object. Use it in `beforeSend` (after the noise filter) and in
+ * `beforeSendTransaction`.
  */
 export function scrubUrlSecrets<E extends object>(event: E): E {
   const seen = new WeakSet<object>();
