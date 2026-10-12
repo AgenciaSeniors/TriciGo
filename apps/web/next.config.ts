@@ -51,8 +51,16 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
+    // The optimizer downloads and decodes every image these patterns allow.
+    // A `*.supabase.co` wildcard let anyone with a free Supabase project make
+    // this server decode an image they wrote, so only our own project's public
+    // Storage is allowed. Blog covers live on tricigo.com today.
     remotePatterns: [
-      { protocol: 'https', hostname: '*.supabase.co' },
+      {
+        protocol: 'https',
+        hostname: 'lqaufszburqvlslpcuac.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
       { protocol: 'https', hostname: 'tricigo.com' },
     ],
   },

@@ -45,7 +45,9 @@
       "expo-secure-store": "55.0.13",
       "expo-sharing": "55.0.18",
       "expo-splash-screen": "55.0.17",
-      "expo-symbols": "55.0.7"
+      "expo-symbols": "55.0.7",
+      "dompurify": "^3.4.16",
+      "undici": "^7.30.0"
     },
     "neverBuiltDependencies": [
       "sharp"
@@ -60,7 +62,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "prettier": "^3.4.2",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.5",
     "turbo": "^2.7.0",
     "typescript-eslint": "^8",
     "vitest": "^4.0.18"

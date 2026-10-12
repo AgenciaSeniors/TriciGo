@@ -98,6 +98,16 @@ jobs:
             echo "standalone build not found under $SRC"; find "$SRC" -maxdepth 4 -type d -name standalone; exit 1
           fi
 
+          # sharp (the image optimizer's native decoder) needs Node >= 20.9 since
+          # 0.35. Load it with this server's node before touching the live dir:
+          # if it cannot load, the deploy stops here and the running site stays.
+          SHARP_PKG="$(find "$BASE/.next/standalone" -path '*/node_modules/sharp/package.json' -print -quit)"
+          if [ -n "$SHARP_PKG" ]; then
+            node -e 'const d = process.argv[1]; require(d); console.log("sharp", require(d + "/package.json").version, "loads on node", process.version)' "$(dirname "$SHARP_PKG")"
+          else
+            echo "sharp is not in the standalone build: every optimized image would fail"; exit 1
+          fi
+
           rsync -a --delete "$BASE/.next/standalone/" "$APP_DIR/"
 
           # Monorepo standalone nests server.js under apps/admin; static must

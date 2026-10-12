@@ -3731,6 +3731,18 @@ Hasta 00605, cualquier cuenta con sesión podía insertar su propia fila en `pub
 
 **Probar un cambio de tarifas sin dejar nada en prod:** un `DO` que aplica los `UPDATE`, llama a `recompute`, verifica y termina con `RAISE EXCEPTION '<valores>'` (la excepción deshace todo y devuelve los valores en el mensaje). Para el piso: insertar dentro de otro `DO` que termina en excepción un viaje **programado** (`scheduled_at` futuro, no se despacha a nadie) con la mínima nueva, y otro un peso por debajo, que debe rechazarse.
 
+### Dependencias con vulnerabilidades conocidas (revisado 2026-10-12)
+
+- **`pnpm audit` se cuelga desde el sandbox.** Lo que funciona: mandar los paquetes de la sección `packages:` de `pnpm-lock.yaml` a `POST https://registry.npmjs.org/-/npm/v1/security/advisories/bulk` (cuerpo `{"nombre": ["versión", …]}`, en tandas de 400) y quedarse con los avisos cuyo `vulnerable_versions` cumple la versión instalada (`semver.satisfies`). Los imports de las Edge Functions no están en el lockfile: van por OSV (`POST https://api.osv.dev/v1/querybatch`). `api.github.com/advisories` está bloqueado por el proxy; el detalle de un aviso sale de `https://api.osv.dev/v1/vulns/<GHSA>`.
+- **Lo que importa es lo que corre expuesto:** el servidor de Next de la web y del panel (en el VPS), las Edge Functions y el código que va dentro de las apps. Los avisos que quedan son de herramientas de build y desarrollo (Expo CLI, Metro, vitest, babel, postcss, ngrok) y no corren en prod.
+- **La web y el panel tenían Next 15.5.12, con 28 avisos (dos críticos).** Pasaron a 15.5.27 y sharp 0.35.5. Uno de los críticos es libheif dentro de sharp con imágenes AVIF: desde 15.5.24 Next devuelve un AVIF tal cual, sin decodificarlo (comprobado con un build local).
+- **`images.remotePatterns` de la web dice qué imágenes descarga y decodifica el servidor.** Era `*.supabase.co`, o sea cualquier proyecto de Supabase. Probado en prod: un subdominio inexistente dio 500 (intentó descargarlo) y otro dominio dio 400. Ahora solo el Storage público de nuestro proyecto y `tricigo.com`. No volver a poner comodines; si una tapa del blog vive en otro dominio, se agrega por nombre.
+- **sharp 0.35 exige Node ≥ 20.9 en el VPS.** Los dos deploys cargan sharp con el Node del VPS antes de tocar la carpeta en vivo. Si eso falla, el deploy se corta y el sitio sigue con la versión anterior: actualizar Node en el VPS.
+- **Avisos que no aplican, con motivo:**
+  - `@opentelemetry/core` (baggage): el propagador de Sentry reemplaza el `extract` vulnerable, y Node corta los headers en 16 KB.
+  - DOMPurify: usamos solo `ALLOWED_TAGS`/`ALLOWED_ATTR`, y los avisos son de `IN_PLACE`, hooks, `ADD_TAGS` como función, `SAFE_FOR_TEMPLATES` y `setConfig`. Igual se subió a 3.4.16 con un override.
+- **`pnpm update --depth Infinity <paquete>` sube medio árbol** (babel, Metro…). Para subir una dependencia transitiva, usar `pnpm.overrides` y comparar las claves del lockfile antes y después.
+
 ### Recordatorio para Claude
 
 **Siempre leer `CLAUDE.md` al empezar** y actualizar esta sección cuando aparezca un nuevo problema, comando útil, o paso de troubleshooting verificado en una sesión real.
