@@ -290,3 +290,172 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public.admin_active_ride_context(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_active_ride_context(uuid) TO authenticated, service_role;
+
+-- 8. Back to search, now (accepted, driver_en_route). What release_rides_from_dead_drivers
+--    block A does, plus: the previous driver's GPS state is reset, so a rider
+--    confirmation given to that driver does not let the next one skip the
+--    arrival gate; the 00628 wait alert is stamped (support is already on it);
+--    and dispatch runs at once.
+CREATE OR REPLACE FUNCTION public.admin_release_active_ride(p_ride_id uuid, p_expected_status text, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_admin uuid := auth.uid();
+  v_reason text := btrim(COALESCE(p_reason, ''));
+  v_ride public.rides%ROWTYPE;
+  v_driver_user uuid;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+  IF length(v_reason) < 3 THEN
+    RETURN jsonb_build_object('error', 'reason_required');
+  END IF;
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+  IF v_ride.status::text IS DISTINCT FROM p_expected_status THEN
+    RETURN jsonb_build_object('error', 'ride_changed', 'status', v_ride.status);
+  END IF;
+  IF v_ride.status NOT IN ('accepted', 'driver_en_route') THEN
+    RETURN jsonb_build_object('error', 'ride_not_releasable', 'status', v_ride.status);
+  END IF;
+  IF v_ride.scheduled_at IS NOT NULL AND v_ride.scheduled_at > now() THEN
+    RETURN jsonb_build_object('error', 'scheduled_not_due', 'status', v_ride.status);
+  END IF;
+
+  SELECT dp.user_id INTO v_driver_user FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id;
+
+  UPDATE public.driver_profiles
+     SET is_online = false, auto_offline_at = COALESCE(auto_offline_at, now())
+   WHERE id = v_ride.driver_id AND is_online;
+
+  UPDATE public.rides SET
+    status = 'searching', driver_id = NULL, accepted_at = NULL,
+    searching_seen_at = now(), last_dispatched_at = NULL,
+    driver_gps_status = 'healthy', driver_gps_unavailable_at = NULL,
+    gps_override_requested_at = NULL, gps_override_confirmed_at = NULL,
+    gps_check_distance_m = NULL, driver_custom_rate_cup = NULL,
+    updated_at = now()
+  WHERE id = p_ride_id;
+
+  -- The driver's accepted offer stays 'accepted': dispatch never re-offers it,
+  -- and the driver's acceptance_rate does not move.
+  UPDATE public.ride_offers SET status = 'expired'
+   WHERE ride_id = p_ride_id AND driver_profile_id = v_ride.driver_id AND status = 'pending';
+
+  UPDATE public.stuck_ride_alerts SET resolved_at = now() WHERE ride_id = p_ride_id AND resolved_at IS NULL;
+
+  INSERT INTO public.ride_assist AS ra (ride_id, wait_alert_sent_at, wait_email_sent_at)
+  VALUES (p_ride_id, now(), now())
+  ON CONFLICT (ride_id) DO UPDATE SET
+    wait_alert_sent_at = COALESCE(ra.wait_alert_sent_at, now()),
+    wait_email_sent_at = COALESCE(ra.wait_email_sent_at, now());
+
+  INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values, reason)
+  VALUES (v_admin, 'support_release_ride', 'ride', p_ride_id::text,
+          jsonb_build_object('status', v_ride.status, 'driver_profile_id', v_ride.driver_id),
+          jsonb_build_object('status', 'searching'), v_reason);
+
+  PERFORM public._support_ride_push('admin_release_active_ride', p_ride_id, v_ride.customer_id,
+    'Buscando otro conductor',
+    'Tu conductor no pudo continuar. Estamos buscándote otro ahora mismo.',
+    'ride', jsonb_build_object('reason', 'support_ride_released'));
+  PERFORM public._support_ride_push('admin_release_active_ride', p_ride_id, v_driver_user,
+    'Soporte te quitó el viaje',
+    'Le pasamos el viaje a otro conductor. Te pusimos fuera de línea: conéctate cuando puedas tomar viajes.',
+    'system', jsonb_build_object('event', 'support_ride_update', 'action', 'release'));
+
+  BEGIN
+    PERFORM public.dispatch_ride(p_ride_id);
+  EXCEPTION WHEN OTHERS THEN
+    -- The release stands; retry_dispatch_expired_rides picks it up next minute.
+    RAISE WARNING 'admin_release_active_ride: dispatch of ride % failed: % %', p_ride_id, SQLSTATE, SQLERRM;
+    PERFORM public.log_rpc_attempt('admin_release_active_ride', v_admin, p_ride_id, 'dispatch_failed',
+      jsonb_build_object('error', SQLERRM));
+  END;
+
+  RETURN jsonb_build_object('success', true, 'ride_id', p_ride_id, 'status', 'searching');
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.admin_release_active_ride(uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_release_active_ride(uuid, text, text) TO authenticated, service_role;
+
+-- 9. One step forward, standing in for the driver's tap. No GPS gate: that is
+--    what support is for. "Viaje iniciado" takes the pickup time from the GPS
+--    departure; with none, pickup = arrival, so no wait is charged.
+CREATE OR REPLACE FUNCTION public.admin_advance_active_ride(p_ride_id uuid, p_expected_status text, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+DECLARE
+  v_admin uuid := auth.uid();
+  v_reason text := btrim(COALESCE(p_reason, ''));
+  v_ride public.rides%ROWTYPE;
+  v_new public.rides%ROWTYPE;
+  v_to public.ride_status;
+  v_label text;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+  IF length(v_reason) < 3 THEN
+    RETURN jsonb_build_object('error', 'reason_required');
+  END IF;
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+  IF v_ride.status::text IS DISTINCT FROM p_expected_status THEN
+    RETURN jsonb_build_object('error', 'ride_changed', 'status', v_ride.status);
+  END IF;
+
+  IF v_ride.status IN ('accepted', 'driver_en_route') THEN
+    v_to := 'arrived_at_pickup';
+    v_label := 'llegaste a recoger';
+    UPDATE public.rides
+       SET status = v_to, driver_arrived_at = COALESCE(driver_arrived_at, now()), updated_at = now()
+     WHERE id = p_ride_id;
+  ELSIF v_ride.status = 'arrived_at_pickup' THEN
+    v_to := 'in_progress';
+    v_label := 'viaje iniciado';
+    UPDATE public.rides
+       SET status = v_to,
+           pickup_at = COALESCE(v_ride.pickup_at,
+                                public._ride_gps_departure_at(p_ride_id, v_ride.driver_arrived_at),
+                                v_ride.driver_arrived_at, now()),
+           updated_at = now()
+     WHERE id = p_ride_id;
+  ELSIF v_ride.status = 'in_progress' THEN
+    v_to := 'arrived_at_destination';
+    v_label := 'llegaste al destino';
+    UPDATE public.rides SET status = v_to, updated_at = now() WHERE id = p_ride_id;
+  ELSE
+    RETURN jsonb_build_object('error', 'ride_not_advanceable', 'status', v_ride.status);
+  END IF;
+
+  SELECT * INTO v_new FROM public.rides WHERE id = p_ride_id;
+
+  INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values, reason)
+  VALUES (v_admin, 'support_advance_ride', 'ride', p_ride_id::text,
+          jsonb_build_object('status', v_ride.status, 'driver_arrived_at', v_ride.driver_arrived_at, 'pickup_at', v_ride.pickup_at),
+          jsonb_build_object('status', v_to, 'driver_arrived_at', v_new.driver_arrived_at, 'pickup_at', v_new.pickup_at),
+          v_reason);
+
+  -- The rider already gets the status push from notify_ride_status_change.
+  PERFORM public._support_ride_push('admin_advance_active_ride', p_ride_id,
+    (SELECT dp.user_id FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id),
+    'Soporte actualizó tu viaje', 'Lo marcamos como ' || v_label || '.',
+    'system', jsonb_build_object('event', 'support_ride_update', 'action', 'advance', 'status', v_to));
+
+  RETURN jsonb_build_object('success', true, 'ride_id', p_ride_id, 'status', v_to);
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.admin_advance_active_ride(uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_advance_active_ride(uuid, text, text) TO authenticated, service_role;
