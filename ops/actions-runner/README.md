@@ -58,6 +58,46 @@ Corre el hook real con los datos de cada tipo de trabajo, en un entorno limpio
 exige que, sin cada uno, pase un trabajo que antes se rechazaba. En CI corre
 `runner-gate-tests.yml`.
 
+## Estado
+
+Instalado el **2026-10-12** (11:23 UTC, servicio reiniciado con el hook en
+`.env`) y verificado ese mismo día con las dos pruebas de "Verificar":
+
+- un deploy de `master` lanzado a mano pasó (`trabajo permitido`) y terminó bien;
+- un trabajo `deploy` disparado por push desde una rama `claude/`, con `env:`
+  imitando un deploy de master, se rechazó con `rama o ref refs/heads/claude/…`
+  sin ejecutar su paso, y llegó el correo. O sea que el `env:` del workflow no
+  llega al hook.
+
+## Desde PowerShell
+
+Los comandos de abajo son para bash (Git Bash o WSL). PowerShell 5.1 les saca
+las comillas dobles a los argumentos que le pasa a `ssh`, y el comando llega
+roto al VPS (`syntax error near unexpected token '('`). Desde PowerShell, usar
+estas versiones sin comillas dobles, que fueron las que se usaron en la
+instalación:
+
+```powershell
+# Mirar el runner (no imprime valores de .env, solo los nombres).
+ssh root@187.77.214.236 'cd /root/actions-runner && grep -v -i token .runner; echo; cut -d= -f1 .env; echo; ./svc.sh status | head -5'
+
+# 1. Bajar el hook de master. Comparar la huella que imprime con la de
+#    `git show origin/master:ops/actions-runner/job-gate.sh | sha256sum`.
+ssh root@187.77.214.236 'mkdir -p /etc/tricigo && curl -fsSL https://raw.githubusercontent.com/AgenciaSeniors/TriciGo/master/ops/actions-runner/job-gate.sh -o /etc/tricigo/runner-job-gate.sh && sha256sum /etc/tricigo/runner-job-gate.sh && chown root:root /etc/tricigo/runner-job-gate.sh && chmod 700 /etc/tricigo/runner-job-gate.sh && bash -n /etc/tricigo/runner-job-gate.sh && echo listo'
+
+# 2. Probarlo a mano.
+ssh root@187.77.214.236 'GITHUB_REPOSITORY=AgenciaSeniors/TriciGo GITHUB_EVENT_NAME=pull_request GITHUB_REF=refs/pull/1/merge GITHUB_JOB=deploy GITHUB_WORKFLOW_REF=AgenciaSeniors/TriciGo/.github/workflows/prueba.yml@refs/pull/1/merge GITHUB_RUN_ID=0 /etc/tricigo/runner-job-gate.sh; echo salida=$?'
+
+# 3. Activarlo y reiniciar el runner.
+ssh root@187.77.214.236 'cd /root/actions-runner && (grep -q ^ACTIONS_RUNNER_HOOK_JOB_STARTED= .env || echo ACTIONS_RUNNER_HOOK_JOB_STARTED=/etc/tricigo/runner-job-gate.sh >> .env) && ./svc.sh stop && ./svc.sh start && ./svc.sh status | head -5 && grep ^ACTIONS_RUNNER_HOOK .env'
+
+# Desactivar.
+ssh root@187.77.214.236 'cd /root/actions-runner && sed -i /^ACTIONS_RUNNER_HOOK_JOB_STARTED=/d .env && ./svc.sh stop && ./svc.sh start'
+```
+
+Para actualizar el hook después de un cambio en `job-gate.sh`, alcanza con el
+paso 1: el runner lo lee en cada trabajo, sin reiniciar.
+
 ## Antes de instalar: mirar el runner (solo lectura)
 
 ```bash
@@ -89,14 +129,15 @@ ssh root@187.77.214.236 'cd /root/actions-runner && (grep -q "^ACTIONS_RUNNER_HO
 ## Verificar
 
 1. **Lo legítimo sigue andando.** En GitHub, Actions → Deploy Web → Run workflow
-   sobre `master`. En el trabajo "Deploy to VPS (self-hosted)" tiene que aparecer
-   un paso nuevo, *A job started hook*, que dice `trabajo permitido`, y el deploy
+   sobre `master`. En el trabajo "Deploy to VPS (self-hosted)" el hook corre
+   dentro del paso **Set up runner**: su log dice `A job started hook has been
+   configured` y después `Runner de TriciGo: trabajo permitido (…)`. El deploy
    tiene que terminar bien.
 2. **Lo ajeno no corre.** Una rama de prueba con un workflow que corre en
    `self-hosted`, cuyo trabajo se llama `deploy` y que en su `env:` imita los
-   valores de un deploy de master. El trabajo tiene que fallar en el hook, sin
-   ejecutar su único paso (un `echo`), y tiene que llegar el correo. Después se
-   borra la rama.
+   valores de un deploy de master. El trabajo tiene que fallar en **Set up
+   runner**, con su único paso (un `echo`) en *skipped*, y tiene que llegar el
+   correo. Después se borra el workflow de la rama.
 
 Si el paso 1 falla con `::error::`, el correo dice qué dato no coincidió.
 Desactivar (abajo) y avisar.
