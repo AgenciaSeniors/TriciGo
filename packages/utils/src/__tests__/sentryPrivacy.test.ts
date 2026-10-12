@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeSentryBeforeSend } from '../sentryNoise';
-import { scrubUrlFragments, stripUrlFragments } from '../sentryPrivacy';
+import { scrubUrlSecrets, stripUrlSecrets } from '../sentryPrivacy';
 
 // Fake session, shaped like what GoTrue puts in the fragment after Google/Apple or the e-mail link.
 const ACCESS = 'eyJhbGciOiJFUzI1NiIsImtpZCI6ImZha2UiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJmYWtlLXVzZXIifQ.ZmFrZS1zaWduYXR1cmU';
@@ -103,13 +103,13 @@ function pageloadTransaction(page: string, fragment: string): Record<string, unk
   };
 }
 
-describe('scrubUrlFragments', () => {
+describe('scrubUrlSecrets', () => {
   it('leaves no trace of the session tokens in a pageload transaction of the login callback', () => {
     const event = pageloadTransaction(CALLBACK, LOGIN_FRAGMENT);
     expect(serialized(event)).toContain(REFRESH); // the fixture really carries them
     expect(serialized(event)).toContain(ACCESS);
 
-    const sent = serialized(scrubUrlFragments(event));
+    const sent = serialized(scrubUrlSecrets(event));
 
     expect(sent).not.toContain(ACCESS);
     expect(sent).not.toContain(REFRESH);
@@ -120,7 +120,7 @@ describe('scrubUrlFragments', () => {
   });
 
   it('keeps every URL of that transaction, query included, minus its fragment', () => {
-    const out = scrubUrlFragments(pageloadTransaction(CALLBACK, LOGIN_FRAGMENT));
+    const out = scrubUrlSecrets(pageloadTransaction(CALLBACK, LOGIN_FRAGMENT));
 
     const request = out.request as { url: string; headers: Record<string, string> };
     expect(request.url).toBe(CALLBACK);
@@ -151,23 +151,23 @@ describe('scrubUrlFragments', () => {
 
   it('covers the site-URL fallback, where the tokens land on the home page', () => {
     for (const page of ['https://tricigo.com/', 'https://tricigo.com']) {
-      const out = scrubUrlFragments({ request: { url: `${page}${LOGIN_FRAGMENT}` } });
+      const out = scrubUrlSecrets({ request: { url: `${page}${LOGIN_FRAGMENT}` } });
       expect(out.request.url).toBe(page);
     }
-    const crumb = scrubUrlFragments({ data: { from: undefined, to: `/${LOGIN_FRAGMENT}` } });
+    const crumb = scrubUrlSecrets({ data: { from: undefined, to: `/${LOGIN_FRAGMENT}` } });
     expect(crumb.data.to).toBe('/');
   });
 
   it('still covers the team digest opt-out link', () => {
     const event = pageloadTransaction(OPT_OUT, OPT_OUT_FRAGMENT);
-    const sent = serialized(scrubUrlFragments(event));
+    const sent = serialized(scrubUrlSecrets(event));
     expect(sent).not.toContain(T);
     expect(sent).not.toContain(U);
     expect((event.request as { url: string }).url).toBe(OPT_OUT);
   });
 
   it('cuts the fragment of every page, not only the ones that carry tokens', () => {
-    const out = scrubUrlFragments({
+    const out = scrubUrlSecrets({
       request: { url: 'https://tricigo.com/blog#comentarios', headers: {} },
       breadcrumbs: [{ category: 'navigation', data: { from: '/blog', to: '/blog/post/?ref=ig#seccion-2' } }],
       spans: [{ data: { url: '/blog#x', 'http.url': 'https://tricigo.com/blog#x', 'http.fragment': '#x' } }],
@@ -187,14 +187,14 @@ describe('scrubUrlFragments', () => {
       tags: { selector: '#root', ticket: 'BUG-201#2' },
     };
     const before = structuredClone(event);
-    expect(scrubUrlFragments(event)).toEqual(before);
+    expect(scrubUrlSecrets(event)).toEqual(before);
   });
 
   it('returns the same event object and never walks sdkProcessingMetadata', () => {
     const event = pageloadTransaction(CALLBACK, LOGIN_FRAGMENT);
     const meta = event.sdkProcessingMetadata as { capturedSpanScope: { note: string } };
-    expect(() => scrubUrlFragments(event)).not.toThrow();
-    expect(scrubUrlFragments(event)).toBe(event);
+    expect(() => scrubUrlSecrets(event)).not.toThrow();
+    expect(scrubUrlSecrets(event)).toBe(event);
     expect(event.sdkProcessingMetadata).toBe(meta);
     expect(meta.capturedSpanScope.note).toBe(`${CALLBACK}${LOGIN_FRAGMENT}`);
   });
@@ -203,7 +203,7 @@ describe('scrubUrlFragments', () => {
     const dropNoise = makeSentryBeforeSend();
     const beforeSend = <E extends Record<string, unknown>>(event: E): E | null => {
       const kept = dropNoise(event);
-      return kept && scrubUrlFragments(kept);
+      return kept && scrubUrlSecrets(kept);
     };
     expect(beforeSend({ message: 'Failed to fetch', request: { url: `${CALLBACK}${LOGIN_FRAGMENT}` } })).toBeNull();
     const kept = beforeSend({
@@ -215,17 +215,17 @@ describe('scrubUrlFragments', () => {
   });
 });
 
-describe('stripUrlFragments', () => {
+describe('stripUrlSecrets', () => {
   it('cuts the fragment of an app deep link, so a log line can keep where the browser came back to', () => {
-    expect(stripUrlFragments(`tricigo-driver://auth/callback${LOGIN_FRAGMENT}`)).toBe('tricigo-driver://auth/callback');
-    expect(stripUrlFragments(`tricigo://auth/callback?error=access_denied#error_description=x`)).toBe(
+    expect(stripUrlSecrets(`tricigo-driver://auth/callback${LOGIN_FRAGMENT}`)).toBe('tricigo-driver://auth/callback');
+    expect(stripUrlSecrets(`tricigo://auth/callback?error=access_denied#error_description=x`)).toBe(
       'tricigo://auth/callback?error=access_denied',
     );
   });
 
   it('returns text without URL fragments unchanged', () => {
-    expect(stripUrlFragments('tricigo-driver://auth/callback')).toBe('tricigo-driver://auth/callback');
-    expect(stripUrlFragments('error #418')).toBe('error #418');
+    expect(stripUrlSecrets('tricigo-driver://auth/callback')).toBe('tricigo-driver://auth/callback');
+    expect(stripUrlSecrets('error #418')).toBe('error #418');
   });
 
   it('takes linear time on a crafted link, so it cannot freeze the page', () => {
@@ -233,25 +233,210 @@ describe('stripUrlFragments', () => {
     const tail = ',/'.repeat(250_000);
     const crafted = `https://tricigo.com/#a'${tail}`;
     const t0 = performance.now();
-    const out = stripUrlFragments(crafted);
+    const out = stripUrlSecrets(crafted);
     expect(performance.now() - t0).toBeLessThan(250);
     expect(out).toBe(`https://tricigo.com/'${tail}`);
   });
 
   it('cuts a later fragment in the same run once an earlier # was not a URL', () => {
-    expect(stripUrlFragments('div#x,/auth/callback#access_token=a')).toBe('div#x,/auth/callback');
-    expect(stripUrlFragments('a#/x#y')).toBe('a#/x#y');
+    expect(stripUrlSecrets('div#x,/auth/callback#access_token=a')).toBe('div#x,/auth/callback');
+    expect(stripUrlSecrets('a#/x#y')).toBe('a#/x#y');
   });
 
   it('redacts session tokens that are not in a URL fragment', () => {
-    expect(stripUrlFragments(`hash: #access_token=${ACCESS}&refresh_token=${REFRESH}&type=recovery`)).toBe(
+    expect(stripUrlSecrets(`hash: #access_token=${ACCESS}&refresh_token=${REFRESH}&type=recovery`)).toBe(
       'hash: #access_token=[Filtered]&refresh_token=[Filtered]&type=recovery',
     );
-    expect(stripUrlFragments(`https://tricigo.com/?refresh_token=${REFRESH}&x=1`)).toBe(
+    expect(stripUrlSecrets(`https://tricigo.com/?refresh_token=${REFRESH}&x=1`)).toBe(
       'https://tricigo.com/?refresh_token=[Filtered]&x=1',
     );
-    expect(stripUrlFragments(`/login?return=%2Fauth%2Fcallback%23access_token%3D${ACCESS}%26provider_refresh_token%3Dz`)).toBe(
+    expect(stripUrlSecrets(`/login?return=%2Fauth%2Fcallback%23access_token%3D${ACCESS}%26provider_refresh_token%3Dz`)).toBe(
       '/login?return=%2Fauth%2Fcallback%23access_token%3D[Filtered]%26provider_refresh_token%3D[Filtered]',
     );
+  });
+});
+
+// Trip share link (00513): anyone holding https://tricigo.com/track/share/<token> watches the trip until
+// 48 h after it ends. /ride/share/<token> (deep link) and /delivery/<token> (old SMS, redirected) carry
+// the same token.
+const SHARE = 'a3f19c0b7d2e4f6a8b9c1d0e';
+const SHARE_PAGE = `https://tricigo.com/track/share/${SHARE}`;
+const SHARE_PATH = `/track/share/${SHARE}`;
+// Single-use e-mail confirmation token (add-email-with-verification), valid 24 h until redeemed.
+const MAIL = '42f8bcff025a798f46d763068ff8c31238b75cabc3717b70e8502648afc3f541';
+const CONFIRM_PAGE = `https://tricigo.com/auth/email-confirmed?token=${MAIL}`;
+
+/**
+ * An http.server transaction shaped like the ones the Next.js server SDK sends for an RSC request to the
+ * share page (seen on tricigo-web, 2026-10: http.target keeps the raw path while the name is the route,
+ * and every request header becomes http.request.header.*, next-url and next-router-state-tree included).
+ * Next's router tree carries a dynamic segment as ["token","<value>","d"], URL-encoded
+ * (get-dynamic-param.js).
+ */
+function serverShareTransaction(): Record<string, unknown> {
+  const tree = encodeURIComponent(
+    JSON.stringify(['', { children: ['ride', { children: ['share', { children: [['token', SHARE, 'd'], {}] }] }] }]),
+  );
+  return {
+    type: 'transaction',
+    transaction: 'GET /track/share/[token]',
+    transaction_info: { source: 'route' },
+    contexts: {
+      trace: {
+        op: 'http.server',
+        data: {
+          'http.target': `${SHARE_PATH}?_rsc=1umbt`,
+          'url.path': SHARE_PATH,
+          'url.query': '_rsc=1umbt',
+          'http.url': `https://tricigo.com${SHARE_PATH}?_rsc=1umbt`,
+          'http.route': '/track/share/[token]',
+          'next.route': '/track/share/[token]',
+          'http.request.header.referer': `https://tricigo.com/ride/share/${SHARE}`,
+          'http.request.header.next_url': `/ride/share/${SHARE}`,
+          'http.request.header.next_router_state_tree': tree,
+        },
+      },
+    },
+    request: {
+      url: `https://tricigo.com${SHARE_PATH}?_rsc=1umbt`,
+      query_string: '_rsc=1umbt',
+      headers: { referer: `https://tricigo.com/ride/share/${SHARE}` },
+    },
+    sdkProcessingMetadata: {
+      dynamicSamplingContext: { trace_id: 't', public_key: 'k', transaction: `GET ${SHARE_PATH}` },
+    },
+  };
+}
+
+describe('scrubUrlSecrets: trip share links', () => {
+  it('leaves no trace of the share token in a pageload transaction of the share page', () => {
+    const event = pageloadTransaction(SHARE_PAGE, '');
+    expect(serialized(event)).toContain(SHARE);
+
+    const out = scrubUrlSecrets(event);
+
+    expect(serialized(out)).not.toContain(SHARE);
+    expect((out.request as { url: string }).url).toBe('https://tricigo.com/track/share/[token]');
+    expect(out.transaction).toBe('/track/share/[token]');
+    type Crumb = { data?: Record<string, unknown> };
+    const crumbs = out.breadcrumbs as Crumb[];
+    expect(crumbs[0]?.data?.to).toBe('/track/share/[token]');
+    expect(crumbs[2]?.data?.url).toBe('/track/share/[token]?_rsc=1x2y3');
+    const spans = out.spans as { description: string; data: Record<string, unknown> }[];
+    expect(spans[1]?.description).toBe('GET /track/share/[token]?_rsc=1x2y3');
+    expect(spans[1]?.data['http.url']).toBe('https://tricigo.com/track/share/[token]?_rsc=1x2y3');
+  });
+
+  it('replaces the token in every path that carries it, encoded or in a deep link', () => {
+    expect(stripUrlSecrets(`https://tricigo.com/ride/share/${SHARE}`)).toBe('https://tricigo.com/ride/share/[token]');
+    expect(stripUrlSecrets(`/delivery/${SHARE}?utm=sms`)).toBe('/delivery/[token]?utm=sms');
+    expect(stripUrlSecrets(`tricigo://ride/share/${SHARE}`)).toBe('tricigo://ride/share/[token]');
+    expect(stripUrlSecrets(`/login?return=%2Ftrack%2Fshare%2F${SHARE}%3Fx%3D1`)).toBe(
+      '/login?return=%2Ftrack%2Fshare%2F[token]%3Fx%3D1',
+    );
+    expect(stripUrlSecrets(`Sigue mi viaje: ${SHARE_PAGE}, llego en 10`)).toBe(
+      'Sigue mi viaje: https://tricigo.com/track/share/[token], llego en 10',
+    );
+  });
+
+  it('keeps a name the SDK already parameterized', () => {
+    for (const name of ['/track/share/:token', 'GET /track/share/[token]', '/ride/share/:token']) {
+      expect(stripUrlSecrets(name)).toBe(name);
+    }
+  });
+
+  it('cleans a server transaction: raw target, request headers, the router tree and the envelope trace header', () => {
+    const event = serverShareTransaction();
+    const sdkDsc = (event.sdkProcessingMetadata as { dynamicSamplingContext: Record<string, string> }).dynamicSamplingContext;
+    const out = scrubUrlSecrets(event);
+
+    expect(JSON.stringify(out)).not.toContain(SHARE);
+    // The SDK may share its DSC object with the live root span: it gets a copy, not an edit.
+    expect(sdkDsc.transaction).toBe(`GET ${SHARE_PATH}`);
+    const data = (out.contexts as { trace: { data: Record<string, unknown> } }).trace.data;
+    expect(data['http.target']).toBe('/track/share/[token]?_rsc=1umbt');
+    expect(data['http.request.header.next_url']).toBe('/ride/share/[token]');
+    expect(data['http.request.header.referer']).toBe('https://tricigo.com/ride/share/[token]');
+    expect(data['http.route']).toBe('/track/share/[token]');
+    expect(out.transaction).toBe('GET /track/share/[token]');
+    // The envelope `trace` header is this object (core createEventEnvelopeHeaders).
+    const dsc = (out.sdkProcessingMetadata as { dynamicSamplingContext: Record<string, string> }).dynamicSamplingContext;
+    expect(dsc).toEqual({ trace_id: 't', public_key: 'k', transaction: 'GET /track/share/[token]' });
+  });
+
+  it('redacts the token of a PostgREST filter on share_token', () => {
+    const url = `https://lqaufszburqvlslpcuac.supabase.co/rest/v1/rides?select=*&share_token=eq.${SHARE}`;
+    const out = scrubUrlSecrets({
+      breadcrumbs: [{ category: 'fetch', data: { method: 'GET', url, status_code: 200 } }],
+      spans: [{ description: `GET ${url}`, data: { url, 'http.query': `?select=*&share_token=eq.${SHARE}` } }],
+    });
+    expect(JSON.stringify(out)).not.toContain(SHARE);
+    expect(out.breadcrumbs[0]?.data.url).toBe(
+      'https://lqaufszburqvlslpcuac.supabase.co/rest/v1/rides?select=*&share_token=[Filtered]',
+    );
+    expect(out.spans[0]?.data['http.query']).toBe('?select=*&share_token=[Filtered]');
+  });
+
+  it('scrubs a standalone span (INP) the way beforeSendSpan gets it', () => {
+    const span = { description: 'body > main > button', data: { transaction: SHARE_PATH, 'sentry.op': 'ui.interaction.click' } };
+    expect(scrubUrlSecrets(span)).toBe(span);
+    expect(span.data.transaction).toBe('/track/share/[token]');
+  });
+});
+
+describe('scrubUrlSecrets: e-mail confirmation link', () => {
+  it('redacts the single-use token in the query, on the client and on the server', () => {
+    const page = scrubUrlSecrets(pageloadTransaction(CONFIRM_PAGE, ''));
+    expect(serialized(page)).not.toContain(MAIL);
+    expect((page.request as { url: string }).url).toBe('https://tricigo.com/auth/email-confirmed?token=[Filtered]');
+
+    const server = scrubUrlSecrets({
+      request: { url: CONFIRM_PAGE, query_string: `token=${MAIL}` },
+      contexts: { trace: { data: { 'http.target': `/auth/email-confirmed?token=${MAIL}`, 'url.query': `token=${MAIL}` } } },
+    });
+    expect(JSON.stringify(server)).not.toContain(MAIL);
+    expect(server.request.query_string).toBe('token=[Filtered]');
+  });
+
+  it("redacts it inside Next's router tree, where the page segment carries the query as JSON", () => {
+    const page = `__PAGE__?${JSON.stringify({ token: MAIL })}`;
+    const tree = encodeURIComponent(
+      JSON.stringify(['', { children: ['auth', { children: ['email-confirmed', { children: [page, {}] }] }] }]),
+    );
+    const out = stripUrlSecrets(tree);
+    expect(out).not.toContain(MAIL);
+    const decoded = JSON.parse(decodeURIComponent(out.replace('[Filtered]', 'X'))) as unknown;
+    expect(JSON.stringify(decoded)).toContain(JSON.stringify(`__PAGE__?${JSON.stringify({ token: 'X' })}`));
+  });
+});
+
+describe('stripUrlSecrets: what it leaves alone', () => {
+  it('keeps other paths and ordinary uses of the word token', () => {
+    for (const text of [
+      '/track/2e5f710f-4836-4b11-9842-fb525bcf35cc',
+      '/blog/como-compartir-tu-viaje',
+      '/ride/shared/abc',
+      'https://x.supabase.co/storage/v1/object/public/delivery-photos/r/1.jpg',
+      'Invalid token: expected a JWT',
+      'tokens=3',
+      'token_type=bearer',
+      'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
+    ]) {
+      expect(stripUrlSecrets(text)).toBe(text);
+    }
+  });
+
+  it('takes linear time on crafted share paths and token runs', () => {
+    for (const crafted of [
+      `${'/track/share/'.repeat(40_000)}x`,
+      `token${','.repeat(250_000)} `,
+      `token${'%22'.repeat(100_000)} `,
+      'token,'.repeat(80_000),
+      '%2Ftrack%2Fshare'.repeat(30_000),
+    ]) {
+      const t0 = performance.now();
+      stripUrlSecrets(crafted);
+      expect(performance.now() - t0).toBeLessThan(250);
+    }
   });
 });

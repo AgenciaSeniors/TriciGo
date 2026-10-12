@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 import { SENTRY_IGNORE_PATTERNS, SENTRY_DENY_URLS, makeSentryBeforeSend } from '@tricigo/utils/sentryNoise';
-import { scrubUrlFragments } from '@tricigo/utils/sentryPrivacy';
+import { scrubUrlSecrets } from '@tricigo/utils/sentryPrivacy';
 
 const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
@@ -20,16 +20,18 @@ if (SENTRY_DSN) {
     // errors, and scrub Authorization. Shared with the other apps (sentryNoise.ts).
     ignoreErrors: SENTRY_IGNORE_PATTERNS,
     denyUrls: SENTRY_DENY_URLS,
-    // The URL fragment carries secrets here: the Supabase session after Google/Apple and the e-mail
-    // login link (/auth/callback#access_token=…&refresh_token=…) and the team digest opt-out token.
-    // The SDK copies the page URL into errors, transactions and breadcrumbs (the pageload transaction
-    // keeps location.href from SDK init, before GoTrue clears the hash): scrubUrlFragments cuts every
-    // fragment from both kinds of event (sentryPrivacy.ts).
+    // URLs carry secrets here: the Supabase session in the fragment after Google/Apple and the e-mail
+    // login link (/auth/callback#access_token=…&refresh_token=…), the team digest opt-out token, the
+    // trip share token in the path (/track/share/<token>) and the e-mail confirmation token in the
+    // query. The SDK copies the page URL into errors, transactions, breadcrumbs and the standalone INP
+    // span (the pageload transaction keeps location.href from SDK init, before GoTrue clears the hash):
+    // scrubUrlSecrets removes them from every kind of event (sentryPrivacy.ts).
     beforeSend: (event, hint) => {
       const kept = dropNoise(event, hint);
-      return kept && scrubUrlFragments(kept);
+      return kept && scrubUrlSecrets(kept);
     },
-    beforeSendTransaction: (event) => scrubUrlFragments(event),
+    beforeSendTransaction: (event) => scrubUrlSecrets(event),
+    beforeSendSpan: (span) => scrubUrlSecrets(span),
   });
 }
 

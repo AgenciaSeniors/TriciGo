@@ -15,7 +15,7 @@ import { useResponsive } from '@tricigo/ui/hooks/useResponsive';
 import { useTranslation } from '@tricigo/i18n';
 import { handleAuthLink, markLoginStarted } from '@/lib/authLink';
 import { authService } from '@tricigo/api';
-import { isValidCubanPhone, normalizeCubanPhone, stripUrlFragments } from '@tricigo/utils';
+import { isValidCubanPhone, normalizeCubanPhone, stripUrlSecrets } from '@tricigo/utils';
 import { colors, midnightEmber } from '@tricigo/theme';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
@@ -272,7 +272,7 @@ export default function LoginScreen() {
                       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
                       // Without the fragment: on success it holds the session (access and refresh
                       // tokens), and Sentry keeps console logs as breadcrumbs of later errors.
-                      console.log('[GoogleSignIn] WebBrowser result', { type: result.type, url: 'url' in result ? stripUrlFragments(result.url) : null });
+                      console.log('[GoogleSignIn] WebBrowser result', { type: result.type, url: 'url' in result ? stripUrlSecrets(result.url) : null });
                       // BUG-201 fallback: if browser returned with a callback URL
                       // but the OS-level handler didn't fire the Linking event,
                       // process the URL manually so the session is set anyway.

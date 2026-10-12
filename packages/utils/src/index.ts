@@ -41,7 +41,7 @@ export {
 } from './sentryNoise';
 export type { MinimalSentryEvent, MinimalSentryHint } from './sentryNoise';
 // No URL fragment reaches Sentry: the web gets the login session and the digest opt-out token there.
-export { scrubUrlFragments, stripUrlFragments } from './sentryPrivacy';
+export { scrubUrlSecrets, stripUrlSecrets } from './sentryPrivacy';
 export { isNetworkError } from './networkError';
 export { useDebouncePress } from './useDebouncePress';
 // BUG-marker-position-lag: smooth coordinate interpolation for Uber-style
