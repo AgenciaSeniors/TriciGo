@@ -5,7 +5,7 @@
 **Goal:** A super admin invites people to the admin panel from an "Equipo" page. The invitation is bound to an e-mail address and accepted by signing in with that Google account. The panel also changes roles and removes access, and replaces the "No tienes permisos" bounce with a page that says what happened.
 
 **Architecture:**
-- **Database (migration 00660):** a lock table `team_invitations`, and SECURITY DEFINER RPCs that gate themselves (super_admin to manage, the token for the public page, the signed-in person to accept). There is one flag-guarded branch in `tg_users_protect_admin_fields`, so the RPCs can write the role.
+- **Database (migration 00661):** a lock table `team_invitations`, and SECURITY DEFINER RPCs that gate themselves (super_admin to manage, the token for the public page, the signed-in person to accept). There is one flag-guarded branch in `tg_users_protect_admin_fields`, so the RPCs can write the role.
 - **E-mail:** it goes through `send-email` (new template `team_invitation`) via `cron_http_post`.
 - **Panel:** `/equipo` for super admins, the public pages `/invitacion/[token]` and `/sin-acceso`. `/auth/callback` accepts a token, and the middleware accepts a pending invitation for the caller's Google address.
 
@@ -15,7 +15,7 @@
 
 **Order:** this branch is rebased on master after the admin speed PR (`claude/admin-panel-speed`) merges. It builds on that PR's middleware (getClaims, role cache, role cookie) and its single Supabase client.
 
-**Migration number:** 00660. On 2026-10-12, master ended at 00659 (#1153) and among the open PRs only #965 reserved a number (00569). Re-check right before pushing:
+**Migration number:** 00661. On 2026-10-12, master ended at 00659 (#1153); among the open PRs #965 reserved 00569 and #1155 reserved 00660. Re-check right before pushing:
 ```bash
 git fetch origin master && git ls-tree origin/master supabase/migrations/ | awk -F'\t' '{print $2}' | sort -r | head -3
 ```
@@ -26,7 +26,7 @@ Also check the files of every open PR.
 ### Task 1: Rehearsal scaffold, seed and runner (RED)
 
 **Files:**
-- Create: `supabase/tests/00660/scaffold.sql`, `supabase/tests/00660/seed.sql`, `supabase/tests/00660/run.sh`
+- Create: `supabase/tests/00661/scaffold.sql`, `supabase/tests/00661/seed.sql`, `supabase/tests/00661/run.sh`
 
 The three files are already drafted and checked: `scratchpad/plan-team/tests/`.
 - **Scaffold:** the live bodies of `tg_users_protect_admin_fields`, `is_admin`, `is_super_admin`, `current_user_role` and `mailable_user_emails`, read from prod (S0 compares their md5).
@@ -34,15 +34,15 @@ The three files are already drafted and checked: `scratchpad/plan-team/tests/`.
 - **Seed:** the eleven people listed in its header.
 - **Runner:** 47 cases plus G0–G5.
 
-- [ ] **Step 1:** Copy the three files to `supabase/tests/00660/` and `chmod +x run.sh`.
+- [ ] **Step 1:** Copy the three files to `supabase/tests/00661/` and `chmod +x run.sh`.
 - [ ] **Step 2:** Start the cluster: `su pgtest -c "/usr/lib/postgresql/16/bin/pg_ctl -D /home/pgtest/data -o '-p 5433 -c listen_addresses=127.0.0.1 -c unix_socket_directories=/tmp' -l /home/pgtest/pg.log -w start"`.
-- [ ] **Step 3:** Run `supabase/tests/00660/run.sh none`. Expected: `3 passed, 44 failed` (S0, S1 and the control C13 pass).
-- [ ] **Step 4:** Commit: `test(db): rehearsal for team invitations (00660)`.
+- [ ] **Step 3:** Run `supabase/tests/00661/run.sh none`. Expected: `3 passed, 44 failed` (S0, S1 and the control C13 pass).
+- [ ] **Step 4:** Commit: `test(db): rehearsal for team invitations (00661)`.
 
-### Task 2: Migration 00660 (GREEN)
+### Task 2: Migration 00661 (GREEN)
 
 **Files:**
-- Create: `supabase/migrations/00660_team_invitations.sql` (drafted and checked: `scratchpad/plan-team/00660_team_invitations.sql`)
+- Create: `supabase/migrations/00661_team_invitations.sql` (drafted and checked: `scratchpad/plan-team/00661_team_invitations.sql`)
 
 Sections:
 - 0: guard on the live trigger md5.
@@ -55,8 +55,8 @@ Sections:
 - 7: self-checks.
 
 - [ ] **Step 1:** Copy the file.
-- [ ] **Step 2:** Run `supabase/tests/00660/run.sh supabase/migrations/00660_team_invitations.sql`. Expected: `53 passed, 0 failed`. That covers both applies, the CRLF copy and G1–G5.
-- [ ] **Step 3:** Commit: `feat(db): team invitations (00660)`.
+- [ ] **Step 2:** Run `supabase/tests/00661/run.sh supabase/migrations/00661_team_invitations.sql`. Expected: `53 passed, 0 failed`. That covers both applies, the CRLF copy and G1–G5.
+- [ ] **Step 3:** Commit: `feat(db): team invitations (00661)`.
 
 ### Task 3: The `team_invitation` e-mail
 
@@ -152,16 +152,16 @@ Sections:
 
 ### Task 10: Docs, full verification, push
 
-- [ ] **Step 1:** Add a CLAUDE.md section, "Equipo del panel: invitaciones (00660)". It covers the rules, the trigger flag, the role cache delay (up to 1 minute), the e-mail label, and how to diagnose a stuck invitation.
-- [ ] **Step 2:** Run `pnpm check-types`, the vitest suites of `packages/api` and `packages/utils`, and `supabase/tests/00660/run.sh <migration>`. Build the admin and open `/invitacion/<64 hex>` and `/sin-acceso?reason=wrong_account&email=l…@gmail.com` in Chromium. Take screenshots.
+- [ ] **Step 1:** Add a CLAUDE.md section, "Equipo del panel: invitaciones (00661)". It covers the rules, the trigger flag, the role cache delay (up to 1 minute), the e-mail label, and how to diagnose a stuck invitation.
+- [ ] **Step 2:** Run `pnpm check-types`, the vitest suites of `packages/api` and `packages/utils`, and `supabase/tests/00661/run.sh <migration>`. Build the admin and open `/invitacion/<64 hex>` and `/sin-acceso?reason=wrong_account&email=l…@gmail.com` in Chromium. Take screenshots.
 - [ ] **Step 3:** Re-check the migration number, push and update draft PR #1151. Dispatch a final code reviewer.
 
 ### Task 11: Rollout (each step needs the owner's OK)
 
-1. Rehearse 00660 in prod inside a rolled-back block:
+1. Rehearse 00661 in prod inside a rolled-back block:
    - Run `EXECUTE` of the file, check md5 equality of the text, then run cases as real accounts.
    - Make `cron_http_post` safe: the rollback cancels the queued request.
-2. Apply 00660 by MCP. It has no DROP or DELETE, so no destructive prompt.
+2. Apply 00661 by MCP. It has no DROP or DELETE, so no destructive prompt.
 3. Deploy `send-email` with the new template (MCP `deploy_edge_function` with every file it imports).
 4. Merge #1151, which deploys the panel.
 5. The owner invites a test Gmail and accepts it, then tries the wrong account, then removes access.

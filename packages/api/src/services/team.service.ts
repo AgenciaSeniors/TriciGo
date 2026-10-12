@@ -1,5 +1,5 @@
 // ============================================================
-// Team of the admin panel (00660): members, invitations, roles.
+// Team of the admin panel (00661): members, invitations, roles.
 // Every function is a SECURITY DEFINER RPC that checks the caller itself:
 // super_admin for managing, anyone with the token for get_team_invitation,
 // the signed-in person for accept_team_invitation.

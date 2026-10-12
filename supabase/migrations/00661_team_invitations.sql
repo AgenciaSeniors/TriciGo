@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 00660: team invitations for the admin panel
+-- Migration 00661: team invitations for the admin panel
 --
 -- Spec: docs/superpowers/specs/2026-10-12-team-invitations-design.md
 --
@@ -30,7 +30,7 @@
 -- needs a send-email deploy) via cron_http_post, label team-invitation-email, so a
 -- rejected send shows in check_cron_http_failures.
 -- Errors carry Spanish text in MESSAGE and a code in DETAIL (team_*).
--- Rehearsal: supabase/tests/00660/run.sh
+-- Rehearsal: supabase/tests/00661/run.sh
 -- ============================================================
 
 -- 0. The live protect trigger must be the one this migration knows ---------------
@@ -43,7 +43,7 @@ BEGIN
   FROM pg_proc WHERE oid = 'public.tg_users_protect_admin_fields()'::regprocedure;
   IF v_md5 IS DISTINCT FROM '377912e83023297eda4761622a113364'
      AND position('app.team_role_change' IN coalesce(v_src, '')) = 0 THEN
-    RAISE EXCEPTION '00660: tg_users_protect_admin_fields has an unknown body (md5 %), refusing to patch it', v_md5;
+    RAISE EXCEPTION '00661: tg_users_protect_admin_fields has an unknown body (md5 %), refusing to patch it', v_md5;
   END IF;
 END
 $guard$;
@@ -623,7 +623,7 @@ DECLARE
   v_src text;
   c_anchor CONSTANT text := '  IF current_setting(''app.trusted_tier_update'', true) = ''1'' THEN';
   c_branch CONSTANT text := array_to_string(ARRAY[
-    '  -- 00660: team invitations. _team_write_role sets the team role flag around its',
+    '  -- 00661: team invitations. _team_write_role sets the team role flag around its',
     '  -- single UPDATE (accept_team_invitation, set_team_member_role, remove_team_member).',
     '  -- Only the role passes; what the other branches protect stays as it was.',
     '  IF coalesce(current_setting(''app.team_role_change'', true), '''') = ''1'' THEN',
@@ -645,7 +645,7 @@ BEGIN
     RETURN;
   END IF;
   IF (length(v_src) - length(replace(v_src, c_anchor, ''))) / length(c_anchor) <> 1 THEN
-    RAISE EXCEPTION '00660: the anchor is not in tg_users_protect_admin_fields exactly once';
+    RAISE EXCEPTION '00661: the anchor is not in tg_users_protect_admin_fields exactly once';
   END IF;
   EXECUTE replace(v_src, c_anchor, c_branch || c_anchor);
 END
@@ -718,15 +718,15 @@ DECLARE
   v_src  text;
 BEGIN
   IF NOT (SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = 'public.team_invitations'::regclass) THEN
-    RAISE EXCEPTION '00660: public.team_invitations has row level security disabled';
+    RAISE EXCEPTION '00661: public.team_invitations has row level security disabled';
   END IF;
   FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
     IF has_table_privilege(v_role, 'public.team_invitations', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE') THEN
-      RAISE EXCEPTION '00660: % has privileges on public.team_invitations', v_role;
+      RAISE EXCEPTION '00661: % has privileges on public.team_invitations', v_role;
     END IF;
   END LOOP;
   IF NOT has_table_privilege('service_role', 'public.team_invitations', 'SELECT, INSERT, UPDATE') THEN
-    RAISE EXCEPTION '00660: service_role cannot use public.team_invitations';
+    RAISE EXCEPTION '00661: service_role cannot use public.team_invitations';
   END IF;
 
   FOREACH v_fn IN ARRAY ARRAY[
@@ -737,7 +737,7 @@ BEGIN
   LOOP
     FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
       IF has_function_privilege(v_role, v_fn, 'EXECUTE') THEN
-        RAISE EXCEPTION '00660: % can execute %', v_role, v_fn;
+        RAISE EXCEPTION '00661: % can execute %', v_role, v_fn;
       END IF;
     END LOOP;
   END LOOP;
@@ -749,26 +749,26 @@ BEGIN
     'public.remove_team_member(uuid, text)']::regprocedure[]
   LOOP
     IF has_function_privilege('anon', v_fn, 'EXECUTE') THEN
-      RAISE EXCEPTION '00660: anon can execute %', v_fn;
+      RAISE EXCEPTION '00661: anon can execute %', v_fn;
     END IF;
     IF NOT has_function_privilege('authenticated', v_fn, 'EXECUTE') THEN
-      RAISE EXCEPTION '00660: authenticated cannot execute %', v_fn;
+      RAISE EXCEPTION '00661: authenticated cannot execute %', v_fn;
     END IF;
     IF NOT (SELECT p.prosecdef FROM pg_proc p WHERE p.oid = v_fn) THEN
-      RAISE EXCEPTION '00660: % must be SECURITY DEFINER', v_fn;
+      RAISE EXCEPTION '00661: % must be SECURITY DEFINER', v_fn;
     END IF;
   END LOOP;
   IF NOT has_function_privilege('anon', 'public.get_team_invitation(text)', 'EXECUTE') THEN
-    RAISE EXCEPTION '00660: anon cannot execute public.get_team_invitation(text)';
+    RAISE EXCEPTION '00661: anon cannot execute public.get_team_invitation(text)';
   END IF;
 
   SELECT prosrc INTO v_src FROM pg_proc WHERE oid = 'public.tg_users_protect_admin_fields()'::regprocedure;
   IF (length(v_src) - length(replace(v_src, 'current_setting(''app.team_role_change''', '')))
        / length('current_setting(''app.team_role_change''') <> 1 THEN
-    RAISE EXCEPTION '00660: tg_users_protect_admin_fields does not read the team role flag exactly once';
+    RAISE EXCEPTION '00661: tg_users_protect_admin_fields does not read the team role flag exactly once';
   END IF;
   IF position(chr(13) IN v_src) > 0 THEN
-    RAISE EXCEPTION '00660: tg_users_protect_admin_fields kept a carriage return';
+    RAISE EXCEPTION '00661: tg_users_protect_admin_fields kept a carriage return';
   END IF;
 END
 $check$;

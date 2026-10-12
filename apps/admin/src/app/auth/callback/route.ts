@@ -21,7 +21,7 @@ import {
  * → Redirect URLs. Otherwise GoTrue discards the redirect and falls back to the
  * project Site URL (tricigo.com), which is the bug this fixes.
  *
- * `?invite=<token>` comes from the invitation page (00660): after the exchange
+ * `?invite=<token>` comes from the invitation page (00661): after the exchange
  * the invitation is accepted with that token, and the person lands on their
  * home or on /sin-acceso with the reason.
  */

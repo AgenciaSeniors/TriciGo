@@ -1,5 +1,5 @@
 /**
- * Team invitations (00660): what accept_team_invitation answers and where that sends someone.
+ * Team invitations (00661): what accept_team_invitation answers and where that sends someone.
  * Imported as `@tricigo/utils/teamInvitation` so the admin middleware does not load the barrel.
  * Spec: docs/superpowers/specs/2026-10-12-team-invitations-design.md
  */

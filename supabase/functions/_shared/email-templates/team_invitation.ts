@@ -1,5 +1,5 @@
 // ============================================================
-// TriciGo — Team invitation e-mail (00660)
+// TriciGo — Team invitation e-mail (00661)
 //
 // Sent by create_team_invitation and resend_team_invitation (SQL, through
 // cron_http_post to send-email) to the address a super admin invited to the

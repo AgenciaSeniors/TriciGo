@@ -7,7 +7,7 @@ import { noAccessReason } from '@tricigo/utils/teamInvitation';
 import { createBrowserClient } from '@/lib/supabase-server';
 
 /**
- * Where the panel sends a signed-in account that has no panel role (00660), with
+ * Where the panel sends a signed-in account that has no panel role (00661), with
  * the reason: no invitation, the invitation is for another address, it expired, etc.
  * Public on purpose (outside the middleware), so it never loops.
  */

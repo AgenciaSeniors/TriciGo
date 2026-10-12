@@ -10,7 +10,7 @@ import { formatAdminDate } from '@/lib/formatDate';
 import { GoogleIcon } from '@/components/ui/GoogleIcon';
 
 /**
- * The page an invitation e-mail links to (00660). Public: it reads the invitation
+ * The page an invitation e-mail links to (00661). Public: it reads the invitation
  * with its token (role, who invited, the address masked) and signs in with Google.
  * /auth/callback accepts the invitation with the same token.
  */

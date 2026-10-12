@@ -182,7 +182,7 @@ export async function middleware(request: NextRequest) {
     role = account.role;
   } else {
     // No panel role: accept a pending invitation for this account's Google or Apple
-    // address, if there is one (00660). Otherwise /sin-acceso says why there is no access.
+    // address, if there is one (00661). Otherwise /sin-acceso says why there is no access.
     const { data, error } = await supabase.rpc('accept_team_invitation');
     const outcome = parseAcceptOutcome(error ? null : data);
     if (outcome.result !== 'accepted' || !outcome.role) {
@@ -213,7 +213,7 @@ export const config = {
      * Match all routes except:
      * - /login (auth page)
      * - /auth/callback (OAuth code exchange — must run before any session exists)
-     * - /invitacion/*, /sin-acceso (public team invitation pages, 00660)
+     * - /invitacion/*, /sin-acceso (public team invitation pages, 00661)
      * - /_next (Next.js internals)
      * - /favicon.png, /logo-*, /icon-*, /vehicles/* (static assets in public/)
      * - /api (API routes if any)

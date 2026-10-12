@@ -1,4 +1,4 @@
--- Seed for the 00660 rehearsal. People and their Google/Apple identities; run.sh says which case
+-- Seed for the 00661 rehearsal. People and their Google/Apple identities; run.sh says which case
 -- uses whom.
 --   SAM  super_admin, proven address (Google)        ANA  admin, proven address (Google)
 --   MIA  marketing: users.email differs from her Google address, so not proven

@@ -64,7 +64,7 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
     pathname === '/login' ||
     pathname === '/forgot-password' ||
     pathname === '/reset-password' ||
-    // Public team invitation pages (00660): no session or no panel role yet.
+    // Public team invitation pages (00661): no session or no panel role yet.
     pathname === '/sin-acceso' ||
     pathname.startsWith('/invitacion/');
   const [ready, setReady] = useState(i18nInitialized);

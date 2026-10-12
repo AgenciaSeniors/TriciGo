@@ -20,7 +20,7 @@ import { formatAdminDate } from '@/lib/formatDate';
 const ROLES: TeamRole[] = ['super_admin', 'admin', 'marketing'];
 
 /**
- * Equipo (00660): who has access to the panel, the invitations on their way, and
+ * Equipo (00661): who has access to the panel, the invitations on their way, and
  * the form to invite someone. Super admins only (middleware and every function).
  */
 export default function TeamPage() {

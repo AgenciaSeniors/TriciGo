@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Rehearsal runner for migration 00660 (team invitations; local Postgres 16).
-#   supabase/tests/00660/run.sh none
+# Rehearsal runner for migration 00661 (team invitations; local Postgres 16).
+#   supabase/tests/00661/run.sh none
 #       -> scaffold + seed + tests without the migration (RED: none of the objects exist)
-#   supabase/tests/00660/run.sh supabase/migrations/00660_team_invitations.sql
+#   supabase/tests/00661/run.sh supabase/migrations/00661_team_invitations.sql
 #       -> scaffold + seed + migration x2 (idempotency) + tests + negative proofs of the self-checks (GREEN)
 # The migration is applied as postgres, the scaffold's non-superuser owner (as in prod).
 # Cluster setup: see CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod" (user pgtest, port 5433).
-# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00660/run.sh ...
+# Other clusters: PGBIN=<dir with psql> PGPORT=<port> PYTHON=<python> supabase/tests/00661/run.sh ...
 set -u
 export PGCLIENTENCODING=UTF8 LC_MESSAGES=C
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -14,7 +14,7 @@ MIG="${1:-none}"
 BIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 CONN="-h 127.0.0.1 -p ${PGPORT:-5433} -U pgtest"
 PY="${PYTHON:-python3}"
-DB="${RUN_DB:-pr660}"
+DB="${RUN_DB:-pr661}"
 P="$BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1"
 AS_OWNER="SET SESSION AUTHORIZATION postgres; SET search_path = ''"
 PASS=0; FAIL=0

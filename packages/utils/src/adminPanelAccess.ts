@@ -28,7 +28,7 @@ export const MARKETING_ROUTES: readonly string[] = [
   '/blog',
 ];
 
-/** The pages only super admins may open (00660, team invitations). Each one also covers its sub-pages. */
+/** The pages only super admins may open (00661, team invitations). Each one also covers its sub-pages. */
 export const SUPER_ADMIN_ROUTES: readonly string[] = ['/equipo'];
 
 /** Where marketing lands, and where the middleware sends it from any other page. */

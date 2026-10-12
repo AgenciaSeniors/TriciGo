@@ -1,5 +1,5 @@
--- Scaffold for the 00660 rehearsal (team invitations).
--- Prod's objects as of 2026-10-12, reduced to the columns 00660 reads. Every object belongs to a
+-- Scaffold for the 00661 rehearsal (team invitations).
+-- Prod's objects as of 2026-10-12, reduced to the columns 00661 reads. Every object belongs to a
 -- NON-superuser role named postgres, as in prod. auth.uid() reads request.jwt.claim.sub like
 -- PostgREST. Live bodies, byte for byte from prod (pg_get_functiondef): tg_users_protect_admin_fields
 -- (00599, md5 377912e8...), is_admin, is_super_admin, current_user_role, mailable_user_emails;
