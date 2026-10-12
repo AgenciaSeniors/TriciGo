@@ -5,9 +5,11 @@
   "scripts": {
     "check-types": "tsc --noEmit"
   },
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./config": "./src/config.ts"
+    "./config": "./src/config.ts",
+    "./admin": "./src/admin.ts"
   },
   "dependencies": {
     "i18next": "^24.2.2",
