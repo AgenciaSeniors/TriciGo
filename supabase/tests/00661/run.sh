@@ -55,7 +55,7 @@ ID="current_setting('test.id')::uuid"
 accept(){ printf "SELECT (r->>'result') || '|' || coalesce(r->>'role', '') || '|' || coalesce(r->>'email_masked', '') FROM (SELECT public.accept_team_invitation(%s) r) x;" "${1:-}"; }
 out(){ printf "SELECT t.outcome('%s');" "$1"; }
 NOT_SA="raised 42501: Solo un superadministrador puede gestionar el equipo. [team_not_super_admin]"
-FNS="'_team_mask_email', '_team_invitation_link', '_team_role_rank', '_team_require_super_admin', '_team_previous_role', '_team_lock_target', '_team_check_last_super_admin', '_team_write_role', '_team_queue_invitation_email', 'list_team', 'create_team_invitation', 'resend_team_invitation', 'cancel_team_invitation', 'get_team_invitation', 'accept_team_invitation', 'set_team_member_role', 'remove_team_member', 'tg_users_protect_admin_fields'"
+FNS="'_team_mask_email', '_team_invitation_link', '_team_role_rank', '_team_require_super_admin', '_team_previous_role', '_team_lock_target', '_team_check_last_super_admin', '_team_write_role', '_team_cancel_pending_for', '_team_queue_invitation_email', 'list_team', 'create_team_invitation', 'resend_team_invitation', 'cancel_team_invitation', 'get_team_invitation', 'accept_team_invitation', 'set_team_member_role', 'remove_team_member', 'tg_users_protect_admin_fields'"
 BODIES="SELECT string_agg(proname || ':' || md5(prosrc), ',' ORDER BY proname) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN ($FNS)"
 
 echo "== reset database =="
@@ -78,7 +78,7 @@ val "O1 the table has RLS and only service_role can use it" \
   "true:falsefalsefalsetrue"
 val "O2 who executes what: helpers nobody, get_team_invitation anon too, the rest signed-in" \
   "SELECT string_agg(p.proname || ':' || has_function_privilege('anon', p.oid, 'EXECUTE') || has_function_privilege('authenticated', p.oid, 'EXECUTE'), ',' ORDER BY p.proname) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($FNS) AND p.proname <> 'tg_users_protect_admin_fields'" \
-  "_team_check_last_super_admin:falsefalse,_team_invitation_link:falsefalse,_team_lock_target:falsefalse,_team_mask_email:falsefalse,_team_previous_role:falsefalse,_team_queue_invitation_email:falsefalse,_team_require_super_admin:falsefalse,_team_role_rank:falsefalse,_team_write_role:falsefalse,accept_team_invitation:falsetrue,cancel_team_invitation:falsetrue,create_team_invitation:falsetrue,get_team_invitation:truetrue,list_team:falsetrue,remove_team_member:falsetrue,resend_team_invitation:falsetrue,set_team_member_role:falsetrue"
+  "_team_cancel_pending_for:falsefalse,_team_check_last_super_admin:falsefalse,_team_invitation_link:falsefalse,_team_lock_target:falsefalse,_team_mask_email:falsefalse,_team_previous_role:falsefalse,_team_queue_invitation_email:falsefalse,_team_require_super_admin:falsefalse,_team_role_rank:falsefalse,_team_write_role:falsefalse,accept_team_invitation:falsetrue,cancel_team_invitation:falsetrue,create_team_invitation:falsetrue,get_team_invitation:truetrue,list_team:falsetrue,remove_team_member:falsetrue,resend_team_invitation:falsetrue,set_team_member_role:falsetrue"
 val "O3 the protect trigger reads the team role flag once" \
   "SELECT (length(prosrc) - length(replace(prosrc, 'current_setting(''app.team_role_change''', ''))) / length('current_setting(''app.team_role_change''') FROM pg_proc WHERE oid = 'public.tg_users_protect_admin_fields()'::regprocedure" \
   "1"
@@ -200,6 +200,44 @@ val "M7 with two super_admins, one can demote the other" \
 val "M8 setting the same role changes nothing and audits nothing" \
   "$(as $SAM "SELECT public.set_team_member_role('$ANA', 'admin', 'Sin cambios'); $(sup) SELECT count(*) FROM public.admin_actions;")" \
   "admin;0"
+val "M9 a role change cancels the person's pending invitations (not anyone else's): a later accept cannot raise the role back" \
+  "$(as $SAM "$(sup) INSERT INTO public.team_invitations (email, role, token, invited_by, expires_at) VALUES ('ana@example.com', 'super_admin', repeat('e', 64), '$SAM', now() + interval '1 day'), ('carl@gmail.com', 'admin', repeat('9', 64), '$SAM', now() + interval '1 day'); $(who $SAM) SELECT public.set_team_member_role('$ANA', 'marketing', 'Cambia de area'); $(who $ANA) $(accept "repeat('e', 64)") $(accept) $(sup) SELECT role FROM public.users WHERE id = '$ANA'; SELECT string_agg(email || ':' || status || ':' || coalesce((canceled_by = '$SAM')::text, '-'), ',' ORDER BY email) FROM public.team_invitations;")" \
+  "marketing;canceled||;none||;marketing;ana@example.com:canceled:true,carl@gmail.com:pending:-"
+val "M10 setting the same role also cancels them, and still audits nothing" \
+  "$(as $SAM "$(sup) INSERT INTO public.team_invitations (email, role, token, invited_by, expires_at) VALUES ('ana@example.com', 'super_admin', repeat('e', 64), '$SAM', now() + interval '1 day'); $(who $SAM) SELECT public.set_team_member_role('$ANA', 'admin', 'Sigue igual'); $(sup) SELECT status FROM public.team_invitations; SELECT count(*) FROM public.admin_actions;")" \
+  "admin;canceled;0"
+
+echo "== an accept racing a removal waits for it instead of deadlocking =="
+# _team_role_rank is swapped for one that sleeps 2 s once, inside the accept, after the accept
+# has taken its first locks; the removal starts meanwhile. Locking the invitation before the
+# person's row (the order before the fix) ends in "deadlock detected".
+fresh ${DB}r
+[ "$MIG" != "none" ] && $BIN/psql $CONN -d ${DB}r -qAt -v ON_ERROR_STOP=1 -1 -c "$AS_OWNER" -f "$MIG" >/dev/null 2>&1
+R="$BIN/psql $CONN -d ${DB}r -qAt"
+TR=$(mktemp -d)
+$R -c "SET ROLE postgres; INSERT INTO public.team_invitations (email, role, token, invited_by, expires_at) VALUES ('mia@example.com', 'admin', repeat('f', 64), '$SAM', now() + interval '1 day'); CREATE OR REPLACE FUNCTION public._team_role_rank(p_role text) RETURNS integer LANGUAGE plpgsql SET search_path = pg_catalog AS \$f\$ BEGIN IF current_setting('test.slow_rank', true) = '1' THEN PERFORM set_config('test.slow_rank', '', true); PERFORM pg_sleep(2); END IF; RETURN CASE p_role WHEN 'super_admin' THEN 3 WHEN 'admin' THEN 2 WHEN 'marketing' THEN 1 ELSE 0 END; END \$f\$;" >/dev/null 2>&1
+( $R -c "BEGIN; SET LOCAL request.jwt.claim.sub = '$MIA'; SET LOCAL ROLE authenticated; SET LOCAL test.slow_rank = '1'; SELECT public.accept_team_invitation(repeat('f', 64))->>'result'; COMMIT;" 2>&1 | tr -d '\r' | grep -m1 -o 'deadlock detected\|^[a-z_]*$' > "$TR/accept" ) &
+sleep 0.5
+rm_out=$($R -c "BEGIN; SET LOCAL request.jwt.claim.sub = '$SAM'; SET LOCAL ROLE authenticated; SELECT public.remove_team_member('$MIA', 'Ya no trabaja aqui'); COMMIT;" 2>&1 | tr -d '\r' | grep -m1 -o 'deadlock detected\|^[a-z_]*$')
+wait
+final=$($R -c "SELECT u.role || ':' || i.status FROM public.users u, public.team_invitations i WHERE u.id = '$MIA'" 2>&1 | tr -d '\r')
+got="$(cat "$TR/accept")|$rm_out|$final"
+[ "$got" = "accepted|customer|customer:accepted" ] && ok "R1 the accept finishes first, the removal then takes the role away; no deadlock" || ko "R1 the accept finishes first, the removal then takes the role away; no deadlock" "expected [accepted|customer|customer:accepted], got [$got]"
+
+# R2, the other order: _team_previous_role sleeps inside the removal, after it has locked the
+# person's row; the accept starts meanwhile, waits, and then finds its invitation canceled.
+fresh ${DB}r
+[ "$MIG" != "none" ] && $BIN/psql $CONN -d ${DB}r -qAt -v ON_ERROR_STOP=1 -1 -c "$AS_OWNER" -f "$MIG" >/dev/null 2>&1
+$R -c "SET ROLE postgres; INSERT INTO public.team_invitations (email, role, token, invited_by, expires_at) VALUES ('mia@example.com', 'admin', repeat('f', 64), '$SAM', now() + interval '1 day'); CREATE OR REPLACE FUNCTION public._team_previous_role(p_user uuid) RETURNS public.user_role LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog AS \$f\$ BEGIN IF current_setting('test.slow_prev', true) = '1' THEN PERFORM set_config('test.slow_prev', '', true); PERFORM pg_sleep(2); END IF; RETURN CASE WHEN EXISTS (SELECT 1 FROM public.driver_profiles dp WHERE dp.user_id = p_user AND dp.status IN ('approved', 'suspended')) THEN 'driver'::public.user_role ELSE 'customer'::public.user_role END; END \$f\$;" >/dev/null 2>&1
+( $R -c "BEGIN; SET LOCAL request.jwt.claim.sub = '$SAM'; SET LOCAL ROLE authenticated; SET LOCAL test.slow_prev = '1'; SELECT public.remove_team_member('$MIA', 'Ya no trabaja aqui'); COMMIT;" 2>&1 | tr -d '\r' | grep -m1 -o 'deadlock detected\|^[a-z_]*$' > "$TR/remove" ) &
+sleep 0.5
+acc_out=$($R -c "BEGIN; SET LOCAL request.jwt.claim.sub = '$MIA'; SET LOCAL ROLE authenticated; SELECT public.accept_team_invitation(repeat('f', 64))->>'result'; COMMIT;" 2>&1 | tr -d '\r' | grep -m1 -o 'deadlock detected\|^[a-z_]*$')
+wait
+final=$($R -c "SELECT u.role || ':' || i.status FROM public.users u, public.team_invitations i WHERE u.id = '$MIA'" 2>&1 | tr -d '\r')
+got="$(cat "$TR/remove")|$acc_out|$final"
+[ "$got" = "customer|canceled|customer:canceled" ] && ok "R2 the removal finishes first, the accept then finds its invitation canceled; no deadlock" || ko "R2 the removal finishes first, the accept then finds its invitation canceled; no deadlock" "expected [customer|canceled|customer:canceled], got [$got]"
+rm -rf "$TR"
+$BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}r" >/dev/null 2>&1
 
 echo "== the team listing =="
 val "L1 members: active panel accounts, system accounts out, ordered by role; digest and me flags" \

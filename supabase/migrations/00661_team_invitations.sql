@@ -12,7 +12,7 @@
 --   2. Helpers (no client may execute them): _team_mask_email, _team_invitation_link,
 --      _team_role_rank, _team_require_super_admin, _team_previous_role,
 --      _team_lock_target, _team_check_last_super_admin, _team_write_role,
---      _team_queue_invitation_email.
+--      _team_cancel_pending_for, _team_queue_invitation_email.
 --   3. For the panel: list_team, create_team_invitation, resend_team_invitation,
 --      cancel_team_invitation, set_team_member_role, remove_team_member (super_admin
 --      only), get_team_invitation (anyone with the token, anon too) and
@@ -161,7 +161,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'No puedes cambiar tu propio acceso.', DETAIL = 'team_self';
   END IF;
-  SELECT u.role INTO v_role FROM public.users u WHERE u.id = p_user FOR UPDATE;
+  SELECT u.role INTO v_role FROM public.users u WHERE u.id = p_user FOR NO KEY UPDATE;
   IF NOT FOUND OR v_role NOT IN ('super_admin', 'admin', 'marketing') THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'Esa cuenta no es parte del equipo.', DETAIL = 'team_not_member';
@@ -201,6 +201,29 @@ BEGIN
   PERFORM set_config('app.team_role_change', '1', true);
   UPDATE public.users SET role = p_role WHERE id = p_user;
   PERFORM set_config('app.team_role_change', '', true);
+END;
+$$;
+
+-- Cancels the pending invitations for any of a person's addresses (users.email and the
+-- e-mail of every identity). A role decided on the Equipo page supersedes them: left
+-- pending, the next sign-in would accept one and give back what was just taken away.
+CREATE OR REPLACE FUNCTION public._team_cancel_pending_for(p_user uuid, p_by uuid)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_count integer;
+BEGIN
+  UPDATE public.team_invitations i
+     SET status = 'canceled', canceled_at = now(), canceled_by = p_by
+   WHERE i.status = 'pending'
+     AND (i.email = (SELECT lower(btrim(coalesce(u.email, ''))) FROM public.users u WHERE u.id = p_user)
+          OR i.email IN (SELECT lower(btrim(coalesce(ai.identity_data->>'email', '')))
+                         FROM auth.identities ai WHERE ai.user_id = p_user));
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
 END;
 $$;
 
@@ -472,7 +495,11 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '42501',
       MESSAGE = 'Inicia sesión para aceptar la invitación.', DETAIL = 'team_no_session';
   END IF;
-  SELECT u.role, coalesce(u.is_active, true) INTO v_role, v_active FROM public.users u WHERE u.id = v_uid;
+  -- The caller's row first, then the invitation: the same order as set_team_member_role
+  -- and remove_team_member, so an accept racing a removal waits instead of deadlocking.
+  SELECT u.role, coalesce(u.is_active, true) INTO v_role, v_active
+  FROM public.users u WHERE u.id = v_uid
+  FOR NO KEY UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('result', 'none');
   END IF;
@@ -559,10 +586,12 @@ BEGIN
       MESSAGE = 'Escribe el motivo (al menos 5 caracteres).', DETAIL = 'team_reason_required';
   END IF;
   -- Team changes run one at a time: two super_admins demoting each other at once
-  -- could otherwise leave none.
-  PERFORM 1 FROM public.users WHERE role = 'super_admin' ORDER BY id FOR UPDATE;
+  -- could otherwise leave none. NO KEY UPDATE, not UPDATE: an accept writes admin_actions,
+  -- whose foreign key share-locks the inviter's row, and must not wait on this.
+  PERFORM 1 FROM public.users WHERE role = 'super_admin' ORDER BY id FOR NO KEY UPDATE;
   v_uid := public._team_require_super_admin();
   v_old := public._team_lock_target(v_uid, p_user);
+  PERFORM public._team_cancel_pending_for(p_user, v_uid);
   IF v_old::text = p_role THEN
     RETURN p_role;
   END IF;
@@ -594,7 +623,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023',
       MESSAGE = 'Escribe el motivo (al menos 5 caracteres).', DETAIL = 'team_reason_required';
   END IF;
-  PERFORM 1 FROM public.users WHERE role = 'super_admin' ORDER BY id FOR UPDATE;
+  PERFORM 1 FROM public.users WHERE role = 'super_admin' ORDER BY id FOR NO KEY UPDATE;
   v_uid := public._team_require_super_admin();
   v_old := public._team_lock_target(v_uid, p_user);
   IF v_old = 'super_admin' THEN
@@ -602,14 +631,7 @@ BEGIN
   END IF;
   v_new := public._team_previous_role(p_user);
   PERFORM public._team_write_role(p_user, v_new);
-  -- A pending invitation for one of the person's addresses would give the access back
-  -- the next time they sign in: it goes too.
-  UPDATE public.team_invitations i
-     SET status = 'canceled', canceled_at = now(), canceled_by = v_uid
-   WHERE i.status = 'pending'
-     AND (i.email = (SELECT lower(btrim(coalesce(u.email, ''))) FROM public.users u WHERE u.id = p_user)
-          OR i.email IN (SELECT lower(btrim(coalesce(ai.identity_data->>'email', '')))
-                         FROM auth.identities ai WHERE ai.user_id = p_user));
+  PERFORM public._team_cancel_pending_for(p_user, v_uid);
   INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values, reason)
   VALUES (v_uid, 'team_member_removed', 'user', p_user::text,
           jsonb_build_object('role', v_old), jsonb_build_object('role', v_new), v_reason);
@@ -661,6 +683,7 @@ REVOKE ALL ON FUNCTION
   public._team_lock_target(uuid, uuid),
   public._team_check_last_super_admin(uuid),
   public._team_write_role(uuid, public.user_role),
+  public._team_cancel_pending_for(uuid, uuid),
   public._team_queue_invitation_email(uuid)
 FROM PUBLIC, anon, authenticated;
 
@@ -696,7 +719,8 @@ BEGIN
     'public._team_mask_email(text)', 'public._team_invitation_link(text)', 'public._team_role_rank(text)',
     'public._team_require_super_admin()', 'public._team_previous_role(uuid)',
     'public._team_lock_target(uuid, uuid)', 'public._team_check_last_super_admin(uuid)',
-    'public._team_write_role(uuid, public.user_role)', 'public._team_queue_invitation_email(uuid)',
+    'public._team_write_role(uuid, public.user_role)', 'public._team_cancel_pending_for(uuid, uuid)',
+    'public._team_queue_invitation_email(uuid)',
     'public.list_team()', 'public.create_team_invitation(text, text, text)',
     'public.resend_team_invitation(uuid)', 'public.cancel_team_invitation(uuid)',
     'public.get_team_invitation(text)', 'public.accept_team_invitation(text)',
@@ -733,7 +757,8 @@ BEGIN
     'public._team_mask_email(text)', 'public._team_invitation_link(text)', 'public._team_role_rank(text)',
     'public._team_require_super_admin()', 'public._team_previous_role(uuid)',
     'public._team_lock_target(uuid, uuid)', 'public._team_check_last_super_admin(uuid)',
-    'public._team_write_role(uuid, public.user_role)', 'public._team_queue_invitation_email(uuid)']::regprocedure[]
+    'public._team_write_role(uuid, public.user_role)', 'public._team_cancel_pending_for(uuid, uuid)',
+    'public._team_queue_invitation_email(uuid)']::regprocedure[]
   LOOP
     FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
       IF has_function_privilege(v_role, v_fn, 'EXECUTE') THEN
