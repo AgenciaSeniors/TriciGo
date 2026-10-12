@@ -180,15 +180,16 @@ val "C14 a ride scheduled later offers neither release nor advance" \
   "$(as $ADMIN "SELECT public.admin_active_ride_context('$R_SCHED')->'allowed_actions';")" "[]"
 
 echo "== release =="
-val "R1 releases an accepted ride like the automatic release, plus the GPS reset" \
-  "$(as $ADMIN "RESET ROLE; UPDATE public.rides SET gps_override_confirmed_at = now(), driver_gps_status = 'rider_consented' WHERE id = '$R_ACC';
+val "R1 releases an accepted ride like the automatic release, plus the GPS and proximity reset" \
+  "$(as $ADMIN "RESET ROLE; UPDATE public.rides SET gps_override_confirmed_at = now(), driver_gps_status = 'rider_consented',
+       proximity_pickup_notified_at = now() WHERE id = '$R_ACC';
      SET LOCAL ROLE authenticated; SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'no responde')->>'success';
      RESET ROLE; SELECT status || '|' || (driver_id IS NULL) || '|' || (accepted_at IS NULL) || '|' || (searching_seen_at = now()) || '|' ||
        driver_gps_status || '|' || (gps_override_confirmed_at IS NULL) || '|' ||
        (SELECT count(*) FROM public.dispatch_calls WHERE ride_id = '$R_ACC') || '|' || (last_dispatched_at = now()) || '|' ||
-       (SELECT is_online FROM public.driver_profiles WHERE id = '$DP_DIEGO')
+       (SELECT is_online FROM public.driver_profiles WHERE id = '$DP_DIEGO') || '|' || (proximity_pickup_notified_at IS NULL)
      FROM public.rides WHERE id = '$R_ACC';")" \
-  "true;searching|true|true|true|healthy|true|1|true|false"
+  "true;searching|true|true|true|healthy|true|1|true|false|true"
 val "R2 the driver goes offline, the accepted offer stays accepted, dispatch is called" \
   "$(as $ADMIN "SELECT public.admin_release_active_ride('$R_ENR', 'driver_en_route', '$DP_DIEGO', 'no responde')->>'success';
      RESET ROLE; SELECT (SELECT is_online FROM public.driver_profiles WHERE id = '$DP_DIEGO') || '|' ||
@@ -215,6 +216,32 @@ val "R9 bound to the driver support saw: retaken by Ana -> ride_changed, Ana unt
      SELECT (r->>'error') || '|' || (r->>'status') FROM (SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'no responde') r) s;
      RESET ROLE; SELECT (SELECT driver_id FROM public.rides WHERE id = '$R_ACC') || '|' || (SELECT is_online FROM public.driver_profiles WHERE id = '$DP_ANA');")" \
   "true;ride_changed|accepted;$DP_ANA|true"
+val "R10 the driver goes offline by hand: no auto_offline_at (he reconnects himself)" \
+  "$(as $ADMIN "SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'no responde')->>'success';
+     RESET ROLE; SELECT is_online || '|' || (auto_offline_at IS NULL) FROM public.driver_profiles WHERE id = '$DP_DIEGO';")" "true;false|true"
+# Ana had been offered the ride (superseded when Diego took it), Beto had said no.
+OTHER_OFFERS="RESET ROLE; INSERT INTO public.ride_offers (ride_id, driver_profile_id, status, expires_at) VALUES
+  ('$R_ACC', '$DP_ANA', 'superseded', now() - interval '9 minutes'), ('$R_ACC', '$DP_BETO', 'rejected', now() - interval '9 minutes');"
+OFFERS_AFTER="SELECT string_agg(o.status || ':' || CASE WHEN o.status <> 'expired' THEN '-'
+     WHEN o.expires_at < now() - make_interval(secs => public.get_platform_config_numeric('reoffer_cooldown_s', 120)::int) THEN 'rearmable' ELSE 'cooling' END,
+     ' ' ORDER BY u.full_name) FROM public.ride_offers o JOIN public.driver_profiles dp ON dp.id = o.driver_profile_id JOIN public.users u ON u.id = dp.user_id
+   WHERE o.ride_id = '$R_ACC';"
+val "R11 the release reopens the other drivers' offers to dispatch; a rejection and the released driver's row stay" \
+  "$(as $ADMIN "$OTHER_OFFERS SET LOCAL ROLE authenticated; SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'no responde')->>'success';
+     RESET ROLE; $OFFERS_AFTER")" "true;expired:rearmable rejected:- accepted:-"
+val "R12 ...past the configured re-offer cooldown" \
+  "$(as $ADMIN "$OTHER_OFFERS UPDATE public.platform_config SET value = '600' WHERE key = 'reoffer_cooldown_s'; SET LOCAL ROLE authenticated;
+     SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'no responde')->>'success';
+     RESET ROLE; SELECT expires_at < now() - interval '600 seconds' FROM public.ride_offers WHERE ride_id = '$R_ACC' AND driver_profile_id = '$DP_ANA';")" "true;t"
+val "R13 the automatic release (block A) also reopens the offers and resets GPS and proximity" \
+  "BEGIN; $OTHER_OFFERS UPDATE public.rides SET proximity_pickup_notified_at = now(), driver_gps_status = 'rider_consented',
+       gps_override_requested_at = now(), gps_override_confirmed_at = now(), gps_check_distance_m = 50, driver_custom_rate_cup = 100,
+       driver_gps_unavailable_at = now() WHERE id = '$R_ACC';
+     SELECT public.release_rides_from_dead_drivers()->>'released';
+     SELECT status || '|' || (proximity_pickup_notified_at IS NULL) || '|' || driver_gps_status || '|' ||
+       (num_nulls(gps_override_requested_at, gps_override_confirmed_at, gps_check_distance_m, driver_custom_rate_cup, driver_gps_unavailable_at) = 5)
+       FROM public.rides WHERE id = '$R_ACC';
+     $OFFERS_AFTER ROLLBACK;" "2;searching|true|healthy|true;expired:rearmable rejected:- accepted:-"
 
 # L1: a session holding the driver's row (as block A and update_driver_position do,
 # driver first) must not find the release already holding the ride.
@@ -304,6 +331,8 @@ if [ "$MIG" != "none" ]; then
       "is not the body this migration replaces" "N1 refuses an unknown calculate_wait_charge"
   neg "INSERT INTO public.valid_transitions VALUES ('accepted','arrived_at_pickup','{driver,admin,super_admin}');" \
       "must be for admin and super_admin only" "N2 refuses a driver-open accepted -> arrived_at_pickup"
+  neg "CREATE OR REPLACE FUNCTION public.release_rides_from_dead_drivers() RETURNS jsonb LANGUAGE plpgsql AS \$f\$ BEGIN RETURN '{}'; END \$f\$;" \
+      "is not the body this migration patches" "N4 refuses an unknown release_rides_from_dead_drivers"
   neg "CREATE OR REPLACE FUNCTION public._wait_charge_for(p text) RETURNS int LANGUAGE sql AS 'SELECT 1'; GRANT EXECUTE ON FUNCTION public._wait_charge_for(text) TO authenticated;" \
       "executable by a client role" "N3 refuses a client-executable helper overload"
 fi

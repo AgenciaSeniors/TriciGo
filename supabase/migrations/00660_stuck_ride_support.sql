@@ -208,7 +208,84 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public._support_ride_push(text, uuid, uuid, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
 
--- 7. Everything the active view shows, in one call.
+-- 7. A released ride goes back to the drivers it was offered to. accept_ride_v2
+--    marks every other pending offer 'superseded', and dispatch_ride re-arms an
+--    existing row only when it is 'expired' and its expires_at is past
+--    reoffer_cooldown_s. Without this, nobody offered the ride before it was
+--    taken ever gets it again. 'rejected' stays: that driver said no. The
+--    released driver's own rows stay too: his 'accepted' row keeps the ride away
+--    from him. Returns how many offers were reopened.
+CREATE OR REPLACE FUNCTION public._reopen_ride_offers(p_ride_id uuid, p_released_driver uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_n integer;
+BEGIN
+  UPDATE public.ride_offers
+     SET status = 'expired',
+         expires_at = now() - make_interval(secs => GREATEST(0, public.get_platform_config_numeric('reoffer_cooldown_s', 120))::int + 1)
+   WHERE ride_id = p_ride_id
+     AND driver_profile_id IS DISTINCT FROM p_released_driver
+     AND status IN ('superseded', 'expired');
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public._reopen_ride_offers(uuid, uuid) FROM PUBLIC, anon, authenticated;
+
+-- 8. The automatic release (release_rides_from_dead_drivers, block A) gets the
+--    same two things as the support release: the previous driver's GPS and
+--    proximity state is reset, and the other drivers' offers are reopened.
+--    Patched in place from the live body (md5 c99dd7b8...), refused on any other.
+DO $patch$
+DECLARE
+  c_fn constant regprocedure := 'public.release_rides_from_dead_drivers()'::regprocedure;
+  c_old_md5 constant text := 'c99dd7b82a9cddaa2bf21a48d9bff7f7';
+  c_new_md5 constant text := 'cdfaba6fef339647c23c7fcb0a6de317';
+  c_upd_old constant text := E'        last_dispatched_at = NULL,\n';
+  c_upd_new constant text := E'        last_dispatched_at = NULL,\n'
+                          || E'        -- 00660: the previous driver''s GPS and proximity state goes with him,\n'
+                          || E'        -- as in admin_release_active_ride.\n'
+                          || E'        driver_gps_status = ''healthy'',\n'
+                          || E'        driver_gps_unavailable_at = NULL,\n'
+                          || E'        gps_override_requested_at = NULL,\n'
+                          || E'        gps_override_confirmed_at = NULL,\n'
+                          || E'        gps_check_distance_m = NULL,\n'
+                          || E'        driver_custom_rate_cup = NULL,\n'
+                          || E'        proximity_pickup_notified_at = NULL,\n';
+  c_off_old constant text := E'WHERE ride_id = r.id AND driver_profile_id = r.driver_id AND status = ''pending'';\n';
+  c_off_new constant text := E'WHERE ride_id = r.id AND driver_profile_id = r.driver_id AND status = ''pending'';\n'
+                          || E'\n'
+                          || E'      -- 00660: the drivers offered the ride before he took it get it again.\n'
+                          || E'      PERFORM public._reopen_ride_offers(r.id, r.driver_id);\n';
+  v_src text;
+  v_md5 text;
+  v_def text;
+BEGIN
+  SELECT prosrc, md5(prosrc) INTO v_src, v_md5 FROM pg_proc WHERE oid = c_fn;
+  IF v_md5 = c_new_md5 THEN
+    RETURN;
+  END IF;
+  IF v_md5 IS DISTINCT FROM c_old_md5 THEN
+    RAISE EXCEPTION '00660: release_rides_from_dead_drivers is not the body this migration patches (md5 %)', v_md5;
+  END IF;
+  IF (length(v_src) - length(replace(v_src, c_upd_old, ''))) / length(c_upd_old) <> 1
+     OR (length(v_src) - length(replace(v_src, c_off_old, ''))) / length(c_off_old) <> 1 THEN
+    RAISE EXCEPTION '00660: release_rides_from_dead_drivers does not contain each patched text exactly once';
+  END IF;
+  v_def := pg_get_functiondef(c_fn);
+  EXECUTE replace(replace(v_def, c_upd_old, c_upd_new), c_off_old, c_off_new);
+  SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = c_fn;
+  IF v_md5 IS DISTINCT FROM c_new_md5 THEN
+    RAISE EXCEPTION '00660: release_rides_from_dead_drivers patched to an unexpected body (md5 %)', v_md5;
+  END IF;
+END
+$patch$;
+
+-- 9. Everything the active view shows, in one call.
 CREATE OR REPLACE FUNCTION public.admin_active_ride_context(p_ride_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -302,7 +379,7 @@ $function$;
 REVOKE ALL ON FUNCTION public.admin_active_ride_context(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_active_ride_context(uuid) TO authenticated, service_role;
 
--- 8. Back to search, now (accepted, driver_en_route). What release_rides_from_dead_drivers
+-- 10. Back to search, now (accepted, driver_en_route). What release_rides_from_dead_drivers
 --    block A does, plus: the previous driver's GPS state is reset, so a rider
 --    confirmation given to that driver does not let the next one skip the
 --    arrival gate; the 00628 wait alert is stamped (support is already on it);
@@ -319,6 +396,7 @@ DECLARE
   v_reason text := btrim(COALESCE(p_reason, ''));
   v_ride public.rides%ROWTYPE;
   v_driver_user uuid;
+  v_reopened integer;
 BEGIN
   IF NOT public.is_admin() THEN
     RETURN jsonb_build_object('error', 'forbidden');
@@ -348,9 +426,10 @@ BEGIN
     RETURN jsonb_build_object('error', 'scheduled_not_due', 'status', v_ride.status);
   END IF;
 
-  UPDATE public.driver_profiles
-     SET is_online = false, auto_offline_at = COALESCE(auto_offline_at, now())
-   WHERE id = v_ride.driver_id AND is_online;
+  -- He reconnects by hand (the push tells him). No auto_offline_at: the
+  -- trigger tg_driver_profiles_shift_intent clears it on any is_online change a
+  -- person makes, an admin included.
+  UPDATE public.driver_profiles SET is_online = false WHERE id = v_ride.driver_id AND is_online;
 
   UPDATE public.rides SET
     status = 'searching', driver_id = NULL, accepted_at = NULL,
@@ -358,6 +437,7 @@ BEGIN
     driver_gps_status = 'healthy', driver_gps_unavailable_at = NULL,
     gps_override_requested_at = NULL, gps_override_confirmed_at = NULL,
     gps_check_distance_m = NULL, driver_custom_rate_cup = NULL,
+    proximity_pickup_notified_at = NULL,
     updated_at = now()
   WHERE id = p_ride_id;
 
@@ -365,6 +445,7 @@ BEGIN
   -- and the driver's acceptance_rate does not move.
   UPDATE public.ride_offers SET status = 'expired'
    WHERE ride_id = p_ride_id AND driver_profile_id = v_ride.driver_id AND status = 'pending';
+  v_reopened := public._reopen_ride_offers(p_ride_id, v_ride.driver_id);
 
   UPDATE public.stuck_ride_alerts SET resolved_at = now() WHERE ride_id = p_ride_id AND resolved_at IS NULL;
 
@@ -377,7 +458,7 @@ BEGIN
   INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values, reason)
   VALUES (v_admin, 'support_release_ride', 'ride', p_ride_id::text,
           jsonb_build_object('status', v_ride.status, 'driver_profile_id', v_ride.driver_id),
-          jsonb_build_object('status', 'searching'), v_reason);
+          jsonb_build_object('status', 'searching', 'offers_reopened', v_reopened), v_reason);
 
   PERFORM public._support_ride_push('admin_release_active_ride', p_ride_id, v_ride.customer_id,
     'Buscando otro conductor',
@@ -403,7 +484,7 @@ $function$;
 REVOKE ALL ON FUNCTION public.admin_release_active_ride(uuid, text, uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_release_active_ride(uuid, text, uuid, text) TO authenticated, service_role;
 
--- 9. One step forward, standing in for the driver's tap. No GPS gate: that is
+-- 11. One step forward, standing in for the driver's tap. No GPS gate: that is
 --    what support is for. "Viaje iniciado" takes the pickup time from the GPS
 --    departure; with none, pickup = arrival, so no wait is charged.
 CREATE OR REPLACE FUNCTION public.admin_advance_active_ride(p_ride_id uuid, p_expected_status text,
@@ -488,7 +569,7 @@ $function$;
 REVOKE ALL ON FUNCTION public.admin_advance_active_ride(uuid, text, uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_advance_active_ride(uuid, text, uuid, text) TO authenticated, service_role;
 
--- 10. Complete and charge: the agreed price minus the discount plus the recorded
+-- 12. Complete and charge: the agreed price minus the discount plus the recorded
 --     wait, through complete_ride_and_pay (it admits admin callers and moves the
 --     money exactly as for any ride). The amount must be the one support saw.
 CREATE OR REPLACE FUNCTION public.admin_complete_active_ride(p_ride_id uuid, p_expected_status text,
@@ -568,8 +649,8 @@ BEGIN
     SELECT p.oid FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
       '_wait_charge_for', 'calculate_wait_charge', '_ride_gps_departure_at', '_active_ride_charge_preview',
-      '_support_ride_push', 'admin_active_ride_context', 'admin_release_active_ride',
-      'admin_advance_active_ride', 'admin_complete_active_ride')
+      '_support_ride_push', '_reopen_ride_offers', 'release_rides_from_dead_drivers', 'admin_active_ride_context',
+      'admin_release_active_ride', 'admin_advance_active_ride', 'admin_complete_active_ride')
       AND position(chr(13) IN p.prosrc) > 0
   LOOP
     EXECUTE replace(pg_get_functiondef(r.oid), chr(13), '');
@@ -587,6 +668,10 @@ BEGIN
      IS DISTINCT FROM 'dcf518cffa45073e26fbd84833776bc5' THEN
     RAISE EXCEPTION '00660 check: calculate_wait_charge has an unexpected body';
   END IF;
+  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.release_rides_from_dead_drivers()'::regprocedure)
+     IS DISTINCT FROM 'cdfaba6fef339647c23c7fcb0a6de317' THEN
+    RAISE EXCEPTION '00660 check: release_rides_from_dead_drivers has an unexpected body';
+  END IF;
 
   IF (SELECT allowed_roles FROM public.valid_transitions
        WHERE from_status = 'accepted' AND to_status = 'arrived_at_pickup')
@@ -598,15 +683,16 @@ BEGIN
   FOR r IN
     SELECT p.oid::regprocedure AS fn FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
-      '_wait_charge_for', '_ride_gps_departure_at', '_active_ride_charge_preview', '_support_ride_push')
+      '_wait_charge_for', '_ride_gps_departure_at', '_active_ride_charge_preview', '_support_ride_push',
+      '_reopen_ride_offers')
   LOOP
     v_n := v_n + 1;
     IF has_function_privilege('anon', r.fn, 'EXECUTE') OR has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
       RAISE EXCEPTION '00660 check: % is executable by a client role', r.fn;
     END IF;
   END LOOP;
-  IF v_n <> 4 THEN
-    RAISE EXCEPTION '00660 check: expected 4 internal functions, found %', v_n;
+  IF v_n <> 5 THEN
+    RAISE EXCEPTION '00660 check: expected 5 internal functions, found %', v_n;
   END IF;
 
   v_n := 0;
@@ -631,8 +717,8 @@ BEGIN
     SELECT 1 FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
       '_wait_charge_for', 'calculate_wait_charge', '_ride_gps_departure_at', '_active_ride_charge_preview',
-      '_support_ride_push', 'admin_active_ride_context', 'admin_release_active_ride',
-      'admin_advance_active_ride', 'admin_complete_active_ride')
+      '_support_ride_push', '_reopen_ride_offers', 'release_rides_from_dead_drivers', 'admin_active_ride_context',
+      'admin_release_active_ride', 'admin_advance_active_ride', 'admin_complete_active_ride')
       AND position(chr(13) IN p.prosrc) > 0
   ) THEN
     RAISE EXCEPTION '00660 check: a function body still has a carriage return';
