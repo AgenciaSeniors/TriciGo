@@ -133,10 +133,11 @@ for fn in "admin_active_ride_context('$R_IP')" "admin_release_active_ride('$R_AC
   val "G2 a rider is refused: ${fn%%(*}" "$(as $RIDER "SELECT (public.$fn)->>'error';")" "forbidden"
 done
 err "G3 anon cannot call them" "BEGIN; SET LOCAL ROLE anon; SELECT public.admin_active_ride_context('$R_IP'); ROLLBACK;" "permission denied"
-val "G4 the helpers are not executable by clients" \
-  "SELECT count(*) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-     AND p.proname IN ('_wait_charge_for','_ride_gps_departure_at','_active_ride_charge_preview','_support_ride_push')
-     AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'));" "0"
+val "G4 the four helpers exist and are not executable by clients" \
+  "SELECT count(*) || '|' || count(*) FILTER (WHERE has_function_privilege('anon', p.oid, 'EXECUTE')
+                                          OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))
+   FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+     AND p.proname IN ('_wait_charge_for','_ride_gps_departure_at','_active_ride_charge_preview','_support_ride_push');" "4|0"
 
 echo "== context =="
 val "C1 allowed actions per status" \

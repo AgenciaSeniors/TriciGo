@@ -497,10 +497,11 @@ for fn in "admin_active_ride_context('$R_IP')" "admin_release_active_ride('$R_AC
   val "G2 a rider is refused: ${fn%%(*}" "$(as $RIDER "SELECT (public.$fn)->>'error';")" "forbidden"
 done
 err "G3 anon cannot call them" "BEGIN; SET LOCAL ROLE anon; SELECT public.admin_active_ride_context('$R_IP'); ROLLBACK;" "permission denied"
-val "G4 the helpers are not executable by clients" \
-  "SELECT count(*) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-     AND p.proname IN ('_wait_charge_for','_ride_gps_departure_at','_active_ride_charge_preview','_support_ride_push')
-     AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'));" "0"
+val "G4 the four helpers exist and are not executable by clients" \
+  "SELECT count(*) || '|' || count(*) FILTER (WHERE has_function_privilege('anon', p.oid, 'EXECUTE')
+                                          OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))
+   FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+     AND p.proname IN ('_wait_charge_for','_ride_gps_departure_at','_active_ride_charge_preview','_support_ride_push');" "4|0"
 
 echo "== context =="
 val "C1 allowed actions per status" \
@@ -602,7 +603,7 @@ echo "passed $PASS, failed $FAIL"
 Follow CLAUDE.md § "Cómo probar migraciones SQL de verdad sin tocar prod": user `pgtest`, port 5433, PostGIS installed (`apt-get install -y postgresql-16-postgis-3` if missing).
 
 Run: `bash supabase/tests/00660/run.sh none`
-Expected: the scaffold and grid load (no "scaffold failed"/"grid failed"), and every test FAILs: the functions do not exist yet. The last line reads `passed 0, failed 45`.
+Expected: the scaffold and grid load (no "scaffold failed"/"grid failed"), and every test FAILs except W2: the functions do not exist yet. W2 checks that the live `calculate_wait_charge` still gives the grid's answers, so it passes before and after the migration. The last line reads `passed 1, failed 44`.
 
 - [ ] **Step 3: Commit**
 
