@@ -2241,6 +2241,52 @@ Cuando el despacho no encuentra conductor, soporte ayuda desde el panel: banner 
 
 ---
 
+### Soporte con viajes trabados que ya tienen conductor (00660, 2026-10-12)
+
+Desde la 00660, `/rides/[id]/assist` también ayuda a un viaje `accepted`, `driver_en_route`, `arrived_at_pickup`, `in_progress` o `arrived_at_destination`: la app del conductor murió, no tiene GPS para marcar "Llegué" o no puede terminar. Diseño: `docs/superpowers/specs/2026-10-12-stuck-ride-support-design.md`. Ensayo: `supabase/tests/00660/run.sh` (RED: 79 fallos; GREEN 92/92, con la migración aplicada dos veces, una copia CRLF y pruebas negativas de sus autochequeos). **Estado:** ensayada en prod el 2026-10-12 dentro de un bloque revertido (la migración llegó intacta, con md5 `6e687d1f…`, y dejó en cada función el mismo md5 que en el ensayo local; se probaron el viaje completo con las cuentas demo, la liberación y el rechazo con un conductor equivocado). Todavía no está aplicada.
+
+- **Cuatro RPC, solo admin y super_admin** (marketing no): `admin_active_ride_context`, `admin_release_active_ride` (vuelve a buscar conductor ya), `admin_advance_active_ride` (un paso: llegada, inicio, destino) y `admin_complete_active_ride` (cobra el precio acordado más la espera registrada, por `complete_ride_and_pay`).
+  - Las tres acciones reciben el estado y el `driver_id` que vio soporte, y responden `ride_changed` si cualquiera de los dos cambió.
+  - Completar recibe además el total que soporte confirmó, y responde `amount_changed` si cambió.
+  - Las cuatro rechazan `self_ride` cuando el admin es el pasajero o el conductor del viaje.
+  - Los rechazos son `{error, status}`, como en 00628.
+- **El inicio sale del rastro GPS.** "Marcar viaje iniciado" usa `_ride_gps_departure_at`: el primer punto a más de 100 m de la recogida, tomado a la hora más temprana entre la del celular y la del servidor.
+  - Si entre ese punto y el anterior pasaron más de 6 minutos, se toma el anterior: la app no estaba corriendo y esa espera no se cobra.
+  - Lo medido: con la app viva, los conductores mandan un punto cada pocos segundos mientras esperan, y el hueco más largo fue de 5,5 minutos.
+  - Sin rastro, no hay espera.
+- **La espera la calcula una sola función.** `calculate_wait_charge` pasó a ser una envoltura de `_wait_charge_for`, que es pura y calcula lo mismo; la usan también la vista previa del panel y el avance.
+  - La migración se negó a reemplazar un cuerpo que no fuera el md5 `2c0679d1…`.
+  - En el ensayo en prod, la función nueva dio lo mismo que la vieja en los 21 viajes reales con llegada y recogida.
+- **Las dos liberaciones reabren las ofertas de los demás conductores.**
+  - `accept_ride_v2` deja `superseded` las ofertas pendientes de los otros, y `dispatch_ride` solo reactiva filas `expired` con más de `reoffer_cooldown_s`.
+  - Hasta la 00660, un viaje liberado (por soporte o por la liberación automática de los 12 minutos) no les volvía a llegar a los que ya lo habían recibido, y con el despacho en paralelo eso solían ser todos los cercanos.
+  - `_reopen_ride_offers` las pasa a `expired` con un `expires_at` vencido. Las rechazadas no se tocan.
+  - El bloque A de `release_rides_from_dead_drivers` se parchó sobre el cuerpo vivo (md5 `c99dd7b8…` → `cdfaba6f…`). Además, ahora borra el estado GPS y el aviso de proximidad del conductor anterior. **Una migración que la redefina tiene que partir de este cuerpo.**
+- **El conductor liberado queda fuera de línea y reconecta a mano.** `tg_driver_profiles_shift_intent` borra `auto_offline_at` cuando una persona, un admin incluido, cambia `is_online`, así que la liberación de soporte no lo escribe.
+- **Un envío no se cobra sin prueba de entrega.** `tg_rides_require_delivery_proof` deja pasar a los admins, así que `admin_complete_active_ride` rechaza un viaje de carga sin el código del destinatario y la foto (`delivery_proof_missing`), y el contexto no ofrece "complete".
+- **El efectivo a cobrar se calcula a partir de la fila del viaje.** `complete_ride_and_pay` devuelve `cash_amount_cup: 0` en un viaje en efectivo: solo llena ese valor en los mixtos, en los divididos y cuando falta saldo (00637). La respuesta de soporte trae `cash_amount_cup`:
+  - el total en un viaje en efectivo;
+  - el `cash_amount_cup` de la fila en uno mixto;
+  - 0 en cualquier otro caso.
+
+  El panel deja ese aviso 20 segundos en pantalla, para que soporte se lo pase al conductor.
+- **Pushes** por `cron_http_post` con la etiqueta `support-ride-resolved`.
+  - Soporte avisa al pasajero solo al liberar. En el avance y el cobro, el pasajero ya recibe el push de cambio de estado.
+  - El conductor recibe uno en la liberación y en cada avance (categoría `system`, `data.event = 'support_ride_update'`).
+  - Al liberar, el pasajero puede recibir dos pushes juntos: el de soporte y el de la ronda nueva del despacho.
+- **Transición nueva:** `accepted → arrived_at_pickup`, solo para admin y super_admin, para que "Marcar llegada" sea un solo paso con un solo push al pasajero.
+- **App del conductor (próximo build):** el sondeo de 5 s del viaje aplica un estado del servidor que esté más adelante que el de la pantalla, nunca uno anterior. Un viaje que soporte terminó muestra el cobro real.
+- **Orden de bloqueos:** la liberación bloquea primero al conductor (`FOR NO KEY UPDATE`) y después el viaje, como el bloque A y `update_driver_position`. El avance y el cobro bloquean primero el viaje, como `complete_ride_and_pay`. Un bloqueo mutuo raro con `cancel_ride` (40P01) se muestra en el panel como `ride_changed`.
+- **Diagnóstico:**
+  ```sql
+  SELECT action, target_id, reason, new_values, created_at FROM admin_actions
+  WHERE action IN ('support_release_ride', 'support_advance_ride', 'support_complete_ride')
+  ORDER BY created_at DESC LIMIT 20;
+  ```
+  Un push que no salió deja `rpc_attempt_log` con `push_failed`, y una liberación cuyo despacho falló deja `dispatch_failed`. Las dos acciones siguen valiendo.
+
+---
+
 ### Chat, soporte, objetos perdidos e incidentes: qué escribe un cliente (00653, 2026-10-11)
 
 Hasta la 00653, las políticas de estas cinco tablas solo miraban quién escribía, nunca qué. Medido en prod como cuentas reales, en bloques revertidos:
