@@ -101,6 +101,16 @@ export {
   type CampaignChannelResult,
 } from './services/campaign.service';
 export {
+  teamService,
+  type TeamRole,
+  type TeamMember,
+  type TeamInvitation,
+  type TeamListing,
+  type InvitationSent,
+  type PublicInvitation,
+  type PublicInvitationStatus,
+} from './services/team.service';
+export {
   marketingStatsService,
   type PromoCodePerformance,
   type ReferralCodePerformance,
