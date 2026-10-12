@@ -111,28 +111,57 @@ BEGIN
 END;
 $function$;
 
--- 4. When the GPS trail shows the driver leaving the pickup: the first point more
---    than 100 m from it at or after p_since. Per point, the earlier of the phone's
---    time and the server's receipt: a later departure means more wait for the
---    rider, so it is never later than the server saw the point (00659 uses the
---    later one for arrival, for the same reason). Only the ride's driver's points.
+-- 4. When the GPS trail shows the driver leaving the pickup. Only the ride's
+--    current driver's points at or after p_since count, each at the earlier of
+--    the phone's time and the server's receipt: a later departure means more
+--    wait for the rider, so it is never later than the server saw the point
+--    (00659 uses the later one for arrival, for the same reason).
+--    f = the first point more than 100 m from the pickup; p = the last point
+--    before it, or p_since when there is none. When more than 5 minutes pass
+--    between p and f the app was not running, and the departure is p: the last
+--    moment the trail proves the driver was still there. Otherwise it is f.
+--    Never later than now(); NULL with no far point or no p_since.
 CREATE OR REPLACE FUNCTION public._ride_gps_departure_at(p_ride_id uuid, p_since timestamptz)
  RETURNS timestamptz
- LANGUAGE sql
+ LANGUAGE plpgsql
  STABLE
  SET search_path TO 'public', 'extensions', 'pg_catalog'
 AS $function$
-  SELECT CASE WHEN s.m IS NULL THEN NULL ELSE LEAST(s.m, now()) END
-  FROM (
-    SELECT min(LEAST(le.recorded_at, le.received_at)) AS m
-    FROM public.ride_location_events le
-    JOIN public.rides r ON r.id = le.ride_id
-    WHERE le.ride_id = p_ride_id
-      AND p_since IS NOT NULL
-      AND le.driver_id = r.driver_id
-      AND LEAST(le.recorded_at, le.received_at) >= p_since
-      AND ST_Distance(le.location, r.pickup_location) > 100
-  ) s;
+DECLARE
+  -- Measured in prod: while a driver waits at the pickup with the app alive, it
+  -- sends a point every few seconds (the longest gap seen was 5.5 minutes). A
+  -- longer silence means the app was not running, and the wait it did not
+  -- record is not charged.
+  c_max_gap constant interval := interval '5 minutes';
+  v_far timestamptz;
+  v_last timestamptz;
+BEGIN
+  IF p_since IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT min(LEAST(le.recorded_at, le.received_at)) INTO v_far
+  FROM public.ride_location_events le
+  JOIN public.rides r ON r.id = le.ride_id
+  WHERE le.ride_id = p_ride_id
+    AND le.driver_id = r.driver_id
+    AND LEAST(le.recorded_at, le.received_at) >= p_since
+    AND ST_Distance(le.location, r.pickup_location) > 100;
+  IF v_far IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT max(LEAST(le.recorded_at, le.received_at)) INTO v_last
+  FROM public.ride_location_events le
+  JOIN public.rides r ON r.id = le.ride_id
+  WHERE le.ride_id = p_ride_id
+    AND le.driver_id = r.driver_id
+    AND LEAST(le.recorded_at, le.received_at) >= p_since
+    AND LEAST(le.recorded_at, le.received_at) < v_far;
+  v_last := COALESCE(v_last, p_since);
+  IF v_far - v_last > c_max_gap THEN
+    RETURN LEAST(v_last, now());
+  END IF;
+  RETURN LEAST(v_far, now());
+END;
 $function$;
 REVOKE ALL ON FUNCTION public._ride_gps_departure_at(uuid, timestamptz) FROM PUBLIC, anon, authenticated;
 
@@ -365,8 +394,9 @@ BEGIN
         'recorded_at', le.recorded_at, 'received_at', le.received_at,
         'distance_to_pickup_m', round(ST_Distance(le.location, v_ride.pickup_location))::int,
         'distance_to_dropoff_m', round(ST_Distance(le.location, v_ride.dropoff_location))::int)
-      FROM public.ride_location_events le WHERE le.ride_id = v_ride.id
-      ORDER BY le.recorded_at DESC, le.id DESC LIMIT 1),
+      FROM public.ride_location_events le
+      WHERE le.ride_id = v_ride.id AND le.driver_id = v_ride.driver_id
+      ORDER BY GREATEST(le.recorded_at, le.received_at) DESC, le.recorded_at DESC, le.id DESC LIMIT 1),
     'alert', (SELECT jsonb_build_object('reason', a.reason, 'detected_at', a.detected_at)
       FROM public.stuck_ride_alerts a WHERE a.ride_id = v_ride.id AND a.resolved_at IS NULL),
     'driver_profile_id', v_ride.driver_id,

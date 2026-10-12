@@ -126,10 +126,22 @@ val "D2 a far point from before the arrival is ignored" \
   "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '20 minutes'")
    SELECT public._ride_gps_departure_at('$R_PICK', now() - interval '15 minutes') IS NULL; ROLLBACK;" "t"
 val "D3 never later than the server received it (a phone time in the future is capped)" \
-  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() + interval '30 minutes'")
+  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '2 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() + interval '30 minutes'")
    SELECT public._ride_gps_departure_at('$R_PICK', now() - interval '15 minutes') = now(); ROLLBACK;" "t"
 val "D4 no point: NULL" "SELECT public._ride_gps_departure_at('$R_PICK', now() - interval '15 minutes') IS NULL;" "t"
 val "D5 no arrival time: NULL" "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") SELECT public._ride_gps_departure_at('$R_PICK', NULL) IS NULL; ROLLBACK;" "t"
+DEP="SELECT round(extract(epoch FROM now() - public._ride_gps_departure_at('$R_PICK', now() - interval '15 minutes')) / 60);"
+val "D6 a 14-minute silence before the first far point: departure = the last near point" \
+  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '14 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now()") $DEP ROLLBACK;" "14"
+val "D6 ...and the arrival when no point came before" \
+  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '1 minute'") $DEP ROLLBACK;" "15"
+val "D7 another driver's points on the ride are ignored (far or near)" \
+  "BEGIN; UPDATE public.rides SET driver_id = '$DP_ANA' WHERE id = '$R_PICK';
+     $(PT $R_PICK $DP_ANA "$PT_FAR" "now() - interval '12 minutes'") $(PT $R_PICK $DP_ANA "$PT_NEAR" "now() - interval '10 minutes'")
+     UPDATE public.rides SET driver_id = '$DP_DIEGO' WHERE id = '$R_PICK';
+     $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") $DEP ROLLBACK;" "15"
+val "D8 the silence limit is 5 minutes: 5 min 1 s already counts as silence (D1 is exactly 5)" \
+  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '14 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '8 minutes 59 seconds'") $DEP ROLLBACK;" "14"
 
 echo "== who may act =="
 for fn in "admin_active_ride_context('$R_IP')" "admin_release_active_ride('$R_ACC','accepted','$DP_DIEGO','no responde')" \
@@ -167,7 +179,7 @@ val "C2 in_progress preview: agreed 3000, discount 500, waited 10 -> 5 billable"
      ((p->>'total_cup')::int = 2500 + (p->>'wait_cup')::int)::text
      FROM (SELECT public.admin_active_ride_context('$R_IP')->'preview' p) s;")" "3000|500|5|true"
 val "C3 arrived_at_pickup: start time from the GPS departure" \
-  "$(as $ADMIN "RESET ROLE; $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") SET LOCAL ROLE authenticated;
+  "$(as $ADMIN "RESET ROLE; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '12 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") SET LOCAL ROLE authenticated;
      SELECT (c->>'start_pickup_source') || '|' || round(extract(epoch FROM now() - (c->>'start_pickup_at')::timestamptz) / 60)
      FROM (SELECT public.admin_active_ride_context('$R_PICK') c) s;")" "gps|9"
 val "C4 driver, vehicle label without blank fields, alert" \
@@ -176,6 +188,10 @@ val "C4 driver, vehicle label without blank fields, alert" \
 val "C5 no snapshot, no preview" "$(as $ADMIN "SELECT public.admin_active_ride_context('$R_NOSNAP')->'preview' = 'null'::jsonb;")" "t"
 val "C13 the ride's driver at the top level, for the panel to send back" \
   "$(as $ADMIN "SELECT public.admin_active_ride_context('$R_IP')->>'driver_profile_id';")" "$DP_DIEGO"
+val "C17 the last point is the ride's driver's: a newer point of another driver is not shown" \
+  "$(as $ADMIN "RESET ROLE; $(PT $R_IP $DP_DIEGO "$PT_FAR" "now() - interval '5 minutes'") UPDATE public.rides SET driver_id = '$DP_ANA' WHERE id = '$R_IP';
+     $(PT $R_IP $DP_ANA "$PT_NEAR" "now() - interval '1 minute'") UPDATE public.rides SET driver_id = '$DP_DIEGO' WHERE id = '$R_IP'; SET LOCAL ROLE authenticated;
+     SELECT (public.admin_active_ride_context('$R_IP')->'last_point'->>'recorded_at')::timestamptz = now() - interval '5 minutes';")" "t"
 val "C14 a ride scheduled later offers neither release nor advance" \
   "$(as $ADMIN "SELECT public.admin_active_ride_context('$R_SCHED')->'allowed_actions';")" "[]"
 
@@ -264,7 +280,7 @@ val "A1 accepted -> arrived_at_pickup in one transition, one status push, arriva
        (SELECT count(*) FROM net.calls WHERE body->>'title' = 'Conductor llegó') || '|' ||
        (SELECT driver_arrived_at = now() FROM public.rides WHERE id = '$R_ACC');")" "arrived_at_pickup;1|1|true"
 val "A2 arrived_at_pickup -> in_progress with pickup at the GPS departure" \
-  "$(as $ADMIN "RESET ROLE; $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") SET LOCAL ROLE authenticated;
+  "$(as $ADMIN "RESET ROLE; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '12 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") SET LOCAL ROLE authenticated;
      SELECT public.admin_advance_active_ride('$R_PICK', 'arrived_at_pickup', '$DP_DIEGO', 'sin gps')->>'status';
      RESET ROLE; SELECT round(extract(epoch FROM now() - pickup_at) / 60) FROM public.rides WHERE id = '$R_PICK';")" "in_progress;9"
 val "A3 no departure point: pickup = arrival, so no wait" \
