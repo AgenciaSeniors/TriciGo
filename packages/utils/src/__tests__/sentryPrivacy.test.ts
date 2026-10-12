@@ -227,4 +227,31 @@ describe('stripUrlFragments', () => {
     expect(stripUrlFragments('tricigo-driver://auth/callback')).toBe('tricigo-driver://auth/callback');
     expect(stripUrlFragments('error #418')).toBe('error #418');
   });
+
+  it('takes linear time on a crafted link, so it cannot freeze the page', () => {
+    // A link to tricigo.com/#a',/,/,/… reaches every event as a navigation breadcrumb, untruncated.
+    const tail = ',/'.repeat(250_000);
+    const crafted = `https://tricigo.com/#a'${tail}`;
+    const t0 = performance.now();
+    const out = stripUrlFragments(crafted);
+    expect(performance.now() - t0).toBeLessThan(250);
+    expect(out).toBe(`https://tricigo.com/'${tail}`);
+  });
+
+  it('cuts a later fragment in the same run once an earlier # was not a URL', () => {
+    expect(stripUrlFragments('div#x,/auth/callback#access_token=a')).toBe('div#x,/auth/callback');
+    expect(stripUrlFragments('a#/x#y')).toBe('a#/x#y');
+  });
+
+  it('redacts session tokens that are not in a URL fragment', () => {
+    expect(stripUrlFragments(`hash: #access_token=${ACCESS}&refresh_token=${REFRESH}&type=recovery`)).toBe(
+      'hash: #access_token=[Filtered]&refresh_token=[Filtered]&type=recovery',
+    );
+    expect(stripUrlFragments(`https://tricigo.com/?refresh_token=${REFRESH}&x=1`)).toBe(
+      'https://tricigo.com/?refresh_token=[Filtered]&x=1',
+    );
+    expect(stripUrlFragments(`/login?return=%2Fauth%2Fcallback%23access_token%3D${ACCESS}%26provider_refresh_token%3Dz`)).toBe(
+      '/login?return=%2Fauth%2Fcallback%23access_token%3D[Filtered]%26provider_refresh_token%3D[Filtered]',
+    );
+  });
 });

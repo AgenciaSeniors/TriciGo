@@ -17,25 +17,53 @@
 // Pure and dependency-free, like sentryNoise.ts.
 // ============================================================
 
-/** What can sit right before a URL in free text. No lookbehind: this runs in browsers that lack it. */
-const URL_PREFIX = '(^|[\\s"\'`(<>=:,;[{])';
 /**
- * prefix, then a URL up to its fragment, then the fragment to cut. The URL is a path or a
- * protocol-relative URL (`/…`, `//host…`), optionally after a scheme (`https:`, `tricigo-driver:`).
- * It must start right after the prefix, so `div#root`, `error #418` and `#ff6a00` are not URLs.
- * The fragment runs to the next space, quote or angle bracket, `)` included: a fragment may hold one.
+ * A run of text a URL can sit in: it ends at a space, quote or angle bracket. A fragment runs to the
+ * end of its run, `)` included (a fragment may hold one).
  */
-const FRAGMENT_RE = new RegExp(
-  `${URL_PREFIX}((?:[a-z][a-z0-9+.-]*:)?\\/[^\\s"'\`<>#]*)#[^\\s"'\`<>]*`,
-  'gi',
-);
+const RUN_RE = /[^\s"'`<>]+/g;
+/**
+ * Characters inside a run after which a `/` starts a URL. With the start of the run they cover a path
+ * (`/…`), a protocol-relative URL (`//host…`) and a URL with a scheme (`https://…`,
+ * `tricigo-driver://…`: the `/` follows the `:`). So `div#root`, `error #418` and `#ff6a00` are not URLs.
+ */
+const URL_START_AFTER = '(=:,;[{';
+
+/**
+ * GoTrue's session parameters, wherever they sit (a fragment that is not part of a URL, a query, a
+ * URL-encoded `return=`): their value goes. Names longest first, so provider_refresh_token wins.
+ */
+const SESSION_PARAM_RE = /((?:provider_refresh_token|provider_token|refresh_token|access_token)(?:=|%3D))[^&#%\s"'`<>]*/gi;
 
 /** Holds SDK scopes (cyclic) and is deleted before the envelope is built: never walked. */
 const SKIP_KEYS = new Set(['sdkProcessingMetadata']);
 
-/** Removes the fragment of every URL in `text`; text without one comes back unchanged. */
+/**
+ * Cuts a run at the first `#` that ends a URL. One pass, no backtracking: a crafted link of hundreds
+ * of KB reaches every event as a breadcrumb, and a regex that backtracks froze the page (229 s on
+ * 500 KB of `,/`).
+ */
+function cutRun(run: string): string {
+  let inUrl = false;
+  for (let i = 0; i < run.length; i++) {
+    const c = run[i];
+    if (c === '#') {
+      if (inUrl) return run.slice(0, i);
+      inUrl = false;
+    } else if (c === '/' && !inUrl && (i === 0 || URL_START_AFTER.includes(run[i - 1] as string))) {
+      inUrl = true;
+    }
+  }
+  return run;
+}
+
+/**
+ * Removes the fragment of every URL in `text` and the value of every session token parameter. Text
+ * without either comes back unchanged.
+ */
 export function stripUrlFragments(text: string): string {
-  return text.replace(FRAGMENT_RE, '$1$2');
+  const cut = text.includes('#') ? text.replace(RUN_RE, (run) => (run.includes('#') ? cutRun(run) : run)) : text;
+  return cut.replace(SESSION_PARAM_RE, '$1[Filtered]');
 }
 
 function scrubNode(node: object, seen: WeakSet<object>): void {
