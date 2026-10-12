@@ -297,6 +297,17 @@ val "A8 bound to the driver support saw: retaken by Ana -> ride_changed" \
      RESET ROLE; SELECT status || '|' || driver_id || '|' || (driver_arrived_at IS NULL) FROM public.rides WHERE id = '$R_ACC';")" \
   "true;ride_changed;accepted|$DP_ANA|true"
 val "A9 refused for a ride scheduled later" "$(as $ADMIN "SELECT public.admin_advance_active_ride('$R_SCHED', 'accepted', '$DP_ANA', 'x y z')->>'error';")" "scheduled_not_due"
+val "A10 'viaje iniciado' returns the times it wrote and the wait, the one the context previewed" \
+  "$(as $ADMIN "RESET ROLE; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '12 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") SET LOCAL ROLE authenticated;
+     SELECT set_config('t.wait', public.admin_active_ride_context('$R_PICK')->'preview'->>'wait_cup', true) IS NOT NULL;
+     SELECT (r->>'status') || '|' || round(extract(epoch FROM now() - (r->>'driver_arrived_at')::timestamptz) / 60) || '|' ||
+       ((r->>'pickup_at')::timestamptz = now() - interval '9 minutes') || '|' || (r->>'wait_minutes') || '|' || (r->>'billable_minutes') || '|' ||
+       ((r->>'wait_cup')::int = current_setting('t.wait')::int AND (r->>'wait_cup')::int > 0)
+     FROM (SELECT public.admin_advance_active_ride('$R_PICK', 'arrived_at_pickup', '$DP_DIEGO', 'sin gps') r) s;")" "t;in_progress|15|true|6|1|true"
+val "A11 'llegada' returns the arrival, no pickup and no wait yet" \
+  "$(as $ADMIN "SELECT (r->>'status') || '|' || ((r->>'driver_arrived_at')::timestamptz = now()) || '|' || (r->'pickup_at')::text || '|' ||
+       (r->>'wait_minutes') || (r->>'billable_minutes') || (r->>'wait_cup')
+     FROM (SELECT public.admin_advance_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'sin gps') r) s;")" "arrived_at_pickup|true|null|000"
 val "A7 the new transition is admin-only" \
   "SELECT allowed_roles::text FROM public.valid_transitions WHERE from_status = 'accepted' AND to_status = 'arrived_at_pickup';" "{admin,super_admin}"
 
@@ -337,12 +348,34 @@ val "C16 with the proof it is offered and completes; a passenger ride never miss
      SELECT ($COMPLETE_IP)->>'success';
      SELECT public.admin_active_ride_context('$R_DEST')->>'delivery_proof_missing';")" \
   '["advance", "complete"]|false;true;false'
+val "C18 completion returns what to collect: fare, method, cash and wallet parts" \
+  "$(as $ADMIN "SELECT set_config('t.total', public.admin_active_ride_context('$R_DEST')->'preview'->>'total_cup', true) IS NOT NULL;
+     SELECT ((r->>'final_fare_cup')::int = current_setting('t.total')::int) || '|' || (r->>'payment_method') || '|' ||
+       ((r->>'cash_amount_cup')::int = current_setting('t.total')::int) || '|' || (r->>'wallet_amount_cup') || '|' || (r->>'status')
+     FROM (SELECT public.admin_complete_active_ride('$R_DEST', 'arrived_at_destination', '$DP_DIEGO', current_setting('t.total')::int, 'app caida') r) s;")" \
+  "t;true|cash|true|0|completed"
 
 echo "== pushes =="
 val "P1 a push without a service key keeps the action and logs push_failed" \
   "$(as $ADMIN "SET LOCAL client_min_messages TO error; RESET ROLE; CREATE OR REPLACE FUNCTION public.get_service_role_key() RETURNS text LANGUAGE sql AS \$f\$ SELECT NULL::text \$f\$; SET LOCAL ROLE authenticated;
      SELECT public.admin_advance_active_ride('$R_IP', 'in_progress', '$DP_DIEGO', 'sin gps')->>'status';
      RESET ROLE; SELECT outcome FROM public.rpc_attempt_log WHERE rpc_name = 'admin_advance_active_ride';")" "arrived_at_destination;push_failed"
+val "P1b a push whose cron_http_post raises keeps the release and logs push_failed for each" \
+  "$(as $ADMIN "SET LOCAL client_min_messages TO error; RESET ROLE; CREATE OR REPLACE FUNCTION public.cron_http_post(p_jobname text, url text,
+       headers jsonb DEFAULT '{}'::jsonb, body jsonb DEFAULT '{}'::jsonb, timeout_milliseconds integer DEFAULT 30000)
+       RETURNS bigint LANGUAGE plpgsql AS \$f\$ BEGIN RAISE EXCEPTION 'pg_net is down'; END \$f\$; SET LOCAL ROLE authenticated;
+     SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'no responde')->>'success';
+     RESET ROLE; SELECT (SELECT status FROM public.rides WHERE id = '$R_ACC') || '|' ||
+       (SELECT count(*) FROM public.rpc_attempt_log WHERE rpc_name = 'admin_release_active_ride' AND outcome = 'push_failed');")" "true;searching|2"
+SUPPORT_PUSHES="RESET ROLE; SELECT string_agg((body->>'title') || ' / ' || (body->>'body'), ' # ' ORDER BY id) FROM net.calls WHERE url LIKE 'support-ride-resolved%';"
+val "P2 release: the rider is told we look for another driver, the driver what support did" \
+  "$(as $ADMIN "SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'no responde')->>'success'; $SUPPORT_PUSHES")" \
+  "true;Buscando otro conductor / Tu conductor no pudo continuar. Estamos buscándote otro ahora mismo. # Soporte te quitó el viaje / Estamos buscando otro conductor para este viaje. Te pusimos fuera de línea: conéctate cuando puedas tomar viajes."
+val "P3 advance: one sentence per step for the driver" \
+  "$(as $ADMIN "SELECT public.admin_advance_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'sin gps')->>'success';
+     SELECT public.admin_advance_active_ride('$R_PICK', 'arrived_at_pickup', '$DP_DIEGO', 'sin gps')->>'success';
+     SELECT public.admin_advance_active_ride('$R_IP', 'in_progress', '$DP_DIEGO', 'sin gps')->>'success'; $SUPPORT_PUSHES")" \
+  "true;true;true;Soporte actualizó tu viaje / Marcamos que llegaste al punto de recogida. # Soporte actualizó tu viaje / Marcamos el viaje como iniciado. # Soporte actualizó tu viaje / Marcamos que llegaste al destino."
 
 if [ "$MIG" != "none" ]; then
   echo "== CRLF copy applies and leaves no carriage return =="
