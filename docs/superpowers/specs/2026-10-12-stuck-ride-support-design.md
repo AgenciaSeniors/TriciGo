@@ -60,8 +60,8 @@ Volume is low: 185 rides in the last 90 days, 9 completed, 4 of them with a wait
 ### Driver
 
 - **Every support action pushes the driver,** category `system` (always delivered), with `data.event = 'support_ride_update'` and the ride id:
-  - **Release:** "Soporte te quitó el viaje — Le pasamos el viaje a otro conductor. Te pusimos fuera de línea: conéctate cuando puedas tomar viajes."
-  - **Advance:** "Soporte actualizó tu viaje — Lo marcamos como <estado>." The status is in Spanish: llegaste a recoger, viaje iniciado, llegaste al destino.
+  - **Release:** "Soporte te quitó el viaje — Estamos buscando otro conductor para este viaje. Te pusimos fuera de línea: conéctate cuando puedas tomar viajes."
+  - **Advance:** "Soporte actualizó tu viaje", with one sentence per step: "Marcamos que llegaste al punto de recogida.", "Marcamos el viaje como iniciado." or "Marcamos que llegaste al destino."
   - **Complete:** no extra push. `notify_ride_status_change` already sends the driver "Viaje completado. ¡Revisa tus ganancias!".
 - **App change (next driver build).** While a trip is active, the 5 s trip poll in `useDriverRide` today only refreshes GPS-override fields and the fare. It will also apply a status from the server that is further along than the one on screen (`accepted` < `driver_en_route` < `arrived_at_pickup` < `in_progress` < `arrived_at_destination`), with a neutral toast "Tu viaje se actualizó — Te mostramos el estado actual del viaje." (the poll cannot tell support's change from the driver's own tap whose answer was lost; the support push says who did it).
   - It applies only a status that is further along, so a slow poll answer from before the driver's own tap cannot move the screen back.
@@ -149,6 +149,25 @@ The migration asserts all of this at the end. Refusals return `{error: <code>, s
 ## Out of scope
 
 - **A support notice** that replaces "Perdimos tu conexión" for a support release. It needs the driver app to know why the ride left; the push covers it meanwhile.
-- **Block A's leftover GPS state.** The automatic release has the same GPS-state leftover this design resets. Follow-up: apply the same reset there, in its own migration.
 - **Changing a stuck ride's price or route.** Support charges the agreed price; anything else is a dispute.
 - **Alerts for stuck pre-pickup rides** before the 12-minute release. Support finds them from the ride list or the rider.
+
+## Review round 1 (2026-10-12)
+
+A code review of the first version of 00660, and checks against prod, changed the design as follows.
+
+- **Bound to the driver support saw.** Release, advance and complete take `p_expected_driver_id` and refuse `ride_changed` when the ride's driver is another one. Without it, if the ride was released and taken by another driver while support was looking, support would act on that new driver. The context returns `driver_profile_id` for the panel to send back.
+- **Lock order.** The release locks the driver profile first, then the ride, like the automatic release and `update_driver_position`. Advance and complete lock the ride first, like `complete_ride_and_pay`.
+- **Other drivers' offers.** `accept_ride_v2` marks every other pending offer `superseded`, and `dispatch_ride` re-arms only `expired` rows past the re-offer cooldown. So after a release, nobody who had been offered the ride ever got it again. This applied to the support release and to the automatic release (block A of `release_rides_from_dead_drivers`), checked in prod on 2026-10-12. `_reopen_ride_offers` resets those rows to `expired` with a past `expires_at`, and both releases call it. `rejected` offers stay as they are. Block A is patched in place from its live body (md5 `c99dd7b8…`), and it also gets the GPS and proximity reset that the support release does.
+- **Proximity notice.** Both releases reset `proximity_pickup_notified_at`, so the rider gets "Conductor cerca" for the new driver.
+- **Driver offline by hand.** `tg_driver_profiles_shift_intent` clears `auto_offline_at` on any `is_online` change made with a user token, the admin's included. The support release no longer writes it, and the driver reconnects by hand (the push says so).
+- **Cargo rides.** Admins skip `tg_rides_require_delivery_proof`, so "Terminar y cobrar" refuses a cargo ride without the recipient code and the delivery photo (`delivery_proof_missing`). The context drops "complete" for that ride. Support can still advance it to the destination, so the driver's app collects the proof, or cancel it.
+- **A silent gap in the trail.** Measured in prod: while a driver waits at the pickup with the app alive, it sends a point every few seconds (the longest gap seen was 5.5 minutes). When more than 5 minutes pass between the last point and the first point away from the pickup, the app was not running. The departure is then the last point that proves the driver was still there (or the arrival, if there is none), and the unrecorded wait is not charged. This follows decision 4: no evidence, no charge. Only the current driver's points count.
+- **Scheduled rides not yet due.** Advance refuses `scheduled_not_due`, and the context offers neither release nor advance for them.
+- **Self-ride.** An admin who is the ride's rider or driver gets `self_ride`. Prod has a super_admin who also drives.
+- **Responses.** Advance returns the times and the wait it recorded. Complete returns `payment_method`, `cash_amount_cup` and `wallet_amount_cup` from `complete_ride_and_pay`, so support can tell a driver whose app is down how much to collect in cash.
+- **Accepted as is:**
+  - On a release the rider can get two pushes together: the support push and the dispatch-retry push of the new round.
+  - A rider who stays away from the app (for example on WhatsApp with support) for more than `searching_abandon_seconds` after a release can have the ride closed as abandoned, as after any release.
+  - The new driver can read the rider's chat with the previous one. That predates this work and also happens after the automatic release.
+
