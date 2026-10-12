@@ -458,7 +458,11 @@ BEGIN
   END IF;
   -- The driver first, then the ride: the order of release_rides_from_dead_drivers
   -- (block A) and update_driver_position, so a release never deadlocks with them.
-  PERFORM 1 FROM public.driver_profiles WHERE id = p_expected_driver_id FOR UPDATE;
+  -- NO KEY UPDATE is the lock the UPDATE below needs (it touches no key) and the
+  -- one block A's own UPDATE of the driver takes, so they queue behind each other
+  -- the same way. FOR UPDATE would also hold back the foreign-key checks of rows
+  -- that reference this driver.
+  PERFORM 1 FROM public.driver_profiles WHERE id = p_expected_driver_id FOR NO KEY UPDATE;
   SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('error', 'ride_not_found');

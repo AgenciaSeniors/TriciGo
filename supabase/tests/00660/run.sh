@@ -289,6 +289,18 @@ lock_order(){ local a b w=0 c i out; out=$(mktemp)
   wait $a $b; echo "$w|$c|$(tr -d '\r' < "$out" | sed '/^$/d' | paste -sd';' -)"; rm -f "$out"; }
 L1=$(lock_order); [ "$L1" = "1|free|true" ] && ok "L1 the release locks the driver before the ride" || ko "L1 the release locks the driver before the ride" "expected [1|free|true], got [$L1]"
 
+# L2: the release only runs an UPDATE that touches no key, so a session that merely checks a
+# foreign key on the driver's row (FOR KEY SHARE: what inserting a row that references
+# driver_profiles takes) must not hold it back. FOR UPDATE would; FOR NO KEY UPDATE does not.
+lock_weight(){ local a b i fin=0 out; out=$(mktemp)
+  PGAPPNAME=l2a $BIN/psql $CONN -d $DB -qAt -c "BEGIN; SELECT 1 FROM public.driver_profiles WHERE id = '$DP_DIEGO' FOR KEY SHARE; SELECT pg_sleep(3); ROLLBACK;" >/dev/null 2>&1 & a=$!
+  sleep 0.5
+  PGAPPNAME=l2b $BIN/psql $CONN -d $DB -qAt -v ON_ERROR_STOP=1 \
+    -c "$(as $ADMIN "SELECT public.admin_release_active_ride('$R_ENR', 'driver_en_route', '$DP_DIEGO', 'no responde')->>'success';")" >"$out" 2>&1 & b=$!
+  for i in $(seq 1 20); do kill -0 $b 2>/dev/null || { fin=1; break; }; sleep 0.1; done
+  wait $a $b; echo "$fin|$(tr -d '\r' < "$out" | sed '/^$/d' | paste -sd';' -)"; rm -f "$out"; }
+L2=$(lock_weight); [ "$L2" = "1|true" ] && ok "L2 a foreign-key check on the driver's row does not hold the release back" || ko "L2 a foreign-key check on the driver's row does not hold the release back" "expected [1|true], got [$L2]"
+
 echo "== advance =="
 val "A1 accepted -> arrived_at_pickup in exactly one transition and one status push for the ride, arrival = now" \
   "$(as $ADMIN "SELECT public.admin_advance_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'sin gps')->>'status';
