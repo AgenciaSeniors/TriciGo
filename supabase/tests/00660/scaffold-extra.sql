@@ -28,6 +28,7 @@ ALTER TABLE public.rides
   ADD COLUMN wait_time_minutes integer NOT NULL DEFAULT 0,
   ADD COLUMN wait_time_charge_cup integer NOT NULL DEFAULT 0,
   ADD COLUMN final_fare_cup integer,
+  ADD COLUMN cash_amount_cup integer,
   ADD COLUMN corporate_account_id uuid,
   ADD COLUMN canceled_by uuid,
   ADD COLUMN pickup_address text NOT NULL DEFAULT 'Capitolio',
@@ -128,13 +129,21 @@ AS $f$
 $f$;
 REVOKE ALL ON FUNCTION public.dispatch_ride(uuid, integer) FROM PUBLIC;
 
+-- A rider's wallet, for the stub below: a TriciCoin ride is paid from it up to its balance and
+-- the rest is cash (the 00637 shortfall). No row = the wallet covers the fare.
+CREATE TABLE public.stub_wallet (user_id uuid PRIMARY KEY, balance integer NOT NULL);
+
 -- complete_ride_and_pay: prod's guards copied, the money part reduced to the fare it charges.
+-- Its result carries cash_amount_cup / wallet_amount_cup as prod's does: both 0 on a cash ride,
+-- filled only for a mixed ride and for the wallet shortfall (which turns the ride into 'mixed'
+-- with rides.cash_amount_cup = the shortfall).
 CREATE TABLE public.complete_calls (ride_id uuid, driver_id uuid, distance_m integer, duration_s integer, caller uuid);
 CREATE OR REPLACE FUNCTION public.complete_ride_and_pay(p_ride_id uuid, p_driver_id uuid,
   p_actual_distance_m integer, p_actual_duration_s integer)
  RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $f$
 DECLARE v_ride public.rides%ROWTYPE; v_total integer; v_wait integer; v_driver_user_id uuid;
+  v_final integer; v_method text; v_balance integer; v_cash integer := 0; v_wallet integer := 0;
 BEGIN
   PERFORM set_config('app.trusted_driver_update', '1', true);
   SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
@@ -155,13 +164,25 @@ BEGIN
   SELECT total INTO v_total FROM public.ride_pricing_snapshots WHERE ride_id = p_ride_id AND snapshot_type = 'estimate' LIMIT 1;
   UPDATE public.rides SET status = 'completed',
          final_fare_cup = GREATEST(v_total - COALESCE(v_ride.discount_amount_cup, 0), 0) + COALESCE(v_wait, 0)
-   WHERE id = p_ride_id;
-  -- prod's result carries these keys; a cash ride is all cash.
-  RETURN (SELECT jsonb_build_object('success', true, 'final_fare_cup', r.final_fare_cup,
-                 'payment_method', r.payment_method,
-                 'cash_amount_cup', CASE WHEN r.payment_method = 'cash' THEN r.final_fare_cup ELSE 0 END,
-                 'wallet_amount_cup', CASE WHEN r.payment_method = 'cash' THEN 0 ELSE r.final_fare_cup END)
-          FROM public.rides r WHERE r.id = p_ride_id);
+   WHERE id = p_ride_id
+  RETURNING final_fare_cup, payment_method INTO v_final, v_method;
+  IF v_method = 'tricicoin' THEN
+    SELECT balance INTO v_balance FROM public.stub_wallet WHERE user_id = v_ride.customer_id;
+    v_balance := COALESCE(v_balance, v_final);
+    IF v_balance >= v_final THEN
+      v_wallet := v_final;
+    ELSE
+      v_wallet := GREATEST(v_balance, 0);
+      v_cash := v_final - v_wallet;
+      v_method := 'mixed';
+      UPDATE public.rides SET payment_method = 'mixed', cash_amount_cup = v_cash WHERE id = p_ride_id;
+    END IF;
+  ELSIF v_method = 'mixed' THEN
+    v_cash := COALESCE(v_ride.cash_amount_cup, 0);
+    v_wallet := v_final - v_cash;
+  END IF;
+  RETURN jsonb_build_object('success', true, 'final_fare_cup', v_final, 'payment_method', v_method,
+                            'cash_amount_cup', v_cash, 'wallet_amount_cup', v_wallet);
 END $f$;
 REVOKE ALL ON FUNCTION public.complete_ride_and_pay(uuid, uuid, integer, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.complete_ride_and_pay(uuid, uuid, integer, integer) TO authenticated, service_role;

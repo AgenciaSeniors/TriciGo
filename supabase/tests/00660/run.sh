@@ -361,12 +361,26 @@ val "C16 with the proof it is offered and completes; a passenger ride never miss
      SELECT ($COMPLETE_IP)->>'success';
      SELECT public.admin_active_ride_context('$R_DEST')->>'delivery_proof_missing';")" \
   '["advance", "complete"]|false;true;false'
-val "C18 completion returns what to collect: fare, method, cash and wallet parts" \
+# complete_ride_and_pay's own cash_amount_cup / wallet_amount_cup are 0 on a cash ride (prod fills
+# them only for a mixed ride, a split and the wallet shortfall), so the migration derives them
+# from the ride row: cash = the whole fare on a cash ride, the shortfall on a mixed one.
+val "C18 a cash ride: the whole fare is cash to collect, nothing from a wallet" \
   "$(as $ADMIN "SELECT set_config('t.total', public.admin_active_ride_context('$R_DEST')->'preview'->>'total_cup', true) IS NOT NULL;
      SELECT ((r->>'final_fare_cup')::int = current_setting('t.total')::int) || '|' || (r->>'payment_method') || '|' ||
        ((r->>'cash_amount_cup')::int = current_setting('t.total')::int) || '|' || (r->>'wallet_amount_cup') || '|' || (r->>'status')
      FROM (SELECT public.admin_complete_active_ride('$R_DEST', 'arrived_at_destination', '$DP_DIEGO', current_setting('t.total')::int, 'app caida') r) s;")" \
   "t;true|cash|true|0|completed"
+WALLET_RIDE="RESET ROLE; UPDATE public.rides SET payment_method = 'tricicoin' WHERE id = '$R_DEST';"
+COMPLETE_DEST="SELECT (r->>'final_fare_cup') || '|' || (r->>'payment_method') || '|' || (r->>'cash_amount_cup') || '|' || (r->>'wallet_amount_cup')
+     FROM (SELECT public.admin_complete_active_ride('$R_DEST', 'arrived_at_destination', '$DP_DIEGO', 3000, 'app caida') r) s;"
+val "C19 a wallet ride the wallet does not cover (balance 2000 of 3000): mixed, the shortfall is the cash to collect" \
+  "$(as $ADMIN "$WALLET_RIDE INSERT INTO public.stub_wallet VALUES ('$RIDER', 2000); SET LOCAL ROLE authenticated;
+     $COMPLETE_DEST RESET ROLE; SELECT payment_method || '|' || cash_amount_cup FROM public.rides WHERE id = '$R_DEST';")" \
+  "3000|mixed|1000|2000;mixed|1000"
+val "C20 a wallet ride the wallet covers: nothing to collect, the whole fare from the wallet" \
+  "$(as $ADMIN "$WALLET_RIDE INSERT INTO public.stub_wallet VALUES ('$RIDER', 5000); SET LOCAL ROLE authenticated;
+     $COMPLETE_DEST RESET ROLE; SELECT payment_method || '|' || COALESCE(cash_amount_cup, 0) FROM public.rides WHERE id = '$R_DEST';")" \
+  "3000|tricicoin|0|3000;tricicoin|0"
 
 echo "== pushes =="
 val "P1 a push without a service key keeps the action and logs push_failed" \

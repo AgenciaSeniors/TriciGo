@@ -645,10 +645,12 @@ DECLARE
   v_ride public.rides%ROWTYPE;
   v_driver_user uuid;
   v_preview jsonb;
-  v_result jsonb;
   v_status text;
   v_final integer;
   v_method text;
+  v_row_cash integer;
+  v_cash integer;
+  v_wallet integer;
   v_pay jsonb;
 BEGIN
   IF NOT public.is_admin() THEN
@@ -691,19 +693,23 @@ BEGIN
 
   -- The distance does not change a ride with a snapshot: complete_ride_and_pay
   -- prefers the trail distance and only records it.
-  v_result := public.complete_ride_and_pay(p_ride_id, v_ride.driver_id,
-                                           v_ride.estimated_distance_m, v_ride.estimated_duration_s);
-  SELECT status::text, final_fare_cup, payment_method::text INTO v_status, v_final, v_method
+  PERFORM public.complete_ride_and_pay(p_ride_id, v_ride.driver_id,
+                                       v_ride.estimated_distance_m, v_ride.estimated_duration_s);
+  SELECT status::text, final_fare_cup, payment_method::text, COALESCE(cash_amount_cup, 0)
+    INTO v_status, v_final, v_method, v_row_cash
   FROM public.rides WHERE id = p_ride_id;
   -- What support tells a driver whose app is down: how much to collect in cash.
-  -- As complete_ride_and_pay returns it (00637 can turn a wallet ride into a
-  -- mixed one); the ride row backs up the fare and the method. Passed through
-  -- as jsonb: a cast here could only roll back a payment that went through.
-  v_pay := jsonb_build_object(
-    'final_fare_cup', COALESCE(v_result->'final_fare_cup', to_jsonb(v_final)),
-    'payment_method', COALESCE(v_result->'payment_method', to_jsonb(v_method)),
-    'cash_amount_cup', v_result->'cash_amount_cup',
-    'wallet_amount_cup', v_result->'wallet_amount_cup');
+  -- Derived from the ride row, not read from complete_ride_and_pay's result: its
+  -- cash_amount_cup and wallet_amount_cup are 0 on a cash ride (it fills them
+  -- only for a mixed ride, a split and the wallet shortfall of 00637, which turns
+  -- the ride into a mixed one), yet the driver collects the whole fare. In the
+  -- response, cash_amount_cup is the cash the driver collects and
+  -- wallet_amount_cup what the wallets paid. The result is not read at all: a
+  -- cast error here would roll back a payment that went through.
+  v_cash := CASE v_method WHEN 'cash' THEN v_final WHEN 'mixed' THEN v_row_cash ELSE 0 END;
+  v_wallet := CASE WHEN v_method IN ('tricicoin', 'mixed') THEN GREATEST(v_final - v_cash, 0) ELSE 0 END;
+  v_pay := jsonb_build_object('final_fare_cup', v_final, 'payment_method', v_method,
+                              'cash_amount_cup', v_cash, 'wallet_amount_cup', v_wallet);
 
   UPDATE public.stuck_ride_alerts SET resolved_at = now() WHERE ride_id = p_ride_id AND resolved_at IS NULL;
 
