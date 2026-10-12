@@ -437,6 +437,13 @@ export function useDriverRideInit() {
           } catch { /* best-effort — treat as gone below */ }
           if (!mounted) return;
           if (terminalStatus === 'completed') {
+            // The driver's own "Finalizar" landed while this poll was in flight: what
+            // advanceStatus stored is richer (it comes from complete_ride_and_pay's answer).
+            const current = useDriverRideStore.getState();
+            if (current.isAdvancing
+                || (current.activeTrip?.id === localTrip.id && current.activeTrip.status === 'completed')) {
+              return;
+            }
             // A completion the store missed (e.g. offline replay flushed, or
             // support finished the ride from the panel, 00660): surface it as
             // completed so TripCompleteView renders instead of flashing a

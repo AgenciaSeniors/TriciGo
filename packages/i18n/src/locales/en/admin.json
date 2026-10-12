@@ -2603,7 +2603,7 @@
     "error_ride_not_completable": "This ride cannot be finished yet.",
     "error_no_agreed_price": "This ride has no agreed price; support cannot charge it.",
     "error_self_ride": "You can't assist a ride where you are the rider or the driver.",
-    "error_delivery_proof_missing": "This delivery has no proof of delivery (recipient code and photo). Support cannot charge it.",
+    "error_delivery_proof_missing": "This delivery has no proof of delivery (recipient code and photo). Support cannot finish it or mark the arrival at the destination.",
     "error_ride_not_found": "This ride doesn't exist or is no longer available.",
     "error_server": "The server refused the action: {{message}}",
     "delivery_proof_missing_note": "Delivery without proof (recipient code and photo). The driver's app asks for it while the ride is in progress; support cannot mark the arrival at the destination or charge it. If the app doesn't work, cancel it from the ride page.",

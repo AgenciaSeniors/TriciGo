@@ -2603,7 +2603,7 @@
     "error_ride_not_completable": "Esta corrida ainda não pode ser finalizada.",
     "error_no_agreed_price": "Esta corrida não tem preço combinado; o suporte não pode cobrá-la.",
     "error_self_ride": "Você não pode ajudar uma corrida em que é o passageiro ou o motorista.",
-    "error_delivery_proof_missing": "Esta entrega não tem prova de entrega (código do destinatário e foto). O suporte não pode cobrá-la.",
+    "error_delivery_proof_missing": "Esta entrega não tem prova de entrega (código do destinatário e foto). O suporte não pode finalizá-la nem marcar a chegada ao destino.",
     "error_ride_not_found": "Esta corrida não existe ou não está mais disponível.",
     "error_server": "O servidor recusou a ação: {{message}}",
     "delivery_proof_missing_note": "Entrega sem prova (código do destinatário e foto). O app do motorista pede a prova enquanto a corrida está em andamento; o suporte não pode marcar a chegada ao destino nem cobrá-la. Se o app não funciona, cancele-a na página da corrida.",

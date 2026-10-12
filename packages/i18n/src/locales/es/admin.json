@@ -2603,7 +2603,7 @@
     "error_ride_not_completable": "Este viaje todavía no se puede terminar.",
     "error_no_agreed_price": "Este viaje no tiene precio acordado; no se puede cobrar desde soporte.",
     "error_self_ride": "No puedes asistir un viaje en el que eres el pasajero o el conductor.",
-    "error_delivery_proof_missing": "Este envío no tiene la prueba de entrega (código del destinatario y foto). No se puede cobrar desde soporte.",
+    "error_delivery_proof_missing": "Este envío no tiene la prueba de entrega (código del destinatario y foto). No se puede terminar ni marcar la llegada al destino desde soporte.",
     "error_ride_not_found": "Este viaje no existe o ya no está disponible.",
     "error_server": "El servidor rechazó la acción: {{message}}",
     "delivery_proof_missing_note": "Envío sin prueba de entrega (código del destinatario y foto). La app del conductor la pide mientras el viaje está en curso; soporte no puede marcar la llegada al destino ni cobrarlo. Si la app no funciona, cancélalo desde el detalle del viaje.",

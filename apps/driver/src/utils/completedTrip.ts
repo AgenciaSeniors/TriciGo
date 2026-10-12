@@ -19,5 +19,7 @@ export function withServerCompletion(local: Ride, row: Partial<Ride> | null | un
     actual_distance_m: row?.actual_distance_m ?? local.actual_distance_m,
     actual_duration_s: row?.actual_duration_s ?? local.actual_duration_s,
     completed_at: row?.completed_at ?? local.completed_at,
+    // The distance the rider was not charged for: TripCompleteView explains it to the driver.
+    excess_distance_uncharged_m: row?.excess_distance_uncharged_m ?? local.excess_distance_uncharged_m,
   };
 }

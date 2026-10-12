@@ -30,8 +30,10 @@ describe('withServerCompletion (a completion the app did not make, e.g. support 
       actual_distance_m: 4300,
       actual_duration_s: 900,
       completed_at: '2026-10-12T12:30:00Z',
+      excess_distance_uncharged_m: 1200,
     };
     expect(withServerCompletion(local, row)).toMatchObject({
+      excess_distance_uncharged_m: 1200,
       id: 'r-1',
       status: 'completed',
       final_fare_cup: 2970,
