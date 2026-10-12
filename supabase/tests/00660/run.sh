@@ -179,7 +179,7 @@ val "R5 refused after pickup" "$(as $ADMIN "SELECT public.admin_release_active_r
 val "R6 refused for a ride scheduled later" "$(as $ADMIN "SELECT public.admin_release_active_ride('$R_SCHED', 'accepted', 'x y z')->>'error';")" "scheduled_not_due"
 val "R7 refused without a reason" "$(as $ADMIN "SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '  ')->>'error';")" "reason_required"
 val "R8 a failing dispatch keeps the release and logs dispatch_failed" \
-  "$(as $ADMIN "RESET ROLE; CREATE OR REPLACE FUNCTION public.dispatch_ride(p_ride_id uuid, p_radius_m integer DEFAULT 5000) RETURNS jsonb
+  "$(as $ADMIN "SET LOCAL client_min_messages TO error; RESET ROLE; CREATE OR REPLACE FUNCTION public.dispatch_ride(p_ride_id uuid, p_radius_m integer DEFAULT 5000) RETURNS jsonb
        LANGUAGE plpgsql AS \$f\$ BEGIN RAISE EXCEPTION 'boom'; END \$f\$; SET LOCAL ROLE authenticated;
      SELECT public.admin_release_active_ride('$R_ACC', 'accepted', 'no responde')->>'success';
      RESET ROLE; SELECT (SELECT status FROM public.rides WHERE id = '$R_ACC') || '|' || (SELECT outcome FROM public.rpc_attempt_log WHERE rpc_name = 'admin_release_active_ride');")" \
@@ -198,7 +198,7 @@ val "A2 arrived_at_pickup -> in_progress with pickup at the GPS departure" \
 val "A3 no departure point: pickup = arrival, so no wait" \
   "$(as $ADMIN "SELECT public.admin_advance_active_ride('$R_PICK', 'arrived_at_pickup', 'sin gps')->>'success';
      RESET ROLE; SELECT pickup_at = driver_arrived_at FROM public.rides WHERE id = '$R_PICK';")" \
-  "true;true"
+  "true;t"
 val "A4 in_progress -> arrived_at_destination, the driver gets the support push" \
   "$(as $ADMIN "SELECT public.admin_advance_active_ride('$R_IP', 'in_progress', 'sin gps')->>'status'; $PUSHES")" "arrived_at_destination;1"
 val "A5 refused at the destination" "$(as $ADMIN "SELECT public.admin_advance_active_ride('$R_DEST', 'arrived_at_destination', 'x y z')->>'error';")" "ride_not_advanceable"
@@ -225,7 +225,7 @@ val "C11 completion sends no support push (the status trigger already pushes bot
 
 echo "== pushes =="
 val "P1 a push without a service key keeps the action and logs push_failed" \
-  "$(as $ADMIN "RESET ROLE; CREATE OR REPLACE FUNCTION public.get_service_role_key() RETURNS text LANGUAGE sql AS \$f\$ SELECT NULL::text \$f\$; SET LOCAL ROLE authenticated;
+  "$(as $ADMIN "SET LOCAL client_min_messages TO error; RESET ROLE; CREATE OR REPLACE FUNCTION public.get_service_role_key() RETURNS text LANGUAGE sql AS \$f\$ SELECT NULL::text \$f\$; SET LOCAL ROLE authenticated;
      SELECT public.admin_advance_active_ride('$R_IP', 'in_progress', 'sin gps')->>'status';
      RESET ROLE; SELECT outcome FROM public.rpc_attempt_log WHERE rpc_name = 'admin_advance_active_ride';")" "arrived_at_destination;push_failed"
 
