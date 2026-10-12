@@ -2291,6 +2291,35 @@ Ensayo: `supabase/tests/00655/run.sh` (RED: 24 fallos; GREEN 39/39, con 5 prueba
 - el sexto viaje programado da `scheduled_limit`;
 - el envío nace con el OTP del servidor y sin foto.
 
+### Rastro GPS del viaje y cargo por espera (00659, 2026-10-12)
+
+Medido en prod con las cuentas demo, en un bloque revertido:
+- **Viaje ajeno.** `rl_insert` solo exigía que `driver_id` fuera del conductor que escribe. Un conductor podía escribir puntos en cualquier viaje: el pasajero los ve como la posición de su conductor, y en un viaje en curso disparan el push "Conductor cerca". `update_driver_position` (SECURITY DEFINER) tampoco miraba de quién era el viaje.
+- **Espera adelantada.** Si "Llegué" llega sin coordenadas, o lejos, `update_ride_status_v2` se respalda en el rastro del viaje (camino C) y toma como hora de llegada el `recorded_at` más viejo cerca de la recogida. Esa hora la pone el celular. Un punto inventado de hace 24 minutos dejó la llegada 24 minutos atrás: 19 minutos cobrables, 1.501 CUP a la tarifa de la mañana (79 CUP/min). A la noche (314 CUP/min) son 5.966. El tope es `max_billable_wait_minutes` (20) más 5 gratis.
+
+**La regla desde 00659:**
+- **Hora del servidor.** `ride_location_events.received_at` la pone `trg_ride_location_events_guard` en cada punto, mande lo que mande quien escribe. `recorded_at` sigue siendo la hora del celular: los puntos guardados sin conexión se suben después y el mapa y el rastro la necesitan.
+- **Viajes ajenos.** El mismo trigger descarta, sin error, un punto cuyo viaje no maneja su `driver_id`. No rechaza, porque la app sube los puntos por tandas y un punto viejo (un viaje reasignado mientras el celular estaba sin red) no puede tirar la tanda entera. Un punto descartado no dispara el push de proximidad. Vale también para `update_driver_position`.
+- **Cobro de la espera.** El camino C cobra la espera desde `GREATEST(recorded_at, received_at)`: nunca antes de que el servidor viera el punto. Los puntos anteriores a 00659 no tienen `received_at` y usan `recorded_at`. Costo aceptado: si el conductor llegó sin red, la espera cuenta desde que sus puntos llegaron al servidor, así que el pasajero paga menos, nunca más. Qué puntos abren la verja no cambió (se eligen por `recorded_at`).
+- **Permisos.** `anon` no escribe en la tabla y `authenticated` solo inserta y lee. Ninguna versión de la app actualizó ni borró puntos.
+
+**Revisado sin cambios:**
+- **Aceptar un viaje.** `accept_ride_v2` bloquea la fila del viaje (`FOR UPDATE`) y exige una oferta `pending` y vigente para ese conductor. Dos conductores que aceptan a la vez quedan en fila: el segundo recibe `ride_already_taken`. Si un conductor acepta dos viajes a la vez, el índice único de viaje activo por conductor rechaza el segundo (`driver_has_active_ride`, `race: true`).
+- **Distancia del conductor.** Con el snapshot de estimado, la tarifa es la del estimado. La distancia que manda el conductor no cambia el cobro: solo se registra.
+
+**No cubierto, decisión pendiente:** "Llegué" con coordenadas inventadas (camino B.1) sigue arrancando la espera en el momento del aviso, aunque el conductor esté lejos. El servidor solo sabe lo que dice la app. Hacen falta pruebas que hoy no tiene: que el pasajero confirme la llegada, un código en la recogida, o que la app mande el aviso de ubicación simulada (`loc.mocked`), que la app del conductor ya lee para suavizar el rumbo en el mapa pero no reporta.
+
+Ensayo: `supabase/tests/00659/run.sh` (RED: 12 fallos; GREEN 23/23, con 5 pruebas negativas y una copia CRLF).
+
+**Estado: aplicada en prod el 2026-10-12** por MCP (`20261012115959`). Verificado por objeto:
+- **Funciones:** `update_ride_status_v2` `1b51ff10…`, sin `\r` y con los mismos permisos; `tg_ride_location_events_guard` `a6af4796…`, con el trigger activo.
+- **Permisos de la tabla:** `anon` solo lee y `authenticated` solo inserta y lee.
+- **Prueba con las cuentas demo, en un bloque revertido:** un punto en un viaje ajeno no se guarda, ni directo ni por `update_driver_position`, y un punto inventado de hace 24 minutos deja la llegada en el momento del aviso.
+
+Ese día no había viajes en curso (el último punto real era del 7/10). En el primer viaje, `SELECT count(*) FROM ride_location_events WHERE received_at IS NOT NULL` tiene que crecer; si queda en 0 con viajes en curso, la app no está pudiendo escribir.
+
+**Trampa de herramienta:** en el parámetro de una herramienta (Write, Edit, `execute_sql`, `apply_migration`), `\u00ed` llega como el carácter "í" y `\\u00ed` llega con las dos barras. Dentro de un `E''`, las dos barras son una barra literal: con eso, el primer intento de aplicar la 00659 no encontró el texto que tenía que reemplazar (frenó la guarda y no se aplicó nada). Para mandar una migración con `\u00ed` dentro de un `E''`, escribir el carácter en sí: da la misma cadena, aunque el md5 del texto mandado ya no coincide con el del archivo. Para escribir la secuencia en un archivo, armarla con `chr(92)` desde un script. Para saber qué se mandó exactamente, el registro de la sesión (`~/.claude/projects/<proyecto>/<sesión>.jsonl`) guarda el texto de cada llamada y se puede comparar con un diff.
+
 ### Eliminar una cuenta: todo o nada, y no con algo abierto (00657, 2026-10-11)
 
 `delete-account` (y `admin-delete-pending-account`) liquidaban la billetera, después pasaban las referencias al usuario anónimo `…0099` y después le pedían a GoTrue que borrara al usuario: tres pasos en transacciones separadas. `anonymize_user_references` atrapa el error de cada columna y sigue. Medido en prod con dos conductores referidos reales, en un bloque revertido:
