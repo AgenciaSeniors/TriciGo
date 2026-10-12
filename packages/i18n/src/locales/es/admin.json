@@ -2575,14 +2575,17 @@
     "charge_corporate": "Viaje corporativo: la empresa paga con su comisión acordada y el monto final puede ser menor.",
     "charge_none": "Este viaje no tiene precio acordado.",
     "actions_card": "Ayudar con el viaje",
+    "scheduled_later_note": "Viaje programado para más tarde: no hay acciones de soporte hasta su hora. Si hace falta, cancélalo desde el detalle del viaje.",
     "action_release": "Volver a buscar conductor",
     "action_advance_arrived": "Marcar llegada",
     "action_advance_started": "Marcar viaje iniciado",
     "action_advance_destination": "Marcar llegada al destino",
     "action_complete": "Terminar y cobrar",
     "confirm_release_message": "El viaje vuelve a buscar conductor ahora mismo y {{name}} queda fuera de línea. Avisamos a los dos.",
+    "release_driver_fallback": "el conductor",
     "confirm_arrived_message": "Marcamos que el conductor llegó a recoger. La espera empieza a contar desde ahora.",
     "confirm_started_message": "Marcamos el viaje como iniciado a las {{time}} ({{source}}). Espera registrada: {{wait}}.",
+    "confirm_started_message_no_price": "Marcamos el viaje como iniciado a las {{time}} ({{source}}). Este viaje no tiene precio acordado.",
     "source_gps": "cuando el GPS lo muestra saliendo",
     "source_arrival": "sin salida en el GPS: no se cobra espera",
     "source_recorded": "hora ya registrada",
@@ -2601,8 +2604,11 @@
     "error_no_agreed_price": "Este viaje no tiene precio acordado; no se puede cobrar desde soporte.",
     "error_self_ride": "No puedes asistir un viaje en el que eres el pasajero o el conductor.",
     "error_delivery_proof_missing": "Este envío no tiene la prueba de entrega (código del destinatario y foto). No se puede cobrar desde soporte.",
-    "delivery_proof_missing_note": "Envío sin prueba de entrega: no se puede terminar y cobrar desde soporte. Si la app del conductor funciona, avanza el viaje al destino para que la pida; si no, cancélalo desde el detalle del viaje.",
+    "error_ride_not_found": "Este viaje no existe o ya no está disponible.",
+    "error_server": "El servidor rechazó la acción: {{message}}",
+    "delivery_proof_missing_note": "Envío sin prueba de entrega: no se puede terminar y cobrar desde soporte. La app del conductor pide el código del destinatario y la foto mientras el viaje está en curso, y deja de pedirlos al llegar al destino: no marques la llegada al destino desde aquí. Si la app no funciona, cancélalo desde el detalle del viaje.",
+    "delivery_proof_missing_note_at_destination": "Envío sin prueba de entrega: no se puede terminar y cobrar desde soporte, y en el destino la app del conductor ya no pide el código del destinatario ni la foto. Cancélalo desde el detalle del viaje.",
     "done_started": "Viaje iniciado a las {{time}}. Espera registrada: {{wait}}.",
-    "done_complete_cash": "Viaje terminado: se cobró {{total}}. Avísale al conductor que cobre {{cash}} en efectivo."
+    "done_complete_cash": "Viaje terminado por {{total}}. Avísale al conductor que cobre {{cash}} en efectivo."
   }
 }

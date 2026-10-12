@@ -2575,14 +2575,17 @@
     "charge_corporate": "Corporate ride: the company pays with its agreed commission and the final amount can be lower.",
     "charge_none": "This ride has no agreed price.",
     "actions_card": "Help with the ride",
+    "scheduled_later_note": "Ride scheduled for later: support has no actions until its time. If needed, cancel it from the ride page.",
     "action_release": "Find another driver",
     "action_advance_arrived": "Mark arrival",
     "action_advance_started": "Mark ride started",
     "action_advance_destination": "Mark arrival at destination",
     "action_complete": "Finish and charge",
     "confirm_release_message": "The ride goes back to search right now and {{name}} goes offline. We notify both.",
+    "release_driver_fallback": "the driver",
     "confirm_arrived_message": "We mark that the driver arrived at the pickup. The wait starts counting now.",
     "confirm_started_message": "We mark the ride as started at {{time}} ({{source}}). Recorded wait: {{wait}}.",
+    "confirm_started_message_no_price": "We mark the ride as started at {{time}} ({{source}}). This ride has no agreed price.",
     "source_gps": "when the GPS shows the driver leaving",
     "source_arrival": "no departure in the GPS: no wait is charged",
     "source_recorded": "time already recorded",
@@ -2601,8 +2604,11 @@
     "error_no_agreed_price": "This ride has no agreed price; support cannot charge it.",
     "error_self_ride": "You can't assist a ride where you are the rider or the driver.",
     "error_delivery_proof_missing": "This delivery has no proof of delivery (recipient code and photo). Support cannot charge it.",
-    "delivery_proof_missing_note": "Delivery without proof: support cannot finish and charge it. If the driver's app works, advance the ride to the destination so the app asks for it; otherwise cancel it from the ride page.",
+    "error_ride_not_found": "This ride doesn't exist or is no longer available.",
+    "error_server": "The server refused the action: {{message}}",
+    "delivery_proof_missing_note": "Delivery without proof: support cannot finish and charge it. The driver's app asks for the recipient's code and the photo while the ride is in progress and stops asking at the destination, so do not mark the arrival at the destination from here. If the app does not work, cancel it from the ride page.",
+    "delivery_proof_missing_note_at_destination": "Delivery without proof: support cannot finish and charge it, and at the destination the driver's app no longer asks for the recipient's code or the photo. Cancel it from the ride page.",
     "done_started": "Ride started at {{time}}. Recorded wait: {{wait}}.",
-    "done_complete_cash": "Ride finished: {{total}} charged. Tell the driver to collect {{cash}} in cash."
+    "done_complete_cash": "Ride finished for {{total}}. Tell the driver to collect {{cash}} in cash."
   }
 }
