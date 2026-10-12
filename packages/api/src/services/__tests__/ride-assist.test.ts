@@ -267,5 +267,27 @@ describe('rideAssistService', () => {
       await expect(rideAssistService.completeActiveRide('r-1', 'in_progress', 'd-1', 2970, 'app caída'))
         .rejects.toMatchObject({ code: 'amount_changed' });
     });
+
+    it('the three actions say the feature is unavailable when 00660 is not applied', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { ...MISSING, message: 'Could not find the function public.admin_release_active_ride' } });
+      await expect(rideAssistService.releaseActiveRide('r-1', 'accepted', 'd-1', 'no responde'))
+        .rejects.toMatchObject({ code: RIDE_ASSIST_UNAVAILABLE, statusCode: 503 });
+      mockRpc.mockResolvedValueOnce({ data: null, error: { ...MISSING, message: 'Could not find the function public.admin_advance_active_ride' } });
+      await expect(rideAssistService.advanceActiveRide('r-1', 'accepted', 'd-1', 'sin gps'))
+        .rejects.toMatchObject({ code: RIDE_ASSIST_UNAVAILABLE, statusCode: 503 });
+      mockRpc.mockResolvedValueOnce({ data: null, error: { ...MISSING, message: 'Could not find the function public.admin_complete_active_ride' } });
+      await expect(rideAssistService.completeActiveRide('r-1', 'in_progress', 'd-1', 2970, 'app caída'))
+        .rejects.toMatchObject({ code: RIDE_ASSIST_UNAVAILABLE, statusCode: 503 });
+    });
+
+    it('a deadlock (40P01) comes back as the Postgres error itself, for the panel to read as ride_changed', async () => {
+      const deadlock = { code: '40P01', message: 'deadlock detected', details: null, hint: null };
+      mockRpc.mockResolvedValueOnce({ data: null, error: deadlock });
+      await expect(rideAssistService.releaseActiveRide('r-1', 'accepted', 'd-1', 'no responde')).rejects.toBe(deadlock);
+      mockRpc.mockResolvedValueOnce({ data: null, error: deadlock });
+      await expect(rideAssistService.advanceActiveRide('r-1', 'accepted', 'd-1', 'sin gps')).rejects.toBe(deadlock);
+      mockRpc.mockResolvedValueOnce({ data: null, error: deadlock });
+      await expect(rideAssistService.completeActiveRide('r-1', 'in_progress', 'd-1', 2970, 'app caída')).rejects.toBe(deadlock);
+    });
   });
 });
