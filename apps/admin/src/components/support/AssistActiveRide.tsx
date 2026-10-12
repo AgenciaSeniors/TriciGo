@@ -104,12 +104,16 @@ export function AssistActiveRide({ ctx, now, onChanged }: { ctx: ActiveRideConte
         );
       } else if (pending === 'complete' && preview) {
         const r = await rideAssistService.completeActiveRide(ride.id, ride.status, driverId, preview.total_cup, why);
-        showToast(
-          'success',
-          typeof r.cash_amount_cup === 'number' && r.cash_amount_cup > 0
-            ? t('ride_assist.done_complete_cash', { total: formatCUP(r.final_fare_cup), cash: formatCUP(r.cash_amount_cup) })
-            : t('ride_assist.done_complete', { total: formatCUP(r.final_fare_cup) }),
-        );
+        if (typeof r.cash_amount_cup === 'number' && r.cash_amount_cup > 0) {
+          // Support has to pass this on to a driver whose app is down: keep it up longer.
+          showToast(
+            'success',
+            t('ride_assist.done_complete_cash', { total: formatCUP(r.final_fare_cup), cash: formatCUP(r.cash_amount_cup) }),
+            20_000,
+          );
+        } else {
+          showToast('success', t('ride_assist.done_complete', { total: formatCUP(r.final_fare_cup) }));
+        }
       }
       close();
     } catch (err) {
