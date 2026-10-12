@@ -20,6 +20,7 @@ import { useLocationStore } from '@/stores/location.store';
 import type { RideStatus, DriverAcceptedBroadcast, Vehicle } from '@tricigo/types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { onRideAssignedPush, shouldAnnounceAssignedRide } from '@/utils/rideAssignedPush';
+import { isStatusAhead } from '@/utils/tripStatusOrder';
 
 /** Cached vehicle info for broadcast — loaded once per session */
 let cachedVehicle: Vehicle | null = null;
@@ -456,6 +457,27 @@ export function useDriverRideInit() {
           // while minimized.
           unbindBgLocationFromRide(profile?.id);
           useDriverRideStore.getState().reset();
+          return;
+        }
+
+        // Support moved the ride forward from the panel (00660), or the driver's own tap landed
+        // but its answer was lost. Only a status further along is applied (isStatusAhead).
+        // While the driver's own tap is still in flight (isAdvancing) its answer updates the
+        // screen; announcing it here too would read as someone else's change.
+        if (isStatusAhead(fresh.status, localTrip.status) && !useDriverRideStore.getState().isAdvancing) {
+          useDriverRideStore.getState().updateActiveTrip(fresh);
+          triggerHaptic('success');
+          Toast.show({
+            type: 'info',
+            text1: i18next.t('driver:trip.trip_updated_title', { defaultValue: 'Tu viaje se actualizó' }),
+            text2: i18next.t('driver:trip.trip_updated_msg', { defaultValue: 'Te mostramos el estado actual del viaje.' }),
+            visibilityTime: 5000,
+          });
+          logger.info('[DriverRide] server status ahead of the screen', {
+            ride_id: localTrip.id,
+            local_status: localTrip.status,
+            server_status: fresh.status,
+          });
           return;
         }
 

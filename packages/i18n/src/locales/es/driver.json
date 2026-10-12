@@ -265,7 +265,9 @@
     "restart_nav": "Reiniciar navegación",
     "approaching_pickup": "Llegando al punto de recogida",
     "approaching_pickup_body": "Estás a ~2 minutos del punto de recogida",
-    "step_at_destination": "En destino"
+    "step_at_destination": "En destino",
+    "trip_updated_title": "Tu viaje se actualizó",
+    "trip_updated_msg": "Te mostramos el estado actual del viaje."
   },
 
   "ride": {
