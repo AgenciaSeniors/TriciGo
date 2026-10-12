@@ -217,6 +217,7 @@ CREATE OR REPLACE FUNCTION public.admin_active_ride_context(p_ride_id uuid)
 AS $function$
 DECLARE
   v_ride public.rides%ROWTYPE;
+  v_driver_user uuid;
   v_actions text[];
   v_dep timestamptz;
   v_start timestamptz;
@@ -230,6 +231,10 @@ BEGIN
   IF NOT FOUND THEN
     RETURN jsonb_build_object('error', 'ride_not_found');
   END IF;
+  SELECT dp.user_id INTO v_driver_user FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id;
+  IF auth.uid() = v_ride.customer_id OR auth.uid() = v_driver_user THEN
+    RETURN jsonb_build_object('error', 'self_ride');
+  END IF;
 
   v_actions := CASE v_ride.status
     WHEN 'accepted' THEN ARRAY['release', 'advance']
@@ -238,6 +243,11 @@ BEGIN
     WHEN 'in_progress' THEN ARRAY['advance', 'complete']
     WHEN 'arrived_at_destination' THEN ARRAY['complete']
     ELSE ARRAY[]::text[] END;
+  -- Only what the RPCs accept: a ride scheduled for later is neither released
+  -- nor advanced (support cancels it from the ride page).
+  IF v_ride.status IN ('accepted', 'driver_en_route') AND v_ride.scheduled_at > now() THEN
+    v_actions := array_remove(array_remove(v_actions, 'release'), 'advance');
+  END IF;
 
   IF v_ride.status = 'arrived_at_pickup' THEN
     v_dep := public._ride_gps_departure_at(v_ride.id, v_ride.driver_arrived_at);
@@ -282,6 +292,7 @@ BEGIN
       ORDER BY le.recorded_at DESC, le.id DESC LIMIT 1),
     'alert', (SELECT jsonb_build_object('reason', a.reason, 'detected_at', a.detected_at)
       FROM public.stuck_ride_alerts a WHERE a.ride_id = v_ride.id AND a.resolved_at IS NULL),
+    'driver_profile_id', v_ride.driver_id,
     'preview', v_preview,
     'start_pickup_at', CASE WHEN v_ride.status = 'arrived_at_pickup' THEN v_start END,
     'start_pickup_source', v_source,
@@ -296,7 +307,8 @@ GRANT EXECUTE ON FUNCTION public.admin_active_ride_context(uuid) TO authenticate
 --    confirmation given to that driver does not let the next one skip the
 --    arrival gate; the 00628 wait alert is stamped (support is already on it);
 --    and dispatch runs at once.
-CREATE OR REPLACE FUNCTION public.admin_release_active_ride(p_ride_id uuid, p_expected_status text, p_reason text)
+CREATE OR REPLACE FUNCTION public.admin_release_active_ride(p_ride_id uuid, p_expected_status text,
+  p_expected_driver_id uuid, p_reason text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -314,11 +326,19 @@ BEGIN
   IF length(v_reason) < 3 THEN
     RETURN jsonb_build_object('error', 'reason_required');
   END IF;
+  -- The driver first, then the ride: the order of release_rides_from_dead_drivers
+  -- (block A) and update_driver_position, so a release never deadlocks with them.
+  PERFORM 1 FROM public.driver_profiles WHERE id = p_expected_driver_id FOR UPDATE;
   SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('error', 'ride_not_found');
   END IF;
-  IF v_ride.status::text IS DISTINCT FROM p_expected_status THEN
+  SELECT dp.user_id INTO v_driver_user FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id;
+  IF v_admin = v_ride.customer_id OR v_admin = v_driver_user THEN
+    RETURN jsonb_build_object('error', 'self_ride');
+  END IF;
+  IF v_ride.status::text IS DISTINCT FROM p_expected_status
+     OR v_ride.driver_id IS DISTINCT FROM p_expected_driver_id THEN
     RETURN jsonb_build_object('error', 'ride_changed', 'status', v_ride.status);
   END IF;
   IF v_ride.status NOT IN ('accepted', 'driver_en_route') THEN
@@ -327,8 +347,6 @@ BEGIN
   IF v_ride.scheduled_at IS NOT NULL AND v_ride.scheduled_at > now() THEN
     RETURN jsonb_build_object('error', 'scheduled_not_due', 'status', v_ride.status);
   END IF;
-
-  SELECT dp.user_id INTO v_driver_user FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id;
 
   UPDATE public.driver_profiles
      SET is_online = false, auto_offline_at = COALESCE(auto_offline_at, now())
@@ -382,13 +400,14 @@ BEGIN
   RETURN jsonb_build_object('success', true, 'ride_id', p_ride_id, 'status', 'searching');
 END;
 $function$;
-REVOKE ALL ON FUNCTION public.admin_release_active_ride(uuid, text, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.admin_release_active_ride(uuid, text, text) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.admin_release_active_ride(uuid, text, uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_release_active_ride(uuid, text, uuid, text) TO authenticated, service_role;
 
 -- 9. One step forward, standing in for the driver's tap. No GPS gate: that is
 --    what support is for. "Viaje iniciado" takes the pickup time from the GPS
 --    departure; with none, pickup = arrival, so no wait is charged.
-CREATE OR REPLACE FUNCTION public.admin_advance_active_ride(p_ride_id uuid, p_expected_status text, p_reason text)
+CREATE OR REPLACE FUNCTION public.admin_advance_active_ride(p_ride_id uuid, p_expected_status text,
+  p_expected_driver_id uuid, p_reason text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -399,6 +418,7 @@ DECLARE
   v_reason text := btrim(COALESCE(p_reason, ''));
   v_ride public.rides%ROWTYPE;
   v_new public.rides%ROWTYPE;
+  v_driver_user uuid;
   v_to public.ride_status;
   v_label text;
 BEGIN
@@ -408,12 +428,21 @@ BEGIN
   IF length(v_reason) < 3 THEN
     RETURN jsonb_build_object('error', 'reason_required');
   END IF;
+  -- The ride first, as complete_ride_and_pay does.
   SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('error', 'ride_not_found');
   END IF;
-  IF v_ride.status::text IS DISTINCT FROM p_expected_status THEN
+  SELECT dp.user_id INTO v_driver_user FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id;
+  IF v_admin = v_ride.customer_id OR v_admin = v_driver_user THEN
+    RETURN jsonb_build_object('error', 'self_ride');
+  END IF;
+  IF v_ride.status::text IS DISTINCT FROM p_expected_status
+     OR v_ride.driver_id IS DISTINCT FROM p_expected_driver_id THEN
     RETURN jsonb_build_object('error', 'ride_changed', 'status', v_ride.status);
+  END IF;
+  IF v_ride.status IN ('accepted', 'driver_en_route') AND v_ride.scheduled_at > now() THEN
+    RETURN jsonb_build_object('error', 'scheduled_not_due', 'status', v_ride.status);
   END IF;
 
   IF v_ride.status IN ('accepted', 'driver_en_route') THEN
@@ -449,22 +478,21 @@ BEGIN
           v_reason);
 
   -- The rider already gets the status push from notify_ride_status_change.
-  PERFORM public._support_ride_push('admin_advance_active_ride', p_ride_id,
-    (SELECT dp.user_id FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id),
+  PERFORM public._support_ride_push('admin_advance_active_ride', p_ride_id, v_driver_user,
     'Soporte actualizó tu viaje', 'Lo marcamos como ' || v_label || '.',
     'system', jsonb_build_object('event', 'support_ride_update', 'action', 'advance', 'status', v_to));
 
   RETURN jsonb_build_object('success', true, 'ride_id', p_ride_id, 'status', v_to);
 END;
 $function$;
-REVOKE ALL ON FUNCTION public.admin_advance_active_ride(uuid, text, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.admin_advance_active_ride(uuid, text, text) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.admin_advance_active_ride(uuid, text, uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_advance_active_ride(uuid, text, uuid, text) TO authenticated, service_role;
 
 -- 10. Complete and charge: the agreed price minus the discount plus the recorded
 --     wait, through complete_ride_and_pay (it admits admin callers and moves the
 --     money exactly as for any ride). The amount must be the one support saw.
 CREATE OR REPLACE FUNCTION public.admin_complete_active_ride(p_ride_id uuid, p_expected_status text,
-  p_expected_total_cup integer, p_reason text)
+  p_expected_driver_id uuid, p_expected_total_cup integer, p_reason text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -474,6 +502,7 @@ DECLARE
   v_admin uuid := auth.uid();
   v_reason text := btrim(COALESCE(p_reason, ''));
   v_ride public.rides%ROWTYPE;
+  v_driver_user uuid;
   v_preview jsonb;
   v_result jsonb;
   v_final integer;
@@ -484,11 +513,17 @@ BEGIN
   IF length(v_reason) < 3 THEN
     RETURN jsonb_build_object('error', 'reason_required');
   END IF;
+  -- The ride first, as complete_ride_and_pay does.
   SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('error', 'ride_not_found');
   END IF;
-  IF v_ride.status::text IS DISTINCT FROM p_expected_status THEN
+  SELECT dp.user_id INTO v_driver_user FROM public.driver_profiles dp WHERE dp.id = v_ride.driver_id;
+  IF v_admin = v_ride.customer_id OR v_admin = v_driver_user THEN
+    RETURN jsonb_build_object('error', 'self_ride');
+  END IF;
+  IF v_ride.status::text IS DISTINCT FROM p_expected_status
+     OR v_ride.driver_id IS DISTINCT FROM p_expected_driver_id THEN
     RETURN jsonb_build_object('error', 'ride_changed', 'status', v_ride.status);
   END IF;
   IF v_ride.status NOT IN ('in_progress', 'arrived_at_destination') THEN
@@ -520,8 +555,8 @@ BEGIN
   RETURN jsonb_build_object('success', true, 'ride_id', p_ride_id, 'final_fare_cup', v_final, 'payment', v_result);
 END;
 $function$;
-REVOKE ALL ON FUNCTION public.admin_complete_active_ride(uuid, text, integer, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.admin_complete_active_ride(uuid, text, integer, text) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.admin_complete_active_ride(uuid, text, uuid, integer, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_complete_active_ride(uuid, text, uuid, integer, text) TO authenticated, service_role;
 
 -- A copy pasted with Windows line ends puts \r in the function bodies. They run
 -- the same, but their md5 no longer matches git. Rebuild them from the catalog.
