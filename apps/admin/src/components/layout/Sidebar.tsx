@@ -42,6 +42,7 @@ import {
   Ticket,
   Rocket,
   UserRoundX,
+  UserCog,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSidebar } from './SidebarContext';
@@ -153,6 +154,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/audit', labelKey: 'sidebar.audit', defaultLabel: 'Auditoría', icon: ClipboardList },
       { href: '/settings/cities', labelKey: 'sidebar.cities', defaultLabel: 'Ciudades', icon: MapPin },
       { href: '/settings', labelKey: 'sidebar.settings', defaultLabel: 'Ajustes', icon: Settings },
+      { href: '/equipo', labelKey: 'sidebar.team', defaultLabel: 'Equipo', icon: UserCog },
     ],
   },
 ];
