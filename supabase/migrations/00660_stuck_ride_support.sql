@@ -459,3 +459,66 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public.admin_advance_active_ride(uuid, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_advance_active_ride(uuid, text, text) TO authenticated, service_role;
+
+-- 10. Complete and charge: the agreed price minus the discount plus the recorded
+--     wait, through complete_ride_and_pay (it admits admin callers and moves the
+--     money exactly as for any ride). The amount must be the one support saw.
+CREATE OR REPLACE FUNCTION public.admin_complete_active_ride(p_ride_id uuid, p_expected_status text,
+  p_expected_total_cup integer, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+DECLARE
+  v_admin uuid := auth.uid();
+  v_reason text := btrim(COALESCE(p_reason, ''));
+  v_ride public.rides%ROWTYPE;
+  v_preview jsonb;
+  v_result jsonb;
+  v_final integer;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+  IF length(v_reason) < 3 THEN
+    RETURN jsonb_build_object('error', 'reason_required');
+  END IF;
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+  IF v_ride.status::text IS DISTINCT FROM p_expected_status THEN
+    RETURN jsonb_build_object('error', 'ride_changed', 'status', v_ride.status);
+  END IF;
+  IF v_ride.status NOT IN ('in_progress', 'arrived_at_destination') THEN
+    RETURN jsonb_build_object('error', 'ride_not_completable', 'status', v_ride.status);
+  END IF;
+  v_preview := public._active_ride_charge_preview(v_ride, v_ride.pickup_at);
+  IF v_preview IS NULL THEN
+    RETURN jsonb_build_object('error', 'no_agreed_price');
+  END IF;
+  IF (v_preview->>'total_cup')::integer IS DISTINCT FROM p_expected_total_cup THEN
+    RETURN jsonb_build_object('error', 'amount_changed', 'total_cup', (v_preview->>'total_cup')::integer);
+  END IF;
+
+  -- The distance does not change a ride with a snapshot: complete_ride_and_pay
+  -- prefers the trail distance and only records it.
+  v_result := public.complete_ride_and_pay(p_ride_id, v_ride.driver_id,
+                                           v_ride.estimated_distance_m, v_ride.estimated_duration_s);
+  SELECT final_fare_cup INTO v_final FROM public.rides WHERE id = p_ride_id;
+
+  UPDATE public.stuck_ride_alerts SET resolved_at = now() WHERE ride_id = p_ride_id AND resolved_at IS NULL;
+
+  INSERT INTO public.admin_actions (admin_id, action, target_type, target_id, old_values, new_values, reason)
+  VALUES (v_admin, 'support_complete_ride', 'ride', p_ride_id::text,
+          jsonb_build_object('status', v_ride.status),
+          jsonb_build_object('status', 'completed', 'final_fare_cup', v_final, 'preview', v_preview),
+          v_reason);
+
+  -- No support push: notify_ride_status_change already pushes both on 'completed'.
+  RETURN jsonb_build_object('success', true, 'ride_id', p_ride_id, 'final_fare_cup', v_final, 'payment', v_result);
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.admin_complete_active_ride(uuid, text, integer, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_complete_active_ride(uuid, text, integer, text) TO authenticated, service_role;
