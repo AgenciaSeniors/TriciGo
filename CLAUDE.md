@@ -2291,6 +2291,27 @@ Ensayo: `supabase/tests/00655/run.sh` (RED: 24 fallos; GREEN 39/39, con 5 prueba
 - el sexto viaje programado da `scheduled_limit`;
 - el envío nace con el OTP del servidor y sin foto.
 
+### Eliminar una cuenta: todo o nada, y no con algo abierto (00657, 2026-10-11)
+
+`delete-account` (y `admin-delete-pending-account`) liquidaban la billetera, después pasaban las referencias al usuario anónimo `…0099` y después le pedían a GoTrue que borrara al usuario: tres pasos en transacciones separadas. `anonymize_user_references` atrapa el error de cada columna y sigue. Medido en prod con dos conductores referidos reales, en un bloque revertido:
+- **El segundo referido que eliminaba su cuenta quedaba a medias.** `referrals.referee_id` es único: el primero mueve su fila a `…0099` y el segundo choca con 23505. Su fila sigue apuntándolo, GoTrue no puede borrarlo (FK sin acción) y la función respondía 500, pero la billetera ya se había pasado a `platform_revenue`: el conductor quedó de 10.000 CUP a 0, con la cuenta viva y sin poder eliminarla nunca. Hay 30 referidos en prod. `promotion_uses` (promoción, usuario), `corporate_employees` (empresa, usuario) y `reviews` (viaje, autor) tienen el mismo tipo de clave.
+- **Nada miraba lo que la cuenta tenía en curso.** Se podía eliminar en medio de un viaje, con un reporte o una disputa abierta en contra, con deuda de comisión (quedaba sin dueño) o con una recarga en proceso (se habría acreditado a `…0099`).
+
+**La regla (decidida con el dueño):**
+- Las cuatro claves únicas ignoran al usuario anónimo (índices únicos parciales `WHERE <col> <> '…0099'`, con los mismos nombres). `reviews` tenía la clave dos veces (constraint e índice `uniq_reviews_ride_reviewer`); queda una.
+- **`prepare_account_deletion(user)`** (SECURITY DEFINER, solo `service_role`) hace los controles, la liquidación y el paso de referencias en UNA transacción, y falla si alguna referencia no se pudo mover (DETAIL `deletion_incomplete`, HINT con las columnas). Las dos Edge Functions la llaman antes de GoTrue (`_shared/account-deletion.ts`), así que un rechazo o una falla dejan la cuenta, su plata y su historial como estaban. Si la función no existe (`PGRST202`) caen a las dos RPC viejas, así que el orden de despliegue no importa.
+- **Rechaza** con MESSAGE en español y DETAIL: viaje que no terminó, programados incluidos, como pasajero, conductor o invitado que aceptó (`deletion_active_ride`); reporte abierto en contra o disputa abierta en la que es parte (`deletion_open_case`); cualquier billetera bajo cero, con el monto en el texto (`deletion_debt`); pago empezado en las últimas 2 horas sin terminar (`deletion_payment_pending`). Documentos, vehículo y GPS del conductor se siguen borrando al instante (decisión del dueño).
+- `delete-account` responde 409 `{ error, message }` y las apps (cliente, conductor, web) muestran ese texto con `isAccountDeletionRefusal` de `@tricigo/api`. El panel recibe 409 `not_deletable` con el código sin el prefijo `deletion_` como blocker (`users.delete_blocker_*`).
+- **Hueco conocido:** un viaje creado en los milisegundos entre la preparación y el borrado de GoTrue deja la cuenta viva, ya liquidada y anonimizada; un reintento se rechaza hasta que ese viaje termine.
+- **Una referencia nueva a `users` que no sea CASCADE** hay que sumarla a `anonymize_user_references`, y si tiene clave única que incluye al usuario, hacerla parcial como estas cuatro, o la segunda eliminación vuelve a fallar (ahora sin perder plata: `deletion_incomplete`).
+- Ensayo: `supabase/tests/00657/run.sh` (RED: 16 fallos; GREEN 31/31, con 5 pruebas negativas y una copia CRLF). Ensayo en prod dentro de un bloque revertido, con la función como `pg_temp` y las claves viejas: el primer referido se elimina, el segundo da `deletion_incomplete [public.referrals.referee_id]` con su billetera intacta (10.000), y los cinco rechazos salen con su texto.
+- **Estado (2026-10-12): aplicada a medias.**
+  - **En prod:** la función (sección 2), por MCP como `00657_…_part1`, con md5 `be50db1c…/3409`; también `delete-account` v19 y `admin-delete-pending-account` v10. Ensayo posterior sobre la función real, revertido: el primer referido se elimina; el segundo da `deletion_incomplete [public.referrals.referee_id]` con la billetera intacta; la cuenta anónima da `deletion_system_account`.
+  - **Falta la sección 1** (los `DROP CONSTRAINT`/`DROP INDEX` y los índices parciales). Se intentó seis veces por MCP y la aprobación nunca le llegó al dueño.
+  - **Mientras falte**, nadie pierde plata. Pero el segundo referido que quiera eliminar su cuenta (y los casos raros de las otras tres claves) recibe "No pudimos eliminar tu cuenta. Escríbenos a soporte".
+  - **Para aplicarla:** pegar en el SQL Editor las secciones 1 y 3 del archivo (sin la función: así no entran `\r` en su cuerpo). El texto está en la descripción del PR #1144.
+  - **Comprobar que quedó:** `SELECT c.relname, pg_get_expr(i.indpred, i.indrelid) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname LIKE '%referee_id_key' OR c.relname LIKE 'reviews_ride_id%' OR c.relname = 'uniq_reviews_ride_reviewer';`. Tiene que mostrar el predicado con `…0099` y ya no `uniq_reviews_ride_reviewer`.
+
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
 Un canal **público** de Realtime no pasa por ninguna regla: cualquiera con sesión que sepa el nombre puede unirse, leer los broadcasts y la presencia, y mandar mensajes. Las reglas de `realtime.messages` solo se aplican a los canales **privados** (`{ config: { private: true } }`). Un canal privado y uno público con el mismo nombre no se cruzan: lo que se manda en uno nunca llega al otro.
@@ -2879,6 +2900,11 @@ Dos pushes con voseo ("Intentalo nuevamente", "Abrí la app y confirmá si lo ve
 - La 00622 entró al instante aunque nombra `DELETE` en un `GRANT … DELETE ON …` y en un comentario.
 - Un bloque de prueba que termina en `RAISE EXCEPTION`, con un `DELETE` de limpieza adentro, también se cortó por `execute_sql`, aunque todo se iba a deshacer. Para probar en prod sin esperar, llamar solo a la función bajo prueba y dejar que el `RAISE EXCEPTION` deshaga las filas creadas.
 - **El aviso puede no llegar nunca** (2026-10-07): la 00627 (7 `DROP POLICY`) y la 00629 (una función con `DELETE FROM auth.sessions`) se cortaron cinco veces seguidas, también con el dueño en la conversación pidiendo que se aplicara, y nunca vio un aviso a tiempo. Si se corta dos veces, no seguir reintentando: pasarle al usuario los pasos del SQL Editor. Funcionó así: abrir `https://supabase.com/dashboard/project/lqaufszburqvlslpcuac/sql/new`, copiar el archivo de la migración desde GitHub con "Copy raw file", pegar, Run, y confirmar el aviso de operación destructiva con "Run this query". Después, verificar por objeto.
+- **El modo de la sesión cambia cómo falla, pero no hizo llegar el aviso** (2026-10-12, 00657 sección 1, seis intentos con el dueño mirando la app):
+  - En modo **Auto**, una llamada con `DROP` vuelve `{"status":"cancelled"}` al instante, sin mostrar nada.
+  - En **Accept edits**, espera los 60 s y se corta, y el dueño tampoco vio ninguna tarjeta.
+  - En los dos casos la base quedó igual.
+  - **Conclusión:** no gastar más intentos cambiando el modo. Lo destructivo se deja para el SQL Editor desde una compu.
 
 **Si se corta, se aplica desde el SQL Editor, y pegar desde Windows mete `\r` en el cuerpo de las funciones.** La función anda igual, pero su md5 ya no es el de git: la 00617 quedó en `d7957554…/1173` en vez de `582b8dd9…/1136`. Pegar la migración y agregar al final este bloque, en la misma ejecución, la recrea desde el catálogo sin los `\r`. Conserva permisos y SECURITY DEFINER, y frena si el cuerpo no queda igual al de git. Así quedó bien la 00620 a la primera.
 

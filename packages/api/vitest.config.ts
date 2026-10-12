@@ -42,6 +42,8 @@ export default defineConfig({
       '../../supabase/functions/send-sms-otp/*.test.ts',
       '../../supabase/functions/verify-otp/*.test.ts',
       '../../supabase/functions/link-phone/*.test.ts',
+      // delete-account (00657): supabase-js replaced with vi.mock, Deno stubbed.
+      '../../supabase/functions/delete-account/*.test.ts',
     ],
   },
 });

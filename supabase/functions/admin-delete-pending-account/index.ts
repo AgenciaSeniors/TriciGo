@@ -35,9 +35,12 @@
 // A pending driver profile, canceled-only rides, and an incomplete profile are
 // all disposable and do NOT block.
 //
-// On confirm, the actual delete reuses the same idempotent machinery as
-// delete-account: settle_and_scrub_for_deletion → anonymize_user_references →
-// best-effort storage cleanup → auth.admin.deleteUser (CASCADE frees the phone).
+// On confirm, the actual delete reuses the same machinery as delete-account:
+// prepare_account_deletion (00657: its own gates, the settlement and the
+// re-pointing in one transaction) → best-effort storage cleanup →
+// auth.admin.deleteUser (CASCADE frees the phone). If prepare_account_deletion
+// refuses, the answer is 409 not_deletable with its code as the blocker
+// (without the deletion_ prefix) and its Spanish text in `message`.
 // Every deletion writes an admin_actions audit row (old_values = snapshot).
 //
 // Returns: { deletable, blockers, summary } (dry run) or
@@ -46,6 +49,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey } from '../_shared/service-key.ts';
+import { prepareAccountDeletion } from '../_shared/account-deletion.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -217,19 +221,25 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: 'not_deletable', blockers, summary }, 409);
     }
 
-    // 6a. Settle any (zero, by the gate above) balance + scrub authored free text.
-    //     Kept for parity with delete-account and as defense-in-depth.
-    const { error: settleErr } = await admin.rpc('settle_and_scrub_for_deletion', {
-      p_user_id: userId,
-    });
-    if (settleErr) throw new Error(`settle_failed: ${settleErr.message}`);
-
-    // 6b. Re-point non-CASCADE FKs to the anonymous user so the auth delete
-    //     cascade doesn't trip a constraint (idempotent).
-    const { error: anonErr } = await admin.rpc('anonymize_user_references', {
-      p_user_id: userId,
-    });
-    if (anonErr) throw new Error(`anonymize_failed: ${anonErr.message}`);
+    // 6a+6b. Gates, settlement (zero, by the gate above) and re-pointing of
+    //     non-CASCADE FKs to the anonymous user, all in one transaction.
+    const prepared = await prepareAccountDeletion(admin, userId);
+    if (!prepared.ok) {
+      console.error('[admin-delete-pending-account] refused for user', userId, ':', prepared.log);
+      if (prepared.status === 409 || prepared.status === 403) {
+        return jsonResponse(
+          req,
+          {
+            error: 'not_deletable',
+            blockers: [prepared.error.replace(/^deletion_/, '')],
+            message: prepared.message,
+            summary,
+          },
+          409,
+        );
+      }
+      return jsonResponse(req, { error: prepared.error }, prepared.status);
+    }
 
     // 6c. Best-effort storage cleanup (avatars + driver KYC docs).
     try {

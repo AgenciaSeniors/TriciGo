@@ -34,7 +34,8 @@ vi.mock('../../client', () => ({
 }));
 
 // Import after mock is set up
-import { authService } from '../auth.service';
+import { authService, isAccountDeletionRefusal } from '../auth.service';
+import { AppError } from '../../errors';
 
 describe('authService', () => {
   beforeEach(() => {
@@ -772,6 +773,71 @@ describe('authService', () => {
       await expect(
         authService.sendEmailLoginLink('damian@example.com', 'driver'),
       ).rejects.toMatchObject({ code: 'rate_limited' });
+    });
+  });
+
+  // ==================== deleteAccount ====================
+  describe('deleteAccount', () => {
+    function httpError(status: number, body: unknown) {
+      const res = new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      return Object.assign(new Error('Edge Function returned a non-2xx status code'), { context: res });
+    }
+
+    it('signs out after the server deletes the account', async () => {
+      mockFunctions.invoke.mockResolvedValue({ data: { success: true }, error: null });
+      mockAuth.signOut.mockResolvedValue({ error: null });
+
+      await authService.deleteAccount();
+
+      expect(mockFunctions.invoke).toHaveBeenCalledWith('delete-account', { method: 'POST', body: {} });
+      expect(mockAuth.signOut).toHaveBeenCalled();
+    });
+
+    it('turns a refusal into an AppError carrying the server text', async () => {
+      mockFunctions.invoke.mockResolvedValue({
+        data: null,
+        error: httpError(409, {
+          error: 'deletion_debt',
+          message: 'Tienes una deuda de 1200 CUP con TriciGo. Págala antes de eliminar tu cuenta.',
+        }),
+      });
+
+      const err = await authService.deleteAccount().catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(AppError);
+      expect(err).toMatchObject({
+        code: 'DELETION_DEBT',
+        statusCode: 409,
+        message: 'Tienes una deuda de 1200 CUP con TriciGo. Págala antes de eliminar tu cuenta.',
+      });
+      expect(isAccountDeletionRefusal(err)).toBe(true);
+      expect(mockAuth.signOut).not.toHaveBeenCalled();
+    });
+
+    it('keeps the raw error when the server gives no text', async () => {
+      const raw = httpError(500, { error: 'deletion_failed' });
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: raw });
+
+      const err = await authService.deleteAccount().catch((e: unknown) => e);
+
+      expect(err).toBe(raw);
+      expect(isAccountDeletionRefusal(err)).toBe(false);
+      expect(mockAuth.signOut).not.toHaveBeenCalled();
+    });
+
+    it('keeps the raw error when the body is not JSON', async () => {
+      const raw = Object.assign(new Error('boom'), { context: new Response('<html>', { status: 502 }) });
+      mockFunctions.invoke.mockResolvedValue({ data: null, error: raw });
+
+      await expect(authService.deleteAccount()).rejects.toBe(raw);
+    });
+
+    it('does not treat other AppErrors as deletion refusals', () => {
+      expect(isAccountDeletionRefusal(new AppError('x', 'FARE_ABOVE_CEILING'))).toBe(false);
+      expect(isAccountDeletionRefusal(new Error('x'))).toBe(false);
     });
   });
 });

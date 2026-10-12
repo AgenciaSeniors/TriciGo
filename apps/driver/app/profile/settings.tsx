@@ -44,7 +44,7 @@ import { ProfileScreenHeader } from '@tricigo/ui/ProfileScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
 import { midnightEmber, cubanLight, cubanDark } from '@tricigo/theme';
 import { i18n } from '@tricigo/i18n';
-import { notificationService, authService, driverService } from '@tricigo/api';
+import { notificationService, authService, driverService, isAccountDeletionRefusal } from '@tricigo/api';
 import { logger } from '@tricigo/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDriverStore } from '@/stores/driver.store';
@@ -393,7 +393,10 @@ export default function DriverSettingsScreen() {
     // BUG-Store-Readiness-Driver (DD1): invoke the shared `delete-account`
     // edge function (introduced in PR #160 for the client app). The edge
     // function:
-    //   1. Anonymizes all non-CASCADE FK references to the user (rides,
+    //   1. Refuses while the driver has a trip in progress or scheduled, an
+    //      open report or dispute, a commission debt or a payment in flight
+    //      (00657). Otherwise, in one transaction, settles the wallet and
+    //      anonymizes all non-CASCADE FK references to the user (rides,
     //      ratings, referrals, ledger entries, chat messages, etc.) by
     //      re-pointing them to the anonymous user (00000000-…-099).
     //   2. Best-effort cleanup of the user's avatar AND any KYC documents
@@ -411,8 +414,15 @@ export default function DriverSettingsScreen() {
       try {
         await authService.deleteAccount();
         router.replace('/(auth)/login');
-      } catch {
-        Alert.alert('Error', t('profile.delete_error', { defaultValue: 'No se pudo eliminar la cuenta.' }));
+      } catch (err) {
+        // A refusal (trip in progress, open report, commission debt...) carries
+        // the server's Spanish text: show it instead of the generic one.
+        Alert.alert(
+          'Error',
+          isAccountDeletionRefusal(err)
+            ? err.message
+            : t('profile.delete_error', { defaultValue: 'No se pudo eliminar la cuenta.' }),
+        );
       }
     };
 
