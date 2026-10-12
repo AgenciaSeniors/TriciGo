@@ -75,12 +75,13 @@ fresh(){ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $1" -c "CR
   INSERT INTO public.stuck_ride_alerts (ride_id, reason) VALUES ('$R_IP','dead_driver_app');" >/dev/null 2>&1 || return 1; }
 
 # The old calculate_wait_charge's answers on a grid, kept to compare the new code against.
+# waited is in seconds: 0, 4, 5, 5:59 (no billable minute), 6, 12, 25 and 40 minutes.
 grid(){ run "$1" "
   CREATE TABLE public.wait_grid (arrived timestamptz, waited integer, wait_minutes integer, billable integer, charge integer);
   DO \$g\$ DECLARE h integer; w integer; r record; BEGIN
-    FOR h IN 0..23 LOOP FOREACH w IN ARRAY ARRAY[0,4,5,6,12,25,40] LOOP
+    FOR h IN 0..23 LOOP FOREACH w IN ARRAY ARRAY[0,240,300,359,360,720,1500,2400] LOOP
       UPDATE public.rides SET driver_arrived_at = (date '2026-10-12' + make_interval(hours => h)) AT TIME ZONE 'America/Havana',
-                              pickup_at = (date '2026-10-12' + make_interval(hours => h, mins => w)) AT TIME ZONE 'America/Havana'
+                              pickup_at = (date '2026-10-12' + make_interval(hours => h, secs => w)) AT TIME ZONE 'America/Havana'
        WHERE id = '$R_GRID';
       SELECT * INTO r FROM public.calculate_wait_charge('$R_GRID') AS (wait_minutes integer, billable_minutes integer, charge integer);
       INSERT INTO public.wait_grid SELECT driver_arrived_at, w, r.wait_minutes, r.billable_minutes, r.charge FROM public.rides WHERE id = '$R_GRID';
@@ -89,7 +90,13 @@ grid(){ run "$1" "
   END \$g\$; SELECT count(*) FROM public.wait_grid;"; }
 
 fresh $DB || { echo "scaffold failed"; exit 1; }
-[ "$(grid $DB)" = "168" ] || { echo "grid failed"; exit 1; }
+[ "$(grid $DB)" = "192" ] || { echo "grid failed"; exit 1; }
+
+# The live bodies the scaffold loaded are the ones read from prod (before the migration touches any).
+LIVE_MD5=$(sed -n "s/^-- live \([a-z_]*\): md5 \([0-9a-f]*\)$/('\1','\2')/p" "$DIR/live-bodies.sql" | paste -sd, -)
+val "S1 the live bodies load with the md5 noted in live-bodies.sql" \
+  "SELECT count(*) FILTER (WHERE md5(p.prosrc) = v.m) || '/' || count(*) FROM (VALUES $LIVE_MD5) v(n, m)
+   LEFT JOIN pg_proc p ON p.proname = v.n AND p.pronamespace = 'public'::regnamespace;" "9/9"
 
 apply(){ $BIN/psql $CONN -d "$1" -qAt -v ON_ERROR_STOP=1 -1 -c "$AS_OWNER" -f "$2" 2>&1 | tr -d '\r' | grep -v '^$'; return ${PIPESTATUS[0]}; }
 if [ "$MIG" != "none" ]; then
@@ -104,19 +111,21 @@ PUSHES="RESET ROLE; SELECT count(*) FROM net.calls WHERE url LIKE 'support-ride-
 STATUS_PUSHES="RESET ROLE; SELECT count(*) FROM net.calls WHERE url NOT LIKE 'support-ride-resolved%';"
 
 echo "== the wait charge keeps its rules =="
-val "W1 _wait_charge_for equals the old calculate_wait_charge on 168 waits (24 hours x 7 lengths)" \
-  "SELECT count(*) FROM public.wait_grid g, public._wait_charge_for('triciclo_basico', g.arrived, g.arrived + make_interval(mins => g.waited)) n
+val "W1 _wait_charge_for equals the old calculate_wait_charge on 192 waits (24 hours x 8 lengths)" \
+  "SELECT count(*) FROM public.wait_grid g, public._wait_charge_for('triciclo_basico', g.arrived, g.arrived + make_interval(secs => g.waited)) n
    WHERE (n.wait_minutes, n.billable_minutes, n.charge) IS DISTINCT FROM (g.wait_minutes, g.billable, g.charge);" "0"
-val "W2 the new calculate_wait_charge gives the same 168 answers and writes the same columns" \
+val "W2 the new calculate_wait_charge gives the same 192 answers and writes the same columns" \
   "BEGIN; DO \$g\$ DECLARE g record; r record; BEGIN
      FOR g IN SELECT * FROM public.wait_grid LOOP
-       UPDATE public.rides SET driver_arrived_at = g.arrived, pickup_at = g.arrived + make_interval(mins => g.waited) WHERE id = '$R_GRID';
+       UPDATE public.rides SET driver_arrived_at = g.arrived, pickup_at = g.arrived + make_interval(secs => g.waited) WHERE id = '$R_GRID';
        SELECT * INTO r FROM public.calculate_wait_charge('$R_GRID') AS (wait_minutes integer, billable_minutes integer, charge integer);
        IF (r.wait_minutes, r.billable_minutes, r.charge) IS DISTINCT FROM (g.wait_minutes, g.billable, g.charge)
           OR (SELECT (wait_time_minutes, wait_time_charge_cup) FROM public.rides WHERE id = '$R_GRID') IS DISTINCT FROM (g.wait_minutes, g.charge) THEN
          RAISE EXCEPTION 'differs at % +%', g.arrived, g.waited; END IF;
      END LOOP; END \$g\$; SELECT 'same'; ROLLBACK;" "same"
 val "W3 no times, no charge" "SELECT (n).* FROM (SELECT public._wait_charge_for('triciclo_basico', NULL, now()) n) s;" "0|0|0"
+val "W4 the grid has the 5:59 wait: 5 minutes, none billable" \
+  "SELECT string_agg(DISTINCT wait_minutes || '|' || billable || '|' || charge, ' ') FROM public.wait_grid WHERE waited = 359;" "5|0|0"
 
 echo "== GPS departure =="
 val "D1 the first point beyond 100 m after arrival" \
@@ -150,11 +159,15 @@ for fn in "admin_active_ride_context('$R_IP')" "admin_release_active_ride('$R_AC
   val "G2 a rider is refused: ${fn%%(*}" "$(as $RIDER "SELECT (public.$fn)->>'error';")" "forbidden"
 done
 err "G3 anon cannot call them" "BEGIN; SET LOCAL ROLE anon; SELECT public.admin_active_ride_context('$R_IP'); ROLLBACK;" "permission denied"
-val "G4 the four helpers exist and are not executable by clients" \
+val "G4 the five helpers exist and are not executable by clients" \
   "SELECT count(*) || '|' || count(*) FILTER (WHERE has_function_privilege('anon', p.oid, 'EXECUTE')
                                           OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))
    FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
-     AND p.proname IN ('_wait_charge_for','_ride_gps_departure_at','_active_ride_charge_preview','_support_ride_push');" "4|0"
+     AND p.proname IN ('_wait_charge_for','_ride_gps_departure_at','_active_ride_charge_preview','_support_ride_push','_reopen_ride_offers');" "5|0"
+val "G8 the read-only helpers are STABLE" \
+  "SELECT string_agg(proname || ':' || provolatile::text, ' ' ORDER BY proname) FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+     AND proname IN ('_wait_charge_for','_ride_gps_departure_at','_active_ride_charge_preview');" \
+  "_active_ride_charge_preview:s _ride_gps_departure_at:s _wait_charge_for:s"
 val "G5 a super_admin may act (context and release)" \
   "$(as $SUPER "SELECT COALESCE(public.admin_active_ride_context('$R_IP')->>'error', 'ok');
      SELECT public.admin_release_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'no responde')->>'success';")" "ok;true"
@@ -274,11 +287,11 @@ lock_order(){ local a b w=0 c i out; out=$(mktemp)
 L1=$(lock_order); [ "$L1" = "1|free|true" ] && ok "L1 the release locks the driver before the ride" || ko "L1 the release locks the driver before the ride" "expected [1|free|true], got [$L1]"
 
 echo "== advance =="
-val "A1 accepted -> arrived_at_pickup in one transition, one status push, arrival = now" \
+val "A1 accepted -> arrived_at_pickup in exactly one transition and one status push for the ride, arrival = now" \
   "$(as $ADMIN "SELECT public.admin_advance_active_ride('$R_ACC', 'accepted', '$DP_DIEGO', 'sin gps')->>'status';
-     RESET ROLE; SELECT (SELECT count(*) FROM public.ride_transitions WHERE ride_id = '$R_ACC') || '|' ||
-       (SELECT count(*) FROM net.calls WHERE body->>'title' = 'Conductor llegó') || '|' ||
-       (SELECT driver_arrived_at = now() FROM public.rides WHERE id = '$R_ACC');")" "arrived_at_pickup;1|1|true"
+     RESET ROLE; SELECT (SELECT string_agg(from_status || '>' || to_status, ',') FROM public.ride_transitions WHERE ride_id = '$R_ACC') || '|' ||
+       (SELECT string_agg(body->>'title', ',') FROM net.calls WHERE url NOT LIKE 'support-ride-resolved%' AND body->'data'->>'ride_id' = '$R_ACC') || '|' ||
+       (SELECT driver_arrived_at = now() FROM public.rides WHERE id = '$R_ACC');")" "arrived_at_pickup;accepted>arrived_at_pickup|Conductor llegó|true"
 val "A2 arrived_at_pickup -> in_progress with pickup at the GPS departure" \
   "$(as $ADMIN "RESET ROLE; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '12 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") SET LOCAL ROLE authenticated;
      SELECT public.admin_advance_active_ride('$R_PICK', 'arrived_at_pickup', '$DP_DIEGO', 'sin gps')->>'status';
@@ -399,6 +412,14 @@ if [ "$MIG" != "none" ]; then
       "is not the body this migration patches" "N4 refuses an unknown release_rides_from_dead_drivers"
   neg "CREATE OR REPLACE FUNCTION public._wait_charge_for(p text) RETURNS int LANGUAGE sql AS 'SELECT 1'; GRANT EXECUTE ON FUNCTION public._wait_charge_for(text) TO authenticated;" \
       "executable by a client role" "N3 refuses a client-executable helper overload"
+  neg "CREATE FUNCTION public.admin_release_active_ride(p uuid) RETURNS jsonb LANGUAGE sql SET search_path = public, pg_catalog AS 'SELECT NULL::jsonb';" \
+      "is not SECURITY DEFINER with a fixed search_path" "N5 refuses an RPC that is not SECURITY DEFINER"
+  neg "CREATE FUNCTION public.admin_advance_active_ride(p uuid) RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS 'SELECT NULL::jsonb';" \
+      "is not SECURITY DEFINER with a fixed search_path" "N6 refuses an RPC without a fixed search_path"
+  neg "CREATE FUNCTION public.admin_complete_active_ride(p uuid) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_catalog AS 'SELECT NULL::jsonb'; GRANT EXECUTE ON FUNCTION public.admin_complete_active_ride(uuid) TO anon;" \
+      "is executable by anon" "N7 refuses an RPC that anon may run"
+  neg "CREATE FUNCTION public._reopen_ride_offers(p uuid) RETURNS integer LANGUAGE sql SET search_path = public, pg_catalog AS 'SELECT 0'; REVOKE ALL ON FUNCTION public._reopen_ride_offers(uuid) FROM PUBLIC;" \
+      "is not SECURITY DEFINER with a fixed search_path" "N8 refuses a writing helper that is not SECURITY DEFINER"
 fi
 
 echo

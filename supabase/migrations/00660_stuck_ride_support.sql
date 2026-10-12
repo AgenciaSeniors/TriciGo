@@ -11,15 +11,21 @@
 --   admin_release_active_ride   back to search now (accepted, driver_en_route)
 --   admin_advance_active_ride   one step: arrived / started / at destination
 --   admin_complete_active_ride  complete and charge (agreed price + recorded wait)
--- Each one locks the ride, refuses when the status is not the one support saw
--- (ride_changed), needs a reason, logs to admin_actions and pushes through
+-- Each action locks the ride, refuses when the status or the driver is not the
+-- one support saw (ride_changed) and when the admin is the ride's rider or
+-- driver (self_ride), needs a reason, logs to admin_actions and pushes through
 -- cron_http_post ('support-ride-resolved').
+--
+-- Both releases, support's and the automatic one (release_rides_from_dead_drivers
+-- block A, patched in place from its live body md5 c99dd7b8...), now give the
+-- ride back to the drivers it had been offered to, and reset the previous
+-- driver's GPS and proximity state.
 --
 -- calculate_wait_charge now calls _wait_charge_for, a pure function with the
 -- same rules, so the panel can preview the charge the completion will make.
 -- It is replaced only when the live body is the one this migration was written
 -- for (md5 2c0679d1...). The rehearsal checks the two bodies give the same
--- answers on 168 waits, and the prod check on every ride with both times.
+-- answers on 192 waits, and the prod check on every ride with both times.
 
 SET lock_timeout = '5s';
 
@@ -34,6 +40,7 @@ CREATE OR REPLACE FUNCTION public._wait_charge_for(
   p_service_type text, p_arrived_at timestamptz, p_pickup_at timestamptz,
   OUT wait_minutes integer, OUT billable_minutes integer, OUT charge integer)
  LANGUAGE plpgsql
+ STABLE
  SET search_path TO 'public', 'pg_catalog'
 AS $function$
 DECLARE
@@ -172,6 +179,7 @@ REVOKE ALL ON FUNCTION public._ride_gps_departure_at(uuid, timestamptz) FROM PUB
 CREATE OR REPLACE FUNCTION public._active_ride_charge_preview(p_ride public.rides, p_pickup_at timestamptz)
  RETURNS jsonb
  LANGUAGE plpgsql
+ STABLE
  SET search_path TO 'public', 'pg_catalog'
 AS $function$
 DECLARE
@@ -421,10 +429,13 @@ REVOKE ALL ON FUNCTION public.admin_active_ride_context(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_active_ride_context(uuid) TO authenticated, service_role;
 
 -- 10. Back to search, now (accepted, driver_en_route). What release_rides_from_dead_drivers
---    block A does, plus: the previous driver's GPS state is reset, so a rider
---    confirmation given to that driver does not let the next one skip the
---    arrival gate; the 00628 wait alert is stamped (support is already on it);
---    and dispatch runs at once.
+--     block A does (with section 8: the previous driver's GPS and proximity
+--     state is reset, so a rider confirmation given to him does not let the
+--     next driver skip the arrival gate, and the other drivers' offers are
+--     reopened), plus: the 00628 wait alert is stamped (support is already on
+--     it), and dispatch runs at once. When that dispatch is round 2 or 3, the
+--     rider also gets its "Seguimos buscando" push, as after the automatic
+--     release.
 CREATE OR REPLACE FUNCTION public.admin_release_active_ride(p_ride_id uuid, p_expected_status text,
   p_expected_driver_id uuid, p_reason text)
  RETURNS jsonb
@@ -526,8 +537,9 @@ REVOKE ALL ON FUNCTION public.admin_release_active_ride(uuid, text, uuid, text) 
 GRANT EXECUTE ON FUNCTION public.admin_release_active_ride(uuid, text, uuid, text) TO authenticated, service_role;
 
 -- 11. One step forward, standing in for the driver's tap. No GPS gate: that is
---    what support is for. "Viaje iniciado" takes the pickup time from the GPS
---    departure; with none, pickup = arrival, so no wait is charged.
+--     what support is for. "Viaje iniciado" takes the pickup time from the GPS
+--     departure; with none, pickup = arrival, so no wait is charged. Returns
+--     the times it wrote and the wait they give.
 CREATE OR REPLACE FUNCTION public.admin_advance_active_ride(p_ride_id uuid, p_expected_status text,
   p_expected_driver_id uuid, p_reason text)
  RETURNS jsonb
@@ -618,7 +630,8 @@ GRANT EXECUTE ON FUNCTION public.admin_advance_active_ride(uuid, text, uuid, tex
 
 -- 12. Complete and charge: the agreed price minus the discount plus the recorded
 --     wait, through complete_ride_and_pay (it admits admin callers and moves the
---     money exactly as for any ride). The amount must be the one support saw.
+--     money exactly as for any ride). The amount must be the one support saw,
+--     and a cargo ride needs its delivery proof.
 CREATE OR REPLACE FUNCTION public.admin_complete_active_ride(p_ride_id uuid, p_expected_status text,
   p_expected_driver_id uuid, p_expected_total_cup integer, p_reason text)
  RETURNS jsonb
@@ -747,14 +760,20 @@ BEGIN
     RAISE EXCEPTION '00660 check: accepted -> arrived_at_pickup must be for admin and super_admin only';
   END IF;
 
+  -- The helpers that write run as their owner, with a fixed search_path; none
+  -- of the five is callable by a client.
   v_n := 0;
   FOR r IN
-    SELECT p.oid::regprocedure AS fn FROM pg_proc p
+    SELECT p.oid::regprocedure AS fn, p.proname, p.prosecdef, p.proconfig FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
       '_wait_charge_for', '_ride_gps_departure_at', '_active_ride_charge_preview', '_support_ride_push',
       '_reopen_ride_offers')
   LOOP
     v_n := v_n + 1;
+    IF r.proname IN ('_support_ride_push', '_reopen_ride_offers')
+       AND NOT (r.prosecdef AND COALESCE(r.proconfig && ARRAY['search_path=public, pg_catalog'], false)) THEN
+      RAISE EXCEPTION '00660 check: % is not SECURITY DEFINER with a fixed search_path', r.fn;
+    END IF;
     IF has_function_privilege('anon', r.fn, 'EXECUTE') OR has_function_privilege('authenticated', r.fn, 'EXECUTE') THEN
       RAISE EXCEPTION '00660 check: % is executable by a client role', r.fn;
     END IF;
@@ -763,13 +782,19 @@ BEGIN
     RAISE EXCEPTION '00660 check: expected 5 internal functions, found %', v_n;
   END IF;
 
+  -- The four RPCs: SECURITY DEFINER with a fixed search_path, for signed-in
+  -- callers only (each one checks is_admin() itself).
   v_n := 0;
   FOR r IN
-    SELECT p.oid::regprocedure AS fn FROM pg_proc p
+    SELECT p.oid::regprocedure AS fn, p.prosecdef, p.proconfig FROM pg_proc p
     WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN (
       'admin_active_ride_context', 'admin_release_active_ride', 'admin_advance_active_ride', 'admin_complete_active_ride')
   LOOP
     v_n := v_n + 1;
+    IF NOT (r.prosecdef AND COALESCE(r.proconfig && ARRAY['search_path=public, pg_catalog',
+                                                          'search_path=public, extensions, pg_catalog'], false)) THEN
+      RAISE EXCEPTION '00660 check: % is not SECURITY DEFINER with a fixed search_path', r.fn;
+    END IF;
     IF has_function_privilege('anon', r.fn, 'EXECUTE') THEN
       RAISE EXCEPTION '00660 check: % is executable by anon', r.fn;
     END IF;
