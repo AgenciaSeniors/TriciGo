@@ -110,3 +110,183 @@ BEGIN
   RETURN result;
 END;
 $function$;
+
+-- 4. When the GPS trail shows the driver leaving the pickup: the first point more
+--    than 100 m from it at or after p_since. Per point, the earlier of the phone's
+--    time and the server's receipt: a later departure means more wait for the
+--    rider, so it is never later than the server saw the point (00659 uses the
+--    later one for arrival, for the same reason). Only the ride's driver's points.
+CREATE OR REPLACE FUNCTION public._ride_gps_departure_at(p_ride_id uuid, p_since timestamptz)
+ RETURNS timestamptz
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+  SELECT CASE WHEN s.m IS NULL THEN NULL ELSE LEAST(s.m, now()) END
+  FROM (
+    SELECT min(LEAST(le.recorded_at, le.received_at)) AS m
+    FROM public.ride_location_events le
+    JOIN public.rides r ON r.id = le.ride_id
+    WHERE le.ride_id = p_ride_id
+      AND p_since IS NOT NULL
+      AND le.driver_id = r.driver_id
+      AND LEAST(le.recorded_at, le.received_at) >= p_since
+      AND ST_Distance(le.location, r.pickup_location) > 100
+  ) s;
+$function$;
+REVOKE ALL ON FUNCTION public._ride_gps_departure_at(uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+
+-- 5. What completing the ride would charge, for a given pickup time. NULL when the
+--    ride has no estimate snapshot (none in the last 90 days). Same formula as
+--    complete_ride_and_pay's strict-parity path. A corporate ride whose commission
+--    is below the default ends lower; is_corporate tells the panel.
+CREATE OR REPLACE FUNCTION public._active_ride_charge_preview(p_ride public.rides, p_pickup_at timestamptz)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_total integer;
+  v_w record;
+BEGIN
+  SELECT s.total INTO v_total FROM public.ride_pricing_snapshots s
+   WHERE s.ride_id = p_ride.id AND s.snapshot_type = 'estimate' LIMIT 1;
+  IF v_total IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT * INTO v_w FROM public._wait_charge_for(p_ride.service_type, p_ride.driver_arrived_at, p_pickup_at);
+  RETURN jsonb_build_object(
+    'agreed_cup', v_total,
+    'discount_cup', COALESCE(p_ride.discount_amount_cup, 0),
+    'wait_minutes', v_w.wait_minutes,
+    'billable_minutes', v_w.billable_minutes,
+    'wait_cup', v_w.charge,
+    'insurance_cup', CASE WHEN p_ride.insurance_selected AND p_ride.insurance_premium_cup > 0
+                          THEN p_ride.insurance_premium_cup ELSE 0 END,
+    'is_corporate', p_ride.corporate_account_id IS NOT NULL,
+    'total_cup', GREATEST(v_total - COALESCE(p_ride.discount_amount_cup, 0), 0) + v_w.charge);
+END;
+$function$;
+REVOKE ALL ON FUNCTION public._active_ride_charge_preview(public.rides, timestamptz) FROM PUBLIC, anon, authenticated;
+
+-- 6. A support push. In a block of its own, like 00628's: a failing push never
+--    takes back the action; it leaves a WARNING and an rpc_attempt_log row.
+CREATE OR REPLACE FUNCTION public._support_ride_push(p_rpc text, p_ride_id uuid, p_user_id uuid,
+  p_title text, p_body text, p_category text, p_data jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_key text;
+BEGIN
+  IF p_user_id IS NULL THEN
+    RETURN;
+  END IF;
+  BEGIN
+    v_key := public.get_service_role_key();
+    IF v_key IS NULL OR v_key = '' THEN
+      RAISE WARNING '%: no service role key, no push for ride %', p_rpc, p_ride_id;
+      PERFORM public.log_rpc_attempt(p_rpc, auth.uid(), p_ride_id, 'push_failed',
+        jsonb_build_object('user_id', p_user_id, 'error', 'no service role key'));
+    ELSE
+      PERFORM public.cron_http_post('support-ride-resolved',
+        url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
+        headers := jsonb_build_object('Content-Type', 'application/json',
+                                      'Authorization', 'Bearer ' || v_key, 'apikey', v_key),
+        body    := jsonb_build_object('user_id', p_user_id::text, 'title', p_title, 'body', p_body,
+                                      'category', p_category,
+                                      'data', COALESCE(p_data, '{}'::jsonb) || jsonb_build_object('ride_id', p_ride_id::text)));
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '%: the push for ride % failed: % %', p_rpc, p_ride_id, SQLSTATE, SQLERRM;
+    PERFORM public.log_rpc_attempt(p_rpc, auth.uid(), p_ride_id, 'push_failed',
+      jsonb_build_object('user_id', p_user_id, 'error', SQLERRM));
+  END;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public._support_ride_push(text, uuid, uuid, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+
+-- 7. Everything the active view shows, in one call.
+CREATE OR REPLACE FUNCTION public.admin_active_ride_context(p_ride_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+DECLARE
+  v_ride public.rides%ROWTYPE;
+  v_actions text[];
+  v_dep timestamptz;
+  v_start timestamptz;
+  v_source text;
+  v_preview jsonb;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('error', 'forbidden');
+  END IF;
+  SELECT * INTO v_ride FROM public.rides WHERE id = p_ride_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'ride_not_found');
+  END IF;
+
+  v_actions := CASE v_ride.status
+    WHEN 'accepted' THEN ARRAY['release', 'advance']
+    WHEN 'driver_en_route' THEN ARRAY['release', 'advance']
+    WHEN 'arrived_at_pickup' THEN ARRAY['advance']
+    WHEN 'in_progress' THEN ARRAY['advance', 'complete']
+    WHEN 'arrived_at_destination' THEN ARRAY['complete']
+    ELSE ARRAY[]::text[] END;
+
+  IF v_ride.status = 'arrived_at_pickup' THEN
+    v_dep := public._ride_gps_departure_at(v_ride.id, v_ride.driver_arrived_at);
+    v_start := COALESCE(v_ride.pickup_at, v_dep, v_ride.driver_arrived_at, now());
+    v_source := CASE WHEN v_ride.pickup_at IS NOT NULL THEN 'recorded'
+                     WHEN v_dep IS NOT NULL THEN 'gps'
+                     WHEN v_ride.driver_arrived_at IS NOT NULL THEN 'arrival'
+                     ELSE 'now' END;
+    v_preview := public._active_ride_charge_preview(v_ride, v_start);
+  ELSIF v_ride.status IN ('in_progress', 'arrived_at_destination') THEN
+    v_preview := public._active_ride_charge_preview(v_ride, v_ride.pickup_at);
+  ELSE
+    v_preview := public._active_ride_charge_preview(v_ride, NULL);
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ride', (SELECT jsonb_build_object(
+        'id', v_ride.id, 'code', public._ride_short_code(v_ride.id), 'status', v_ride.status,
+        'service_type', v_ride.service_type, 'payment_method', v_ride.payment_method,
+        'is_corporate', v_ride.corporate_account_id IS NOT NULL,
+        'pickup_address', v_ride.pickup_address, 'dropoff_address', v_ride.dropoff_address,
+        'created_at', v_ride.created_at, 'accepted_at', v_ride.accepted_at,
+        'driver_arrived_at', v_ride.driver_arrived_at, 'pickup_at', v_ride.pickup_at,
+        'scheduled_at', v_ride.scheduled_at, 'estimated_fare_cup', v_ride.estimated_fare_cup,
+        'customer_id', v_ride.customer_id, 'customer_name', c.full_name,
+        'customer_phone', c.phone, 'customer_is_test', c.is_test)
+      FROM public.users c WHERE c.id = v_ride.customer_id),
+    'driver', (SELECT jsonb_build_object(
+        'driver_profile_id', dp.id, 'full_name', u.full_name, 'phone', u.phone,
+        'is_online', dp.is_online, 'last_heartbeat_at', dp.last_heartbeat_at,
+        'vehicle_label', (SELECT concat_ws(' · ',
+             NULLIF(concat_ws(' ', NULLIF(btrim(v.make), ''), NULLIF(btrim(v.model), '')), ''),
+             NULLIF(btrim(v.color), ''), NULLIF(btrim(v.plate_number), ''))
+           FROM public.vehicles v WHERE v.driver_id = dp.id AND v.is_active LIMIT 1))
+      FROM public.driver_profiles dp JOIN public.users u ON u.id = dp.user_id
+      WHERE dp.id = v_ride.driver_id),
+    'last_point', (SELECT jsonb_build_object(
+        'recorded_at', le.recorded_at, 'received_at', le.received_at,
+        'distance_to_pickup_m', round(ST_Distance(le.location, v_ride.pickup_location))::int,
+        'distance_to_dropoff_m', round(ST_Distance(le.location, v_ride.dropoff_location))::int)
+      FROM public.ride_location_events le WHERE le.ride_id = v_ride.id
+      ORDER BY le.recorded_at DESC, le.id DESC LIMIT 1),
+    'alert', (SELECT jsonb_build_object('reason', a.reason, 'detected_at', a.detected_at)
+      FROM public.stuck_ride_alerts a WHERE a.ride_id = v_ride.id AND a.resolved_at IS NULL),
+    'preview', v_preview,
+    'start_pickup_at', CASE WHEN v_ride.status = 'arrived_at_pickup' THEN v_start END,
+    'start_pickup_source', v_source,
+    'allowed_actions', to_jsonb(v_actions));
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.admin_active_ride_context(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_active_ride_context(uuid) TO authenticated, service_role;
