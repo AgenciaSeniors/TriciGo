@@ -2305,12 +2305,12 @@ Ensayo: `supabase/tests/00655/run.sh` (RED: 24 fallos; GREEN 39/39, con 5 prueba
 - **Hueco conocido:** un viaje creado en los milisegundos entre la preparación y el borrado de GoTrue deja la cuenta viva, ya liquidada y anonimizada; un reintento se rechaza hasta que ese viaje termine.
 - **Una referencia nueva a `users` que no sea CASCADE** hay que sumarla a `anonymize_user_references`, y si tiene clave única que incluye al usuario, hacerla parcial como estas cuatro, o la segunda eliminación vuelve a fallar (ahora sin perder plata: `deletion_incomplete`).
 - Ensayo: `supabase/tests/00657/run.sh` (RED: 16 fallos; GREEN 31/31, con 5 pruebas negativas y una copia CRLF). Ensayo en prod dentro de un bloque revertido, con la función como `pg_temp` y las claves viejas: el primer referido se elimina, el segundo da `deletion_incomplete [public.referrals.referee_id]` con su billetera intacta (10.000), y los cinco rechazos salen con su texto.
-- **Estado (2026-10-12): aplicada a medias.**
-  - **En prod:** la función (sección 2), por MCP como `00657_…_part1`, con md5 `be50db1c…/3409`; también `delete-account` v19 y `admin-delete-pending-account` v10. Ensayo posterior sobre la función real, revertido: el primer referido se elimina; el segundo da `deletion_incomplete [public.referrals.referee_id]` con la billetera intacta; la cuenta anónima da `deletion_system_account`.
-  - **Falta la sección 1** (los `DROP CONSTRAINT`/`DROP INDEX` y los índices parciales). Se intentó seis veces por MCP y la aprobación nunca le llegó al dueño.
-  - **Mientras falte**, nadie pierde plata. Pero el segundo referido que quiera eliminar su cuenta (y los casos raros de las otras tres claves) recibe "No pudimos eliminar tu cuenta. Escríbenos a soporte".
-  - **Para aplicarla:** pegar en el SQL Editor las secciones 1 y 3 del archivo (sin la función: así no entran `\r` en su cuerpo). El texto está en la descripción del PR #1144.
-  - **Comprobar que quedó:** `SELECT c.relname, pg_get_expr(i.indpred, i.indrelid) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname LIKE '%referee_id_key' OR c.relname LIKE 'reviews_ride_id%' OR c.relname = 'uniq_reviews_ride_reviewer';`. Tiene que mostrar el predicado con `…0099` y ya no `uniq_reviews_ride_reviewer`.
+- **Estado (2026-10-12): aplicada completa en prod, en dos partes.**
+  - **Función (sección 2):** por MCP como `00657_…_part1`, md5 `be50db1c…/3409`.
+  - **Claves parciales (secciones 1 y 3):** el dueño las pegó en el SQL Editor, porque seis intentos por MCP nunca le mostraron la aprobación. Por eso no figuran en `schema_migrations`.
+  - **Edge Functions:** `delete-account` v19 y `admin-delete-pending-account` v10.
+  - **Verificado por objeto:** las cuatro claves son índices únicos parciales con `…0099` en el predicado, sin constraint, y `uniq_reviews_ride_reviewer` ya no existe.
+  - **Probado con dos conductores referidos reales, en un bloque revertido:** los dos se eliminan, sus billeteras quedan en 0 y las dos filas de `referrals` pasan a `…0099`. Al deshacer, todo volvió a 10.000.
 
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
