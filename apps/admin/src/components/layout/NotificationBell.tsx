@@ -6,7 +6,7 @@
  * Replaces the former decorative placeholder (a Bell with an always-on
  * pulsing dot and no onClick). Surfaces the admin's actionable queue,
  * reusing data sources that already exist — no new plumbing:
- *   - Open SOS incidents, realtime, via useSosAlerts (own channel topic).
+ *   - Open SOS incidents, realtime, via useSosAlerts (shared with the dashboard banner).
  *   - Open incidents + drivers pending verification, from the same
  *     get_admin_dashboard_metrics RPC the dashboard polls.
  *
@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Bell, Siren, UserCheck } from 'lucide-react';
-import { adminService } from '@tricigo/api/services/admin';
+import { getDashboardMetricsShared } from '@/lib/dashboardMetrics';
 import { useTranslation } from '@tricigo/i18n';
 import { useSosAlerts } from '@/hooks/useSosAlerts';
 
@@ -28,12 +28,12 @@ export function NotificationBell() {
   const { t } = useTranslation('admin');
   const [open, setOpen] = useState(false);
   const [metrics, setMetrics] = useState<Metrics>({ open_incidents: 0, pending_verifications: 0 });
-  const { alerts: sosAlerts, count: sosCount } = useSosAlerts('sos-alerts-header');
+  const { alerts: sosAlerts, count: sosCount } = useSosAlerts();
   const ref = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const m = await adminService.getDashboardMetrics();
+      const m = await getDashboardMetricsShared();
       setMetrics({
         open_incidents: m.open_incidents ?? 0,
         pending_verifications: m.pending_verifications ?? 0,

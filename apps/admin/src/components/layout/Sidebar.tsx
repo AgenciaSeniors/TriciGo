@@ -178,6 +178,8 @@ export function Sidebar() {
   );
 
   // Promotions marketing left waiting: a dot on the menu item, for the people who approve them.
+  // Counted when the panel opens, every 2 minutes and when the promotions page changes one;
+  // not on every page change (that was one more request per navigation, 2026-10-12).
   const [pendingPromotions, setPendingPromotions] = useState(0);
   useEffect(() => {
     if (panelRole === 'marketing') return;
@@ -190,13 +192,15 @@ export function Sidebar() {
       });
     };
     recount();
+    const timer = setInterval(recount, 120_000);
     // The promotions page announces an approval, a saved draft or a delete, so the dot clears right away.
     window.addEventListener('tricigo:promotions-changed', recount);
     return () => {
       cancelled = true;
+      clearInterval(timer);
       window.removeEventListener('tricigo:promotions-changed', recount);
     };
-  }, [panelRole, pathname]);
+  }, [panelRole]);
 
   const width = isCollapsed ? 'md:w-[72px]' : 'md:w-[272px]';
 

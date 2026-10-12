@@ -18,6 +18,7 @@ import { adminService } from '@tricigo/api/services/admin';
 import { formatCUP } from '@tricigo/utils';
 import type { Ride, DriverProfileWithUser, AdminAction } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { getDashboardMetricsShared } from '@/lib/dashboardMetrics';
 import { DashboardHero } from '@/components/dashboard/DashboardHero';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { SectionCard } from '@/components/dashboard/SectionCard';
@@ -111,7 +112,7 @@ export default function DashboardPage() {
     async function fetchDashboard() {
       try {
         const [metricsData, rides, drivers, autoActionsData] = await Promise.all([
-          adminService.getDashboardMetrics(),
+          getDashboardMetricsShared(),
           adminService.getRides({}, 0, 6),
           adminService.getDriversByStatus('pending_verification', 0, 5),
           adminService.getRecentAutoActions(6).catch(() => [] as AdminAction[]),
