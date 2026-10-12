@@ -1,11 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { makeSentryBeforeSend } from '../sentryNoise';
-import { PRIVATE_FRAGMENT_PATHS, scrubPrivateFragments } from '../sentryPrivacy';
+import { scrubUrlFragments, stripUrlFragments } from '../sentryPrivacy';
 
+// Fake session, shaped like what GoTrue puts in the fragment after Google/Apple or the e-mail link.
+const ACCESS = 'eyJhbGciOiJFUzI1NiIsImtpZCI6ImZha2UiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJmYWtlLXVzZXIifQ.ZmFrZS1zaWduYXR1cmU';
+const REFRESH = 'k3xq9fakerefresh7';
+const LOGIN_FRAGMENT = `#access_token=${ACCESS}&expires_at=1760188000&expires_in=3600&provider_token=ya29.fakeprovider&refresh_token=${REFRESH}&token_type=bearer`;
+const CALLBACK = 'https://tricigo.com/auth/callback';
+
+// Team digest opt-out link (00656).
 const U = '3f2b8c1e-7a4d-4e5f-9b6a-0c1d2e3f4a5b';
 const T = '9e107d9d372bb6826bd81d3542a419d6c0ffee00deadbeef0123456789abcdef';
-const FRAGMENT = `#u=${U}&t=${T}`;
-const PAGE = 'https://tricigo.com/resumen-diario/baja';
+const OPT_OUT = 'https://tricigo.com/resumen-diario/baja';
+const OPT_OUT_FRAGMENT = `#u=${U}&t=${T}`;
 
 /** What the SDK sends: the envelope drops sdkProcessingMetadata (core envelope.js). */
 function serialized(event: Record<string, unknown>): string {
@@ -14,22 +21,26 @@ function serialized(event: Record<string, unknown>): string {
 }
 
 /**
- * A pageload transaction shaped like the one @sentry/nextjs 10.43 builds for this page:
- * - request.url is document.location.href captured when the pageload span starts
- *   (browserTracingIntegration: setSDKProcessingMetadata({ normalizedRequest: getHttpRequestData() }),
- *   then sentrySpan._convertSpanToTransaction: request: normalizedRequest);
+ * A pageload transaction shaped like the one @sentry/nextjs 10.43 builds when the browser lands on
+ * `page + fragment`:
+ * - request.url is document.location.href captured when the pageload span starts, at SDK init and
+ *   before GoTrue clears the hash (browserTracingIntegration: setSDKProcessingMetadata({
+ *   normalizedRequest: getHttpRequestData() }), then sentrySpan._convertSpanToTransaction:
+ *   request: normalizedRequest);
  * - transaction is WINDOW.location.pathname (appRouterRoutingInstrumentation);
- * - fetch spans carry url / http.url / http.query / http.fragment (core fetch.js getFetchSpanAttributes,
- *   browser tracing/request.js);
- * - navigation breadcrumbs carry data.from / data.to, fetch breadcrumbs data.url (breadcrumbs.js).
+ * - fetch spans carry url / http.url / http.query / http.fragment (core fetch.js getFetchSpanAttributes);
+ * - navigation breadcrumbs carry data.from / data.to as relative URLs with the hash (Next's first
+ *   history.replaceState writes the canonical URL, hash included; breadcrumbs.js keeps parsedTo.relative);
+ *   console breadcrumbs carry the logged text.
  */
-function pageloadTransaction(): Record<string, unknown> {
+function pageloadTransaction(page: string, fragment: string): Record<string, unknown> {
+  const path = new URL(page).pathname;
   const capturedSpanScope: Record<string, unknown> = { name: 'scope' };
   capturedSpanScope.self = capturedSpanScope; // real scopes are cyclic; never walked or sent
-  capturedSpanScope.note = `${PAGE}${FRAGMENT}`; // proves the walker stays out of it
+  capturedSpanScope.note = `${page}${fragment}`; // proves the walker stays out of it
   return {
     type: 'transaction',
-    transaction: '/resumen-diario/baja',
+    transaction: path,
     transaction_info: { source: 'url' },
     start_timestamp: 1760184300.1,
     timestamp: 1760184302.4,
@@ -41,161 +52,206 @@ function pageloadTransaction(): Record<string, unknown> {
         origin: 'auto.pageload.nextjs.app_router_instrumentation',
         data: {
           'sentry.op': 'pageload',
-          'sentry.origin': 'auto.pageload.nextjs.app_router_instrumentation',
           'sentry.source': 'url',
           'sentry.sample_rate': 0.2,
-          'performance.timeOrigin': 1760184300000,
-          'lcp.element': 'body > main > div > h1',
+          'lcp.element': 'body > div#__next > main > div > h1',
         },
       },
     },
     spans: [
       {
         op: 'http.client',
-        description: 'POST https://lqaufszburqvlslpcuac.supabase.co/functions/v1/team-digest-unsubscribe',
+        description: 'GET https://lqaufszburqvlslpcuac.supabase.co/auth/v1/user',
         origin: 'auto.http.browser',
         data: {
-          url: 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/team-digest-unsubscribe',
+          url: 'https://lqaufszburqvlslpcuac.supabase.co/auth/v1/user',
           type: 'fetch',
-          'http.method': 'POST',
-          'http.url': 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/team-digest-unsubscribe',
+          'http.method': 'GET',
+          'http.url': 'https://lqaufszburqvlslpcuac.supabase.co/auth/v1/user',
           'server.address': 'lqaufszburqvlslpcuac.supabase.co',
-          'sentry.op': 'http.client',
         },
       },
       {
         op: 'http.client',
-        description: 'GET /resumen-diario/baja',
+        description: `GET ${path}?_rsc=1x2y3${fragment}`,
         origin: 'auto.http.browser',
         data: {
-          url: `/resumen-diario/baja?_rsc=1x2y3${FRAGMENT}`,
+          url: `${path}?_rsc=1x2y3${fragment}`,
           type: 'fetch',
           'http.method': 'GET',
-          'http.url': `${PAGE}?_rsc=1x2y3${FRAGMENT}`,
+          'http.url': `${page}?_rsc=1x2y3${fragment}`,
           'http.query': '?_rsc=1x2y3',
-          'http.fragment': FRAGMENT,
+          'http.fragment': fragment,
           'server.address': 'tricigo.com',
         },
       },
     ],
     request: {
-      url: `${PAGE}${FRAGMENT}`,
-      headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://mail.google.com/' },
+      url: `${page}${fragment}`,
+      headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://accounts.google.com/' },
     },
     breadcrumbs: [
-      { category: 'navigation', timestamp: 1, data: { from: undefined, to: `/resumen-diario/baja${FRAGMENT}` } },
-      { category: 'navigation', timestamp: 2, data: { from: `/resumen-diario/baja${FRAGMENT}`, to: '/resumen-diario/baja' } },
-      { category: 'fetch', type: 'http', timestamp: 3, data: { method: 'GET', url: `/resumen-diario/baja?_rsc=1x2y3${FRAGMENT}`, status_code: 200 } },
-      { category: 'console', timestamp: 4, message: `Opened ${PAGE}${FRAGMENT} from the e-mail` },
+      { category: 'navigation', timestamp: 1, data: { from: undefined, to: `${path}${fragment}` } },
+      { category: 'navigation', timestamp: 2, data: { from: `${path}${fragment}`, to: '/book' } },
+      { category: 'fetch', type: 'http', timestamp: 3, data: { method: 'GET', url: `${path}?_rsc=1x2y3${fragment}`, status_code: 200 } },
+      { category: 'console', timestamp: 4, message: `Opened ${page}${fragment} from the e-mail` },
     ],
     sdkProcessingMetadata: {
       capturedSpanScope,
-      dynamicSamplingContext: { transaction: '/resumen-diario/baja', sample_rate: '0.2' },
+      dynamicSamplingContext: { transaction: path, sample_rate: '0.2' },
     },
   };
 }
 
-describe('scrubPrivateFragments', () => {
-  it('covers the team digest opt-out page', () => {
-    expect(PRIVATE_FRAGMENT_PATHS).toContain('/resumen-diario/baja');
+describe('scrubUrlFragments', () => {
+  it('leaves no trace of the session tokens in a pageload transaction of the login callback', () => {
+    const event = pageloadTransaction(CALLBACK, LOGIN_FRAGMENT);
+    expect(serialized(event)).toContain(REFRESH); // the fixture really carries them
+    expect(serialized(event)).toContain(ACCESS);
+
+    const sent = serialized(scrubUrlFragments(event));
+
+    expect(sent).not.toContain(ACCESS);
+    expect(sent).not.toContain(REFRESH);
+    expect(sent).not.toContain('access_token');
+    expect(sent).not.toContain('refresh_token');
+    expect(sent).not.toContain('provider_token');
+    expect(sent).not.toContain('ya29.');
   });
 
-  it('leaves no trace of the token anywhere in a pageload transaction of the page', () => {
-    const event = pageloadTransaction();
-    expect(serialized(event)).toContain(`t=${T}`); // the fixture really carries it
-
-    const out = scrubPrivateFragments(event);
-    const sent = serialized(out);
-
-    expect(sent).not.toContain('t=');
-    expect(sent).not.toContain(T);
-    expect(sent).not.toContain(U);
-    expect(sent).not.toContain('#u=');
+  it('keeps every URL of that transaction, query included, minus its fragment', () => {
+    const out = scrubUrlFragments(pageloadTransaction(CALLBACK, LOGIN_FRAGMENT));
 
     const request = out.request as { url: string; headers: Record<string, string> };
-    expect(request.url).toBe(PAGE);
-    expect(request.headers.Referer).toBe('https://mail.google.com/');
+    expect(request.url).toBe(CALLBACK);
+    expect(request.headers.Referer).toBe('https://accounts.google.com/');
 
-    type SpanJson = { data: Record<string, unknown> };
+    type SpanJson = { description: string; data: Record<string, unknown> };
     const spans = out.spans as [SpanJson, SpanJson];
-    expect(spans[1].data.url).toBe('/resumen-diario/baja?_rsc=1x2y3');
-    expect(spans[1].data['http.url']).toBe(`${PAGE}?_rsc=1x2y3`);
+    expect(spans[1].description).toBe('GET /auth/callback?_rsc=1x2y3');
+    expect(spans[1].data.url).toBe('/auth/callback?_rsc=1x2y3');
+    expect(spans[1].data['http.url']).toBe(`${CALLBACK}?_rsc=1x2y3`);
     expect(spans[1].data['http.query']).toBe('?_rsc=1x2y3');
     expect('http.fragment' in spans[1].data).toBe(false);
-    // Spans that never pointed at the page are untouched.
-    expect(spans[0].data).toEqual((pageloadTransaction().spans as [SpanJson, SpanJson])[0].data);
+    // A span that never had a fragment is untouched.
+    const fresh = pageloadTransaction(CALLBACK, LOGIN_FRAGMENT).spans as [SpanJson, SpanJson];
+    expect(spans[0]).toEqual(fresh[0]);
 
     type Crumb = { data?: Record<string, unknown>; message?: string };
     const crumbs = out.breadcrumbs as [Crumb, Crumb, Crumb, Crumb];
-    expect(crumbs[0].data?.to).toBe('/resumen-diario/baja');
-    expect(crumbs[1].data).toEqual({ from: '/resumen-diario/baja', to: '/resumen-diario/baja' });
-    expect(crumbs[2].data?.url).toBe('/resumen-diario/baja?_rsc=1x2y3');
-    expect(crumbs[3].message).toBe(`Opened ${PAGE} from the e-mail`);
+    expect(crumbs[0].data?.to).toBe('/auth/callback');
+    expect(crumbs[1].data).toEqual({ from: '/auth/callback', to: '/book' });
+    expect(crumbs[2].data?.url).toBe('/auth/callback?_rsc=1x2y3');
+    expect(crumbs[3].message).toBe(`Opened ${CALLBACK} from the e-mail`);
 
-    expect(out.transaction).toBe('/resumen-diario/baja');
+    expect(out.transaction).toBe('/auth/callback');
+    const trace = (out.contexts as { trace: { data: Record<string, unknown> } }).trace;
+    expect(trace.data['lcp.element']).toBe('body > div#__next > main > div > h1');
+  });
+
+  it('covers the site-URL fallback, where the tokens land on the home page', () => {
+    for (const page of ['https://tricigo.com/', 'https://tricigo.com']) {
+      const out = scrubUrlFragments({ request: { url: `${page}${LOGIN_FRAGMENT}` } });
+      expect(out.request.url).toBe(page);
+    }
+    const crumb = scrubUrlFragments({ data: { from: undefined, to: `/${LOGIN_FRAGMENT}` } });
+    expect(crumb.data.to).toBe('/');
+  });
+
+  it('still covers the team digest opt-out link', () => {
+    const event = pageloadTransaction(OPT_OUT, OPT_OUT_FRAGMENT);
+    const sent = serialized(scrubUrlFragments(event));
+    expect(sent).not.toContain(T);
+    expect(sent).not.toContain(U);
+    expect((event.request as { url: string }).url).toBe(OPT_OUT);
+  });
+
+  it('cuts the fragment of every page, not only the ones that carry tokens', () => {
+    const out = scrubUrlFragments({
+      request: { url: 'https://tricigo.com/blog#comentarios', headers: {} },
+      breadcrumbs: [{ category: 'navigation', data: { from: '/blog', to: '/blog/post/?ref=ig#seccion-2' } }],
+      spans: [{ data: { url: '/blog#x', 'http.url': 'https://tricigo.com/blog#x', 'http.fragment': '#x' } }],
+      extra: { link: 'ver https://tricigo.com/terms#pagos y listo', quoted: '"//cdn.example.com/a.svg#icon"' },
+    });
+    expect(out.request.url).toBe('https://tricigo.com/blog');
+    expect(out.breadcrumbs[0]?.data.to).toBe('/blog/post/?ref=ig');
+    expect(out.spans[0]?.data).toEqual({ url: '/blog', 'http.url': 'https://tricigo.com/blog' });
+    expect(out.extra).toEqual({ link: 'ver https://tricigo.com/terms y listo', quoted: '"//cdn.example.com/a.svg"' });
+  });
+
+  it('leaves alone a # that is not part of a URL', () => {
+    const event = {
+      message: 'Minified React error #418; visit https://react.dev/errors/418?args[]=text for the full message',
+      exception: { values: [{ type: 'Error', value: 'Expected #ff6a00 but got #000' }] },
+      breadcrumbs: [{ category: 'ui.click', message: 'body > div#__next > button#cta.primary' }],
+      tags: { selector: '#root', ticket: 'BUG-201#2' },
+    };
+    const before = structuredClone(event);
+    expect(scrubUrlFragments(event)).toEqual(before);
   });
 
   it('returns the same event object and never walks sdkProcessingMetadata', () => {
-    const event = pageloadTransaction();
+    const event = pageloadTransaction(CALLBACK, LOGIN_FRAGMENT);
     const meta = event.sdkProcessingMetadata as { capturedSpanScope: { note: string } };
-    expect(() => scrubPrivateFragments(event)).not.toThrow();
-    expect(scrubPrivateFragments(event)).toBe(event);
+    expect(() => scrubUrlFragments(event)).not.toThrow();
+    expect(scrubUrlFragments(event)).toBe(event);
     expect(event.sdkProcessingMetadata).toBe(meta);
-    expect(meta.capturedSpanScope.note).toBe(`${PAGE}${FRAGMENT}`);
-  });
-
-  it('cleans a full href in the transaction name, should an instrumentation ever put one there', () => {
-    const out = scrubPrivateFragments({ type: 'transaction', transaction: `${PAGE}${FRAGMENT}` });
-    expect(out.transaction).toBe(PAGE);
-  });
-
-  it('keeps the fragment of every other page', () => {
-    const event = {
-      exception: { values: [{ type: 'TypeError', value: 'x is undefined' }] },
-      request: { url: 'https://tricigo.com/blog#comentarios', headers: {} },
-      breadcrumbs: [{ category: 'navigation', data: { from: '/blog', to: '/blog#comentarios' } }],
-      spans: [{ data: { url: '/blog#comentarios', 'http.url': 'https://tricigo.com/blog#comentarios', 'http.fragment': '#comentarios' } }],
-      extra: {
-        near: 'https://tricigo.com/resumen-diario/bajas#otra',
-        nested: 'https://tricigo.com/x/resumen-diario/baja#otra',
-        text: 'ver /docs/resumen-diario/baja#seccion',
-      },
-    };
-    const before = structuredClone(event);
-    expect(scrubPrivateFragments(event)).toEqual(before);
-  });
-
-  it('cleans the page URL that a breadcrumb carries into an event of another page', () => {
-    const event = {
-      request: { url: 'https://tricigo.com/blog#comentarios', headers: {} },
-      breadcrumbs: [
-        { category: 'navigation', data: { from: `/resumen-diario/baja${FRAGMENT}`, to: '/resumen-diario/baja' } },
-        { category: 'navigation', data: { from: '/resumen-diario/baja', to: '/blog#comentarios' } },
-      ],
-    };
-    const out = scrubPrivateFragments(event);
-    expect(out.request.url).toBe('https://tricigo.com/blog#comentarios');
-    expect(out.breadcrumbs[0]?.data.from).toBe('/resumen-diario/baja');
-    expect(out.breadcrumbs[1]?.data.to).toBe('/blog#comentarios');
-    expect(JSON.stringify(out)).not.toContain(T);
-  });
-
-  it('handles a trailing slash and a query before the fragment', () => {
-    const out = scrubPrivateFragments({ request: { url: `${PAGE}/?utm_source=correo${FRAGMENT}` } });
-    expect(out.request.url).toBe(`${PAGE}/?utm_source=correo`);
+    expect(meta.capturedSpanScope.note).toBe(`${CALLBACK}${LOGIN_FRAGMENT}`);
   });
 
   it('composes with makeSentryBeforeSend the way instrumentation-client.ts does', () => {
     const dropNoise = makeSentryBeforeSend();
     const beforeSend = <E extends Record<string, unknown>>(event: E): E | null => {
       const kept = dropNoise(event);
-      return kept && scrubPrivateFragments(kept);
+      return kept && scrubUrlFragments(kept);
     };
-    expect(beforeSend({ message: 'Failed to fetch', request: { url: `${PAGE}${FRAGMENT}` } })).toBeNull();
+    expect(beforeSend({ message: 'Failed to fetch', request: { url: `${CALLBACK}${LOGIN_FRAGMENT}` } })).toBeNull();
     const kept = beforeSend({
       message: 'Boom',
-      request: { url: `${PAGE}${FRAGMENT}`, headers: { Authorization: 'Bearer secret' } },
+      request: { url: `${CALLBACK}${LOGIN_FRAGMENT}`, headers: { Authorization: `Bearer ${ACCESS}` } },
     });
-    expect(kept?.request).toEqual({ url: PAGE, headers: {} });
+    expect(kept?.request).toEqual({ url: CALLBACK, headers: {} });
+    expect(JSON.stringify(kept)).not.toContain(ACCESS);
+  });
+});
+
+describe('stripUrlFragments', () => {
+  it('cuts the fragment of an app deep link, so a log line can keep where the browser came back to', () => {
+    expect(stripUrlFragments(`tricigo-driver://auth/callback${LOGIN_FRAGMENT}`)).toBe('tricigo-driver://auth/callback');
+    expect(stripUrlFragments(`tricigo://auth/callback?error=access_denied#error_description=x`)).toBe(
+      'tricigo://auth/callback?error=access_denied',
+    );
+  });
+
+  it('returns text without URL fragments unchanged', () => {
+    expect(stripUrlFragments('tricigo-driver://auth/callback')).toBe('tricigo-driver://auth/callback');
+    expect(stripUrlFragments('error #418')).toBe('error #418');
+  });
+
+  it('takes linear time on a crafted link, so it cannot freeze the page', () => {
+    // A link to tricigo.com/#a',/,/,/… reaches every event as a navigation breadcrumb, untruncated.
+    const tail = ',/'.repeat(250_000);
+    const crafted = `https://tricigo.com/#a'${tail}`;
+    const t0 = performance.now();
+    const out = stripUrlFragments(crafted);
+    expect(performance.now() - t0).toBeLessThan(250);
+    expect(out).toBe(`https://tricigo.com/'${tail}`);
+  });
+
+  it('cuts a later fragment in the same run once an earlier # was not a URL', () => {
+    expect(stripUrlFragments('div#x,/auth/callback#access_token=a')).toBe('div#x,/auth/callback');
+    expect(stripUrlFragments('a#/x#y')).toBe('a#/x#y');
+  });
+
+  it('redacts session tokens that are not in a URL fragment', () => {
+    expect(stripUrlFragments(`hash: #access_token=${ACCESS}&refresh_token=${REFRESH}&type=recovery`)).toBe(
+      'hash: #access_token=[Filtered]&refresh_token=[Filtered]&type=recovery',
+    );
+    expect(stripUrlFragments(`https://tricigo.com/?refresh_token=${REFRESH}&x=1`)).toBe(
+      'https://tricigo.com/?refresh_token=[Filtered]&x=1',
+    );
+    expect(stripUrlFragments(`/login?return=%2Fauth%2Fcallback%23access_token%3D${ACCESS}%26provider_refresh_token%3Dz`)).toBe(
+      '/login?return=%2Fauth%2Fcallback%23access_token%3D[Filtered]%26provider_refresh_token%3D[Filtered]',
+    );
   });
 });
