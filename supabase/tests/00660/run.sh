@@ -369,7 +369,12 @@ val "C15 a cargo ride without the delivery proof (code and photo) is not complet
      SELECT (c->'allowed_actions')::text || '|' || (c->>'delivery_proof_missing') FROM (SELECT public.admin_active_ride_context('$R_IP') c) s;
      SELECT (r->>'error') || '|' || (r->>'status') FROM ($COMPLETE_IP r) s;
      RESET ROLE; SELECT status || '|' || (SELECT count(*) FROM public.complete_calls) FROM public.rides WHERE id = '$R_IP';")" \
-  '["advance"]|true;delivery_proof_missing|in_progress;in_progress|0'
+  '[]|true;delivery_proof_missing|in_progress;in_progress|0'
+val "A12 a cargo ride without the delivery proof is not moved to the destination (the app asks for it only in_progress)" \
+  "$(as $ADMIN "$CARGO INSERT INTO public.delivery_details (ride_id, delivery_otp_validated_at) VALUES ('$R_IP', now()); SET LOCAL ROLE authenticated;
+     SELECT (r->>'error') || '|' || (r->>'status') FROM (SELECT public.admin_advance_active_ride('$R_IP', 'in_progress', '$DP_DIEGO', 'sin gps') r) s;
+     RESET ROLE; SELECT status FROM public.rides WHERE id = '$R_IP';")" \
+  'delivery_proof_missing|in_progress;in_progress'
 val "C16 with the proof it is offered and completes; a passenger ride never misses a proof" \
   "$(as $ADMIN "$CARGO INSERT INTO public.delivery_details VALUES ('$R_IP', now(), 'delivery-photos/x.jpg'); SET LOCAL ROLE authenticated;
      SELECT (c->'allowed_actions')::text || '|' || (c->>'delivery_proof_missing') FROM (SELECT public.admin_active_ride_context('$R_IP') c) s;

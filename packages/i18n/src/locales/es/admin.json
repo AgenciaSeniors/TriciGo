@@ -2606,7 +2606,7 @@
     "error_delivery_proof_missing": "Este envío no tiene la prueba de entrega (código del destinatario y foto). No se puede cobrar desde soporte.",
     "error_ride_not_found": "Este viaje no existe o ya no está disponible.",
     "error_server": "El servidor rechazó la acción: {{message}}",
-    "delivery_proof_missing_note": "Envío sin prueba de entrega: no se puede terminar y cobrar desde soporte. La app del conductor pide el código del destinatario y la foto mientras el viaje está en curso, y deja de pedirlos al llegar al destino: no marques la llegada al destino desde aquí. Si la app no funciona, cancélalo desde el detalle del viaje.",
+    "delivery_proof_missing_note": "Envío sin prueba de entrega (código del destinatario y foto). La app del conductor la pide mientras el viaje está en curso; soporte no puede marcar la llegada al destino ni cobrarlo. Si la app no funciona, cancélalo desde el detalle del viaje.",
     "delivery_proof_missing_note_at_destination": "Envío sin prueba de entrega: no se puede terminar y cobrar desde soporte, y en el destino la app del conductor ya no pide el código del destinatario ni la foto. Cancélalo desde el detalle del viaje.",
     "done_started": "Viaje iniciado a las {{time}}. Espera registrada: {{wait}}.",
     "done_complete_cash": "Viaje terminado por {{total}}. Avísale al conductor que cobre {{cash}} en efectivo."

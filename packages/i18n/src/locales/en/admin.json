@@ -2606,7 +2606,7 @@
     "error_delivery_proof_missing": "This delivery has no proof of delivery (recipient code and photo). Support cannot charge it.",
     "error_ride_not_found": "This ride doesn't exist or is no longer available.",
     "error_server": "The server refused the action: {{message}}",
-    "delivery_proof_missing_note": "Delivery without proof: support cannot finish and charge it. The driver's app asks for the recipient's code and the photo while the ride is in progress and stops asking at the destination, so do not mark the arrival at the destination from here. If the app does not work, cancel it from the ride page.",
+    "delivery_proof_missing_note": "Delivery without proof (recipient code and photo). The driver's app asks for it while the ride is in progress; support cannot mark the arrival at the destination or charge it. If the app doesn't work, cancel it from the ride page.",
     "delivery_proof_missing_note_at_destination": "Delivery without proof: support cannot finish and charge it, and at the destination the driver's app no longer asks for the recipient's code or the photo. Cancel it from the ride page.",
     "done_started": "Ride started at {{time}}. Recorded wait: {{wait}}.",
     "done_complete_cash": "Ride finished for {{total}}. Tell the driver to collect {{cash}} in cash."

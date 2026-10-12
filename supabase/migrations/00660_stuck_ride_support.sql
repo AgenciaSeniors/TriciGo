@@ -364,13 +364,17 @@ BEGIN
     v_actions := array_remove(array_remove(v_actions, 'release'), 'advance');
   END IF;
   -- A cargo ride is completed only with the recipient's code and the delivery
-  -- photo (admin_complete_active_ride refuses otherwise). Advancing it to the
-  -- destination stays, so the driver's app can collect them.
+  -- photo (admin_complete_active_ride refuses otherwise). The driver's app asks
+  -- for them only while the ride is in_progress, so support does not move it to
+  -- the destination either (admin_advance_active_ride refuses that step).
   v_proof_missing := COALESCE(v_ride.ride_mode::text = 'cargo', false) AND NOT EXISTS (
     SELECT 1 FROM public.delivery_details dd
     WHERE dd.ride_id = v_ride.id AND dd.delivery_otp_validated_at IS NOT NULL AND dd.delivery_photo_url IS NOT NULL);
   IF v_proof_missing THEN
     v_actions := array_remove(v_actions, 'complete');
+    IF v_ride.status = 'in_progress' THEN
+      v_actions := array_remove(v_actions, 'advance');
+    END IF;
   END IF;
 
   IF v_ride.status = 'arrived_at_pickup' THEN
@@ -601,6 +605,14 @@ BEGIN
            updated_at = now()
      WHERE id = p_ride_id;
   ELSIF v_ride.status = 'in_progress' THEN
+    -- The driver's app asks for a cargo ride's delivery proof (the recipient's
+    -- code and the photo) only while it is in_progress: moved to the destination
+    -- without it, the ride could no longer be completed.
+    IF COALESCE(v_ride.ride_mode::text = 'cargo', false) AND NOT EXISTS (
+         SELECT 1 FROM public.delivery_details dd
+         WHERE dd.ride_id = p_ride_id AND dd.delivery_otp_validated_at IS NOT NULL AND dd.delivery_photo_url IS NOT NULL) THEN
+      RETURN jsonb_build_object('error', 'delivery_proof_missing', 'status', v_ride.status);
+    END IF;
     v_to := 'arrived_at_destination';
     v_body := 'Marcamos que llegaste al destino.';
     UPDATE public.rides SET status = v_to, updated_at = now() WHERE id = p_ride_id;

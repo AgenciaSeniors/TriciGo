@@ -2606,7 +2606,7 @@
     "error_delivery_proof_missing": "Esta entrega não tem prova de entrega (código do destinatário e foto). O suporte não pode cobrá-la.",
     "error_ride_not_found": "Esta corrida não existe ou não está mais disponível.",
     "error_server": "O servidor recusou a ação: {{message}}",
-    "delivery_proof_missing_note": "Entrega sem prova: o suporte não pode finalizar e cobrar. O app do motorista pede o código do destinatário e a foto enquanto a corrida está em andamento e deixa de pedir ao chegar ao destino: não marque a chegada ao destino daqui. Se o app não funciona, cancele-a na página da corrida.",
+    "delivery_proof_missing_note": "Entrega sem prova (código do destinatário e foto). O app do motorista pede a prova enquanto a corrida está em andamento; o suporte não pode marcar a chegada ao destino nem cobrá-la. Se o app não funciona, cancele-a na página da corrida.",
     "delivery_proof_missing_note_at_destination": "Entrega sem prova: o suporte não pode finalizar e cobrar, e no destino o app do motorista não pede mais o código do destinatário nem a foto. Cancele-a na página da corrida.",
     "done_started": "Corrida iniciada às {{time}}. Espera registrada: {{wait}}.",
     "done_complete_cash": "Corrida finalizada por {{total}}. Avise o motorista para cobrar {{cash}} em dinheiro."
