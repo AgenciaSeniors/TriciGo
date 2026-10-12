@@ -26,55 +26,87 @@ function publicUrl(request: NextRequest, path: string): URL {
 }
 
 /**
- * Role lookups, kept for a minute in this server process and shared by requests
- * that arrive together. Opening a page used to cost two calls to Supabase per
- * request (getUser() and this lookup), and the browser prefetches every menu
- * link at once: 39 requests in 10 s, each with both calls, slowed the panel's
- * own data requests (2026-10-12). The session is now verified locally
- * (getClaims), so a request in that burst costs at most one lookup per user.
- * A role change or a block reaches the pages within a minute; the data and the
+ * Account lookups, kept for a minute in this server process and shared by
+ * requests that arrive together. Opening a page used to cost two calls to
+ * Supabase per request (getUser() and the role lookup), and the browser
+ * prefetches every menu link at once: 39 requests in 10 s, each with both
+ * calls, slowed the panel's own data requests (2026-10-12). The token is now
+ * verified locally (getClaims) on every request, and the two calls run once per
+ * session and minute:
+ *  - getUser() asks GoTrue whether the session still exists, so "sign out
+ *    everywhere" (reset password) and a block close the pages within a minute,
+ *    as they did when it ran on every request;
+ *  - the users row gives the role and is_active.
+ * A role change reaches the pages within the same minute. The data and the
  * actions never depended on this check (RLS, RPC gates).
  */
-const ROLE_TTL_MS = 60_000;
-const ROLE_CACHE_MAX = 500;
+const ACCOUNT_TTL_MS = 60_000;
+const ACCOUNT_CACHE_MAX = 500;
 
-interface RoleEntry {
-  at: number;
-  lookup: Promise<{ role: unknown; active: boolean } | null>;
+interface Account {
+  role: unknown;
+  active: boolean;
 }
 
-const roleCache = new Map<string, RoleEntry>();
+/** 'no_session': GoTrue no longer has the session (signed out everywhere, blocked, or unreachable). */
+type AccountLookup = Account | 'no_session' | null;
 
-function readRole(
+interface AccountEntry {
+  at: number;
+  lookup: Promise<AccountLookup>;
+}
+
+const accountCache = new Map<string, AccountEntry>();
+
+function readAccount(
   supabase: ReturnType<typeof createMiddlewareClient>['supabase'],
   userId: string,
-): Promise<{ role: unknown; active: boolean } | null> {
+  sessionId: string,
+): Promise<AccountLookup> {
+  const key = `${userId}:${sessionId}`;
   const now = Date.now();
-  const hit = roleCache.get(userId);
-  if (hit && now - hit.at < ROLE_TTL_MS) return hit.lookup;
+  const hit = accountCache.get(key);
+  if (hit && now - hit.at < ACCOUNT_TTL_MS) return hit.lookup;
 
-  const lookup = (async () => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('role, is_active')
-      .eq('id', userId)
-      .single();
-    if (error || !data) return null;
-    return { role: data.role as unknown, active: data.is_active !== false };
+  const lookup = (async (): Promise<AccountLookup> => {
+    const [auth, row] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase.from('users').select('role, is_active').eq('id', userId).single(),
+    ]);
+    if (auth.error || auth.data.user?.id !== userId) return 'no_session';
+    if (row.error || !row.data) return null;
+    return { role: row.data.role as unknown, active: row.data.is_active !== false };
   })();
-  if (roleCache.size >= ROLE_CACHE_MAX) roleCache.clear();
-  const entry: RoleEntry = { at: now, lookup };
-  roleCache.set(userId, entry);
+  if (accountCache.size >= ACCOUNT_CACHE_MAX) accountCache.clear();
+  const entry: AccountEntry = { at: now, lookup };
+  accountCache.set(key, entry);
   // A failed lookup is not remembered: the next request asks again.
   void lookup.then(
     (result) => {
-      if (!result && roleCache.get(userId) === entry) roleCache.delete(userId);
+      if ((!result || result === 'no_session') && accountCache.get(key) === entry) accountCache.delete(key);
     },
     () => {
-      if (roleCache.get(userId) === entry) roleCache.delete(userId);
+      if (accountCache.get(key) === entry) accountCache.delete(key);
     },
   );
   return lookup;
+}
+
+/** The verified user and session ids, or null. Any failure (even a thrown one) is "no session". */
+async function verifiedSession(
+  supabase: ReturnType<typeof createMiddlewareClient>['supabase'],
+): Promise<{ userId: string; sessionId: string } | null> {
+  try {
+    const { data, error } = await supabase.auth.getClaims();
+    const claims = data?.claims as Record<string, unknown> | undefined;
+    if (error || typeof claims?.sub !== 'string') return null;
+    const sessionId = typeof claims.session_id === 'string' ? claims.session_id : 'none';
+    return { userId: claims.sub, sessionId };
+  } catch {
+    // getClaims rethrows anything that is not an AuthError (an expired exp the cookie
+    // did not show, an unknown alg, a WebCrypto failure): it is not a session either.
+    return null;
+  }
 }
 
 /** Tells the browser the account's role for drawing the menus (see PANEL_ROLE_COOKIE). */
@@ -117,19 +149,18 @@ export async function middleware(request: NextRequest) {
 
   // Check for valid session. getClaims() verifies the token's signature with the
   // project's public key (cached in this process): no call to Supabase unless the
-  // token has expired and must be refreshed. A blocked account keeps a valid token
-  // for up to an hour, so the lookup below also checks is_active.
-  const { data: claimsData, error } = await supabase.auth.getClaims();
-  const userId = typeof claimsData?.claims?.sub === 'string' ? claimsData.claims.sub : null;
+  // token has expired and must be refreshed. Whether the session still exists and
+  // the account's role come from readAccount, once per session and minute.
+  const session = await verifiedSession(supabase);
+  const account = session ? await readAccount(supabase, session.userId, session.sessionId) : 'no_session';
 
-  if (error || !userId) {
+  if (!session || account === 'no_session') {
     const loginUrl = publicUrl(request, '/login');
     loginUrl.searchParams.set('redirect', request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   // Check admin role
-  const account = await readRole(supabase, userId);
   const role: unknown = account?.role;
   if (!account?.active || !isPanelRole(role)) {
     const loginUrl = publicUrl(request, '/login');
