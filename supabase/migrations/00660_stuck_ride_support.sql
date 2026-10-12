@@ -329,6 +329,7 @@ DECLARE
   v_start timestamptz;
   v_source text;
   v_preview jsonb;
+  v_proof_missing boolean;
 BEGIN
   IF NOT public.is_admin() THEN
     RETURN jsonb_build_object('error', 'forbidden');
@@ -353,6 +354,15 @@ BEGIN
   -- nor advanced (support cancels it from the ride page).
   IF v_ride.status IN ('accepted', 'driver_en_route') AND v_ride.scheduled_at > now() THEN
     v_actions := array_remove(array_remove(v_actions, 'release'), 'advance');
+  END IF;
+  -- A cargo ride is completed only with the recipient's code and the delivery
+  -- photo (admin_complete_active_ride refuses otherwise). Advancing it to the
+  -- destination stays, so the driver's app can collect them.
+  v_proof_missing := COALESCE(v_ride.ride_mode::text = 'cargo', false) AND NOT EXISTS (
+    SELECT 1 FROM public.delivery_details dd
+    WHERE dd.ride_id = v_ride.id AND dd.delivery_otp_validated_at IS NOT NULL AND dd.delivery_photo_url IS NOT NULL);
+  IF v_proof_missing THEN
+    v_actions := array_remove(v_actions, 'complete');
   END IF;
 
   IF v_ride.status = 'arrived_at_pickup' THEN
@@ -400,6 +410,7 @@ BEGIN
     'alert', (SELECT jsonb_build_object('reason', a.reason, 'detected_at', a.detected_at)
       FROM public.stuck_ride_alerts a WHERE a.ride_id = v_ride.id AND a.resolved_at IS NULL),
     'driver_profile_id', v_ride.driver_id,
+    'delivery_proof_missing', v_proof_missing,
     'preview', v_preview,
     'start_pickup_at', CASE WHEN v_ride.status = 'arrived_at_pickup' THEN v_start END,
     'start_pickup_source', v_source,
@@ -639,6 +650,13 @@ BEGIN
   END IF;
   IF v_ride.status NOT IN ('in_progress', 'arrived_at_destination') THEN
     RETURN jsonb_build_object('error', 'ride_not_completable', 'status', v_ride.status);
+  END IF;
+  -- tg_rides_require_delivery_proof lets admins through, so the proof a cargo
+  -- ride needs (the recipient's code and the delivery photo) is checked here.
+  IF COALESCE(v_ride.ride_mode::text = 'cargo', false) AND NOT EXISTS (
+       SELECT 1 FROM public.delivery_details dd
+       WHERE dd.ride_id = p_ride_id AND dd.delivery_otp_validated_at IS NOT NULL AND dd.delivery_photo_url IS NOT NULL) THEN
+    RETURN jsonb_build_object('error', 'delivery_proof_missing', 'status', v_ride.status);
   END IF;
   v_preview := public._active_ride_charge_preview(v_ride, v_ride.pickup_at);
   IF v_preview IS NULL THEN

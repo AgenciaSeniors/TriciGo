@@ -322,6 +322,21 @@ val "C12 bound to the driver support saw: reassigned to Ana -> ride_changed, not
      SELECT (r->>'error') || '|' || (r->>'status') FROM (SELECT public.admin_complete_active_ride('$R_IP', 'in_progress', '$DP_DIEGO', 3065, 'app caida') r) s;
      RESET ROLE; SELECT (SELECT status FROM public.rides WHERE id = '$R_IP') || '|' || (SELECT count(*) FROM public.complete_calls);")" \
   "ride_changed|in_progress;in_progress|0"
+CARGO="RESET ROLE; UPDATE public.rides SET ride_mode = 'cargo' WHERE id = '$R_IP';"
+COMPLETE_IP="SELECT public.admin_complete_active_ride('$R_IP', 'in_progress', '$DP_DIEGO',
+     (public.admin_active_ride_context('$R_IP')->'preview'->>'total_cup')::int, 'app caida')"
+val "C15 a cargo ride without the delivery proof (code and photo) is not completed, nor offered" \
+  "$(as $ADMIN "$CARGO INSERT INTO public.delivery_details (ride_id, delivery_otp_validated_at) VALUES ('$R_IP', now()); SET LOCAL ROLE authenticated;
+     SELECT (c->'allowed_actions')::text || '|' || (c->>'delivery_proof_missing') FROM (SELECT public.admin_active_ride_context('$R_IP') c) s;
+     SELECT (r->>'error') || '|' || (r->>'status') FROM ($COMPLETE_IP r) s;
+     RESET ROLE; SELECT status || '|' || (SELECT count(*) FROM public.complete_calls) FROM public.rides WHERE id = '$R_IP';")" \
+  '["advance"]|true;delivery_proof_missing|in_progress;in_progress|0'
+val "C16 with the proof it is offered and completes; a passenger ride never misses a proof" \
+  "$(as $ADMIN "$CARGO INSERT INTO public.delivery_details VALUES ('$R_IP', now(), 'delivery-photos/x.jpg'); SET LOCAL ROLE authenticated;
+     SELECT (c->'allowed_actions')::text || '|' || (c->>'delivery_proof_missing') FROM (SELECT public.admin_active_ride_context('$R_IP') c) s;
+     SELECT ($COMPLETE_IP)->>'success';
+     SELECT public.admin_active_ride_context('$R_DEST')->>'delivery_proof_missing';")" \
+  '["advance", "complete"]|false;true;false'
 
 echo "== pushes =="
 val "P1 a push without a service key keeps the action and logs push_failed" \
