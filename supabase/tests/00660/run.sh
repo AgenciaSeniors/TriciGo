@@ -128,9 +128,9 @@ val "W4 the grid has the 5:59 wait: 5 minutes, none billable" \
   "SELECT string_agg(DISTINCT wait_minutes || '|' || billable || '|' || charge, ' ') FROM public.wait_grid WHERE waited = 359;" "5|0|0"
 
 echo "== GPS departure =="
-val "D1 the first point beyond 100 m after arrival" \
-  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '14 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '8 minutes'")
-   SELECT round(extract(epoch FROM now() - public._ride_gps_departure_at('$R_PICK', now() - interval '15 minutes')) / 60); ROLLBACK;" "9"
+val "D1 the first point beyond 100 m after arrival (exactly the 6-minute limit still counts as continuous)" \
+  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '14 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '8 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '7 minutes'")
+   SELECT round(extract(epoch FROM now() - public._ride_gps_departure_at('$R_PICK', now() - interval '15 minutes')) / 60); ROLLBACK;" "8"
 val "D2 a far point from before the arrival is ignored" \
   "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '20 minutes'")
    SELECT public._ride_gps_departure_at('$R_PICK', now() - interval '15 minutes') IS NULL; ROLLBACK;" "t"
@@ -148,9 +148,12 @@ val "D7 another driver's points on the ride are ignored (far or near)" \
   "BEGIN; UPDATE public.rides SET driver_id = '$DP_ANA' WHERE id = '$R_PICK';
      $(PT $R_PICK $DP_ANA "$PT_FAR" "now() - interval '12 minutes'") $(PT $R_PICK $DP_ANA "$PT_NEAR" "now() - interval '10 minutes'")
      UPDATE public.rides SET driver_id = '$DP_DIEGO' WHERE id = '$R_PICK';
-     $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '9 minutes'") $DEP ROLLBACK;" "15"
-val "D8 the silence limit is 5 minutes: 5 min 1 s already counts as silence (D1 is exactly 5)" \
-  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '14 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '8 minutes 59 seconds'") $DEP ROLLBACK;" "14"
+     $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '8 minutes 30 seconds'") $DEP ROLLBACK;" "15"
+val "D8 the silence limit is 6 minutes: 6 min 1 s already counts as silence (D1 is exactly 6)" \
+  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '14 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '7 minutes 59 seconds'") $DEP ROLLBACK;" "14"
+val "D9 a 5 min 30 s gap before the first far point is not silence: departure = the far point" \
+  "BEGIN; $(PT $R_PICK $DP_DIEGO "$PT_NEAR" "now() - interval '14 minutes'") $(PT $R_PICK $DP_DIEGO "$PT_FAR" "now() - interval '8 minutes 30 seconds'")
+   SELECT public._ride_gps_departure_at('$R_PICK', now() - interval '15 minutes') = now() - interval '8 minutes 30 seconds'; ROLLBACK;" "t"
 
 echo "== who may act =="
 for fn in "admin_active_ride_context('$R_IP')" "admin_release_active_ride('$R_ACC','accepted','$DP_DIEGO','no responde')" \

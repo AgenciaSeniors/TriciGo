@@ -124,7 +124,7 @@ $function$;
 --    wait for the rider, so it is never later than the server saw the point
 --    (00659 uses the later one for arrival, for the same reason).
 --    f = the first point more than 100 m from the pickup; p = the last point
---    before it, or p_since when there is none. When more than 5 minutes pass
+--    before it, or p_since when there is none. When more than 6 minutes pass
 --    between p and f the app was not running, and the departure is p: the last
 --    moment the trail proves the driver was still there. Otherwise it is f.
 --    Never later than now(); NULL with no far point or no p_since.
@@ -135,11 +135,11 @@ CREATE OR REPLACE FUNCTION public._ride_gps_departure_at(p_ride_id uuid, p_since
  SET search_path TO 'public', 'extensions', 'pg_catalog'
 AS $function$
 DECLARE
-  -- Measured in prod: while a driver waits at the pickup with the app alive, it
-  -- sends a point every few seconds (the longest gap seen was 5.5 minutes). A
-  -- longer silence means the app was not running, and the wait it did not
-  -- record is not charged.
-  c_max_gap constant interval := interval '5 minutes';
+  -- Measured in prod on 2026-10-12: a live app sends a point every few seconds
+  -- while the driver waits, and the longest gap seen was 5.5 minutes. A silence
+  -- longer than 6 minutes is treated as the app not running, and the wait it did
+  -- not record is not charged.
+  c_max_gap constant interval := interval '6 minutes';
   v_far timestamptz;
   v_last timestamptz;
 BEGIN
