@@ -47,6 +47,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   validation: 'Validación',
   settings: 'Ajustes',
   cities: 'Ciudades',
+  equipo: 'Equipo',
 };
 
 function buildBreadcrumbs(pathname: string) {

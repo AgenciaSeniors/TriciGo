@@ -2605,8 +2605,7 @@
   },
   "no_access": {
     "title": "Sem acesso ao painel",
-    "this_account": "esta conta",
-    "none": "Sua conta {{account}} não tem acesso ao painel. Se você trabalha na TriciGo, peça a um superadministrador que convide você. Se já foi convidado, entre com a conta do Google que recebeu o convite.",
+    "none": "Você entrou como {{account}}, e essa conta não tem acesso ao painel. Se você trabalha na TriciGo, peça a um superadministrador que convide você. Se já foi convidado, entre com a conta do Google que recebeu o convite.",
     "wrong_account": "O convite é para {{invited}}, mas você entrou como {{account}}. Saia e entre com essa conta do Google.",
     "needs_google": "O convite é para {{invited}}. Para aceitá-lo, entre com o Google usando esse endereço.",
     "expired": "O convite venceu. Peça a quem convidou você que envie um novo.",
@@ -2614,6 +2613,8 @@
     "used": "Esse convite já foi usado.",
     "blocked": "Sua conta está bloqueada. Escreva para soporte@tricigo.com.",
     "not_found": "Não encontramos esse convite. Confira o link ou peça um novo.",
-    "sign_out": "Sair"
+    "sign_out": "Sair",
+    "none_unknown": "Esta conta não tem acesso ao painel. Se você trabalha na TriciGo, peça a um superadministrador que convide você. Se já foi convidado, entre com a conta do Google que recebeu o convite.",
+    "wrong_account_unknown": "O convite é para {{invited}}, mas você entrou com outra conta. Saia e entre com essa conta do Google."
   }
 }

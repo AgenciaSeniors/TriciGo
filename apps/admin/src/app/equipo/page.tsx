@@ -163,18 +163,18 @@ export default function TeamPage() {
       align: 'right',
       cell: (m) =>
         m.is_me ? null : (
-          <span className="inline-flex gap-2">
+          <span className="inline-flex flex-wrap justify-end gap-2">
             <button
               type="button"
               onClick={() => setRoleChange({ member: m, role: m.role, reason: '' })}
-              className="rounded-full border border-line px-3 py-1 text-[12px] text-ink hover:bg-surface-sunken"
+              className="whitespace-nowrap rounded-full border border-line px-3 py-1 text-[12px] text-ink hover:bg-surface-sunken"
             >
               {t('team.change_role', { defaultValue: 'Cambiar rol' })}
             </button>
             <button
               type="button"
               onClick={() => setRemoval({ member: m, reason: '' })}
-              className="rounded-full border border-red-500/40 px-3 py-1 text-[12px] text-red-700 hover:bg-red-500/10 dark:text-red-400"
+              className="whitespace-nowrap rounded-full border border-red-500/40 px-3 py-1 text-[12px] text-red-700 hover:bg-red-500/10 dark:text-red-400"
             >
               {t('team.remove', { defaultValue: 'Quitar acceso' })}
             </button>
@@ -202,14 +202,14 @@ export default function TeamPage() {
       header: '',
       align: 'right',
       cell: (i) => (
-        <span className="inline-flex gap-2">
-          <button type="button" onClick={() => copy(i.link)} className="inline-flex items-center gap-1 rounded-full border border-line px-3 py-1 text-[12px] text-ink hover:bg-surface-sunken">
+        <span className="inline-flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={() => copy(i.link)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-line px-3 py-1 text-[12px] text-ink hover:bg-surface-sunken">
             <Copy className="h-3 w-3" /> {t('team.copy_link', { defaultValue: 'Copiar enlace' })}
           </button>
-          <button type="button" onClick={() => resend(i)} className="inline-flex items-center gap-1 rounded-full border border-line px-3 py-1 text-[12px] text-ink hover:bg-surface-sunken">
+          <button type="button" onClick={() => resend(i)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-line px-3 py-1 text-[12px] text-ink hover:bg-surface-sunken">
             <RefreshCw className="h-3 w-3" /> {t('team.resend', { defaultValue: 'Reenviar' })}
           </button>
-          <button type="button" onClick={() => cancel(i)} className="inline-flex items-center gap-1 rounded-full border border-red-500/40 px-3 py-1 text-[12px] text-red-700 hover:bg-red-500/10 dark:text-red-400">
+          <button type="button" onClick={() => cancel(i)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-red-500/40 px-3 py-1 text-[12px] text-red-700 hover:bg-red-500/10 dark:text-red-400">
             <X className="h-3 w-3" /> {t('team.cancel', { defaultValue: 'Cancelar' })}
           </button>
         </span>

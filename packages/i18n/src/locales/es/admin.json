@@ -2605,8 +2605,7 @@
   },
   "no_access": {
     "title": "Sin acceso al panel",
-    "this_account": "esta cuenta",
-    "none": "Tu cuenta {{account}} no tiene acceso al panel. Si trabajas en TriciGo, pídele a un superadministrador que te invite. Si ya te invitaron, entra con la cuenta de Google a la que llegó la invitación.",
+    "none": "Entraste como {{account}}, y esa cuenta no tiene acceso al panel. Si trabajas en TriciGo, pídele a un superadministrador que te invite. Si ya te invitaron, entra con la cuenta de Google a la que llegó la invitación.",
     "wrong_account": "La invitación es para {{invited}}, pero entraste como {{account}}. Cierra sesión y entra con esa cuenta de Google.",
     "needs_google": "La invitación es para {{invited}}. Para aceptarla tienes que entrar con Google usando esa dirección.",
     "expired": "La invitación venció. Pídele a quien te invitó que te mande una nueva.",
@@ -2614,6 +2613,8 @@
     "used": "Esa invitación ya se usó.",
     "blocked": "Tu cuenta está bloqueada. Escribe a soporte@tricigo.com.",
     "not_found": "No encontramos esa invitación. Revisa el enlace o pide uno nuevo.",
-    "sign_out": "Cerrar sesión"
+    "sign_out": "Cerrar sesión",
+    "none_unknown": "Esta cuenta no tiene acceso al panel. Si trabajas en TriciGo, pídele a un superadministrador que te invite. Si ya te invitaron, entra con la cuenta de Google a la que llegó la invitación.",
+    "wrong_account_unknown": "La invitación es para {{invited}}, pero entraste con otra cuenta. Cierra sesión y entra con esa cuenta de Google."
   }
 }

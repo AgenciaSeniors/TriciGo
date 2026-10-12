@@ -32,18 +32,28 @@ function NoAccess() {
     router.replace('/login');
   };
 
-  const account = signedInAs || t('no_access.this_account', { defaultValue: 'esta cuenta' });
+  // The account's address is shown when the session has one (Google, Apple).
   const messages: Record<string, string> = {
-    none: t('no_access.none', {
-      defaultValue:
-        'Tu cuenta {{account}} no tiene acceso al panel. Si trabajas en TriciGo, pídele a un superadministrador que te invite. Si ya te invitaron, entra con la cuenta de Google a la que llegó la invitación.',
-      account,
-    }),
-    wrong_account: t('no_access.wrong_account', {
-      defaultValue: 'La invitación es para {{invited}}, pero entraste como {{account}}. Cierra sesión y entra con esa cuenta de Google.',
-      invited,
-      account,
-    }),
+    none: signedInAs
+      ? t('no_access.none', {
+          defaultValue:
+            'Entraste como {{account}}, y esa cuenta no tiene acceso al panel. Si trabajas en TriciGo, pídele a un superadministrador que te invite. Si ya te invitaron, entra con la cuenta de Google a la que llegó la invitación.',
+          account: signedInAs,
+        })
+      : t('no_access.none_unknown', {
+          defaultValue:
+            'Esta cuenta no tiene acceso al panel. Si trabajas en TriciGo, pídele a un superadministrador que te invite. Si ya te invitaron, entra con la cuenta de Google a la que llegó la invitación.',
+        }),
+    wrong_account: signedInAs
+      ? t('no_access.wrong_account', {
+          defaultValue: 'La invitación es para {{invited}}, pero entraste como {{account}}. Cierra sesión y entra con esa cuenta de Google.',
+          invited,
+          account: signedInAs,
+        })
+      : t('no_access.wrong_account_unknown', {
+          defaultValue: 'La invitación es para {{invited}}, pero entraste con otra cuenta. Cierra sesión y entra con esa cuenta de Google.',
+          invited,
+        }),
     needs_google: t('no_access.needs_google', {
       defaultValue: 'La invitación es para {{invited}}. Para aceptarla tienes que entrar con Google usando esa dirección.',
       invited,
