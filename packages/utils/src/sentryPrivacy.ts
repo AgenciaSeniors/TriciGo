@@ -1,19 +1,39 @@
 // ============================================================
-// Sentry privacy: no URL fragment reaches Sentry from the web.
+// Sentry privacy: no secret carried in a URL reaches Sentry from the web.
 //
-// tricigo.com receives secrets in the URL fragment: the Supabase session after Google/Apple and the
-// e-mail login link (/auth/callback#access_token=…&refresh_token=…, implicit flow; the home page if
-// GoTrue falls back to the Site URL) and the team digest opt-out token (/resumen-diario/baja#u=…&t=…).
-// The fragment never reaches our server, but the browser SDK copies the page URL into what it sends:
+// tricigo.com receives secrets in three places of the URL:
+//   - the fragment: the Supabase session after Google/Apple and the e-mail login link
+//     (/auth/callback#access_token=…&refresh_token=…, implicit flow; the home page if GoTrue falls
+//     back to the Site URL) and the team digest opt-out token (/resumen-diario/baja#u=…&t=…);
+//   - the path: the trip share token (/track/share/<token>, also /ride/share/<token> and the old
+//     /delivery/<token>). Whoever holds it watches the trip until 48 h after it ends;
+//   - the query: the single-use e-mail confirmation token (/auth/email-confirmed?token=…), valid 24 h
+//     until the page redeems it, and the PostgREST filter share_token=eq.<token>.
+// The browser SDK copies the page URL into what it sends:
 //   - event.request.url: document.location.href, fragment included (httpContextIntegration on every
 //     event; for a pageload transaction, captured when the span starts, at SDK init, before GoTrue
-//     clears the hash, and set as `request`);
+//     clears the hash, and set as `request`), and request.headers.Referer (document.referrer);
 //   - breadcrumbs: navigation data.from / data.to (history instrumentation, relative URL with the
 //     fragment; Next's first history.replaceState writes it), fetch/xhr data.url;
-//   - fetch/xhr spans: data.url, data['http.url'], description, data['http.fragment'] (the fragment alone);
+//   - fetch/xhr spans: data.url, data['http.url'], data['http.query'], description,
+//     data['http.fragment'] (the fragment alone);
+//   - the transaction name and the INP span's `transaction`, raw if the route manifest misses a path;
 //   - any other string that quotes the URL (messages, exception values, extra).
-// scrubUrlFragments() cuts the fragment from every URL wherever it appears in an event and drops
-// 'http.fragment'. A fragment has no diagnostic value, so it does not try to tell pages apart.
+// The server SDK (http.server transactions and request errors) keeps the raw path and query in
+// http.target / url.path / url.query / request.url / request.query_string, and every request header
+// as http.request.header.*: referer, next_url (the page the browser is on) and next_router_state_tree
+// (Next's router tree, URL-encoded JSON: a dynamic segment is ["token","<value>","d"] and a page's
+// query is __PAGE__?{"token":"<value>"}, though outside dev Next strips the page query from that
+// header). The envelope's `trace` header is the event's sdkProcessingMetadata.dynamicSamplingContext,
+// whose `transaction` may be a raw path.
+// scrubUrlSecrets() cuts the fragment from every URL wherever it appears in an event, drops
+// 'http.fragment', blanks the value of every *token parameter and replaces the share token path
+// segment with [token]. A fragment has no diagnostic value, so it does not try to tell pages apart.
+// Two carriers never reach beforeSend/beforeSendTransaction, so apps/web cleans them with client hooks
+// and stripUrlSecrets: the INP span's `transaction` attribute (spanEnd; a beforeSendSpan would drop
+// every transaction's trace links) and the DSC where it is created (createDsc).
+// It works on strings: a token whose name sits in another string or key ({ token: '<v>' }, a console
+// argument list) is not caught. Nothing sends one today.
 // Pure and dependency-free, like sentryNoise.ts.
 // ============================================================
 
@@ -30,10 +50,21 @@ const RUN_RE = /[^\s"'`<>]+/g;
 const URL_START_AFTER = '(=:,;[{';
 
 /**
- * GoTrue's session parameters, wherever they sit (a fragment that is not part of a URL, a query, a
- * URL-encoded `return=`): their value goes. Names longest first, so provider_refresh_token wins.
+ * The value of any parameter whose name ends in `token`, wherever it sits in a string: GoTrue's session
+ * (access_token, refresh_token, provider_token, provider_refresh_token) in a fragment that is not part
+ * of a URL, a query or a URL-encoded `return=`; ?token= of the e-mail confirmation;
+ * share_token=eq.<value> in a PostgREST URL; "token","<value>" and \"token\":\"<value>\" in Next's
+ * router tree, URL-encoded or not. After `token` comes a run of separators (= : , " \ or their %XX
+ * forms) and then the value, which shares no character with the separators: a crafted run of
+ * separators only backtracks over itself, so the match stays linear.
  */
-const SESSION_PARAM_RE = /((?:provider_refresh_token|provider_token|refresh_token|access_token)(?:=|%3D))[^&#%\s"'`<>]*/gi;
+const TOKEN_PARAM_RE = /(token(?:%22|%5C|%3A|%2C|%3D|["\\:,=])+)[^&#%"\\:,=;\s'`<>]+/gi;
+
+/**
+ * The trip share token in a path, plain or URL-encoded. The segment is limited to URL-unreserved
+ * characters, so a name the SDK already parameterized (`:token`, `[token]`) stays as it is.
+ */
+const SHARE_PATH_RE = /((?:\/|%2F)(?:track(?:\/|%2F)share|ride(?:\/|%2F)share|delivery)(?:\/|%2F))[\w.~-]+/gi;
 
 /** Holds SDK scopes (cyclic) and is deleted before the envelope is built: never walked. */
 const SKIP_KEYS = new Set(['sdkProcessingMetadata']);
@@ -58,12 +89,12 @@ function cutRun(run: string): string {
 }
 
 /**
- * Removes the fragment of every URL in `text` and the value of every session token parameter. Text
- * without either comes back unchanged.
+ * Removes the fragment of every URL in `text`, the value of every *token parameter and the trip share
+ * token of every share path. Text without any of them comes back unchanged.
  */
-export function stripUrlFragments(text: string): string {
+export function stripUrlSecrets(text: string): string {
   const cut = text.includes('#') ? text.replace(RUN_RE, (run) => (run.includes('#') ? cutRun(run) : run)) : text;
-  return cut.replace(SESSION_PARAM_RE, '$1[Filtered]');
+  return cut.replace(TOKEN_PARAM_RE, '$1[Filtered]').replace(SHARE_PATH_RE, '$1[token]');
 }
 
 function scrubNode(node: object, seen: WeakSet<object>): void {
@@ -74,7 +105,7 @@ function scrubNode(node: object, seen: WeakSet<object>): void {
     for (let i = 0; i < node.length; i++) {
       const item: unknown = node[i];
       if (typeof item === 'string') {
-        const clean = stripUrlFragments(item);
+        const clean = stripUrlSecrets(item);
         if (clean !== item) node[i] = clean;
       } else if (item && typeof item === 'object') {
         scrubNode(item, seen);
@@ -90,7 +121,7 @@ function scrubNode(node: object, seen: WeakSet<object>): void {
     if (SKIP_KEYS.has(key)) continue;
     const value = record[key];
     if (typeof value === 'string') {
-      const clean = stripUrlFragments(value);
+      const clean = stripUrlSecrets(value);
       if (clean !== value) record[key] = clean;
     } else if (value && typeof value === 'object') {
       scrubNode(value, seen);
@@ -99,10 +130,25 @@ function scrubNode(node: object, seen: WeakSet<object>): void {
 }
 
 /**
- * Removes the fragment of every URL from a Sentry event or transaction, in place, and returns the
- * same event. Use it in `beforeSend` (after the noise filter) and in `beforeSendTransaction`.
+ * Removes the secrets that URLs carry (see stripUrlSecrets) from a Sentry event or transaction, in
+ * place, and returns the same object. Use it in `beforeSend` (after the noise filter) and in
+ * `beforeSendTransaction`.
  */
-export function scrubUrlFragments<E extends object>(event: E): E {
-  scrubNode(event, new WeakSet<object>());
+export function scrubUrlSecrets<E extends object>(event: E): E {
+  const seen = new WeakSet<object>();
+  scrubNode(event, seen);
+  // sdkProcessingMetadata is never walked, but its dynamicSamplingContext (plain strings) becomes the
+  // envelope's `trace` header (core createEventEnvelopeHeaders). The SDK may share that object with the
+  // live root span (_frozenDsc), so it gets a scrubbed copy instead of an edit.
+  const meta: unknown = (event as { sdkProcessingMetadata?: unknown }).sdkProcessingMetadata;
+  if (meta && typeof meta === 'object') {
+    const holder = meta as { dynamicSamplingContext?: unknown };
+    const dsc = holder.dynamicSamplingContext;
+    if (dsc && typeof dsc === 'object' && !Array.isArray(dsc)) {
+      const copy = { ...(dsc as Record<string, unknown>) };
+      scrubNode(copy, seen);
+      holder.dynamicSamplingContext = copy;
+    }
+  }
   return event;
 }
