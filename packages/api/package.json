@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./authCallback": "./src/authCallback.ts",
     "./client": "./src/client.ts",
+    "./timeoutFetch": "./src/timeoutFetch.ts",
     "./services/auth": "./src/services/auth.service.ts",
     "./services/wallet": "./src/services/wallet.service.ts",
     "./services/ride": "./src/services/ride.service.ts",

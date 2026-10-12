@@ -1,8 +1,10 @@
 'use client';
 
+// First: hands the panel's own Supabase client to @tricigo/api before any service runs.
+import '@/lib/sharedClient';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { initI18n } from '@tricigo/i18n';
+import { initAdminI18n } from '@tricigo/i18n/admin';
 import { menuRole } from '@tricigo/utils/adminPanelAccess';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -10,7 +12,7 @@ import { BottomNav } from './BottomNav';
 import { SidebarProvider } from './SidebarContext';
 import { ThemeProvider } from './ThemeProvider';
 import { AdminToastProvider } from '@/components/ui/AdminToast';
-import { useAdminUser } from '@/lib/useAdminUser';
+import { AdminUserProvider, useAdminUser } from '@/lib/useAdminUser';
 import { PanelRoleProvider, usePanelRole } from '@/lib/panelRole';
 import { SupportWaitingBanner } from '@/components/support/SupportWaitingBanner';
 
@@ -48,6 +50,14 @@ function ShellLayout({ children }: { children: React.ReactNode }) {
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
+  return (
+    <AdminUserProvider>
+      <ShellRoot>{children}</ShellRoot>
+    </AdminUserProvider>
+  );
+}
+
+function ShellRoot({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isAuthPage =
@@ -59,7 +69,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!i18nInitialized) {
-      initI18n();
+      initAdminI18n();
       i18nInitialized = true;
       setReady(true);
     }

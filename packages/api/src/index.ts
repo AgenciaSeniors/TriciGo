@@ -1,4 +1,4 @@
-export { getSupabaseClient, getSupabaseAdmin } from './client';
+export { getSupabaseClient, getSupabaseAdmin, setSupabaseClient } from './client';
 export * from './schemas';
 export * from './errors';
 export type { SupabaseClient } from './client';
