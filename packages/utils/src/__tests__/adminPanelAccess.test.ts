@@ -3,6 +3,7 @@ import {
   MARKETING_HOME,
   MARKETING_ROUTES,
   PANEL_ROLE_COOKIE,
+  SUPER_ADMIN_ROUTES,
   canOpenPanelPath,
   isPanelRole,
   menuRole,
@@ -46,6 +47,19 @@ describe('canOpenPanelPath', () => {
   it('does not take a longer name for a sub-page', () => {
     expect(canOpenPanelPath('marketing', '/promotionsx')).toBe(false);
     expect(canOpenPanelPath('marketing', '/blog-admin')).toBe(false);
+  });
+
+  it('opens the Equipo page and its sub-pages only for super admins', () => {
+    for (const path of ['/equipo', '/equipo/x']) {
+      expect(canOpenPanelPath('super_admin', path)).toBe(true);
+      expect(canOpenPanelPath('admin', path)).toBe(false);
+      expect(canOpenPanelPath('marketing', path)).toBe(false);
+    }
+    expect(SUPER_ADMIN_ROUTES).toContain('/equipo');
+  });
+
+  it('does not take a longer name for the Equipo page', () => {
+    expect(canOpenPanelPath('admin', '/equipos')).toBe(true);
   });
 
   it('lets no other role open anything, even if the middleware check is skipped', () => {

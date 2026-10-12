@@ -28,6 +28,9 @@ export const MARKETING_ROUTES: readonly string[] = [
   '/blog',
 ];
 
+/** The pages only super admins may open (00660, team invitations). Each one also covers its sub-pages. */
+export const SUPER_ADMIN_ROUTES: readonly string[] = ['/equipo'];
+
 /** Where marketing lands, and where the middleware sends it from any other page. */
 export const MARKETING_HOME = '/launch-pulse';
 
@@ -44,11 +47,19 @@ export function panelHome(role: PanelRole): string {
   return role === 'marketing' ? MARKETING_HOME : '/';
 }
 
-/** Admins open everything, marketing its allow-list. Any other value opens nothing. */
+function underRoute(routes: readonly string[], pathname: string): boolean {
+  return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
+/**
+ * Super admins open everything, admins everything but the super-admin pages, marketing its
+ * allow-list. Any other value opens nothing.
+ */
 export function canOpenPanelPath(role: PanelRole, pathname: string): boolean {
+  if (underRoute(SUPER_ADMIN_ROUTES, pathname)) return role === 'super_admin';
   if (role === 'admin' || role === 'super_admin') return true;
   if (role !== 'marketing') return false;
-  return MARKETING_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  return underRoute(MARKETING_ROUTES, pathname);
 }
 
 /**

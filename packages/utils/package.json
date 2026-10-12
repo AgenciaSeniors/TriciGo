@@ -24,6 +24,7 @@
     "./haptics": "./src/haptics.ts",
     "./htmlSafety": "./src/htmlSafety.ts",
     "./sharedRequest": "./src/sharedRequest.ts",
+    "./teamInvitation": "./src/teamInvitation.ts",
     "./historyExport": "./src/historyExport.ts",
     "./mapStyles": "./src/mapStyles.ts",
     "./mapboxOffline": "./src/mapboxOffline.ts",
