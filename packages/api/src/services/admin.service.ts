@@ -351,9 +351,14 @@ export const adminService = {
     const supabase = getSupabaseClient();
 
     const [profileRes, vehiclesRes, documentsRes, scoreEventsRes] = await Promise.all([
+      // The work wallet comes in the same request (it used to be a second one,
+      // after this one returned). wallet_accounts has two keys to users (user_id
+      // and frozen_by), so the embed names the one to follow.
       supabase
         .from('driver_profiles')
-        .select('*, users!inner(full_name, phone, email)')
+        .select(
+          '*, users!inner(full_name, phone, email, wallet_accounts!wallet_accounts_user_id_fkey(account_type, balance, held_balance, is_active, is_frozen, frozen_reason))',
+        )
         .eq('id', driverId)
         .single(),
       supabase
@@ -378,8 +383,23 @@ export const adminService = {
 
     if (profileRes.error) throw profileRes.error;
 
-    // Resolve user_id from profile for score events query
-    const profile = profileRes.data as DriverProfile & {
+    type DriverWallet = {
+      balance: number;
+      held_balance: number;
+      is_active: boolean;
+      is_frozen: boolean;
+      frozen_reason: string | null;
+    };
+    const raw = profileRes.data as DriverProfile & {
+      users: {
+        full_name: string;
+        phone: string;
+        email: string | null;
+        wallet_accounts?: (DriverWallet & { account_type: string })[] | null;
+      };
+    };
+    const { wallet_accounts: wallets, ...userFields } = raw.users ?? ({} as typeof raw.users);
+    const profile = { ...raw, users: userFields } as DriverProfile & {
       users: { full_name: string; phone: string; email: string | null };
     };
 
@@ -388,12 +408,16 @@ export const adminService = {
     // adjusts THIS wallet via "Ajustar saldo TC", so surface its balance here
     // instead of leaving the admin to top up blind. Tolerate a driver who has
     // no wallet row yet (null).
-    const walletRes = await supabase
-      .from('wallet_accounts')
-      .select('balance, held_balance, is_active, is_frozen, frozen_reason')
-      .eq('user_id', profile.user_id)
-      .eq('account_type', 'tricicoin')
-      .maybeSingle();
+    const work = (wallets ?? []).find((w) => w.account_type === 'tricicoin');
+    const wallet: DriverWallet | null = work
+      ? {
+          balance: work.balance,
+          held_balance: work.held_balance,
+          is_active: work.is_active,
+          is_frozen: work.is_frozen,
+          frozen_reason: work.frozen_reason,
+        }
+      : null;
 
     // Keep only the most recent document per document_type.
     // Drivers may re-upload (e.g. after rejection or earlier failures), which
@@ -410,16 +434,29 @@ export const adminService = {
     return {
       profile,
       vehicle: (vehiclesRes.data?.[0] as Vehicle) ?? null,
-      wallet: (walletRes.data as {
-        balance: number;
-        held_balance: number;
-        is_active: boolean;
-        is_frozen: boolean;
-        frozen_reason: string | null;
-      } | null) ?? null,
+      wallet,
       documents: Array.from(latestByType.values()),
       scoreEvents: (scoreEventsRes.data as DriverScoreEvent[]) ?? [],
     };
+  },
+
+  /**
+   * Signed URLs for several driver documents in one request (the driver page
+   * used to sign each document separately). Maps each path to its URL, or to
+   * null when that file could not be signed.
+   */
+  async getDocumentUrls(storagePaths: string[]): Promise<Record<string, string | null>> {
+    if (storagePaths.length === 0) return {};
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.storage
+      .from('driver-documents')
+      .createSignedUrls(storagePaths, 3600);
+    if (error) throw error;
+    const urls: Record<string, string | null> = {};
+    for (const item of data ?? []) {
+      if (item.path) urls[item.path] = item.error || !item.signedUrl ? null : item.signedUrl;
+    }
+    return urls;
   },
 
   /**

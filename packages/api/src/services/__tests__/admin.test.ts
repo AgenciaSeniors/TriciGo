@@ -6,7 +6,10 @@ import { getErrorMessage } from '@tricigo/utils';
 const mockFrom = vi.fn(() => createMockQueryChain());
 const mockRpc = vi.fn();
 const mockCreateSignedUrl = vi.fn();
-const mockStorage = { from: vi.fn(() => ({ createSignedUrl: mockCreateSignedUrl })) };
+const mockCreateSignedUrls = vi.fn();
+const mockStorage = {
+  from: vi.fn(() => ({ createSignedUrl: mockCreateSignedUrl, createSignedUrls: mockCreateSignedUrls })),
+};
 const mockInvoke = vi.fn();
 const mockSupabase = {
   from: mockFrom,
@@ -199,6 +202,47 @@ describe('adminService', () => {
       expect(result.scoreEvents).toEqual(scoreEvents);
     });
 
+    it('reads the work wallet in the same request as the profile, not after it', async () => {
+      const tricicoin = { account_type: 'tricicoin', balance: 500, held_balance: 0, is_active: true, is_frozen: false, frozen_reason: null };
+      const profile = {
+        id: 'd-1',
+        user_id: 'u-1',
+        users: {
+          full_name: 'Juan', phone: '555', email: null,
+          wallet_accounts: [{ ...tricicoin, account_type: 'customer_cash', balance: 9 }, tricicoin],
+        },
+      };
+      const chain1 = createMockQueryChain();
+      chain1.single.mockResolvedValue({ data: profile, error: null });
+      mockFrom
+        .mockReturnValueOnce(chain1)
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }));
+
+      const result = await adminService.getDriverDetail('d-1');
+
+      expect(chain1.select).toHaveBeenCalledWith(expect.stringContaining('wallet_accounts!wallet_accounts_user_id_fkey('));
+      expect(mockFrom).toHaveBeenCalledTimes(4);
+      expect(result.wallet).toEqual({ balance: 500, held_balance: 0, is_active: true, is_frozen: false, frozen_reason: null });
+      expect(result.profile.users).toEqual({ full_name: 'Juan', phone: '555', email: null });
+    });
+
+    it('returns a null wallet when the driver has no work wallet yet', async () => {
+      const profile = { id: 'd-1', users: { full_name: 'Juan', phone: '555', email: null, wallet_accounts: [] } };
+      const chain1 = createMockQueryChain();
+      chain1.single.mockResolvedValue({ data: profile, error: null });
+      mockFrom
+        .mockReturnValueOnce(chain1)
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }))
+        .mockReturnValueOnce(createMockQueryChain({ data: [], error: null }));
+
+      const result = await adminService.getDriverDetail('d-1');
+
+      expect(result.wallet).toBeNull();
+    });
+
     it('throws when profile query errors', async () => {
       const err = { message: 'Not found', code: 'PGRST116' };
       const chain1 = createMockQueryChain();
@@ -251,6 +295,37 @@ describe('adminService', () => {
 
       expect(result.documents).toEqual([]);
       expect(result.scoreEvents).toEqual([]);
+    });
+  });
+
+  describe('getDocumentUrls', () => {
+    it('signs every document in one request', async () => {
+      mockCreateSignedUrls.mockResolvedValueOnce({
+        data: [
+          { path: 'a.jpg', signedUrl: 'https://s/a', error: null },
+          { path: 'b.jpg', signedUrl: '', error: 'Object not found' },
+        ],
+        error: null,
+      });
+
+      const result = await adminService.getDocumentUrls(['a.jpg', 'b.jpg']);
+
+      expect(mockStorage.from).toHaveBeenCalledWith('driver-documents');
+      expect(mockCreateSignedUrls).toHaveBeenCalledTimes(1);
+      expect(mockCreateSignedUrls).toHaveBeenCalledWith(['a.jpg', 'b.jpg'], 3600);
+      expect(result).toEqual({ 'a.jpg': 'https://s/a', 'b.jpg': null });
+    });
+
+    it('makes no request without documents', async () => {
+      expect(await adminService.getDocumentUrls([])).toEqual({});
+      expect(mockCreateSignedUrls).not.toHaveBeenCalled();
+    });
+
+    it('throws when the request fails', async () => {
+      const err = { message: 'denied' };
+      mockCreateSignedUrls.mockResolvedValueOnce({ data: null, error: err });
+
+      await expect(adminService.getDocumentUrls(['a.jpg'])).rejects.toEqual(err);
     });
   });
 

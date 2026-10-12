@@ -176,21 +176,32 @@ export default function DriverDetailPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // Load signed URLs for documents
+  // Signed URLs for every document, in one request.
   useEffect(() => {
-    if (!driver?.documents.length) return;
-    driver.documents.forEach(async (doc) => {
-      try {
-        const url = await adminService.getDocumentUrl(doc.storage_path);
-        if (!url) {
-          setDocUrls((prev) => ({ ...prev, [doc.id]: '__error__' }));
-          return;
-        }
-        setDocUrls((prev) => ({ ...prev, [doc.id]: url }));
-      } catch {
-        setDocUrls((prev) => ({ ...prev, [doc.id]: '__error__' }));
-      }
-    });
+    const documents = driver?.documents ?? [];
+    if (!documents.length) return;
+    let cancelled = false;
+    adminService
+      .getDocumentUrls(documents.map((doc) => doc.storage_path))
+      .then((byPath) => {
+        if (cancelled) return;
+        setDocUrls((prev) => {
+          const next = { ...prev };
+          for (const doc of documents) next[doc.id] = byPath[doc.storage_path] ?? '__error__';
+          return next;
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDocUrls((prev) => {
+          const next = { ...prev };
+          for (const doc of documents) next[doc.id] = '__error__';
+          return next;
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [driver?.documents]);
 
   // Close actions menu on outside click
