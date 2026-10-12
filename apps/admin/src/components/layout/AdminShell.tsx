@@ -63,7 +63,10 @@ function ShellRoot({ children }: { children: React.ReactNode }) {
   const isAuthPage =
     pathname === '/login' ||
     pathname === '/forgot-password' ||
-    pathname === '/reset-password';
+    pathname === '/reset-password' ||
+    // Public team invitation pages (00660): no session or no panel role yet.
+    pathname === '/sin-acceso' ||
+    pathname.startsWith('/invitacion/');
   const [ready, setReady] = useState(i18nInitialized);
   const { user, loading: authLoading } = useAdminUser();
 
