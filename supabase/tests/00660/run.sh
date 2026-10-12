@@ -161,9 +161,12 @@ echo "== release =="
 val "R1 releases an accepted ride like the automatic release, plus the GPS reset" \
   "$(as $ADMIN "RESET ROLE; UPDATE public.rides SET gps_override_confirmed_at = now(), driver_gps_status = 'rider_consented' WHERE id = '$R_ACC';
      SET LOCAL ROLE authenticated; SELECT public.admin_release_active_ride('$R_ACC', 'accepted', 'no responde')->>'success';
-     RESET ROLE; SELECT status || '|' || (driver_id IS NULL) || '|' || (accepted_at IS NULL) || '|' || (last_dispatched_at IS NULL) || '|' ||
-       driver_gps_status || '|' || (gps_override_confirmed_at IS NULL) FROM public.rides WHERE id = '$R_ACC';")" \
-  "true;searching|true|true|true|healthy|true"
+     RESET ROLE; SELECT status || '|' || (driver_id IS NULL) || '|' || (accepted_at IS NULL) || '|' || (searching_seen_at = now()) || '|' ||
+       driver_gps_status || '|' || (gps_override_confirmed_at IS NULL) || '|' ||
+       (SELECT count(*) FROM public.dispatch_calls WHERE ride_id = '$R_ACC') || '|' || (last_dispatched_at = now()) || '|' ||
+       (SELECT is_online FROM public.driver_profiles WHERE id = '$DP_DIEGO')
+     FROM public.rides WHERE id = '$R_ACC';")" \
+  "true;searching|true|true|true|healthy|true|1|true|false"
 val "R2 the driver goes offline, the accepted offer stays accepted, dispatch is called" \
   "$(as $ADMIN "SELECT public.admin_release_active_ride('$R_ENR', 'driver_en_route', 'no responde')->>'success';
      RESET ROLE; SELECT (SELECT is_online FROM public.driver_profiles WHERE id = '$DP_DIEGO') || '|' ||

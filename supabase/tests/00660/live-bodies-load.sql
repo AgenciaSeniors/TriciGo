@@ -304,3 +304,141 @@ EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
 END;
 $function$;
+
+-- live release_rides_from_dead_drivers: md5 c99dd7b82a9cddaa2bf21a48d9bff7f7
+CREATE OR REPLACE FUNCTION public.release_rides_from_dead_drivers()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+DECLARE
+  v_after_min   INT;
+  v_enabled     TEXT;
+  v_released    INT := 0;
+  v_flagged     INT := 0;
+  v_rider_ids   JSONB := '[]'::jsonb;
+  v_service_key TEXT;
+  r             RECORD;
+BEGIN
+  SELECT COALESCE((value #>> '{}'), 'true') INTO v_enabled
+  FROM platform_config WHERE key = 'dead_driver_ride_release_enabled';
+  IF v_enabled IN ('false', 'f') THEN
+    RETURN jsonb_build_object('enabled', false, 'released', 0, 'flagged', 0);
+  END IF;
+
+  -- ::int es obligatorio: get_platform_config_numeric devuelve NUMERIC y
+  -- make_interval(mins => ...) solo acepta INT (revienta en runtime, no al crear).
+  v_after_min := GREATEST(1, get_platform_config_numeric('dead_driver_ride_release_after_minutes', 12))::int;
+
+  -- A) PRE-RECOGIDA → devolver a búsqueda
+  FOR r IN
+    SELECT rd.id, rd.customer_id, rd.driver_id, rd.status
+    FROM rides rd
+    JOIN driver_profiles dp ON dp.id = rd.driver_id
+    WHERE rd.status IN ('accepted', 'driver_en_route')
+      AND dp.last_heartbeat_at IS NOT NULL
+      AND dp.last_heartbeat_at < now() - make_interval(mins => v_after_min)
+  LOOP
+    -- Sacar de línea al conductor muerto ANTES de liberar. Sin esto hay una carrera:
+    -- find_best_drivers filtra por is_online pero el filtro de heartbeat está desactivado
+    -- por defecto (dispatch_heartbeat_window_s = 0), así que un conductor muerto todavía
+    -- marcado online podría recibir de vuelta el mismo viaje que le acabamos de quitar.
+    UPDATE driver_profiles
+    SET is_online = false, auto_offline_at = COALESCE(auto_offline_at, now())
+    WHERE id = r.driver_id AND is_online = true;
+
+    -- searching_seen_at = now() es CRÍTICO: cleanup_orphan_searching_rides (cron cada minuto)
+    -- cancela los `searching` cuyo searching_seen_at supera searching_abandon_seconds. Sin
+    -- refrescarlo, el viaje liberado se cancelaría al minuto siguiente. Con el refresco arranca
+    -- una ventana limpia, y si nadie lo toma, ese mismo cron lo cierra de forma ordenada.
+    -- last_dispatched_at = NULL deja que retry_dispatch_expired_rides lo re-despache ya.
+    UPDATE rides
+    SET status             = 'searching',
+        driver_id          = NULL,
+        accepted_at        = NULL,
+        searching_seen_at  = now(),
+        last_dispatched_at = NULL,
+        updated_at         = now()
+    WHERE id = r.id
+      AND status = r.status;   -- guarda optimista: si el conductor revivió y avanzó, no lo pisamos
+
+    IF FOUND THEN
+      v_released := v_released + 1;
+      v_rider_ids := v_rider_ids || to_jsonb(r.customer_id);
+
+      UPDATE ride_offers
+      SET status = 'expired'
+      WHERE ride_id = r.id AND driver_profile_id = r.driver_id AND status = 'pending';
+    END IF;
+  END LOOP;
+
+  -- B) POST-RECOGIDA → solo alertar, jamás tocar el viaje
+  INSERT INTO stuck_ride_alerts (ride_id, reason, details)
+  SELECT rd.id, 'dead_driver_app',
+         jsonb_build_object(
+           'ride_status', rd.status,
+           'driver_id', rd.driver_id,
+           'last_heartbeat_at', dp.last_heartbeat_at,
+           'minutes_silent', ROUND(EXTRACT(EPOCH FROM (now() - dp.last_heartbeat_at)) / 60)
+         )
+  FROM rides rd
+  JOIN driver_profiles dp ON dp.id = rd.driver_id
+  WHERE rd.status IN ('arrived_at_pickup', 'in_progress', 'arrived_at_destination')
+    AND dp.last_heartbeat_at IS NOT NULL
+    AND dp.last_heartbeat_at < now() - make_interval(mins => v_after_min)
+  ON CONFLICT (ride_id) DO NOTHING;
+  GET DIAGNOSTICS v_flagged = ROW_COUNT;
+
+  -- 00555: avisar por correo. Hasta acá la fila se insertaba muda y 00538
+  -- la auto-resolvía a los 5 min, así que nadie se enteraba nunca.
+  -- 00640: the e-mail runs in its own cron job (notify-dead-driver-alert), so a
+  -- failure there fails that job and never rolls back the releases above.
+
+  -- C) Avisar a los pasajeros liberados. Bloque propio: un fallo de push jamás debe
+  -- deshacer la liberación.
+  IF v_released > 0 THEN
+    BEGIN
+      v_service_key := get_service_role_key();
+      IF v_service_key IS NOT NULL AND v_service_key <> '' THEN
+        PERFORM public.cron_http_post('dead-driver-ride-released',
+          url     := 'https://lqaufszburqvlslpcuac.supabase.co/functions/v1/send-push',
+          headers := jsonb_build_object(
+            'Content-Type',  'application/json',
+            'Authorization', 'Bearer ' || v_service_key,
+            'apikey',        v_service_key
+          ),
+          body    := jsonb_build_object(
+            'user_ids', v_rider_ids,
+            'title',    'Buscando otro conductor',
+            'body',     'Tu conductor perdió la conexión y no pudo continuar. Estamos buscándote otro ahora mismo.',
+            'category', 'ride',
+            'data',     jsonb_build_object('reason', 'dead_driver_ride_released')
+          )
+        );
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING '[release_rides_from_dead_drivers] push failed: % %', SQLSTATE, SQLERRM;
+    END;
+  END IF;
+
+  RETURN jsonb_build_object('enabled', true, 'released', v_released, 'flagged', v_flagged);
+END;
+$function$;
+
+-- live tg_driver_profiles_shift_intent: md5 41124993d04add2f672606333db3b952
+CREATE OR REPLACE FUNCTION public.tg_driver_profiles_shift_intent()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  -- auth.uid() presente = lo hizo una persona (el conductor o un admin), no el
+  -- cron (service_role, auth.uid() NULL). Su intención manda: se borra la marca.
+  IF NEW.is_online IS DISTINCT FROM OLD.is_online AND auth.uid() IS NOT NULL THEN
+    NEW.auto_offline_at := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$function$;

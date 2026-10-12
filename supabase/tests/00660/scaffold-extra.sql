@@ -1,7 +1,8 @@
 -- Additions to the 00659 scaffold (+ the 00659 migration) for the 00660 rehearsal.
 -- Columns, tables and seed rows mirror prod (2026-10-12). Live bodies come from
--- live-bodies.sql (md5-checked); complete_ride_and_pay, dispatch_ride and
--- cron_http_post are stubs that record their calls.
+-- live-bodies.sql (run.sh checks each md5 before applying the migration);
+-- complete_ride_and_pay, dispatch_ride and cron_http_post are stubs that record
+-- their calls.
 SET ROLE tricigo_owner;
 
 ALTER TABLE public.users ADD COLUMN phone text, ADD COLUMN is_test boolean NOT NULL DEFAULT false;
@@ -30,7 +31,14 @@ ALTER TABLE public.rides
   ADD COLUMN corporate_account_id uuid,
   ADD COLUMN canceled_by uuid,
   ADD COLUMN pickup_address text NOT NULL DEFAULT 'Capitolio',
-  ADD COLUMN dropoff_address text NOT NULL DEFAULT 'Hotel Nacional';
+  ADD COLUMN dropoff_address text NOT NULL DEFAULT 'Hotel Nacional',
+  ADD COLUMN ride_mode text DEFAULT 'passenger',
+  ADD COLUMN dispatch_round integer NOT NULL DEFAULT 0;
+
+-- Delivery proof of a cargo ride (only the columns tg_rides_require_delivery_proof reads).
+CREATE TABLE public.delivery_details (
+  ride_id uuid PRIMARY KEY REFERENCES public.rides(id) ON DELETE CASCADE,
+  delivery_otp_validated_at timestamptz, delivery_photo_url text);
 
 CREATE TABLE public.service_type_configs (
   slug text PRIMARY KEY, free_wait_minutes integer, per_wait_minute_rate_cup integer);
@@ -45,7 +53,7 @@ INSERT INTO public.pricing_rules (service_type, per_wait_minute_rate_cup, time_w
   ('triciclo_basico', NULL, '12:00', '18:00'), ('triciclo_basico', 94, '18:00', '00:00');
 
 CREATE TABLE public.platform_config (key text PRIMARY KEY, value jsonb);
-INSERT INTO public.platform_config VALUES ('max_billable_wait_minutes', '20');
+INSERT INTO public.platform_config VALUES ('max_billable_wait_minutes', '20'), ('reoffer_cooldown_s', '120');
 
 CREATE TABLE public.ride_pricing_snapshots (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), ride_id uuid NOT NULL REFERENCES public.rides(id),
@@ -110,10 +118,14 @@ CREATE OR REPLACE FUNCTION public.cron_http_post(p_jobname text, url text, heade
  RETURNS bigint LANGUAGE sql AS $f$ INSERT INTO net.calls (url, body) VALUES (p_jobname || ' ' || url, body) RETURNING id $f$;
 REVOKE ALL ON FUNCTION public.cron_http_post(text, text, jsonb, jsonb, integer) FROM PUBLIC;
 
+-- dispatch_ride: what prod writes on the ride itself (a new round, now), plus a call record.
 CREATE TABLE public.dispatch_calls (ride_id uuid, at timestamptz DEFAULT clock_timestamp());
 CREATE OR REPLACE FUNCTION public.dispatch_ride(p_ride_id uuid, p_radius_m integer DEFAULT 5000)
  RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_catalog
-AS $f$ INSERT INTO public.dispatch_calls (ride_id) VALUES (p_ride_id) RETURNING jsonb_build_object('ok', true) $f$;
+AS $f$
+  UPDATE public.rides SET dispatch_round = dispatch_round + 1, last_dispatched_at = now() WHERE id = p_ride_id;
+  INSERT INTO public.dispatch_calls (ride_id) VALUES (p_ride_id) RETURNING jsonb_build_object('ok', true)
+$f$;
 REVOKE ALL ON FUNCTION public.dispatch_ride(uuid, integer) FROM PUBLIC;
 
 -- complete_ride_and_pay: prod's guards copied, the money part reduced to the fare it charges.
@@ -144,7 +156,12 @@ BEGIN
   UPDATE public.rides SET status = 'completed',
          final_fare_cup = GREATEST(v_total - COALESCE(v_ride.discount_amount_cup, 0), 0) + COALESCE(v_wait, 0)
    WHERE id = p_ride_id;
-  RETURN jsonb_build_object('success', true, 'final_fare_cup', (SELECT final_fare_cup FROM public.rides WHERE id = p_ride_id));
+  -- prod's result carries these keys; a cash ride is all cash.
+  RETURN (SELECT jsonb_build_object('success', true, 'final_fare_cup', r.final_fare_cup,
+                 'payment_method', r.payment_method,
+                 'cash_amount_cup', CASE WHEN r.payment_method = 'cash' THEN r.final_fare_cup ELSE 0 END,
+                 'wallet_amount_cup', CASE WHEN r.payment_method = 'cash' THEN 0 ELSE r.final_fare_cup END)
+          FROM public.rides r WHERE r.id = p_ride_id);
 END $f$;
 REVOKE ALL ON FUNCTION public.complete_ride_and_pay(uuid, uuid, integer, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.complete_ride_and_pay(uuid, uuid, integer, integer) TO authenticated, service_role;
@@ -157,6 +174,9 @@ CREATE TRIGGER trg_enforce_ride_transition BEFORE UPDATE OF status ON public.rid
   FOR EACH ROW WHEN (old.status IS DISTINCT FROM new.status) EXECUTE FUNCTION public.enforce_ride_transition();
 CREATE TRIGGER trg_push_ride_status AFTER UPDATE OF status ON public.rides
   FOR EACH ROW WHEN (old.status IS DISTINCT FROM new.status) EXECUTE FUNCTION public.notify_ride_status_change();
+CREATE TRIGGER trg_driver_profiles_shift_intent BEFORE UPDATE ON public.driver_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.tg_driver_profiles_shift_intent();
 REVOKE ALL ON FUNCTION public.calculate_wait_charge(uuid), public.get_platform_config_numeric(text, numeric),
-  public.log_rpc_attempt(text, uuid, uuid, text, jsonb), public._ride_short_code(uuid) FROM PUBLIC;
+  public.log_rpc_attempt(text, uuid, uuid, text, jsonb), public._ride_short_code(uuid),
+  public.release_rides_from_dead_drivers(), public.tg_driver_profiles_shift_intent() FROM PUBLIC;
 RESET ROLE;
