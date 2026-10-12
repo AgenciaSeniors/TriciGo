@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   MARKETING_HOME,
   MARKETING_ROUTES,
+  PANEL_ROLE_COOKIE,
   canOpenPanelPath,
   isPanelRole,
   menuRole,
   panelHome,
+  panelRoleFromCookies,
   type PanelRole,
 } from '../adminPanelAccess';
 
@@ -67,5 +69,32 @@ describe('panelHome and menuRole', () => {
     expect(menuRole(null)).toBe('marketing');
     expect(menuRole(undefined)).toBe('marketing');
     expect(menuRole('admin')).toBe('admin');
+  });
+});
+
+describe('panelRoleFromCookies', () => {
+  it('reads the role the middleware wrote', () => {
+    expect(panelRoleFromCookies(`a=1; ${PANEL_ROLE_COOKIE}=marketing; b=2`)).toBe('marketing');
+    expect(panelRoleFromCookies(`${PANEL_ROLE_COOKIE}=super_admin`)).toBe('super_admin');
+  });
+
+  it('ignores a value that is not a panel role', () => {
+    expect(panelRoleFromCookies(`${PANEL_ROLE_COOKIE}=customer`)).toBeNull();
+    expect(panelRoleFromCookies(`${PANEL_ROLE_COOKIE}=`)).toBeNull();
+    expect(panelRoleFromCookies(`${PANEL_ROLE_COOKIE}=admin%00`)).toBeNull();
+  });
+
+  it('does not take another cookie whose name ends the same way', () => {
+    expect(panelRoleFromCookies(`x${PANEL_ROLE_COOKIE}=admin`)).toBeNull();
+  });
+
+  it('is null without the cookie or without cookies at all', () => {
+    expect(panelRoleFromCookies('a=1; b=2')).toBeNull();
+    expect(panelRoleFromCookies('')).toBeNull();
+    expect(panelRoleFromCookies(undefined)).toBeNull();
+  });
+
+  it('does not throw on a value that is not valid URI encoding', () => {
+    expect(panelRoleFromCookies(`${PANEL_ROLE_COOKIE}=%E0%A4%A`)).toBeNull();
   });
 });
