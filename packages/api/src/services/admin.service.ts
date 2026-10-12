@@ -360,6 +360,8 @@ export const adminService = {
           '*, users!inner(full_name, phone, email, wallet_accounts!wallet_accounts_user_id_fkey(account_type, balance, held_balance, is_active, is_frozen, frozen_reason))',
         )
         .eq('id', driverId)
+        // Only the work wallet comes back; the embed filter does not drop the profile.
+        .eq('users.wallet_accounts.account_type', 'tricicoin')
         .single(),
       supabase
         .from('vehicles')

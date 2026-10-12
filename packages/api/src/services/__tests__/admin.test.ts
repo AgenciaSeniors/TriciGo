@@ -223,6 +223,7 @@ describe('adminService', () => {
       const result = await adminService.getDriverDetail('d-1');
 
       expect(chain1.select).toHaveBeenCalledWith(expect.stringContaining('wallet_accounts!wallet_accounts_user_id_fkey('));
+      expect(chain1.eq).toHaveBeenCalledWith('users.wallet_accounts.account_type', 'tricicoin');
       expect(mockFrom).toHaveBeenCalledTimes(4);
       expect(result.wallet).toEqual({ balance: 500, held_balance: 0, is_active: true, is_frozen: false, frozen_reason: null });
       expect(result.profile.users).toEqual({ full_name: 'Juan', phone: '555', email: null });

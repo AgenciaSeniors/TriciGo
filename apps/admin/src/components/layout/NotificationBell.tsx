@@ -31,9 +31,11 @@ export function NotificationBell() {
   const { alerts: sosAlerts, count: sosCount } = useSosAlerts();
   const ref = useRef<HTMLDivElement>(null);
 
-  const refresh = useCallback(async () => {
+  // maxAgeMs: the background poll takes an answer the dashboard got in the last
+  // 20 s; opening the panel asks fresh.
+  const refresh = useCallback(async (maxAgeMs?: number) => {
     try {
-      const m = await getDashboardMetricsShared();
+      const m = await getDashboardMetricsShared(maxAgeMs);
       setMetrics({
         open_incidents: m.open_incidents ?? 0,
         pending_verifications: m.pending_verifications ?? 0,
@@ -46,13 +48,13 @@ export function NotificationBell() {
   // Keep the badge live even while the panel is closed (lightweight RPC).
   useEffect(() => {
     void refresh();
-    const id = setInterval(refresh, 60_000);
+    const id = setInterval(() => void refresh(), 60_000);
     return () => clearInterval(id);
   }, [refresh]);
 
   // Fresh data the moment the panel opens.
   useEffect(() => {
-    if (open) void refresh();
+    if (open) void refresh(0);
   }, [open, refresh]);
 
   // Outside-click + Escape close (mirrors the user menu).
