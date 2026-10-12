@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Create a fresh in-memory storage for each test
 function createMockStorage() {
@@ -141,7 +141,7 @@ describe('offlineQueue', () => {
             id: 'persisted-1',
             action: 'ride.complete',
             params: [{ rideId: 'ride-1' }],
-            timestamp: 1,
+            timestamp: Date.now(),
             retries: 0,
           },
         ]),
@@ -203,6 +203,93 @@ describe('offlineQueue', () => {
 
       expect(handler).toHaveBeenCalledTimes(1);
       expect(mod.getPendingCount()).toBe(1);
+    });
+  });
+
+  describe('retry tick', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('retries a failed replay while the device still reports a connection', async () => {
+      // Cuban networks often stay "connected" while requests fail, so NetInfo
+      // never fires again. The tick must retry without a connectivity event.
+      vi.useFakeTimers();
+      let fail = true;
+      const handler = vi.fn(async () => {
+        if (fail) throw new Error('network request failed');
+      });
+      mod.registerOfflineMutation('ride.complete', handler);
+
+      const result = await mod.executeOrQueue('ride.complete', { rideId: 'ride-1' });
+      expect(result.executed).toBe(false);
+      expect(mod.getOnlineStatus()).toBe(false);
+
+      fail = false;
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(mod.getPendingCount()).toBe(0);
+      expect(mod.getOnlineStatus()).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('does not retry while the device reports no connection', async () => {
+      vi.useFakeTimers();
+      const handler = vi.fn(async () => {});
+      mod.registerOfflineMutation('ride.complete', handler);
+      mod.setOnlineStatus(false);
+
+      await mod.executeOrQueue('ride.complete', { rideId: 'ride-1' });
+      await vi.advanceTimersByTimeAsync(120_000);
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(mod.getPendingCount()).toBe(1);
+    });
+
+    it('retries a mutation once its backoff expires, with no new connectivity event', async () => {
+      vi.useFakeTimers();
+      let fail = true;
+      const handler = vi.fn(async () => {
+        if (fail) throw new Error('Internal server error');
+      });
+      mod.registerOfflineMutation('ride.complete', handler);
+      mod.setOnlineStatus(false);
+      await mod.executeOrQueue('ride.complete', { rideId: 'ride-1' });
+
+      mod.setOnlineStatus(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(mod.getPendingCount()).toBe(1);
+
+      fail = false;
+      await vi.advanceTimersByTimeAsync(31_000);
+
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(mod.getPendingCount()).toBe(0);
+    });
+  });
+
+  describe('mutations with no handler', () => {
+    it('drops one older than a day and keeps a recent one', async () => {
+      const fresh = await loadFreshModule();
+      const persistedStorage = createMockStorage();
+      persistedStorage._store.set(
+        '@tricigo/offline-queue',
+        JSON.stringify([
+          { id: 'old', action: 'gone.action', params: [], timestamp: Date.now() - 25 * 60 * 60 * 1000, retries: 0 },
+          { id: 'recent', action: 'late.action', params: [], timestamp: Date.now(), retries: 0 },
+        ]),
+      );
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await fresh.initOfflineQueue(persistedStorage);
+      await vi.waitFor(() => expect(fresh.getPendingCount()).toBe(1));
+
+      expect(fresh.getPendingMutations().map((m) => m.id)).toEqual(['recent']);
+      expect(JSON.parse(persistedStorage._store.get('@tricigo/offline-queue') ?? '[]')).toHaveLength(1);
+      expect(warn).toHaveBeenCalledWith('[OfflineQueue] Discarding mutation with no handler:', 'gone.action');
+      warn.mockRestore();
     });
   });
 

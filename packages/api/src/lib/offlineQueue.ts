@@ -33,11 +33,26 @@ const MAX_RETRIES = 3;
 // transition, so a mutation must serve a backoff between attempts. Without it a
 // burst of NetInfo events drains MAX_RETRIES in a second and drops the work.
 const RETRY_BACKOFF_MS = 30_000;
+// NetInfo only fires when the connection state changes. On networks that stay
+// "connected" while requests fail (common in Cuba), a failed replay would wait
+// for a state change that never comes. While anything is pending and the
+// device says it is connected, try again on this tick. It also picks up
+// mutations whose backoff has expired.
+const RETRY_TICK_MS = 30_000;
+// A queued action with no registered handler is kept for a while (handlers
+// can register after the first replay), then dropped so it cannot sit in the
+// queue, and in the banner, forever.
+const UNKNOWN_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
 
 let storage: StorageAdapter | null = null;
 let queue: QueuedMutation[] = [];
 let isProcessing = false;
 let isOnline = true;
+// Last connectivity report from the device (NetInfo). isOnline also goes false
+// when a request fails with a network error while the device still reports a
+// connection; deviceOnline does not, so the retry tick knows it may try again.
+let deviceOnline = true;
+let retryTimer: ReturnType<typeof setInterval> | null = null;
 let initialization: Promise<void> = Promise.resolve();
 
 // Registry of mutation handlers
@@ -55,6 +70,7 @@ let processingStatus: ProcessingStatus = {
 };
 
 function notifyListeners() {
+  syncRetryTimer();
   const snapshot = [...queue];
   const statusSnapshot = { ...processingStatus };
   for (const cb of listeners) {
@@ -90,8 +106,33 @@ export function registerOfflineMutation(
  * Set online/offline status.
  */
 export function setOnlineStatus(online: boolean) {
+  deviceOnline = online;
   isOnline = online;
   if (online) void processQueue();
+}
+
+/** A request failed on the network. The device may still report a connection. */
+function markRequestFailed() {
+  isOnline = false;
+}
+
+function syncRetryTimer() {
+  if (queue.length > 0 && !retryTimer) {
+    retryTimer = setInterval(retryTick, RETRY_TICK_MS);
+    // Node (tests): do not keep the process alive for this timer.
+    (retryTimer as { unref?: () => void }).unref?.();
+  } else if (queue.length === 0 && retryTimer) {
+    clearInterval(retryTimer);
+    retryTimer = null;
+  }
+}
+
+function retryTick() {
+  if (!deviceOnline) return;
+  // Probe: if the network is still failing, the first request marks the queue
+  // offline again until the next tick.
+  isOnline = true;
+  void processQueue();
 }
 
 /**
@@ -154,7 +195,7 @@ export async function executeOrQueue(
     } catch (err) {
       // If it's a network error, queue it
       if (isNetworkError(err)) {
-        setOnlineStatus(false);
+        markRequestFailed();
         await enqueue(action, params);
         return { executed: false };
       }
@@ -194,8 +235,16 @@ async function processQueue() {
 
     if (!handler) {
       // Handlers are registered during startup and the replay can win that
-      // race. Skip — never discard — so the mutation survives until its
-      // handler lands and registerOfflineMutation replays the queue.
+      // race, so a recent mutation is skipped until its handler lands and
+      // registerOfflineMutation replays the queue. An old one belongs to an
+      // action this app version no longer has: drop it.
+      if (Date.now() - mutation.timestamp > UNKNOWN_ACTION_TTL_MS) {
+        console.warn('[OfflineQueue] Discarding mutation with no handler:', mutation.action);
+        queue.splice(cursor, 1);
+        await saveQueue();
+        notifyListeners();
+        continue;
+      }
       cursor++;
       continue;
     }
@@ -223,7 +272,7 @@ async function processQueue() {
     } catch (err) {
       if (isNetworkError(err)) {
         // Still offline, stop processing
-        setOnlineStatus(false);
+        markRequestFailed();
         break;
       }
 
