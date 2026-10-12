@@ -97,6 +97,8 @@ export const referralService = {
       if (error.code === 'P0001') throw new Error('Código de referido inválido');
       if (error.code === 'P0002') throw new Error('No puedes usar tu propio código');
       if (error.code === 'P0003') throw new Error('Ya usaste un código de referido');
+      // 00658: referral rewards are once per confirmed phone.
+      if (error.code === 'P0004') throw new Error('Confirma tu teléfono para usar un código de referido.');
 
       // Migration not yet applied — legacy fallback (works only for admins
       // due to RLS on users; non-admins get "invalid" same as before).

@@ -563,6 +563,7 @@ export function useRideActions() {
         max_uses: i18next.t('rider:ride.promo_error_max_uses', { defaultValue: 'Código agotado' }),
         already_used: i18next.t('rider:ride.promo_error_already_used', { defaultValue: 'Ya usaste este código' }),
         first_ride_only: i18next.t('rider:ride.promo_error_first_ride', { defaultValue: 'Solo válido para tu primer viaje' }),
+        phone_required: i18next.t('rider:ride.promo_error_phone_required', { defaultValue: 'Confirma tu teléfono para usar códigos de promoción' }),
       };
       setPromoResult({
         valid: result.valid,

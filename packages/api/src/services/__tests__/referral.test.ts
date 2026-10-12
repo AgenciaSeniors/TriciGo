@@ -158,6 +158,17 @@ describe('referralService', () => {
       ).rejects.toThrow('Ya usaste un código de referido');
     });
 
+    it('maps P0004 → asks to confirm the phone (00658)', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'P0004', message: 'no confirmed phone' },
+      });
+
+      await expect(
+        referralService.applyReferralCode('referee-id', 'AAAA1111'),
+      ).rejects.toThrow('Confirma tu teléfono para usar un código de referido.');
+    });
+
     it('falls back to legacy path when RPC missing (PGRST202)', async () => {
       mockRpc.mockResolvedValueOnce({
         data: null,

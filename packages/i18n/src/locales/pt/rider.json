@@ -187,6 +187,7 @@
     "promo_error_max_uses": "Código esgotado",
     "promo_error_already_used": "Você já usou este código",
     "promo_error_first_ride": "Válido apenas para sua primeira viagem",
+    "promo_error_phone_required": "Confirme seu telefone para usar códigos promocionais",
     "promo_already_used": "Você já usou este código",
     "promo_max_uses": "Código esgotado",
     "discount": "Desconto",

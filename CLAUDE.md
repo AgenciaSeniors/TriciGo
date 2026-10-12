@@ -2312,6 +2312,28 @@ Ensayo: `supabase/tests/00655/run.sh` (RED: 24 fallos; GREEN 39/39, con 5 prueba
   - **Verificado por objeto:** las cuatro claves son índices únicos parciales con `…0099` en el predicado, sin constraint, y `uniq_reviews_ride_reviewer` ya no existe.
   - **Probado con dos conductores referidos reales, en un bloque revertido:** los dos se eliminan, sus billeteras quedan en 0 y las dos filas de `referrals` pasan a `…0099`. Al deshacer, todo volvió a 10.000.
 
+### Bonos de una vez por persona: van atados al teléfono confirmado (00658, 2026-10-12)
+
+Un código de promoción se podía usar una vez por **cuenta** (`promotion_uses`) y un referido se pagaba una vez por **cuenta** (`referrals.referee_id`). Al eliminar la cuenta, las dos filas pasan a `…0099` (00657), así que la misma persona podía registrarse otra vez con el mismo teléfono y volver a usar BIENVENIDA, o ser referida de nuevo y hacer cobrar otros 500 CUP a quien la refirió. Medido en el ensayo con los cuerpos vivos: el mismo teléfono cobraba la promo dos veces y el referido pagaba 1.000 en vez de 500.
+
+**La regla (decidida con el dueño):**
+- Cada bono queda registrado por el **teléfono confirmado** de la cuenta (`auth.users.phone` con `phone_confirmed_at`), guardado como hash con sal en `reward_claims`. Esas filas no tienen FK a `users` y sobreviven a la eliminación de la cuenta a propósito.
+  - `claim` vale `promo:<id>` para un código o `referral_referee` para el referido.
+  - La sal está en `reward_identity_salt` (tabla-candado, como `nearby_vehicle_salt`). Quien lea la sal puede recuperar un teléfono probando todos los números: protege solo contra quien tenga una copia de `reward_claims`.
+- **Sin teléfono confirmado no hay bonos de una vez por persona** (decisión del dueño).
+  - Afecta a las 90 cuentas de Google o Apple sin teléfono, que de todos modos no pasan la pantalla de verificar teléfono.
+  - `validate_promo_code` responde `phone_required` y las apps muestran "Confirma tu teléfono para usar códigos de promoción" (`ride.promo_error_phone_required`, `book.promo_error_phone_required`).
+  - `apply_referral_code` responde P0004 "Confirma tu teléfono para usar un código de referido.".
+- **Promos:**
+  - Cada código, una vez por teléfono, desde cualquier cuenta. El trigger del viaje descarta la promo como si fuera un segundo uso (`already_used`).
+  - Cancelar el viaje devuelve el registro (`released_at`), igual que devuelve el uso.
+- **Referidos:**
+  - Un teléfono cobra como referido una sola vez. Los dos triggers vivos y la función `trg_referral_reward_on_driver_approved` (no la llama ningún trigger) no pagan nada si el teléfono ya cobró, y el referido queda `pending`.
+  - El registro se toma dentro del bloque de dinero: si el pago falla, se deshace con él.
+  - `admin_reward_referral` rechaza un teléfono que ya cobró (DETAIL `referral_phone_already_rewarded`) y deja pagar a mano a alguien sin teléfono.
+- **Un bono nuevo de una vez por persona** (otra promo, otro tipo de bono) toma su registro con `_claim_reward(user, '<tipo>:<id>', ride, referral)` en la misma transacción que lo paga, y lo consulta con `_reward_claim_status`. Las dos funciones son SECURITY DEFINER y las ejecuta solo `service_role`.
+- Ensayo: `supabase/tests/00658/run.sh`. RED: 20 fallos. GREEN: 36/36, aplicada dos veces, con 4 pruebas negativas y una copia CRLF.
+
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
 Un canal **público** de Realtime no pasa por ninguna regla: cualquiera con sesión que sepa el nombre puede unirse, leer los broadcasts y la presencia, y mandar mensajes. Las reglas de `realtime.messages` solo se aplican a los canales **privados** (`{ config: { private: true } }`). Un canal privado y uno público con el mismo nombre no se cruzan: lo que se manda en uno nunca llega al otro.
