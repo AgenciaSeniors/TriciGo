@@ -37,9 +37,10 @@ import { getSupabaseClient } from '../client';
  * timeout so a stalled upload becomes a clear, surfaced error, and we auto-retry
  * once on a timeout/network-class failure (the common transient case in Cuba).
  * A real denial (forbidden/too_large/etc. — a `{ error }` body) is NOT retried.
- * Retrying is safe: idempotent paths (avatar upsert to a fixed path, docs keyed
- * by docType) simply overwrite; timestamped paths (selfie/dispute) at worst
- * leave a harmless orphan object.
+ * The path is fixed for the whole call. With upsert (avatar, selfie, driver
+ * documents) a retry rewrites the object the first attempt may have written.
+ * Without upsert (dispute evidence), a retry after a first attempt that did
+ * land fails with 409.
  *
  * Throws on failure (gateway error, timeout, or an `{ error }` body from the EF).
  */

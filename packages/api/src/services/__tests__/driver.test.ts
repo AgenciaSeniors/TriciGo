@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
@@ -196,17 +196,31 @@ describe('driverService', () => {
   // `uploadFileFromUri` helper posts a FormData body to the EF via
   // `functions.invoke('storage-upload')`. (See _storage-upload.ts / PR #430/#432.)
   describe('uploadDocument', () => {
-    it('uploads file to the storage-upload EF and creates document record', async () => {
-      mockFunctionsInvoke.mockResolvedValueOnce({
-        data: { path: 'driver-docs/d-1/license/license.jpg' },
-        error: null,
-      });
+    // Each upload gets its own object. With the bare file name as the key, a
+    // re-upload of the same photo replaced the object behind a row the admin
+    // had already approved (10 approved documents in prod, 2026-09-27).
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** The form sent to the EF on the n-th storage-upload call. */
+    const uploadForm = (call = 0): FormData => {
+      const args = mockFunctionsInvoke.mock.calls[call];
+      if (!args) throw new Error(`storage-upload call ${call} was not made`);
+      return (args[1] as { body: FormData }).body;
+    };
+    const uploadedPath = (call = 0) => uploadForm(call).get('path');
+
+    it('uploads under a timestamped path and records that path', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(1760000000000);
+      mockFunctionsInvoke.mockResolvedValueOnce({ data: { path: 'ignored' }, error: null });
 
       const mockDoc = {
         id: 'doc-1',
         driver_id: 'd-1',
         document_type: 'license',
-        storage_path: 'driver-docs/d-1/license/license.jpg',
+        storage_path: 'driver-docs/d-1/license/1760000000000-license.jpg',
         file_name: 'license.jpg',
         mime_type: 'image/jpeg',
       };
@@ -224,15 +238,43 @@ describe('driverService', () => {
       expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
         body: expect.any(FormData),
       });
+      expect(uploadedPath()).toBe('driver-docs/d-1/license/1760000000000-license.jpg');
+      // A retry after a timed-out attempt that did land rewrites this same,
+      // fresh object; without upsert it would fail with 409.
+      expect(uploadForm().get('upsert')).toBe('true');
       expect(mockFrom).toHaveBeenCalledWith('driver_documents');
       expect(chain.insert).toHaveBeenCalledWith({
         driver_id: 'd-1',
         document_type: 'license',
-        storage_path: 'driver-docs/d-1/license/license.jpg',
+        storage_path: 'driver-docs/d-1/license/1760000000000-license.jpg',
         file_name: 'license.jpg',
         mime_type: 'image/jpeg',
       });
       expect(result).toEqual(mockDoc);
+    });
+
+    it('never reuses a path when the same file name is uploaded again', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(1760000000000);
+      mockFunctionsInvoke
+        .mockResolvedValueOnce({ data: { path: 'ignored' }, error: null })
+        .mockResolvedValueOnce({ data: { path: 'ignored' }, error: null });
+      const first = createMockQueryChain();
+      first.single.mockResolvedValue({ data: { id: 'doc-1' }, error: null });
+      const second = createMockQueryChain();
+      second.single.mockResolvedValue({ data: { id: 'doc-2' }, error: null });
+      mockFrom.mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+      await driverService.uploadDocument('d-1', 'license', 'file:///a.jpg', 'license.jpg');
+      vi.setSystemTime(1760000005000);
+      await driverService.uploadDocument('d-1', 'license', 'file:///b.jpg', 'license.jpg');
+
+      expect(uploadedPath(0)).not.toBe(uploadedPath(1));
+      const firstRow = first.insert.mock.calls[0][0] as { storage_path: string };
+      const secondRow = second.insert.mock.calls[0][0] as { storage_path: string };
+      expect(firstRow.storage_path).toBe(uploadedPath(0));
+      expect(secondRow.storage_path).toBe(uploadedPath(1));
+      expect(firstRow.storage_path).not.toBe(secondRow.storage_path);
     });
 
     it('throws when the storage-upload EF returns an error', async () => {

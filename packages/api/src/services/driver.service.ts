@@ -203,7 +203,11 @@ export const driverService = {
     const supabase = getSupabaseClient();
 
     // Upload file to Supabase Storage (RN-safe via FormData — see _storage-upload.ts).
-    const storagePath = `driver-docs/${driverId}/${documentType}/${fileName}`;
+    // Every upload gets its own object: keyed by the bare file name, a re-upload
+    // of the same photo replaced the object behind a row the admin had already
+    // approved. upsert stays on so a retry of this same call rewrites its own
+    // object instead of failing with 409.
+    const storagePath = `driver-docs/${driverId}/${documentType}/${Date.now()}-${fileName}`;
     await uploadFileFromUri('driver-documents', storagePath, filePath, {
       fileName,
       mimeType,
