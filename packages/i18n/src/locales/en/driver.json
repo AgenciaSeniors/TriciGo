@@ -265,7 +265,9 @@
     "restart_nav": "Restart navigation",
     "approaching_pickup": "Approaching pickup point",
     "approaching_pickup_body": "You're ~2 minutes from the pickup point",
-    "step_at_destination": "At destination"
+    "step_at_destination": "At destination",
+    "trip_updated_title": "Your ride was updated",
+    "trip_updated_msg": "We are showing the ride as it is now."
   },
 
   "ride": {

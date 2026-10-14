@@ -193,7 +193,7 @@ export default function RideDetailPage() {
           {ride.final_fare_cup != null && ride.final_fare_cup !== ride.estimated_fare_cup && (
             <p className="text-sm text-ink-subtle line-through">{formatCUP(ride.estimated_fare_cup)} {t('rides.estimated')}</p>
           )}
-          {ride.status === 'searching' && (
+          {['searching', 'accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'].includes(ride.status) && (
             <Link
               href={`/rides/${ride.id}/assist`}
               className="mt-3 mr-2 inline-block px-4 py-2 text-sm rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium"

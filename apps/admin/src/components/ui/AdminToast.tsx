@@ -10,7 +10,8 @@ interface Toast {
 }
 
 interface ToastContextType {
-  showToast: (type: ToastType, message: string) => void;
+  /** `durationMs` defaults to 5 s; pass more for a message someone has to act on. */
+  showToast: (type: ToastType, message: string, durationMs?: number) => void;
 }
 
 const ToastContext = createContext<ToastContextType>({ showToast: () => {} });
@@ -22,12 +23,12 @@ export function useToast() {
 export function AdminToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((type: ToastType, message: string) => {
+  const showToast = useCallback((type: ToastType, message: string, durationMs = 5000) => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, type, message }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 5000);
+    }, durationMs);
   }, []);
 
   const colors = {

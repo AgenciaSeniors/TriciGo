@@ -20,6 +20,8 @@ import { useLocationStore } from '@/stores/location.store';
 import type { RideStatus, DriverAcceptedBroadcast, Vehicle } from '@tricigo/types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { onRideAssignedPush, shouldAnnounceAssignedRide } from '@/utils/rideAssignedPush';
+import { isStatusAhead } from '@/utils/tripStatusOrder';
+import { withServerCompletion } from '@/utils/completedTrip';
 
 /** Cached vehicle info for broadcast — loaded once per session */
 let cachedVehicle: Vehicle | null = null;
@@ -401,6 +403,14 @@ export function useDriverRideInit() {
         const fresh = await driverService.getActiveTrip(profile.id);
         if (!mounted) return;
         lastActiveTripCheckAt = Date.now();
+        // Another ride is this driver's active one now (support released the one on screen and
+        // assigned him another; there is only one active ride per driver). Nothing below applies
+        // to it: checkActive loads it and announces it. The baseline is left as it was, so that
+        // run sees the ride as new.
+        if (fresh && fresh.id !== localTrip.id) {
+          void checkActive();
+          return;
+        }
         // Kept current so a ride that leaves this driver and comes back (support assigns it to
         // him again) is announced as new.
         activeTripBaseline = { profileId: profile.id, tripId: fresh?.id ?? null };
@@ -419,17 +429,28 @@ export function useDriverRideInit() {
           if (useDriverRideStore.getState().isDriverCanceling) return;
           let terminalStatus: string | null = null;
           let cancelReason: string | null = null;
+          let row: Awaited<ReturnType<typeof rideService.getRideWithDriver>> = null;
           try {
-            const row = await rideService.getRideWithDriver(localTrip.id);
+            row = await rideService.getRideWithDriver(localTrip.id);
             terminalStatus = row?.status ?? null;
             cancelReason = row?.cancellation_reason ?? null;
           } catch { /* best-effort — treat as gone below */ }
           if (!mounted) return;
           if (terminalStatus === 'completed') {
-            // A completion the store missed (e.g. offline replay flushed):
-            // surface it as completed so TripCompleteView renders instead
-            // of flashing a bogus "canceled" toast.
-            useDriverRideStore.getState().updateActiveTrip({ ...localTrip, status: 'completed' });
+            // The driver's own "Finalizar" landed while this poll was in flight: what
+            // advanceStatus stored is richer (it comes from complete_ride_and_pay's answer).
+            const current = useDriverRideStore.getState();
+            if (current.isAdvancing
+                || (current.activeTrip?.id === localTrip.id && current.activeTrip.status === 'completed')) {
+              return;
+            }
+            // A completion the store missed (e.g. offline replay flushed, or
+            // support finished the ride from the panel, 00660): surface it as
+            // completed so TripCompleteView renders instead of flashing a
+            // bogus "canceled" toast, with what the server charged (the fare,
+            // and the cash to collect on a mixed ride).
+            useDriverRideStore.getState().updateActiveTrip(withServerCompletion(localTrip, row));
+            useDriverRideStore.getState().setFarPinPrompt(null);
             return;
           }
           // The trip left this driver. WHY it left decides what we say — the
@@ -456,6 +477,29 @@ export function useDriverRideInit() {
           // while minimized.
           unbindBgLocationFromRide(profile?.id);
           useDriverRideStore.getState().reset();
+          return;
+        }
+
+        // Support moved the ride forward from the panel (00660), or the driver's own tap landed
+        // but its answer was lost. Only a status further along is applied (isStatusAhead).
+        // While the driver's own tap is still in flight (isAdvancing) its answer updates the
+        // screen; announcing it here too would read as someone else's change.
+        if (isStatusAhead(fresh.status, localTrip.status) && !useDriverRideStore.getState().isAdvancing) {
+          useDriverRideStore.getState().updateActiveTrip(fresh);
+          // A "¿El pasajero ya llegó?" prompt left open belongs to the step the ride has left.
+          useDriverRideStore.getState().setFarPinPrompt(null);
+          triggerHaptic('success');
+          Toast.show({
+            type: 'info',
+            text1: i18next.t('driver:trip.trip_updated_title', { defaultValue: 'Tu viaje se actualizó' }),
+            text2: i18next.t('driver:trip.trip_updated_msg', { defaultValue: 'Te mostramos el estado actual del viaje.' }),
+            visibilityTime: 5000,
+          });
+          logger.info('[DriverRide] server status ahead of the screen', {
+            ride_id: localTrip.id,
+            local_status: localTrip.status,
+            server_status: fresh.status,
+          });
           return;
         }
 
