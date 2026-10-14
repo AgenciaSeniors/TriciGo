@@ -2519,6 +2519,40 @@ Marketing entra al panel con su propio rol, no como admin. Diseño y decisiones:
 - **Estado: 00641 y 00642 aplicadas en prod el 2026-10-08, antes del merge.** Primero se ensayó 00642 en prod dentro de un `DO` revertido, que comprobó con md5 que el texto llegó entero. Verificado después por objeto: `is_marketing` `1903156b…`, `tg_promotions_marketing_guard` `2b4dd44a…`, `promotion_is_referenced` `d02d1233…`, `count_power_users` `40b9c404…`, las dos vistas y las 11 políticas, idénticos al ensayo local.
 - **Si una página falla para marketing:** revisar que esté en `MARKETING_ROUTES`, que su consulta no lea `rides`/`driver_profiles` directo y que la RPC que use acepte `is_marketing()` (las de métricas se parchearon en 00642 con verja md5 sobre el cuerpo vivo).
 
+### Equipo del panel: invitaciones (00661)
+
+Un super_admin invita a alguien al panel desde **Equipo** (`/equipo`, solo super_admin: `SUPER_ADMIN_ROUTES` en `@tricigo/utils/adminPanelAccess`). Antes, la persona entraba, rebotaba a `/login?error=unauthorized` y alguien corría `promote_user_role` por SQL. Diseño: `docs/superpowers/specs/2026-10-12-team-invitations-design.md`. Ensayo: `supabase/tests/00661/run.sh`.
+
+- **La invitación va atada a una dirección.** Se acepta solo si la cuenta que entra tiene una identidad de Google o Apple con `email_verified` y esa misma dirección (`auth.identities`). `users.email` no cuenta: lo escribe el dueño sin verificar. Con otra cuenta, `/sin-acceso?reason=wrong_account` muestra la dirección enmascarada (`l…@gmail.com`).
+- **Dos caminos para aceptar.** El enlace del correo (`/invitacion/<token>`, público, 7 días) entra con Google y vuelve por `/auth/callback?invite=<token>`, que llama a `accept_team_invitation(p_token)`. Sin token, el middleware la acepta cuando una cuenta activa sin rol de panel entra: busca una invitación pendiente para alguna de sus direcciones de Google o Apple. Si no hay, va a `/sin-acceso` con el motivo (`invitationOutcomePath`, `@tricigo/utils/teamInvitation`).
+- **Una cuenta bloqueada no entra**, ni con invitación: el middleware la manda a `/login?error=unauthorized` antes de mirar invitaciones, y la función responde `blocked`.
+- **Aceptar nunca baja un rol**: un admin que acepta una invitación de marketing sigue admin.
+- **El rol lo escribe solo `_team_write_role`**, con la bandera de transacción `app.team_role_change` puesta alrededor de su único UPDATE. `tg_users_protect_admin_fields` tiene una rama que deja pasar el cambio de rol con esa bandera. **Una migración que redefina ese trigger tiene que partir del cuerpo con la rama de 00661**, no del de 00599: si no, invitar, cambiar rol y quitar acceso dejan de cambiar el rol en silencio.
+- **Quitar acceso** (`remove_team_member`) devuelve la cuenta a `driver` si tiene perfil de conductor aprobado o suspendido, y a `customer` si no. No la bloquea.
+- **Cambiar rol y quitar acceso cancelan las invitaciones pendientes** para las direcciones de la persona (`_team_cancel_pending_for`). Si no, al volver a entrar aceptaría una y recuperaría el rol que se le acaba de cambiar.
+- **Orden de bloqueos:** aceptar bloquea primero la fila de la persona y después la invitación, igual que cambiar rol y quitar acceso. Los cambios de equipo bloquean las filas de `users` con `FOR NO KEY UPDATE`: con `FOR UPDATE`, la clave foránea de `admin_actions` hacia quien invitó trababa un aceptar contra un quitar acceso, y en uno de los dos órdenes se abortaba el quitar acceso y la persona se quedaba con el rol (ensayo R1/R2). Una función nueva que toque `users` y `team_invitations` sigue ese orden.
+- Cambiar rol y quitar acceso piden motivo (5 caracteres o más), quedan en `admin_actions`, no se pueden hacer sobre uno mismo ni sobre las cuentas de sistema, y tiene que quedar al menos un super_admin activo.
+- **Un cambio de rol llega al panel en hasta un minuto**: el middleware guarda el rol por sesión durante 60 s. Al aceptar una invitación, el middleware borra lo guardado de esa cuenta, así que la persona entra enseguida.
+- **El correo** sale por `send-email` (plantilla `team_invitation`) con `cron_http_post`, etiqueta `team-invitation-email`. Si no se pudo encolar, la invitación queda creada y la página avisa que se copie el enlace y se mande por WhatsApp. La plantilla solo acepta enlaces a `https://admin.tricigo.com/invitacion/<64 hex>`.
+- **`team_invitations` es tabla-candado**: RLS sin políticas y GRANT solo a `service_role`. Todo pasa por las funciones, que se verifican solas (super_admin para gestionar, el token para la página pública, la persona con sesión para aceptar). Los errores traen el texto en español en MESSAGE y un código `team_*` en DETAIL; `teamService` los pasa a `AppError` con status 400, para que `getErrorMessage` no los convierta en "Sesión expirada".
+- **Diagnóstico de una invitación que no llega o no se acepta:**
+  ```sql
+  SELECT email, role, status, created_at, expires_at, sent_at, accepted_at, accepted_user_id
+  FROM team_invitations ORDER BY created_at DESC LIMIT 10;
+  -- ¿salió el correo?
+  SELECT c.called_at, r.status_code, left(r.content, 120) FROM cron_http_calls c
+  LEFT JOIN net._http_response r ON r.id = c.request_id
+  WHERE c.jobname = 'team-invitation-email' ORDER BY c.called_at DESC LIMIT 10;
+  -- ¿con qué direcciones verificadas entró la persona?
+  SELECT provider, identity_data->>'email', identity_data->>'email_verified'
+  FROM auth.identities WHERE user_id = '<id>';
+  ```
+  Si la persona entró con correo y contraseña, el middleware no encuentra ninguna invitación para ella y la manda a `/sin-acceso?reason=none`: tiene que abrir el enlace o entrar con Google. `needs_google` aparece solo con el enlace, cuando la cuenta no tiene ninguna identidad de Google o Apple verificada.
+- **`/sin-acceso` ofrece "Entrar con otra cuenta de Google"**: cierra la sesión y abre Google con `prompt: 'select_account'`. Sin eso, Google vuelve a entrar con la misma cuenta y la persona vuelve a `/sin-acceso`. La dirección de la URL se muestra solo si tiene la forma enmascarada (`maskedEmailParam`); un enlace armado a mano no puede poner texto propio en la página. Quien ya tiene un rol del panel y abre un enlace viejo o usado va a su inicio, no a `/sin-acceso`.
+- **El token va en la ruta** (`/invitacion/<token>`), así que queda en los logs de nginx y puede llegar a Sentry. Solo no da acceso: aceptar exige la cuenta de Google de esa dirección.
+- **Cuentas con contraseña y Google en la misma dirección.** GoTrue vincula un login de Google a la cuenta que ya tiene ese correo confirmado. Si alguien hubiera registrado con contraseña la dirección de otra persona, la invitación de esa persona le daría el rol a esa cuenta. Medido el 2026-10-12: la única cuenta con identidad `email` y Google en la misma dirección es la del dueño (super_admin), y desde el 2026-10-07 el alta con contraseña ya no se confirma sola.
+- **Estado: 00661 aplicada en prod el 2026-10-14** por MCP (`20261014014359`), después de un ensayo en prod dentro de un bloque revertido. Verificado por objeto: los 19 cuerpos tienen el mismo md5 que en el ensayo local, sin `\r`; `team_invitations` con RLS, sin políticas y sin permisos para `anon`/`authenticated`. `send-email` v60 desplegada el mismo día con la plantilla `team_invitation` (los 27 archivos iguales a git), y un envío de prueba a `delivered@resend.dev` salió con el asunto y el enlace correctos.
+
 ### Campañas: las manda el servidor, a la hora elegida (00649, PR #1129)
 
 Hasta la 00649, "Programar para" guardaba la campaña como `scheduled` y nada la mandaba nunca, y "Enviar ahora" corría en el navegador (calculaba los destinatarios por PostgREST, con tope de 1000 filas, y se cortaba si se cerraba la pestaña). Diseño: `docs/superpowers/specs/2026-10-09-scheduled-campaigns-design.md`. Ensayo: `supabase/tests/00649/run.sh` (con `none` falla casi todo; con la migración, aplicada tres veces y una copia CRLF, pasa entero, incluidas las pruebas negativas de sus autochequeos y dos carreras entre sesiones).

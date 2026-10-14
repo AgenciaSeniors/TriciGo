@@ -1,7 +1,13 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { isPanelRole, panelHome } from '@tricigo/utils/adminPanelAccess';
 import { safeInternalPath } from '@tricigo/utils/htmlSafety';
+import {
+  invitationOutcomePath,
+  isInvitationToken,
+  parseAcceptOutcome,
+} from '@tricigo/utils/teamInvitation';
 
 /**
  * OAuth callback handler for the admin panel.
@@ -15,6 +21,11 @@ import { safeInternalPath } from '@tricigo/utils/htmlSafety';
  * REQUIRES `https://admin.tricigo.com/**` in Supabase Auth → URL Configuration
  * → Redirect URLs. Otherwise GoTrue discards the redirect and falls back to the
  * project Site URL (tricigo.com), which is the bug this fixes.
+ *
+ * `?invite=<token>` comes from the invitation page (00661): after the exchange
+ * the invitation is accepted with that token, and the person lands on their
+ * home or on /sin-acceso with the reason. Someone who already has a panel role
+ * (an old or used link) goes to their home instead of /sin-acceso.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -23,6 +34,8 @@ export async function GET(request: Request) {
   // Open-redirect guard: only same-origin relative paths (mirrors login page).
   const rawNext = url.searchParams.get('redirect') ?? '/';
   const next = safeInternalPath(rawNext) ?? '/';
+  const rawInvite = url.searchParams.get('invite');
+  const invite = isInvitationToken(rawInvite) ? rawInvite : null;
 
   // Behind nginx the internal request host is 127.0.0.1:3002; prefer the
   // forwarded host so redirects go back to the public admin.tricigo.com.
@@ -52,8 +65,17 @@ export async function GET(request: Request) {
       },
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data: exchanged, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      if (invite) {
+        const { data, error: acceptError } = await supabase.rpc('accept_team_invitation', { p_token: invite });
+        const outcome = parseAcceptOutcome(acceptError ? null : data);
+        if (outcome.result !== 'accepted' && outcome.result !== 'blocked' && exchanged.user) {
+          const { data: row } = await supabase.from('users').select('role').eq('id', exchanged.user.id).maybeSingle();
+          if (isPanelRole(row?.role)) return NextResponse.redirect(`${base}${panelHome(row.role)}`);
+        }
+        return NextResponse.redirect(`${base}${invitationOutcomePath(outcome)}`);
+      }
       return NextResponse.redirect(`${base}${next}`);
     }
   }

@@ -13,11 +13,13 @@ interface AdminConfirmModalProps {
   inputValue?: string;
   onInputChange?: (val: string) => void;
   inputPlaceholder?: string;
+  /** Keeps the confirm button disabled, e.g. until a required reason is long enough. */
+  confirmDisabled?: boolean;
 }
 
 export function AdminConfirmModal({
   open, title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar',
-  variant = 'default', onConfirm, onCancel, inputValue, onInputChange, inputPlaceholder
+  variant = 'default', onConfirm, onCancel, inputValue, onInputChange, inputPlaceholder, confirmDisabled = false
 }: AdminConfirmModalProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   // Double-click guard: several money flows (reverse gift, freeze wallet,
@@ -53,7 +55,7 @@ export function AdminConfirmModal({
           <button ref={cancelRef} onClick={onCancel} className="px-4 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-surface-sunken">{cancelLabel}</button>
           <button
             onClick={async () => {
-              if (confirming) return;
+              if (confirming || confirmDisabled) return;
               setConfirming(true);
               try {
                 // Handlers are usually async; lock while they run and unlock
@@ -63,7 +65,7 @@ export function AdminConfirmModal({
                 setConfirming(false);
               }
             }}
-            disabled={confirming}
+            disabled={confirming || confirmDisabled}
             className={`px-4 py-2 text-sm rounded-lg text-white font-medium disabled:opacity-60 disabled:cursor-not-allowed ${btnColor}`}
           >
             {confirmLabel}
