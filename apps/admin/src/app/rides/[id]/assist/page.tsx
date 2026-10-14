@@ -3,6 +3,8 @@
 /**
  * /rides/[id]/assist — support helps a waiting ride find a driver (00628): send it to a
  * chosen driver, assign it directly, or switch its vehicle type with the rider's consent.
+ * A ride that already has a driver gets the active view instead (00660): release it back to
+ * search, move it a step forward, or finish and charge it.
  * The ride is re-read every 10 s; the candidates refresh on their own every 20 s.
  */
 
@@ -13,20 +15,26 @@ import { MessageCircle, Phone } from 'lucide-react';
 import { useTranslation } from '@tricigo/i18n';
 import {
   adminService,
+  AppError,
   rideAssistService,
   RIDE_ASSIST_UNAVAILABLE,
+  type ActiveRideContext,
   type RideAssistContext,
   type RideOfferStatus,
 } from '@tricigo/api';
 import type { ServiceTypeConfig } from '@tricigo/types';
 import { formatCUP, waMeLink } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
+import { AssistActiveRide } from '@/components/support/AssistActiveRide';
 import { AssistCandidates } from '@/components/support/AssistCandidates';
+import { assistErrorKey } from '@/components/support/assistErrors';
 import { AssistServiceChange } from '@/components/support/AssistServiceChange';
 import { telLink, waitLabel } from '@/components/support/supportFormat';
 import { formatAdminDate } from '@/lib/formatDate';
 
 const CARD = 'rounded-xl border border-line bg-surface-elevated p-6 shadow-sm';
+// The statuses with a driver on the ride: the page shows the active view (00660) for them.
+const ACTIVE = ['accepted', 'driver_en_route', 'arrived_at_pickup', 'in_progress', 'arrived_at_destination'];
 const LINK_BTN =
   'inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-sunken';
 
@@ -45,6 +53,9 @@ export default function RideAssistPage() {
   const { t } = useTranslation('admin');
   const { id } = useParams<{ id: string }>();
   const [ctx, setCtx] = useState<RideAssistContext | null>(null);
+  const [active, setActive] = useState<ActiveRideContext | null>(null);
+  // The admin.json key of the server's refusal to show the active view (e.g. self_ride).
+  const [activeError, setActiveError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState(0);
   const [state, setState] = useState<LoadState>('loading');
   const [configs, setConfigs] = useState<ServiceTypeConfig[]>([]);
@@ -59,9 +70,34 @@ export default function RideAssistPage() {
     try {
       const next = await rideAssistService.getAssistContext(id);
       if (seq !== latestLoad.current) return;
+      // A ride with a driver also needs the active view's data. Both answers are shown
+      // together, so the first load does not flash the searching layout.
+      let nextActive: ActiveRideContext | null = null;
+      let nextActiveError: string | null = null;
+      let keepActive = false;
+      if (ACTIVE.includes(next.ride.status)) {
+        try {
+          nextActive = await rideAssistService.getActiveContext(id);
+        } catch (err) {
+          if (err instanceof AppError && err.code === RIDE_ASSIST_UNAVAILABLE) {
+            // 00660 not applied: the page shows today's "not searching" notice.
+          } else if (err instanceof AppError && err.statusCode === 409) {
+            // The server refused (self_ride, ...): say why instead of the active view.
+            nextActiveError = assistErrorKey(err);
+          } else {
+            // Network, timeout: keep what the page shows; the next poll retries.
+            keepActive = true;
+          }
+        }
+        if (seq !== latestLoad.current) return;
+      }
       setCtx(next);
       setFetchedAt(Date.now());
       setState('ready');
+      if (!keepActive) {
+        setActive(nextActive);
+        setActiveError(nextActiveError);
+      }
     } catch (err) {
       if (seq !== latestLoad.current) return;
       const code = (err as { code?: unknown } | null)?.code;
@@ -160,102 +196,108 @@ export default function RideAssistPage() {
         <p className="text-3xl font-bold text-primary-600 dark:text-primary-400">{formatCUP(ride.estimated_fare_cup)}</p>
       </div>
 
-      {!searching && (
+      {!searching && !active && (
         <div className="mb-6 rounded-xl bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-400">
-          {t('ride_assist.not_searching', { status: ride.status })}{' '}
+          {activeError ? t(activeError) : t('ride_assist.not_searching', { status: ride.status })}{' '}
           <Link href={`/rides/${ride.id}`} className="font-semibold underline">
             {t('ride_assist.see_ride')}
           </Link>
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-        <section className={CARD}>
-          <h2 className="mb-4 text-lg font-bold">{t('ride_assist.ride_card')}</h2>
-          <dl className="space-y-3 text-sm">
-            <div>
-              <dt className="text-ink-muted">{t('ride_assist.origin')}</dt>
-              <dd className="font-medium text-ink">{ride.pickup_address}</dd>
-            </div>
-            <div>
-              <dt className="text-ink-muted">{t('ride_assist.destination')}</dt>
-              <dd className="font-medium text-ink">{ride.dropoff_address}</dd>
-            </div>
-            <div className="flex flex-wrap gap-6">
-              <div>
-                <dt className="text-ink-muted">{t('ride_assist.service')}</dt>
-                <dd className="font-medium text-ink">{typeName(ride.service_type)}</dd>
-              </div>
-              <div>
-                <dt className="text-ink-muted">{t('ride_assist.passengers')}</dt>
-                <dd className="font-medium text-ink">{ride.passenger_count}</dd>
-              </div>
-              <div>
-                <dt className="text-ink-muted">{t('ride_assist.payment')}</dt>
-                <dd className="font-medium text-ink">
-                  {t(`rides.payment_${ride.payment_method}`, { defaultValue: ride.payment_method })}
-                </dd>
-              </div>
-            </div>
-          </dl>
-        </section>
+      {active && <AssistActiveRide ctx={active} now={now} onChanged={load} />}
 
-        <section className={CARD}>
-          <h2 className="mb-4 text-lg font-bold">{t('ride_assist.rider')}</h2>
-          <p className="text-sm font-medium text-ink">{ride.customer_name}</p>
-          <p className="text-sm text-ink-muted">{ride.customer_phone ?? '—'}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {riderWa && (
-              <a href={riderWa} target="_blank" rel="noopener noreferrer" className={LINK_BTN}>
-                <MessageCircle className="h-4 w-4" />
-                {t('ride_assist.whatsapp')}
-              </a>
-            )}
-            {riderTel && (
-              <a href={riderTel} className={LINK_BTN}>
-                <Phone className="h-4 w-4" />
-                {t('ride_assist.call')}
-              </a>
-            )}
-          </div>
-        </section>
-      </div>
-
-      <section className={`${CARD} mb-6`}>
-        <h2 className="mb-4 text-lg font-bold">{t('ride_assist.offers_card')}</h2>
-        {offers.length === 0 ? (
-          <p className="text-sm text-ink-muted">{t('ride_assist.offers_empty')}</p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {offers.map((o) => {
-              const left = Math.floor((new Date(o.expires_at).getTime() - now) / 1000);
-              const live = o.status === 'pending' && left > 0;
-              const shown: RideOfferStatus = o.status === 'pending' && !live ? 'expired' : o.status;
-              return (
-                <li key={o.driver_profile_id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
-                  <span className="font-medium text-ink">{o.driver_name}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${OFFER_CHIP[shown]}`}>
-                    {t(`ride_assist.offer_status_${shown}`)}
-                  </span>
-                  {live && <span className="text-ink-muted">{t('ride_assist.expires_in', { time: waitLabel(left) })}</span>}
-                  <span className="ml-auto text-xs text-ink-subtle">{formatAdminDate(o.offered_at)}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      {searching && (
+      {!active && (
         <>
-          <AssistCandidates
-            rideId={ride.id}
-            rideServiceType={ride.service_type}
-            pickupAddress={ride.pickup_address}
-            typeOptions={typeOptions}
-            onChanged={load}
-          />
-          <AssistServiceChange ride={ride} configs={configs} proposalLine={proposalLine} onChanged={load} />
+          <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+            <section className={CARD}>
+              <h2 className="mb-4 text-lg font-bold">{t('ride_assist.ride_card')}</h2>
+              <dl className="space-y-3 text-sm">
+                <div>
+                  <dt className="text-ink-muted">{t('ride_assist.origin')}</dt>
+                  <dd className="font-medium text-ink">{ride.pickup_address}</dd>
+                </div>
+                <div>
+                  <dt className="text-ink-muted">{t('ride_assist.destination')}</dt>
+                  <dd className="font-medium text-ink">{ride.dropoff_address}</dd>
+                </div>
+                <div className="flex flex-wrap gap-6">
+                  <div>
+                    <dt className="text-ink-muted">{t('ride_assist.service')}</dt>
+                    <dd className="font-medium text-ink">{typeName(ride.service_type)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ink-muted">{t('ride_assist.passengers')}</dt>
+                    <dd className="font-medium text-ink">{ride.passenger_count}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ink-muted">{t('ride_assist.payment')}</dt>
+                    <dd className="font-medium text-ink">
+                      {t(`rides.payment_${ride.payment_method}`, { defaultValue: ride.payment_method })}
+                    </dd>
+                  </div>
+                </div>
+              </dl>
+            </section>
+
+            <section className={CARD}>
+              <h2 className="mb-4 text-lg font-bold">{t('ride_assist.rider')}</h2>
+              <p className="text-sm font-medium text-ink">{ride.customer_name}</p>
+              <p className="text-sm text-ink-muted">{ride.customer_phone ?? '—'}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {riderWa && (
+                  <a href={riderWa} target="_blank" rel="noopener noreferrer" className={LINK_BTN}>
+                    <MessageCircle className="h-4 w-4" />
+                    {t('ride_assist.whatsapp')}
+                  </a>
+                )}
+                {riderTel && (
+                  <a href={riderTel} className={LINK_BTN}>
+                    <Phone className="h-4 w-4" />
+                    {t('ride_assist.call')}
+                  </a>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <section className={`${CARD} mb-6`}>
+            <h2 className="mb-4 text-lg font-bold">{t('ride_assist.offers_card')}</h2>
+            {offers.length === 0 ? (
+              <p className="text-sm text-ink-muted">{t('ride_assist.offers_empty')}</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {offers.map((o) => {
+                  const left = Math.floor((new Date(o.expires_at).getTime() - now) / 1000);
+                  const live = o.status === 'pending' && left > 0;
+                  const shown: RideOfferStatus = o.status === 'pending' && !live ? 'expired' : o.status;
+                  return (
+                    <li key={o.driver_profile_id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
+                      <span className="font-medium text-ink">{o.driver_name}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${OFFER_CHIP[shown]}`}>
+                        {t(`ride_assist.offer_status_${shown}`)}
+                      </span>
+                      {live && <span className="text-ink-muted">{t('ride_assist.expires_in', { time: waitLabel(left) })}</span>}
+                      <span className="ml-auto text-xs text-ink-subtle">{formatAdminDate(o.offered_at)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {searching && (
+            <>
+              <AssistCandidates
+                rideId={ride.id}
+                rideServiceType={ride.service_type}
+                pickupAddress={ride.pickup_address}
+                typeOptions={typeOptions}
+                onChanged={load}
+              />
+              <AssistServiceChange ride={ride} configs={configs} proposalLine={proposalLine} onChanged={load} />
+            </>
+          )}
         </>
       )}
     </div>

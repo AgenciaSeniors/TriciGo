@@ -1,8 +1,9 @@
 // ============================================================
-// TriciGo — support-assisted matching (migration 00628)
-// The rider's "Pedir ayuda" and proposal card, and the admin's assist page.
+// TriciGo — support-assisted matching (migrations 00628 and 00660)
+// The rider's "Pedir ayuda" and proposal card, and the admin's assist page: a searching ride
+// (00628) and a ride that already has a driver (00660).
 // The server answers an expected refusal as `{ error: code }`; it comes back here as an
-// AppError whose `code` is that string. A missing function (00628 not applied) is PGRST202.
+// AppError whose `code` is that string. A missing function (migration not applied) is PGRST202.
 // ============================================================
 
 import { getSupabaseClient } from '../client';
@@ -118,6 +119,89 @@ export interface AssistCandidate {
   offer_expires_at: string | null;
 }
 
+/** An action support can take on an active ride (00660). */
+export type ActiveRideAction = 'release' | 'advance' | 'complete';
+
+/** What completing the ride would charge (00660 _active_ride_charge_preview). */
+export interface ActiveRideChargePreview {
+  agreed_cup: number;
+  discount_cup: number;
+  wait_minutes: number;
+  billable_minutes: number;
+  wait_cup: number;
+  insurance_cup: number;
+  is_corporate: boolean;
+  total_cup: number;
+}
+
+/** Everything the assist page shows for a ride that already has a driver (admin_active_ride_context). */
+export interface ActiveRideContext {
+  ride: {
+    id: string;
+    code: string;
+    status: string;
+    service_type: string;
+    payment_method: string;
+    is_corporate: boolean;
+    pickup_address: string;
+    dropoff_address: string;
+    created_at: string;
+    accepted_at: string | null;
+    driver_arrived_at: string | null;
+    pickup_at: string | null;
+    scheduled_at: string | null;
+    estimated_fare_cup: number;
+    customer_id: string;
+    customer_name: string | null;
+    customer_phone: string | null;
+    customer_is_test: boolean;
+  };
+  driver: {
+    driver_profile_id: string;
+    full_name: string | null;
+    phone: string | null;
+    is_online: boolean;
+    last_heartbeat_at: string | null;
+    vehicle_label: string | null;
+  } | null;
+  /** The ride's driver profile. The panel sends it back to the three actions as the driver it saw. */
+  driver_profile_id: string | null;
+  /** A cargo ride without the recipient's code and the delivery photo: support cannot complete it. */
+  delivery_proof_missing: boolean;
+  last_point: {
+    recorded_at: string;
+    received_at: string | null;
+    distance_to_pickup_m: number;
+    distance_to_dropoff_m: number;
+  } | null;
+  alert: { reason: string; detected_at: string } | null;
+  preview: ActiveRideChargePreview | null;
+  /** For arrived_at_pickup: the pickup time "Marcar viaje iniciado" would record. */
+  start_pickup_at: string | null;
+  start_pickup_source: 'recorded' | 'gps' | 'arrival' | 'now' | null;
+  /** What the server would accept now. Empty for an accepted/en-route ride scheduled for later. */
+  allowed_actions: ActiveRideAction[];
+}
+
+/** What "Avanzar" recorded (admin_advance_active_ride). */
+export interface ActiveRideAdvanceResult {
+  status: string;
+  driver_arrived_at: string | null;
+  pickup_at: string | null;
+  wait_minutes: number;
+  billable_minutes: number;
+  wait_cup: number;
+}
+
+/** What "Terminar y cobrar" charged (admin_complete_active_ride). */
+export interface ActiveRideCompleteResult {
+  final_fare_cup: number;
+  payment_method: string;
+  /** The part the driver collects in cash. Null when the server did not report it. */
+  cash_amount_cup: number | null;
+  wallet_amount_cup: number | null;
+}
+
 /** The code the assist page shows as "not available yet". */
 export const RIDE_ASSIST_UNAVAILABLE = 'ride_assist_unavailable';
 
@@ -132,7 +216,12 @@ function isMissingRpc(error: RpcError | null | undefined): boolean {
 }
 
 function unavailable(rpc: string): AppError {
-  return new AppError(`${rpc} is not deployed yet (migration 00628)`, RIDE_ASSIST_UNAVAILABLE, 503);
+  return new AppError(`${rpc} is not deployed yet`, RIDE_ASSIST_UNAVAILABLE, 503);
+}
+
+/** A JSON number, or null for anything else (absent, null, not finite). */
+function numberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /** `{ error: code }` from an RPC becomes an AppError carrying the code. */
@@ -285,5 +374,100 @@ export const rideAssistService = {
     throwIfRefused('admin_change_ride_service', data);
     const r = data as { proposal_id?: string; expires_at?: string };
     return { proposalId: r.proposal_id ?? null, expiresAt: r.expires_at ?? null };
+  },
+
+  /** The active-ride view's data. A missing RPC (00660 not applied) throws RIDE_ASSIST_UNAVAILABLE. */
+  async getActiveContext(rideId: string): Promise<ActiveRideContext> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('admin_active_ride_context', { p_ride_id: rideId });
+    if (error) {
+      if (isMissingRpc(error)) throw unavailable('admin_active_ride_context');
+      throw error;
+    }
+    throwIfRefused('admin_active_ride_context', data);
+    return data as ActiveRideContext;
+  },
+
+  /**
+   * Back to search now. `expectedStatus` and `expectedDriverId` are what support saw: the server
+   * refuses with ride_changed if either differs.
+   */
+  async releaseActiveRide(rideId: string, expectedStatus: string, expectedDriverId: string, reason: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('admin_release_active_ride', {
+      p_ride_id: rideId,
+      p_expected_status: expectedStatus,
+      p_expected_driver_id: expectedDriverId,
+      p_reason: reason,
+    });
+    if (error) {
+      if (isMissingRpc(error)) throw unavailable('admin_release_active_ride');
+      throw error;
+    }
+    throwIfRefused('admin_release_active_ride', data);
+  },
+
+  /** One step forward. Returns the new status and, from the pickup step on, the wait it recorded. */
+  async advanceActiveRide(
+    rideId: string,
+    expectedStatus: string,
+    expectedDriverId: string,
+    reason: string,
+  ): Promise<ActiveRideAdvanceResult> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('admin_advance_active_ride', {
+      p_ride_id: rideId,
+      p_expected_status: expectedStatus,
+      p_expected_driver_id: expectedDriverId,
+      p_reason: reason,
+    });
+    if (error) {
+      if (isMissingRpc(error)) throw unavailable('admin_advance_active_ride');
+      throw error;
+    }
+    throwIfRefused('admin_advance_active_ride', data);
+    const r = data as Partial<ActiveRideAdvanceResult>;
+    return {
+      status: r.status ?? '',
+      driver_arrived_at: r.driver_arrived_at ?? null,
+      pickup_at: r.pickup_at ?? null,
+      wait_minutes: numberOrNull(r.wait_minutes) ?? 0,
+      billable_minutes: numberOrNull(r.billable_minutes) ?? 0,
+      wait_cup: numberOrNull(r.wait_cup) ?? 0,
+    };
+  },
+
+  /**
+   * Complete and charge `expectedTotalCup`, the amount support confirmed (refused as
+   * amount_changed otherwise). Returns what was charged, including the cash part the driver
+   * collects when the server reports it.
+   */
+  async completeActiveRide(
+    rideId: string,
+    expectedStatus: string,
+    expectedDriverId: string,
+    expectedTotalCup: number,
+    reason: string,
+  ): Promise<ActiveRideCompleteResult> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('admin_complete_active_ride', {
+      p_ride_id: rideId,
+      p_expected_status: expectedStatus,
+      p_expected_driver_id: expectedDriverId,
+      p_expected_total_cup: expectedTotalCup,
+      p_reason: reason,
+    });
+    if (error) {
+      if (isMissingRpc(error)) throw unavailable('admin_complete_active_ride');
+      throw error;
+    }
+    throwIfRefused('admin_complete_active_ride', data);
+    const r = data as Record<string, unknown>;
+    return {
+      final_fare_cup: numberOrNull(r.final_fare_cup) ?? expectedTotalCup,
+      payment_method: typeof r.payment_method === 'string' ? r.payment_method : '',
+      cash_amount_cup: numberOrNull(r.cash_amount_cup),
+      wallet_amount_cup: numberOrNull(r.wallet_amount_cup),
+    };
   },
 };
