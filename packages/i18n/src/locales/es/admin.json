@@ -2615,6 +2615,9 @@
     "not_found": "No encontramos esa invitación. Revisa el enlace o pide uno nuevo.",
     "sign_out": "Cerrar sesión",
     "none_unknown": "Esta cuenta no tiene acceso al panel. Si trabajas en TriciGo, pídele a un superadministrador que te invite. Si ya te invitaron, entra con la cuenta de Google a la que llegó la invitación.",
-    "wrong_account_unknown": "La invitación es para {{invited}}, pero entraste con otra cuenta. Cierra sesión y entra con esa cuenta de Google."
+    "wrong_account_unknown": "La invitación es para {{invited}}, pero entraste con otra cuenta. Cierra sesión y entra con esa cuenta de Google.",
+    "other_google": "Entrar con otra cuenta de Google",
+    "wrong_account_no_email": "La invitación es para otra cuenta de Google. Entra con la cuenta a la que llegó la invitación.",
+    "needs_google_no_email": "Para aceptar la invitación tienes que entrar con Google, con la dirección a la que llegó."
   }
 }

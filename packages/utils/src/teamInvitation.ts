@@ -59,3 +59,12 @@ export function noAccessReason(raw: string | null | undefined): NoAccessReason {
 export function isInvitationToken(raw: string | null | undefined): raw is string {
   return typeof raw === 'string' && /^[0-9a-f]{64}$/.test(raw);
 }
+
+/**
+ * The address in /sin-acceso's URL, only in the shape _team_mask_email produces ('l…@gmail.com').
+ * Anything else is null, so a crafted link cannot put its own text on the page.
+ */
+export function maskedEmailParam(raw: string | null | undefined): string | null {
+  if (typeof raw !== 'string') return null;
+  return /^[\p{L}\p{N}._%+'-]…@(?=.{3,253}$)(?:[\p{L}\p{N}-]+\.)+[\p{L}\p{N}-]+$/u.test(raw) ? raw : null;
+}

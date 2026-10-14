@@ -2615,6 +2615,9 @@
     "not_found": "We could not find that invitation. Check the link or ask for a new one.",
     "sign_out": "Sign out",
     "none_unknown": "This account has no access to the panel. If you work at TriciGo, ask a super admin to invite you. If you were already invited, sign in with the Google account the invitation was sent to.",
-    "wrong_account_unknown": "The invitation is for {{invited}}, but you signed in with another account. Sign out and sign in with that Google account."
+    "wrong_account_unknown": "The invitation is for {{invited}}, but you signed in with another account. Sign out and sign in with that Google account.",
+    "other_google": "Sign in with another Google account",
+    "wrong_account_no_email": "The invitation is for another Google account. Sign in with the account it was sent to.",
+    "needs_google_no_email": "To accept the invitation, sign in with Google using the address it was sent to."
   }
 }

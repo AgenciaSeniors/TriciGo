@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   invitationOutcomePath,
   isInvitationToken,
+  maskedEmailParam,
   noAccessReason,
   parseAcceptOutcome,
 } from '../teamInvitation';
@@ -53,6 +54,32 @@ describe('isInvitationToken', () => {
     expect(isInvitationToken('a'.repeat(64))).toBe(true);
     for (const raw of ['A'.repeat(64), 'a'.repeat(63), 'g'.repeat(64), '', null, undefined]) {
       expect(isInvitationToken(raw)).toBe(false);
+    }
+  });
+});
+
+describe('maskedEmailParam', () => {
+  it('keeps an address masked like _team_mask_email', () => {
+    expect(maskedEmailParam('l…@gmail.com')).toBe('l…@gmail.com');
+    expect(maskedEmailParam('9…@correo.tricigo.cu')).toBe('9…@correo.tricigo.cu');
+    expect(maskedEmailParam('m…@münchen.de')).toBe('m…@münchen.de');
+  });
+
+  it('drops anything else, so a crafted link cannot put its own text on the page', () => {
+    for (const raw of [
+      null,
+      undefined,
+      '',
+      'lucia@gmail.com',
+      '…@gmail.com',
+      'l…@gmail',
+      'l… @gmail.com',
+      'l…@gmail.com y llama al +5355555555',
+      'l…@gmail.com/login',
+      'l…@evil..com',
+      `l…@${'a'.repeat(250)}.com`,
+    ]) {
+      expect(maskedEmailParam(raw)).toBeNull();
     }
   });
 });

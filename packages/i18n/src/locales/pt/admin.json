@@ -2615,6 +2615,9 @@
     "not_found": "Não encontramos esse convite. Confira o link ou peça um novo.",
     "sign_out": "Sair",
     "none_unknown": "Esta conta não tem acesso ao painel. Se você trabalha na TriciGo, peça a um superadministrador que convide você. Se já foi convidado, entre com a conta do Google que recebeu o convite.",
-    "wrong_account_unknown": "O convite é para {{invited}}, mas você entrou com outra conta. Saia e entre com essa conta do Google."
+    "wrong_account_unknown": "O convite é para {{invited}}, mas você entrou com outra conta. Saia e entre com essa conta do Google.",
+    "other_google": "Entrar com outra conta do Google",
+    "wrong_account_no_email": "O convite é para outra conta do Google. Entre com a conta para a qual o convite foi enviado.",
+    "needs_google_no_email": "Para aceitar o convite, entre com o Google usando o endereço para o qual ele foi enviado."
   }
 }

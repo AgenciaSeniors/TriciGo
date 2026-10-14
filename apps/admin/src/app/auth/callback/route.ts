@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { isPanelRole, panelHome } from '@tricigo/utils/adminPanelAccess';
 import { safeInternalPath } from '@tricigo/utils/htmlSafety';
 import {
   invitationOutcomePath,
@@ -23,7 +24,8 @@ import {
  *
  * `?invite=<token>` comes from the invitation page (00661): after the exchange
  * the invitation is accepted with that token, and the person lands on their
- * home or on /sin-acceso with the reason.
+ * home or on /sin-acceso with the reason. Someone who already has a panel role
+ * (an old or used link) goes to their home instead of /sin-acceso.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -63,11 +65,15 @@ export async function GET(request: Request) {
       },
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data: exchanged, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       if (invite) {
         const { data, error: acceptError } = await supabase.rpc('accept_team_invitation', { p_token: invite });
         const outcome = parseAcceptOutcome(acceptError ? null : data);
+        if (outcome.result !== 'accepted' && outcome.result !== 'blocked' && exchanged.user) {
+          const { data: row } = await supabase.from('users').select('role').eq('id', exchanged.user.id).maybeSingle();
+          if (isPanelRole(row?.role)) return NextResponse.redirect(`${base}${panelHome(row.role)}`);
+        }
         return NextResponse.redirect(`${base}${invitationOutcomePath(outcome)}`);
       }
       return NextResponse.redirect(`${base}${next}`);
