@@ -81,8 +81,8 @@ All are SECURITY DEFINER, executable by `authenticated` only, with the gate insi
 | `cancel_team_invitation(id)` | super_admin | Pending only. |
 | `get_team_invitation(token)` | anyone, `anon` included | For the public page: role, inviter's name, masked address, and whether it is pending, expired, canceled or accepted. Nothing without a valid token. |
 | `accept_team_invitation(token default null)` | the signed-in person | See below. |
-| `set_team_member_role(user, role, reason)` | super_admin | Target must be a panel member. Not on oneself; never leaves zero super_admins. |
-| `remove_team_member(user, reason)` | super_admin | Same guards. Sets the role back to `driver` or `customer`. |
+| `set_team_member_role(user, role, reason)` | super_admin | Target must be a panel member. Not on oneself; never leaves zero super_admins. Cancels the person's pending invitations, so a later sign-in cannot accept one and undo the change. |
+| `remove_team_member(user, reason)` | super_admin | Same guards. Sets the role back to `driver` or `customer` and cancels the person's pending invitations. |
 
 **Accepting.** `accept_team_invitation` looks for a pending, unexpired invitation whose address equals one of the caller's verified Google (or Apple) identities: `auth.identities` rows of that provider with `email_verified` true and that address. With a token, only that invitation is considered. The result is one of:
 
@@ -109,9 +109,9 @@ A `team_invitation` template is added to the `send-email` registry, in the style
 
 - **`/equipo` page and its menu entry**, super_admin only. The middleware also sends any other role away from `/equipo`, and the functions refuse anyway.
 - **`/invitacion/[token]`**, a public page outside the middleware. It reads `get_team_invitation` and starts Google sign-in with the token carried through `/auth/callback`.
-- **`/auth/callback`**: after exchanging the code, when a token came along, it calls `accept_team_invitation(token)`. Accepted → the role's home page. Otherwise → `/sin-acceso` with the reason.
+- **`/auth/callback`**: after exchanging the code, when a token came along, it calls `accept_team_invitation(token)`. Accepted → the role's home page. Otherwise → `/sin-acceso` with the reason, except for someone who already has a panel role (an old or used link), who goes to their home.
 - **Middleware**: when the account has no panel role, it calls `accept_team_invitation()` (no token) once. If that accepts, the request goes on; otherwise → `/sin-acceso`. This covers someone invited who signs in from the plain login page.
-- **`/sin-acceso`**, a new page that replaces the `?error=unauthorized` message. It shows the signed-in address, the message for its case (no invitation, wrong account, expired, canceled) and "Cerrar sesión".
+- **`/sin-acceso`**, a new page that replaces the `?error=unauthorized` message. It shows the signed-in address, the message for its case (no invitation, wrong account, expired, canceled) and "Cerrar sesión". For no invitation, wrong account and needs Google it also offers "Entrar con otra cuenta de Google", which signs out and opens Google's account picker (`prompt: 'select_account'`); otherwise Google signs the same account in again. The masked address from the URL is shown only in the shape the server produces.
 - **Texts** in es/en/pt (`admin.json`).
 - **`teamService`** in `packages/api` wraps the functions.
 
