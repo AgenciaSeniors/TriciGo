@@ -37,6 +37,9 @@ export default function TeamPage() {
   const [removal, setRemoval] = useState<{ member: TeamMember; reason: string } | null>(null);
 
   const roleLabel = useCallback((r: string) => t(`team.role_${r}`, { defaultValue: r }), [t]);
+  // Stable: AdminConfirmModal re-runs its focus effect whenever onCancel changes, which with an
+  // inline arrow moved the focus out of the reason field on every keystroke.
+  const closeRemoval = useCallback(() => setRemoval(null), []);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -327,7 +330,8 @@ export default function TeamPage() {
         onInputChange={(reason) => removal && setRemoval({ ...removal, reason })}
         inputPlaceholder={t('team.reason_placeholder', { defaultValue: 'Motivo' })}
         onConfirm={confirmRemoval}
-        onCancel={() => setRemoval(null)}
+        onCancel={closeRemoval}
+        confirmDisabled={(removal?.reason.trim().length ?? 0) < 5}
       />
     </div>
   );
