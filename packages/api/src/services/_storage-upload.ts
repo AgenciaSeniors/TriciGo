@@ -38,8 +38,8 @@ import { getSupabaseClient } from '../client';
  * once on a timeout/network-class failure (the common transient case in Cuba).
  * A real denial (forbidden/too_large/etc. — a `{ error }` body) is NOT retried.
  * The path is fixed for the whole call. With upsert (avatar, selfie, driver
- * documents) a retry rewrites the object the first attempt may have written.
- * Without upsert (dispute evidence), a retry after a first attempt that did
+ * documents, dispute evidence) a retry rewrites the object the first attempt
+ * may have written. Without upsert, a retry after a first attempt that did
  * land fails with 409.
  *
  * Throws on failure (gateway error, timeout, or an `{ error }` body from the EF).

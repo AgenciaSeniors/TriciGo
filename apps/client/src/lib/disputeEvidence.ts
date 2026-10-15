@@ -29,9 +29,14 @@ export async function uploadDisputeEvidence(
 
     // RN-safe upload via FormData. fetch(uri).blob() throws
     // "Network request failed" on native. See _storage-upload.ts.
+    // upsert: after a timeout or a network error, uploadFileFromUri retries
+    // once with the same path. When the first attempt did reach Storage, the
+    // retry would otherwise fail with 409 on this same photo. The path is
+    // unique per photo, so upsert can only rewrite that photo.
     await uploadFileFromUri('dispute-evidence', storagePath, uri, {
       fileName,
       mimeType: `image/${ext}`,
+      upsert: true,
     });
 
     const { data: urlData } = supabase.storage
