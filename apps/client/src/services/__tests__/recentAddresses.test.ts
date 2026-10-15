@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// In-memory AsyncStorage mock. The service module is imported LAZY (inside
-// each test) so the mock is set up before its top-level import runs.
+// In-memory AsyncStorage mock. vi.mock is hoisted above the imports, so the
+// service imported below already uses it.
 vi.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
   return {
@@ -13,6 +13,11 @@ vi.mock('@react-native-async-storage/async-storage', () => {
     },
   };
 });
+
+// Keep this import static. Inside a test, the first import loads the module
+// and the whole @tricigo/utils barrel within that test's 5 s timeout, which
+// ran out when every package's suite ran in parallel.
+import { recentAddressService } from '../recentAddresses';
 
 const KEY = '@tricigo/recent_addresses';
 
@@ -43,20 +48,17 @@ describe('recentAddressService.add (isFinite guard)', () => {
     await seedStorage([
       { address: 'Calle 23 e/ L y M', latitude: 23.137, longitude: -82.383, timestamp: 1 },
     ]);
-    const { recentAddressService } = await import('../recentAddresses');
     const out = await recentAddressService.add('Callejón de los Protestantes', NaN, NaN);
     expect(out).toHaveLength(1);
     expect(out[0]!.address).toBe('Calle 23 e/ L y M');
   });
 
   it('rejects an Infinity coordinate', async () => {
-    const { recentAddressService } = await import('../recentAddresses');
     const out = await recentAddressService.add('bad', Number.POSITIVE_INFINITY, 0);
     expect(out).toHaveLength(0);
   });
 
   it('accepts a valid coordinate', async () => {
-    const { recentAddressService } = await import('../recentAddresses');
     const out = await recentAddressService.add('Vedado', 23.137, -82.383);
     expect(out).toHaveLength(1);
     expect(out[0]!.latitude).toBe(23.137);
@@ -72,7 +74,6 @@ describe('recentAddressService.getAll (self-heal)', () => {
       { address: 'infinity', latitude: Number.NEGATIVE_INFINITY, longitude: -80, timestamp: 4 },
       { address: 'still-good', latitude: 21.4, longitude: -77.9, timestamp: 5 },
     ]);
-    const { recentAddressService } = await import('../recentAddresses');
     const out = await recentAddressService.getAll();
     expect(out.map(r => r.address)).toEqual(['good', 'still-good']);
 
@@ -85,14 +86,12 @@ describe('recentAddressService.getAll (self-heal)', () => {
   });
 
   it('returns empty list when storage is empty', async () => {
-    const { recentAddressService } = await import('../recentAddresses');
     const out = await recentAddressService.getAll();
     expect(out).toEqual([]);
   });
 
   it('returns empty list when storage holds a non-array', async () => {
     await seedStorage({ oops: true });
-    const { recentAddressService } = await import('../recentAddresses');
     const out = await recentAddressService.getAll();
     expect(out).toEqual([]);
   });
@@ -100,19 +99,16 @@ describe('recentAddressService.getAll (self-heal)', () => {
 
 describe('recentAddressService.add (notes for the driver)', () => {
   it('stores the rider notes with the address', async () => {
-    const { recentAddressService } = await import('../recentAddresses');
     const out = await recentAddressService.add('Casa', 23.137, -82.383, '#302 apto 4');
     expect(out[0]!.notes).toBe('#302 apto 4');
   });
 
   it('omits the notes key when there are none', async () => {
-    const { recentAddressService } = await import('../recentAddresses');
     const out = await recentAddressService.add('Vedado', 23.137, -82.383);
     expect(out[0]).not.toHaveProperty('notes');
   });
 
   it('lets the newest notes win over an older row at the same place', async () => {
-    const { recentAddressService } = await import('../recentAddresses');
     await recentAddressService.add('Casa', 23.137, -82.383, 'viejo');
     const out = await recentAddressService.add('Casa', 23.137, -82.383, 'nuevo');
     expect(out).toHaveLength(1);
