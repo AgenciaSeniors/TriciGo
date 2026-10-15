@@ -117,6 +117,8 @@ export {
 } from './services/team.service';
 export {
   panelReadService,
+  parseProductFailures,
+  type ProductFailures,
   type CanceledByRole,
   type PanelRide,
   type PanelDriverRow,

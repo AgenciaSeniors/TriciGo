@@ -23,7 +23,7 @@ vi.mock('../../client', () => ({
   getSupabaseClient: () => ({ from: (t: string) => chain(t), rpc: mockRpc }),
 }));
 
-import { panelReadService } from '../panel-read.service';
+import { panelReadService, parseProductFailures } from '../panel-read.service';
 
 beforeEach(() => {
   calls.length = 0;
@@ -201,5 +201,45 @@ describe('panelReadService details', () => {
     expect(sos).toMatchObject({ against: null, resolver: null, ride: null, review: null });
     expect(await panelReadService.getIncidentDetail('missing')).toBeNull();
     expect(calls.map((c) => c.table)).toEqual(['panel_incident_reports', 'users', 'panel_incident_reports']);
+  });
+});
+
+describe('product failures', () => {
+  it('parses the RPC answer and drops malformed entries', () => {
+    expect(parseProductFailures({
+      days: 30,
+      places_not_found: [{ name: 'Paladar X', searches: 2, last_seen: 't', imported: 0 }, { name: 5 }],
+      push_outcomes: [{ app: 'client', outcome: 'denied', users: 3 }],
+      push_reach: { riders_active: 10, riders_reachable: 4, drivers_active: 5, drivers_reachable: 5 },
+      app_versions: [{ app: 'client', version: '1.7.3', platform: 'android', installs: 2 }],
+      failed_payments: [{ reason: 'Invalid card number', payments: 4, last_seen: 't' }],
+    })).toEqual({
+      days: 30,
+      placesNotFound: [{ name: 'Paladar X', searches: 2, lastSeen: 't', imported: 0 }],
+      pushOutcomes: [{ app: 'client', outcome: 'denied', users: 3 }],
+      pushReach: { ridersActive: 10, ridersReachable: 4, driversActive: 5, driversReachable: 5 },
+      appVersions: [{ app: 'client', version: '1.7.3', platform: 'android', installs: 2 }],
+      failedPayments: [{ reason: 'Invalid card number', payments: 4, lastSeen: 't' }],
+    });
+  });
+
+  it('returns empty blocks for an answer it cannot read', () => {
+    expect(parseProductFailures(null)).toEqual({
+      days: 0, placesNotFound: [], pushOutcomes: [],
+      pushReach: { ridersActive: 0, ridersReachable: 0, driversActive: 0, driversReachable: 0 },
+      appVersions: [], failedPayments: [],
+    });
+  });
+
+  it('calls get_product_failures with the period', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { days: 7 }, error: null });
+    const r = await panelReadService.getProductFailures(7);
+    expect(mockRpc).toHaveBeenCalledWith('get_product_failures', { p_days: 7 });
+    expect(r.days).toBe(7);
+  });
+
+  it('throws the RPC error', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('Admin only') });
+    await expect(panelReadService.getProductFailures(7)).rejects.toThrow('Admin only');
   });
 });

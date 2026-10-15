@@ -202,6 +202,47 @@ function toListItem(row: PanelDriverRow): PanelDriverListItem {
   };
 }
 
+export interface ProductFailures {
+  days: number;
+  placesNotFound: { name: string; searches: number; lastSeen: string; imported: number }[];
+  pushOutcomes: { app: string; outcome: string; users: number }[];
+  pushReach: { ridersActive: number; ridersReachable: number; driversActive: number; driversReachable: number };
+  appVersions: { app: string; version: string | null; platform: string | null; installs: number }[];
+  failedPayments: { reason: string; payments: number; lastSeen: string }[];
+}
+
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+const list = (v: unknown): Record<string, unknown>[] =>
+  Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null) : [];
+
+/** What get_product_failures() returns, typed; malformed entries are dropped. */
+export function parseProductFailures(raw: unknown): ProductFailures {
+  const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const reach = (typeof r.push_reach === 'object' && r.push_reach !== null ? r.push_reach : {}) as Record<string, unknown>;
+  return {
+    days: num(r.days),
+    placesNotFound: list(r.places_not_found)
+      .filter((p) => typeof p.name === 'string')
+      .map((p) => ({ name: p.name as string, searches: num(p.searches), lastSeen: str(p.last_seen) ?? '', imported: num(p.imported) })),
+    pushOutcomes: list(r.push_outcomes)
+      .filter((p) => typeof p.app === 'string' && typeof p.outcome === 'string')
+      .map((p) => ({ app: p.app as string, outcome: p.outcome as string, users: num(p.users) })),
+    pushReach: {
+      ridersActive: num(reach.riders_active),
+      ridersReachable: num(reach.riders_reachable),
+      driversActive: num(reach.drivers_active),
+      driversReachable: num(reach.drivers_reachable),
+    },
+    appVersions: list(r.app_versions)
+      .filter((p) => typeof p.app === 'string')
+      .map((p) => ({ app: p.app as string, version: str(p.version), platform: str(p.platform), installs: num(p.installs) })),
+    failedPayments: list(r.failed_payments)
+      .filter((p) => typeof p.reason === 'string')
+      .map((p) => ({ reason: p.reason as string, payments: num(p.payments), lastSeen: str(p.last_seen) ?? '' })),
+  };
+}
+
 export const panelReadService = {
   /** The rides list: panel_rides, with the admin list's filters. */
   async getRides(filters: PanelRideFilters = {}, page = 0, pageSize = 20): Promise<PanelRide[]> {
@@ -395,5 +436,12 @@ export const panelReadService = {
       ride,
       review,
     };
+  },
+
+  /** The "Fallas del producto" section of Reportes (00663). */
+  async getProductFailures(days: number): Promise<ProductFailures> {
+    const { data, error } = await getSupabaseClient().rpc('get_product_failures', { p_days: days });
+    if (error) throw error;
+    return parseProductFailures(data);
   },
 };
