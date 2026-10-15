@@ -23,14 +23,19 @@
 -- Creating a policy locks its table; fail fast instead of queueing the app's reads behind us.
 SET lock_timeout = '2s';
 
--- Every table this file touches, locked up front: a ride first, then its people. ACCESS EXCLUSIVE
--- where a policy or trigger is created, ACCESS SHARE where a view only reads it. On 40P01
--- (deadlock) or 55P03 (lock_timeout) the whole file rolls back; run it again.
+-- Every table this file touches, locked up front. ACCESS EXCLUSIVE where a policy or trigger is
+-- created, ACCESS SHARE where a view only reads it. The app never takes ACCESS EXCLUSIVE, so only
+-- the order of the exclusive locks can deadlock with it, and they go in the order the app takes
+-- those tables: a ride's price snapshot before its transitions (completion reads the snapshot,
+-- then its status change writes the transition), the transitions before the driver's score
+-- events (written after the status change), and a ticket's messages before the ticket (a message
+-- reads its ticket through RLS and its guard). On 40P01 (deadlock) or 55P03 (lock_timeout) the
+-- whole file rolls back; run it again.
 LOCK TABLE public.rides IN ACCESS SHARE MODE;
-LOCK TABLE public.ride_transitions, public.ride_pricing_snapshots IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.ride_pricing_snapshots, public.ride_transitions IN ACCESS EXCLUSIVE MODE;
 LOCK TABLE public.users, public.driver_profiles, public.vehicles, public.driver_documents IN ACCESS SHARE MODE;
 LOCK TABLE public.driver_score_events, public.driver_outreach_log, public.reviews,
-  public.support_tickets, public.ticket_messages IN ACCESS EXCLUSIVE MODE;
+  public.ticket_messages, public.support_tickets IN ACCESS EXCLUSIVE MODE;
 LOCK TABLE public.ride_disputes, public.incident_reports, public.lost_items IN ACCESS SHARE MODE;
 
 -- 1. Panel views -----------------------------------------------------------------------------
@@ -349,24 +354,62 @@ BEGIN
 
   RETURN jsonb_build_object(
     'days', v_days,
-    -- Places riders asked for that the app did not have. 00584 queues one row per ride endpoint
-    -- it could not match, so requests counts the ride endpoints that asked for that name. A row
-    -- without a ride stays; one whose ride's customer is a test or system account does not.
+    -- Places riders asked for that the app did not have. 00584 queues a ride's pickup or dropoff
+    -- venue (the text before the first comma) when no POI matches it, but not while a pending row
+    -- of that name sits within ~200 m: a queue row is a place, not a request. So the demand is
+    -- counted on the rides. A place is a queued name, compared without case, accents or outer
+    -- spaces, shown with its latest spelling; it is listed when it was queued in the period or a
+    -- ride of the period asked for it. rides: rides created in the period with that venue at
+    -- either end; riders: their distinct customers. By name only: a ride to a place of the same
+    -- name elsewhere counts too. last_seen: its latest queue row. imported: how many of its queue
+    -- rows were imported (a count). Queue rows and rides of test and system accounts are left
+    -- out; a queue row without a ride stays.
     'places_not_found', coalesce((
-      SELECT jsonb_agg(jsonb_build_object('name', x.name, 'requests', x.requests,
-                                          'last_seen', x.last_seen, 'imported', x.imported)
-                       ORDER BY x.requests DESC, x.last_seen DESC, x.name)
-      FROM (
-        SELECT left(q.name, 80) AS name, count(*)::integer AS requests, max(q.created_at) AS last_seen,
-               count(*) FILTER (WHERE q.status = 'done')::integer AS imported
+      WITH queued AS (
+        SELECT lower(public.unaccent(btrim(q.name))) AS place, q.id, q.name, q.created_at, q.status
         FROM public.poi_import_queue q
         LEFT JOIN public.rides r ON r.id = q.ride_id
         LEFT JOIN public.users u ON u.id = r.customer_id
-        WHERE q.created_at >= v_since
-          AND NOT coalesce(u.is_test, false)
+        WHERE NOT coalesce(u.is_test, false)
           AND (r.customer_id IS NULL OR r.customer_id <> ALL (c_system))
-        GROUP BY left(q.name, 80)
-        ORDER BY count(*) DESC, max(q.created_at) DESC, left(q.name, 80)
+      ),
+      places AS (
+        SELECT place, left((array_agg(name ORDER BY created_at DESC, id DESC))[1], 80) AS name,
+               max(created_at) AS last_seen,
+               count(*) FILTER (WHERE status = 'done')::integer AS imported,
+               bool_or(created_at >= v_since) AS queued_in_period
+        FROM queued
+        GROUP BY place
+      ),
+      -- One pass over the period's rides: the text before the first comma of each end, normalized
+      -- the same way, kept when it names a place. _poi_leading_venue_name() returns that text or
+      -- NULL, so below it only confirms these few ends are venues; MATERIALIZED keeps the planner
+      -- from calling it on every end of every ride.
+      ends AS MATERIALIZED (
+        SELECT r.id, r.customer_id, e.addr, n.place
+        FROM public.rides r
+        JOIN public.users u ON u.id = r.customer_id
+        CROSS JOIN LATERAL (VALUES (r.pickup_address), (r.dropoff_address)) AS e(addr)
+        CROSS JOIN LATERAL (SELECT lower(public.unaccent(btrim(split_part(e.addr, ',', 1)))) AS place) AS n
+        WHERE r.created_at >= v_since AND NOT u.is_test AND r.customer_id <> ALL (c_system)
+          AND n.place IN (SELECT p.place FROM places p)
+      ),
+      demand AS (
+        SELECT place, count(DISTINCT id)::integer AS rides, count(DISTINCT customer_id)::integer AS riders
+        FROM ends
+        WHERE public._poi_leading_venue_name(addr) IS NOT NULL
+        GROUP BY place
+      )
+      SELECT jsonb_agg(jsonb_build_object('name', x.name, 'rides', x.rides, 'riders', x.riders,
+                                          'last_seen', x.last_seen, 'imported', x.imported)
+                       ORDER BY x.rides DESC, x.last_seen DESC, x.name)
+      FROM (
+        SELECT p.name, coalesce(d.rides, 0) AS rides, coalesce(d.riders, 0) AS riders,
+               p.last_seen, p.imported
+        FROM places p
+        LEFT JOIN demand d ON d.place = p.place
+        WHERE p.queued_in_period OR d.place IS NOT NULL
+        ORDER BY coalesce(d.rides, 0) DESC, p.last_seen DESC, p.name
         LIMIT 50
       ) x), '[]'::jsonb),
     -- The last push registration outcome per account and app (00585), reported in the period.
@@ -468,6 +511,8 @@ DECLARE
     'payment_intent_id', 'return_location', 'return_notes'];
   -- A policy condition as Postgres stores it, printed with the empty search_path set below.
   c_m constant text := '( SELECT public.is_marketing() AS is_marketing)';
+  -- The views' WHERE as pg_get_viewdef prints it, with the same search_path.
+  c_gate constant text := 'WHERE (( SELECT public.is_admin() AS is_admin) OR ' || c_m || ');';
   c_guard constant regprocedure := 'public.tg_support_tickets_client_update_guard()'::regprocedure;
   c_pf constant regprocedure := 'public.get_product_failures(integer)'::regprocedure;
   c_churn constant regprocedure := 'public._panel_driver_churn_risk()'::regprocedure;
@@ -489,11 +534,12 @@ BEGIN
   -- compared below are the same in every session. Put back at the end.
   PERFORM set_config('search_path', '', true);
 
-  -- No panel_ view in public carries a hidden column (by name: a column added later fails here).
-  SELECT string_agg(c.relname || '.' || a.attname, ', ') INTO v_def
+  -- No panel_ view in public carries a hidden column (by name: a column added later fails here),
+  -- nor any column named like a coordinate (actual_pickup_location, start_lat, gps_coords...).
+  SELECT string_agg(c.relname || '.' || a.attname, ', ' ORDER BY c.relname, a.attnum) INTO v_def
   FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
   WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('v', 'm') AND c.relname LIKE 'panel\_%'
-    AND a.attname = ANY (c_hidden);
+    AND (a.attname = ANY (c_hidden) OR a.attname ~* '(_location|_lat|_lng|_lon|_coords?)$');
   IF v_def IS NOT NULL THEN
     RAISE EXCEPTION '00663: % is a hidden column in a panel view', v_def;
   END IF;
@@ -519,19 +565,26 @@ BEGIN
     RAISE EXCEPTION '00663: % is a column that view must leave out', v_def;
   END IF;
 
-  -- The seven views: read as the owner behind the gate, readable only by authenticated and
-  -- service_role, writable by none of them.
-  FOREACH v_name IN ARRAY ARRAY['panel_rides', 'panel_driver_profiles', 'panel_driver_documents',
-                                'panel_driver_churn_risk', 'panel_ride_disputes', 'panel_incident_reports',
-                                'panel_lost_items'] LOOP
+  -- The seven views, and any other panel_ view of public: read as the owner behind the gate,
+  -- readable only by authenticated and service_role, writable by none of them.
+  FOR v_name IN
+    SELECT unnest(ARRAY['panel_rides', 'panel_driver_profiles', 'panel_driver_documents',
+                        'panel_driver_churn_risk', 'panel_ride_disputes', 'panel_incident_reports',
+                        'panel_lost_items'])
+    UNION
+    SELECT c.relname::text FROM pg_class c
+    WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('v', 'm') AND c.relname LIKE 'panel\_%'
+    ORDER BY 1
+  LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_class
                    WHERE oid = ('public.' || v_name)::regclass AND relkind = 'v'
                      AND reloptions @> ARRAY['security_barrier=true', 'security_invoker=false']) THEN
       RAISE EXCEPTION '00663: view % must be a security_barrier view that is not security_invoker', v_name;
     END IF;
-    v_qual := pg_get_viewdef(('public.' || v_name)::regclass);
-    IF position('is_admin()' IN v_qual) = 0 OR position('is_marketing()' IN v_qual) = 0 THEN
-      RAISE EXCEPTION '00663: view % does not gate its rows on is_admin() or is_marketing()', v_name;
+    -- The gate is the view's own WHERE, exactly: the last thing in its definition.
+    v_qual := rtrim(pg_get_viewdef(('public.' || v_name)::regclass), E' \t\n');
+    IF right(v_qual, length(c_gate)) IS DISTINCT FROM c_gate THEN
+      RAISE EXCEPTION '00663: view % does not end in the gate %', v_name, c_gate;
     END IF;
     IF NOT has_table_privilege('authenticated', 'public.' || v_name, 'SELECT')
        OR NOT has_table_privilege('service_role', 'public.' || v_name, 'SELECT')
@@ -609,6 +662,9 @@ BEGIN
   IF (SELECT prosecdef FROM pg_proc WHERE oid = c_guard) THEN
     RAISE EXCEPTION '00663: tg_support_tickets_client_update_guard() must be SECURITY INVOKER';
   END IF;
+  IF (SELECT proconfig FROM pg_proc WHERE oid = c_guard) IS DISTINCT FROM ARRAY['search_path=public, pg_catalog'] THEN
+    RAISE EXCEPTION '00663: tg_support_tickets_client_update_guard() must SET search_path = public, pg_catalog';
+  END IF;
   -- tgtype bits: ROW 1, BEFORE 2, UPDATE 16.
   IF NOT EXISTS (SELECT 1 FROM pg_trigger
                  WHERE tgrelid = 'public.support_tickets'::regclass
@@ -656,7 +712,7 @@ BEGIN
     SELECT * FROM (VALUES
       ('public._panel_driver_churn_risk()', '20240a8b10635d4349bc31b96ef0eb50'),
       ('public.tg_support_tickets_client_update_guard()', '2a44d8f0d1e0181509edcc3a969a53ba'),
-      ('public.get_product_failures(integer)', 'd769cb2d50af193a46d04b8ffe0ec671')
+      ('public.get_product_failures(integer)', '70bde4511d3aaf39180b83024e26ca1e')
     ) AS v(fn, md5)
   LOOP
     IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_name::regprocedure) <> v_def THEN

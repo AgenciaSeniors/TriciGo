@@ -147,9 +147,12 @@ val V8 "BEGIN; $(as_user $CARLA) SELECT (SELECT count(*) FROM public.panel_rides
   (SELECT count(*) FROM public.panel_lost_items); ROLLBACK;" "0|0|0|0|0|0|0"
 val V10 "BEGIN; $(as_user $ANA) SELECT (SELECT count(*) FROM public.panel_rides), (SELECT count(*) FROM public.panel_driver_documents),
   (SELECT count(*) FROM public.panel_ride_disputes), (SELECT count(*) FROM public.panel_lost_items); ROLLBACK;" "7|1|1|1"
-# V11: no panel view carries a column that the spec keeps hidden (by name, so a later column fails too).
+# V11: no panel view carries a column that the spec keeps hidden (by name, so a later column fails
+# too), nor one named like a coordinate.
 val V11 "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public'
   AND table_name IN ($VIEWS) AND column_name IN ($FORBIDDEN)" "0"
+val V11b "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name LIKE 'panel\\_%'
+  AND column_name ~* '(_location|_lat|_lng|_lon|_coords?)\$'" "0"
 val V12 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ($NEW_VIEWS)" "5"
 # V13: the live wait columns come through.
 val V13 "BEGIN; $(as_user $MARA) SELECT wait_time_minutes, wait_time_charge_cup FROM public.panel_rides WHERE id = '$RIDE_C'; ROLLBACK;" "4|120"
@@ -301,15 +304,18 @@ err X24b "BEGIN; $(as_anon) SELECT count(*) FROM public._panel_driver_churn_risk
 val X24c "BEGIN; $(as_user $MARA) SELECT count(*) FROM public._panel_driver_churn_risk(); ROLLBACK;" "1"
 
 # --- Product failures ----------------------------------------------------------------------
-val F1 "BEGIN; $(as_user $MARA) SELECT r->'places_not_found'->0->>'name', r->'places_not_found'->0->>'requests',
+# F1: the seed's queue rows have no ride: the two Paladar X rows are one place, asked by no ride.
+val F1 "BEGIN; $(as_user $MARA) SELECT (SELECT string_agg(e->>'name' || ':' || (e->>'rides') || ':' || (e->>'riders') || ':' || (e->>'imported'),
+    ',' ORDER BY o) FROM jsonb_array_elements(r->'places_not_found') WITH ORDINALITY a(e, o)),
   jsonb_array_length(r->'failed_payments'), r->'failed_payments'->0->>'reason', r->'failed_payments'->0->>'payments',
   jsonb_array_length(r->'app_versions'), jsonb_array_length(r->'push_outcomes'),
   r->'push_reach'->>'riders_active', r->'push_reach'->>'riders_reachable',
   r->'push_reach'->>'drivers_active', r->'push_reach'->>'drivers_reachable'
-  FROM (SELECT public.get_product_failures(30) AS r) x; ROLLBACK;" "Paladar X|2|2|Invalid card number|2|1|2|1|0|1|1"
+  FROM (SELECT public.get_product_failures(30) AS r) x; ROLLBACK;" "Hotel Y:0:0:1,Paladar X:0:0:0|2|Invalid card number|2|1|2|1|0|1|1"
 err F2 "BEGIN; $(as_user $CARLA) SELECT public.get_product_failures(30); ROLLBACK;" "Admin only"
 err F3 "BEGIN; $(as_anon) SELECT public.get_product_failures(30); ROLLBACK;" "permission denied"
 # X16: exactly these keys (no ids, amounts, emails or phones by construction), and no uuid in the text.
+# X16b (in F4) walks every key at every depth on data where every block has rows.
 val X16 "BEGIN; $(as_user $MARA) SELECT (SELECT string_agg(k, ',' ORDER BY k) FROM jsonb_object_keys(r) k),
   (SELECT string_agg(DISTINCT k, ',' ORDER BY k) FROM jsonb_array_elements(r->'places_not_found') e, jsonb_object_keys(e) k),
   (SELECT string_agg(DISTINCT k, ',' ORDER BY k) FROM jsonb_array_elements(r->'failed_payments') e, jsonb_object_keys(e) k),
@@ -318,7 +324,7 @@ val X16 "BEGIN; $(as_user $MARA) SELECT (SELECT string_agg(k, ',' ORDER BY k) FR
   (SELECT string_agg(k, ',' ORDER BY k) FROM jsonb_object_keys(r->'push_reach') k),
   r::text !~* '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
   FROM (SELECT public.get_product_failures(30) r) x; ROLLBACK;" \
-  "app_versions,days,failed_payments,places_not_found,push_outcomes,push_reach|imported,last_seen,name,requests|last_seen,payments,reason|app,installs,platform,version|app,outcome,users|drivers_active,drivers_reachable,riders_active,riders_reachable|t"
+  "app_versions,days,failed_payments,places_not_found,push_outcomes,push_reach|imported,last_seen,name,riders,rides|last_seen,payments,reason|app,installs,platform,version|app,outcome,users|drivers_active,drivers_reachable,riders_active,riders_reachable|t"
 # X17: the period is clamped to 1..365 days, 30 by default.
 val X17 "BEGIN; $(as_user $ANA) SELECT public.get_product_failures(0)->>'days', public.get_product_failures(9999)->>'days',
   public.get_product_failures(NULL)->>'days', public.get_product_failures(-5)->>'days'; ROLLBACK;" "1|365|30|1"
@@ -337,7 +343,7 @@ val X18 "BEGIN; INSERT INTO public.poi_import_queue (name, created_at) VALUES ('
 # X19: test and system accounts are left out of every block (a row of each in each block changes
 # nothing), while the same rows of a real user (X19c) show up in every block.
 PF_ROWS(){ # $1 user for the rows, $2 a ride id, $3 a name suffix
-  echo "INSERT INTO public.rides (id, customer_id, status) VALUES ('$2', '$1', 'completed');
+  echo "INSERT INTO public.rides (id, customer_id, status, pickup_address) VALUES ('$2', '$1', 'completed', 'Paladar X, Obispo $3');
   INSERT INTO public.poi_import_queue (ride_id, name) VALUES ('$2', 'Lugar $3');
   INSERT INTO public.push_registration_status (user_id, app, outcome) VALUES ('$1', 'client', 'error')
     ON CONFLICT (user_id, app) DO UPDATE SET outcome = 'error', updated_at = now();
@@ -352,17 +358,56 @@ val X19 "BEGIN; SET LOCAL request.jwt.claim.sub = '$MARA';
   $(PF_ROWS $TESTU f0000000-0000-4000-8000-000000000081 1)
   $(PF_ROWS $SYS1 f0000000-0000-4000-8000-000000000082 2)
   $(PF_ROWS $SYS99 f0000000-0000-4000-8000-000000000083 3)
-  SELECT (SELECT r FROM pf0) = public.get_product_failures(30), $PF_SIZES FROM (SELECT public.get_product_failures(30) r) x; ROLLBACK;" \
-  "t|2|2|2|1|1|1"
+  SELECT (SELECT r FROM pf0) = public.get_product_failures(30), $PF_SIZES, (SELECT e->>'rides' || '/' || (e->>'riders') FROM jsonb_array_elements(r->'places_not_found') e WHERE e->>'name' = 'Paladar X')
+  FROM (SELECT public.get_product_failures(30) r) x; ROLLBACK;" "t|2|2|2|1|1|1|0/0"
 val X19c "BEGIN; SET LOCAL request.jwt.claim.sub = '$MARA';
   $(PF_ROWS $SAM f0000000-0000-4000-8000-000000000084 4)
-  SELECT $PF_SIZES FROM (SELECT public.get_product_failures(30) r) x; ROLLBACK;" "3|3|3|2|2|2"
+  SELECT $PF_SIZES, (SELECT e->>'rides' || '/' || (e->>'riders') FROM jsonb_array_elements(r->'places_not_found') e WHERE e->>'name' = 'Paladar X') FROM (SELECT public.get_product_failures(30) r) x; ROLLBACK;" "3|3|3|2|2|2|1/1"
 # X25: a reason (the provider's code too) is cut to 60 characters and a place name to 80.
 val X25 "BEGIN; INSERT INTO public.poi_import_queue (name) VALUES (repeat('n', 120));
   INSERT INTO public.payment_intents (user_id, status, provider_error_code) VALUES ('$CARLA', 'failed', repeat('c', 100));
   $(as_user $MARA) SELECT (SELECT max(length(e->>'name')) FROM jsonb_array_elements(r->'places_not_found') e),
   (SELECT max(length(e->>'reason')) FROM jsonb_array_elements(r->'failed_payments') e)
   FROM (SELECT public.get_product_failures(30) r) x; ROLLBACK;" "80|60"
+# F4: places_not_found counts rides and riders, not queue rows (00584 keeps one pending row per name
+# within ~200 m). Paladar Z has a single queue row and is asked by three rides of two riders in the
+# period, written with other case and spaces (Sam's ride names it at both ends: one ride), by a test
+# account and a system account (left out), and by a ride 40 days old (outside 30 days, inside 90).
+PZ="f0000000-0000-4000-8000-0000000000"
+PZ_SETUP="INSERT INTO public.users (id, full_name, is_test) VALUES ('$TESTU', 'Cuenta de prueba', true);
+  INSERT INTO public.rides (id, customer_id, status, pickup_address, dropoff_address, created_at) VALUES
+    ('${PZ}91', '$CARLA', 'completed', 'Paladar Z, Calle 23 e/ L y M, Plaza', 'Prado 100', now() - interval '3 days'),
+    ('${PZ}92', '$CARLA', 'completed', 'Obispo 5', '  paladar z , Vedado', now() - interval '2 days'),
+    ('${PZ}93', '$SAM', 'canceled', 'PALADAR Z', 'Paladar Z, La Habana', now() - interval '1 day'),
+    ('${PZ}94', '$TESTU', 'completed', 'Paladar Z', 'Prado 1', now()),
+    ('${PZ}95', '$SYS99', 'completed', 'Paladar Z, Obispo', 'Prado 1', now()),
+    ('${PZ}96', '$CARLA', 'completed', 'Paladar Z', 'Prado 1', now() - interval '40 days');
+  INSERT INTO public.poi_import_queue (ride_id, name, created_at) VALUES ('${PZ}91', 'Paladar Z', now() - interval '3 days');"
+PZ_ROW="e->>'name', e->>'rides', e->>'riders', e->>'imported', (e->>'last_seen')::timestamptz = now() - interval '3 days'"
+val F4 "BEGIN; $PZ_SETUP $(as_user $MARA)
+  SELECT $PZ_ROW FROM (SELECT public.get_product_failures(30)->'places_not_found'->0 e) x
+  UNION ALL SELECT $PZ_ROW FROM (SELECT public.get_product_failures(90)->'places_not_found'->0 e) x; ROLLBACK;" \
+  "Paladar Z|3|2|0|t;Paladar Z|4|2|0|t"
+# X16b: on the same data, every block has rows. Every key at every depth is one of these (so the walk
+# reaches the items of each block), none names a person, a ride or a coordinate, and no value is a uuid.
+PF_KEYS="app,app_versions,days,drivers_active,drivers_reachable,failed_payments,imported,installs,last_seen,name,outcome,payments,places_not_found,platform,push_outcomes,push_reach,reason,riders,riders_active,riders_reachable,rides,users,version"
+val X16b "BEGIN; $PZ_SETUP $(as_user $MARA)
+  SELECT (SELECT string_agg(DISTINCT k, ',' ORDER BY k) FROM jsonb_path_query(r, 'strict \$.** ? (@.type() == \"object\")') o, jsonb_object_keys(o) k),
+  (SELECT count(*) FROM jsonb_path_query(r, 'strict \$.** ? (@.type() == \"object\")') o, jsonb_object_keys(o) k
+    WHERE k IN ('user_id', 'customer_id', 'driver_id', 'ride_id', 'phone', 'email', 'lat', 'lng')),
+  r::text !~* '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+  jsonb_array_length(r->'places_not_found') > 0 AND jsonb_array_length(r->'failed_payments') > 0
+    AND jsonb_array_length(r->'app_versions') > 0 AND jsonb_array_length(r->'push_outcomes') > 0
+  FROM (SELECT public.get_product_failures(30) r) x; ROLLBACK;" "$PF_KEYS|0|t|t"
+# F5: a place whose only queue row is older than the period is listed when a ride of the period asks
+# for it (the queue does not add a row while that one is pending); one asked by no ride of the period
+# is not (X18's Viejo).
+val F5 "BEGIN; INSERT INTO public.rides (customer_id, status, dropoff_address) VALUES ('$CARLA', 'completed', 'Cafe Viejo, Obispo');
+  INSERT INTO public.poi_import_queue (name, created_at) VALUES ('Cafe Viejo', now() - interval '45 days'),
+                                                               ('Cafe Olvidado', now() - interval '45 days');
+  $(as_user $MARA) SELECT string_agg(e->>'name' || ':' || (e->>'rides') || ':' || (e->>'riders'), ',')
+  FROM (SELECT public.get_product_failures(30) r) x, jsonb_array_elements(r->'places_not_found') e
+  WHERE e->>'name' LIKE 'Cafe%'; ROLLBACK;" "Cafe Viejo:1:1"
 
 # --- What is left as it was ----------------------------------------------------------------
 # X20: the marketing policies: 00642's eleven and this file's nine.
@@ -463,6 +508,58 @@ FROM public.incident_reports i" "panel_incident_reports.resolution_notes is a co
      CREATE TRIGGER trg_support_tickets_a_first BEFORE UPDATE ON public.support_tickets FOR EACH ROW EXECUTE FUNCTION public.tg_noop()"
   # N14 (M9): a created body that is not the one the file checks.
   negfile N14 "'sin motivo'" "'sin dato'" "public.get_product_failures(integer) does not have the body of this file"
+  # N15: a view the file creates without its gate, and one whose gate lets more through.
+  negfile N15 "FROM public.driver_documents d
+WHERE (SELECT public.is_admin()) OR (SELECT public.is_marketing());" "FROM public.driver_documents d;" \
+    "view panel_driver_documents does not end in the gate"
+  negfile N15b "FROM public.lost_items l
+WHERE (SELECT public.is_admin()) OR (SELECT public.is_marketing());" "FROM public.lost_items l
+WHERE (SELECT public.is_admin()) OR (SELECT public.is_marketing()) OR true;" \
+    "view panel_lost_items does not end in the gate"
+  # N15c: any other panel_ view of public answers to the same checks.
+  neg N15c "$MIG" "view panel_extra does not end in the gate" \
+    "CREATE VIEW public.panel_extra WITH (security_barrier = true, security_invoker = false) AS SELECT id, status FROM public.rides"
+  # N3b: a column named like a coordinate, though not in the list of hidden names.
+  neg N3b "$MIG" "panel_extra.actual_pickup_location is a hidden column in a panel view" \
+    "CREATE VIEW public.panel_extra AS SELECT id, pickup_location AS actual_pickup_location FROM public.rides"
+  # N16-N18: a definer this file creates without SECURITY DEFINER or without its search_path.
+  negfile N16 "LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''" "LANGUAGE plpgsql
+STABLE
+SET search_path = ''" "public.get_product_failures(integer) must be SECURITY DEFINER with search_path = ''"
+  negfile N17 "STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS \$fn\$
+DECLARE
+  c_system" "STABLE
+SECURITY DEFINER
+AS \$fn\$
+DECLARE
+  c_system" "public.get_product_failures(integer) must be SECURITY DEFINER with search_path = ''"
+  negfile N18 "LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''" "LANGUAGE sql
+STABLE
+SET search_path = ''" "public._panel_driver_churn_risk() must be SECURITY DEFINER with search_path = ''"
+  negfile N18b "SECURITY DEFINER
+SET search_path = ''
+AS \$fn\$
+  SELECT c.driver_profile_id" "SECURITY DEFINER
+AS \$fn\$
+  SELECT c.driver_profile_id" "public._panel_driver_churn_risk() must be SECURITY DEFINER with search_path = ''"
+  # N19: the support guard without its search_path.
+  negfile N19 "LANGUAGE plpgsql
+SET search_path = public, pg_catalog
+AS \$fn\$
+DECLARE
+  c_free" "LANGUAGE plpgsql
+AS \$fn\$
+DECLARE
+  c_free" "tg_support_tickets_client_update_guard() must SET search_path = public, pg_catalog"
   $BIN/dropdb $CONN --if-exists $NEG >/dev/null 2>&1
 fi
 

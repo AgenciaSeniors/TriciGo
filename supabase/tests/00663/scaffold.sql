@@ -3,7 +3,8 @@
 -- what 00663 touches, reduced to the columns the code under test reads, with prod's policies as
 -- of 2026-10-15. Coordinates are text stand-ins (no PostGIS): no test reads them, and the views
 -- must leave them out by name. The two POI functions read them through stubs of geometry,
--- ST_X, ST_Y and unaccent below.
+-- ST_X, ST_Y and unaccent below; get_product_failures reads each ride's venue through prod's
+-- _poi_leading_venue_name (00584), copied below.
 SET ROLE postgres;
 
 -- Columns 00663's views read or must leave out.
@@ -283,7 +284,9 @@ FROM (
 ) c;
 
 -- The PostGIS and unaccent pieces the live admin_list_pois and list_poi_submissions call: a
--- geometry that is the text of the point, and an unaccent that changes nothing.
+-- geometry that is the text of the point, and an unaccent that changes nothing. In prod
+-- unaccent(text) lives in public too (measured 2026-10-15). An identity is enough here: every
+-- place name the tests seed is ASCII, so no match depends on removing an accent.
 CREATE DOMAIN public.geometry AS text;
 CREATE FUNCTION public.st_x(public.geometry) RETURNS double precision LANGUAGE sql IMMUTABLE AS $f$
   SELECT split_part(btrim(split_part($1, '(', 2), ')'), ' ', 1)::double precision
@@ -292,6 +295,73 @@ CREATE FUNCTION public.st_y(public.geometry) RETURNS double precision LANGUAGE s
   SELECT split_part(btrim(split_part($1, '(', 2), ')'), ' ', 2)::double precision
 $f$;
 CREATE FUNCTION public.unaccent(text) RETURNS text LANGUAGE sql IMMUTABLE AS $f$ SELECT $1 $f$;
+
+-- What get_product_failures calls to read a ride's venue: _ride_address_is_placeholder (00546) and
+-- _poi_leading_venue_name (00584), copied from those migrations, over a cuba_admin_areas without
+-- its polygons and with two of prod's names (without accents: unaccent is an identity here).
+CREATE TABLE public.cuba_admin_areas (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, admin_level integer NOT NULL,
+  name text NOT NULL, name_es text
+);
+ALTER TABLE public.cuba_admin_areas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY cuba_admin_areas_read ON public.cuba_admin_areas FOR SELECT USING (true);
+INSERT INTO public.cuba_admin_areas (admin_level, name, name_es)
+  VALUES (4, 'La Habana', 'La Habana'), (6, 'Plaza de la Revolucion', NULL);
+
+CREATE FUNCTION public._ride_address_is_placeholder(p_addr text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $function$
+  SELECT
+    p_addr IS NULL
+    OR btrim(p_addr) = ''
+    -- coordenadas crudas tipo "23.12638, -82.35472"
+    OR p_addr ~ '^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$'
+    -- fallback viejo del picker de mapa
+    OR p_addr = 'Ubicación seleccionada en el mapa'
+    -- fallback del cliente por preset local (el servidor lo mejora si puede)
+    OR p_addr LIKE 'Cerca de %'
+    -- 00546: textos provisionales de la UI (es / en / pt)
+    OR btrim(p_addr) IN (
+         'Detectando dirección...',
+         'Detecting address...',
+         'Detectando endereço...',
+         'Origen',
+         'Destino',
+         'Mi ubicación'
+       );
+$function$;
+REVOKE ALL ON FUNCTION public._ride_address_is_placeholder(text) FROM PUBLIC, anon, authenticated;
+
+CREATE FUNCTION public._poi_leading_venue_name(p_addr text)
+RETURNS text
+LANGUAGE sql
+STABLE
+SET search_path TO 'public', 'extensions', 'pg_catalog'
+AS $$
+  -- The venue part of a ride address: "Coppelia, Calle 23 e/ L y K, Plaza, La Habana" → "Coppelia".
+  -- NULL for placeholders, corner / street forms, zone names, numeric or too-short text.
+  SELECT CASE
+    WHEN public._ride_address_is_placeholder(p_addr) THEN NULL
+    WHEN v.lead IS NULL OR length(v.lead) < 3 OR length(v.lead) > 80 THEN NULL
+    WHEN v.lead !~ '[[:alpha:]].*[[:alpha:]]' THEN NULL
+    WHEN v.lead ~* '(^|\s)(e/|entre|esq\.?|esquina|y)(\s|$)' THEN NULL
+    WHEN v.lead ~* '^(calle|calzada|avenida|ave\.?|av\.?|avda\.?|carretera|camino|callejon|callejón|paseo|linea|línea|km|kilometro|kilómetro|autopista|circunvalacion|circunvalación|reparto|rpto\.?|edificio|edif\.?|apto\.?|apartamento|cerca de)(\s|$)' THEN NULL
+    WHEN v.lead ~ '^\d' THEN NULL
+    WHEN lower(unaccent(v.lead)) IN (
+      'vedado', 'el vedado', 'nuevo vedado', 'miramar', 'centro habana', 'habana vieja', 'la habana vieja', 'cerro',
+      'playa', 'marianao', 'la lisa', 'boyeros', 'alamar', 'cojimar', 'santos suarez', 'lawton', 'luyano',
+      'la vibora', 'vibora', 'siboney', 'kohly', 'casino deportivo', 'santa fe', 'guanabo', 'regla', 'guanabacoa',
+      'la habana', 'habana', 'varadero', 'centro historico', 'reparto flores', 'buenavista', 'buena vista') THEN NULL
+    WHEN EXISTS (SELECT 1 FROM public.cuba_admin_areas a
+                 WHERE lower(unaccent(a.name)) = lower(unaccent(v.lead))
+                    OR lower(unaccent(COALESCE(a.name_es, ''))) = lower(unaccent(v.lead))) THEN NULL
+    ELSE v.lead END
+  FROM (SELECT NULLIF(btrim(split_part(COALESCE(p_addr, ''), ',', 1)), '') AS lead) v;
+$$;
+REVOKE ALL ON FUNCTION public._poi_leading_venue_name(text) FROM PUBLIC, anon, authenticated;
 
 -- Prod's review_is_public (00645): a visible review of the ride's driver, for a signed-in user.
 CREATE FUNCTION public.review_is_public(p_review_id uuid)
