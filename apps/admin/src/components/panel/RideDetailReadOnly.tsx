@@ -77,7 +77,10 @@ export function RideDetailReadOnly({ rideId }: { rideId: string }) {
           <Field label={t('panel_view.ride_distance', { defaultValue: 'Distancia (estimada / real)' })}>{km(ride.estimated_distance_m)} / {km(ride.actual_distance_m)}</Field>
           <Field label={t('panel_view.ride_duration', { defaultValue: 'Duración (estimada / real)' })}>{min(ride.estimated_duration_s)} / {min(ride.actual_duration_s)}</Field>
           <Field label={t('panel_view.ride_dispatch_round', { defaultValue: 'Ronda de despacho' })}>{ride.dispatch_round}</Field>
-          <Field label={t('panel_view.ride_wait', { defaultValue: 'Espera' })}>{min(ride.wait_time_seconds)}</Field>
+          <Field label={t('panel_view.ride_wait', { defaultValue: 'Espera' })}>
+            {ride.wait_time_minutes == null ? '—' : `${ride.wait_time_minutes} min`}
+            {ride.wait_time_charge_cup ? ` · ${formatCUP(ride.wait_time_charge_cup)}` : ''}
+          </Field>
           {ride.status === 'canceled' && (
             <Field label={t('panel_view.ride_canceled', { defaultValue: 'Cancelación' })}>
               {rideCancelSummary(t, ride.canceled_by_role, ride.cancellation_reason)}

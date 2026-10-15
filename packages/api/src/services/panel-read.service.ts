@@ -22,7 +22,8 @@ import { havanaDayRangeUtc } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
 import { escapeLikePattern, rideCodePrefix } from './_search';
 
-export type CanceledByRole = 'customer' | 'driver' | 'staff' | 'system';
+/** Who canceled a ride: unknown is a canceler who is none of the others (00663). */
+export type CanceledByRole = 'customer' | 'driver' | 'staff' | 'system' | 'unknown';
 
 /** One row of panel_rides. */
 export interface PanelRide {
@@ -60,8 +61,8 @@ export interface PanelRide {
   actual_distance_m: number | null;
   estimated_duration_s: number | null;
   actual_duration_s: number | null;
-  wait_time_seconds: number | null;
-  wait_charge_cup: number | null;
+  wait_time_minutes: number | null;
+  wait_time_charge_cup: number | null;
   passenger_count: number | null;
   shared_ride: boolean;
   is_split: boolean;
@@ -204,7 +205,8 @@ function toListItem(row: PanelDriverRow): PanelDriverListItem {
 
 export interface ProductFailures {
   days: number;
-  placesNotFound: { name: string; searches: number; lastSeen: string; imported: number }[];
+  /** requests: how many ride endpoints asked for the name. */
+  placesNotFound: { name: string; requests: number; lastSeen: string; imported: number }[];
   pushOutcomes: { app: string; outcome: string; users: number }[];
   pushReach: { ridersActive: number; ridersReachable: number; driversActive: number; driversReachable: number };
   appVersions: { app: string; version: string | null; platform: string | null; installs: number }[];
@@ -224,7 +226,7 @@ export function parseProductFailures(raw: unknown): ProductFailures {
     days: num(r.days),
     placesNotFound: list(r.places_not_found)
       .filter((p) => typeof p.name === 'string')
-      .map((p) => ({ name: p.name as string, searches: num(p.searches), lastSeen: str(p.last_seen) ?? '', imported: num(p.imported) })),
+      .map((p) => ({ name: p.name as string, requests: num(p.requests), lastSeen: str(p.last_seen) ?? '', imported: num(p.imported) })),
     pushOutcomes: list(r.push_outcomes)
       .filter((p) => typeof p.app === 'string' && typeof p.outcome === 'string')
       .map((p) => ({ app: p.app as string, outcome: p.outcome as string, users: num(p.users) })),

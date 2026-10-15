@@ -7,6 +7,7 @@ const CANCELED_BY_FALLBACK: Record<CanceledByRole, string> = {
   driver: 'Conductor',
   staff: 'Soporte',
   system: 'Sistema',
+  unknown: 'Sin dato',
 };
 
 /** Who canceled a ride and why, for the rides list and the ride detail. */

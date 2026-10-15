@@ -208,14 +208,14 @@ describe('product failures', () => {
   it('parses the RPC answer and drops malformed entries', () => {
     expect(parseProductFailures({
       days: 30,
-      places_not_found: [{ name: 'Paladar X', searches: 2, last_seen: 't', imported: 0 }, { name: 5 }],
+      places_not_found: [{ name: 'Paladar X', requests: 2, last_seen: 't', imported: 0 }, { name: 5 }],
       push_outcomes: [{ app: 'client', outcome: 'denied', users: 3 }],
       push_reach: { riders_active: 10, riders_reachable: 4, drivers_active: 5, drivers_reachable: 5 },
       app_versions: [{ app: 'client', version: '1.7.3', platform: 'android', installs: 2 }],
       failed_payments: [{ reason: 'Invalid card number', payments: 4, last_seen: 't' }],
     })).toEqual({
       days: 30,
-      placesNotFound: [{ name: 'Paladar X', searches: 2, lastSeen: 't', imported: 0 }],
+      placesNotFound: [{ name: 'Paladar X', requests: 2, lastSeen: 't', imported: 0 }],
       pushOutcomes: [{ app: 'client', outcome: 'denied', users: 3 }],
       pushReach: { ridersActive: 10, ridersReachable: 4, driversActive: 5, driversReachable: 5 },
       appVersions: [{ app: 'client', version: '1.7.3', platform: 'android', installs: 2 }],
