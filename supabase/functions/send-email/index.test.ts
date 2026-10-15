@@ -16,16 +16,34 @@ const limiter = vi.hoisted(() => ({
 }));
 vi.mock('../_shared/rate-limiter.ts', () => limiter);
 
-// Fake key material: same shape as a real secret key, not a credential.
-const SERVICE_KEY = 'sb_secret_TESTtestTESTtestTESTtest01';
+// index.ts reads Deno.env and calls Deno.serve while it loads, so Deno is
+// stubbed in vi.hoisted, which runs before the static import below.
+const { SERVICE_KEY, served } = vi.hoisted(() => {
+  // Fake key material: same shape as a real secret key, not a credential.
+  const SERVICE_KEY = 'sb_secret_TESTtestTESTtestTESTtest01';
+  const env: Record<string, string> = {
+    SUPABASE_SECRET_KEYS: JSON.stringify({ default: SERVICE_KEY }),
+    RESEND_API_KEY: 're_test_not_a_key',
+  };
+  const served: { handler?: (req: Request) => Promise<Response> } = {};
+  vi.stubGlobal('Deno', {
+    env: { get: (name: string) => env[name] },
+    serve: (h: (req: Request) => Promise<Response>) => {
+      served.handler = h;
+    },
+  });
+  return { SERVICE_KEY, served };
+});
+
+// Keep this import static. In a beforeAll, loading the handler and its 20
+// e-mail templates took 8 to 11 s when every package's suite ran in parallel,
+// at or past the 10 s hook timeout.
+import './index.ts';
+
+// Fake too: SERVICE_KEY with its last character changed.
 const NEAR_MISS_KEY = 'sb_secret_TESTtestTESTtestTESTtest02';
 const PG_NET_IP = '44.234.196.74'; // every database trigger and cron leaves from here
 const OUTSIDE_IP = '203.0.113.7'; // TEST-NET-3
-
-const env: Record<string, string> = {
-  SUPABASE_SECRET_KEYS: JSON.stringify({ default: SERVICE_KEY }),
-  RESEND_API_KEY: 're_test_not_a_key',
-};
 
 const resend = vi.fn(
   async () =>
@@ -35,17 +53,10 @@ const resend = vi.fn(
     }),
 );
 
-let handler: (req: Request) => Promise<Response>;
+const handler = (req: Request) => served.handler!(req);
 
-beforeAll(async () => {
-  vi.stubGlobal('Deno', {
-    env: { get: (name: string) => env[name] },
-    serve: (h: typeof handler) => {
-      handler = h;
-    },
-  });
+beforeAll(() => {
   vi.stubGlobal('fetch', resend);
-  await import('./index.ts');
 });
 
 beforeEach(() => {
