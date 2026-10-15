@@ -134,6 +134,7 @@ export {
   type PanelDispute,
   type PanelIncident,
   type PanelIncidentDetail,
+  type PanelLostItem,
 } from './services/panel-read.service';
 export {
   marketingStatsService,

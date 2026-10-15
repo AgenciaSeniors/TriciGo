@@ -324,6 +324,104 @@ describe('panelReadService details', () => {
     expect(await panelReadService.getIncidentDetail('missing')).toBeNull();
     expect(calls.map((c) => c.table)).toEqual(['panel_incident_reports', 'users', 'panel_incident_reports']);
   });
+
+  it('answers null and reads nothing else for an incident that does not exist or an id that is not a uuid', async () => {
+    expect(await panelReadService.getIncidentDetail('00000000-0000-0000-0000-000000000000')).toBeNull();
+    results.push({ data: null, error: BAD_UUID });
+    expect(await panelReadService.getIncidentDetail('abc')).toBeNull();
+    expect(calls.map((c) => c.table)).toEqual(['panel_incident_reports', 'panel_incident_reports']);
+    expect(calls[0]!.ops).toContainEqual(['maybeSingle', []]);
+  });
+
+  it('throws when the incident cannot be read, and reads nothing else', async () => {
+    results.push({ data: null, error: new Error('incident read failed') });
+    await expect(panelReadService.getIncidentDetail('i1')).rejects.toThrow('incident read failed');
+    expect(calls.map((c) => c.table)).toEqual(['panel_incident_reports']);
+  });
+
+  it('flags the ride and the review as unavailable only when their reads fail', async () => {
+    const incident = { id: 'i1', reported_by: 'u1', against_user_id: null, resolved_by: null, ride_id: 'r1', type: 'review_abuse', review_id: 'v1' };
+    results.push(
+      { data: incident, error: null },
+      { data: [{ id: 'u1', full_name: 'Carla', phone: '1' }], error: null },
+      { data: null, error: new Error('ride read failed') },
+      { data: { id: 'v1', rating: 1, comment: null, is_visible: true, created_at: 't' }, error: null },
+    );
+    const noRide = await panelReadService.getIncidentDetail('i1');
+    expect(noRide).toMatchObject({ ride: null, rideUnavailable: true, reviewUnavailable: false });
+    expect(noRide?.review?.id).toBe('v1');
+
+    results.length = 0;
+    results.push(
+      { data: incident, error: null },
+      { data: [{ id: 'u1', full_name: 'Carla', phone: '1' }], error: null },
+      { data: { id: 'r1', status: 'completed', pickup_address: 'A', dropoff_address: 'B' }, error: null },
+      { data: null, error: new Error('review read failed') },
+    );
+    const noReview = await panelReadService.getIncidentDetail('i1');
+    expect(noReview).toMatchObject({ review: null, reviewUnavailable: true, rideUnavailable: false });
+    expect(noReview?.ride?.id).toBe('r1');
+  });
+
+  it('does not flag a ride or review the incident has none of', async () => {
+    results.push(
+      { data: { id: 'i2', reported_by: 'u1', against_user_id: null, resolved_by: null, ride_id: null, type: 'sos', review_id: null }, error: null },
+    );
+    expect(await panelReadService.getIncidentDetail('i2')).toMatchObject({
+      ride: null, rideUnavailable: false, review: null, reviewUnavailable: false,
+    });
+  });
+
+  it('leaves the names out when the people lookup fails (the page shows the ids)', async () => {
+    results.push(
+      { data: { id: 'i3', reported_by: 'u1', against_user_id: 'u2', resolved_by: null, ride_id: null, type: 'sos', review_id: null }, error: null },
+      { data: null, error: new Error('users read failed') },
+    );
+    expect(await panelReadService.getIncidentDetail('i3')).toMatchObject({ reporter: null, against: null });
+  });
+});
+
+describe('panelReadService.getLostItems', () => {
+  /** The columns of panel_lost_items, in the view's order (00663). */
+  const VIEW_COLUMNS = [
+    'id', 'ride_id', 'reporter_id', 'driver_id', 'description', 'category', 'photo_urls', 'status',
+    'driver_response', 'driver_found', 'return_fee_cup', 'resolved_by', 'created_at', 'updated_at', 'resolved_at',
+  ];
+
+  it('reads panel_lost_items newest first, 100 by default, without a status filter', async () => {
+    results.push({ data: [{ id: 'l1' }], error: null });
+    expect(await panelReadService.getLostItems()).toEqual([{ id: 'l1' }]);
+    expect(calls[0]!.table).toBe('panel_lost_items');
+    expect(calls[0]!.ops).toContainEqual(['order', ['created_at', { ascending: false }]]);
+    expect(calls[0]!.ops).toContainEqual(['limit', [100]]);
+    expect(calls[0]!.ops.some(([op]) => op === 'eq')).toBe(false);
+  });
+
+  it('filters by status only when given, with the limit asked for', async () => {
+    await panelReadService.getLostItems({ status: 'found', limit: 20 });
+    expect(calls[0]!.ops).toContainEqual(['eq', ['status', 'found']]);
+    expect(calls[0]!.ops).toContainEqual(['limit', [20]]);
+  });
+
+  it('selects the view’s columns by name and none of the hidden ones', async () => {
+    await panelReadService.getLostItems();
+    const select = calls[0]!.ops.find(([op]) => op === 'select');
+    const columns = String(select?.[1][0]).split(',').map((c) => c.trim());
+    expect(columns).toEqual(VIEW_COLUMNS);
+    for (const hidden of ['admin_notes', 'return_location', 'return_notes', '*']) {
+      expect(columns).not.toContain(hidden);
+    }
+  });
+
+  it('answers an empty list when there are no rows', async () => {
+    results.push({ data: null, error: null });
+    expect(await panelReadService.getLostItems()).toEqual([]);
+  });
+
+  it('throws the Supabase error', async () => {
+    results.push({ data: null, error: new Error('lost items read failed') });
+    await expect(panelReadService.getLostItems()).rejects.toThrow('lost items read failed');
+  });
 });
 
 describe('product failures', () => {

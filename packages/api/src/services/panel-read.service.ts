@@ -9,6 +9,8 @@ import type {
   DriverScoreEvent,
   DriverStatus,
   IncidentReport,
+  LostItem,
+  LostItemStatus,
   PaymentMethod,
   RideDispute,
   RidePricingSnapshot,
@@ -186,14 +188,25 @@ export type PanelDispute = WithHidden<RideDispute,
   'evidence_urls' | 'respondent_evidence_urls' | 'refund_amount_trc' | 'refund_transaction_id'
   | 'admin_notes' | 'ride_estimated_fare_trc' | 'ride_final_fare_trc'>;
 export type PanelIncident = WithHidden<IncidentReport, 'evidence_urls' | 'resolution_notes'>;
+export type PanelLostItem = WithHidden<LostItem, 'admin_notes' | 'return_location' | 'return_notes'>;
+
+/** panel_lost_items, column by column: every lost_items column but the notes and the return arrangements (00663). */
+const PANEL_LOST_ITEM_COLUMNS = 'id, ride_id, reporter_id, driver_id, description, category, photo_urls, status, driver_response, driver_found, return_fee_cup, resolved_by, created_at, updated_at, resolved_at';
 
 export interface PanelIncidentDetail {
   incident: PanelIncident;
+  /** null when the lookup found nobody or failed: the page shows the id instead. */
   reporter: { name: string; phone: string } | null;
   against: { name: string; phone: string } | null;
   resolver: { name: string; phone: string } | null;
+  /** null when the incident has no ride, or when the read found nothing or failed (see rideUnavailable). */
   ride: { id: string; status: string; pickup_address: string; dropoff_address: string } | null;
+  /** The ride summary read failed: ride is null, and the page says "No disponible". */
+  rideUnavailable: boolean;
+  /** null unless the incident reports a review and the read found it (see reviewUnavailable). */
   review: { id: string; rating: number; comment: string | null; is_visible: boolean; created_at: string } | null;
+  /** The reported review read failed: review is null, and the page says "No disponible". */
+  reviewUnavailable: boolean;
 }
 
 /** PostgREST answers 22P02 (invalid_text_representation) for an id that is not a uuid. */
@@ -421,12 +434,17 @@ export const panelReadService = {
     return data as PanelIncident[];
   },
 
+  /**
+   * An incident for marketing: no evidence or resolution notes. null when there is no such incident.
+   * The names, the ride summary and the reported review are extras the page can do without; a
+   * failed ride or review read is flagged so the page says "No disponible" instead of "no ride".
+   */
   async getIncidentDetail(id: string): Promise<PanelIncidentDetail | null> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.from('panel_incident_reports').select('*').eq('id', id).maybeSingle();
-    if (error) throw error;
-    if (!data) return null;
-    const incident = data as PanelIncident;
+    const incident = mainRow<PanelIncident>(
+      await supabase.from('panel_incident_reports').select('*').eq('id', id).maybeSingle(),
+    );
+    if (!incident) return null;
 
     const userIds = [incident.reported_by, incident.against_user_id, incident.resolved_by]
       .filter((v): v is string => Boolean(v));
@@ -438,16 +456,20 @@ export const panelReadService = {
       }
     }
     let ride: PanelIncidentDetail['ride'] = null;
+    let rideUnavailable = false;
     if (incident.ride_id) {
-      const { data: r } = await supabase.from('panel_rides')
+      const { data: r, error: rideError } = await supabase.from('panel_rides')
         .select('id, status, pickup_address, dropoff_address').eq('id', incident.ride_id).maybeSingle();
-      ride = (r as PanelIncidentDetail['ride']) ?? null;
+      rideUnavailable = rideError != null;
+      ride = rideError ? null : ((r as PanelIncidentDetail['ride']) ?? null);
     }
     let review: PanelIncidentDetail['review'] = null;
+    let reviewUnavailable = false;
     if (incident.type === 'review_abuse' && incident.review_id) {
-      const { data: rev } = await supabase.from('reviews')
+      const { data: rev, error: reviewError } = await supabase.from('reviews')
         .select('id, rating, comment, is_visible, created_at').eq('id', incident.review_id).maybeSingle();
-      review = (rev as PanelIncidentDetail['review']) ?? null;
+      reviewUnavailable = reviewError != null;
+      review = reviewError ? null : ((rev as PanelIncidentDetail['review']) ?? null);
     }
     return {
       incident,
@@ -455,8 +477,23 @@ export const panelReadService = {
       against: incident.against_user_id ? (userMap[incident.against_user_id] ?? null) : null,
       resolver: incident.resolved_by ? (userMap[incident.resolved_by] ?? null) : null,
       ride,
+      rideUnavailable,
       review,
+      reviewUnavailable,
     };
+  },
+
+  /**
+   * Lost items without the internal notes or the return arrangements (panel_lost_items, 00663).
+   * Mirrors lostItemService.getAllLostItems: marketing has no policy on lost_items itself.
+   */
+  async getLostItems(options: { status?: LostItemStatus; limit?: number } = {}): Promise<PanelLostItem[]> {
+    const { status, limit = 100 } = options;
+    let query = getSupabaseClient().from('panel_lost_items').select(PANEL_LOST_ITEM_COLUMNS);
+    if (status) query = query.eq('status', status);
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+    if (error) throw error;
+    return (data ?? []) as PanelLostItem[];
   },
 
   /** The "Fallas del producto" section of Reportes (00663). */
