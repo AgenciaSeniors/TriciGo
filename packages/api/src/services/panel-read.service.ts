@@ -236,8 +236,8 @@ function toListItem(row: PanelDriverRow): PanelDriverListItem {
 
 export interface ProductFailures {
   days: number;
-  /** requests: how many ride endpoints asked for the name. */
-  placesNotFound: { name: string; requests: number; lastSeen: string; imported: number }[];
+  /** rides: rides in the period whose pickup or dropoff named the place; riders: distinct customers among them. */
+  placesNotFound: { name: string; rides: number; riders: number; lastSeen: string; imported: number }[];
   pushOutcomes: { app: string; outcome: string; users: number }[];
   pushReach: { ridersActive: number; ridersReachable: number; driversActive: number; driversReachable: number };
   appVersions: { app: string; version: string | null; platform: string | null; installs: number }[];
@@ -257,7 +257,7 @@ export function parseProductFailures(raw: unknown): ProductFailures {
     days: num(r.days),
     placesNotFound: list(r.places_not_found)
       .filter((p) => typeof p.name === 'string')
-      .map((p) => ({ name: p.name as string, requests: num(p.requests), lastSeen: str(p.last_seen) ?? '', imported: num(p.imported) })),
+      .map((p) => ({ name: p.name as string, rides: num(p.rides), riders: num(p.riders), lastSeen: str(p.last_seen) ?? '', imported: num(p.imported) })),
     pushOutcomes: list(r.push_outcomes)
       .filter((p) => typeof p.app === 'string' && typeof p.outcome === 'string')
       .map((p) => ({ app: p.app as string, outcome: p.outcome as string, users: num(p.users) })),

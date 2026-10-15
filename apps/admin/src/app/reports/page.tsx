@@ -11,6 +11,7 @@ import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 import { Download } from 'lucide-react';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { SectionCard } from '@/components/dashboard/SectionCard';
+import { ProductFailuresSection } from '@/components/panel/ProductFailuresSection';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -704,6 +705,8 @@ export default function ReportsPage() {
               </div>
             </div>
           </section>
+
+          <ProductFailuresSection />
         </>
       )}
     </div>
