@@ -78,3 +78,128 @@ describe('panelReadService.getDrivers', () => {
     expect(rows[1]!.vehicles).toEqual([]);
   });
 });
+
+describe('panelReadService details', () => {
+  it('reads a ride, its timeline, its price and both people without the chat or delivery', async () => {
+    results.push(
+      { data: { id: 'r1', customer_id: 'c1', driver_id: 'd1' }, error: null }, // panel_rides
+      { data: [{ id: 't1' }], error: null },                                   // ride_transitions
+      { data: { ride_id: 'r1', total: 1500 }, error: null },                    // ride_pricing_snapshots
+      { data: { full_name: 'Carla', phone: '+5355' }, error: null },            // users
+      { data: { id: 'd1', full_name: 'Diego', phone: null }, error: null },     // panel_driver_profiles
+    );
+    const detail = await panelReadService.getRideDetail('r1');
+    expect(calls.map((c) => c.table)).toEqual(['panel_rides', 'ride_transitions', 'ride_pricing_snapshots', 'users', 'panel_driver_profiles']);
+    expect(detail.customerInfo).toEqual({ name: 'Carla', phone: '+5355' });
+    expect(detail.driverInfo).toEqual({ id: 'd1', name: 'Diego', phone: null });
+    expect(detail.pricing).toEqual({ ride_id: 'r1', total: 1500 });
+  });
+
+  it('does not look for a driver when the ride has none', async () => {
+    results.push(
+      { data: { id: 'r1', customer_id: 'c1', driver_id: null }, error: null },
+      { data: [], error: null },
+      { data: null, error: null },
+      { data: { full_name: 'Carla', phone: null }, error: null },
+    );
+    const detail = await panelReadService.getRideDetail('r1');
+    expect(calls.map((c) => c.table)).toEqual(['panel_rides', 'ride_transitions', 'ride_pricing_snapshots', 'users']);
+    expect(detail.driverInfo).toBeNull();
+    expect(detail.pricing).toBeNull();
+    expect(detail.transitions).toEqual([]);
+  });
+
+  it('reads a driver from the views and keeps the latest document per type', async () => {
+    results.push(
+      { data: { id: 'd1', user_id: 'u-d1', full_name: 'Diego' }, error: null }, // panel_driver_profiles
+      { data: [
+          { id: 'a', document_type: 'selfie', uploaded_at: '2026-10-02' },
+          { id: 'b', document_type: 'selfie', uploaded_at: '2026-10-01' },
+          { id: 'c', document_type: 'national_id', uploaded_at: '2026-10-01' },
+        ], error: null },                                                     // panel_driver_documents
+      { data: [{ id: 'e1' }], error: null },                                  // driver_score_events
+      { data: { driver_profile_id: 'd1', risk_level: 'high' }, error: null }, // panel_driver_churn_risk
+    );
+    const detail = await panelReadService.getDriverDetail('d1');
+    expect(calls.map((c) => c.table)).toEqual(['panel_driver_profiles', 'panel_driver_documents', 'driver_score_events', 'panel_driver_churn_risk']);
+    expect(detail.documents.map((d) => d.id)).toEqual(['a', 'c']);
+    expect(detail.churn).toEqual({ driver_profile_id: 'd1', risk_level: 'high' });
+  });
+
+  it('filters documents and churn by the profile id, and score events by the user id', async () => {
+    // driver_documents.driver_id and driver_churn_risk.driver_profile_id are the profile id;
+    // driver_score_events.driver_id references users(id) (all 12 rows in prod match a user_id and none a profile id).
+    results.push({ data: { id: 'd1', user_id: 'u-d1' }, error: null });
+    await panelReadService.getDriverDetail('d1');
+    const byTable = Object.fromEntries(calls.map((c) => [c.table, c.ops]));
+    expect(byTable['panel_driver_profiles']).toContainEqual(['eq', ['id', 'd1']]);
+    expect(byTable['panel_driver_documents']).toContainEqual(['eq', ['driver_id', 'd1']]);
+    expect(byTable['driver_score_events']).toContainEqual(['eq', ['driver_id', 'u-d1']]);
+    expect(byTable['panel_driver_churn_risk']).toContainEqual(['eq', ['driver_profile_id', 'd1']]);
+  });
+
+  it('does not read anything else when the driver profile is not found', async () => {
+    results.push({ data: null, error: new Error('no rows') });
+    await expect(panelReadService.getDriverDetail('nope')).rejects.toThrow('no rows');
+    expect(calls.map((c) => c.table)).toEqual(['panel_driver_profiles']);
+  });
+
+  it('counts a user’s rides and total spent from panel_rides', async () => {
+    results.push(
+      { data: { id: 'u1', full_name: 'Carla' }, error: null },
+      { data: [
+          { status: 'completed', final_fare_cup: 1500 },
+          { status: 'completed', final_fare_cup: null },
+          { status: 'canceled', final_fare_cup: null },
+          { status: 'searching', final_fare_cup: null },
+        ], error: null },
+    );
+    const detail = await panelReadService.getUserDetail('u1');
+    expect(calls.map((c) => c.table)).toEqual(['users', 'panel_rides']);
+    expect(detail).toMatchObject({ ridesAsCustomer: 4, completedAsCustomer: 2, canceledAsCustomer: 1, totalSpentCup: 1500 });
+  });
+
+  it('reads disputes and incidents from their views', async () => {
+    results.push({ data: [{ id: 'x' }], error: null }, { data: [{ id: 'y' }], error: null });
+    await panelReadService.getDisputes({ status: 'open', limit: 10 });
+    await panelReadService.getIncidents('open', 0, 20);
+    expect(calls.map((c) => c.table)).toEqual(['panel_ride_disputes', 'panel_incident_reports']);
+    expect(calls[0]!.ops).toContainEqual(['eq', ['status', 'open']]);
+    expect(calls[0]!.ops).toContainEqual(['limit', [10]]);
+  });
+
+  it('does not filter by status for "all" and pages incidents', async () => {
+    await panelReadService.getIncidents('all', 2, 20);
+    await panelReadService.getDisputes();
+    expect(calls[0]!.ops).toContainEqual(['range', [40, 59]]);
+    expect(calls[0]!.ops.some(([op]) => op === 'eq')).toBe(false);
+    expect(calls[1]!.ops.some(([op]) => op === 'eq')).toBe(false);
+    expect(calls[1]!.ops).toContainEqual(['limit', [50]]);
+  });
+
+  it('reads an incident with names, a ride summary from panel_rides and the reported review', async () => {
+    results.push(
+      { data: { id: 'i1', reported_by: 'u1', against_user_id: 'u2', resolved_by: null, ride_id: 'r1', type: 'review_abuse', review_id: 'v1' }, error: null },
+      { data: [{ id: 'u1', full_name: 'Carla', phone: '1' }, { id: 'u2', full_name: 'Diego', phone: '2' }], error: null },
+      { data: { id: 'r1', status: 'completed', pickup_address: 'A', dropoff_address: 'B' }, error: null },
+      { data: { id: 'v1', rating: 1, comment: 'x', is_visible: true, created_at: 't' }, error: null },
+    );
+    const detail = await panelReadService.getIncidentDetail('i1');
+    expect(calls.map((c) => c.table)).toEqual(['panel_incident_reports', 'users', 'panel_rides', 'reviews']);
+    expect(detail?.reporter).toEqual({ name: 'Carla', phone: '1' });
+    expect(detail?.ride?.pickup_address).toBe('A');
+  });
+
+  it('skips the review for other incident types and answers null for an unknown incident', async () => {
+    results.push(
+      { data: { id: 'i2', reported_by: 'u1', against_user_id: null, resolved_by: null, ride_id: null, type: 'sos', review_id: null }, error: null },
+      { data: [{ id: 'u1', full_name: 'Carla', phone: '1' }], error: null },
+      { data: null, error: null },
+    );
+    const sos = await panelReadService.getIncidentDetail('i2');
+    expect(calls.map((c) => c.table)).toEqual(['panel_incident_reports', 'users']);
+    expect(sos).toMatchObject({ against: null, resolver: null, ride: null, review: null });
+    expect(await panelReadService.getIncidentDetail('missing')).toBeNull();
+    expect(calls.map((c) => c.table)).toEqual(['panel_incident_reports', 'users', 'panel_incident_reports']);
+  });
+});

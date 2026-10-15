@@ -136,6 +136,62 @@ export interface PanelDriverFilters {
   cityId?: string;
 }
 
+export interface PanelRideDetail {
+  ride: PanelRide;
+  transitions: RideTransition[];
+  pricing: RidePricingSnapshot | null;
+  customerInfo: { name: string; phone: string | null } | null;
+  driverInfo: { id: string; name: string; phone: string | null } | null;
+}
+
+export interface PanelDriverDocument {
+  id: string;
+  driver_id: string;
+  document_type: string;
+  uploaded_at: string | null;
+  is_verified: boolean;
+  verified_at: string | null;
+  rejection_reason: string | null;
+}
+
+export interface PanelChurnRisk {
+  driver_profile_id: string;
+  days_since_last_ride: number | null;
+  churn_risk_score: number | null;
+  risk_level: string | null;
+}
+
+export interface PanelDriverDetail {
+  profile: PanelDriverRow;
+  documents: PanelDriverDocument[];
+  scoreEvents: DriverScoreEvent[];
+  churn: PanelChurnRisk | null;
+}
+
+export interface PanelUserDetail {
+  user: User;
+  ridesAsCustomer: number;
+  completedAsCustomer: number;
+  canceledAsCustomer: number;
+  totalSpentCup: number;
+}
+
+/** A type with some fields that a panel view leaves out. */
+type WithHidden<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+export type PanelDispute = WithHidden<RideDispute,
+  'evidence_urls' | 'respondent_evidence_urls' | 'refund_amount_trc' | 'refund_transaction_id'
+  | 'admin_notes' | 'ride_estimated_fare_trc' | 'ride_final_fare_trc'>;
+export type PanelIncident = WithHidden<IncidentReport, 'evidence_urls' | 'resolution_notes'>;
+
+export interface PanelIncidentDetail {
+  incident: PanelIncident;
+  reporter: { name: string; phone: string } | null;
+  against: { name: string; phone: string } | null;
+  resolver: { name: string; phone: string } | null;
+  ride: { id: string; status: string; pickup_address: string; dropoff_address: string } | null;
+  review: { id: string; rating: number; comment: string | null; is_visible: boolean; created_at: string } | null;
+}
+
 function toListItem(row: PanelDriverRow): PanelDriverListItem {
   return {
     ...row,
@@ -202,5 +258,142 @@ export const panelReadService = {
     const { data, error } = await query;
     if (error) throw error;
     return (data as PanelDriverRow[]).map(toListItem);
+  },
+
+  /** A ride for marketing: no chat, no delivery code or photos, no coordinates. */
+  async getRideDetail(rideId: string): Promise<PanelRideDetail> {
+    const supabase = getSupabaseClient();
+    const [rideRes, transitionsRes, pricingRes] = await Promise.all([
+      supabase.from('panel_rides').select('*').eq('id', rideId).single(),
+      supabase.from('ride_transitions').select('*').eq('ride_id', rideId).order('created_at', { ascending: true }),
+      supabase.from('ride_pricing_snapshots').select('*').eq('ride_id', rideId)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (rideRes.error) throw rideRes.error;
+    const ride = rideRes.data as PanelRide;
+
+    const [custRes, driverRes] = await Promise.all([
+      supabase.from('users').select('full_name, phone').eq('id', ride.customer_id).maybeSingle(),
+      ride.driver_id
+        ? supabase.from('panel_driver_profiles').select('id, full_name, phone').eq('id', ride.driver_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+    const cust = custRes.data as { full_name: string; phone: string | null } | null;
+    const drv = driverRes.data as { id: string; full_name: string; phone: string | null } | null;
+    return {
+      ride,
+      transitions: (transitionsRes.data as RideTransition[]) ?? [],
+      pricing: (pricingRes.data as RidePricingSnapshot) ?? null,
+      customerInfo: cust ? { name: cust.full_name, phone: cust.phone } : null,
+      driverInfo: drv ? { id: drv.id, name: drv.full_name, phone: drv.phone } : null,
+    };
+  },
+
+  /** A driver for marketing: no wallet, files, selfies, contract, identity or earnings. */
+  async getDriverDetail(driverId: string): Promise<PanelDriverDetail> {
+    const supabase = getSupabaseClient();
+    const profileRes = await supabase.from('panel_driver_profiles').select('*').eq('id', driverId).single();
+    if (profileRes.error) throw profileRes.error;
+    const profile = profileRes.data as PanelDriverRow;
+
+    const [docsRes, eventsRes, churnRes] = await Promise.all([
+      supabase.from('panel_driver_documents').select('*').eq('driver_id', driverId)
+        .order('uploaded_at', { ascending: false }).limit(100),
+      // driver_score_events.driver_id references users(id): it is the profile's user_id, not its id.
+      supabase.from('driver_score_events').select('*').eq('driver_id', profile.user_id)
+        .order('created_at', { ascending: false }).limit(20),
+      supabase.from('panel_driver_churn_risk').select('*').eq('driver_profile_id', driverId).maybeSingle(),
+    ]);
+    // The most recent document per type, as the admin page shows (re-uploads leave old rows).
+    const latest = new Map<string, PanelDriverDocument>();
+    for (const doc of (docsRes.data as PanelDriverDocument[]) ?? []) {
+      if (!latest.has(doc.document_type)) latest.set(doc.document_type, doc);
+    }
+    return {
+      profile,
+      documents: Array.from(latest.values()),
+      scoreEvents: (eventsRes.data as DriverScoreEvent[]) ?? [],
+      churn: (churnRes.data as PanelChurnRisk) ?? null,
+    };
+  },
+
+  /** A user for marketing: no wallet, transfers or penalties. */
+  async getUserDetail(userId: string): Promise<PanelUserDetail> {
+    const supabase = getSupabaseClient();
+    const [userRes, ridesRes] = await Promise.all([
+      supabase.from('users').select('*').eq('id', userId).single(),
+      supabase.from('panel_rides').select('status, final_fare_cup').eq('customer_id', userId).limit(10000),
+    ]);
+    if (userRes.error) throw userRes.error;
+    const rides = (ridesRes.data ?? []) as Array<{ status: RideStatus; final_fare_cup: number | null }>;
+    const completed = rides.filter((r) => r.status === 'completed');
+    return {
+      user: userRes.data as User,
+      ridesAsCustomer: rides.length,
+      completedAsCustomer: completed.length,
+      canceledAsCustomer: rides.filter((r) => r.status === 'canceled').length,
+      totalSpentCup: completed.reduce((sum, r) => sum + (r.final_fare_cup ?? 0), 0),
+    };
+  },
+
+  /** Disputes without evidence, refunds or admin notes. */
+  async getDisputes(params?: { status?: string; limit?: number }): Promise<PanelDispute[]> {
+    const supabase = getSupabaseClient();
+    let query = supabase.from('panel_ride_disputes').select('*')
+      .order('created_at', { ascending: false }).limit(params?.limit ?? 50);
+    if (params?.status) query = query.eq('status', params.status);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data as PanelDispute[];
+  },
+
+  /** Incident reports without evidence or resolution notes. */
+  async getIncidents(status?: string, page = 0, pageSize = 20): Promise<PanelIncident[]> {
+    const supabase = getSupabaseClient();
+    const from = page * pageSize;
+    let query = supabase.from('panel_incident_reports').select('*')
+      .order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+    if (status && status !== 'all') query = query.eq('status', status);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data as PanelIncident[];
+  },
+
+  async getIncidentDetail(id: string): Promise<PanelIncidentDetail | null> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.from('panel_incident_reports').select('*').eq('id', id).maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const incident = data as PanelIncident;
+
+    const userIds = [incident.reported_by, incident.against_user_id, incident.resolved_by]
+      .filter((v): v is string => Boolean(v));
+    const userMap: Record<string, { name: string; phone: string }> = {};
+    if (userIds.length > 0) {
+      const { data: users } = await supabase.from('users').select('id, full_name, phone').in('id', userIds);
+      for (const u of (users ?? []) as { id: string; full_name: string; phone: string }[]) {
+        userMap[u.id] = { name: u.full_name, phone: u.phone };
+      }
+    }
+    let ride: PanelIncidentDetail['ride'] = null;
+    if (incident.ride_id) {
+      const { data: r } = await supabase.from('panel_rides')
+        .select('id, status, pickup_address, dropoff_address').eq('id', incident.ride_id).maybeSingle();
+      ride = (r as PanelIncidentDetail['ride']) ?? null;
+    }
+    let review: PanelIncidentDetail['review'] = null;
+    if (incident.type === 'review_abuse' && incident.review_id) {
+      const { data: rev } = await supabase.from('reviews')
+        .select('id, rating, comment, is_visible, created_at').eq('id', incident.review_id).maybeSingle();
+      review = (rev as PanelIncidentDetail['review']) ?? null;
+    }
+    return {
+      incident,
+      reporter: userMap[incident.reported_by] ?? null,
+      against: incident.against_user_id ? (userMap[incident.against_user_id] ?? null) : null,
+      resolver: incident.resolved_by ? (userMap[incident.resolved_by] ?? null) : null,
+      ride,
+      review,
+    };
   },
 };

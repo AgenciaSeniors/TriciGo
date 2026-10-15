@@ -123,6 +123,14 @@ export {
   type PanelDriverListItem,
   type PanelRideFilters,
   type PanelDriverFilters,
+  type PanelRideDetail,
+  type PanelDriverDocument,
+  type PanelChurnRisk,
+  type PanelDriverDetail,
+  type PanelUserDetail,
+  type PanelDispute,
+  type PanelIncident,
+  type PanelIncidentDetail,
 } from './services/panel-read.service';
 export {
   marketingStatsService,
