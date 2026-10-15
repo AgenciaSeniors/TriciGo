@@ -246,6 +246,11 @@ export interface ProductFailures {
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+/** A timestamp the page can format: '' when it is missing or not a date, so the UI shows its dash. */
+const timestamp = (v: unknown): string => {
+  const s = str(v);
+  return s !== null && !Number.isNaN(Date.parse(s)) ? s : '';
+};
 const list = (v: unknown): Record<string, unknown>[] =>
   Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null) : [];
 
@@ -257,7 +262,7 @@ export function parseProductFailures(raw: unknown): ProductFailures {
     days: num(r.days),
     placesNotFound: list(r.places_not_found)
       .filter((p) => typeof p.name === 'string')
-      .map((p) => ({ name: p.name as string, rides: num(p.rides), riders: num(p.riders), lastSeen: str(p.last_seen) ?? '', imported: num(p.imported) })),
+      .map((p) => ({ name: p.name as string, rides: num(p.rides), riders: num(p.riders), lastSeen: timestamp(p.last_seen), imported: num(p.imported) })),
     pushOutcomes: list(r.push_outcomes)
       .filter((p) => typeof p.app === 'string' && typeof p.outcome === 'string')
       .map((p) => ({ app: p.app as string, outcome: p.outcome as string, users: num(p.users) })),
@@ -272,7 +277,7 @@ export function parseProductFailures(raw: unknown): ProductFailures {
       .map((p) => ({ app: p.app as string, version: str(p.version), platform: str(p.platform), installs: num(p.installs) })),
     failedPayments: list(r.failed_payments)
       .filter((p) => typeof p.reason === 'string')
-      .map((p) => ({ reason: p.reason as string, payments: num(p.payments), lastSeen: str(p.last_seen) ?? '' })),
+      .map((p) => ({ reason: p.reason as string, payments: num(p.payments), lastSeen: timestamp(p.last_seen) })),
   };
 }
 

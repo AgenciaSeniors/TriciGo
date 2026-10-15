@@ -367,7 +367,9 @@ export default function ReviewsPage() {
             {t('reviews.title', { defaultValue: 'Reseñas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('reviews.page_description', { defaultValue: 'Opiniones de pasajeros y conductores. Modera lo que se muestra y destaca lo mejor.' })}
+            {canAct
+              ? t('reviews.page_description', { defaultValue: 'Opiniones de pasajeros y conductores. Modera lo que se muestra y destaca lo mejor.' })
+              : t('panel_view.reviews_page_body', { defaultValue: 'Lo que la gente dice de sus viajes: calificaciones, comentarios y etiquetas.' })}
           </p>
         </div>
       </div>

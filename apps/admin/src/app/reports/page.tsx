@@ -705,10 +705,12 @@ export default function ReportsPage() {
               </div>
             </div>
           </section>
-
-          <ProductFailuresSection />
         </>
       )}
+
+      {/* Outside the `loading` fragment: it has its own period and loading state, and must stay
+          mounted when this page's 7d/30d/90d selector reloads the numbers above. */}
+      <ProductFailuresSection />
     </div>
   );
 }

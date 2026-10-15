@@ -15,6 +15,9 @@ import { StatusBadge } from '@/components/data/StatusBadge';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
 
+/** Postgres "invalid input syntax for type uuid", as PostgREST reports it. */
+const INVALID_UUID_CODE = '22P02';
+
 type Severity = 'critical' | 'high' | 'medium' | 'low';
 
 const SEVERITY_CLASS: Record<Severity, string> = {
@@ -92,8 +95,14 @@ export default function IncidentDetailPage() {
         setDetail(data as unknown as IncidentDetail);
       }
     } catch (err) {
-      // A failed read is not a missing incident: say so, and let the user retry.
-      setLoadError(getErrorMessage(err));
+      if ((err as { code?: unknown } | null)?.code === INVALID_UUID_CODE) {
+        // The admin read passes the id straight to a uuid column, so a malformed id
+        // (/incidents/abc) is a PostgREST 22P02. No such incident, not a failed read.
+        setMissing(true);
+      } else {
+        // A failed read is not a missing incident: say so, and let the user retry.
+        setLoadError(getErrorMessage(err));
+      }
       setDetail(null);
     } finally {
       setLoading(false);

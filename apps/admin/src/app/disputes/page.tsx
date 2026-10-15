@@ -334,7 +334,11 @@ export default function DisputesPage() {
             {t('disputes.title', { defaultValue: 'Disputas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('disputes.page_description', { defaultValue: 'Reclamos de pasajeros y conductores. Escucha ambas versiones antes de decidir.' })}
+            {!ready
+              ? ''
+              : canAct
+                ? t('disputes.page_description', { defaultValue: 'Reclamos de pasajeros y conductores. Escucha ambas versiones antes de decidir.' })
+                : t('panel_view.disputes_page_body', { defaultValue: 'Reclamos de pasajeros y conductores, con su estado y la respuesta de la otra parte.' })}
           </p>
         </div>
       </div>

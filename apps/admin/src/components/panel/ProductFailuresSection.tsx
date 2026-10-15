@@ -11,6 +11,15 @@ import { formatAdminDate } from '@/lib/formatDate';
 
 const PERIODS = [7, 30, 90] as const;
 
+/** Spanish text for each push registration outcome (migration 00585); an unknown one shows as it came. */
+const PUSH_OUTCOME_LABELS = new Map<string, string>([
+  ['registered', 'Registrado'],
+  ['never_asked', 'Nunca se le preguntó'],
+  ['denied', 'Rechazó el permiso'],
+  ['blocked', 'Bloqueado en ajustes'],
+  ['error', 'Error al registrar'],
+]);
+
 /** PostgREST answers PGRST202 while migration 00663 (get_product_failures) is not in the database. */
 const FUNCTION_NOT_FOUND = 'PGRST202';
 
@@ -62,7 +71,7 @@ export function ProductFailuresSection() {
       : t('product_failures.app_client', { defaultValue: 'Pasajero' });
 
   return (
-    <section className="mb-6">
+    <section>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-ink">{t('product_failures.title', { defaultValue: 'Fallas del producto' })}</h2>
         <div className="flex gap-1" role="group" aria-label={t('product_failures.period', { defaultValue: 'Período' })}>
@@ -91,9 +100,9 @@ export function ProductFailuresSection() {
             description={t('product_failures.places_hint', { defaultValue: 'Lo que escribieron como origen o destino de un viaje y la app no tenía.' })}
           >
             {data.placesNotFound.length === 0 ? empty(t('product_failures.places_empty', { defaultValue: 'Nadie buscó un lugar que no exista en este período.' })) : (
-              <ul className="flex flex-col gap-1.5 px-5 pb-5">
-                {data.placesNotFound.map((p) => (
-                  <li key={p.name} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 text-[13px]">
+              <ul className="flex max-h-96 flex-col gap-1.5 overflow-y-auto px-5 pb-5">
+                {data.placesNotFound.map((p, i) => (
+                  <li key={`${p.name}-${i}`} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 text-[13px]">
                     <span className="min-w-0 break-words text-ink">{p.name}</span>
                     <span className="text-ink-muted">
                       {t('product_failures.rides', {
@@ -137,11 +146,11 @@ export function ProductFailuresSection() {
             </dl>
             {data.pushOutcomes.length > 0 && (
               <ul className="flex flex-col gap-1 px-5 pb-5 text-[12.5px] text-ink-muted">
-                {data.pushOutcomes.map((o) => (
-                  <li key={`${o.app}-${o.outcome}`}>
+                {data.pushOutcomes.map((o, i) => (
+                  <li key={`${o.app}-${o.outcome}-${i}`}>
                     {appName(o.app)}
                     {' · '}
-                    {t(`product_failures.outcome_${o.outcome}`, { defaultValue: o.outcome })}: {o.users}
+                    {t(`product_failures.outcome_${o.outcome}`, { defaultValue: PUSH_OUTCOME_LABELS.get(o.outcome) ?? o.outcome })}: {o.users}
                   </li>
                 ))}
               </ul>
@@ -151,8 +160,8 @@ export function ProductFailuresSection() {
           <SectionCard bleed title={t('product_failures.versions_title', { defaultValue: 'Versiones de la app en uso' })}>
             {data.appVersions.length === 0 ? empty(t('product_failures.versions_empty', { defaultValue: 'Se llena cuando salga la versión de la app que reporta aperturas.' })) : (
               <ul className="flex flex-col gap-1.5 px-5 pb-5">
-                {data.appVersions.map((v) => (
-                  <li key={`${v.app}-${v.version}-${v.platform}`} className="flex justify-between gap-3 text-[13px]">
+                {data.appVersions.map((v, i) => (
+                  <li key={`${v.app}-${v.version}-${v.platform}-${i}`} className="flex justify-between gap-3 text-[13px]">
                     <span className="text-ink">
                       {appName(v.app)} {v.version ?? '—'} · {v.platform ?? '—'}
                     </span>
@@ -173,8 +182,8 @@ export function ProductFailuresSection() {
           <SectionCard bleed title={t('product_failures.payments_title', { defaultValue: 'Pagos que fallaron' })}>
             {data.failedPayments.length === 0 ? empty(t('product_failures.payments_empty', { defaultValue: 'No falló ningún pago en este período.' })) : (
               <ul className="flex flex-col gap-1.5 px-5 pb-5">
-                {data.failedPayments.map((p) => (
-                  <li key={p.reason} className="flex justify-between gap-3 text-[13px]">
+                {data.failedPayments.map((p, i) => (
+                  <li key={`${p.reason}-${i}`} className="flex justify-between gap-3 text-[13px]">
                     <span className="min-w-0 break-words text-ink">{p.reason}</span>
                     <span className="shrink-0 text-ink-muted">
                       {t('product_failures.payments_count', {

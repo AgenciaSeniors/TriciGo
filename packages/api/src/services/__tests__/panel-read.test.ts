@@ -428,24 +428,57 @@ describe('product failures', () => {
   it('parses the RPC answer and drops malformed entries', () => {
     expect(parseProductFailures({
       days: 30,
-      places_not_found: [{ name: 'Paladar X', rides: 3, riders: 2, last_seen: 't', imported: 0 }, { name: 5 }],
+      places_not_found: [{ name: 'Paladar X', rides: 3, riders: 2, last_seen: '2026-10-01T12:00:00Z', imported: 0 }, { name: 5 }],
       push_outcomes: [{ app: 'client', outcome: 'denied', users: 3 }],
       push_reach: { riders_active: 10, riders_reachable: 4, drivers_active: 5, drivers_reachable: 5 },
       app_versions: [{ app: 'client', version: '1.7.3', platform: 'android', installs: 2 }],
-      failed_payments: [{ reason: 'Invalid card number', payments: 4, last_seen: 't' }],
+      failed_payments: [{ reason: 'Invalid card number', payments: 4, last_seen: '2026-10-02T08:30:00Z' }],
     })).toEqual({
       days: 30,
-      placesNotFound: [{ name: 'Paladar X', rides: 3, riders: 2, lastSeen: 't', imported: 0 }],
+      placesNotFound: [{ name: 'Paladar X', rides: 3, riders: 2, lastSeen: '2026-10-01T12:00:00Z', imported: 0 }],
       pushOutcomes: [{ app: 'client', outcome: 'denied', users: 3 }],
       pushReach: { ridersActive: 10, ridersReachable: 4, driversActive: 5, driversReachable: 5 },
       appVersions: [{ app: 'client', version: '1.7.3', platform: 'android', installs: 2 }],
-      failedPayments: [{ reason: 'Invalid card number', payments: 4, lastSeen: 't' }],
+      failedPayments: [{ reason: 'Invalid card number', payments: 4, lastSeen: '2026-10-02T08:30:00Z' }],
     });
   });
 
   it('parses a place with missing counts as zero', () => {
-    expect(parseProductFailures({ places_not_found: [{ name: 'Paladar Y', last_seen: 't' }] }).placesNotFound)
-      .toEqual([{ name: 'Paladar Y', rides: 0, riders: 0, lastSeen: 't', imported: 0 }]);
+    expect(parseProductFailures({ places_not_found: [{ name: 'Paladar Y', last_seen: '2026-10-01T12:00:00Z' }] }).placesNotFound)
+      .toEqual([{ name: 'Paladar Y', rides: 0, riders: 0, lastSeen: '2026-10-01T12:00:00Z', imported: 0 }]);
+  });
+
+  it('reads wrongly typed fields as zeros, empty text and empty lists', () => {
+    // Counts that are strings, NaN or null are 0; a last_seen that is not a date is '' (the page
+    // draws a dash for it, never "Invalid Date"); a missing last_seen is '' too.
+    const parsed = parseProductFailures({
+      days: '30',
+      places_not_found: [{ name: 'Paladar Z', rides: '3', riders: NaN, last_seen: 'not a date', imported: null }],
+      push_outcomes: [{ app: 'driver', outcome: 'error', users: '7' }],
+      push_reach: { riders_active: '10', riders_reachable: NaN, drivers_active: null },
+      app_versions: [{ app: 'client', version: 3, platform: null, installs: '2' }],
+      failed_payments: [{ reason: 'Declined', payments: null, last_seen: 'tomorrow-ish' }],
+    });
+    expect(parsed.days).toBe(0);
+    expect(parsed.placesNotFound).toEqual([{ name: 'Paladar Z', rides: 0, riders: 0, lastSeen: '', imported: 0 }]);
+    expect(parsed.pushOutcomes).toEqual([{ app: 'driver', outcome: 'error', users: 0 }]);
+    expect(parsed.pushReach).toEqual({ ridersActive: 0, ridersReachable: 0, driversActive: 0, driversReachable: 0 });
+    expect(parsed.appVersions).toEqual([{ app: 'client', version: null, platform: null, installs: 0 }]);
+    expect(parsed.failedPayments).toEqual([{ reason: 'Declined', payments: 0, lastSeen: '' }]);
+
+    // A push_reach that is not an object and lists that are not arrays read as zeros and empty lists.
+    expect(parseProductFailures({
+      days: 7,
+      places_not_found: 'nope',
+      push_outcomes: { app: 'client' },
+      push_reach: 'nope',
+      app_versions: 5,
+      failed_payments: null,
+    })).toEqual({
+      days: 7, placesNotFound: [], pushOutcomes: [],
+      pushReach: { ridersActive: 0, ridersReachable: 0, driversActive: 0, driversReachable: 0 },
+      appVersions: [], failedPayments: [],
+    });
   });
 
   it('returns empty blocks for an answer it cannot read', () => {

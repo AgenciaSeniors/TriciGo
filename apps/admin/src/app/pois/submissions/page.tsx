@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { MapPin, Check, X, ExternalLink, Filter } from 'lucide-react';
 import { getSupabaseClient } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
 import { useCanAct } from '@/lib/useCanAct';
 
@@ -40,6 +41,7 @@ interface Submission {
 type StatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 
 export default function PoisSubmissionsPage() {
+  const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { canAct } = useCanAct();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -215,7 +217,7 @@ export default function PoisSubmissionsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {s.status === 'pending' ? (
-                      canAct && (
+                      canAct ? (
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => handleApprove(s.id)}
@@ -234,6 +236,10 @@ export default function PoisSubmissionsPage() {
                             Rechazar
                           </button>
                         </div>
+                      ) : (
+                        <span className="text-xs text-neutral-500">
+                          {t('panel_view.submission_pending', { defaultValue: 'Pendiente' })}
+                        </span>
                       )
                     ) : s.status === 'approved' ? (
                       <span className="text-xs text-green-700 dark:text-green-400">
