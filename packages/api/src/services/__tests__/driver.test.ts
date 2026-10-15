@@ -237,6 +237,7 @@ describe('driverService', () => {
 
       expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
         body: expect.any(FormData),
+        signal: expect.any(AbortSignal),
       });
       expect(uploadedPath()).toBe('driver-docs/d-1/license/1760000000000-license.jpg');
       // A retry after a timed-out attempt that did land rewrites this same,
@@ -312,6 +313,7 @@ describe('driverService', () => {
 
       expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
         body: expect.any(FormData),
+        signal: expect.any(AbortSignal),
       });
       expect(mockFrom).toHaveBeenCalledWith('selfie_checks');
       expect(result).toEqual(mockCheck);
