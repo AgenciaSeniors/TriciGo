@@ -18,9 +18,8 @@ import type {
   User,
   VehicleType,
 } from '@tricigo/types';
-import { havanaDayRangeUtc } from '@tricigo/utils';
 import { getSupabaseClient } from '../client';
-import { escapeLikePattern, rideCodePrefix } from './_search';
+import { applyRideListFilters, escapeLikePattern, type RideListFilters } from './_search';
 
 /** Who canceled a ride: unknown is a canceler who is none of the others (00663). */
 export type CanceledByRole = 'customer' | 'driver' | 'staff' | 'system' | 'unknown';
@@ -85,7 +84,7 @@ export interface PanelDriverRow {
   total_rides_completed: number;
   total_rides: number;
   status: DriverStatus;
-  rating_avg: number | null;
+  rating_avg: number;
   acceptance_rate: number | null;
   total_rides_offered: number | null;
   city_id: string | null;
@@ -118,16 +117,8 @@ export interface PanelDriverListItem extends PanelDriverRow {
   vehicles: { type: VehicleType; plate_number: string }[];
 }
 
-export interface PanelRideFilters {
-  status?: string;
-  serviceType?: string;
-  paymentMethod?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  search?: string;
-  cityId?: string;
-  rideMode?: 'passenger' | 'cargo';
-}
+/** The rides-list filters, the same as the admin list's. */
+export type PanelRideFilters = RideListFilters;
 
 export interface PanelDriverFilters {
   status?: string;
@@ -140,8 +131,13 @@ export interface PanelDriverFilters {
 export interface PanelRideDetail {
   ride: PanelRide;
   transitions: RideTransition[];
+  /** The latest snapshot (final when there is one, else the estimate); null when there is none. */
   pricing: RidePricingSnapshot | null;
+  /** The snapshot read failed: pricing is null, and the page says "No disponible". */
+  pricingUnavailable: boolean;
+  /** null when the lookup found nobody or failed: the page shows '—'. */
   customerInfo: { name: string; phone: string | null } | null;
+  /** null when the ride has no driver, or when the lookup found nobody or failed. */
   driverInfo: { id: string; name: string; phone: string | null } | null;
 }
 
@@ -149,14 +145,18 @@ export interface PanelDriverDocument {
   id: string;
   driver_id: string;
   document_type: string;
-  uploaded_at: string | null;
+  uploaded_at: string;
   is_verified: boolean;
   verified_at: string | null;
   rejection_reason: string | null;
 }
 
+/** A driver who never completed a ride has this many days_since_last_ride (COALESCE in the view). */
+export const CHURN_NEVER_RODE_DAYS = 999;
+
 export interface PanelChurnRisk {
   driver_profile_id: string;
+  /** CHURN_NEVER_RODE_DAYS when the driver never completed a ride. */
   days_since_last_ride: number | null;
   churn_risk_score: number | null;
   risk_level: string | null;
@@ -166,7 +166,10 @@ export interface PanelDriverDetail {
   profile: PanelDriverRow;
   documents: PanelDriverDocument[];
   scoreEvents: DriverScoreEvent[];
+  /** null when the driver has no churn row, or when the read failed (see churnUnavailable). */
   churn: PanelChurnRisk | null;
+  /** The churn read failed: the page says "No disponible". */
+  churnUnavailable: boolean;
 }
 
 export interface PanelUserDetail {
@@ -191,6 +194,21 @@ export interface PanelIncidentDetail {
   resolver: { name: string; phone: string } | null;
   ride: { id: string; status: string; pickup_address: string; dropoff_address: string } | null;
   review: { id: string; rating: number; comment: string | null; is_visible: boolean; created_at: string } | null;
+}
+
+/** PostgREST answers 22P02 (invalid_text_representation) for an id that is not a uuid. */
+const INVALID_TEXT_REPRESENTATION = '22P02';
+
+/**
+ * The main row of a detail page, read with maybeSingle(): null when there is no row or the id is
+ * not a uuid (the page then says it was not found); any other error is thrown.
+ */
+function mainRow<T>(res: { data: unknown; error: { code?: string } | null }): T | null {
+  if (res.error) {
+    if (res.error.code === INVALID_TEXT_REPRESENTATION) return null;
+    throw res.error;
+  }
+  return (res.data as T | null) ?? null;
 }
 
 function toListItem(row: PanelDriverRow): PanelDriverListItem {
@@ -250,32 +268,14 @@ export const panelReadService = {
   async getRides(filters: PanelRideFilters = {}, page = 0, pageSize = 20): Promise<PanelRide[]> {
     const supabase = getSupabaseClient();
     const from = page * pageSize;
-    let query = supabase
-      .from('panel_rides')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .range(from, from + pageSize - 1);
-
-    if (filters.status) query = query.eq('status', filters.status);
-    if (filters.serviceType) query = query.eq('service_type', filters.serviceType);
-    if (filters.rideMode) query = query.eq('ride_mode', filters.rideMode);
-    if (filters.paymentMethod) query = query.eq('payment_method', filters.paymentMethod);
-    // Date inputs are Havana calendar days ('YYYY-MM-DD').
-    if (filters.dateFrom) query = query.gte('created_at', havanaDayRangeUtc(filters.dateFrom).start.toISOString());
-    if (filters.dateTo) query = query.lt('created_at', havanaDayRangeUtc(filters.dateTo).end.toISOString());
-    if (filters.search) {
-      const code = rideCodePrefix(filters.search);
-      if (code) {
-        // uuid order is byte order, so every id with this prefix lies in this range.
-        query = query
-          .gte('id', `${code}-0000-0000-0000-000000000000`)
-          .lte('id', `${code}-ffff-ffff-ffff-ffffffffffff`);
-      } else {
-        const escaped = escapeLikePattern(filters.search);
-        query = query.or(`pickup_address.ilike.%${escaped}%,dropoff_address.ilike.%${escaped}%`);
-      }
-    }
-    if (filters.cityId) query = query.eq('city_id', filters.cityId);
+    const query = applyRideListFilters(
+      supabase
+        .from('panel_rides')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, from + pageSize - 1),
+      filters,
+    );
 
     const { data, error } = await query;
     if (error) throw error;
@@ -303,17 +303,22 @@ export const panelReadService = {
     return (data as PanelDriverRow[]).map(toListItem);
   },
 
-  /** A ride for marketing: no chat, no delivery code or photos, no coordinates. */
-  async getRideDetail(rideId: string): Promise<PanelRideDetail> {
+  /**
+   * A ride for marketing: no chat, no delivery code or photos, no coordinates. null when there is no
+   * such ride. The timeline must load (an empty one would claim the ride never moved); the price
+   * snapshot and the two people are extras the page can do without.
+   */
+  async getRideDetail(rideId: string): Promise<PanelRideDetail | null> {
     const supabase = getSupabaseClient();
     const [rideRes, transitionsRes, pricingRes] = await Promise.all([
-      supabase.from('panel_rides').select('*').eq('id', rideId).single(),
+      supabase.from('panel_rides').select('*').eq('id', rideId).maybeSingle(),
       supabase.from('ride_transitions').select('*').eq('ride_id', rideId).order('created_at', { ascending: true }),
       supabase.from('ride_pricing_snapshots').select('*').eq('ride_id', rideId)
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
-    if (rideRes.error) throw rideRes.error;
-    const ride = rideRes.data as PanelRide;
+    const ride = mainRow<PanelRide>(rideRes);
+    if (!ride) return null;
+    if (transitionsRes.error) throw transitionsRes.error;
 
     const [custRes, driverRes] = await Promise.all([
       supabase.from('users').select('full_name, phone').eq('id', ride.customer_id).maybeSingle(),
@@ -326,18 +331,24 @@ export const panelReadService = {
     return {
       ride,
       transitions: (transitionsRes.data as RideTransition[]) ?? [],
-      pricing: (pricingRes.data as RidePricingSnapshot) ?? null,
+      pricing: pricingRes.error ? null : ((pricingRes.data as RidePricingSnapshot | null) ?? null),
+      pricingUnavailable: pricingRes.error != null,
       customerInfo: cust ? { name: cust.full_name, phone: cust.phone } : null,
       driverInfo: drv ? { id: drv.id, name: drv.full_name, phone: drv.phone } : null,
     };
   },
 
-  /** A driver for marketing: no wallet, files, selfies, contract, identity or earnings. */
-  async getDriverDetail(driverId: string): Promise<PanelDriverDetail> {
+  /**
+   * A driver for marketing: no wallet, files, selfies, contract, identity or earnings. null when
+   * there is no such driver. Documents and score events must load (an empty list would claim the
+   * driver has none); churn risk is an extra the page can do without.
+   */
+  async getDriverDetail(driverId: string): Promise<PanelDriverDetail | null> {
     const supabase = getSupabaseClient();
-    const profileRes = await supabase.from('panel_driver_profiles').select('*').eq('id', driverId).single();
-    if (profileRes.error) throw profileRes.error;
-    const profile = profileRes.data as PanelDriverRow;
+    const profile = mainRow<PanelDriverRow>(
+      await supabase.from('panel_driver_profiles').select('*').eq('id', driverId).maybeSingle(),
+    );
+    if (!profile) return null;
 
     const [docsRes, eventsRes, churnRes] = await Promise.all([
       supabase.from('panel_driver_documents').select('*').eq('driver_id', driverId)
@@ -347,6 +358,8 @@ export const panelReadService = {
         .order('created_at', { ascending: false }).limit(20),
       supabase.from('panel_driver_churn_risk').select('*').eq('driver_profile_id', driverId).maybeSingle(),
     ]);
+    if (docsRes.error) throw docsRes.error;
+    if (eventsRes.error) throw eventsRes.error;
     // The most recent document per type, as the admin page shows (re-uploads leave old rows).
     const latest = new Map<string, PanelDriverDocument>();
     for (const doc of (docsRes.data as PanelDriverDocument[]) ?? []) {
@@ -356,22 +369,28 @@ export const panelReadService = {
       profile,
       documents: Array.from(latest.values()),
       scoreEvents: (eventsRes.data as DriverScoreEvent[]) ?? [],
-      churn: (churnRes.data as PanelChurnRisk) ?? null,
+      churn: churnRes.error ? null : ((churnRes.data as PanelChurnRisk | null) ?? null),
+      churnUnavailable: churnRes.error != null,
     };
   },
 
-  /** A user for marketing: no wallet, transfers or penalties. */
-  async getUserDetail(userId: string): Promise<PanelUserDetail> {
+  /**
+   * A user for marketing: no wallet, transfers or penalties. null when there is no such user. The
+   * rides read must load: without it the page would show 0 rides as if that were true.
+   */
+  async getUserDetail(userId: string): Promise<PanelUserDetail | null> {
     const supabase = getSupabaseClient();
     const [userRes, ridesRes] = await Promise.all([
-      supabase.from('users').select('*').eq('id', userId).single(),
+      supabase.from('users').select('*').eq('id', userId).maybeSingle(),
       supabase.from('panel_rides').select('status, final_fare_cup').eq('customer_id', userId).limit(10000),
     ]);
-    if (userRes.error) throw userRes.error;
+    const user = mainRow<User>(userRes);
+    if (!user) return null;
+    if (ridesRes.error) throw ridesRes.error;
     const rides = (ridesRes.data ?? []) as Array<{ status: RideStatus; final_fare_cup: number | null }>;
     const completed = rides.filter((r) => r.status === 'completed');
     return {
-      user: userRes.data as User,
+      user,
       ridesAsCustomer: rides.length,
       completedAsCustomer: completed.length,
       canceledAsCustomer: rides.filter((r) => r.status === 'canceled').length,

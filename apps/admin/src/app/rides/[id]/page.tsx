@@ -12,6 +12,7 @@ import type { DeliveryDetails, AdminRideMessage } from '@tricigo/api';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
+import { PAYMENT_LABEL, labelFor } from '@/lib/labels';
 import { useCanAct } from '@/lib/useCanAct';
 import { RideDetailReadOnly } from '@/components/panel/RideDetailReadOnly';
 import { rideTypeLabel } from '@/lib/rideType';
@@ -53,15 +54,6 @@ const STATUS_LABEL_KEY: Record<RideStatus, string> = {
   completed: 'rides.status_completed',
   canceled: 'rides.status_canceled',
   disputed: 'rides.status_disputed',
-};
-
-const PAYMENT_KEY: Record<string, string> = {
-  cash: 'rides.payment_cash',
-  tricicoin: 'rides.payment_tricicoin',
-  mixed: 'rides.payment_mixed',
-  corporate: 'rides.payment_corporate',
-  tropipay: 'rides.payment_tropipay',
-  stripe: 'rides.payment_tropipay',
 };
 
 const PACKAGE_CATEGORY_KEY: Record<string, string> = {
@@ -266,7 +258,7 @@ function AdminRideDetailPage() {
               </div>
               <div>
                 <dt className="text-sm text-ink-muted">{t('rides.label_payment_method')}</dt>
-                <dd className="text-sm font-medium">{PAYMENT_KEY[ride.payment_method] ? t(PAYMENT_KEY[ride.payment_method]!) : ride.payment_method}</dd>
+                <dd className="text-sm font-medium">{labelFor(t, PAYMENT_LABEL, ride.payment_method)}</dd>
               </div>
             </div>
           </dl>

@@ -358,7 +358,7 @@ export default function DriversPage() {
                 sortedData.map((driver) => {
                   const vehicle = driver.vehicles?.[0];
                   const VIcon = vehicleIcon(vehicle?.type);
-                  const status = STATUS_STYLES[driver.status];
+                  const status = STATUS_STYLES[driver.status] ?? STATUS_STYLES.pending_verification;
                   return (
                     <tr
                       key={driver.id}
@@ -441,7 +441,7 @@ export default function DriversPage() {
         ) : (
           sortedData.map((driver) => {
             const vehicle = driver.vehicles?.[0];
-            const status = STATUS_STYLES[driver.status];
+            const status = STATUS_STYLES[driver.status] ?? STATUS_STYLES.pending_verification;
             return (
               <button
                 key={driver.id}

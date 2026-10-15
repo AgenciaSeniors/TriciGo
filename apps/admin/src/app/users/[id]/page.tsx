@@ -9,6 +9,7 @@ import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
 import { getErrorMessage } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
+import { USER_LEVEL_LABEL, labelFor } from '@/lib/labels';
 import { useCanAct } from '@/lib/useCanAct';
 import { UserDetailReadOnly } from '@/components/panel/UserDetailReadOnly';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -24,14 +25,6 @@ const levelBadgeClasses: Record<UserLevel, string> = {
   oro: 'bg-yellow-100 text-yellow-800',
   platino: 'bg-teal-100 text-teal-800',
   diamante: 'bg-violet-100 text-violet-800',
-};
-
-const LEVEL_LABEL_KEY: Record<UserLevel, string> = {
-  bronce: 'users.level_bronze',
-  plata: 'users.level_silver',
-  oro: 'users.level_gold',
-  platino: 'users.level_platinum',
-  diamante: 'users.level_diamond',
 };
 
 const LANG_KEY: Record<string, string> = {
@@ -204,7 +197,7 @@ function AdminUserDetailPage() {
             <span
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${levelBadgeClasses[currentLevel]}`}
             >
-              {LEVEL_LABEL_KEY[currentLevel] ? t(LEVEL_LABEL_KEY[currentLevel]!) : currentLevel}
+              {labelFor(t, USER_LEVEL_LABEL, currentLevel)}
             </span>
             <span
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
@@ -287,7 +280,7 @@ function AdminUserDetailPage() {
               <dt className="text-sm text-ink-muted">{t('users.label_current_level')}</dt>
               <dd>
                 <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${levelBadgeClasses[currentLevel]}`}>
-                  {LEVEL_LABEL_KEY[currentLevel] ? t(LEVEL_LABEL_KEY[currentLevel]!) : currentLevel}
+                  {labelFor(t, USER_LEVEL_LABEL, currentLevel)}
                 </span>
               </dd>
             </div>

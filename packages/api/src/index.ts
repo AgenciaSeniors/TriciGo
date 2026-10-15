@@ -118,6 +118,7 @@ export {
 export {
   panelReadService,
   parseProductFailures,
+  CHURN_NEVER_RODE_DAYS,
   type ProductFailures,
   type CanceledByRole,
   type PanelRide,

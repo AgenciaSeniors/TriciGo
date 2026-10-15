@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { havanaDayRangeUtc } from '@tricigo/utils';
 
-/** A query chain that records every call and resolves to the next queued result. */
+/** What postgrest-js answers when single() or maybeSingle() cannot pick one row. */
+const PGRST116 = { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' };
+
+/**
+ * A query chain that records every call and resolves to the next queued result (an unqueued call
+ * finds no rows). Like supabase-js, single() and maybeSingle() turn a list of rows into one row:
+ * maybeSingle() gives null for no rows, single() an error; both give an error for 2+ rows.
+ */
 const calls: Array<{ table: string; ops: Array<[string, unknown[]]> }> = [];
 const results: Array<{ data: unknown; error: unknown }> = [];
 function chain(table: string) {
   const entry = { table, ops: [] as Array<[string, unknown[]]> };
   calls.push(entry);
-  const result = results.shift() ?? { data: [], error: null };
+  const queued = results.shift() ?? { data: [], error: null };
   const proxy: Record<string, unknown> = {};
   for (const op of ['select', 'eq', 'in', 'gte', 'lt', 'lte', 'or', 'ilike', 'order', 'range', 'limit', 'maybeSingle', 'single']) {
     proxy[op] = (...args: unknown[]) => {
@@ -14,10 +22,21 @@ function chain(table: string) {
       return proxy;
     };
   }
+  const settle = () => {
+    const mode = entry.ops.some(([op]) => op === 'single') ? 'single'
+      : entry.ops.some(([op]) => op === 'maybeSingle') ? 'maybeSingle' : null;
+    if (!mode || queued.error || !Array.isArray(queued.data)) return queued;
+    const rows = queued.data;
+    if (rows.length === 1) return { data: rows[0], error: null };
+    if (rows.length === 0 && mode === 'maybeSingle') return { data: null, error: null };
+    return { data: null, error: PGRST116 };
+  };
   proxy.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
-    Promise.resolve(result).then(resolve, reject);
+    Promise.resolve(settle()).then(resolve, reject);
   return proxy;
 }
+/** The error PostgREST gives for an id that is not a uuid. */
+const BAD_UUID = { code: '22P02', message: 'invalid input syntax for type uuid: "abc"' };
 const mockRpc = vi.fn();
 vi.mock('../../client', () => ({
   getSupabaseClient: () => ({ from: (t: string) => chain(t), rpc: mockRpc }),
@@ -53,6 +72,22 @@ describe('panelReadService.getRides', () => {
     expect(calls[0]!.ops).toContainEqual(['or', ['pickup_address.ilike.%Calle 23\\_\\%%,dropoff_address.ilike.%Calle 23\\_\\%%']]);
   });
 
+  it('finds a ride code by its id range alone, with no address filter', async () => {
+    await panelReadService.getRides({ search: ' #F1A2B3C4 ' });
+    expect(calls[0]!.ops).toContainEqual(['gte', ['id', 'f1a2b3c4-0000-0000-0000-000000000000']]);
+    expect(calls[0]!.ops.some(([op]) => op === 'or')).toBe(false);
+  });
+
+  it('reads the date inputs as Havana calendar days', async () => {
+    await panelReadService.getRides({ dateFrom: '2026-07-10', dateTo: '2026-07-12' });
+    const from = havanaDayRangeUtc('2026-07-10').start.toISOString();
+    const to = havanaDayRangeUtc('2026-07-12').end.toISOString();
+    // July is Cuban summer time (UTC-4): a day starts at 04:00 UTC.
+    expect([from, to]).toEqual(['2026-07-10T04:00:00.000Z', '2026-07-13T04:00:00.000Z']);
+    expect(calls[0]!.ops).toContainEqual(['gte', ['created_at', from]]);
+    expect(calls[0]!.ops).toContainEqual(['lt', ['created_at', to]]);
+  });
+
   it('throws the Supabase error', async () => {
     results.push({ data: null, error: new Error('boom') });
     await expect(panelReadService.getRides()).rejects.toThrow('boom');
@@ -77,6 +112,13 @@ describe('panelReadService.getDrivers', () => {
     expect(rows[0]!.vehicles).toEqual([{ type: 'triciclo', plate_number: 'P1' }]);
     expect(rows[1]!.vehicles).toEqual([]);
   });
+
+  it('does not filter by status for "all"', async () => {
+    await panelReadService.getDrivers(0, 20, { status: 'all' });
+    await panelReadService.getDrivers(0, 20, { status: 'approved' });
+    expect(calls[0]!.ops.some(([op, args]) => op === 'eq' && args[0] === 'status')).toBe(false);
+    expect(calls[1]!.ops).toContainEqual(['eq', ['status', 'approved']]);
+  });
 });
 
 describe('panelReadService details', () => {
@@ -90,9 +132,42 @@ describe('panelReadService details', () => {
     );
     const detail = await panelReadService.getRideDetail('r1');
     expect(calls.map((c) => c.table)).toEqual(['panel_rides', 'ride_transitions', 'ride_pricing_snapshots', 'users', 'panel_driver_profiles']);
-    expect(detail.customerInfo).toEqual({ name: 'Carla', phone: '+5355' });
-    expect(detail.driverInfo).toEqual({ id: 'd1', name: 'Diego', phone: null });
-    expect(detail.pricing).toEqual({ ride_id: 'r1', total: 1500 });
+    expect(calls[0]!.ops).toContainEqual(['maybeSingle', []]);
+    expect(detail?.customerInfo).toEqual({ name: 'Carla', phone: '+5355' });
+    expect(detail?.driverInfo).toEqual({ id: 'd1', name: 'Diego', phone: null });
+    expect(detail?.pricing).toEqual({ ride_id: 'r1', total: 1500 });
+    expect(detail?.pricingUnavailable).toBe(false);
+  });
+
+  it('answers null for a ride that does not exist or an id that is not a uuid', async () => {
+    expect(await panelReadService.getRideDetail('00000000-0000-0000-0000-000000000000')).toBeNull();
+    expect(calls.map((c) => c.table)).toEqual(['panel_rides', 'ride_transitions', 'ride_pricing_snapshots']);
+    calls.length = 0;
+    results.push({ data: null, error: BAD_UUID }, { data: null, error: BAD_UUID }, { data: null, error: BAD_UUID });
+    expect(await panelReadService.getRideDetail('abc')).toBeNull();
+    expect(calls.map((c) => c.table)).toEqual(['panel_rides', 'ride_transitions', 'ride_pricing_snapshots']);
+  });
+
+  it('throws when the ride or its timeline cannot be read', async () => {
+    results.push({ data: null, error: new Error('ride read failed') });
+    await expect(panelReadService.getRideDetail('r1')).rejects.toThrow('ride read failed');
+    results.length = 0;
+    results.push(
+      { data: { id: 'r1', customer_id: 'c1', driver_id: null }, error: null },
+      { data: null, error: new Error('timeline read failed') },
+    );
+    await expect(panelReadService.getRideDetail('r1')).rejects.toThrow('timeline read failed');
+  });
+
+  it('marks the price unavailable when its read fails, instead of looking like no snapshot', async () => {
+    results.push(
+      { data: { id: 'r1', customer_id: 'c1', driver_id: null }, error: null },
+      { data: [], error: null },
+      { data: null, error: new Error('pricing read failed') },
+    );
+    const detail = await panelReadService.getRideDetail('r1');
+    expect(detail?.pricing).toBeNull();
+    expect(detail?.pricingUnavailable).toBe(true);
   });
 
   it('does not look for a driver when the ride has none', async () => {
@@ -104,9 +179,10 @@ describe('panelReadService details', () => {
     );
     const detail = await panelReadService.getRideDetail('r1');
     expect(calls.map((c) => c.table)).toEqual(['panel_rides', 'ride_transitions', 'ride_pricing_snapshots', 'users']);
-    expect(detail.driverInfo).toBeNull();
-    expect(detail.pricing).toBeNull();
-    expect(detail.transitions).toEqual([]);
+    expect(detail?.driverInfo).toBeNull();
+    expect(detail?.pricing).toBeNull();
+    expect(detail?.pricingUnavailable).toBe(false);
+    expect(detail?.transitions).toEqual([]);
   });
 
   it('reads a driver from the views and keeps the latest document per type', async () => {
@@ -122,8 +198,9 @@ describe('panelReadService details', () => {
     );
     const detail = await panelReadService.getDriverDetail('d1');
     expect(calls.map((c) => c.table)).toEqual(['panel_driver_profiles', 'panel_driver_documents', 'driver_score_events', 'panel_driver_churn_risk']);
-    expect(detail.documents.map((d) => d.id)).toEqual(['a', 'c']);
-    expect(detail.churn).toEqual({ driver_profile_id: 'd1', risk_level: 'high' });
+    expect(detail?.documents.map((d) => d.id)).toEqual(['a', 'c']);
+    expect(detail?.churn).toEqual({ driver_profile_id: 'd1', risk_level: 'high' });
+    expect(detail?.churnUnavailable).toBe(false);
   });
 
   it('filters documents and churn by the profile id, and score events by the user id', async () => {
@@ -138,10 +215,41 @@ describe('panelReadService details', () => {
     expect(byTable['panel_driver_churn_risk']).toContainEqual(['eq', ['driver_profile_id', 'd1']]);
   });
 
-  it('does not read anything else when the driver profile is not found', async () => {
-    results.push({ data: null, error: new Error('no rows') });
-    await expect(panelReadService.getDriverDetail('nope')).rejects.toThrow('no rows');
+  it('answers null and reads nothing else for a driver that does not exist or an id that is not a uuid', async () => {
+    expect(await panelReadService.getDriverDetail('00000000-0000-0000-0000-000000000000')).toBeNull();
+    results.push({ data: null, error: BAD_UUID });
+    expect(await panelReadService.getDriverDetail('abc')).toBeNull();
+    expect(calls.map((c) => c.table)).toEqual(['panel_driver_profiles', 'panel_driver_profiles']);
+  });
+
+  it('throws when the profile cannot be read, and reads nothing else', async () => {
+    results.push({ data: null, error: new Error('profile read failed') });
+    await expect(panelReadService.getDriverDetail('d1')).rejects.toThrow('profile read failed');
     expect(calls.map((c) => c.table)).toEqual(['panel_driver_profiles']);
+  });
+
+  it('throws when the documents or the score events cannot be read', async () => {
+    results.push({ data: { id: 'd1', user_id: 'u-d1' }, error: null }, { data: null, error: new Error('documents read failed') });
+    await expect(panelReadService.getDriverDetail('d1')).rejects.toThrow('documents read failed');
+    results.length = 0;
+    results.push(
+      { data: { id: 'd1', user_id: 'u-d1' }, error: null },
+      { data: [], error: null },
+      { data: null, error: new Error('score events read failed') },
+    );
+    await expect(panelReadService.getDriverDetail('d1')).rejects.toThrow('score events read failed');
+  });
+
+  it('marks churn risk unavailable when its read fails, instead of looking like no risk row', async () => {
+    results.push(
+      { data: { id: 'd1', user_id: 'u-d1' }, error: null },
+      { data: [], error: null },
+      { data: [], error: null },
+      { data: null, error: new Error('churn read failed') },
+    );
+    const detail = await panelReadService.getDriverDetail('d1');
+    expect(detail?.churn).toBeNull();
+    expect(detail?.churnUnavailable).toBe(true);
   });
 
   it('counts a user’s rides and total spent from panel_rides', async () => {
@@ -157,6 +265,20 @@ describe('panelReadService details', () => {
     const detail = await panelReadService.getUserDetail('u1');
     expect(calls.map((c) => c.table)).toEqual(['users', 'panel_rides']);
     expect(detail).toMatchObject({ ridesAsCustomer: 4, completedAsCustomer: 2, canceledAsCustomer: 1, totalSpentCup: 1500 });
+  });
+
+  it('answers null for a user that does not exist or an id that is not a uuid', async () => {
+    expect(await panelReadService.getUserDetail('00000000-0000-0000-0000-000000000000')).toBeNull();
+    results.push({ data: null, error: BAD_UUID }, { data: null, error: BAD_UUID });
+    expect(await panelReadService.getUserDetail('abc')).toBeNull();
+  });
+
+  it('throws when the user or their rides cannot be read, instead of showing 0 rides', async () => {
+    results.push({ data: null, error: new Error('user read failed') });
+    await expect(panelReadService.getUserDetail('u1')).rejects.toThrow('user read failed');
+    results.length = 0;
+    results.push({ data: { id: 'u1', full_name: 'Carla' }, error: null }, { data: null, error: new Error('rides read failed') });
+    await expect(panelReadService.getUserDetail('u1')).rejects.toThrow('rides read failed');
   });
 
   it('reads disputes and incidents from their views', async () => {

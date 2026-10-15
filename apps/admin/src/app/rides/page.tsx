@@ -10,6 +10,7 @@ import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { formatAdminDate } from '@/lib/formatDate';
+import { PAYMENT_LABEL, labelFor } from '@/lib/labels';
 import { rideTypeLabel } from '@/lib/rideType';
 import { rideCancelSummary } from '@/lib/rideCancel';
 import { exportToCsv } from '@/lib/exportCsv';
@@ -38,17 +39,6 @@ function truncate(str: string | null | undefined, len: number) {
   if (!str) return '—';
   return str.length > len ? str.slice(0, len) + '…' : str;
 }
-
-// Covers every PaymentMethod enum value so mixed/corporate/card rides aren't
-// mislabeled as "TriciCoin". stripe/tropipay are both card (legacy rows).
-const PAYMENT_KEY: Record<string, string> = {
-  cash: 'rides.payment_cash',
-  tricicoin: 'rides.payment_tricicoin',
-  mixed: 'rides.payment_mixed',
-  corporate: 'rides.payment_corporate',
-  tropipay: 'rides.payment_tropipay',
-  stripe: 'rides.payment_tropipay',
-};
 
 export default function RidesPage() {
   const { t } = useTranslation('admin');
@@ -268,7 +258,7 @@ export default function RidesPage() {
       id: 'payment_method',
       header: t('rides.col_payment', { defaultValue: 'Pago' }),
       cell: (r) =>
-        PAYMENT_KEY[r.payment_method] ? t(PAYMENT_KEY[r.payment_method]!) : r.payment_method,
+        labelFor(t, PAYMENT_LABEL, r.payment_method),
       hideBelow: 'lg',
       width: '110px',
     },
