@@ -31,11 +31,12 @@ import { getSupabaseClient } from '../client';
  * afterward (PostgREST validates the JWT fine — only Storage was broken).
  *
  * WHY a timeout + retry (Cuban connectivity):
- * `supabase.functions.invoke` has NO built-in timeout. On a flaky edge/3G link
- * the request can hang indefinitely — the UI shows an infinite spinner that
- * users perceive as a freeze ("se bloquea"). We race the invoke against a hard
- * timeout so a stalled upload becomes a clear, surfaced error, and we auto-retry
- * once on a timeout/network-class failure (the common transient case in Cuba).
+ * `supabase.functions.invoke` has no timeout unless one is passed, and the
+ * client's fetch backstop (makeTimeoutFetch) only gives up after 120 s. On a
+ * flaky edge/3G link that is a long spinner users perceive as a freeze ("se
+ * bloquea"). We race each attempt against a 45 s timeout so a stalled upload
+ * becomes a clear, surfaced error, and we auto-retry once on a
+ * timeout/network-class failure (the common transient case in Cuba).
  * A real denial (forbidden/too_large/etc. — a `{ error }` body) is NOT retried.
  * The path is fixed for the whole call, which is why `upsert` is required.
  * With upsert (avatar, selfie, driver documents, dispute evidence) a retry
@@ -120,6 +121,8 @@ async function invokeStorageUpload(
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
+      // Reject first: the race has to settle as a timeout before the abort can
+      // settle the invoke with a fetch error.
       reject(new UploadTransientError('upload_timeout'));
       controller.abort();
     }, UPLOAD_TIMEOUT_MS);

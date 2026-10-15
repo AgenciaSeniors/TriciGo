@@ -637,10 +637,10 @@ describe('authService', () => {
 
       const result = await authService.uploadAvatar('user-1', 'file:///tmp/photo.jpg');
 
-      expect(mockFunctions.invoke).toHaveBeenCalledWith('storage-upload', {
-        body: expect.any(FormData),
-        signal: expect.any(AbortSignal),
-      });
+      expect(mockFunctions.invoke).toHaveBeenCalledWith(
+        'storage-upload',
+        expect.objectContaining({ body: expect.any(FormData) }),
+      );
       expect(mockStorage.from).toHaveBeenCalledWith('avatars');
       expect(result).toContain('https://storage.supabase.co/avatars/user-1/avatar.jpg');
     });

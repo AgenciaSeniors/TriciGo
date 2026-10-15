@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
+import { describe, it, expect, expectTypeOf, vi, beforeEach, assert } from 'vitest';
 
 // uploadFileFromUri routes the upload through the `storage-upload` Edge Function
 // (service-role) via `functions.invoke`, NOT a direct `supabase.storage.upload()`
@@ -66,9 +66,9 @@ describe('uploadFileFromUri', () => {
   it('requires the caller to choose upsert', () => {
     // The path is fixed for the whole call. After a first attempt that did land,
     // a retry without upsert fails with 409 on its own file, so upsert has no
-    // default: every caller has to pass it.
-    // @ts-expect-error upsert is required
-    void (() => uploadFileFromUri('avatars', 'u/a.jpg', 'file:///a.jpg', { fileName: 'a.jpg' }));
+    // default: every caller has to pass it. An optional upsert would be typed
+    // boolean | undefined here.
+    expectTypeOf<Parameters<typeof uploadFileFromUri>[3]['upsert']>().toEqualTypeOf<boolean>();
   });
 
   it('falls back to error.message on a gateway error with no JSON body', async () => {
@@ -190,6 +190,42 @@ describe('uploadFileFromUri', () => {
       expect(signalOf(0)).toBeInstanceOf(AbortSignal);
       expect(firstAbortedWhenRetrySent).toBe(true);
       expect(signalOf(1)?.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up with upload_timeout when both attempts time out, aborting each request', async () => {
+    vi.useFakeTimers();
+    try {
+      // Like functions-js: an aborted request settles as a FunctionsFetchError.
+      // This one settles right inside the abort listener, the earliest it can.
+      mockFunctionsInvoke.mockImplementation(
+        (_name: string, options: { signal: AbortSignal }) =>
+          new Promise((resolve) => {
+            options.signal.addEventListener('abort', () =>
+              resolve({
+                data: null,
+                error: { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function' },
+              }),
+            );
+          }),
+      );
+
+      const p = uploadFileFromUri('avatars', 'u/avatar.jpg', 'file:///a.jpg', {
+        fileName: 'avatar.jpg',
+        upsert: true,
+      });
+      // Attach the rejection expectation before advancing (no unhandled rejection).
+      const assertion = expect(p).rejects.toThrow('upload_timeout');
+      // Two 45 s attempts + the 2 s backoff.
+      await vi.advanceTimersByTimeAsync(95_000);
+      await assertion;
+
+      expect(mockFunctionsInvoke).toHaveBeenCalledTimes(2);
+      for (const [, options] of mockFunctionsInvoke.mock.calls) {
+        expect((options as { signal: AbortSignal }).signal.aborted).toBe(true);
+      }
     } finally {
       vi.useRealTimers();
     }
