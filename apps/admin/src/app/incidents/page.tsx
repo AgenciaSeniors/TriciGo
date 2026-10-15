@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { adminService } from '@tricigo/api/services/admin';
+import { panelReadService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { useCanAct } from '@/lib/useCanAct';
 import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { StatusBadge } from '@/components/data/StatusBadge';
@@ -47,6 +49,7 @@ export default function IncidentsPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  const { canAct, ready } = useCanAct();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,15 +76,16 @@ export default function IncidentsPage() {
   const beginRequest = useRequestGuard();
 
   const fetchIncidents = useCallback(async () => {
+    // Wait for the role: marketing reads the panel view, which leaves out evidence and notes.
+    if (!ready) return;
     const isLatest = beginRequest();
     setLoading(true);
     setError(null);
     try {
-      const data = await adminService.getIncidents(
-        statusFilter === 'all' ? undefined : statusFilter,
-        page,
-        PAGE_SIZE,
-      );
+      const status = statusFilter === 'all' ? undefined : statusFilter;
+      const data = canAct
+        ? await adminService.getIncidents(status, page, PAGE_SIZE)
+        : await panelReadService.getIncidents(status, page, PAGE_SIZE);
       if (!isLatest()) return;
       setIncidents(data as unknown as Incident[]);
     } catch (err) {
@@ -91,7 +95,7 @@ export default function IncidentsPage() {
     } finally {
       if (isLatest()) setLoading(false);
     }
-  }, [page, statusFilter, beginRequest]);
+  }, [page, statusFilter, beginRequest, canAct, ready]);
 
   useEffect(() => {
     void fetchIncidents();
@@ -219,7 +223,7 @@ export default function IncidentsPage() {
                 body: t('incidents.empty_calm_body', { defaultValue: 'No hay incidentes abiertos en este momento. Buena señal.' }),
               }
         }
-        rowActions={[
+        rowActions={canAct ? [
           {
             label: t('incidents.action_investigate', { defaultValue: 'Investigar' }),
             onClick: (i) => {
@@ -236,7 +240,7 @@ export default function IncidentsPage() {
               }
             },
           },
-        ]}
+        ] : undefined}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: incidents.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
       />
