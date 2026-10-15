@@ -116,6 +116,15 @@ export {
   type PublicInvitationStatus,
 } from './services/team.service';
 export {
+  panelReadService,
+  type CanceledByRole,
+  type PanelRide,
+  type PanelDriverRow,
+  type PanelDriverListItem,
+  type PanelRideFilters,
+  type PanelDriverFilters,
+} from './services/panel-read.service';
+export {
   marketingStatsService,
   type PromoCodePerformance,
   type ReferralCodePerformance,

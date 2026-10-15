@@ -3,20 +3,6 @@
 // Admin panel operations. Uses service role where needed.
 // ============================================================
 
-/** Escape special characters for PostgreSQL ILIKE patterns */
-function escapeLikePattern(pattern: string): string {
-  return pattern.replace(/[%_\\]/g, '\\$&');
-}
-
-/**
- * A ride code as riders and support write it ("F1A2B3C4", "#f1a2b3c4"): the first 8 hex
- * characters of the ride id, lower-cased. null when the text is not one.
- */
-function rideCodePrefix(text: string): string | null {
-  const m = text.trim().match(/^#?([0-9a-f]{8})$/i);
-  return m ? m[1]!.toLowerCase() : null;
-}
-
 /**
  * supabase-js wraps a non-2xx Edge Function response in a FunctionsHttpError
  * with the raw Response on `error.context`. Pull the JSON body out so the
@@ -104,6 +90,7 @@ export interface AdminRideMessage {
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
 import { buildRejectionMessage } from './_driverDocRejectionPresets';
+import { escapeLikePattern, rideCodePrefix } from './_search';
 import { AppError } from '../errors';
 
 /**
