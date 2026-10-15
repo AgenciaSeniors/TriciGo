@@ -13,7 +13,7 @@ const db = vi.hoisted(() => ({
   driverProfiles: {} as Record<string, string>,
   driverProfileError: null as unknown,
   objects: {} as Record<string, Set<string>>,
-  failList: {} as Record<string, { message: string } | 'throw'>,
+  failList: {} as Record<string, { message: string } | 'throw' | 'hang'>,
   failRemove: {} as Record<string, { message: string } | 'throw'>,
 }));
 
@@ -60,6 +60,7 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => ({
           db.calls.push(`storage ${bucket} list ${path}`);
           const fail = db.failList[bucket];
           if (fail === 'throw') throw new Error('socket hang up');
+          if (fail === 'hang') return new Promise<never>(() => {});
           if (fail) return { data: null, error: fail };
           const prefix = path.endsWith('/') ? path : `${path}/`;
           const entries = new Map<string, boolean>();
@@ -123,6 +124,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -343,6 +345,24 @@ describe('delete-account: the driver documents', () => {
     const log = errors.mock.calls.map((args) => args.join(' ')).join('\n');
     expect(log).toContain(DP);
     expect(log).toContain(logged);
+  });
+
+  it('still deletes the account when Storage stops answering, and logs it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    db.driverProfiles = { 'u-1': DP };
+    seed('driver-documents', [`driver-docs/${DP}/national_id/1760000000000-carnet.jpg`]);
+    db.failList['driver-documents'] = 'hang';
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const pending = del();
+    await vi.advanceTimersByTimeAsync(60_000);
+    const res = await pending;
+
+    expect(res.status).toBe(200);
+    expect(db.deleted).toEqual(['u-1']);
+    const log = errors.mock.calls.map((args) => args.join(' ')).join('\n');
+    expect(log).toContain(DP);
+    expect(log).toContain('time budget');
   });
 
   it('still deletes the account when removing fails, and logs it', async () => {

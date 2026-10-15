@@ -10,7 +10,8 @@ import {
 // live driver-documents bucket on 2026-10-14): one level per call, folders with
 // id null and files with an id, sorted by name, paged by limit/offset. A remove
 // takes 1 to 1000 names, like the API.
-type Fault = { message: string } | 'throw' | 'endless';
+// 'hang' never answers; 'silent' answers a remove with success and removes nothing.
+type Fault = { message: string } | 'throw' | 'endless' | 'hang' | 'silent';
 
 function fakeStorage(seed: Record<string, string[]>) {
   const objects = new Map(Object.entries(seed).map(([bucket, keys]) => [bucket, new Set(keys)]));
@@ -26,6 +27,7 @@ function fakeStorage(seed: Record<string, string[]>) {
         calls.push(`${bucket} list ${path} offset=${options.offset}`);
         const fault = listFaults.get(`${bucket}:${path}`);
         if (fault === 'throw') throw new Error('socket hang up');
+        if (fault === 'hang') return new Promise<never>(() => {});
         if (fault === 'endless') {
           return {
             data: Array.from({ length: options.limit }, (_, i) => ({ name: `again-${i}.jpg`, id: `obj-${i}` })),
@@ -52,7 +54,9 @@ function fakeStorage(seed: Record<string, string[]>) {
         calls.push(`${bucket} remove ${paths.length}`);
         const fault = removeFaults.get(`${bucket}:${n}`);
         if (fault === 'throw') throw new Error('socket hang up');
-        if (fault && fault !== 'endless') return { data: null, error: fault };
+        if (fault === 'hang') return new Promise<never>(() => {});
+        if (fault === 'silent') return { data: [], error: null };
+        if (typeof fault === 'object') return { data: null, error: fault };
         if (paths.length < 1 || paths.length > 1000) {
           return { data: null, error: { message: 'prefixes must have 1 to 1000 items' } };
         }
@@ -131,6 +135,15 @@ describe('cleanUpAccountStorage', () => {
     expect(result.documentsFound).toBe(360);
     expect(result.documentsRemoved).toBe(360);
     expect(result.errors).toEqual([]);
+    // Each page once: the 131 folders take 2 pages, each type_ folder 1, the 230
+    // files 3, and the empty selfie-checks folder 1. Then 360 names in 4 removes.
+    expect(s.calls.filter((c) => c.startsWith('driver-documents list'))).toHaveLength(2 + 130 + 3 + 1);
+    expect(s.calls.filter((c) => c.startsWith('driver-documents remove'))).toEqual([
+      'driver-documents remove 100',
+      'driver-documents remove 100',
+      'driver-documents remove 100',
+      'driver-documents remove 60',
+    ]);
   });
 
   it('removes more files than one remove call takes', async () => {
@@ -257,6 +270,47 @@ describe('cleanUpAccountStorage', () => {
     const result = await cleanUpAccountStorage(s.api, { userId: USER, driverProfileId: DP });
 
     expect(result.errors.some((e) => e.includes(`driver-docs/${DP}`) && e.includes('stopped'))).toBe(true);
+  });
+
+  it.each([
+    ['a listing', (s: ReturnType<typeof fakeStorage>) => s.listFaults.set(`driver-documents:driver-docs/${DP}`, 'hang')],
+    ['a removal', (s: ReturnType<typeof fakeStorage>) => s.removeFaults.set('driver-documents:1', 'hang')],
+  ])('gives up when %s never answers, and says the time ran out', async (_case, hang) => {
+    const s = fakeStorage({
+      'driver-documents': [`driver-docs/${DP}/national_id/a.jpg`, `selfie-checks/${DP}/0c1d2e3f-0000-4000-8000-000000000001/b.jpg`],
+    });
+    hang(s);
+
+    const started = Date.now();
+    const result = await cleanUpAccountStorage(s.api, { userId: USER, driverProfileId: DP }, { budgetMs: 50 });
+
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(result.errors.some((e) => e.includes('time budget'))).toBe(true);
+  });
+
+  it('reports files Storage left in place without an error', async () => {
+    const s = fakeStorage({
+      'driver-documents': [`driver-docs/${DP}/national_id/a.jpg`, `driver-docs/${DP}/national_id/b.jpg`],
+    });
+    s.removeFaults.set('driver-documents:1', 'silent');
+
+    const result = await cleanUpAccountStorage(s.api, { userId: USER, driverProfileId: DP });
+
+    expect(result.documentsFound).toBe(2);
+    expect(result.documentsRemoved).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain(`driver-docs/${DP}`);
+    expect(result.errors[0]).toContain('0 of 2');
+  });
+
+  it('reports an entry with an unusable name instead of skipping it quietly', async () => {
+    // A key with "//" comes back from the listing with an empty name.
+    const s = fakeStorage({ 'driver-documents': [`driver-docs/${DP}/national_id//odd.jpg`] });
+
+    const result = await cleanUpAccountStorage(s.api, { userId: USER, driverProfileId: DP });
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain(`driver-docs/${DP}/national_id`);
   });
 
   it('never throws, even when the Storage client itself does', async () => {

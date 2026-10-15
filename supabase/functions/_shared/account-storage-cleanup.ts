@@ -14,8 +14,9 @@
 // fleet-docs/ (licenses a fleet owner uploads for its members) belongs to the
 // fleet, not to the driver whose account is deleted, and is left alone.
 //
-// Best effort: nothing here throws. Every Storage error ends up in `errors`, the
-// caller logs them with logAccountStorageCleanup, and the deletion goes on.
+// Best effort: nothing here throws, and the whole step has a time budget. Every
+// Storage error ends up in `errors`, the caller logs them with
+// logAccountStorageCleanup, and the deletion goes on.
 //
 // Pure module: no remote imports, no Deno, so packages/api's vitest runs it.
 // ============================================================
@@ -41,6 +42,7 @@ export interface StorageBucketApi {
   list(
     path: string,
     options: StorageListOptions,
+    parameters?: { signal?: AbortSignal },
   ): PromiseLike<{ data: StorageListEntry[] | null; error: StorageErrorLike | null }>;
   remove(paths: string[]): PromiseLike<{ data: unknown[] | null; error: StorageErrorLike | null }>;
 }
@@ -57,6 +59,11 @@ export interface AccountStorageCleanup {
   errors: string[];
 }
 
+export interface AccountStorageCleanupOptions {
+  /** How long the whole Storage step may take, in milliseconds. */
+  budgetMs?: number;
+}
+
 export const AVATARS_BUCKET = 'avatars';
 export const DRIVER_DOCUMENTS_BUCKET = 'driver-documents';
 
@@ -68,6 +75,10 @@ const REMOVE_BATCH = 100;
 const MAX_DEPTH = 3;
 // Pages per folder (20,000 entries): a guard against a listing that never ends.
 const MAX_PAGES = 200;
+// A Storage that hangs must not hold the function until the Edge runtime stops
+// it: auth.admin.deleteUser would never run, and the account would stay alive,
+// already settled and anonymized. A typical driver takes about 9 calls.
+const DEFAULT_BUDGET_MS = 20_000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -89,39 +100,71 @@ function messageOf(e: unknown): string {
   return String(e);
 }
 
+class OutOfTime extends Error {}
+
+/**
+ * Runs one Storage call with what is left of the budget, and stops waiting when
+ * it runs out. The signal, when the call takes one, also cancels the request a
+ * second later.
+ */
+async function withinBudget<T>(deadline: number, call: (signal: AbortSignal) => PromiseLike<T>): Promise<T> {
+  const left = deadline - Date.now();
+  if (left <= 0) throw new OutOfTime();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new OutOfTime()), left);
+  });
+  try {
+    return await Promise.race([call(AbortSignal.timeout(left + 1_000)), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Every file under `prefix`, through its subfolders. Listing errors are reported, not thrown. */
 async function listFilesUnder(
   bucket: StorageBucketApi,
   prefix: string,
-): Promise<{ paths: string[]; errors: string[] }> {
+  deadline: number,
+): Promise<{ paths: string[]; errors: string[]; outOfTime: boolean }> {
   const paths = new Set<string>();
   const errors: string[] = [];
+  let outOfTime = false;
 
   const walk = async (folder: string, depth: number): Promise<void> => {
-    for (let page = 0; ; page++) {
+    for (let page = 0; !outOfTime; page++) {
       if (page === MAX_PAGES) {
         errors.push(`list ${folder}: stopped after ${MAX_PAGES * PAGE_SIZE} entries`);
         return;
       }
       let entries: StorageListEntry[];
       try {
-        const { data, error } = await bucket.list(folder, {
-          limit: PAGE_SIZE,
-          offset: page * PAGE_SIZE,
-          sortBy: { column: 'name', order: 'asc' },
-        });
+        const { data, error } = await withinBudget(deadline, (signal) =>
+          bucket.list(
+            folder,
+            { limit: PAGE_SIZE, offset: page * PAGE_SIZE, sortBy: { column: 'name', order: 'asc' } },
+            { signal },
+          ),
+        );
         if (error) {
           errors.push(`list ${folder}: ${messageOf(error)}`);
           return;
         }
         entries = data ?? [];
       } catch (e) {
-        errors.push(`list ${folder}: ${messageOf(e)}`);
+        if (e instanceof OutOfTime) outOfTime = true;
+        else errors.push(`list ${folder}: ${messageOf(e)}`);
         return;
       }
       for (const entry of entries) {
+        if (outOfTime) return;
         const name = entry?.name;
-        if (!name || name.includes('/')) continue;
+        // A key with "//" or a trailing "/" lists with an empty name; the file
+        // behind it cannot be named for a remove.
+        if (!name || name.includes('/')) {
+          errors.push(`list ${folder}: skipped an entry without a usable name`);
+          continue;
+        }
         const path = `${folder}/${name}`;
         if (entry.id != null) {
           paths.add(path);
@@ -136,7 +179,7 @@ async function listFilesUnder(
   };
 
   await walk(prefix, 0);
-  return { paths: [...paths], errors };
+  return { paths: [...paths], errors, outOfTime };
 }
 
 /**
@@ -146,61 +189,77 @@ async function listFilesUnder(
 async function removeFiles(
   bucket: StorageBucketApi,
   paths: string[],
-): Promise<{ removed: number; errors: string[] }> {
+  deadline: number,
+): Promise<{ removed: number; errors: string[]; outOfTime: boolean }> {
   let removed = 0;
   const errors: string[] = [];
   for (let i = 0; i < paths.length; i += REMOVE_BATCH) {
     const batch = paths.slice(i, i + REMOVE_BATCH);
     try {
-      const { data, error } = await bucket.remove(batch);
+      const { data, error } = await withinBudget(deadline, () => bucket.remove(batch));
       if (error) errors.push(`remove ${batch.length} file(s): ${messageOf(error)}`);
       else removed += data?.length ?? 0;
     } catch (e) {
+      if (e instanceof OutOfTime) return { removed, errors, outOfTime: true };
       errors.push(`remove ${batch.length} file(s): ${messageOf(e)}`);
     }
   }
-  return { removed, errors };
+  return { removed, errors, outOfTime: false };
 }
 
+/** Returns false when the time budget ran out before it finished. */
 async function removeAccountFiles(
   storage: StorageApi,
   account: { userId: string; driverProfileId: string | null },
   result: AccountStorageCleanup,
-): Promise<void> {
-  const avatars = await removeFiles(storage.from(AVATARS_BUCKET), avatarPaths(account.userId));
+  deadline: number,
+): Promise<boolean> {
+  const avatars = await removeFiles(storage.from(AVATARS_BUCKET), avatarPaths(account.userId), deadline);
   result.avatarsRemoved = avatars.removed;
   result.errors.push(...avatars.errors.map((e) => `${AVATARS_BUCKET}/${account.userId}: ${e}`));
+  if (avatars.outOfTime) return false;
 
   const driverProfileId = account.driverProfileId;
-  if (driverProfileId === null) return;
-  // Anything but a uuid could turn the prefix into driver-docs/ itself and walk
-  // every driver's files.
+  if (driverProfileId === null) return true;
+  // Defence in depth: with anything but a uuid the walk could start at
+  // driver-docs/ itself, the folder of every driver.
   if (!UUID_RE.test(driverProfileId)) {
     result.errors.push(
       `${DRIVER_DOCUMENTS_BUCKET}: driver profile id ${JSON.stringify(driverProfileId)} is not a uuid, nothing listed`,
     );
-    return;
+    return true;
   }
 
   const bucket = storage.from(DRIVER_DOCUMENTS_BUCKET);
   for (const prefix of driverDocumentPrefixes(driverProfileId)) {
-    const listing = await listFilesUnder(bucket, prefix);
+    const listing = await listFilesUnder(bucket, prefix, deadline);
     result.errors.push(...listing.errors.map((e) => `${DRIVER_DOCUMENTS_BUCKET}: ${e}`));
     result.documentsFound += listing.paths.length;
-    const removal = await removeFiles(bucket, listing.paths);
+    if (listing.outOfTime) return false;
+    const removal = await removeFiles(bucket, listing.paths, deadline);
     result.documentsRemoved += removal.removed;
     result.errors.push(...removal.errors.map((e) => `${DRIVER_DOCUMENTS_BUCKET}/${prefix}: ${e}`));
+    if (removal.outOfTime) return false;
+    if (removal.removed < listing.paths.length && removal.errors.length === 0) {
+      result.errors.push(
+        `${DRIVER_DOCUMENTS_BUCKET}/${prefix}: Storage removed ${removal.removed} of ${listing.paths.length} file(s) without an error; the rest are still there`,
+      );
+    }
   }
+  return true;
 }
 
 /**
  * Removes the avatar of `userId` and, when `driverProfileId` is set, every file
- * under that driver's folders in driver-documents. Never throws.
+ * under that driver's folders in driver-documents. Never throws, and gives up
+ * when the time budget runs out (20 s by default).
  */
 export async function cleanUpAccountStorage(
   storage: StorageApi,
   account: { userId: string; driverProfileId: string | null },
+  options: AccountStorageCleanupOptions = {},
 ): Promise<AccountStorageCleanup> {
+  const budgetMs = options.budgetMs ?? DEFAULT_BUDGET_MS;
   const result: AccountStorageCleanup = {
     avatarsRemoved: 0,
     driverProfileId: account.driverProfileId,
@@ -209,7 +268,8 @@ export async function cleanUpAccountStorage(
     errors: [],
   };
   try {
-    await removeAccountFiles(storage, account, result);
+    const finished = await removeAccountFiles(storage, account, result, Date.now() + budgetMs);
+    if (!finished) result.errors.push(`storage cleanup stopped: its time budget of ${budgetMs / 1000} s ran out`);
   } catch (e) {
     // A broken client (or a bug here) must not stop the deletion either.
     result.errors.push(`storage cleanup stopped: ${messageOf(e)}`);
