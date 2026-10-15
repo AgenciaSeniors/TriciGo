@@ -12,6 +12,8 @@ import type { DeliveryDetails, AdminRideMessage } from '@tricigo/api';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
+import { useCanAct } from '@/lib/useCanAct';
+import { RideDetailReadOnly } from '@/components/panel/RideDetailReadOnly';
 import { rideTypeLabel } from '@/lib/rideType';
 
 // States from which an admin may cancel a ride (matches valid_transitions
@@ -80,7 +82,7 @@ type RideDetail = {
   messages: AdminRideMessage[];
 };
 
-export default function RideDetailPage() {
+function AdminRideDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
@@ -596,4 +598,15 @@ export default function RideDetailPage() {
       />
     </div>
   );
+}
+
+/**
+ * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
+ * the panel views. The role picks which component mounts, so the hooks of each never change.
+ */
+export default function RideDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { canAct, ready } = useCanAct();
+  if (!ready) return null;
+  return canAct ? <AdminRideDetailPage /> : <RideDetailReadOnly rideId={id} />;
 }

@@ -9,6 +9,8 @@ import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
 import { getErrorMessage } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
+import { useCanAct } from '@/lib/useCanAct';
+import { UserDetailReadOnly } from '@/components/panel/UserDetailReadOnly';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
@@ -49,7 +51,7 @@ function formatCurrency(amount: number): string {
   return `${Math.round(amount).toLocaleString('es-CU')} TRC`;
 }
 
-export default function UserDetailPage() {
+function AdminUserDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
@@ -549,4 +551,15 @@ export default function UserDetailPage() {
       )}
     </div>
   );
+}
+
+/**
+ * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
+ * the panel views. The role picks which component mounts, so the hooks of each never change.
+ */
+export default function UserDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { canAct, ready } = useCanAct();
+  if (!ready) return null;
+  return canAct ? <AdminUserDetailPage /> : <UserDetailReadOnly userId={id} />;
 }

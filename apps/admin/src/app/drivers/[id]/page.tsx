@@ -20,6 +20,8 @@ import type {
 } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatAdminDate } from '@/lib/formatDate';
+import { useCanAct } from '@/lib/useCanAct';
+import { DriverDetailReadOnly } from '@/components/panel/DriverDetailReadOnly';
 import {
   ArrowLeft,
   FileText,
@@ -105,7 +107,7 @@ function vehicleIcon(type?: string) {
   }
 }
 
-export default function DriverDetailPage() {
+function AdminDriverDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { userId: adminUserId } = useAdminUser();
@@ -1340,4 +1342,15 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
       <div className="text-[10px] text-neutral-500 mt-0.5">{label}</div>
     </div>
   );
+}
+
+/**
+ * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
+ * the panel views. The role picks which component mounts, so the hooks of each never change.
+ */
+export default function DriverDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { canAct, ready } = useCanAct();
+  if (!ready) return null;
+  return canAct ? <AdminDriverDetailPage /> : <DriverDetailReadOnly driverId={id} />;
 }
