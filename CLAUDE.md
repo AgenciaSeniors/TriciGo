@@ -2415,7 +2415,8 @@ WHERE bucket_id = 'driver-documents'
 
 **Estado:**
 - **Los 135 huérfanos se borraron el 2026-10-15 (01:43 UTC), con autorización del dueño.** Eran 39 de 6 cuentas del borrado previo al lanzamiento (el 2026-06-07; su fila sigue en `zzz_backup_prelaunch_driver_profiles`) y 96 de 16 cuentas eliminadas en julio. Se borraron con la API de Storage: `net.http_delete` a `/storage/v1/object/driver-documents` con `{prefixes}` y `get_service_role_key()` dentro de la consulta, en tandas de 100 y 35. La consulta solo disparaba el borrado si el conjunto seguía siendo exactamente el listado (mismo conteo y md5 de los nombres ordenados). Storage respondió 200 en las dos, quedaron 0 huérfanos y siguen los 996 archivos de conductores vivos.
-- **Funciones:** sin desplegar. Pasan de 3 a 4 archivos (`_shared/account-storage-cleanup.ts`): un deploy por MCP tiene que mandar los 4. Después, un POST sin `Authorization` tiene que responder 401: prueba de que la función arranca.
+- **Funciones: desplegadas el 2026-10-15**, antes del merge de #1159: `delete-account` v20 y `admin-delete-pending-account` v11, con `verify_jwt=false` como antes. Se desplegaron con la CLI desde una exportación LF del árbol de git (`git -c core.autocrlf=false archive`; el worktree tenía los `.ts` en CRLF). Bajadas con `functions download`, los 4 archivos de cada una (`index.ts`, `service-key.ts`, `account-deletion.ts` y `account-storage-cleanup.ts`) son idénticos a master. Un POST sin `Authorization` responde 401 desde la propia función: arranca. Un redespliegue por MCP tiene que mandar los 4 archivos.
+- **No hubo prueba con una cuenta real** (decisión del dueño). La confirmación es la próxima eliminación de un conductor: su log tiene que mostrar `removed N of M driver document file(s)` con N igual a M, y la consulta de huérfanos tiene que seguir en 0.
 
 ### Bonos de una vez por persona: van atados al teléfono confirmado (00658, 2026-10-12)
 
