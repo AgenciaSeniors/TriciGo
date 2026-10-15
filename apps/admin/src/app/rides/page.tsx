@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Route, Search } from 'lucide-react';
-import { adminService } from '@tricigo/api/services/admin';
+import { panelReadService, type PanelRide } from '@tricigo/api';
 import { formatCUP, getErrorMessage } from '@tricigo/utils';
 import { useTranslation } from '@tricigo/i18n';
-import type { Ride } from '@tricigo/types';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { formatAdminDate } from '@/lib/formatDate';
 import { rideTypeLabel } from '@/lib/rideType';
+import { rideCancelSummary } from '@/lib/rideCancel';
 import { exportToCsv } from '@/lib/exportCsv';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRequestGuard } from '@/hooks/useRequestGuard';
@@ -63,7 +63,7 @@ export default function RidesPage() {
     { id: 'disputed', label: t('rides.filter_disputed', { defaultValue: 'En disputa' }), tone: 'warning' },
   ], [t]);
 
-  const [rides, setRides] = useState<Ride[]>([]);
+  const [rides, setRides] = useState<PanelRide[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -104,7 +104,7 @@ export default function RidesPage() {
       if (filters.dateTo) query.dateTo = filters.dateTo;
       if (debouncedSearch) query.search = debouncedSearch;
       if (selectedCity) query.cityId = selectedCity;
-      const data = await adminService.getRides(query, page, PAGE_SIZE);
+      const data = await panelReadService.getRides(query, page, PAGE_SIZE);
       if (!isLatest()) return;
       setRides(data);
     } catch (err) {
@@ -124,7 +124,7 @@ export default function RidesPage() {
   const sortedRides = useMemo(() => {
     if (!sort) return rides;
     const dir = sort.direction === 'asc' ? 1 : -1;
-    const key = sort.columnId as keyof Ride;
+    const key = sort.columnId as keyof PanelRide;
     return [...rides].sort((a, b) => {
       const av = a[key] as unknown;
       const bv = b[key] as unknown;
@@ -155,7 +155,11 @@ export default function RidesPage() {
 
   const handleExportCsv = useCallback(() => {
     exportToCsv(
-      sortedRides as unknown as Record<string, unknown>[],
+      sortedRides.map((r) => ({
+        ...r,
+        canceled_by_summary:
+          r.status === 'canceled' ? rideCancelSummary(t, r.canceled_by_role, r.cancellation_reason) : '',
+      })) as unknown as Record<string, unknown>[],
       [
         { key: 'pickup_address', label: t('rides.csv_col_origin', { defaultValue: 'Origen' }) },
         { key: 'dropoff_address', label: t('rides.csv_col_destination', { defaultValue: 'Destino' }) },
@@ -166,12 +170,13 @@ export default function RidesPage() {
         { key: 'actual_distance_m', label: t('rides.csv_col_actual_distance', { defaultValue: 'Distancia real (m)' }) },
         { key: 'payment_method', label: t('rides.csv_col_payment_method', { defaultValue: 'Método de pago' }) },
         { key: 'created_at', label: t('rides.csv_col_created', { defaultValue: 'Creado' }) },
+        { key: 'canceled_by_summary', label: t('panel_view.csv_canceled_by', { defaultValue: 'Canceló' }) },
       ],
       'rides',
     );
   }, [sortedRides, t]);
 
-  const columns: DataColumn<Ride>[] = [
+  const columns: DataColumn<PanelRide>[] = [
     {
       id: 'pickup_address',
       header: t('rides.col_route', { defaultValue: 'Ruta' }),
@@ -195,7 +200,20 @@ export default function RidesPage() {
     {
       id: 'status',
       header: t('rides.col_status', { defaultValue: 'Estado' }),
-      cell: (r) => <StatusBadge domain="ride" status={r.status} />,
+      cell: (r) => {
+        const cancelNote =
+          r.status === 'canceled' ? rideCancelSummary(t, r.canceled_by_role, r.cancellation_reason) : null;
+        return (
+          <div className="flex flex-col gap-0.5">
+            <StatusBadge domain="ride" status={r.status} />
+            {cancelNote && (
+              <span className="line-clamp-2 text-[11px] text-ink-subtle" title={cancelNote}>
+                {cancelNote}
+              </span>
+            )}
+          </div>
+        );
+      },
       width: '170px',
       sortKey: 'status',
     },
@@ -232,7 +250,7 @@ export default function RidesPage() {
       header: t('rides.col_distance', { defaultValue: 'Distancia' }),
       cell: (r) => {
         if (r.actual_distance_m != null) return `${(r.actual_distance_m / 1000).toFixed(1)} km`;
-        if (r.estimated_distance_m > 0)
+        if (r.estimated_distance_m != null && r.estimated_distance_m > 0)
           return (
             <span className="text-ink-muted">
               {(r.estimated_distance_m / 1000).toFixed(1)} km{' '}
@@ -406,7 +424,7 @@ export default function RidesPage() {
         )}
       </FilterBar>
 
-      <DataTable<Ride>
+      <DataTable<PanelRide>
         columns={columns}
         rows={sortedRides}
         keyField="id"
