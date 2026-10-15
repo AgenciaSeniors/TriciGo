@@ -9,6 +9,7 @@ import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { formatAdminDate } from '@/lib/formatDate';
 import { Field } from './RideDetailReadOnly';
+import { ReviewsReadOnly } from './ReviewsReadOnly';
 
 const LEVEL_LABEL_KEY: Record<string, { key: string; fallback: string }> = {
   bronce: { key: 'users.level_bronze', fallback: 'Bronce' },
@@ -69,6 +70,7 @@ export function UserDetailReadOnly({ userId }: { userId: string }) {
           <Field label={t('panel_view.user_spent', { defaultValue: 'Gastado en viajes' })}>{formatCUP(data.totalSpentCup)}</Field>
         </dl>
       </SectionCard>
+      <ReviewsReadOnly userId={u.id} />
     </div>
   );
 }

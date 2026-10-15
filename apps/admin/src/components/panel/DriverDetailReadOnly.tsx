@@ -10,6 +10,7 @@ import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { AdminTableSkeleton } from '@/components/ui/AdminTableSkeleton';
 import { formatAdminDate } from '@/lib/formatDate';
 import { Field } from './RideDetailReadOnly';
+import { ReviewsReadOnly } from './ReviewsReadOnly';
 
 const VEHICLE_TYPE_KEY: Record<string, { key: string; fallback: string }> = {
   triciclo: { key: 'drivers.type_triciclo', fallback: 'Triciclo' },
@@ -140,6 +141,8 @@ export function DriverDetailReadOnly({ driverId }: { driverId: string }) {
           </ul>
         </SectionCard>
       )}
+
+      <ReviewsReadOnly userId={p.user_id} />
     </div>
   );
 }
