@@ -9,9 +9,10 @@ import { Card } from '@tricigo/ui/Card';
 import { Button } from '@tricigo/ui/Button';
 import { ScreenHeader } from '@tricigo/ui/ScreenHeader';
 import { useTranslation } from '@tricigo/i18n';
-import { disputeService, getSupabaseClient, uploadFileFromUri } from '@tricigo/api';
+import { disputeService } from '@tricigo/api';
 import { getErrorMessage } from '@tricigo/utils';
 import { compressImage } from '@/lib/compressImage';
+import { uploadDisputeEvidence } from '@/lib/disputeEvidence';
 import { useFeatureFlag } from '@tricigo/api/hooks/useFeatureFlag';
 import { useAuth } from '@/lib/useAuth';
 import { colors, darkColors } from '@tricigo/theme';
@@ -100,40 +101,12 @@ export default function DisputeFormScreen() {
     setEvidenceUris((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const uploadEvidence = async (): Promise<string[]> => {
-    if (evidenceUris.length === 0) return [];
-
-    const supabase = getSupabaseClient();
-    const urls: string[] = [];
-
-    for (let i = 0; i < evidenceUris.length; i++) {
-      const uri = evidenceUris[i]!;
-      const ext = uri.split('.').pop() || 'jpg';
-      const fileName = `${Date.now()}_${i}.${ext}`;
-      const storagePath = `disputes/${rideId}/${userId}/${fileName}`;
-
-      // RN-safe upload via FormData. fetch(uri).blob() throws
-      // "Network request failed" on native. See _storage-upload.ts.
-      await uploadFileFromUri('dispute-evidence', storagePath, uri, {
-        fileName,
-        mimeType: `image/${ext}`,
-      });
-
-      const { data: urlData } = supabase.storage
-        .from('dispute-evidence')
-        .getPublicUrl(storagePath);
-      urls.push(urlData.publicUrl);
-    }
-
-    return urls;
-  };
-
   const handleSubmit = async () => {
     if (!reason || !description.trim() || !rideId || !userId) return;
 
     setSubmitting(true);
     try {
-      const evidenceUrls = await uploadEvidence();
+      const evidenceUrls = await uploadDisputeEvidence(rideId, userId, evidenceUris);
 
       await disputeService.createDispute({
         ride_id: rideId,
