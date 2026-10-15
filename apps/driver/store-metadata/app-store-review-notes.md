@@ -87,8 +87,10 @@ server-side) which performs an **immediate, irreversible hard-delete**:
 2. Best-effort cleanup of storage:
    - The driver's avatar from the `avatars` bucket.
    - **All KYC documents** (carné de identidad, licencia de
-     conducir, foto del vehículo, selfie de verificación) from the
-     `driver-documents/{user_id}/` bucket. Recursive list +
+     conducir, foto del vehículo, selfie de verificación) and selfie
+     checks from the `driver-documents` bucket, under
+     `driver-docs/{driver_profile_id}/` and
+     `selfie-checks/{driver_profile_id}/`. Paged recursive list +
      remove — every subfolder per document type is cleaned.
 3. `auth.admin.deleteUser(user_id)` deletes the `auth.users` row,
    CASCADEs to `public.users` and the CASCADE-flagged children:

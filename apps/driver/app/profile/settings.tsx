@@ -399,9 +399,10 @@ export default function DriverSettingsScreen() {
     //      anonymizes all non-CASCADE FK references to the user (rides,
     //      ratings, referrals, ledger entries, chat messages, etc.) by
     //      re-pointing them to the anonymous user (00000000-…-099).
-    //   2. Best-effort cleanup of the user's avatar AND any KYC documents
-    //      stored under `driver-documents/{user_id}/*` (carné, licencia,
-    //      vehicle photo, selfie).
+    //   2. Best-effort cleanup of the user's avatar AND every KYC document
+    //      (carné, licencia, vehicle photo, selfie) and selfie check, stored
+    //      in `driver-documents` under `driver-docs/{driver_profiles.id}/`
+    //      and `selfie-checks/{driver_profiles.id}/`.
     //   3. Calls `auth.admin.deleteUser` which CASCADEs to public.users
     //      and the CASCADE-flagged children including `driver_profiles`.
     //

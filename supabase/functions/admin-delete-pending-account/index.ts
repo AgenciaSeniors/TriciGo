@@ -37,7 +37,9 @@
 //
 // On confirm, the actual delete reuses the same machinery as delete-account:
 // prepare_account_deletion (00657: its own gates, the settlement and the
-// re-pointing in one transaction) → best-effort storage cleanup →
+// re-pointing in one transaction) → best-effort storage cleanup (the avatar and
+// the driver's documents under driver-docs/{driver_profiles.id}/ and
+// selfie-checks/{…}/, with the profile id read in step 4) →
 // auth.admin.deleteUser (CASCADE frees the phone). If prepare_account_deletion
 // refuses, the answer is 409 not_deletable with its code as the blocker
 // (without the deletion_ prefix) and its Spanish text in `message`.
@@ -50,6 +52,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey } from '../_shared/service-key.ts';
 import { prepareAccountDeletion } from '../_shared/account-deletion.ts';
+import { cleanUpAccountStorage, logAccountStorageCleanup } from '../_shared/account-storage-cleanup.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -241,33 +244,14 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(req, { error: prepared.error }, prepared.status);
     }
 
-    // 6c. Best-effort storage cleanup (avatars + driver KYC docs).
-    try {
-      await admin.storage
-        .from('avatars')
-        .remove([`${userId}/avatar.jpg`, `${userId}/avatar.png`, `${userId}/avatar.webp`]);
-    } catch { /* no-op */ }
-    try {
-      const { data: rootEntries } = await admin.storage
-        .from('driver-documents')
-        .list(userId, { limit: 100 });
-      const leafPaths: string[] = [];
-      for (const entry of rootEntries ?? []) {
-        if (entry.id) {
-          leafPaths.push(`${userId}/${entry.name}`);
-        } else {
-          const { data: subEntries } = await admin.storage
-            .from('driver-documents')
-            .list(`${userId}/${entry.name}`, { limit: 100 });
-          for (const sub of subEntries ?? []) {
-            leafPaths.push(`${userId}/${entry.name}/${sub.name}`);
-          }
-        }
-      }
-      if (leafPaths.length > 0) {
-        await admin.storage.from('driver-documents').remove(leafPaths);
-      }
-    } catch { /* no-op */ }
+    // 6c. Best-effort storage cleanup: the avatar and the driver's documents and
+    //     selfie checks, stored under the driver profile id read in step 4 (the
+    //     row goes away with the auth user). Never throws; errors are logged.
+    const storageCleanup = await cleanUpAccountStorage(admin.storage, {
+      userId,
+      driverProfileId: (driverProfile?.id as string | undefined) ?? null,
+    });
+    logAccountStorageCleanup('[admin-delete-pending-account]', userId, storageCleanup);
 
     // 6d. Hard-delete auth.users (CASCADE handles public.users + child tables,
     //     frees the phone/email for re-registration).
