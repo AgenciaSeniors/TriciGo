@@ -14,7 +14,7 @@ const PANEL_ROLES = ['admin', 'super_admin', 'marketing'] as const;
 
 export type PanelRole = (typeof PANEL_ROLES)[number];
 
-/** The pages marketing may open. Each one also covers its sub-pages. */
+/** The pages marketing may open. Each one also covers its sub-pages, except MARKETING_DENIED. */
 export const MARKETING_ROUTES: readonly string[] = [
   '/launch-pulse',
   '/funnel',
@@ -26,7 +26,22 @@ export const MARKETING_ROUTES: readonly string[] = [
   '/campaigns',
   '/announcements',
   '/blog',
+  // Read-only (00663). Marketing acts only on /support.
+  '/rides',
+  '/drivers',
+  '/users',
+  '/reviews',
+  '/support',
+  '/disputes',
+  '/incidents',
+  '/lost-found',
+  '/incomplete-drivers',
+  '/pois',
+  '/validation',
 ];
+
+/** Sub-pages of an allowed page that marketing still may not open: the stuck-ride assist tools. */
+const MARKETING_DENIED: readonly RegExp[] = [/^\/rides\/[^/]+\/assist(?:\/|$)/];
 
 /** The pages only super admins may open (00661, team invitations). Each one also covers its sub-pages. */
 export const SUPER_ADMIN_ROUTES: readonly string[] = ['/equipo'];
@@ -59,7 +74,16 @@ export function canOpenPanelPath(role: PanelRole, pathname: string): boolean {
   if (underRoute(SUPER_ADMIN_ROUTES, pathname)) return role === 'super_admin';
   if (role === 'admin' || role === 'super_admin') return true;
   if (role !== 'marketing') return false;
-  return underRoute(MARKETING_ROUTES, pathname);
+  return underRoute(MARKETING_ROUTES, pathname) && !MARKETING_DENIED.some((re) => re.test(pathname));
+}
+
+/**
+ * Whether the panel shows actions (approve, edit, cancel, move money). Admins and super admins
+ * act; marketing only reads, except on /support. An unknown role acts on nothing. It only shapes
+ * the UI: the server refuses those actions on its own.
+ */
+export function panelCanAct(role: PanelRole | null | undefined): boolean {
+  return role === 'admin' || role === 'super_admin';
 }
 
 /**
