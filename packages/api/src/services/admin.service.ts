@@ -90,7 +90,7 @@ export interface AdminRideMessage {
 import { exchangeRateService } from './exchange-rate.service';
 import { notificationService } from './notification.service';
 import { buildRejectionMessage } from './_driverDocRejectionPresets';
-import { escapeLikePattern, rideCodePrefix } from './_search';
+import { applyRideListFilters, escapeLikePattern, type RideListFilters } from './_search';
 import { AppError } from '../errors';
 
 /**
@@ -768,19 +768,7 @@ export const adminService = {
    * Get all rides with advanced filters.
    */
   async getRides(
-    filters: {
-      status?: string;
-      serviceType?: string;
-      paymentMethod?: string;
-      dateFrom?: string;
-      dateTo?: string;
-      search?: string;
-      cityId?: string;
-      /** 'cargo' = shipments, 'passenger' = normal rides. Filtering by
-          service_type cannot isolate shipments: a delivery is stored with the
-          chosen vehicle's slug, so it looks like any other moto/auto ride. */
-      rideMode?: 'passenger' | 'cargo';
-    } = {},
+    filters: RideListFilters = {},
     page = 0,
     pageSize = 20,
   ): Promise<Ride[]> {
@@ -788,47 +776,14 @@ export const adminService = {
     const from = page * pageSize;
     const to = from + pageSize - 1;
 
-    let query = supabase
-      .from('rides')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .range(from, to);
-
-    if (filters.status) {
-      query = query.eq('status', filters.status);
-    }
-    if (filters.serviceType) {
-      query = query.eq('service_type', filters.serviceType);
-    }
-    if (filters.rideMode) {
-      query = query.eq('ride_mode', filters.rideMode);
-    }
-    if (filters.paymentMethod) {
-      query = query.eq('payment_method', filters.paymentMethod);
-    }
-    // Date inputs are Havana calendar days ('YYYY-MM-DD'); raw strings would
-    // be read as UTC midnight (4-5h off Cuba's day).
-    if (filters.dateFrom) {
-      query = query.gte('created_at', havanaDayRangeUtc(filters.dateFrom).start.toISOString());
-    }
-    if (filters.dateTo) {
-      query = query.lt('created_at', havanaDayRangeUtc(filters.dateTo).end.toISOString());
-    }
-    if (filters.search) {
-      const code = rideCodePrefix(filters.search);
-      if (code) {
-        // uuid order is byte order, so every id with this prefix lies in this range.
-        query = query
-          .gte('id', `${code}-0000-0000-0000-000000000000`)
-          .lte('id', `${code}-ffff-ffff-ffff-ffffffffffff`);
-      } else {
-        const escaped = escapeLikePattern(filters.search);
-        query = query.or(`pickup_address.ilike.%${escaped}%,dropoff_address.ilike.%${escaped}%`);
-      }
-    }
-    if (filters.cityId) {
-      query = query.eq('city_id', filters.cityId);
-    }
+    const query = applyRideListFilters(
+      supabase
+        .from('rides')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, to),
+      filters,
+    );
 
     const { data, error } = await query;
     if (error) throw error;
