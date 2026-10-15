@@ -373,6 +373,8 @@ val X25 "BEGIN; INSERT INTO public.poi_import_queue (name) VALUES (repeat('n', 1
 # within ~200 m). Paladar Z has a single queue row and is asked by three rides of two riders in the
 # period, written with other case and spaces (Sam's ride names it at both ends: one ride), by a test
 # account and a system account (left out), and by a ride 40 days old (outside 30 days, inside 90).
+# last_seen is Sam's ride a day ago, later than the queue row: the test account's ride of today
+# does not count.
 PZ="f0000000-0000-4000-8000-0000000000"
 PZ_SETUP="INSERT INTO public.users (id, full_name, is_test) VALUES ('$TESTU', 'Cuenta de prueba', true);
   INSERT INTO public.rides (id, customer_id, status, pickup_address, dropoff_address, created_at) VALUES
@@ -383,7 +385,7 @@ PZ_SETUP="INSERT INTO public.users (id, full_name, is_test) VALUES ('$TESTU', 'C
     ('${PZ}95', '$SYS99', 'completed', 'Paladar Z, Obispo', 'Prado 1', now()),
     ('${PZ}96', '$CARLA', 'completed', 'Paladar Z', 'Prado 1', now() - interval '40 days');
   INSERT INTO public.poi_import_queue (ride_id, name, created_at) VALUES ('${PZ}91', 'Paladar Z', now() - interval '3 days');"
-PZ_ROW="e->>'name', e->>'rides', e->>'riders', e->>'imported', (e->>'last_seen')::timestamptz = now() - interval '3 days'"
+PZ_ROW="e->>'name', e->>'rides', e->>'riders', e->>'imported', (e->>'last_seen')::timestamptz = now() - interval '1 day'"
 val F4 "BEGIN; $PZ_SETUP $(as_user $MARA)
   SELECT $PZ_ROW FROM (SELECT public.get_product_failures(30)->'places_not_found'->0 e) x
   UNION ALL SELECT $PZ_ROW FROM (SELECT public.get_product_failures(90)->'places_not_found'->0 e) x; ROLLBACK;" \
@@ -400,14 +402,17 @@ val X16b "BEGIN; $PZ_SETUP $(as_user $MARA)
     AND jsonb_array_length(r->'app_versions') > 0 AND jsonb_array_length(r->'push_outcomes') > 0
   FROM (SELECT public.get_product_failures(30) r) x; ROLLBACK;" "$PF_KEYS|0|t|t"
 # F5: a place whose only queue row is older than the period is listed when a ride of the period asks
-# for it (the queue does not add a row while that one is pending); one asked by no ride of the period
-# is not (X18's Viejo).
-val F5 "BEGIN; INSERT INTO public.rides (customer_id, status, dropoff_address) VALUES ('$CARLA', 'completed', 'Cafe Viejo, Obispo');
+# for it (the queue does not add a row while that one is pending), seen last on that ride's date,
+# inside the period; one asked by no ride of the period is not (X18's Viejo).
+val F5 "BEGIN; INSERT INTO public.rides (customer_id, status, dropoff_address, created_at)
+    VALUES ('$CARLA', 'completed', 'Cafe Viejo, Obispo', now() - interval '5 days');
   INSERT INTO public.poi_import_queue (name, created_at) VALUES ('Cafe Viejo', now() - interval '45 days'),
                                                                ('Cafe Olvidado', now() - interval '45 days');
-  $(as_user $MARA) SELECT string_agg(e->>'name' || ':' || (e->>'rides') || ':' || (e->>'riders'), ',')
+  $(as_user $MARA) SELECT string_agg(e->>'name' || ':' || (e->>'rides') || ':' || (e->>'riders') || ':'
+      || ((e->>'last_seen')::timestamptz = now() - interval '5 days')::text || ':'
+      || ((e->>'last_seen')::timestamptz >= now() - interval '30 days')::text, ',')
   FROM (SELECT public.get_product_failures(30) r) x, jsonb_array_elements(r->'places_not_found') e
-  WHERE e->>'name' LIKE 'Cafe%'; ROLLBACK;" "Cafe Viejo:1:1"
+  WHERE e->>'name' LIKE 'Cafe%'; ROLLBACK;" "Cafe Viejo:1:1:true:true"
 
 # --- What is left as it was ----------------------------------------------------------------
 # X20: the marketing policies: 00642's eleven and this file's nine.

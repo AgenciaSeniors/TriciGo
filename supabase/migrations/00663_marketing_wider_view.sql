@@ -361,8 +361,9 @@ BEGIN
     -- spaces, shown with its latest spelling; it is listed when it was queued in the period or a
     -- ride of the period asked for it. rides: rides created in the period with that venue at
     -- either end; riders: their distinct customers. By name only: a ride to a place of the same
-    -- name elsewhere counts too. last_seen: its latest queue row. imported: how many of its queue
-    -- rows were imported (a count). Queue rows and rides of test and system accounts are left
+    -- name elsewhere counts too. last_seen: the later of its latest queue row and the latest of
+    -- those rides (the panel shows it as last seen). imported: how many of its queue rows were
+    -- imported (a count). Queue rows and rides of test and system accounts are left
     -- out; a queue row without a ride stays.
     'places_not_found', coalesce((
       WITH queued AS (
@@ -375,7 +376,7 @@ BEGIN
       ),
       places AS (
         SELECT place, left((array_agg(name ORDER BY created_at DESC, id DESC))[1], 80) AS name,
-               max(created_at) AS last_seen,
+               max(created_at) AS last_queued,
                count(*) FILTER (WHERE status = 'done')::integer AS imported,
                bool_or(created_at >= v_since) AS queued_in_period
         FROM queued
@@ -386,7 +387,7 @@ BEGIN
       -- NULL, so below it only confirms these few ends are venues; MATERIALIZED keeps the planner
       -- from calling it on every end of every ride.
       ends AS MATERIALIZED (
-        SELECT r.id, r.customer_id, e.addr, n.place
+        SELECT r.id, r.customer_id, r.created_at, e.addr, n.place
         FROM public.rides r
         JOIN public.users u ON u.id = r.customer_id
         CROSS JOIN LATERAL (VALUES (r.pickup_address), (r.dropoff_address)) AS e(addr)
@@ -395,7 +396,8 @@ BEGIN
           AND n.place IN (SELECT p.place FROM places p)
       ),
       demand AS (
-        SELECT place, count(DISTINCT id)::integer AS rides, count(DISTINCT customer_id)::integer AS riders
+        SELECT place, count(DISTINCT id)::integer AS rides, count(DISTINCT customer_id)::integer AS riders,
+               max(created_at) AS last_ride
         FROM ends
         WHERE public._poi_leading_venue_name(addr) IS NOT NULL
         GROUP BY place
@@ -405,11 +407,11 @@ BEGIN
                        ORDER BY x.rides DESC, x.last_seen DESC, x.name)
       FROM (
         SELECT p.name, coalesce(d.rides, 0) AS rides, coalesce(d.riders, 0) AS riders,
-               p.last_seen, p.imported
+               GREATEST(p.last_queued, d.last_ride) AS last_seen, p.imported
         FROM places p
         LEFT JOIN demand d ON d.place = p.place
         WHERE p.queued_in_period OR d.place IS NOT NULL
-        ORDER BY coalesce(d.rides, 0) DESC, p.last_seen DESC, p.name
+        ORDER BY coalesce(d.rides, 0) DESC, GREATEST(p.last_queued, d.last_ride) DESC, p.name
         LIMIT 50
       ) x), '[]'::jsonb),
     -- The last push registration outcome per account and app (00585), reported in the period.
@@ -712,7 +714,7 @@ BEGIN
     SELECT * FROM (VALUES
       ('public._panel_driver_churn_risk()', '20240a8b10635d4349bc31b96ef0eb50'),
       ('public.tg_support_tickets_client_update_guard()', '2a44d8f0d1e0181509edcc3a969a53ba'),
-      ('public.get_product_failures(integer)', '70bde4511d3aaf39180b83024e26ca1e')
+      ('public.get_product_failures(integer)', '57a40ccc37b3efd3f6053804d922b03e')
     ) AS v(fn, md5)
   LOOP
     IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_name::regprocedure) <> v_def THEN
