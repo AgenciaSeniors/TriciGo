@@ -2,7 +2,8 @@
 -- Runs after supabase/tests/00642/scaffold.sql + 00641 + 00642 (prod's marketing role) and adds
 -- what 00663 touches, reduced to the columns the code under test reads, with prod's policies as
 -- of 2026-10-15. Coordinates are text stand-ins (no PostGIS): no test reads them, and the views
--- must leave them out by name.
+-- must leave them out by name. The two POI functions read them through stubs of geometry,
+-- ST_X, ST_Y and unaccent below.
 SET ROLE postgres;
 
 -- Columns 00663's views read or must leave out.
@@ -22,8 +23,12 @@ ALTER TABLE public.rides
   ADD COLUMN IF NOT EXISTS actual_distance_m integer,
   ADD COLUMN IF NOT EXISTS estimated_duration_s integer,
   ADD COLUMN IF NOT EXISTS actual_duration_s integer,
+  -- wait_time_seconds and wait_charge_cup are dead in prod (0 of 246 rides use them); the app
+  -- fills wait_time_minutes and wait_time_charge_cup.
   ADD COLUMN IF NOT EXISTS wait_time_seconds integer,
   ADD COLUMN IF NOT EXISTS wait_charge_cup numeric,
+  ADD COLUMN IF NOT EXISTS wait_time_minutes integer,
+  ADD COLUMN IF NOT EXISTS wait_time_charge_cup integer,
   ADD COLUMN IF NOT EXISTS passenger_count integer,
   ADD COLUMN IF NOT EXISTS is_split boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS tip_amount integer,
@@ -42,7 +47,11 @@ ALTER TABLE public.rides
   ADD COLUMN IF NOT EXISTS dropoff_notes text,
   ADD COLUMN IF NOT EXISTS wallet_amount_cup integer,
   ADD COLUMN IF NOT EXISTS cash_amount_cup integer,
+  ADD COLUMN IF NOT EXISTS wallet_ratio numeric,
   ADD COLUMN IF NOT EXISTS payment_intent_id uuid;
+
+-- The commission driver_churn_risk subtracts from the earnings it hides.
+ALTER TABLE public.ride_pricing_snapshots ADD COLUMN IF NOT EXISTS commission_amount integer;
 
 ALTER TABLE public.driver_profiles
   ADD COLUMN IF NOT EXISTS acceptance_rate numeric,
@@ -139,13 +148,18 @@ CREATE TABLE public.ticket_messages (
   is_admin boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Prod's columns, in prod's order (2026-10-15).
 CREATE TABLE public.lost_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   ride_id uuid, reporter_id uuid NOT NULL, driver_id uuid,
-  description text, photo_urls text[] NOT NULL DEFAULT '{}',
+  description text, category text, photo_urls text[] NOT NULL DEFAULT '{}',
   status text NOT NULL DEFAULT 'reported',
-  admin_notes text,
-  created_at timestamptz NOT NULL DEFAULT now()
+  driver_response text, driver_found boolean, return_fee_cup integer,
+  return_location text, return_notes text, admin_notes text,
+  resolved_by uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  resolved_at timestamptz
 );
 CREATE TABLE public.ride_disputes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -228,13 +242,86 @@ CREATE TABLE public.cuba_pois_submissions (
   moderated_at timestamptz, rejection_reason text, promoted_poi_id bigint
 );
 
--- driver_churn_risk is a security_invoker view in prod; this one has its columns.
+-- driver_churn_risk as prod has it (00286): security_invoker, so the RLS of driver_profiles,
+-- users and rides applies to whoever reads it. The risk score and level are prod's expressions,
+-- written once here instead of three times.
 CREATE VIEW public.driver_churn_risk WITH (security_invoker = true) AS
-SELECT dp.id AS driver_profile_id, dp.user_id, u.full_name, dp.rating_avg, dp.total_rides_completed,
-       dp.acceptance_rate, dp.is_online, dp.status, 3 AS days_since_last_ride,
-       1200 AS earnings_this_week, 900 AS earnings_last_week,
-       0.4::numeric AS churn_risk_score, 'medium'::text AS risk_level
-FROM public.driver_profiles dp JOIN public.users u ON u.id = dp.user_id;
+SELECT c.driver_profile_id, c.user_id, c.full_name, c.rating_avg, c.total_rides_completed,
+       c.acceptance_rate, c.is_online, c.status, c.days_since_last_ride,
+       c.earnings_this_week, c.earnings_last_week, c.churn_risk_score,
+       CASE WHEN c.churn_risk_score >= 50 THEN 'high'
+            WHEN LEAST(100, GREATEST(0, c.days_points + c.rating_points)) >= 25 THEN 'medium'
+            ELSE 'low' END AS risk_level
+FROM (
+  SELECT b.*, LEAST(100, GREATEST(0, b.days_points + b.rating_points + b.acceptance_points)) AS churn_risk_score
+  FROM (
+    SELECT dp.id AS driver_profile_id, dp.user_id, u.full_name, dp.rating_avg, dp.total_rides_completed,
+           dp.acceptance_rate, dp.is_online, dp.status,
+           COALESCE(EXTRACT(days FROM (now() - (SELECT max(r.completed_at) FROM public.rides r
+             WHERE r.driver_id = dp.id AND r.status = 'completed'))), 999)::integer AS days_since_last_ride,
+           COALESCE((SELECT sum(r.final_fare_cup - COALESCE(rps.commission_amount, round(r.final_fare_cup * 0.15)::integer)
+                                + COALESCE(r.tip_amount, 0))
+                     FROM public.rides r
+                     LEFT JOIN public.ride_pricing_snapshots rps ON rps.ride_id = r.id AND rps.snapshot_type = 'final'
+                     WHERE r.driver_id = dp.id AND r.status = 'completed'
+                       AND r.completed_at > now() - interval '7 days'), 0)::integer AS earnings_this_week,
+           COALESCE((SELECT sum(r.final_fare_cup - COALESCE(rps.commission_amount, round(r.final_fare_cup * 0.15)::integer)
+                                + COALESCE(r.tip_amount, 0))
+                     FROM public.rides r
+                     LEFT JOIN public.ride_pricing_snapshots rps ON rps.ride_id = r.id AND rps.snapshot_type = 'final'
+                     WHERE r.driver_id = dp.id AND r.status = 'completed'
+                       AND r.completed_at >= now() - interval '14 days'
+                       AND r.completed_at <= now() - interval '7 days'), 0)::integer AS earnings_last_week,
+           LEAST(40, COALESCE(EXTRACT(days FROM (now() - (SELECT max(r.completed_at) FROM public.rides r
+             WHERE r.driver_id = dp.id AND r.status = 'completed'))), 30)::integer * 2) AS days_points,
+           CASE WHEN COALESCE(dp.rating_avg, 5) < 3.5 THEN 20 WHEN COALESCE(dp.rating_avg, 5) < 4.0 THEN 10 ELSE 0 END AS rating_points,
+           CASE WHEN COALESCE(dp.acceptance_rate, 100) < 50 THEN 20 WHEN COALESCE(dp.acceptance_rate, 100) < 70 THEN 10 ELSE 0 END AS acceptance_points
+    FROM public.driver_profiles dp
+    LEFT JOIN public.users u ON u.id = dp.user_id
+    WHERE dp.status = 'approved'
+  ) b
+) c;
+
+-- The PostGIS and unaccent pieces the live admin_list_pois and list_poi_submissions call: a
+-- geometry that is the text of the point, and an unaccent that changes nothing.
+CREATE DOMAIN public.geometry AS text;
+CREATE FUNCTION public.st_x(public.geometry) RETURNS double precision LANGUAGE sql IMMUTABLE AS $f$
+  SELECT split_part(btrim(split_part($1, '(', 2), ')'), ' ', 1)::double precision
+$f$;
+CREATE FUNCTION public.st_y(public.geometry) RETURNS double precision LANGUAGE sql IMMUTABLE AS $f$
+  SELECT split_part(btrim(split_part($1, '(', 2), ')'), ' ', 2)::double precision
+$f$;
+CREATE FUNCTION public.unaccent(text) RETURNS text LANGUAGE sql IMMUTABLE AS $f$ SELECT $1 $f$;
+
+-- Prod's review_is_public (00645): a visible review of the ride's driver, for a signed-in user.
+CREATE FUNCTION public.review_is_public(p_review_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+  SELECT auth.uid() IS NOT NULL AND EXISTS (
+    SELECT 1
+    FROM reviews rv
+    JOIN rides r ON r.id = rv.ride_id
+    JOIN driver_profiles dp ON dp.id = r.driver_id
+    WHERE rv.id = p_review_id
+      AND rv.is_visible = true
+      AND dp.user_id = rv.reviewee_id
+  );
+$function$;
+REVOKE ALL ON FUNCTION public.review_is_public(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.review_is_public(uuid) TO anon, authenticated, service_role;
+
+-- What prod's support_tickets INSERT guard (00653) asks of a ride: the caller's side of it.
+CREATE FUNCTION public._ride_context_for_caller(p_ride_id uuid) RETURNS TABLE (side text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public', 'pg_catalog' AS $f$
+  SELECT CASE WHEN r.customer_id = auth.uid() THEN 'customer' ELSE 'driver' END
+  FROM rides r
+  WHERE r.id = p_ride_id
+    AND (r.customer_id = auth.uid()
+         OR r.driver_id IN (SELECT dp.id FROM driver_profiles dp WHERE dp.user_id = auth.uid()))
+$f$;
 
 -- RLS and prod's policies (2026-10-15).
 ALTER TABLE public.vehicles ENABLE ROW LEVEL SECURITY;
@@ -266,7 +353,8 @@ CREATE POLICY "Admins read score events" ON public.driver_score_events FOR SELEC
 CREATE POLICY driver_outreach_log_admin_select ON public.driver_outreach_log FOR SELECT TO authenticated
   USING ((SELECT is_admin()));
 CREATE POLICY rev_select ON public.reviews FOR SELECT
-  USING (reviewer_id = (SELECT auth.uid()) OR reviewee_id = (SELECT auth.uid()) OR is_admin());
+  USING ((reviewer_id = (SELECT auth.uid())) OR (reviewee_id = (SELECT auth.uid()))
+      OR public.is_admin() OR public.review_is_public(id));
 CREATE POLICY rt_select ON public.review_tags FOR SELECT
   USING (EXISTS (SELECT 1 FROM public.reviews r WHERE r.id = review_tags.review_id));
 CREATE POLICY "Users read own tickets" ON public.support_tickets FOR SELECT
@@ -302,6 +390,37 @@ CREATE POLICY rps_select ON public.ride_pricing_snapshots FOR SELECT
 REVOKE ALL ON public.app_opens FROM anon, authenticated;
 -- driver_churn_risk: anon has no SELECT in prod (00532).
 REVOKE SELECT ON public.driver_churn_risk FROM anon;
+
+-- Prod's INSERT guard on support_tickets (00653). It sorts before 00663's UPDATE guard but fires
+-- on INSERT only, which 00663's trigger-order check must tell apart.
+CREATE FUNCTION public.tg_support_tickets_client_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_catalog
+AS $$
+BEGIN
+  IF current_user NOT IN ('anon', 'authenticated') OR public.is_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.ride_id IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public._ride_context_for_caller(NEW.ride_id)) THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'Ese viaje no es tuyo.',
+      DETAIL = 'ticket_ride_not_yours';
+  END IF;
+
+  NEW.status := 'open';
+  NEW.priority := 'normal';
+  NEW.assigned_to := NULL;
+  NEW.resolved_at := NULL;
+  NEW.created_at := now();
+  NEW.updated_at := NULL;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_support_tickets_client_guard BEFORE INSERT ON public.support_tickets
+  FOR EACH ROW EXECUTE FUNCTION public.tg_support_tickets_client_guard();
 
 RESET ROLE;
 \ir live-bodies.sql
