@@ -3,15 +3,16 @@
 -- Spec: docs/superpowers/specs/2026-10-15-marketing-visibility-design.md
 -- Needs 00642 (is_marketing() and the panel views).
 --
---   1. Panel views. panel_rides and panel_driver_profiles gain columns; four new views (driver
---      documents, churn risk, disputes, incidents) leave out files, money and internal notes.
---      Churn risk reads driver_churn_risk through _panel_driver_churn_risk(), a definer function:
---      that view is security_invoker and would show marketing nothing through a plain view.
+--   1. Panel views. panel_rides and panel_driver_profiles gain columns; five new views (driver
+--      documents, churn risk, disputes, incidents, lost items) leave out files, money and internal
+--      notes. Churn risk reads driver_churn_risk through _panel_driver_churn_risk(), a definer
+--      function: that view is security_invoker and would show marketing nothing through a plain view.
 --   2. SELECT policies for marketing on tables with nothing to hide.
 --   3. The read RPCs of the opened pages let marketing through their admin gate.
 --   4. Support: marketing replies as support and changes a ticket's status, and nothing else.
 --   5. get_product_failures(): the "Fallas del producto" section of Reportes.
---   6. Checks of everything above. A failed check aborts the whole file.
+--   6. A copy saved with CRLF line endings leaves no carriage return in the new bodies.
+--   7. Checks of everything above. A failed check aborts the whole file.
 --
 -- Additive: nothing that exists is loosened for any other role, and nothing is dropped.
 -- Every function patch starts from the live body, runs only on the body this file was written
@@ -20,7 +21,7 @@
 -- ============================================================
 
 -- Creating a policy locks its table; fail fast instead of queueing the app's reads behind us.
-SET lock_timeout = '5s';
+SET lock_timeout = '2s';
 
 -- Every table this file touches, locked up front: a ride first, then its people. ACCESS EXCLUSIVE
 -- where a policy or trigger is created, ACCESS SHARE where a view only reads it. On 40P01
@@ -29,8 +30,8 @@ LOCK TABLE public.rides IN ACCESS SHARE MODE;
 LOCK TABLE public.ride_transitions, public.ride_pricing_snapshots IN ACCESS EXCLUSIVE MODE;
 LOCK TABLE public.users, public.driver_profiles, public.vehicles, public.driver_documents IN ACCESS SHARE MODE;
 LOCK TABLE public.driver_score_events, public.driver_outreach_log, public.reviews,
-  public.support_tickets, public.ticket_messages, public.lost_items IN ACCESS EXCLUSIVE MODE;
-LOCK TABLE public.ride_disputes, public.incident_reports IN ACCESS SHARE MODE;
+  public.support_tickets, public.ticket_messages IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.ride_disputes, public.incident_reports, public.lost_items IN ACCESS SHARE MODE;
 
 -- 1. Panel views -----------------------------------------------------------------------------
 -- As in 00642: not security_invoker (the base tables' RLS would show marketing nothing), with
@@ -52,11 +53,15 @@ SELECT r.id, r.created_at, r.status, r.customer_id, r.driver_id, r.service_type,
          WHEN r.canceled_by = r.customer_id THEN 'customer'
          WHEN EXISTS (SELECT 1 FROM public.driver_profiles d
                       WHERE d.id = r.driver_id AND d.user_id = r.canceled_by) THEN 'driver'
-         ELSE 'staff'
+         -- Marketing cannot cancel rides: staff means an admin.
+         WHEN EXISTS (SELECT 1 FROM public.users u
+                      WHERE u.id = r.canceled_by AND u.role IN ('admin', 'super_admin')) THEN 'staff'
+         ELSE 'unknown'
        END AS canceled_by_role,
        r.cancellation_reason, r.cancellation_reason_code,
        r.estimated_distance_m, r.actual_distance_m, r.estimated_duration_s, r.actual_duration_s,
-       r.wait_time_seconds, r.wait_charge_cup, r.passenger_count, r.shared_ride, r.is_split,
+       -- The live wait columns: wait_time_seconds and wait_charge_cup were never filled.
+       r.wait_time_minutes, r.wait_time_charge_cup, r.passenger_count, r.shared_ride, r.is_split,
        r.corporate_account_id, r.partner_place_id, r.partner_discount_cup, r.tip_amount,
        r.surge_multiplier, r.driver_gps_status, r.searching_seen_at, r.last_dispatched_at,
        r.payment_status
@@ -138,6 +143,16 @@ SELECT i.id, i.ride_id, i.reported_by, i.against_user_id, i.type, i.severity, i.
 FROM public.incident_reports i
 WHERE (SELECT public.is_admin()) OR (SELECT public.is_marketing());
 
+-- Lost items without support's internal notes and the return arrangements (where and how the item
+-- goes back): the owner keeps those to support.
+CREATE OR REPLACE VIEW public.panel_lost_items
+WITH (security_barrier = true, security_invoker = false) AS
+SELECT l.id, l.ride_id, l.reporter_id, l.driver_id, l.description, l.category, l.photo_urls,
+       l.status, l.driver_response, l.driver_found, l.return_fee_cup, l.resolved_by,
+       l.created_at, l.updated_at, l.resolved_at
+FROM public.lost_items l
+WHERE (SELECT public.is_admin()) OR (SELECT public.is_marketing());
+
 -- Until 2026-10-30 Supabase gives every new view of public ALL for the API roles: take it back,
 -- then grant reading only. Written out per view: pnpm check:migration-grants skips dynamic SQL.
 REVOKE ALL ON public.panel_rides FROM PUBLIC, anon, authenticated, service_role;
@@ -146,12 +161,14 @@ REVOKE ALL ON public.panel_driver_documents FROM PUBLIC, anon, authenticated, se
 REVOKE ALL ON public.panel_driver_churn_risk FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON public.panel_ride_disputes FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON public.panel_incident_reports FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON public.panel_lost_items FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.panel_rides TO authenticated, service_role;
 GRANT SELECT ON public.panel_driver_profiles TO authenticated, service_role;
 GRANT SELECT ON public.panel_driver_documents TO authenticated, service_role;
 GRANT SELECT ON public.panel_driver_churn_risk TO authenticated, service_role;
 GRANT SELECT ON public.panel_ride_disputes TO authenticated, service_role;
 GRANT SELECT ON public.panel_incident_reports TO authenticated, service_role;
+GRANT SELECT ON public.panel_lost_items TO authenticated, service_role;
 
 COMMENT ON VIEW public.panel_rides IS
   'Rides as the admin panel reads them, for admins and marketing: no coordinates, share_token, notes or payment split (00642, 00663).';
@@ -167,21 +184,22 @@ COMMENT ON VIEW public.panel_ride_disputes IS
   'Disputes for admins and marketing: no evidence, refunds or admin notes (00663).';
 COMMENT ON VIEW public.panel_incident_reports IS
   'Incident reports for admins and marketing: no evidence or resolution notes (00663).';
+COMMENT ON VIEW public.panel_lost_items IS
+  'Lost items for admins and marketing: no admin notes or return arrangements (00663).';
 
 -- 2. Policies -------------------------------------------------------------------------------
 DO $policies$
 DECLARE
   c_m constant text := '(SELECT public.is_marketing())';
-  r record;
+  v_rec record;
 BEGIN
-  FOR r IN
+  FOR v_rec IN
     SELECT * FROM (VALUES
       ('reviews',                'reviews_select_marketing',                'SELECT', c_m,  NULL::text),
       ('support_tickets',        'support_tickets_select_marketing',        'SELECT', c_m,  NULL),
       ('support_tickets',        'support_tickets_update_marketing',        'UPDATE', c_m,  c_m),
       ('ticket_messages',        'ticket_messages_select_marketing',        'SELECT', c_m,  NULL),
       ('ticket_messages',        'ticket_messages_insert_marketing',        'INSERT', NULL, c_m || ' AND sender_id = (SELECT auth.uid())'),
-      ('lost_items',             'lost_items_select_marketing',             'SELECT', c_m,  NULL),
       ('ride_transitions',       'ride_transitions_select_marketing',       'SELECT', c_m,  NULL),
       ('ride_pricing_snapshots', 'ride_pricing_snapshots_select_marketing', 'SELECT', c_m,  NULL),
       ('driver_score_events',    'driver_score_events_select_marketing',    'SELECT', c_m,  NULL),
@@ -189,11 +207,11 @@ BEGIN
     ) AS v(tbl, name, cmd, using_expr, check_expr)
   LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_policies
-                   WHERE schemaname = 'public' AND tablename = r.tbl AND policyname = r.name) THEN
+                   WHERE schemaname = 'public' AND tablename = v_rec.tbl AND policyname = v_rec.name) THEN
       EXECUTE format('CREATE POLICY %I ON public.%I FOR %s TO authenticated%s%s',
-        r.name, r.tbl, r.cmd,
-        CASE WHEN r.using_expr IS NULL THEN '' ELSE ' USING (' || r.using_expr || ')' END,
-        CASE WHEN r.check_expr IS NULL THEN '' ELSE ' WITH CHECK (' || r.check_expr || ')' END);
+        v_rec.name, v_rec.tbl, v_rec.cmd,
+        CASE WHEN v_rec.using_expr IS NULL THEN '' ELSE ' USING (' || v_rec.using_expr || ')' END,
+        CASE WHEN v_rec.check_expr IS NULL THEN '' ELSE ' WITH CHECK (' || v_rec.check_expr || ')' END);
     END IF;
   END LOOP;
 END
@@ -206,12 +224,12 @@ $policies$;
 -- Targets and replacements lose any \r, so a copy saved with CRLF patches to the same bodies.
 DO $patch$
 DECLARE
-  r record;
+  v_rec record;
   v_src text;
   v_md5 text;
   v_target text;
 BEGIN
-  FOR r IN
+  FOR v_rec IN
     SELECT * FROM (VALUES
       ('public.admin_incomplete_driver_signups()',
        '2841ccd9b2c3f9cb3804a361097e22d3', '65aad048b3031c8398c21cf3649bd47f',
@@ -247,20 +265,20 @@ $t$,
 $t$)
     ) AS v(fn, old_md5, new_md5, target, repl)
   LOOP
-    SELECT prosrc INTO v_src FROM pg_proc WHERE oid = r.fn::regprocedure;
+    SELECT prosrc INTO v_src FROM pg_proc WHERE oid = v_rec.fn::regprocedure;
     v_md5 := md5(v_src);
-    CONTINUE WHEN v_md5 = r.new_md5;
-    IF v_md5 <> r.old_md5 THEN
-      RAISE EXCEPTION '00663: % has a body this file does not know (md5 %); patch it from the live body', r.fn, v_md5;
+    CONTINUE WHEN v_md5 = v_rec.new_md5;
+    IF v_md5 <> v_rec.old_md5 THEN
+      RAISE EXCEPTION '00663: % has a body this file does not know (md5 %); patch it from the live body', v_rec.fn, v_md5;
     END IF;
-    v_target := replace(r.target, chr(13), '');
+    v_target := replace(v_rec.target, chr(13), '');
     IF (length(v_src) - length(replace(v_src, v_target, ''))) / length(v_target) <> 1 THEN
-      RAISE EXCEPTION '00663: the target is not in % exactly once', r.fn;
+      RAISE EXCEPTION '00663: the target is not in % exactly once', v_rec.fn;
     END IF;
-    EXECUTE replace(pg_get_functiondef(r.fn::regprocedure), v_target, replace(r.repl, chr(13), ''));
-    SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = r.fn::regprocedure;
-    IF v_md5 <> r.new_md5 THEN
-      RAISE EXCEPTION '00663: % patched to an unexpected body (md5 %)', r.fn, v_md5;
+    EXECUTE replace(pg_get_functiondef(v_rec.fn::regprocedure), v_target, replace(v_rec.repl, chr(13), ''));
+    SELECT md5(prosrc) INTO v_md5 FROM pg_proc WHERE oid = v_rec.fn::regprocedure;
+    IF v_md5 <> v_rec.new_md5 THEN
+      RAISE EXCEPTION '00663: % patched to an unexpected body (md5 %)', v_rec.fn, v_md5;
     END IF;
   END LOOP;
 END
@@ -293,7 +311,8 @@ BEGIN
   END IF;
   NEW.updated_at := now();
   IF NEW.status IN ('resolved', 'closed') THEN
-    NEW.resolved_at := CASE WHEN OLD.status IN ('resolved', 'closed') THEN OLD.resolved_at ELSE now() END;
+    -- From resolved to closed the date stays; a ticket that was resolved without one gets it now.
+    NEW.resolved_at := CASE WHEN OLD.status IN ('resolved', 'closed') THEN coalesce(OLD.resolved_at, now()) ELSE now() END;
   ELSE
     NEW.resolved_at := NULL;
   END IF;
@@ -308,7 +327,9 @@ CREATE OR REPLACE TRIGGER trg_support_tickets_client_update_guard
 
 -- 5. Product failures -------------------------------------------------------------------------
 -- What breaks for users, by period, for admins and marketing. No amounts, no user ids, no
--- coordinates: counts and reasons only.
+-- coordinates: counts and reasons only, a reason cut to 60 characters and a place name to 80.
+-- Test accounts and the two system accounts (the platform and the deleted users) are left out of
+-- every block.
 CREATE OR REPLACE FUNCTION public.get_product_failures(p_days integer DEFAULT 30)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -317,6 +338,8 @@ SECURITY DEFINER
 SET search_path = ''
 AS $fn$
 DECLARE
+  c_system constant uuid[] := ARRAY['00000000-0000-0000-0000-000000000001',
+                                    '00000000-0000-0000-0000-000000000099']::uuid[];
   v_days integer := LEAST(GREATEST(coalesce(p_days, 30), 1), 365);
   v_since timestamptz := now() - make_interval(days => v_days);
 BEGIN
@@ -326,21 +349,27 @@ BEGIN
 
   RETURN jsonb_build_object(
     'days', v_days,
-    -- Places riders typed that the app did not have (00584 queues them).
+    -- Places riders asked for that the app did not have. 00584 queues one row per ride endpoint
+    -- it could not match, so requests counts the ride endpoints that asked for that name. A row
+    -- without a ride stays; one whose ride's customer is a test or system account does not.
     'places_not_found', coalesce((
-      SELECT jsonb_agg(jsonb_build_object('name', x.name, 'searches', x.searches,
+      SELECT jsonb_agg(jsonb_build_object('name', x.name, 'requests', x.requests,
                                           'last_seen', x.last_seen, 'imported', x.imported)
-                       ORDER BY x.searches DESC, x.last_seen DESC)
+                       ORDER BY x.requests DESC, x.last_seen DESC, x.name)
       FROM (
-        SELECT q.name, count(*)::integer AS searches, max(q.created_at) AS last_seen,
+        SELECT left(q.name, 80) AS name, count(*)::integer AS requests, max(q.created_at) AS last_seen,
                count(*) FILTER (WHERE q.status = 'done')::integer AS imported
         FROM public.poi_import_queue q
+        LEFT JOIN public.rides r ON r.id = q.ride_id
+        LEFT JOIN public.users u ON u.id = r.customer_id
         WHERE q.created_at >= v_since
-        GROUP BY q.name
-        ORDER BY count(*) DESC, max(q.created_at) DESC
+          AND NOT coalesce(u.is_test, false)
+          AND (r.customer_id IS NULL OR r.customer_id <> ALL (c_system))
+        GROUP BY left(q.name, 80)
+        ORDER BY count(*) DESC, max(q.created_at) DESC, left(q.name, 80)
         LIMIT 50
       ) x), '[]'::jsonb),
-    -- The last push registration outcome per account and app (00585), test accounts left out.
+    -- The last push registration outcome per account and app (00585), reported in the period.
     'push_outcomes', coalesce((
       SELECT jsonb_agg(jsonb_build_object('app', x.app, 'outcome', x.outcome, 'users', x.users)
                        ORDER BY x.app, x.outcome)
@@ -348,7 +377,7 @@ BEGIN
         SELECT s.app, s.outcome, count(*)::integer AS users
         FROM public.push_registration_status s
         JOIN public.users u ON u.id = s.user_id
-        WHERE NOT u.is_test
+        WHERE s.updated_at >= v_since AND NOT u.is_test AND s.user_id <> ALL (c_system)
         GROUP BY s.app, s.outcome
       ) x), '[]'::jsonb),
     -- Of the people active in the period, how many have a device that can get a push.
@@ -360,7 +389,7 @@ BEGIN
       FROM (
         SELECT DISTINCT r.customer_id AS id
         FROM public.rides r JOIN public.users u ON u.id = r.customer_id
-        WHERE r.created_at >= v_since AND NOT u.is_test
+        WHERE r.created_at >= v_since AND NOT u.is_test AND r.customer_id <> ALL (c_system)
       ) a
     ) || (
       SELECT jsonb_build_object(
@@ -368,7 +397,7 @@ BEGIN
         'drivers_reachable', count(*) FILTER (WHERE EXISTS (
           SELECT 1 FROM public.user_devices d WHERE d.user_id = dp.user_id)))
       FROM public.driver_profiles dp JOIN public.users u ON u.id = dp.user_id
-      WHERE dp.last_heartbeat_at >= v_since AND NOT u.is_test
+      WHERE dp.last_heartbeat_at >= v_since AND NOT u.is_test AND dp.user_id <> ALL (c_system)
     ),
     -- App versions opened in the period (00622). Empty until a build that reports opens is out.
     'app_versions', coalesce((
@@ -378,20 +407,23 @@ BEGIN
       FROM (
         SELECT o.app, o.app_version, o.platform, count(*)::integer AS installs
         FROM public.app_opens o
-        WHERE o.last_opened_at >= v_since
+        JOIN public.users u ON u.id = o.user_id
+        WHERE o.last_opened_at >= v_since AND NOT u.is_test AND o.user_id <> ALL (c_system)
         GROUP BY o.app, o.app_version, o.platform
       ) x), '[]'::jsonb),
-    -- Failed payments by reason: the provider's code, or the start of the error message.
+    -- Failed payments by reason: the provider's code, or else the start of the error message.
     'failed_payments', coalesce((
       SELECT jsonb_agg(jsonb_build_object('reason', x.reason, 'payments', x.payments,
                                           'last_seen', x.last_seen)
-                       ORDER BY x.payments DESC, x.last_seen DESC)
+                       ORDER BY x.payments DESC, x.last_seen DESC, x.reason)
       FROM (
-        SELECT coalesce(nullif(btrim(p.provider_error_code), ''),
-                        left(coalesce(nullif(btrim(p.error_message), ''), 'sin motivo'), 60)) AS reason,
+        SELECT left(coalesce(nullif(btrim(p.provider_error_code), ''),
+                             nullif(btrim(p.error_message), ''), 'sin motivo'), 60) AS reason,
                count(*)::integer AS payments, max(p.created_at) AS last_seen
         FROM public.payment_intents p
+        JOIN public.users u ON u.id = p.user_id
         WHERE p.status = 'failed' AND p.created_at >= v_since
+          AND NOT u.is_test AND p.user_id <> ALL (c_system)
         GROUP BY 1
       ) x), '[]'::jsonb)
   );
@@ -400,9 +432,31 @@ $fn$;
 REVOKE ALL ON FUNCTION public.get_product_failures(integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_product_failures(integer) TO authenticated, service_role;
 
--- 6. What this file promises ----------------------------------------------------------------
+-- 6. A copy pasted with CRLF line endings leaves carriage returns in the bodies --------------
+-- Recreate each function this file creates from the catalogue without them, so its md5 is the
+-- one section 7 expects. CREATE OR REPLACE keeps the grants, and pg_get_functiondef keeps
+-- SECURITY DEFINER and the search_path. The patched bodies need nothing: section 3 strips \r.
+DO $crlf$
+DECLARE
+  v_fn  regprocedure;
+  v_def text;
+BEGIN
+  FOREACH v_fn IN ARRAY ARRAY[
+    'public._panel_driver_churn_risk()', 'public.tg_support_tickets_client_update_guard()',
+    'public.get_product_failures(integer)']::regprocedure[]
+  LOOP
+    v_def := pg_get_functiondef(v_fn);
+    IF position(chr(13) IN v_def) > 0 THEN
+      EXECUTE replace(v_def, chr(13), '');
+    END IF;
+  END LOOP;
+END
+$crlf$;
+
+-- 7. What this file promises ----------------------------------------------------------------
 DO $check$
 DECLARE
+  -- Columns no panel view may carry, whichever view it is.
   c_hidden constant text[] := ARRAY[
     'share_token', 'share_token_expires_at', 'pickup_location', 'dropoff_location',
     'actual_dropoff_location', 'pickup_lat', 'pickup_lng', 'dropoff_lat', 'dropoff_lng',
@@ -411,21 +465,30 @@ DECLARE
     'face_match_score', 'liveness_passed', 'evidence_urls', 'respondent_evidence_urls',
     'refund_amount_trc', 'refund_transaction_id', 'admin_notes', 'earnings_this_week',
     'earnings_last_week', 'pickup_notes', 'dropoff_notes', 'wallet_amount_cup', 'cash_amount_cup',
-    'payment_intent_id'];
+    'payment_intent_id', 'return_location', 'return_notes'];
+  -- A policy condition as Postgres stores it, printed with the empty search_path set below.
+  c_m constant text := '( SELECT public.is_marketing() AS is_marketing)';
   c_guard constant regprocedure := 'public.tg_support_tickets_client_update_guard()'::regprocedure;
   c_pf constant regprocedure := 'public.get_product_failures(integer)'::regprocedure;
   c_churn constant regprocedure := 'public._panel_driver_churn_risk()'::regprocedure;
+  v_search_path text := current_setting('search_path');
   v_fn regprocedure;
   v_name text;
   v_def text;
   v_tbl text;
   v_cmd text;
+  v_using text;
+  v_with_check text;
   v_pcmd text;
   v_roles name[];
   v_perm text;
   v_qual text;
   v_check text;
 BEGIN
+  -- pg_policies and pg_get_viewdef qualify names by the search_path: with an empty one the texts
+  -- compared below are the same in every session. Put back at the end.
+  PERFORM set_config('search_path', '', true);
+
   -- No panel_ view in public carries a hidden column (by name: a column added later fails here).
   SELECT string_agg(c.relname || '.' || a.attname, ', ') INTO v_def
   FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
@@ -435,10 +498,32 @@ BEGIN
     RAISE EXCEPTION '00663: % is a hidden column in a panel view', v_def;
   END IF;
 
-  -- The six views: read as the owner behind the gate, readable only by authenticated and
+  -- And each view leaves out what its own table keeps to admins. A column listed here may be
+  -- shown by another view: resolution_notes is a dispute's outcome but an incident's admin note.
+  SELECT string_agg(v.view_name || '.' || a.attname, ', ' ORDER BY v.view_name, a.attnum) INTO v_def
+  FROM (VALUES
+    ('panel_rides', ARRAY['wallet_ratio']),
+    ('panel_driver_profiles', ARRAY['is_financially_eligible', 'quota_blocked', 'match_score',
+                                    'custom_per_km_rate_cup', 'preferences']),
+    ('panel_driver_documents', ARRAY['storage_path', 'file_name', 'face_match_score', 'liveness_passed']),
+    ('panel_driver_churn_risk', ARRAY['earnings_this_week', 'earnings_last_week']),
+    ('panel_ride_disputes', ARRAY['evidence_urls', 'respondent_evidence_urls', 'refund_amount_trc',
+                                  'refund_transaction_id', 'admin_notes', 'ride_estimated_fare_trc',
+                                  'ride_final_fare_trc']),
+    ('panel_incident_reports', ARRAY['evidence_urls', 'resolution_notes']),
+    ('panel_lost_items', ARRAY['admin_notes', 'return_location', 'return_notes'])
+  ) AS v(view_name, cols)
+  JOIN pg_attribute a ON a.attrelid = ('public.' || v.view_name)::regclass AND a.attnum > 0 AND NOT a.attisdropped
+  WHERE a.attname = ANY (v.cols);
+  IF v_def IS NOT NULL THEN
+    RAISE EXCEPTION '00663: % is a column that view must leave out', v_def;
+  END IF;
+
+  -- The seven views: read as the owner behind the gate, readable only by authenticated and
   -- service_role, writable by none of them.
   FOREACH v_name IN ARRAY ARRAY['panel_rides', 'panel_driver_profiles', 'panel_driver_documents',
-                                'panel_driver_churn_risk', 'panel_ride_disputes', 'panel_incident_reports'] LOOP
+                                'panel_driver_churn_risk', 'panel_ride_disputes', 'panel_incident_reports',
+                                'panel_lost_items'] LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_class
                    WHERE oid = ('public.' || v_name)::regclass AND relkind = 'v'
                      AND reloptions @> ARRAY['security_barrier=true', 'security_invoker=false']) THEN
@@ -460,49 +545,43 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- The policies: PERMISSIVE, TO authenticated, using is_marketing().
-  FOR v_tbl, v_name, v_cmd IN
+  -- The policies, exactly as this file creates them: one of the same name that is wider in any
+  -- way (another command or role, RESTRICTIVE, another condition) fails here.
+  FOR v_tbl, v_name, v_cmd, v_using, v_with_check IN
     SELECT * FROM (VALUES
-      ('reviews', 'reviews_select_marketing', 'SELECT'),
-      ('support_tickets', 'support_tickets_select_marketing', 'SELECT'),
-      ('support_tickets', 'support_tickets_update_marketing', 'UPDATE'),
-      ('ticket_messages', 'ticket_messages_select_marketing', 'SELECT'),
-      ('ticket_messages', 'ticket_messages_insert_marketing', 'INSERT'),
-      ('lost_items', 'lost_items_select_marketing', 'SELECT'),
-      ('ride_transitions', 'ride_transitions_select_marketing', 'SELECT'),
-      ('ride_pricing_snapshots', 'ride_pricing_snapshots_select_marketing', 'SELECT'),
-      ('driver_score_events', 'driver_score_events_select_marketing', 'SELECT'),
-      ('driver_outreach_log', 'driver_outreach_log_select_marketing', 'SELECT')
-    ) AS v(t, n, c)
+      ('reviews', 'reviews_select_marketing', 'SELECT', c_m, NULL::text),
+      ('support_tickets', 'support_tickets_select_marketing', 'SELECT', c_m, NULL),
+      ('support_tickets', 'support_tickets_update_marketing', 'UPDATE', c_m, c_m),
+      ('ticket_messages', 'ticket_messages_select_marketing', 'SELECT', c_m, NULL),
+      ('ticket_messages', 'ticket_messages_insert_marketing', 'INSERT', NULL,
+       '(' || c_m || ' AND (sender_id = ( SELECT auth.uid() AS uid)))'),
+      ('ride_transitions', 'ride_transitions_select_marketing', 'SELECT', c_m, NULL),
+      ('ride_pricing_snapshots', 'ride_pricing_snapshots_select_marketing', 'SELECT', c_m, NULL),
+      ('driver_score_events', 'driver_score_events_select_marketing', 'SELECT', c_m, NULL),
+      ('driver_outreach_log', 'driver_outreach_log_select_marketing', 'SELECT', c_m, NULL)
+    ) AS v(t, n, c, u, w)
   LOOP
-    SELECT p.cmd, p.roles, p.permissive, coalesce(p.qual, ''), coalesce(p.with_check, '')
+    SELECT p.cmd, p.roles, p.permissive, p.qual, p.with_check
       INTO v_pcmd, v_roles, v_perm, v_qual, v_check
     FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = v_tbl AND p.policyname = v_name;
     IF NOT FOUND THEN
       RAISE EXCEPTION '00663: policy % on % is missing', v_name, v_tbl;
     END IF;
-    IF (v_cmd IN ('SELECT', 'UPDATE') AND position('is_marketing()' IN v_qual) = 0)
-       OR (v_cmd IN ('INSERT', 'UPDATE') AND position('is_marketing()' IN v_check) = 0) THEN
-      RAISE EXCEPTION '00663: policy % on % does not use is_marketing()', v_name, v_tbl;
-    END IF;
-    IF v_pcmd <> v_cmd OR v_roles <> ARRAY['authenticated']::name[] OR v_perm <> 'PERMISSIVE' THEN
-      RAISE EXCEPTION '00663: policy % on % must be PERMISSIVE FOR % TO authenticated (it is % FOR % TO %)',
-        v_name, v_tbl, v_cmd, v_perm, v_pcmd, v_roles;
+    IF v_pcmd IS DISTINCT FROM v_cmd OR v_roles IS DISTINCT FROM ARRAY['authenticated']::name[]
+       OR v_perm IS DISTINCT FROM 'PERMISSIVE' OR v_qual IS DISTINCT FROM v_using
+       OR v_check IS DISTINCT FROM v_with_check THEN
+      RAISE EXCEPTION '00663: policy % on % is not the one this file creates (it is % FOR % TO %, USING %, WITH CHECK %)',
+        v_name, v_tbl, v_perm, v_pcmd, v_roles, coalesce(v_qual, '-'), coalesce(v_check, '-');
     END IF;
   END LOOP;
-  SELECT coalesce(with_check, '') INTO v_check FROM pg_policies
-  WHERE schemaname = 'public' AND tablename = 'ticket_messages' AND policyname = 'ticket_messages_insert_marketing';
-  IF v_check !~ 'sender_id = \( SELECT auth\.uid\(\)' THEN
-    RAISE EXCEPTION '00663: policy ticket_messages_insert_marketing does not tie sender_id to auth.uid()';
-  END IF;
 
   -- Tables marketing reads only through the panel views, or not at all.
   SELECT string_agg(tablename || '.' || policyname, ', ') INTO v_def FROM pg_policies
   WHERE schemaname = 'public'
     AND tablename IN ('rides', 'driver_profiles', 'vehicles', 'driver_documents', 'ride_disputes',
-                      'incident_reports', 'wallet_accounts', 'ledger_entries', 'ledger_transactions',
-                      'wallet_transfers', 'payment_intents', 'ride_messages', 'delivery_details',
-                      'selfie_checks', 'driver_contracts', 'user_devices')
+                      'incident_reports', 'lost_items', 'wallet_accounts', 'ledger_entries',
+                      'ledger_transactions', 'wallet_transfers', 'payment_intents', 'ride_messages',
+                      'delivery_details', 'selfie_checks', 'driver_contracts', 'user_devices')
     AND (position('is_marketing' IN coalesce(qual, '')) > 0
          OR position('is_marketing' IN coalesce(with_check, '')) > 0);
   IF v_def IS NOT NULL THEN
@@ -538,6 +617,15 @@ BEGIN
                    AND cardinality(tgattr::int2[]) = 0 AND tgqual IS NULL) THEN
     RAISE EXCEPTION '00663: trg_support_tickets_client_update_guard must fire BEFORE UPDATE FOR EACH ROW on support_tickets, on every column, enabled';
   END IF;
+  -- And it fires first: BEFORE row triggers of the same event fire in name order, so one that
+  -- sorts before the guard could change NEW behind its back.
+  SELECT string_agg(t.tgname, ', ') INTO v_def FROM pg_trigger t
+  WHERE t.tgrelid = 'public.support_tickets'::regclass AND NOT t.tgisinternal
+    AND (t.tgtype & (1 | 2 | 16)) = (1 | 2 | 16)
+    AND t.tgname::text COLLATE "C" < 'trg_support_tickets_client_update_guard' COLLATE "C";
+  IF v_def IS NOT NULL THEN
+    RAISE EXCEPTION '00663: % fires before trg_support_tickets_client_update_guard on an UPDATE of support_tickets', v_def;
+  END IF;
 
   -- get_product_failures() and _panel_driver_churn_risk(): definers with an empty search_path
   -- that answer admins and marketing only, return no hidden column, and are executable by
@@ -562,6 +650,22 @@ BEGIN
       RAISE EXCEPTION '00663: % must be executable by authenticated and service_role, not by anon or PUBLIC', v_fn;
     END IF;
   END LOOP;
+
+  -- The bodies this file creates, without carriage returns (section 6).
+  FOR v_name, v_def IN
+    SELECT * FROM (VALUES
+      ('public._panel_driver_churn_risk()', '20240a8b10635d4349bc31b96ef0eb50'),
+      ('public.tg_support_tickets_client_update_guard()', '2a44d8f0d1e0181509edcc3a969a53ba'),
+      ('public.get_product_failures(integer)', 'd769cb2d50af193a46d04b8ffe0ec671')
+    ) AS v(fn, md5)
+  LOOP
+    IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_name::regprocedure) <> v_def THEN
+      RAISE EXCEPTION '00663: % does not have the body of this file (md5 %)', v_name,
+        (SELECT md5(prosrc) FROM pg_proc WHERE oid = v_name::regprocedure);
+    END IF;
+  END LOOP;
+
+  PERFORM set_config('search_path', v_search_path, true);
 END
 $check$;
 
