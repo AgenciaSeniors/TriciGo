@@ -121,8 +121,8 @@ function NowStat({ label, value, sub, action }: { label: string; value: string; 
 
 export default function LaunchPulsePage() {
   const { t } = useTranslation('admin');
-  // 00642: marketing opens this page but not /incomplete-drivers; the middleware would bounce
-  // the link. No link while the role is loading or unknown.
+  // Show the link only to roles that may open /incomplete-drivers (marketing may since 00663).
+  // No link while the role is loading or unknown.
   const { role } = usePanelRole();
   const canOpenIncompleteDrivers = role !== null && canOpenPanelPath(role, '/incomplete-drivers');
 

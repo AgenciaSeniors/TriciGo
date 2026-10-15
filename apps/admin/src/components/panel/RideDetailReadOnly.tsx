@@ -150,6 +150,7 @@ export function RideDetailReadOnly({ rideId }: { rideId: string }) {
               <Field label={t('panel_view.pricing_per_km', { defaultValue: 'Por km' })}>{formatCUP(pricing.per_km_rate ?? 0)}</Field>
               <Field label={t('panel_view.pricing_per_min', { defaultValue: 'Por minuto' })}>{formatCUP(pricing.per_minute_rate ?? 0)}</Field>
               <Field label={t('panel_view.pricing_total', { defaultValue: 'Total' })}>{formatCUP(pricing.total ?? 0)}</Field>
+              <Field label={t('panel_view.pricing_commission', { defaultValue: 'Comisión' })}>{formatCUP(pricing.commission_amount ?? 0)}</Field>
             </dl>
           </SectionCard>
         ) : null}

@@ -2971,7 +2971,7 @@ Update PR #1163's body: what changed, the rehearsal result, the checks, and the 
 
 Through `execute_sql`, run the migration text inside `DO $probe$ BEGIN EXECUTE $mig$<file>$mig$; … RAISE EXCEPTION 'PROBE %', <results>; END $probe$;` with, as Mara-like checks, a real marketing account if one exists (`SELECT id FROM users WHERE role = 'marketing'`), else as an admin: read each new view, call `get_product_failures(30)`, insert a support reply in a test ticket. The final `RAISE` rolls everything back. Confirm by object afterwards that nothing stayed (`to_regclass('public.panel_driver_documents')` is null, md5 of the seven functions are the old ones).
 
-- [ ] **Step 2: Apply 00663 by MCP** (ask the owner with AskUserQuestion first; the file has no DROP or DELETE). Verify by object: the seven md5s are the new ones, the four new views exist with their grants, the ten policies exist, `get_product_failures` answers an admin.
+- [ ] **Step 2: Apply 00663 by MCP** (ask the owner with AskUserQuestion first; the file has no DROP or DELETE). Verify by object: the seven md5s are the new ones, the five new views exist with their grants (with `panel_lost_items`), the nine policies exist, `get_product_failures` answers an admin.
 
 - [ ] **Step 3: Merge PR #1163** after the owner's explicit OK ("¿Autorizo el squash-merge de #1163?"). The merge deploys the panel.
 

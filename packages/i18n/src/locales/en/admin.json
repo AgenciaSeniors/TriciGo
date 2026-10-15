@@ -2824,6 +2824,7 @@
     "pricing_snapshot_estimate": "Estimated calculation, when the ride was requested",
     "pricing_snapshot_final": "Final calculation, when the ride ended",
     "pricing_total": "Total",
+    "pricing_commission": "Commission",
     "reviews_count_one": "{{count}} review",
     "reviews_count_other": "{{count}} reviews",
     "reviews_empty": "No reviews yet.",

@@ -2824,6 +2824,7 @@
     "pricing_snapshot_estimate": "Cálculo estimado, al pedir el viaje",
     "pricing_snapshot_final": "Cálculo final, al terminar el viaje",
     "pricing_total": "Total",
+    "pricing_commission": "Comisión",
     "reviews_count_one": "{{count}} reseña",
     "reviews_count_other": "{{count}} reseñas",
     "reviews_empty": "Todavía no tiene reseñas.",
