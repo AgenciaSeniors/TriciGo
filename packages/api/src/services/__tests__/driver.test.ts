@@ -235,9 +235,10 @@ describe('driverService', () => {
         'license.jpg',
       );
 
-      expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
-        body: expect.any(FormData),
-      });
+      expect(mockFunctionsInvoke).toHaveBeenCalledWith(
+        'storage-upload',
+        expect.objectContaining({ body: expect.any(FormData) }),
+      );
       expect(uploadedPath()).toBe('driver-docs/d-1/license/1760000000000-license.jpg');
       // A retry after a timed-out attempt that did land rewrites this same,
       // fresh object; without upsert it would fail with 409.
@@ -310,9 +311,10 @@ describe('driverService', () => {
         'selfie.jpg',
       );
 
-      expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
-        body: expect.any(FormData),
-      });
+      expect(mockFunctionsInvoke).toHaveBeenCalledWith(
+        'storage-upload',
+        expect.objectContaining({ body: expect.any(FormData) }),
+      );
       expect(mockFrom).toHaveBeenCalledWith('selfie_checks');
       expect(result).toEqual(mockCheck);
     });

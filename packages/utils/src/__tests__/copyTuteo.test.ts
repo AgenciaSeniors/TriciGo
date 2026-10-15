@@ -453,6 +453,8 @@ describe('Spanish copy uses tuteo', () => {
     // check_copy_voseo() (00652) scans the copy admins edit in prod with the list
     // embedded in public.voseo_forms(). When a verb is added above, a new
     // migration must redefine that function with JSON.stringify([...FORMS].sort()).
+    // It reads every migration file, so it gets the same budget as the file
+    // scan above: it once took 5.2 s with every package's suite running in parallel.
     const defining = readdirSync(MIGRATIONS)
       .filter((name) => /^\d{5}_.*\.sql$/.test(name))
       .sort()
@@ -466,7 +468,7 @@ describe('Spanish copy uses tuteo', () => {
     expect(embedded === JSON.stringify([...FORMS].sort()), `${latest} lists other voseo forms than this test`).toBe(
       true,
     );
-  });
+  }, 30_000);
 
   it('picks migrations by their number', () => {
     // Guards the filter below: if it broke, every new migration would be

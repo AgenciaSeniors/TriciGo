@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
+import { describe, it, expect, expectTypeOf, vi, beforeEach, assert } from 'vitest';
 
 // uploadFileFromUri routes the upload through the `storage-upload` Edge Function
 // (service-role) via `functions.invoke`, NOT a direct `supabase.storage.upload()`
@@ -29,6 +29,7 @@ describe('uploadFileFromUri', () => {
 
     expect(mockFunctionsInvoke).toHaveBeenCalledWith('storage-upload', {
       body: expect.any(FormData),
+      signal: expect.any(AbortSignal),
     });
     const call = mockFunctionsInvoke.mock.calls[0];
     assert(call);
@@ -39,17 +40,35 @@ describe('uploadFileFromUri', () => {
     expect(body.get('contentType')).toBe('image/jpeg');
   });
 
-  it('defaults upsert to false and omits contentType when no mimeType is given', async () => {
-    await uploadFileFromUri('dispute-evidence', 'disputes/r1/u1/p.png', 'file:///tmp/p.png', {
-      fileName: 'p.png',
+  it('omits contentType when no mimeType is given', async () => {
+    // The selfie upload passes no mimeType.
+    await uploadFileFromUri('driver-documents', 'selfie-checks/d1/c1/selfie.jpg', 'file:///tmp/selfie.jpg', {
+      fileName: 'selfie.jpg',
+      upsert: true,
     });
 
     const call = mockFunctionsInvoke.mock.calls[0];
     assert(call);
     const body = call[1].body as FormData;
-    expect(body.get('bucket')).toBe('dispute-evidence');
-    expect(body.get('upsert')).toBe('false');
+    expect(body.get('path')).toBe('selfie-checks/d1/c1/selfie.jpg');
     expect(body.get('contentType')).toBeNull();
+  });
+
+  it('sends upsert=false when the caller passes false', async () => {
+    await uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg', upsert: false });
+
+    const call = mockFunctionsInvoke.mock.calls[0];
+    assert(call);
+    expect((call[1].body as FormData).get('upsert')).toBe('false');
+  });
+
+  // Checked by tsc, not at run time: pnpm check-types covers this file.
+  it('requires the caller to choose upsert', () => {
+    // The path is fixed for the whole call. After a first attempt that did land,
+    // a retry without upsert fails with 409 on its own file, so upsert has no
+    // default: every caller has to pass it. An optional upsert would be typed
+    // boolean | undefined here.
+    expectTypeOf<Parameters<typeof uploadFileFromUri>[3]['upsert']>().toEqualTypeOf<boolean>();
   });
 
   it('falls back to error.message on a gateway error with no JSON body', async () => {
@@ -58,7 +77,7 @@ describe('uploadFileFromUri', () => {
     mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: uploadErr });
 
     await expect(
-      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg' }),
+      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg', upsert: true }),
     ).rejects.toThrow('Network request failed');
   });
 
@@ -75,7 +94,7 @@ describe('uploadFileFromUri', () => {
     mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: httpErr });
 
     await expect(
-      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg' }),
+      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg', upsert: true }),
     ).rejects.toThrow('db_error: statement timeout');
   });
 
@@ -89,7 +108,7 @@ describe('uploadFileFromUri', () => {
     mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: httpErr });
 
     await expect(
-      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg' }),
+      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg', upsert: true }),
     ).rejects.toThrow('forbidden');
   });
 
@@ -97,7 +116,7 @@ describe('uploadFileFromUri', () => {
     mockFunctionsInvoke.mockResolvedValueOnce({ data: { error: 'bucket not allowed' }, error: null });
 
     await expect(
-      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg' }),
+      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg', upsert: true }),
     ).rejects.toThrow('bucket not allowed');
   });
 
@@ -147,6 +166,71 @@ describe('uploadFileFromUri', () => {
     }
   });
 
+  it('aborts the request of an attempt that timed out before sending the retry', async () => {
+    // Left running, the abandoned upload would share a slow link with the retry.
+    vi.useFakeTimers();
+    try {
+      const signalOf = (call: number) =>
+        (mockFunctionsInvoke.mock.calls[call]?.[1] as { signal?: AbortSignal } | undefined)?.signal;
+      let firstAbortedWhenRetrySent: boolean | undefined;
+      mockFunctionsInvoke
+        .mockReturnValueOnce(new Promise(() => {})) // never resolves — a hung request
+        .mockImplementationOnce(async () => {
+          firstAbortedWhenRetrySent = signalOf(0)?.aborted;
+          return { data: { path: 'ok' }, error: null };
+        });
+
+      const p = uploadFileFromUri('avatars', 'u/avatar.jpg', 'file:///a.jpg', {
+        fileName: 'avatar.jpg',
+        upsert: true,
+      });
+      await vi.advanceTimersByTimeAsync(50_000);
+      await expect(p).resolves.toBeUndefined();
+
+      expect(signalOf(0)).toBeInstanceOf(AbortSignal);
+      expect(firstAbortedWhenRetrySent).toBe(true);
+      expect(signalOf(1)?.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up with upload_timeout when both attempts time out, aborting each request', async () => {
+    vi.useFakeTimers();
+    try {
+      // Like functions-js: an aborted request settles as a FunctionsFetchError.
+      // This one settles right inside the abort listener, the earliest it can.
+      mockFunctionsInvoke.mockImplementation(
+        (_name: string, options: { signal: AbortSignal }) =>
+          new Promise((resolve) => {
+            options.signal.addEventListener('abort', () =>
+              resolve({
+                data: null,
+                error: { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function' },
+              }),
+            );
+          }),
+      );
+
+      const p = uploadFileFromUri('avatars', 'u/avatar.jpg', 'file:///a.jpg', {
+        fileName: 'avatar.jpg',
+        upsert: true,
+      });
+      // Attach the rejection expectation before advancing (no unhandled rejection).
+      const assertion = expect(p).rejects.toThrow('upload_timeout');
+      // Two 45 s attempts + the 2 s backoff.
+      await vi.advanceTimersByTimeAsync(95_000);
+      await assertion;
+
+      expect(mockFunctionsInvoke).toHaveBeenCalledTimes(2);
+      for (const [, options] of mockFunctionsInvoke.mock.calls) {
+        expect((options as { signal: AbortSignal }).signal.aborted).toBe(true);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('gives up after the max attempts on a persistent network error', async () => {
     vi.useFakeTimers();
     try {
@@ -157,6 +241,7 @@ describe('uploadFileFromUri', () => {
 
       const p = uploadFileFromUri('avatars', 'u/avatar.jpg', 'file:///a.jpg', {
         fileName: 'avatar.jpg',
+        upsert: true,
       });
       // Attach the rejection expectation before advancing so the eventual reject
       // is handled (no unhandled-rejection warning).
@@ -177,7 +262,7 @@ describe('uploadFileFromUri', () => {
     mockFunctionsInvoke.mockResolvedValueOnce({ data: null, error: httpErr });
 
     await expect(
-      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg' }),
+      uploadFileFromUri('driver-documents', 'p', 'file:///x.jpg', { fileName: 'x.jpg', upsert: true }),
     ).rejects.toThrow('forbidden');
     expect(mockFunctionsInvoke).toHaveBeenCalledTimes(1); // no retry on a denial
   });

@@ -31,16 +31,17 @@ import { getSupabaseClient } from '../client';
  * afterward (PostgREST validates the JWT fine — only Storage was broken).
  *
  * WHY a timeout + retry (Cuban connectivity):
- * `supabase.functions.invoke` has NO built-in timeout. On a flaky edge/3G link
- * the request can hang indefinitely — the UI shows an infinite spinner that
- * users perceive as a freeze ("se bloquea"). We race the invoke against a hard
- * timeout so a stalled upload becomes a clear, surfaced error, and we auto-retry
- * once on a timeout/network-class failure (the common transient case in Cuba).
+ * `supabase.functions.invoke` has no timeout unless one is passed, and the
+ * client's fetch backstop (makeTimeoutFetch) only gives up after 120 s. On a
+ * flaky edge/3G link that is a long spinner users perceive as a freeze ("se
+ * bloquea"). We race each attempt against a 45 s timeout so a stalled upload
+ * becomes a clear, surfaced error, and we auto-retry once on a
+ * timeout/network-class failure (the common transient case in Cuba).
  * A real denial (forbidden/too_large/etc. — a `{ error }` body) is NOT retried.
- * The path is fixed for the whole call. With upsert (avatar, selfie, driver
- * documents, dispute evidence) a retry rewrites the object the first attempt
- * may have written. Without upsert, a retry after a first attempt that did
- * land fails with 409.
+ * The path is fixed for the whole call, which is why `upsert` is required.
+ * With upsert (avatar, selfie, driver documents, dispute evidence) a retry
+ * rewrites the object the first attempt may have written. Without it, a retry
+ * after a first attempt that did land fails with 409.
  *
  * Throws on failure (gateway error, timeout, or an `{ error }` body from the EF).
  */
@@ -62,7 +63,13 @@ export async function uploadFileFromUri(
   bucket: string,
   storagePath: string,
   uri: string,
-  opts: { fileName: string; mimeType?: string; upsert?: boolean },
+  opts: {
+    fileName: string;
+    mimeType?: string;
+    /** No default: a retry reuses the path, so without upsert it fails with
+     *  409 when the first attempt did land. */
+    upsert: boolean;
+  },
 ): Promise<void> {
   const supabase = getSupabaseClient();
 
@@ -77,7 +84,7 @@ export async function uploadFileFromUri(
     } as unknown as Blob);
     formData.append('bucket', bucket);
     formData.append('path', storagePath);
-    formData.append('upsert', String(opts.upsert ?? false));
+    formData.append('upsert', String(opts.upsert));
     if (opts.mimeType) formData.append('contentType', opts.mimeType);
 
     try {
@@ -100,25 +107,30 @@ export async function uploadFileFromUri(
 /**
  * One invoke attempt, raced against a hard timeout. Resolves on success; throws
  * `UploadTransientError` on a timeout (retryable) and a plain `Error` on a real
- * EF/gateway failure (not retryable). Note: the timeout unblocks the UI but does
- * not cancel the underlying fetch — supabase-js 2.49 `invoke` takes no signal;
- * a stalled request is simply abandoned.
+ * EF/gateway failure (not retryable). A timeout also aborts the attempt's
+ * request: functions-js `invoke` (2.99.1) passes the signal on to fetch, so the
+ * abandoned upload stops sharing a slow link with the retry. Aborting cannot
+ * tell whether the Edge Function already received the whole body and saved the
+ * file, so the retry still needs upsert.
  */
 async function invokeStorageUpload(
   supabase: ReturnType<typeof getSupabaseClient>,
   formData: FormData,
 ): Promise<void> {
+  const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(
-      () => reject(new UploadTransientError('upload_timeout')),
-      UPLOAD_TIMEOUT_MS,
-    );
+    timeoutId = setTimeout(() => {
+      // Reject first: the race has to settle as a timeout before the abort can
+      // settle the invoke with a fetch error.
+      reject(new UploadTransientError('upload_timeout'));
+      controller.abort();
+    }, UPLOAD_TIMEOUT_MS);
   });
 
   try {
     const { data, error } = await Promise.race([
-      supabase.functions.invoke('storage-upload', { body: formData }),
+      supabase.functions.invoke('storage-upload', { body: formData, signal: controller.signal }),
       timeout,
     ]);
     if (error) {

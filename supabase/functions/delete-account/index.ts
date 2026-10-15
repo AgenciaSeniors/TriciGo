@@ -8,7 +8,10 @@
 //   1. Verify the caller's Supabase JWT (Bearer token in Authorization
 //      header). The user being deleted is always the authenticated
 //      user — we never accept a user_id from the request body.
-//   2. Call `prepare_account_deletion(user_id)` (00657). In ONE
+//   2. Read the account's driver_profiles.id, if it has one. The driver's
+//      documents are stored under it, and the row goes away with the auth
+//      user (CASCADE), so it is read before anything changes.
+//   3. Call `prepare_account_deletion(user_id)` (00657). In ONE
 //      transaction it refuses while the account has a ride in progress or
 //      scheduled, an open report or dispute, a debt or a payment in flight
 //      (409 with a Spanish `message`), settles the wallet, and re-points
@@ -16,10 +19,12 @@
 //      00000000-…-099), preserving the financial / audit trail. If any
 //      reference cannot be moved, nothing is changed. Before 00657 is
 //      applied it falls back to the two old RPCs (_shared/account-deletion).
-//   3. Best-effort clean of the user's avatar from the `avatars`
-//      storage bucket. Failure here doesn't abort the deletion —
-//      the row is already anonymized.
-//   4. Call `auth.admin.deleteUser(user_id)`. The CASCADE chain from
+//   4. Best-effort Storage cleanup (_shared/account-storage-cleanup): the
+//      avatar, and the driver's documents and selfie checks under
+//      driver-docs/{driver_profiles.id}/ and selfie-checks/{…}/ of the
+//      driver-documents bucket. A Storage error is logged and doesn't abort
+//      the deletion — the row is already anonymized.
+//   5. Call `auth.admin.deleteUser(user_id)`. The CASCADE chain from
 //      auth.users handles public.users + all CASCADE-flagged child
 //      tables (wallet_accounts, trusted_contacts, notifications,
 //      recurring_rides, driver_profiles, etc.). The phone/email is
@@ -41,10 +46,10 @@
 //
 // Idempotency: if the user has already been deleted, step 1's
 // `auth.getUser` will return unauthorized and the function returns
-// 401. Calling again after step 2 succeeded but auth.admin.deleteUser
+// 401. Calling again after step 3 succeeded but auth.admin.deleteUser
 // failed is safe: the settlement and the re-pointing are no-ops the
 // second time. Known gap: a ride created in the milliseconds between
-// step 2 and step 4 keeps a reference to the user, so the auth delete
+// step 3 and step 5 keeps a reference to the user, so the auth delete
 // fails and the account stays, already settled and anonymized; a retry
 // is refused until that ride ends.
 // ============================================================
@@ -52,6 +57,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2';
 import { getServiceKey } from '../_shared/service-key.ts';
 import { prepareAccountDeletion } from '../_shared/account-deletion.ts';
+import { cleanUpAccountStorage, logAccountStorageCleanup } from '../_shared/account-storage-cleanup.ts';
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').filter(Boolean);
 
@@ -116,7 +122,19 @@ Deno.serve(async (req: Request) => {
   });
 
   try {
-    // ─── 2. Gates + wallet settlement + anonymization, all or nothing ───
+    // ─── 2. The driver profile id, before anything changes ───
+    //     The driver's documents are stored under it, not under the user id,
+    //     and the row goes away with the auth user. Nothing has changed yet,
+    //     so a failed read stops here and the person can try again.
+    const { data: driverRow, error: driverErr } = await admin
+      .from('driver_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (driverErr) throw new Error(`driver_profile_lookup_failed: ${driverErr.message}`);
+    const driverProfileId = (driverRow?.id as string | undefined) ?? null;
+
+    // ─── 3. Gates + wallet settlement + anonymization, all or nothing ───
     //     MUST run before auth.admin.deleteUser: the settlement moves any
     //     balance to platform_revenue (wallet_accounts.user_id is ON DELETE SET
     //     NULL per 00422) and the re-pointing keeps the FKs from blocking the
@@ -132,57 +150,13 @@ Deno.serve(async (req: Request) => {
     }
     const { settled, anonymized } = prepared;
 
-    // ─── 3. Best-effort: clean storage buckets ───
+    // ─── 4. Best-effort: the avatar and the driver's documents ───
+    //     Only once the database step accepted: a refusal keeps the files.
+    //     Never throws; every Storage error is logged.
+    const storageCleanup = await cleanUpAccountStorage(admin.storage, { userId, driverProfileId });
+    logAccountStorageCleanup('[delete-account]', userId, storageCleanup);
 
-    // 3a. `avatars` bucket — both client and driver upload avatars under
-    //     `{user_id}/<filename>` per 00025_avatar_storage.sql. We try
-    //     common extensions; if the user uploaded under a different
-    //     name, it's a no-op (the cron purge would catch leftovers).
-    try {
-      await admin.storage
-        .from('avatars')
-        .remove([`${userId}/avatar.jpg`, `${userId}/avatar.png`, `${userId}/avatar.webp`]);
-    } catch {
-      // ignore — file may not exist or bucket may not be configured
-    }
-
-    // 3b. `driver-documents` bucket — drivers upload KYC docs (carné de
-    //     identidad, licencia de conducir, foto del vehículo, selfie de
-    //     verificación) under `{user_id}/<doc_type>/<filename>` per
-    //     00117_driver_documents_storage_rls.sql. We list-then-remove
-    //     because the exact filenames vary per upload. For non-driver
-    //     users this is a no-op (list returns empty).
-    //
-    // The list API returns paths relative to the bucket root. We
-    // recursively gather subfolders (one per document type) so the
-    // remove call passes the full set of leaf paths in one batch.
-    try {
-      const { data: rootEntries } = await admin.storage
-        .from('driver-documents')
-        .list(userId, { limit: 100 });
-      const leafPaths: string[] = [];
-      for (const entry of rootEntries ?? []) {
-        if (entry.id) {
-          // file directly under {userId}/
-          leafPaths.push(`${userId}/${entry.name}`);
-        } else {
-          // subfolder per document type → list it
-          const { data: subEntries } = await admin.storage
-            .from('driver-documents')
-            .list(`${userId}/${entry.name}`, { limit: 100 });
-          for (const sub of subEntries ?? []) {
-            leafPaths.push(`${userId}/${entry.name}/${sub.name}`);
-          }
-        }
-      }
-      if (leafPaths.length > 0) {
-        await admin.storage.from('driver-documents').remove(leafPaths);
-      }
-    } catch {
-      // ignore — non-driver user or bucket misconfigured
-    }
-
-    // ─── 4. Hard-delete auth.users (CASCADE handles the rest) ───
+    // ─── 5. Hard-delete auth.users (CASCADE handles the rest) ───
     const { error: deleteErr } = await admin.auth.admin.deleteUser(userId);
     if (deleteErr) {
       throw new Error(`auth_delete_failed: ${deleteErr.message}`);
