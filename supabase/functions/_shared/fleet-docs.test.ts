@@ -92,9 +92,22 @@ describe('storageUpsert', () => {
   it("keeps the caller's flag anywhere else", () => {
     // driver-docs/ still overwrites on purpose: installed driver apps re-upload
     // under the gallery file name and rely on it. Closing it needs its own rollout.
+    // A write-once rule there (planned after #1156) still has to let a retry of
+    // the same call rewrite the file its first attempt saved: uploadFileFromUri
+    // retries once with the same path.
     const driverDoc = ['driver-docs', '00000000-0000-4000-8000-000000000301', 'drivers_license', 'IMG_1234.jpg'];
     expect(storageUpsert('driver-documents', driverDoc, true)).toBe(true);
     expect(storageUpsert('driver-documents', driverDoc, false)).toBe(false);
     expect(storageUpsert('avatars', ['00000000-0000-4000-8000-000000000401', 'avatar.jpg'], true)).toBe(true);
+    // The client's same-path retry relies on this: dispute evidence uploads with
+    // upsert, so a retry rewrites the photo its first attempt saved instead of
+    // failing with 409 (apps/client/src/lib/disputeEvidence.ts).
+    const disputePhoto = [
+      'disputes',
+      '00000000-0000-4000-8000-000000000501',
+      '00000000-0000-4000-8000-000000000601',
+      '1790000000000_0.jpg',
+    ];
+    expect(storageUpsert('dispute-evidence', disputePhoto, true)).toBe(true);
   });
 });
