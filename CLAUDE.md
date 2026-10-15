@@ -2387,6 +2387,36 @@ Ese día no había viajes en curso (el último punto real era del 7/10). En el p
   - **Verificado por objeto:** las cuatro claves son índices únicos parciales con `…0099` en el predicado, sin constraint, y `uniq_reviews_ride_reviewer` ya no existe.
   - **Probado con dos conductores referidos reales, en un bloque revertido:** los dos se eliminan, sus billeteras quedan en 0 y las dos filas de `referrals` pasan a `…0099`. Al deshacer, todo volvió a 10.000.
 
+### Eliminar una cuenta: los archivos del conductor están bajo `driver_profiles.id` (2026-10-14)
+
+`delete-account` (desde #163, 2026-05-23) y `admin-delete-pending-account` (desde #820, 2026-07-17) buscaban los documentos del conductor en `driver-documents/{user_id}/`, pero nunca se guardaron ahí. `uploadDocument` (app y panel) sube a `driver-docs/{driver_profiles.id}/{tipo}/{archivo}` desde el primer commit, y `uploadSelfieCheck` a `selfie-checks/{driver_profiles.id}/{check}/{archivo}`. La limpieza no encontraba nada. Además no miraba el `error` que devuelve `storage-js` (no lanza: responde `{ data: null, error }`) y se tragaba las excepciones con `catch {}`, así que nunca dejó rastro. Medido el 2026-10-14: 1.131 objetos bajo `driver-docs/`, ninguno bajo un id de usuario, y **135 de 22 perfiles de conductor que ya no existen** (carnets, licencias y fotos de cuentas eliminadas).
+
+**Desde el arreglo:**
+- La limpieza vive en `_shared/account-storage-cleanup.ts` y la usan las dos funciones. Corre después de que `prepare_account_deletion` aceptó y antes de GoTrue: un rechazo deja la cuenta y sus archivos como estaban.
+- El `driver_profiles.id` se lee antes de `prepare_account_deletion`. La fila se va con el usuario de auth (`auth.users → users → driver_profiles`, todo CASCADE). Si no se puede leer, `delete-account` responde 500 `deletion_failed` sin haber cambiado nada.
+- Recorre `driver-docs/{id}/` y `selfie-checks/{id}/` con `list()` paginado (100 por página) y borra con `remove()` en tandas de 100 (la API acepta hasta 1.000 por llamada). Desde #1156 cada re-subida es un objeto nuevo, así que una carpeta puede pasar de 100.
+- Un id que no es uuid no lista nada. Es una defensa: con un id vacío, la recorrida empezaría en `driver-docs/`, la carpeta de todos los conductores.
+- Es best-effort: un error de Storage no frena la eliminación. Queda en los logs de la función con el usuario y el perfil (`[delete-account] storage cleanup (user …, driver profile …): …`), y cada borrado deja `removed N of M driver document file(s)`. También van al log de errores los archivos que Storage dejó sin dar error y las entradas sin un nombre usable.
+- **Tiene 20 s en total.** Si Storage se cuelga, deja de esperar, la cuenta se elimina igual y lo que faltó queda en el log (`its time budget of 20 s ran out`). Sin ese límite, el runtime cortaba la función antes de `auth.admin.deleteUser` y la cuenta quedaba viva, ya liquidada y anonimizada.
+- `fleet-docs/` es de la flota, no del conductor, y no se toca.
+- **Una subida nueva a `driver-documents` con otro prefijo** se suma a `driverDocumentPrefixes`, o sus archivos quedan huérfanos al eliminar la cuenta.
+- Se borra con la API de Storage, nunca borrando filas de `storage.objects`: eso deja el archivo físico huérfano.
+- Tests: `delete-account/index.test.ts`, `admin-delete-pending-account/index.test.ts` y `_shared/account-storage-cleanup.test.ts`, con un Storage en memoria que lista como la API (carpetas con `id: null`, paginación por `offset`, comprobado contra el bucket real). Con el código anterior fallaban 10 tests de los handlers, y 20 mutaciones del código nuevo (sacar la paginación, las tandas, la verja de uuid, el presupuesto de tiempo, los logs o el `try/catch`; mover la lectura del perfil o la limpieza) hacen fallar al menos uno.
+- **Para ver qué devuelve `list()` en prod sin escribir la clave:** `net.http_post` a `/storage/v1/object/list/<bucket>` con `public.get_service_role_key()` dentro de la consulta (como `apikey` y en `Authorization`) y el cuerpo `{prefix, limit, offset, sortBy}`, y leer `net._http_response`. Es solo lectura.
+
+```sql
+-- Archivos de conductores que ya no existen
+SELECT count(*) AS huerfanos, count(DISTINCT split_part(name,'/',2)) AS conductores
+FROM storage.objects o
+WHERE bucket_id = 'driver-documents'
+  AND split_part(name,'/',1) IN ('driver-docs','selfie-checks')
+  AND NOT EXISTS (SELECT 1 FROM public.driver_profiles dp WHERE dp.id::text = split_part(o.name,'/',2));
+```
+
+**Estado:**
+- **Los 135 huérfanos se borraron el 2026-10-15 (01:43 UTC), con autorización del dueño.** Eran 39 de 6 cuentas del borrado previo al lanzamiento (el 2026-06-07; su fila sigue en `zzz_backup_prelaunch_driver_profiles`) y 96 de 16 cuentas eliminadas en julio. Se borraron con la API de Storage: `net.http_delete` a `/storage/v1/object/driver-documents` con `{prefixes}` y `get_service_role_key()` dentro de la consulta, en tandas de 100 y 35. La consulta solo disparaba el borrado si el conjunto seguía siendo exactamente el listado (mismo conteo y md5 de los nombres ordenados). Storage respondió 200 en las dos, quedaron 0 huérfanos y siguen los 996 archivos de conductores vivos.
+- **Funciones:** sin desplegar. Pasan de 3 a 4 archivos (`_shared/account-storage-cleanup.ts`): un deploy por MCP tiene que mandar los 4. Después, un POST sin `Authorization` tiene que responder 401: prueba de que la función arranca.
+
 ### Bonos de una vez por persona: van atados al teléfono confirmado (00658, 2026-10-12)
 
 Un código de promoción se podía usar una vez por **cuenta** (`promotion_uses`) y un referido se pagaba una vez por **cuenta** (`referrals.referee_id`). Al eliminar la cuenta, las dos filas pasan a `…0099` (00657), así que la misma persona podía registrarse otra vez con el mismo teléfono y volver a usar BIENVENIDA, o ser referida de nuevo y hacer cobrar otros 500 CUP a quien la refirió. Medido en el ensayo con los cuerpos vivos: el mismo teléfono cobraba la promo dos veces y el referido pagaba 1.000 en vez de 500.
