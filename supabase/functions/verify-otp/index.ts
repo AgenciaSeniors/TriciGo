@@ -336,6 +336,23 @@ Deno.serve(async (req) => {
       console.warn('getUserById(email) failed, using devEmail:', e instanceof Error ? e.message : String(e));
     }
 
+    // A password the person chose (a team invitation code, the panel's password reset,
+    // set-password-after-otp) is marked in users.password_set_at. Strategy A writes the
+    // derived password whenever its sign-in fails, so with the mark, or when it cannot be
+    // read, the session comes from the magic link only: no password written, no session closed.
+    let keepPassword = true;
+    try {
+      const { data: mark, error: markErr } = await supabase
+        .from('users')
+        .select('password_set_at')
+        .eq('id', userId)
+        .maybeSingle();
+      if (markErr) console.warn('password_set_at read failed, using the magic link:', markErr.message);
+      else keepPassword = Boolean((mark as { password_set_at?: string | null } | null)?.password_set_at);
+    } catch (e) {
+      console.warn('password_set_at read threw, using the magic link:', e instanceof Error ? e.message : String(e));
+    }
+
     // Strategy A — stable-password grant (NEVER log/return the password).
     // Sign in with the deterministic per-user password. On the happy path this does
     // NOT write the password, so it does NOT revoke the user's other sessions → the
@@ -343,38 +360,36 @@ Deno.serve(async (req) => {
     // password when the sign-in fails (existing user whose password isn't the
     // deterministic value yet, e.g. first login after this deploy or a secret
     // rotation). That "heal" write happens once, then every later login is write-free.
-    // NOTE (latent conflict): this clobbers any user-chosen password from
-    // set-password-after-otp on every OTP login. Harmless today — phone users have no
-    // password-login path and password_set_at is unread — but if that's ever enabled,
-    // skip Strategy A (use the magic-link path below) when password_set_at is set.
-    try {
-      const stablePassword = await deriveStablePassword(userId);
-      let { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-        email: authEmail,
-        password: stablePassword,
-      });
-      if (pwErr) {
-        const { error: pwSetErr } = await supabase.auth.admin.updateUserById(userId, { password: stablePassword });
-        if (pwSetErr) {
-          console.error('updateUserById(password) failed:', pwSetErr.message);
-        } else {
-          ({ data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-            email: authEmail,
-            password: stablePassword,
-          }));
-          if (pwErr) console.error('signInWithPassword (post-heal) failed:', pwErr.message);
+    if (!keepPassword) {
+      try {
+        const stablePassword = await deriveStablePassword(userId);
+        let { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: stablePassword,
+        });
+        if (pwErr) {
+          const { error: pwSetErr } = await supabase.auth.admin.updateUserById(userId, { password: stablePassword });
+          if (pwSetErr) {
+            console.error('updateUserById(password) failed:', pwSetErr.message);
+          } else {
+            ({ data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
+              email: authEmail,
+              password: stablePassword,
+            }));
+            if (pwErr) console.error('signInWithPassword (post-heal) failed:', pwErr.message);
+          }
         }
+        if (pwData?.session) {
+          session = {
+            access_token: pwData.session.access_token,
+            refresh_token: pwData.session.refresh_token,
+            expires_in: pwData.session.expires_in,
+            user: pwData.session.user,
+          };
+        }
+      } catch (e) {
+        console.error('password-grant strategy threw:', e instanceof Error ? e.message : String(e));
       }
-      if (pwData?.session) {
-        session = {
-          access_token: pwData.session.access_token,
-          refresh_token: pwData.session.refresh_token,
-          expires_in: pwData.session.expires_in,
-          user: pwData.session.user,
-        };
-      }
-    } catch (e) {
-      console.error('password-grant strategy threw:', e instanceof Error ? e.message : String(e));
     }
 
     // Strategy B — magic-link hashed_token (fallback; PKCE-correct)

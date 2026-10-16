@@ -87,13 +87,22 @@ export default function ResetPasswordPage() {
 
     try {
       const supabase = supabaseRef.current;
-      const { error: updateError } = await supabase.auth.updateUser({
+      const { data: updated, error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
 
       if (updateError) {
         setError(updateError.message);
         return;
+      }
+
+      // Phone logins (verify-otp) keep a password the person chose only when it is marked.
+      if (updated.user) {
+        const { error: markError } = await supabase
+          .from('users')
+          .update({ password_set_at: new Date().toISOString() })
+          .eq('id', updated.user.id);
+        if (markError) console.warn('[reset-password] password_set_at not saved:', markError.message);
       }
 
       // Sign out after password update so they log in fresh.

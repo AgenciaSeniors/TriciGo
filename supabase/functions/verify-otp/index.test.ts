@@ -1,10 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Runs the real verify-otp handler up to the code check. Replaced: supabase-js
-// (esm.sh) with a fake whose verify_cuba_otp answer each test sets, and the DB-backed
-// rate limiter (the test decides which buckets are full and sees every refund).
-// After a right code the handler goes on to find the account; the fake answers that
-// lookup with an error, so those tests end in a 503 and only check the budget.
+// Runs the real verify-otp handler. Replaced: supabase-js (esm.sh) with a fake whose
+// verify_cuba_otp answer each test sets, and the DB-backed rate limiter (the test
+// decides which buckets are full and sees every refund). After a right code the
+// handler goes on to find the account: with db.lookupId unset the fake answers that
+// lookup with an error, so the budget tests end in a 503. With it set, the fake holds
+// an existing account with that phone confirmed and both sign-in paths answer a
+// session for it, so a test can see how the session was minted.
 const limiter = vi.hoisted(() => ({
   rateLimit: vi.fn(),
   refundRateLimit: vi.fn(async () => {}),
@@ -22,22 +24,71 @@ const db = vi.hoisted(() => ({
   verify: { data: null as unknown, error: null as unknown },
   recentlyVerified: false,
   rpcs: [] as string[],
+  // Id the account lookup answers; null keeps the lookup failing (503).
+  lookupId: null as string | null,
+  // What public.users answers for password_set_at.
+  mark: { data: null as unknown, error: null as unknown },
 }));
+
+const auth = vi.hoisted(() => {
+  const session = (id: string | null) => ({
+    access_token: 'access',
+    refresh_token: 'refresh',
+    expires_in: 3600,
+    user: { id },
+  });
+  return {
+    getUserById: vi.fn(async (id: string) => ({
+      data: {
+        user: {
+          id,
+          email: 'carl@gmail.com',
+          phone: '5355512345', // GoTrue keeps E.164 digits without the +
+          phone_confirmed_at: '2026-09-01T00:00:00Z',
+          banned_until: null,
+        },
+      },
+      error: null,
+    })),
+    signInWithPassword: vi.fn(async () => ({ data: { session: session(db.lookupId) }, error: null })),
+    updateUserById: vi.fn(async () => ({ data: {}, error: null })),
+    generateLink: vi.fn(async () => ({ data: { properties: { hashed_token: 'h' } }, error: null })),
+    verifyOtp: vi.fn(async () => ({ data: { session: session(db.lookupId) }, error: null })),
+  };
+});
+
 vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => ({
   createClient: () => ({
     rpc: async (fn: string) => {
       db.rpcs.push(fn);
       if (fn === 'verify_cuba_otp') return db.verify;
+      if (fn === 'lookup_auth_user_by_contact' && db.lookupId) return { data: db.lookupId, error: null };
       return { data: null, error: { message: 'lookup down' } };
     },
-    from: () => {
+    from: (table: string) => {
       const q: Record<string, unknown> = {};
+      if (table === 'users') {
+        for (const op of ['select', 'eq']) q[op] = () => q;
+        q.maybeSingle = async () => db.mark;
+        return q;
+      }
       for (const op of ['select', 'eq', 'gte']) q[op] = () => q;
       q.limit = async () => ({ data: db.recentlyVerified ? [{ id: 'x' }] : [], error: null });
       return q;
     },
+    auth: {
+      signInWithPassword: auth.signInWithPassword,
+      verifyOtp: auth.verifyOtp,
+      admin: {
+        getUserById: auth.getUserById,
+        updateUserById: auth.updateUserById,
+        generateLink: auth.generateLink,
+      },
+    },
   }),
 }));
+
+const USER_ID = '11111111-2222-4333-8444-555555555555';
 
 const PHONE = '+5355512345';
 const FAIL_KEY = `otp-fail-day:${PHONE}`;
@@ -65,6 +116,9 @@ beforeEach(() => {
   db.verify = { data: { ok: false, error: 'invalid_code', attempts_remaining: 3 }, error: null };
   db.recentlyVerified = false;
   db.rpcs = [];
+  db.lookupId = null;
+  db.mark = { data: { password_set_at: null }, error: null };
+  for (const fn of Object.values(auth)) fn.mockClear();
 });
 
 function buckets(...full: string[]) {
@@ -142,5 +196,39 @@ describe('verify-otp daily budget of failed codes per number', () => {
     buckets();
     await verify('5355512345');
     expect(limiter.rateLimit).toHaveBeenCalledWith(FAIL_KEY, 20, DAY);
+  });
+});
+
+describe('verify-otp keeps a password the person chose', () => {
+  beforeEach(() => {
+    buckets();
+    db.verify = { data: { ok: true }, error: null };
+    db.lookupId = USER_ID;
+  });
+
+  it('with password_set_at, the session comes from the magic link and no password is tried or written', async () => {
+    db.mark = { data: { password_set_at: '2026-10-16T00:00:00Z' }, error: null };
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    expect(auth.updateUserById).not.toHaveBeenCalledWith(USER_ID, expect.objectContaining({ password: expect.anything() }));
+    expect(auth.generateLink).toHaveBeenCalledWith({ type: 'magiclink', email: 'carl@gmail.com' });
+  });
+
+  it('when the mark cannot be read, it also uses the magic link', async () => {
+    db.mark = { data: null, error: { message: 'column does not exist' } };
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    expect(auth.generateLink).toHaveBeenCalled();
+  });
+
+  it('without the mark, it signs in with the derived password as before and writes nothing', async () => {
+    db.mark = { data: { password_set_at: null }, error: null };
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.signInWithPassword).toHaveBeenCalledTimes(1);
+    expect(auth.updateUserById).not.toHaveBeenCalled();
+    expect(auth.generateLink).not.toHaveBeenCalled();
   });
 });
