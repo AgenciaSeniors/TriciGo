@@ -1507,6 +1507,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 5: Edge Function `team-invitation-code`
 
+> **Superseded after review (2026-10-16).** The code below is the first version. The review fixes changed it (see the commits on the branch). The committed files are the source of truth; Task 7 must read the real exports and messages, not this section.
+
 **Files:**
 - Create: `supabase/functions/team-invitation-code/index.ts`
 - Create: `supabase/functions/team-invitation-code/index.test.ts`
@@ -2027,6 +2029,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ---
 
 ### Task 6: Answers and messages in `@tricigo/utils`, service methods in `@tricigo/api`
+
+> **Superseded after review (2026-10-16).** The code below is the first version. The review fixes changed it (see the commits on the branch). The committed files are the source of truth; Task 7 must read the real exports and messages, not this section.
 
 **Files:**
 - Modify: `packages/utils/src/teamInvitation.ts` (append)
