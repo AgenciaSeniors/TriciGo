@@ -8,10 +8,12 @@ import { isInvitationToken } from '@tricigo/utils/teamInvitation';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { formatAdminDate } from '@/lib/formatDate';
 import { GoogleIcon } from '@/components/ui/GoogleIcon';
+import { InvitationCodeForm } from './InvitationCodeForm';
 
 /**
  * The page an invitation e-mail links to (00661). Public: it reads the invitation
- * with its token (role, who invited, the address masked) and signs in with Google.
+ * with its token (role, who invited, the address masked) and signs in with Google,
+ * or accepts with a code sent to the invited address (00664).
  * /auth/callback accepts the invitation with the same token.
  */
 export default function InvitationPage() {
@@ -84,7 +86,8 @@ export default function InvitationPage() {
               </p>
               <p>
                 {t('invitation.use_google', {
-                  defaultValue: 'Entra con la cuenta de Google de {{email}}. Con otra cuenta la invitación no funciona.',
+                  defaultValue:
+                    'Entra con la cuenta de Google de {{email}}, o crea tu cuenta con un código que te mandamos a esa dirección.',
                   email: invitation.email_masked ?? '',
                 })}
               </p>
@@ -102,6 +105,12 @@ export default function InvitationPage() {
                 <GoogleIcon className="h-5 w-5" />
                 {t('invitation.sign_in', { defaultValue: 'Entrar con Google' })}
               </button>
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-neutral-700" />
+                <span className="text-xs uppercase text-neutral-500">{t('login.or_divider')}</span>
+                <div className="h-px flex-1 bg-neutral-700" />
+              </div>
+              <InvitationCodeForm token={token} emailMasked={invitation.email_masked ?? ''} />
             </>
           )}
 
