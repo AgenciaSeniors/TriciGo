@@ -2086,7 +2086,7 @@ describe('invitationCodeMessage', () => {
 
   it('explains the refusals', () => {
     expect(msg('needs_google')).toBe(
-      'Esta cuenta también entra con un teléfono. Para aceptar, entra con Google con este correo.',
+      'Este correo ya está en una cuenta que entra de otra forma, como un teléfono o Google. Para aceptar, entra con Google con este correo.',
     );
     expect(msg('blocked')).toBe('Tu cuenta está bloqueada.');
     expect(msg('locked')).toBe('Probaste demasiadas veces con este código. Pide uno nuevo.');
@@ -2186,14 +2186,15 @@ export function invitationCodeMessage(answer: InvitationCodeAnswer): string {
     case 'no_code':
       return 'Primero pide un código.';
     case 'bad_password':
-      return 'La contraseña tiene que tener entre 8 y 72 caracteres.';
+      // The server counts 72 UTF-8 bytes, so accented passwords hit the limit sooner.
+      return 'La contraseña tiene que tener al menos 8 caracteres y no puede ser demasiado larga.';
     case 'bad_name':
       return 'El nombre puede tener hasta 80 caracteres.';
     case 'weak_password':
       // The code is already spent when GoTrue refuses the password.
       return 'Esa contraseña es muy fácil de adivinar. Elige otra y pide un código nuevo.';
     case 'needs_google':
-      return 'Esta cuenta también entra con un teléfono. Para aceptar, entra con Google con este correo.';
+      return 'Este correo ya está en una cuenta que entra de otra forma, como un teléfono o Google. Para aceptar, entra con Google con este correo.';
     case 'blocked':
       return 'Tu cuenta está bloqueada.';
     case 'internal_address':
