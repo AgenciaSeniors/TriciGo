@@ -131,8 +131,10 @@ async function verify(req: Request, admin: Admin, token: string, body: Record<st
   // Every space goes, not only the ends: a pasted "048 213" must not waste an attempt.
   const code = typeof body.code === 'string' ? body.code.replace(/\s+/g, '') : '';
   const password = typeof body.password === 'string' ? body.password : '';
+  // Whitespace collapses first, so a tab or newline between words stays a space; the control
+  // characters left after that (\u0000, \u001b, \u007f...) are removed.
   const fullName = typeof body.full_name === 'string'
-    ? body.full_name.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim()
+    ? body.full_name.replace(/\s+/g, ' ').replace(/[\u0000-\u001f\u007f]/g, '').trim()
     : '';
   // Checked before the code: a refused password or name must not spend it.
   if (password.length < 8 || new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {

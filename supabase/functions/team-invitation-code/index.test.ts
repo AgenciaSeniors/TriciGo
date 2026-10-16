@@ -282,6 +282,16 @@ describe('team-invitation-code', () => {
       expect(sb.createUser.mock.calls[0][0].user_metadata).toEqual({ full_name: 'Nina Baco' });
     });
 
+    it('keeps a tab between words as a space', async () => {
+      rpcAnswers({
+        team_invitation_code_check: CHECK_NEW,
+        accept_team_invitation_by_code: { result: 'accepted', role: 'marketing' },
+      });
+      sb.createUser.mockResolvedValue({ data: { user: { id: NEW_ID } }, error: null });
+      await verify({ full_name: 'Nina\tBaco' });
+      expect(sb.createUser.mock.calls[0][0].user_metadata).toEqual({ full_name: 'Nina Baco' });
+    });
+
     it("uses the invitation's name when the form sends none", async () => {
       rpcAnswers({
         team_invitation_code_check: CHECK_NEW,
