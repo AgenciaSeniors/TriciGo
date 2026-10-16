@@ -91,6 +91,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task 2: SQL rehearsal (RED)
 
+> **Superseded after Task 4a (2026-10-16).** The code below is what was first committed. The review fixes changed it (grants, account cases, the two marks, new tests). The committed files under `supabase/migrations/00664_*` and `supabase/tests/00664/` are the source of truth; do not copy from this section.
+
 **Files:**
 - Create: `supabase/tests/00664/scaffold.sql`
 - Create: `supabase/tests/00664/seed.sql`
@@ -484,6 +486,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ---
 
 ### Task 3: Migration 00664 (GREEN)
+
+> **Superseded after Task 4a (2026-10-16).** The code below is what was first committed. The review fixes changed it (grants, account cases, the two marks, new tests). The committed files under `supabase/migrations/00664_*` and `supabase/tests/00664/` are the source of truth; do not copy from this section.
 
 **Files:**
 - Create: `supabase/migrations/00664_team_invitation_email_code.sql`
