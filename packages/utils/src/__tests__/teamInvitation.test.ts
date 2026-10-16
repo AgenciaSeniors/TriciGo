@@ -138,7 +138,7 @@ describe('invitationCodeMessage', () => {
 
   it('explains the refusals', () => {
     expect(msg('needs_google')).toBe(
-      'Esta cuenta también entra con un teléfono. Para aceptar, entra con Google con este correo.',
+      'Este correo ya está en una cuenta que entra de otra forma, como un teléfono o Google. Para aceptar, entra con Google con este correo.',
     );
     expect(msg('blocked')).toBe('Tu cuenta está bloqueada.');
     expect(msg('locked')).toBe('Probaste demasiadas veces con este código. Pide uno nuevo.');

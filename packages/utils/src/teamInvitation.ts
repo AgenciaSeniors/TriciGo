@@ -164,7 +164,9 @@ export function invitationCodeMessage(answer: InvitationCodeAnswer): string {
       // The code is already spent when GoTrue refuses the password.
       return 'Esa contraseña es muy fácil de adivinar. Elige otra y pide un código nuevo.';
     case 'needs_google':
-      return 'Esta cuenta también entra con un teléfono. Para aceptar, entra con Google con este correo.';
+      // Covers a phone (confirmed or not), another identity, and an address that only another
+      // account's identity carries.
+      return 'Este correo ya está en una cuenta que entra de otra forma, como un teléfono o Google. Para aceptar, entra con Google con este correo.';
     case 'blocked':
       return 'Tu cuenta está bloqueada.';
     case 'internal_address':
