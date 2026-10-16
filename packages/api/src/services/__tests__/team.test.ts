@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRpc = vi.fn();
+const mockInvoke = vi.fn();
 
 vi.mock('../../client', () => ({
-  getSupabaseClient: () => ({ rpc: mockRpc }),
+  getSupabaseClient: () => ({ rpc: mockRpc, functions: { invoke: mockInvoke } }),
 }));
 
 import { teamService } from '../team.service';
@@ -72,5 +73,108 @@ describe('teamService', () => {
     mockRpc.mockResolvedValueOnce({ data: { status: 'expired' }, error: null });
     await expect(teamService.getInvitation('abc')).resolves.toEqual({ status: 'expired' });
     expect(mockRpc).toHaveBeenCalledWith('get_team_invitation', { p_token: 'abc' });
+  });
+});
+
+describe('teamService invitation codes', () => {
+  const TOKEN = 'a'.repeat(64);
+
+  beforeEach(() => {
+    mockInvoke.mockReset();
+  });
+
+  it('requestInvitationCode asks the function to send a code', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      data: { result: 'sent', account_exists: true, expires_in_s: 600, invitee_name: 'Nina' },
+      error: null,
+    });
+    await expect(teamService.requestInvitationCode(TOKEN)).resolves.toEqual({
+      accountExists: true,
+      expiresInS: 600,
+      inviteeName: 'Nina',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('team-invitation-code', { body: { action: 'send', token: TOKEN } });
+  });
+
+  it('throws a refusal with its Spanish message and the seconds to wait', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { result: 'cooldown', retry_after_s: 42 }, error: null });
+    const err = await teamService.requestInvitationCode(TOKEN).catch((e) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect(err).toMatchObject({
+      message: 'Espera 42 segundos para pedir otro código.',
+      code: 'invitation_cooldown',
+      statusCode: 400,
+      details: { result: 'cooldown', retryAfterS: 42 },
+    });
+  });
+
+  it('says the mail could not go out', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { result: 'send_failed' }, error: null });
+    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({
+      message: 'No pudimos mandar el correo. Intenta de nuevo en un rato.',
+      code: 'invitation_send_failed',
+    });
+  });
+
+  it('reads a 429 as too many attempts from this connection', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: null, error: { context: new Response('{}', { status: 429 }) } });
+    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({ code: 'invitation_rate_limited' });
+  });
+
+  it('reads any other failed call as a generic error', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      data: null,
+      error: { context: new Response('{"error":"internal"}', { status: 500 }) },
+    });
+    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({
+      message: 'Algo salió mal. Intenta de nuevo.',
+      code: 'invitation_error',
+      statusCode: 400,
+    });
+    // A network failure (FunctionsFetchError) has no Response at all.
+    mockInvoke.mockResolvedValueOnce({ data: null, error: { context: new TypeError('Failed to fetch') } });
+    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({ code: 'invitation_error' });
+  });
+
+  it('acceptInvitationWithCode sends code, password and name, and answers the address and role', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      data: { result: 'accepted', email: 'info@bacoagency.com', role: 'marketing' },
+      error: null,
+    });
+    await expect(
+      teamService.acceptInvitationWithCode({ token: TOKEN, code: ' 048213 ', password: 'secreta123', fullName: ' Nina ' }),
+    ).resolves.toEqual({ email: 'info@bacoagency.com', role: 'marketing' });
+    expect(mockInvoke).toHaveBeenCalledWith('team-invitation-code', {
+      body: { action: 'verify', token: TOKEN, code: '048213', password: 'secreta123', full_name: 'Nina' },
+    });
+  });
+
+  it('leaves a blank name out', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { result: 'accepted', email: 'a@b.co', role: 'admin' }, error: null });
+    await teamService.acceptInvitationWithCode({ token: TOKEN, code: '048213', password: 'secreta123', fullName: '  ' });
+    const body = mockInvoke.mock.lastCall?.[1]?.body;
+    expect(body).toMatchObject({ action: 'verify', code: '048213' });
+    expect(body).not.toHaveProperty('full_name');
+  });
+
+  it('says how many attempts are left on a wrong code', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { result: 'wrong_code', attempts_left: 2 }, error: null });
+    await expect(
+      teamService.acceptInvitationWithCode({ token: TOKEN, code: '000000', password: 'secreta123' }),
+    ).rejects.toMatchObject({ message: 'El código no es correcto. Te quedan 2 intentos.', code: 'invitation_wrong_code' });
+  });
+
+  it('passes on the refusals of the SQL functions', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { result: 'needs_google' }, error: null });
+    await expect(
+      teamService.acceptInvitationWithCode({ token: TOKEN, code: '048213', password: 'secreta123' }),
+    ).rejects.toMatchObject({ code: 'invitation_needs_google', statusCode: 400 });
+  });
+
+  it('treats an accepted answer without address or panel role as a failure', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { result: 'accepted', role: 'customer' }, error: null });
+    await expect(
+      teamService.acceptInvitationWithCode({ token: TOKEN, code: '048213', password: 'secreta123' }),
+    ).rejects.toMatchObject({ code: 'invitation_try_again' });
   });
 });

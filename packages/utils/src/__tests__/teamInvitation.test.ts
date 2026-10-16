@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  INVITATION_CODE_RESULTS,
+  invitationCodeMessage,
   invitationOutcomePath,
   isInvitationToken,
   maskedEmailParam,
   noAccessReason,
   parseAcceptOutcome,
+  parseInvitationCodeAnswer,
 } from '../teamInvitation';
 
 describe('parseAcceptOutcome', () => {
@@ -80,6 +83,80 @@ describe('maskedEmailParam', () => {
       `l…@${'a'.repeat(250)}.com`,
     ]) {
       expect(maskedEmailParam(raw)).toBeNull();
+    }
+  });
+});
+
+describe('parseInvitationCodeAnswer', () => {
+  it('reads the result, the seconds and the attempts', () => {
+    expect(parseInvitationCodeAnswer({ result: 'cooldown', retry_after_s: 42 })).toEqual({
+      result: 'cooldown',
+      retryAfterS: 42,
+      attemptsLeft: null,
+    });
+    expect(parseInvitationCodeAnswer({ result: 'wrong_code', attempts_left: 3 })).toEqual({
+      result: 'wrong_code',
+      retryAfterS: null,
+      attemptsLeft: 3,
+    });
+  });
+
+  it('turns anything unexpected into error', () => {
+    expect(parseInvitationCodeAnswer(null).result).toBe('error');
+    expect(parseInvitationCodeAnswer({ result: 'pwned' }).result).toBe('error');
+    expect(parseInvitationCodeAnswer({ result: 'cooldown', retry_after_s: -1 }).retryAfterS).toBeNull();
+  });
+
+  it('never passes on the internal answers of the SQL functions', () => {
+    // team_invitation_code_issue answers 'issued' and _check 'ok'; the Edge Function turns them
+    // into 'sent' / 'accepted', so reaching the page as they are means something broke.
+    expect(parseInvitationCodeAnswer({ result: 'issued' }).result).toBe('error');
+    expect(parseInvitationCodeAnswer({ result: 'ok' }).result).toBe('error');
+  });
+});
+
+describe('invitationCodeMessage', () => {
+  const msg = (result: string, extra: Record<string, unknown> = {}) =>
+    invitationCodeMessage(parseInvitationCodeAnswer({ result, ...extra }));
+
+  it('says how long to wait', () => {
+    expect(msg('cooldown', { retry_after_s: 42 })).toBe('Espera 42 segundos para pedir otro código.');
+    expect(msg('cooldown', { retry_after_s: 1 })).toBe('Espera un momento para pedir otro código.');
+    expect(msg('too_many_hour', { retry_after_s: 61 })).toBe(
+      'Pediste muchos códigos en la última hora. Vuelve a intentarlo en 2 minutos.',
+    );
+    expect(msg('too_many_hour', { retry_after_s: 30 })).toBe(
+      'Pediste muchos códigos en la última hora. Vuelve a intentarlo en 1 minuto.',
+    );
+    expect(msg('too_many_day')).toBe('Ya pediste 10 códigos hoy. Vuelve a intentarlo mañana.');
+  });
+
+  it('counts the attempts left', () => {
+    expect(msg('wrong_code', { attempts_left: 3 })).toBe('El código no es correcto. Te quedan 3 intentos.');
+    expect(msg('wrong_code', { attempts_left: 1 })).toBe('El código no es correcto. Te queda 1 intento.');
+  });
+
+  it('explains the refusals', () => {
+    expect(msg('needs_google')).toBe(
+      'Esta cuenta también entra con un teléfono. Para aceptar, entra con Google con este correo.',
+    );
+    expect(msg('blocked')).toBe('Tu cuenta está bloqueada.');
+    expect(msg('locked')).toBe('Probaste demasiadas veces con este código. Pide uno nuevo.');
+    expect(msg('expired')).toBe('La invitación venció. Pídele a quien te invitó que te mande una nueva.');
+    expect(msg('try_again')).toBe('Algo cambió mientras preparábamos tu cuenta. Pide un código nuevo y vuelve a intentarlo.');
+    expect(msg('weak_password')).toBe('Esa contraseña es muy fácil de adivinar. Elige otra y pide un código nuevo.');
+    expect(msg('error')).toBe('Algo salió mal. Intenta de nuevo.');
+  });
+
+  it('does not promise 72 characters: the server counts 72 bytes, and an accent takes two', () => {
+    expect(msg('bad_password')).toBe('La contraseña tiene que tener al menos 8 caracteres y no puede ser demasiado larga.');
+  });
+
+  it('has its own text for every refusal the function can answer', () => {
+    const generic = msg('error');
+    for (const result of INVITATION_CODE_RESULTS) {
+      if (result === 'sent' || result === 'accepted' || result === 'error') continue;
+      expect(msg(result), result).not.toBe(generic);
     }
   });
 });

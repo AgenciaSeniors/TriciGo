@@ -114,6 +114,8 @@ export {
   type InvitationSent,
   type PublicInvitation,
   type PublicInvitationStatus,
+  type InvitationCodeSent,
+  type InvitationCodeAccepted,
 } from './services/team.service';
 export {
   marketingStatsService,
