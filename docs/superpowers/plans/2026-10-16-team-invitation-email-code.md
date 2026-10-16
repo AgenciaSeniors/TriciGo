@@ -1548,10 +1548,15 @@ const sb = vi.hoisted(() => ({
   rpc: vi.fn(),
   createUser: vi.fn(),
   updateUserById: vi.fn(),
+  // from(table).update(values).eq(column, value): the chosen-password mark.
+  markUpdate: vi.fn(),
 }));
 vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => ({
   createClient: () => ({
     rpc: sb.rpc,
+    from: (table: string) => ({
+      update: (values: unknown) => ({ eq: (column: string, value: unknown) => sb.markUpdate(table, values, column, value) }),
+    }),
     auth: { admin: { createUser: sb.createUser, updateUserById: sb.updateUserById } },
   }),
 }));
@@ -1591,6 +1596,8 @@ beforeEach(() => {
   sb.rpc.mockReset();
   sb.createUser.mockReset();
   sb.updateUserById.mockReset();
+  sb.markUpdate.mockReset();
+  sb.markUpdate.mockResolvedValue({ error: null });
   mail.mockReset();
   mail.mockImplementation(async () => new Response('{"success":true}', { status: 200 }));
 });
@@ -1739,6 +1746,17 @@ describe('team-invitation-code', () => {
       expect(await (await verify()).json()).toEqual({ result: 'accepted', email: 'info@bacoagency.com', role: 'admin' });
       expect(sb.updateUserById).toHaveBeenCalledWith(USER_ID, { password: 'secreta123', email_confirm: true });
       expect(sb.createUser).not.toHaveBeenCalled();
+      // The mark goes first, so a failure after the password write cannot leave it unmarked.
+      expect(sb.markUpdate).toHaveBeenCalledWith('users', { password_set_at: expect.any(String) }, 'id', USER_ID);
+      expect(sb.markUpdate.mock.invocationCallOrder[0]).toBeLessThan(sb.updateUserById.mock.invocationCallOrder[0]);
+    });
+
+    it('does not touch the password of an existing account when the mark cannot be written', async () => {
+      rpcAnswers({ team_invitation_code_check: { ...CHECK_NEW, case: 'proven', user_id: USER_ID } });
+      sb.markUpdate.mockResolvedValue({ error: { message: 'db down' } });
+      expect(await (await verify()).json()).toEqual({ result: 'try_again' });
+      expect(sb.updateUserById).not.toHaveBeenCalled();
+      expect(sb.rpc).not.toHaveBeenCalledWith('accept_team_invitation_by_code', expect.anything());
     });
 
     it('answers weak_password when GoTrue refuses the password, and accepts nothing', async () => {
@@ -1916,6 +1934,17 @@ async function verify(req: Request, admin: Admin, token: string, body: Record<st
     if (createErr || !created?.user) return gotrueFailure(req, createErr, 'create');
     userId = created.user.id;
   } else if ((checked.case === 'proven' || checked.case === 'password_only') && checked.user_id) {
+    // Mark the password as chosen BEFORE writing it: verify-otp (phone login) overwrites an
+    // unmarked password, and a proven account usually has a phone. A mark without the new
+    // password is harmless (phone logins just use the magic link). accept_ also sets it.
+    const { error: markErr } = await admin
+      .from('users')
+      .update({ password_set_at: new Date().toISOString() })
+      .eq('id', checked.user_id);
+    if (markErr) {
+      console.error('[team-invitation-code] password mark failed:', markErr.message);
+      return json(req, { result: 'try_again' });
+    }
     // email_confirm: since 2026-10-07 a GoTrue sign-up leaves the address unconfirmed, and an
     // unconfirmed address cannot sign in with a password.
     const { error: updateErr } = await admin.auth.admin.updateUserById(checked.user_id, { password, email_confirm: true });
@@ -1961,7 +1990,7 @@ Deno.serve(async (req: Request) => {
 - [ ] **Step 5: Run the handler tests**
 
 Run: `pnpm --filter @tricigo/api exec vitest run team-invitation-code`
-Expected: PASS (18 tests). Note the order in the handler: the action check comes before the token check, so `refuses an unknown action` gets 400 even with a valid token.
+Expected: PASS (19 tests). Note the order in the handler: the action check comes before the token check, so `refuses an unknown action` gets 400 even with a valid token.
 
 - [ ] **Step 6: Register `verify_jwt = false`**
 
