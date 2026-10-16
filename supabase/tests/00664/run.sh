@@ -45,6 +45,10 @@ EVE=a1000000-0000-4000-8000-000000000008
 PHIL=a1000000-0000-4000-8000-00000000000b
 BEN=a1000000-0000-4000-8000-00000000000c
 NINA=a1000000-0000-4000-8000-00000000000d
+# Created inline by one test each: GUS (C8, a phone that is set but not confirmed) and IDA (C9, an
+# account whose sign-in address is another one, with a Google identity carrying the invited address).
+GUS=a1000000-0000-4000-8000-00000000000e
+IDA=a1000000-0000-4000-8000-00000000000f
 
 # svc SQL -> SQL as the Edge Function (role service_role) in a transaction that is rolled back.
 # su / sr switch to the test superuser and back to service_role inside an svc block.
@@ -62,6 +66,8 @@ okc(){ printf "SELECT (r->>'result') || '|' || coalesce(r->>'case', '') || '|' |
 # acc C USER -> 'result|role' of accept_team_invitation_by_code
 acc(){ printf "SELECT (r->>'result') || '|' || coalesce(r->>'role', '') FROM (SELECT public.accept_team_invitation_by_code(repeat('%s', 64), '%s') r) x;" "$1" "$2"; }
 out(){ printf "SELECT t.outcome('%s');" "$1"; }
+# quiet EXPR -> evaluates EXPR as the current role and prints nothing
+quiet(){ printf "DO \$q\$ BEGIN PERFORM %s; END \$q\$;" "$1"; }
 RIGHT="current_setting('test.code')"
 WRONG="CASE WHEN current_setting('test.code') = '000000' THEN '111111' ELSE '000000' END"
 FNS="'_team_code_hash', '_team_code_account', 'team_invitation_code_issue', 'team_invitation_code_check', 'accept_team_invitation_by_code'"
@@ -91,6 +97,12 @@ val "O3 one salt, 32 random bytes in hex" \
 val "O4 anon cannot ask for a code; a signed-in user cannot accept with one" \
   "BEGIN; SET LOCAL ROLE anon; $(out "SELECT public.team_invitation_code_issue(repeat(''a'', 64))::text") RESET ROLE; SET LOCAL request.jwt.claim.sub = '$PETE'; SET LOCAL ROLE authenticated; $(out "SELECT public.accept_team_invitation_by_code(repeat(''a'', 64), ''$PETE'')::text") ROLLBACK;" \
   "raised 42501: permission denied for function team_invitation_code_issue;raised 42501: permission denied for function accept_team_invitation_by_code"
+val "O5 service_role holds exactly what the migration grants (the default privileges give it ALL)" \
+  "SELECT t.label || ':' || coalesce(string_agg(v.p, ',' ORDER BY v.n) FILTER (WHERE has_table_privilege('service_role', t.tbl, v.p)), '') FROM (VALUES (1, 'codes', 'public.team_invitation_codes'), (2, 'salt', 'public.team_invitation_code_salt')) t (o, label, tbl) CROSS JOIN (VALUES (1, 'SELECT'), (2, 'INSERT'), (3, 'UPDATE'), (4, 'DELETE'), (5, 'TRUNCATE'), (6, 'REFERENCES'), (7, 'TRIGGER')) v (n, p) GROUP BY t.o, t.label ORDER BY t.o" \
+  "codes:SELECT,INSERT,UPDATE,DELETE;salt:SELECT"
+val "O6 public.users.password_set_at exists, timestamptz and nullable" \
+  "SELECT data_type || ':' || is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'password_set_at'" \
+  "timestamp with time zone:YES"
 
 echo "== issuing a code =="
 val "I1 a pending invitation gets a 6-digit code for its address; only the hash is stored, for 10 minutes" \
@@ -116,6 +128,15 @@ val "I7 the eleventh code in a day is refused" \
 val "I8 expired, canceled, used, internal, unknown and malformed invitations get no code" \
   "$(svc "$(su) INSERT INTO public.team_invitations (email, role, token, invited_by, expires_at, status) VALUES ('x1@example.com', 'admin', repeat('1', 64), '$SAM', now() - interval '1 minute', 'pending'), ('x2@example.com', 'admin', repeat('2', 64), '$SAM', now() + interval '1 day', 'canceled'), ('x3@example.com', 'admin', repeat('3', 64), '$SAM', now() + interval '1 day', 'accepted'), ('ops@tricigo.app', 'admin', repeat('4', 64), '$SAM', now() + interval '1 day', 'pending'); $(sr) SELECT string_agg(public.team_invitation_code_issue(v.t)->>'result', ',' ORDER BY v.n) FROM (VALUES (1, repeat('1', 64)), (2, repeat('2', 64)), (3, repeat('3', 64)), (4, repeat('4', 64)), (5, repeat('9', 64)), (6, 'nope')) v (n, t); SELECT count(*) FROM public.team_invitation_codes;")" \
   "expired,canceled,used,internal_address,not_found,not_found;0"
+val "I9 the fifth code in an hour is still issued" \
+  "$(svc "$(inv nina@bacoagency.com marketing a) $(su) INSERT INTO public.rate_limits (key, window_start, count) SELECT 'team-code-hour:' || id, to_timestamp(floor(extract(epoch FROM now()) / 3600) * 3600), 4 FROM public.team_invitations; $(sr) $(issue a)")" \
+  "issued"
+val "I10 the tenth code in a day is still issued" \
+  "$(svc "$(inv nina@bacoagency.com marketing a) $(su) INSERT INTO public.rate_limits (key, window_start, count) SELECT 'team-code-day:' || id, to_timestamp(floor(extract(epoch FROM now()) / 86400) * 86400), 9 FROM public.team_invitations; $(sr) $(issue a)")" \
+  "issued"
+val "I11 a cooldown answer adds nothing to either counter" \
+  "$(svc "$(inv nina@bacoagency.com marketing a) $(issue a) $(issue a) $(su) SELECT h.count || '|' || d.count FROM public.team_invitations i JOIN public.rate_limits h ON h.key = 'team-code-hour:' || i.id JOIN public.rate_limits d ON d.key = 'team-code-day:' || i.id;")" \
+  "issued;cooldown;1|1"
 
 echo "== checking a code =="
 val "C1 a wrong code costs an attempt and says how many are left" \
@@ -138,6 +159,12 @@ val "C6 checking before asking for a code says so" \
 val "C7 the account cases: proven (with a phone), password only, phone, unverified Google, blocked, banned" \
   "$(svc "$(inv carl@gmail.com marketing c) $(issue c) $(okc c $CARL) $(inv pete@example.com marketing b) $(issue b) $(okc b $PETE) $(inv phil@example.com marketing d) $(issue d) $(okc d $PHIL) SELECT count(*) FROM public.team_invitation_codes c JOIN public.team_invitations i ON i.id = c.invitation_id WHERE i.email = 'phil@example.com'; $(inv eve@gmail.com marketing e) $(issue e) $(okc e $EVE) $(inv bob@gmail.com marketing 1) $(issue 1) $(okc 1 $BOB) $(inv ben@gmail.com marketing 2) $(issue 2) $(okc 2 $BEN)")" \
   "issued;ok|proven|true;issued;ok|password_only|true;issued;needs_google||;1;issued;needs_google||;issued;blocked||;issued;blocked||"
+val "C8 a phone that is set but not confirmed is needs_google; the right code is not spent" \
+  "$(svc "$(su) INSERT INTO public.users (id, email, full_name) VALUES ('$GUS', 'gus@example.com', 'Gus Phone'); INSERT INTO auth.users (id, email, phone, phone_confirmed_at, created_at) VALUES ('$GUS', 'gus@example.com', '5355500077', NULL, '2026-01-01'); INSERT INTO auth.identities (user_id, provider, identity_data) VALUES ('$GUS', 'email', '{\"email\": \"gus@example.com\", \"email_verified\": true}'); $(sr) $(inv gus@example.com marketing 7) $(quiet "set_config('test.code', coalesce(public.team_invitation_code_issue(repeat('7', 64))->>'code', ''), true)") SELECT public.team_invitation_code_check(repeat('7', 64), current_setting('test.code'))->>'result'; SELECT count(*) FROM public.team_invitation_codes;")" \
+  "needs_google;1"
+val "C9 an address only an identity carries: the answer says an account exists, a right code is needs_google and not spent" \
+  "$(svc "$(su) INSERT INTO public.users (id, email, full_name) VALUES ('$IDA', NULL, 'Ida Identity'); INSERT INTO auth.users (id, email, created_at) VALUES ('$IDA', 'phone_5355500088@tricigo.app', '2026-01-01'); INSERT INTO auth.identities (user_id, provider, identity_data) VALUES ('$IDA', 'google', '{\"email\": \"ida@gmail.com\", \"email_verified\": true}'); $(sr) $(inv ida@gmail.com marketing 8) SELECT (r->>'result') || '|' || (r->>'account_exists') FROM (SELECT public.team_invitation_code_issue(repeat('8', 64)) r) x WHERE set_config('test.code', coalesce(r->>'code', ''), true) IS NOT NULL; SELECT public.team_invitation_code_check(repeat('8', 64), current_setting('test.code'))->>'result'; SELECT count(*) FROM public.team_invitation_codes;")" \
+  "issued|true;needs_google;1"
 
 echo "== accepting with a code =="
 val "A1 a new account gets the role; the invitation is accepted and audited as e-mail code" \
@@ -170,6 +197,21 @@ val "A9 expired and canceled invitations cannot be accepted" \
 val "A10 the Google path of 00661 still accepts" \
   "BEGIN; SET LOCAL client_min_messages = error; SET LOCAL ROLE service_role; $(inv carl@gmail.com marketing c) RESET ROLE; SET LOCAL request.jwt.claim.sub = '$CARL'; SET LOCAL ROLE authenticated; SELECT public.accept_team_invitation(repeat('c', 64))->>'result'; ROLLBACK;" \
   "accepted"
+val "A11 an internal address is refused at accept too" \
+  "$(svc "$(inv ops@tricigo.app admin 4) $(acc 4 $PETE)")" \
+  "internal_address|"
+val "A12 an account without a public.users row is no_account" \
+  "$(svc "$(inv nina@bacoagency.com marketing a) $(acc a $NINA)")" \
+  "no_account|"
+val "A13 accepting sets password_set_at and, with users.email the invited address, email_verified_at" \
+  "$(svc "$(inv nina@bacoagency.com marketing a) $(su) INSERT INTO public.users (id, email, full_name) VALUES ('$NINA', 'nina@bacoagency.com', 'Nina Baco'); INSERT INTO auth.users (id, email) VALUES ('$NINA', 'nina@bacoagency.com'); INSERT INTO auth.identities (user_id, provider, identity_data) VALUES ('$NINA', 'email', '{\"email\": \"nina@bacoagency.com\", \"email_verified\": true}'); $(sr) $(quiet "public.accept_team_invitation_by_code(repeat('a', 64), '$NINA')") $(su) SELECT password_set_at = now(), email_verified_at = now() FROM public.users WHERE id = '$NINA';")" \
+  "t|t"
+val "A14 with users.email another address, email_verified_at is left alone and password_set_at is set" \
+  "$(svc "$(su) UPDATE public.users SET email = 'pete.other@example.com' WHERE id = '$PETE'; $(sr) $(inv pete@example.com marketing b) $(quiet "public.accept_team_invitation_by_code(repeat('b', 64), '$PETE')") $(su) SELECT password_set_at = now(), email_verified_at IS NULL FROM public.users WHERE id = '$PETE';")" \
+  "t|t"
+val "A15 an email_verified_at already set is kept, not moved to now() (and the accept did run)" \
+  "$(svc "$(su) UPDATE public.users SET email_verified_at = '2026-03-01 00:00:00+00' WHERE id = '$PETE'; $(sr) $(inv pete@example.com marketing b) $(quiet "public.accept_team_invitation_by_code(repeat('b', 64), '$PETE')") $(su) SELECT email_verified_at = '2026-03-01 00:00:00+00' AND password_set_at = now() FROM public.users WHERE id = '$PETE';")" \
+  "t"
 
 echo "== an accept with a code racing a removal waits for it instead of deadlocking =="
 # Same races as 00661 R1/R2, with accept_team_invitation_by_code. MIA is marketing with a proven
@@ -204,7 +246,8 @@ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}r" >/dev/null 
 if [ "$MIG" != "none" ]; then
   echo "== negative proofs: the migration's own checks catch a broken result =="
   T=$(mktemp -d)
-  sabotage(){ "$PY" - "$MIG" "$T/$1.sql" "$2" "$3" <<'PYEOF'
+  # sabotage NAME OLD NEW [SOURCE] -> $T/NAME.sql: SOURCE (default the migration) with OLD, found once, replaced by NEW
+  sabotage(){ "$PY" - "${4:-$MIG}" "$T/$1.sql" "$2" "$3" <<'PYEOF'
 import sys
 src, dst, old, new = sys.argv[1:5]
 s = open(src, encoding='utf-8').read().replace('\r\n', '\n')
@@ -238,6 +281,14 @@ VALUES (1, encode(extensions.gen_random_bytes(32), 'hex'))
 ON CONFLICT (id) DO NOTHING;" "-- sabotaged"
   fresh ${DB}g; r=$(apply_err ${DB}g "$T/g3.sql")
   echo "$r" | grep -q "the code salt is missing" && ok "G3 a missing salt aborts the migration" || ko "G3 a missing salt aborts the migration" "$r"
+
+  # G4: both table REVOKEs leave out service_role, so it keeps the ALL the default privileges gave it.
+  sabotage g4a "REVOKE ALL ON public.team_invitation_codes FROM PUBLIC, anon, authenticated, service_role;" \
+    "REVOKE ALL ON public.team_invitation_codes FROM PUBLIC, anon, authenticated;"
+  sabotage g4 "REVOKE ALL ON public.team_invitation_code_salt FROM PUBLIC, anon, authenticated, service_role;" \
+    "REVOKE ALL ON public.team_invitation_code_salt FROM PUBLIC, anon, authenticated;" "$T/g4a.sql"
+  fresh ${DB}g; r=$(apply_err ${DB}g "$T/g4.sql")
+  echo "$r" | grep -q "service_role has TRUNCATE on" && ok "G4 a service_role that kept the default ALL on a table aborts the migration" || ko "G4 a service_role that kept the default ALL on a table aborts the migration" "$r"
 
   rm -rf "$T"
   $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}g" >/dev/null 2>&1
