@@ -2092,6 +2092,7 @@ describe('invitationCodeMessage', () => {
     expect(msg('locked')).toBe('Probaste demasiadas veces con este código. Pide uno nuevo.');
     expect(msg('expired')).toBe('La invitación venció. Pídele a quien te invitó que te mande una nueva.');
     expect(msg('try_again')).toBe('Algo cambió mientras preparábamos tu cuenta. Pide un código nuevo y vuelve a intentarlo.');
+    expect(msg('weak_password')).toBe('Esa contraseña es muy fácil de adivinar. Elige otra y pide un código nuevo.');
     expect(msg('error')).toBe('Algo salió mal. Intenta de nuevo.');
   });
 });
@@ -2189,7 +2190,8 @@ export function invitationCodeMessage(answer: InvitationCodeAnswer): string {
     case 'bad_name':
       return 'El nombre puede tener hasta 80 caracteres.';
     case 'weak_password':
-      return 'Esa contraseña es muy fácil de adivinar. Elige otra.';
+      // The code is already spent when GoTrue refuses the password.
+      return 'Esa contraseña es muy fácil de adivinar. Elige otra y pide un código nuevo.';
     case 'needs_google':
       return 'Esta cuenta también entra con un teléfono. Para aceptar, entra con Google con este correo.';
     case 'blocked':
@@ -2522,7 +2524,7 @@ export function InvitationCodeForm({ token, emailMasked }: InvitationCodeFormPro
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!/^\d{6}$/.test(code.trim())) {
+    if (!/^\d{6}$/.test(code.replace(/\s+/g, ''))) {
       setError(t('invitation.code_missing', { defaultValue: 'Escribe el código de 6 dígitos.' }));
       return;
     }
@@ -2532,6 +2534,11 @@ export function InvitationCodeForm({ token, emailMasked }: InvitationCodeFormPro
     }
     if (password.length < 8) {
       setError(t('invitation.code_too_short', { defaultValue: 'La contraseña tiene que tener al menos 8 caracteres.' }));
+      return;
+    }
+    // GoTrue (bcrypt) counts bytes, and the server refuses more than 72 before spending the code.
+    if (new TextEncoder().encode(password).length > 72) {
+      setError(t('invitation.code_too_long', { defaultValue: 'La contraseña es demasiado larga.' }));
       return;
     }
     if (password !== repeat) {
@@ -2747,6 +2754,7 @@ In each `packages/i18n/src/locales/<lang>/admin.json`, inside `"invitation"`: re
     "code_missing": "Escribe el código de 6 dígitos.",
     "code_name_missing": "Escribe tu nombre.",
     "code_too_short": "La contraseña tiene que tener al menos 8 caracteres.",
+    "code_too_long": "La contraseña es demasiado larga.",
     "code_mismatch": "Las contraseñas no coinciden.",
     "code_signin_fallback": "Tu cuenta quedó lista, pero no pudimos iniciar sesión. Entra en la página de inicio de sesión con tu correo y tu contraseña.",
     "code_go_login": "Ir a iniciar sesión",
@@ -2777,6 +2785,7 @@ English:
     "code_missing": "Enter the 6-digit code.",
     "code_name_missing": "Enter your name.",
     "code_too_short": "The password must have at least 8 characters.",
+    "code_too_long": "The password is too long.",
     "code_mismatch": "The passwords do not match.",
     "code_signin_fallback": "Your account is ready, but we could not sign you in. Sign in on the login page with your e-mail and password.",
     "code_go_login": "Go to sign in",
@@ -2807,6 +2816,7 @@ Portuguese:
     "code_missing": "Digite o código de 6 dígitos.",
     "code_name_missing": "Digite seu nome.",
     "code_too_short": "A senha precisa ter pelo menos 8 caracteres.",
+    "code_too_long": "A senha é longa demais.",
     "code_mismatch": "As senhas não coincidem.",
     "code_signin_fallback": "Sua conta está pronta, mas não conseguimos iniciar a sessão. Entre pela página de login com seu e-mail e sua senha.",
     "code_go_login": "Ir para o login",

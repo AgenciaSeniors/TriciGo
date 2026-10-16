@@ -105,6 +105,7 @@ Known and accepted:
 
 - **An access token outlives the closed sessions by up to an hour.** In the `password_only` case, whoever had a session on the account keeps its last access token until it expires (1 h), now with the panel role. The panel middleware asks GoTrue every minute and sends them away, but a direct API call with that token works until it expires. Same window as blocking a user (00629). Today 3 accounts have an address nothing proves.
 - **`accept_team_invitation_by_code` does not check a code itself.** It trusts that the Edge Function ran `team_invitation_code_check` first; only `service_role` can call it.
+- **A phone login at the same instant can still overwrite the chosen password.** If `verify-otp` reads the mark as unset, then the code is accepted (mark and password written), and then its derived-password sign-in fails, it writes the derived password. It needs a phone OTP login of the same account within the same second.
 - **Whoever holds the link can spend the day's codes** (and lock the current one with 5 wrong tries). The invitee then waits or the super_admin sends a new invitation.
 
 ### Errors the person sees
