@@ -11,9 +11,9 @@
 --   1. public.team_invitation_codes and public.team_invitation_code_salt, lock tables
 --      (RLS on, no policies, GRANT to service_role only), and public.users.password_set_at
 --      in git (prod already has it).
---   2. Helpers: _team_code_hash (HMAC of the code with the salt) and
---      _team_code_account (which account has the address, and whether a code may
---      give it the role).
+--   2. Helpers, executed only by their owner through the functions of 3: _team_code_hash
+--      (HMAC of the code with the salt) and _team_code_account (which account has the
+--      address, and whether a code may give it the role).
 --   3. For the Edge Function only (service_role): team_invitation_code_issue,
 --      team_invitation_code_check, accept_team_invitation_by_code.
 --   4. Permissions, 5. carriage returns out of the bodies, 6. self-checks.
@@ -299,8 +299,11 @@ BEGIN
 
   IF coalesce(p_code, '') ~ '^[0-9]{6}$' AND public._team_code_hash(v_inv.id, p_code) = v_row.code_hash THEN
     v_account := public._team_code_account(v_inv.email);
-    IF v_account->>'case' IN ('blocked', 'needs_google') THEN
-      RETURN jsonb_build_object('result', v_account->>'case');
+    -- Only the cases a code may serve go on; anything else, known or not, keeps the code.
+    IF v_account->>'case' = 'blocked' THEN
+      RETURN jsonb_build_object('result', 'blocked');
+    ELSIF coalesce(v_account->>'case', '') NOT IN ('new', 'proven', 'password_only') THEN
+      RETURN jsonb_build_object('result', 'needs_google');
     END IF;
     DELETE FROM public.team_invitation_codes WHERE invitation_id = v_inv.id;
     RETURN jsonb_build_object(
@@ -379,7 +382,7 @@ BEGIN
   IF NOT v_active OR v_account->>'case' = 'blocked' THEN
     RETURN jsonb_build_object('result', 'blocked');
   END IF;
-  IF v_account->>'case' NOT IN ('proven', 'password_only') THEN
+  IF coalesce(v_account->>'case', '') NOT IN ('proven', 'password_only') THEN
     RETURN jsonb_build_object('result', 'needs_google');
   END IF;
 
@@ -415,13 +418,15 @@ END;
 $$;
 
 -- 4. Permissions -----------------------------------------------------------------------
+-- The two helpers are called only from the three SECURITY DEFINER functions, which run as
+-- their owner: nobody else, the service role included, executes them.
 REVOKE ALL ON FUNCTION
   public._team_code_hash(uuid, text),
   public._team_code_account(text),
   public.team_invitation_code_issue(text),
   public.team_invitation_code_check(text, text),
   public.accept_team_invitation_by_code(text, uuid)
-FROM PUBLIC, anon, authenticated;
+FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION
   public.team_invitation_code_issue(text),
   public.team_invitation_code_check(text, text),
@@ -474,6 +479,11 @@ BEGIN
                  WHERE attrelid = 'public.users'::regclass AND attname = 'password_set_at' AND NOT attisdropped) THEN
     RAISE EXCEPTION '00664: public.users.password_set_at is missing';
   END IF;
+  IF (SELECT a.atttypid FROM pg_attribute a
+      WHERE a.attrelid = 'public.users'::regclass AND a.attname = 'password_set_at' AND NOT a.attisdropped)
+     <> 'timestamptz'::regtype THEN
+    RAISE EXCEPTION '00664: public.users.password_set_at must be timestamptz';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM public.team_invitation_code_salt WHERE id = 1 AND salt ~ '^[0-9a-f]{64}$') THEN
     RAISE EXCEPTION '00664: the code salt is missing';
   END IF;
@@ -501,6 +511,11 @@ BEGIN
   LOOP
     IF NOT has_function_privilege('service_role', v_fn, 'EXECUTE') THEN
       RAISE EXCEPTION '00664: service_role cannot execute %', v_fn;
+    END IF;
+  END LOOP;
+  FOREACH v_fn IN ARRAY ARRAY['public._team_code_hash(uuid, text)', 'public._team_code_account(text)']::regprocedure[] LOOP
+    IF has_function_privilege('service_role', v_fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '00664: service_role can execute %', v_fn;
     END IF;
   END LOOP;
 END

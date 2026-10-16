@@ -1,7 +1,9 @@
 -- Extra scaffold for the 00664 rehearsal, run after supabase/tests/00661/scaffold.sql.
 -- What 00664 reads that the 00661 scaffold leaves out: the sign-in address and the ban of
--- auth.users, GoTrue's sessions and refresh tokens, pgcrypto in schema extensions, and
--- rate_limits with the LIVE body of check_rate_limit (prod 2026-10-16, md5 5a2e6163.../527).
+-- auth.users, GoTrue's sessions and refresh tokens, pgcrypto in schema extensions,
+-- rate_limits with the LIVE body of check_rate_limit (prod 2026-10-16, md5 5a2e6163.../527),
+-- and the trigger that gates users.email_verified_at with its LIVE body
+-- (00611; prod 2026-10-16, md5 96a5ad5e.../465).
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 GRANT USAGE ON SCHEMA extensions TO postgres, anon, authenticated, service_role;
@@ -61,4 +63,29 @@ $function$
 ;
 REVOKE ALL ON FUNCTION public.check_rate_limit(text, integer, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.check_rate_limit(text, integer, integer) TO service_role;
+
+-- 00611, as prod has it: a change of users.email clears email_verified_at, and a caller with a
+-- JWT that is not an admin cannot change the mark (it is put back).
+CREATE OR REPLACE FUNCTION public.tg_users_protect_email_verification()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  IF NEW.email IS DISTINCT FROM OLD.email THEN
+    -- A new address is unconfirmed until confirm-email says otherwise.
+    NEW.email_verified_at := NULL;
+  ELSIF NEW.email_verified_at IS DISTINCT FROM OLD.email_verified_at
+        AND auth.uid() IS NOT NULL
+        AND NOT public.is_admin() THEN
+    -- Only the server (confirm-email, no JWT) or an admin may set or clear it.
+    NEW.email_verified_at := OLD.email_verified_at;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+REVOKE EXECUTE ON FUNCTION public.tg_users_protect_email_verification() FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER trg_users_protect_email_verification
+  BEFORE UPDATE OF email, email_verified_at ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.tg_users_protect_email_verification();
 RESET ROLE;

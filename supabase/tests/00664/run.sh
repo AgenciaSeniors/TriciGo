@@ -79,6 +79,12 @@ val "S0 the scaffold carries the live check_rate_limit body" \
   "SELECT md5(prosrc) || '/' || length(prosrc) FROM pg_proc WHERE oid = 'public.check_rate_limit(text, integer, integer)'::regprocedure" \
   "5a2e61635bf60849be2e5ca41cbd9889/527"
 val "S1 00661 is applied, as in prod" "SELECT to_regprocedure('public.accept_team_invitation(text)') IS NOT NULL" "t"
+val "S2 the scaffold carries the live body of the trigger that gates email_verified_at (00611)" \
+  "SELECT md5(prosrc) || '/' || length(prosrc) FROM pg_proc WHERE oid = 'public.tg_users_protect_email_verification()'::regprocedure" \
+  "96a5ad5ef41a09f122f354c4668fdf82/465"
+val "S3 and the trigger is defined as in prod" \
+  "SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t WHERE t.tgrelid = 'public.users'::regclass AND t.tgname = 'trg_users_protect_email_verification'" \
+  "CREATE TRIGGER trg_users_protect_email_verification BEFORE UPDATE OF email, email_verified_at ON public.users FOR EACH ROW EXECUTE FUNCTION tg_users_protect_email_verification()"
 
 if [ "$MIG" != "none" ]; then
   echo "== apply migration (1st, one transaction, as postgres, search_path = '') =="; $P -1 -c "$AS_OWNER" -f "$MIG" >/dev/null || { echo "migration failed"; exit 1; }
@@ -89,9 +95,9 @@ echo "== objects =="
 val "O1 both tables have RLS and only service_role can read them" \
   "SELECT string_agg(c.relname || ':' || c.relrowsecurity || ':' || has_table_privilege('anon', c.oid, 'SELECT') || has_table_privilege('authenticated', c.oid, 'SELECT') || has_table_privilege('service_role', c.oid, 'SELECT'), ',' ORDER BY c.relname COLLATE \"C\") FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relname IN ('team_invitation_codes', 'team_invitation_code_salt')" \
   "team_invitation_code_salt:true:falsefalsetrue,team_invitation_codes:true:falsefalsetrue"
-val "O2 no client executes the new functions; the service role does; all SECURITY DEFINER" \
+val "O2 no client executes the new functions; the service role executes the three it calls, not the helpers; all SECURITY DEFINER" \
   "SELECT string_agg(p.proname || ':' || has_function_privilege('anon', p.oid, 'EXECUTE') || has_function_privilege('authenticated', p.oid, 'EXECUTE') || has_function_privilege('service_role', p.oid, 'EXECUTE') || ':' || p.prosecdef, ',' ORDER BY p.proname COLLATE \"C\") FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ($FNS)" \
-  "_team_code_account:falsefalsetrue:true,_team_code_hash:falsefalsetrue:true,accept_team_invitation_by_code:falsefalsetrue:true,team_invitation_code_check:falsefalsetrue:true,team_invitation_code_issue:falsefalsetrue:true"
+  "_team_code_account:falsefalsefalse:true,_team_code_hash:falsefalsefalse:true,accept_team_invitation_by_code:falsefalsetrue:true,team_invitation_code_check:falsefalsetrue:true,team_invitation_code_issue:falsefalsetrue:true"
 val "O3 one salt, 32 random bytes in hex" \
   "SELECT count(*) || ':' || bool_and(salt ~ '^[0-9a-f]{64}\$') FROM public.team_invitation_code_salt" "1:true"
 val "O4 anon cannot ask for a code; a signed-in user cannot accept with one" \
@@ -109,7 +115,7 @@ val "I1 a pending invitation gets a 6-digit code for its address; only the hash 
   "$(svc "$(inv nina@bacoagency.com marketing a) SELECT (r->>'result') || '|' || (r->>'code' ~ '^[0-9]{6}\$') || '|' || (r->>'email') || '|' || (r->>'account_exists') || '|' || (r->>'expires_in_s') || '|' || (r->>'full_name') FROM (SELECT public.team_invitation_code_issue(repeat('a', 64)) r) x; SELECT (code_hash ~ '^[0-9a-f]{64}\$') || '|' || attempts || '|' || (expires_at = now() + interval '10 minutes') FROM public.team_invitation_codes;")" \
   "issued|true|nina@bacoagency.com|false|600|;true|0|true"
 val "I2 the stored hash is the salted HMAC of the code, not a plain hash" \
-  "$(svc "$(inv nina@bacoagency.com marketing a) $(issue a) SELECT (c.code_hash = public._team_code_hash(c.invitation_id, current_setting('test.code'))) || '|' || (c.code_hash <> encode(sha256(convert_to(current_setting('test.code'), 'UTF8')), 'hex')) FROM public.team_invitation_codes c;")" \
+  "$(svc "$(inv nina@bacoagency.com marketing a) $(issue a) $(su) SELECT (c.code_hash = public._team_code_hash(c.invitation_id, current_setting('test.code'))) || '|' || (c.code_hash <> encode(sha256(convert_to(current_setting('test.code'), 'UTF8')), 'hex')) FROM public.team_invitation_codes c;")" \
   "issued;true|true"
 val "I3 the answer says whether the address already has an account" \
   "$(svc "$(inv pete@example.com admin b) SELECT public.team_invitation_code_issue(repeat('b', 64))->>'account_exists';")" "true"
@@ -160,11 +166,17 @@ val "C7 the account cases: proven (with a phone), password only, phone, unverifi
   "$(svc "$(inv carl@gmail.com marketing c) $(issue c) $(okc c $CARL) $(inv pete@example.com marketing b) $(issue b) $(okc b $PETE) $(inv phil@example.com marketing d) $(issue d) $(okc d $PHIL) SELECT count(*) FROM public.team_invitation_codes c JOIN public.team_invitations i ON i.id = c.invitation_id WHERE i.email = 'phil@example.com'; $(inv eve@gmail.com marketing e) $(issue e) $(okc e $EVE) $(inv bob@gmail.com marketing 1) $(issue 1) $(okc 1 $BOB) $(inv ben@gmail.com marketing 2) $(issue 2) $(okc 2 $BEN)")" \
   "issued;ok|proven|true;issued;ok|password_only|true;issued;needs_google||;1;issued;needs_google||;issued;blocked||;issued;blocked||"
 val "C8 a phone that is set but not confirmed is needs_google; the right code is not spent" \
-  "$(svc "$(su) INSERT INTO public.users (id, email, full_name) VALUES ('$GUS', 'gus@example.com', 'Gus Phone'); INSERT INTO auth.users (id, email, phone, phone_confirmed_at, created_at) VALUES ('$GUS', 'gus@example.com', '5355500077', NULL, '2026-01-01'); INSERT INTO auth.identities (user_id, provider, identity_data) VALUES ('$GUS', 'email', '{\"email\": \"gus@example.com\", \"email_verified\": true}'); $(sr) $(inv gus@example.com marketing 7) $(quiet "set_config('test.code', coalesce(public.team_invitation_code_issue(repeat('7', 64))->>'code', ''), true)") SELECT public.team_invitation_code_check(repeat('7', 64), current_setting('test.code'))->>'result'; SELECT count(*) FROM public.team_invitation_codes;")" \
-  "needs_google;1"
+  "$(svc "$(su) INSERT INTO public.users (id, email, full_name) VALUES ('$GUS', 'gus@example.com', 'Gus Phone'); INSERT INTO auth.users (id, email, phone, phone_confirmed_at, created_at) VALUES ('$GUS', 'gus@example.com', '5355500077', NULL, '2026-01-01'); INSERT INTO auth.identities (user_id, provider, identity_data) VALUES ('$GUS', 'email', '{\"email\": \"gus@example.com\", \"email_verified\": true}'); $(sr) $(inv gus@example.com marketing 7) $(quiet "set_config('test.code', coalesce(public.team_invitation_code_issue(repeat('7', 64))->>'code', ''), true)") SELECT public.team_invitation_code_check(repeat('7', 64), current_setting('test.code'))->>'result'; SELECT count(*) || '|' || coalesce(max(attempts)::text, '-') FROM public.team_invitation_codes;")" \
+  "needs_google;1|0"
 val "C9 an address only an identity carries: the answer says an account exists, a right code is needs_google and not spent" \
-  "$(svc "$(su) INSERT INTO public.users (id, email, full_name) VALUES ('$IDA', NULL, 'Ida Identity'); INSERT INTO auth.users (id, email, created_at) VALUES ('$IDA', 'phone_5355500088@tricigo.app', '2026-01-01'); INSERT INTO auth.identities (user_id, provider, identity_data) VALUES ('$IDA', 'google', '{\"email\": \"ida@gmail.com\", \"email_verified\": true}'); $(sr) $(inv ida@gmail.com marketing 8) SELECT (r->>'result') || '|' || (r->>'account_exists') FROM (SELECT public.team_invitation_code_issue(repeat('8', 64)) r) x WHERE set_config('test.code', coalesce(r->>'code', ''), true) IS NOT NULL; SELECT public.team_invitation_code_check(repeat('8', 64), current_setting('test.code'))->>'result'; SELECT count(*) FROM public.team_invitation_codes;")" \
-  "issued|true;needs_google;1"
+  "$(svc "$(su) INSERT INTO public.users (id, email, full_name) VALUES ('$IDA', NULL, 'Ida Identity'); INSERT INTO auth.users (id, email, created_at) VALUES ('$IDA', 'phone_5355500088@tricigo.app', '2026-01-01'); INSERT INTO auth.identities (user_id, provider, identity_data) VALUES ('$IDA', 'google', '{\"email\": \"ida@gmail.com\", \"email_verified\": true}'); $(sr) $(inv ida@gmail.com marketing 8) SELECT (r->>'result') || '|' || (r->>'account_exists') FROM (SELECT public.team_invitation_code_issue(repeat('8', 64)) r) x WHERE set_config('test.code', coalesce(r->>'code', ''), true) IS NOT NULL; SELECT public.team_invitation_code_check(repeat('8', 64), current_setting('test.code'))->>'result'; SELECT count(*) || '|' || coalesce(max(attempts)::text, '-') FROM public.team_invitation_codes;")" \
+  "issued|true;needs_google;1|0"
+# NOCASE: _team_code_account replaced, inside the rolled-back test, by one that names the account
+# and gives no case, to prove that check and accept refuse any case they do not know.
+NOCASE="CREATE OR REPLACE FUNCTION public._team_code_account(p_email text) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_catalog AS \$s\$ SELECT jsonb_build_object('user_id', (SELECT au.id FROM auth.users au WHERE lower(btrim(au.email)) = lower(btrim(p_email)))) \$s\$;"
+val "C10 an account case check does not know is refused as needs_google, and the right code is not spent" \
+  "$(svc "$(inv pete@example.com marketing b) $(issue b) $(su) $NOCASE $(sr) SELECT public.team_invitation_code_check(repeat('b', 64), current_setting('test.code'))->>'result'; SELECT count(*) || '|' || coalesce(max(attempts)::text, '-') FROM public.team_invitation_codes;")" \
+  "issued;needs_google;1|0"
 
 echo "== accepting with a code =="
 val "A1 a new account gets the role; the invitation is accepted and audited as e-mail code" \
@@ -206,12 +218,24 @@ val "A12 an account without a public.users row is no_account" \
 val "A13 accepting sets password_set_at and, with users.email the invited address, email_verified_at" \
   "$(svc "$(inv nina@bacoagency.com marketing a) $(su) INSERT INTO public.users (id, email, full_name) VALUES ('$NINA', 'nina@bacoagency.com', 'Nina Baco'); INSERT INTO auth.users (id, email) VALUES ('$NINA', 'nina@bacoagency.com'); INSERT INTO auth.identities (user_id, provider, identity_data) VALUES ('$NINA', 'email', '{\"email\": \"nina@bacoagency.com\", \"email_verified\": true}'); $(sr) $(quiet "public.accept_team_invitation_by_code(repeat('a', 64), '$NINA')") $(su) SELECT password_set_at = now(), email_verified_at = now() FROM public.users WHERE id = '$NINA';")" \
   "t|t"
-val "A14 with users.email another address, email_verified_at is left alone and password_set_at is set" \
-  "$(svc "$(su) UPDATE public.users SET email = 'pete.other@example.com' WHERE id = '$PETE'; $(sr) $(inv pete@example.com marketing b) $(quiet "public.accept_team_invitation_by_code(repeat('b', 64), '$PETE')") $(su) SELECT password_set_at = now(), email_verified_at IS NULL FROM public.users WHERE id = '$PETE';")" \
-  "t|t"
+# A14: the address changes first, because 00611 clears email_verified_at on every change of
+# users.email; then the mark is set, for the second accept, after the first one left it NULL.
+val "A14 with users.email another address, email_verified_at is left alone (not set, not cleared) and password_set_at is set" \
+  "$(svc "$(su) UPDATE public.users SET email = 'pete.other@example.com' WHERE id = '$PETE'; $(sr) $(inv pete@example.com marketing b) $(quiet "public.accept_team_invitation_by_code(repeat('b', 64), '$PETE')") $(su) SELECT password_set_at = now(), email_verified_at IS NULL FROM public.users WHERE id = '$PETE'; UPDATE public.users SET email_verified_at = '2026-03-01 00:00:00+00', password_set_at = NULL WHERE id = '$PETE'; $(sr) $(inv pete@example.com admin 9) $(quiet "public.accept_team_invitation_by_code(repeat('9', 64), '$PETE')") $(su) SELECT password_set_at = now(), email_verified_at = '2026-03-01 00:00:00+00' FROM public.users WHERE id = '$PETE';")" \
+  "t|t;t|t"
 val "A15 an email_verified_at already set is kept, not moved to now() (and the accept did run)" \
   "$(svc "$(su) UPDATE public.users SET email_verified_at = '2026-03-01 00:00:00+00' WHERE id = '$PETE'; $(sr) $(inv pete@example.com marketing b) $(quiet "public.accept_team_invitation_by_code(repeat('b', 64), '$PETE')") $(su) SELECT email_verified_at = '2026-03-01 00:00:00+00' AND password_set_at = now() FROM public.users WHERE id = '$PETE';")" \
   "t"
+# A16: the accept's UPDATE, run as its owner, with and without a user's JWT. With one, 00611 puts
+# the mark back, which is why the Edge Function must call accept_team_invitation_by_code with the
+# service key and no user JWT.
+A16_UPD="SET LOCAL ROLE postgres; UPDATE public.users SET password_set_at = now(), email_verified_at = CASE WHEN email_verified_at IS NULL AND lower(btrim(coalesce(email, ''))) = 'pete@example.com' THEN now() ELSE email_verified_at END WHERE id = '$PETE'; RESET ROLE;"
+val "A16 with a user's JWT the prod trigger reverts the accept's email_verified_at write; without one it stays" \
+  "$(svc "$(su) SET LOCAL request.jwt.claim.sub = '$PETE'; $A16_UPD SELECT password_set_at = now(), email_verified_at IS NULL FROM public.users WHERE id = '$PETE'; SET LOCAL request.jwt.claim.sub = ''; $A16_UPD SELECT password_set_at = now(), email_verified_at = now() FROM public.users WHERE id = '$PETE';")" \
+  "t|t;t|t"
+val "A17 an account case accept does not know is refused as needs_google and nothing changes" \
+  "$(svc "$(inv pete@example.com marketing b) $(su) $NOCASE $(sr) $(acc b $PETE) SELECT role FROM public.users WHERE id = '$PETE'; SELECT status FROM public.team_invitations;")" \
+  "needs_google|;customer;pending"
 
 echo "== an accept with a code racing a removal waits for it instead of deadlocking =="
 # Same races as 00661 R1/R2, with accept_team_invitation_by_code. MIA is marketing with a proven
@@ -246,8 +270,8 @@ $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}r" >/dev/null 
 if [ "$MIG" != "none" ]; then
   echo "== negative proofs: the migration's own checks catch a broken result =="
   T=$(mktemp -d)
-  # sabotage NAME OLD NEW [SOURCE] -> $T/NAME.sql: SOURCE (default the migration) with OLD, found once, replaced by NEW
-  sabotage(){ "$PY" - "${4:-$MIG}" "$T/$1.sql" "$2" "$3" <<'PYEOF'
+  # sabotage NAME OLD NEW -> $T/NAME.sql: the migration with OLD, found exactly once, replaced by NEW
+  sabotage(){ "$PY" - "$MIG" "$T/$1.sql" "$2" "$3" <<'PYEOF'
 import sys
 src, dst, old, new = sys.argv[1:5]
 s = open(src, encoding='utf-8').read().replace('\r\n', '\n')
@@ -256,6 +280,11 @@ s2 = s.replace(old, new); assert s2 != s
 open(dst, 'w', encoding='utf-8', newline='\n').write(s2)
 PYEOF
   }
+  # proof NAME LABEL OLD NEW PATTERN -> applies the sabotaged copy to a fresh database; passes when
+  # its first ERROR line matches PATTERN. A sabotage whose OLD text is not found fails the test.
+  proof(){ if ! sabotage "$1" "$3" "$4"; then ko "$2" "sabotage failed: the text to replace is not in the migration exactly once"; return; fi
+           fresh ${DB}g; local r; r=$(apply_err ${DB}g "$T/$1.sql")
+           if echo "$r" | grep -q "$5"; then ok "$2"; else ko "$2" "$r"; fi; }
   # G0: the same file with CRLF line endings (pasted from Windows) produces the same bodies.
   "$PY" - "$MIG" "$T/crlf.sql" <<'PYEOF'
 import sys
@@ -266,29 +295,43 @@ PYEOF
   fresh ${DB}g; r=$(apply_err ${DB}g "$T/crlf.sql"); b=$($BIN/psql $CONN -d ${DB}g -qAt -c "$BODIES" 2>&1 | tr -d '\r')
   [ "$r" = applied ] && [ "$b" = "$want" ] && ok "G0 with CRLF line endings the migration produces the same bodies" || ko "G0 with CRLF line endings the migration produces the same bodies" "$r / $b"
 
-  sabotage g1 "  public.accept_team_invitation_by_code(text, uuid)
-FROM PUBLIC, anon, authenticated;" "  public.accept_team_invitation_by_code(text, uuid)
-FROM PUBLIC;"
-  fresh ${DB}g; r=$(apply_err ${DB}g "$T/g1.sql")
-  echo "$r" | grep -q "can execute public\." && ok "G1 a function a client can execute aborts the migration" || ko "G1 a function a client can execute aborts the migration" "$r"
+  proof g1 "G1 a function a client can execute aborts the migration" \
+    "  public.accept_team_invitation_by_code(text, uuid)
+FROM PUBLIC, anon, authenticated, service_role;" "  public.accept_team_invitation_by_code(text, uuid)
+FROM PUBLIC;" "anon can execute public\."
 
-  sabotage g2 "ALTER TABLE public.team_invitation_codes ENABLE ROW LEVEL SECURITY;" "-- sabotaged"
-  fresh ${DB}g; r=$(apply_err ${DB}g "$T/g2.sql")
-  echo "$r" | grep -q "team_invitation_codes has row level security disabled" && ok "G2 a table without RLS aborts the migration" || ko "G2 a table without RLS aborts the migration" "$r"
+  proof g2 "G2 a table without RLS aborts the migration" \
+    "ALTER TABLE public.team_invitation_codes ENABLE ROW LEVEL SECURITY;" "-- sabotaged" \
+    "team_invitation_codes has row level security disabled"
 
-  sabotage g3 "INSERT INTO public.team_invitation_code_salt (id, salt)
+  proof g3 "G3 a missing salt aborts the migration" \
+    "INSERT INTO public.team_invitation_code_salt (id, salt)
 VALUES (1, encode(extensions.gen_random_bytes(32), 'hex'))
-ON CONFLICT (id) DO NOTHING;" "-- sabotaged"
-  fresh ${DB}g; r=$(apply_err ${DB}g "$T/g3.sql")
-  echo "$r" | grep -q "the code salt is missing" && ok "G3 a missing salt aborts the migration" || ko "G3 a missing salt aborts the migration" "$r"
+ON CONFLICT (id) DO NOTHING;" "-- sabotaged" "the code salt is missing"
 
-  # G4: both table REVOKEs leave out service_role, so it keeps the ALL the default privileges gave it.
-  sabotage g4a "REVOKE ALL ON public.team_invitation_codes FROM PUBLIC, anon, authenticated, service_role;" \
-    "REVOKE ALL ON public.team_invitation_codes FROM PUBLIC, anon, authenticated;"
-  sabotage g4 "REVOKE ALL ON public.team_invitation_code_salt FROM PUBLIC, anon, authenticated, service_role;" \
-    "REVOKE ALL ON public.team_invitation_code_salt FROM PUBLIC, anon, authenticated;" "$T/g4a.sql"
-  fresh ${DB}g; r=$(apply_err ${DB}g "$T/g4.sql")
-  echo "$r" | grep -q "service_role has TRUNCATE on" && ok "G4 a service_role that kept the default ALL on a table aborts the migration" || ko "G4 a service_role that kept the default ALL on a table aborts the migration" "$r"
+  # G4/G4b: a table REVOKE leaves out service_role, so it keeps the ALL the default privileges gave it.
+  proof g4 "G4 a service_role that kept the default ALL on the codes table aborts the migration" \
+    "REVOKE ALL ON public.team_invitation_codes FROM PUBLIC, anon, authenticated, service_role;" \
+    "REVOKE ALL ON public.team_invitation_codes FROM PUBLIC, anon, authenticated;" \
+    "service_role has TRUNCATE on public\.team_invitation_codes"
+  proof g4b "G4b a service_role that kept the default ALL on the salt table aborts the migration" \
+    "REVOKE ALL ON public.team_invitation_code_salt FROM PUBLIC, anon, authenticated, service_role;" \
+    "REVOKE ALL ON public.team_invitation_code_salt FROM PUBLIC, anon, authenticated;" \
+    "service_role has TRUNCATE on public\.team_invitation_code_salt"
+
+  # G5/G6: the scaffold's users has no password_set_at, as git had it before 00664.
+  proof g5 "G5 a users.password_set_at the migration does not add aborts it" \
+    "    ALTER TABLE public.users ADD COLUMN password_set_at timestamptz;" "    NULL;" \
+    "public.users.password_set_at is missing"
+  proof g6 "G6 a users.password_set_at that is not timestamptz aborts the migration" \
+    "ADD COLUMN password_set_at timestamptz;" "ADD COLUMN password_set_at text;" \
+    "public.users.password_set_at must be timestamptz"
+
+  # G7: the function REVOKE leaves out service_role, so it keeps the default EXECUTE on the helpers.
+  proof g7 "G7 a helper the service role can execute aborts the migration" \
+    "  public.accept_team_invitation_by_code(text, uuid)
+FROM PUBLIC, anon, authenticated, service_role;" "  public.accept_team_invitation_by_code(text, uuid)
+FROM PUBLIC, anon, authenticated;" "service_role can execute public\._team_code_"
 
   rm -rf "$T"
   $BIN/psql $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS ${DB}g" >/dev/null 2>&1
