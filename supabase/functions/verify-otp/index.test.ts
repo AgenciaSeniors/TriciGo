@@ -26,9 +26,18 @@ const db = vi.hoisted(() => ({
   rpcs: [] as string[],
   // Id the account lookup answers; null keeps the lookup failing (503).
   lookupId: null as string | null,
-  // What public.users answers for password_set_at.
+  // What public.users answers for password_set_at, or a rejected read.
   mark: { data: null as unknown, error: null as unknown },
+  markThrows: false,
+  // Arguments the handler passed to select() and eq() on public.users.
+  usersSelect: [] as unknown[][],
+  usersEq: [] as unknown[][],
 }));
+
+interface AccountLookup {
+  data: { user: Record<string, unknown> | null };
+  error: { message: string } | null;
+}
 
 const auth = vi.hoisted(() => {
   const session = (id: string | null) => ({
@@ -38,18 +47,20 @@ const auth = vi.hoisted(() => {
     user: { id },
   });
   return {
-    getUserById: vi.fn(async (id: string) => ({
-      data: {
-        user: {
-          id,
-          email: 'carl@gmail.com',
-          phone: '5355512345', // GoTrue keeps E.164 digits without the +
-          phone_confirmed_at: '2026-09-01T00:00:00Z',
-          banned_until: null,
+    getUserById: vi.fn(
+      async (id: string): Promise<AccountLookup> => ({
+        data: {
+          user: {
+            id,
+            email: 'carl@gmail.com',
+            phone: '5355512345', // GoTrue keeps E.164 digits without the +
+            phone_confirmed_at: '2026-09-01T00:00:00Z',
+            banned_until: null,
+          },
         },
-      },
-      error: null,
-    })),
+        error: null,
+      }),
+    ),
     signInWithPassword: vi.fn(async () => ({ data: { session: session(db.lookupId) }, error: null })),
     updateUserById: vi.fn(async () => ({ data: {}, error: null })),
     generateLink: vi.fn(async () => ({ data: { properties: { hashed_token: 'h' } }, error: null })),
@@ -68,8 +79,18 @@ vi.mock('https://esm.sh/@supabase/supabase-js@2.108.2', () => ({
     from: (table: string) => {
       const q: Record<string, unknown> = {};
       if (table === 'users') {
-        for (const op of ['select', 'eq']) q[op] = () => q;
-        q.maybeSingle = async () => db.mark;
+        q.select = (...args: unknown[]) => {
+          db.usersSelect.push(args);
+          return q;
+        };
+        q.eq = (...args: unknown[]) => {
+          db.usersEq.push(args);
+          return q;
+        };
+        q.maybeSingle = async () => {
+          if (db.markThrows) throw new Error('network down');
+          return db.mark;
+        };
         return q;
       }
       for (const op of ['select', 'eq', 'gte']) q[op] = () => q;
@@ -118,7 +139,12 @@ beforeEach(() => {
   db.rpcs = [];
   db.lookupId = null;
   db.mark = { data: { password_set_at: null }, error: null };
-  for (const fn of Object.values(auth)) fn.mockClear();
+  db.markThrows = false;
+  db.usersSelect = [];
+  db.usersEq = [];
+  // mockReset also drops any leftover mockImplementationOnce and goes back to the
+  // implementation given to vi.fn.
+  for (const fn of Object.values(auth)) fn.mockReset();
 });
 
 function buckets(...full: string[]) {
@@ -206,6 +232,12 @@ describe('verify-otp keeps a password the person chose', () => {
     db.lookupId = USER_ID;
   });
 
+  it('reads password_set_at of the account the phone resolved to', async () => {
+    await verify();
+    expect(db.usersSelect).toEqual([['password_set_at']]);
+    expect(db.usersEq).toEqual([['id', USER_ID]]);
+  });
+
   it('with password_set_at, the session comes from the magic link and no password is tried or written', async () => {
     db.mark = { data: { password_set_at: '2026-10-16T00:00:00Z' }, error: null };
     const res = await verify();
@@ -223,6 +255,14 @@ describe('verify-otp keeps a password the person chose', () => {
     expect(auth.generateLink).toHaveBeenCalled();
   });
 
+  it('when the mark read throws, it uses the magic link only', async () => {
+    db.markThrows = true;
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    expect(auth.generateLink).toHaveBeenCalledWith({ type: 'magiclink', email: 'carl@gmail.com' });
+  });
+
   it('without the mark, it signs in with the derived password as before and writes nothing', async () => {
     db.mark = { data: { password_set_at: null }, error: null };
     const res = await verify();
@@ -230,5 +270,25 @@ describe('verify-otp keeps a password the person chose', () => {
     expect(auth.signInWithPassword).toHaveBeenCalledTimes(1);
     expect(auth.updateUserById).not.toHaveBeenCalled();
     expect(auth.generateLink).not.toHaveBeenCalled();
+  });
+
+  it('with no users row, it also signs in with the derived password as before', async () => {
+    db.mark = { data: null, error: null };
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.signInWithPassword).toHaveBeenCalledTimes(1);
+    expect(auth.generateLink).not.toHaveBeenCalled();
+  });
+
+  it('mints with the address of the first account lookup when the second lookup fails', async () => {
+    db.mark = { data: { password_set_at: '2026-10-16T00:00:00Z' }, error: null };
+    const firstLookup = auth.getUserById.getMockImplementation()!;
+    auth.getUserById
+      .mockImplementationOnce(firstLookup)
+      .mockImplementationOnce(async () => ({ data: { user: null }, error: { message: 'auth down' } }));
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.getUserById).toHaveBeenCalledTimes(2);
+    expect(auth.generateLink).toHaveBeenCalledWith({ type: 'magiclink', email: 'carl@gmail.com' });
   });
 });

@@ -201,6 +201,9 @@ Deno.serve(async (req) => {
     }
 
     let userId: string;
+    // Sign-in address of an existing account, from the lookup below. The session is
+    // minted by address, so it is kept in case the second lookup further down fails.
+    let accountEmail: string | undefined;
 
     if (existingUserId) {
       userId = existingUserId;
@@ -216,6 +219,7 @@ Deno.serve(async (req) => {
         accountPhone = existing.user.phone;
         accountPhoneConfirmedAt = existing.user.phone_confirmed_at;
         accountBannedUntil = existing.user.banned_until;
+        if (existing.user.email) accountEmail = existing.user.email;
       } catch (e) {
         console.error('getUserById before login failed:', e);
         return new Response(
@@ -326,9 +330,11 @@ Deno.serve(async (req) => {
     // was linked later, this is NOT the synthetic devEmail (e.g. a real gmail). Using
     // devEmail for session minting made Strategy B's generateLink CREATE a brand-new
     // synthetic-email user and mint a session for THAT empty user — the "app asks for
-    // all my data again as if I never registered" bug. Fall back to devEmail (correct
-    // for phone-only users, where email === devEmail).
-    let authEmail = devEmail;
+    // all my data again as if I never registered" bug. Start from the address the first
+    // lookup returned (an existing account), and fall back to devEmail only without one
+    // (a new account, or a phone-only user, where email === devEmail): if this second
+    // lookup fails, an account with a real address still gets its own magic link.
+    let authEmail = accountEmail ?? devEmail;
     try {
       const { data: u } = await supabase.auth.admin.getUserById(userId);
       if (u?.user?.email) authEmail = u.user.email;
@@ -347,10 +353,10 @@ Deno.serve(async (req) => {
         .select('password_set_at')
         .eq('id', userId)
         .maybeSingle();
-      if (markErr) console.warn('password_set_at read failed, using the magic link:', markErr.message);
+      if (markErr) console.error('password_set_at read failed, using the magic link:', markErr.message);
       else keepPassword = Boolean((mark as { password_set_at?: string | null } | null)?.password_set_at);
     } catch (e) {
-      console.warn('password_set_at read threw, using the magic link:', e instanceof Error ? e.message : String(e));
+      console.error('password_set_at read threw, using the magic link:', e instanceof Error ? e.message : String(e));
     }
 
     // Strategy A — stable-password grant (NEVER log/return the password).

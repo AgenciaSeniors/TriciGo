@@ -87,22 +87,31 @@ export default function ResetPasswordPage() {
 
     try {
       const supabase = supabaseRef.current;
-      const { data: updated, error: updateError } = await supabase.auth.updateUser({
+
+      // Phone logins (verify-otp) keep a password the person chose only when it is marked.
+      // The mark goes first: a mark without a new password only sends phone logins to the
+      // magic link, while a new password without the mark is overwritten on the next one.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: marked, error: markError } = await supabase
+          .from('users')
+          .update({ password_set_at: new Date().toISOString() })
+          .eq('id', session.user.id)
+          .select('id');
+        if (markError || !marked?.length) {
+          console.warn('[reset-password] password_set_at not saved:', markError?.message ?? 'no row updated');
+        }
+      } else {
+        console.warn('[reset-password] password_set_at not saved: no session');
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
 
       if (updateError) {
         setError(updateError.message);
         return;
-      }
-
-      // Phone logins (verify-otp) keep a password the person chose only when it is marked.
-      if (updated.user) {
-        const { error: markError } = await supabase
-          .from('users')
-          .update({ password_set_at: new Date().toISOString() })
-          .eq('id', updated.user.id);
-        if (markError) console.warn('[reset-password] password_set_at not saved:', markError.message);
       }
 
       // Sign out after password update so they log in fresh.
