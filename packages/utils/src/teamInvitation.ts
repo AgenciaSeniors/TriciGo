@@ -71,8 +71,9 @@ export function maskedEmailParam(raw: string | null | undefined): string | null 
 
 /**
  * What the Edge Function team-invitation-code answers (00664): its own results, the ones it
- * passes on from team_invitation_code_issue / _check / accept_team_invitation_by_code, and two
- * the page derives itself: 'rate_limited' (HTTP 429 from the per-IP limiter) and 'error'.
+ * passes on from team_invitation_code_issue / _check / accept_team_invitation_by_code, and three
+ * the page derives itself: 'rate_limited' (HTTP 429 from the per-IP limiter), 'network' (the
+ * request never reached the function) and 'error'.
  * The SQL answers 'issued' and 'ok' never reach the page: the function turns them into
  * 'sent' and 'accepted'.
  */
@@ -101,6 +102,7 @@ export const INVITATION_CODE_RESULTS = [
   'no_account',
   'try_again',
   'rate_limited',
+  'network',
   'error',
 ] as const;
 
@@ -125,22 +127,37 @@ export function parseInvitationCodeAnswer(raw: unknown): InvitationCodeAnswer {
   return { result, retryAfterS: nonNegativeInt(obj.retry_after_s), attemptsLeft: nonNegativeInt(obj.attempts_left) };
 }
 
+/**
+ * A wait as "N minutos" / "1 minuto", or in hours ("N horas" / "1 hora") once it rounds up to
+ * 60 minutes or more, so it never reads "60 minutos". null when the wait is unknown.
+ */
+function waitPhrase(seconds: number | null): string | null {
+  if (!seconds) return null;
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+  const hours = Math.ceil(seconds / 3600);
+  return `${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+}
+
 /** The text the invitation page shows for an answer that is not a success. */
 export function invitationCodeMessage(answer: InvitationCodeAnswer): string {
   const seconds = answer.retryAfterS;
+  const wait = waitPhrase(seconds);
   switch (answer.result) {
     case 'cooldown':
       return seconds && seconds > 1
         ? `Espera ${seconds} segundos para pedir otro código.`
         : 'Espera un momento para pedir otro código.';
-    case 'too_many_hour': {
-      const minutes = seconds ? Math.max(1, Math.ceil(seconds / 60)) : null;
-      return minutes
-        ? `Pediste muchos códigos en la última hora. Vuelve a intentarlo en ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}.`
+    case 'too_many_hour':
+      return wait
+        ? `Pediste muchos códigos en la última hora. Vuelve a intentarlo en ${wait}.`
         : 'Pediste muchos códigos en la última hora. Vuelve a intentarlo más tarde.';
-    }
     case 'too_many_day':
-      return 'Ya pediste 10 códigos hoy. Vuelve a intentarlo mañana.';
+      // check_rate_limit windows are aligned to the epoch: the day opens again at 00:00 UTC
+      // (20:00 or 19:00 in Havana), so "mañana" would be wrong.
+      return wait
+        ? `Ya se pidieron 10 códigos para esta invitación. Vuelve a intentarlo en ${wait}.`
+        : 'Ya se pidieron 10 códigos para esta invitación. Vuelve a intentarlo más tarde.';
     case 'send_failed':
       return 'No pudimos mandar el correo. Intenta de nuevo en un rato.';
     case 'wrong_code': {
@@ -180,7 +197,11 @@ export function invitationCodeMessage(answer: InvitationCodeAnswer): string {
     case 'not_found':
       return 'No encontramos esa invitación. Revisa el enlace o pide uno nuevo.';
     case 'rate_limited':
-      return 'Hubo demasiados intentos desde esta conexión. Espera un rato y vuelve a intentarlo.';
+      return wait
+        ? `Hubo demasiados intentos desde esta conexión. Vuelve a intentarlo en ${wait}.`
+        : 'Hubo demasiados intentos desde esta conexión. Espera un rato y vuelve a intentarlo.';
+    case 'network':
+      return 'Sin conexión a internet. Revisa tu conexión y vuelve a intentarlo.';
     case 'wrong_account':
     case 'no_account':
     case 'try_again':

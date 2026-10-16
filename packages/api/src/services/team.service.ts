@@ -111,15 +111,41 @@ function invitationCodeError(answer: InvitationCodeAnswer): AppError {
 }
 
 /**
+ * The wait of a 429 from rateLimitResponse (supabase/functions/_shared/rate-limiter.ts): the
+ * Retry-After header (exposed to the browser), or retryAfterSec in the body. null when neither.
+ */
+async function retryAfterSeconds(res: Response): Promise<number | null> {
+  const header = Number(res.headers?.get?.('Retry-After'));
+  if (Number.isFinite(header) && header > 0) return Math.ceil(header);
+  try {
+    const body: unknown = await res.clone().json();
+    const sec = (body as { retryAfterSec?: unknown } | null)?.retryAfterSec;
+    if (typeof sec === 'number' && Number.isFinite(sec) && sec > 0) return Math.ceil(sec);
+  } catch {
+    /* body unreadable or already read: the wait stays unknown */
+  }
+  return null;
+}
+
+/**
  * Calls team-invitation-code (verify_jwt = false: the person has no session yet, so the call
  * goes with the publishable key). Every outcome comes back 200 { result }; a non-2xx is the
- * per-IP limiter (429), a malformed request (400) or a failure (500).
+ * per-IP limiter (429), a malformed request (400) or a failure (500). A FunctionsFetchError
+ * means the request never got an answer (no connection, or the browser blocked it).
  */
 async function invokeInvitationCode(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { data, error } = await getSupabaseClient().functions.invoke('team-invitation-code', { body });
   if (error) {
-    const status = (error as { context?: { status?: unknown } }).context?.status;
-    throw invitationCodeError({ result: status === 429 ? 'rate_limited' : 'error', retryAfterS: null, attemptsLeft: null });
+    const failed = error as { name?: unknown; context?: unknown };
+    // By name, not instanceof: two copies of supabase-js in a bundle would break instanceof.
+    if (failed.name === 'FunctionsFetchError') {
+      throw invitationCodeError({ result: 'network', retryAfterS: null, attemptsLeft: null });
+    }
+    const res = failed.context as Response | undefined;
+    if (res && typeof res === 'object' && res.status === 429) {
+      throw invitationCodeError({ result: 'rate_limited', retryAfterS: await retryAfterSeconds(res), attemptsLeft: null });
+    }
+    throw invitationCodeError({ result: 'error', retryAfterS: null, attemptsLeft: null });
   }
   return data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
 }

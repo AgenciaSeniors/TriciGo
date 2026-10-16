@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js';
 
 const mockRpc = vi.fn();
 const mockInvoke = vi.fn();
@@ -116,23 +117,69 @@ describe('teamService invitation codes', () => {
     });
   });
 
-  it('reads a 429 as too many attempts from this connection', async () => {
-    mockInvoke.mockResolvedValueOnce({ data: null, error: { context: new Response('{}', { status: 429 }) } });
-    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({ code: 'invitation_rate_limited' });
+  // What rateLimitResponse (supabase/functions/_shared/rate-limiter.ts) sends.
+  const limited = (retryAfterSec: number, header = true) =>
+    new FunctionsHttpError(
+      new Response(JSON.stringify({ error: 'Too many requests. Try again later.', retryAfterSec }), {
+        status: 429,
+        headers: header
+          ? { 'Content-Type': 'application/json', 'Retry-After': String(retryAfterSec) }
+          : { 'Content-Type': 'application/json' },
+      }),
+    );
+
+  it('reads a 429 as too many attempts from this connection, with the wait from Retry-After', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: null, error: limited(1800) });
+    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({
+      message: 'Hubo demasiados intentos desde esta conexión. Vuelve a intentarlo en 30 minutos.',
+      code: 'invitation_rate_limited',
+      statusCode: 400,
+      details: { result: 'rate_limited', retryAfterS: 1800 },
+    });
+  });
+
+  it('reads the wait from the body when the header cannot be read', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: null, error: limited(61, false) });
+    await expect(
+      teamService.acceptInvitationWithCode({ token: TOKEN, code: '048213', password: 'secreta123' }),
+    ).rejects.toMatchObject({
+      message: 'Hubo demasiados intentos desde esta conexión. Vuelve a intentarlo en 2 minutos.',
+      details: { result: 'rate_limited', retryAfterS: 61 },
+    });
+  });
+
+  it('falls back to a plain text when a 429 says nothing about the wait', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: null, error: new FunctionsHttpError(new Response('{}', { status: 429 })) });
+    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({
+      message: 'Hubo demasiados intentos desde esta conexión. Espera un rato y vuelve a intentarlo.',
+      code: 'invitation_rate_limited',
+      details: { retryAfterS: null },
+    });
+  });
+
+  it('says there is no connection when the request never reached the function', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: null, error: new FunctionsFetchError(new TypeError('Failed to fetch')) });
+    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({
+      message: 'Sin conexión a internet. Revisa tu conexión y vuelve a intentarlo.',
+      code: 'invitation_network',
+      statusCode: 400,
+    });
+    // Recognized by name too, in case two copies of supabase-js end up in a bundle.
+    mockInvoke.mockResolvedValueOnce({ data: null, error: { name: 'FunctionsFetchError', context: new TypeError('x') } });
+    await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({ code: 'invitation_network' });
   });
 
   it('reads any other failed call as a generic error', async () => {
     mockInvoke.mockResolvedValueOnce({
       data: null,
-      error: { context: new Response('{"error":"internal"}', { status: 500 }) },
+      error: new FunctionsHttpError(new Response('{"error":"internal"}', { status: 500 })),
     });
     await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({
       message: 'Algo salió mal. Intenta de nuevo.',
       code: 'invitation_error',
       statusCode: 400,
     });
-    // A network failure (FunctionsFetchError) has no Response at all.
-    mockInvoke.mockResolvedValueOnce({ data: null, error: { context: new TypeError('Failed to fetch') } });
+    mockInvoke.mockResolvedValueOnce({ data: null, error: new FunctionsRelayError(new Response('', { status: 502 })) });
     await expect(teamService.requestInvitationCode(TOKEN)).rejects.toMatchObject({ code: 'invitation_error' });
   });
 
@@ -171,8 +218,15 @@ describe('teamService invitation codes', () => {
     ).rejects.toMatchObject({ code: 'invitation_needs_google', statusCode: 400 });
   });
 
-  it('treats an accepted answer without address or panel role as a failure', async () => {
-    mockInvoke.mockResolvedValueOnce({ data: { result: 'accepted', role: 'customer' }, error: null });
+  it('treats an accepted answer without a panel role as a failure', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { result: 'accepted', email: 'a@b.co', role: 'customer' }, error: null });
+    await expect(
+      teamService.acceptInvitationWithCode({ token: TOKEN, code: '048213', password: 'secreta123' }),
+    ).rejects.toMatchObject({ code: 'invitation_try_again' });
+  });
+
+  it('treats an accepted answer without the address as a failure', async () => {
+    mockInvoke.mockResolvedValueOnce({ data: { result: 'accepted', role: 'admin' }, error: null });
     await expect(
       teamService.acceptInvitationWithCode({ token: TOKEN, code: '048213', password: 'secreta123' }),
     ).rejects.toMatchObject({ code: 'invitation_try_again' });

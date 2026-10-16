@@ -128,7 +128,41 @@ describe('invitationCodeMessage', () => {
     expect(msg('too_many_hour', { retry_after_s: 30 })).toBe(
       'Pediste muchos códigos en la última hora. Vuelve a intentarlo en 1 minuto.',
     );
-    expect(msg('too_many_day')).toBe('Ya pediste 10 códigos hoy. Vuelve a intentarlo mañana.');
+  });
+
+  it('says when the daily cap opens again (00:00 UTC, not "mañana" in Havana)', () => {
+    const day = 'Ya se pidieron 10 códigos para esta invitación. Vuelve a intentarlo en';
+    expect(msg('too_many_day', { retry_after_s: 7200 })).toBe(`${day} 2 horas.`);
+    expect(msg('too_many_day', { retry_after_s: 3601 })).toBe(`${day} 2 horas.`);
+    expect(msg('too_many_day', { retry_after_s: 3600 })).toBe(`${day} 1 hora.`);
+    // Never "60 minutos": a wait that rounds up to an hour reads as one.
+    expect(msg('too_many_day', { retry_after_s: 3590 })).toBe(`${day} 1 hora.`);
+    expect(msg('too_many_day', { retry_after_s: 1800 })).toBe(`${day} 30 minutos.`);
+    expect(msg('too_many_day', { retry_after_s: 30 })).toBe(`${day} 1 minuto.`);
+    expect(msg('too_many_day')).toBe('Ya se pidieron 10 códigos para esta invitación. Vuelve a intentarlo más tarde.');
+  });
+
+  it('says how long a limited connection waits, when the server said so', () => {
+    expect(msg('rate_limited', { retry_after_s: 61 })).toBe(
+      'Hubo demasiados intentos desde esta conexión. Vuelve a intentarlo en 2 minutos.',
+    );
+    expect(msg('rate_limited', { retry_after_s: 3600 })).toBe(
+      'Hubo demasiados intentos desde esta conexión. Vuelve a intentarlo en 1 hora.',
+    );
+    expect(msg('rate_limited')).toBe('Hubo demasiados intentos desde esta conexión. Espera un rato y vuelve a intentarlo.');
+  });
+
+  it('tells a failed connection apart from a server error', () => {
+    expect(msg('network')).toBe('Sin conexión a internet. Revisa tu conexión y vuelve a intentarlo.');
+  });
+
+  it('uses the same texts as the invitation page of 00661', () => {
+    // Byte-identical to invitation.accepted (shown for a used invitation), .canceled, .not_found
+    // and .expired in apps/admin/src/app/invitacion/[token]/page.tsx and es/admin.json.
+    expect(msg('used')).toBe('Esta invitación ya se usó. Entra desde la página de inicio de sesión.');
+    expect(msg('canceled')).toBe('La invitación fue cancelada. Si crees que es un error, pídele a quien te invitó una nueva.');
+    expect(msg('not_found')).toBe('No encontramos esa invitación. Revisa el enlace o pide uno nuevo.');
+    expect(msg('expired')).toBe('La invitación venció. Pídele a quien te invitó que te mande una nueva.');
   });
 
   it('counts the attempts left', () => {
