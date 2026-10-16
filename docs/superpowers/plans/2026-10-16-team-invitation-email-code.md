@@ -1990,7 +1990,7 @@ Deno.serve(async (req: Request) => {
 - [ ] **Step 5: Run the handler tests**
 
 Run: `pnpm --filter @tricigo/api exec vitest run team-invitation-code`
-Expected: PASS (19 tests). Note the order in the handler: the action check comes before the token check, so `refuses an unknown action` gets 400 even with a valid token.
+Expected: PASS (35 tests after the review fixes; the test file in this section is the first version). Note the order in the handler: the action check comes before the token check, so `refuses an unknown action` gets 400 even with a valid token.
 
 - [ ] **Step 6: Register `verify_jwt = false`**
 
