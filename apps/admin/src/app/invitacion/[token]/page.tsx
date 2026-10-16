@@ -23,6 +23,8 @@ export default function InvitationPage() {
   const [invitation, setInvitation] = useState<PublicInvitation | null>(null);
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
+  /** The code form accepted the invitation, or found it over: Google is no use any more. */
+  const [googleOff, setGoogleOff] = useState(false);
 
   useEffect(() => {
     if (!isInvitationToken(token)) {
@@ -96,21 +98,29 @@ export default function InvitationPage() {
                   {t('invitation.expires', { defaultValue: 'Vence el {{date}}.', date: formatAdminDate(invitation.expires_at) })}
                 </p>
               )}
-              <button
-                type="button"
-                onClick={signIn}
-                disabled={starting}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800 py-2.5 font-medium text-white transition-colors hover:bg-neutral-700 disabled:opacity-50"
-              >
-                <GoogleIcon className="h-5 w-5" />
-                {t('invitation.sign_in', { defaultValue: 'Entrar con Google' })}
-              </button>
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-neutral-700" />
-                <span className="text-xs uppercase text-neutral-500">{t('login.or_divider')}</span>
-                <div className="h-px flex-1 bg-neutral-700" />
-              </div>
-              <InvitationCodeForm token={token} emailMasked={invitation.email_masked ?? ''} />
+              {!googleOff && (
+                <>
+                  <button
+                    type="button"
+                    onClick={signIn}
+                    disabled={starting}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800 py-2.5 font-medium text-white transition-colors hover:bg-neutral-700 disabled:opacity-50"
+                  >
+                    <GoogleIcon className="h-5 w-5" />
+                    {t('invitation.sign_in', { defaultValue: 'Entrar con Google' })}
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-neutral-700" />
+                    <span className="text-xs uppercase text-neutral-500">{t('login.or_divider')}</span>
+                    <div className="h-px flex-1 bg-neutral-700" />
+                  </div>
+                </>
+              )}
+              <InvitationCodeForm
+                token={token}
+                emailMasked={invitation.email_masked ?? ''}
+                onSettled={() => setGoogleOff(true)}
+              />
             </>
           )}
 
