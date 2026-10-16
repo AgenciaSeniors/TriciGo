@@ -17,14 +17,15 @@ The marketing agency Baco uses `info@bacoagency.com`. Its mail is served by `mai
 
 ## What people see
 
-On `admin.tricigo.com/invitacion/<token>` (the page already shows the role, who invited and the address masked as `i…@bacoagency.com`), under "Entrar con Google", a second option: **Crear cuenta con un código**.
+On `admin.tricigo.com/invitacion/<token>` (the page already shows the role, who invited and the address masked as `i…@bacoagency.com`), under "Entrar con Google", a second option: **Entrar con un código por correo**.
 
-1. They tap it. The page says "Te mandamos un código de 6 dígitos a i…@bacoagency.com" and offers **Enviar código**.
+1. They tap it. The page says "Te vamos a mandar un código de 6 dígitos a i…@bacoagency.com" and offers **Enviar código**, plus a link **Ya tengo un código** for someone who reloaded the page or came back from their mail (it opens the form without sending a new code, which would replace the one they hold).
 2. They get an e-mail from `noreply@tricigo.com`, subject "Tu código para el panel de TriciGo", with the code, that it expires in 10 minutes, and "si no pediste este código, ignora este correo".
 3. A form asks for the code, their name (prefilled from the invitation when it has one), a password of at least 8 characters and the password again. Button: **Crear cuenta y entrar**.
-   - When the address already has an account, the form says "Ya hay una cuenta con este correo: elige una contraseña nueva para entrar" and does not ask for the name.
+   - When the address already has an account, the form says "Ya hay una cuenta con este correo: elige una contraseña nueva para entrar", does not ask for the name, and the button says **Entrar al panel**.
+   - Opened with **Ya tengo un código**, the page doesn't know whether an account exists: the name is optional and the button says **Entrar al panel**.
 4. On success they land on their panel home (`panelHome(role)`): marketing on *Pulso del lanzamiento*, admins on the home page.
-5. **Enviar otro código** is enabled 60 s after each send.
+5. **Enviar otro código** is enabled 60 s after each send, or later when the server asks to wait longer.
 
 The invitation e-mail and the page stop saying that only Google works. The e-mail line becomes: "Toca el botón y entra con la cuenta de Google de <address>, o crea tu cuenta con un código que te mandamos a esta dirección."
 
