@@ -73,8 +73,8 @@ export function teamInvitationHtml(data: TeamInvitationData): string {
       ${who} al panel de administración de TriciGo con el rol <strong>${escapeHtml(role)}</strong>.
     </p>
     <p style="margin: 0 0 16px;">
-      Toca el botón y entra con la cuenta de Google de <strong>${escapeHtml(data.email)}</strong>.
-      Con otra cuenta la invitación no funciona.
+      Toca el botón y entra con la cuenta de Google de <strong>${escapeHtml(data.email)}</strong>,
+      o crea tu cuenta con un código que te mandamos a esta dirección.
     </p>
     ${expiry ? `<p style="margin: 0 0 8px; font-family: ${FONT_STACK}; font-size: 14px; color: ${COLORS.muted};">La invitación vence el ${escapeHtml(expiry)}.</p>` : ''}
     <p style="margin: 0;">
