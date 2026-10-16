@@ -188,16 +188,17 @@ export function InvitationCodeForm({ token, emailMasked, onSettled }: Invitation
       if (failure.retryAfterS) holdSending(failure.retryAfterS);
       if (!again && failure.result === 'cooldown') {
         // A code went out under a minute ago (a reload, another tab): it still works, so the
-        // form opens for it. Whether the address has an account stays unknown.
+        // form opens for it. This page does not know when it went out nor whether the address
+        // has an account. No message: the resend button already shows the live wait.
         setAccountExists(null);
-        setSentHere(true);
+        setSentHere(false);
         setSent(true);
-        setInfo(failure.message);
         return;
       }
       fail(failure.message);
-      if (again && failure.result === 'send_failed') {
-        // The server already replaced the code: the one typed is gone, and so is the cooldown.
+      if (failure.result === 'send_failed') {
+        // The server already issued a new code and started its cooldown before the mail failed:
+        // a typed code is gone, and sending again waits the cooldown out.
         setCode('');
         holdSending(RESEND_AFTER_S);
       }
