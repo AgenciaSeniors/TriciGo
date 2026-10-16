@@ -4,7 +4,7 @@
 
 **Goal:** Let an invited person accept an admin panel invitation with a 6-digit code sent to the invited address, creating their account (or setting a password on the existing one), next to the existing Google option.
 
-**Architecture:** One migration (00664) adds two lock tables and three SECURITY DEFINER functions that only `service_role` executes: issue a code, check it, accept the invitation for an account. A new Edge Function `team-invitation-code` (`verify_jwt = false`) wraps them with per-IP limits, sends the code through `send-email`, and creates or updates the GoTrue account. The invitation page gets a form that calls the function through `teamService` and then signs in with the chosen password.
+**Architecture:** One migration (00664) adds two lock tables and three SECURITY DEFINER functions that only `service_role` executes: issue a code, check it, accept the invitation for an account. A new Edge Function `team-invitation-code` (`verify_jwt = false`) wraps them with per-IP limits, sends the code through `send-email`, and creates or updates the GoTrue account. The invitation page gets a form that calls the function through `teamService` and then signs in with the chosen password. `verify-otp` stops overwriting a password the person chose (marked in `users.password_set_at`), so a team member with a phone keeps it after a phone login.
 
 **Tech Stack:** Postgres 16 (plpgsql, pgcrypto in schema `extensions`), Supabase Edge Functions (Deno, supabase-js 2.108.2 from esm.sh), vitest, Next.js 15 admin app with `@supabase/ssr`, i18next.
 
@@ -40,7 +40,9 @@
 | `packages/api/src/services/team.service.ts`, `src/index.ts`, `src/services/__tests__/team.test.ts` (modify) | `requestInvitationCode`, `acceptInvitationWithCode` |
 | `apps/admin/src/app/invitacion/[token]/InvitationCodeForm.tsx` (create), `page.tsx` (modify) | The form |
 | `packages/i18n/src/locales/{es,en,pt}/admin.json` (modify) | Page text |
-| `docs/superpowers/specs/2026-10-16-team-invitation-email-code-design.md` (modify) | Two clarifications found while planning |
+| `docs/superpowers/specs/2026-10-16-team-invitation-email-code-design.md` (modify) | Clarifications found while planning (Task 1) and in review (before Task 4a) |
+| `supabase/functions/verify-otp/index.ts` + `index.test.ts` (modify, Task 4b) | Phone logins keep a chosen password |
+| `apps/admin/src/app/reset-password/page.tsx` (modify, Task 4b) | Marks the password after a reset |
 | `CLAUDE.md` (modify, Task 8) | Documents the feature |
 
 ---
@@ -1182,6 +1184,323 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
+### Task 4a: Review fixes to 00664
+
+A code review of Tasks 2–3 (2026-10-16) found these; each was checked against the code before being accepted. The migration is still unapplied, so the fixes go into the same file.
+
+**Files:**
+- Modify: `supabase/migrations/00664_team_invitation_email_code.sql`
+- Modify: `supabase/tests/00664/run.sh` (and `seed.sql` only if a new person is clearer than an inline one)
+
+- [ ] **Step 1: Add the failing rehearsal tests**
+
+Add to `supabase/tests/00664/run.sh`, each in the section it belongs to (O = objects, I = issuing, C = checking, A = accepting, G = negative proofs; the last ones today are O4, I8, C7, A10, G3) (use the existing helpers `svc`, `su`, `sr`, `inv`, `issue`, `chk`, `okc`, `acc`):
+
+| Test | What it proves | Expected |
+|---|---|---|
+| O5 | `service_role` has exactly what the migration grants: on `team_invitation_codes` SELECT, INSERT, UPDATE, DELETE and not TRUNCATE, REFERENCES or TRIGGER; on `team_invitation_code_salt` SELECT and nothing else. The scaffold gives every new table ALL through default privileges, as prod does until 2026-10-30, so this fails until the REVOKE includes `service_role`. | `codes:SELECT,INSERT,UPDATE,DELETE;salt:SELECT` (list the privileges service_role holds, in that order) |
+| O6 | `public.users.password_set_at` exists (timestamptz, nullable) | `timestamp with time zone:YES` (`information_schema.columns` data_type and is_nullable) |
+| I9 | The fifth code in an hour is still issued: `rate_limits` count 4 for `team-code-hour:<id>` → `issued` (I6 shows the sixth is refused) | `issued` |
+| I10 | The tenth code in a day is still issued: count 9 for `team-code-day:<id>` → `issued` | `issued` |
+| I11 | A `cooldown` answer adds nothing to either counter: issue, issue again within 60 s, then the two `rate_limits` counts are still 1 and 1 | `issued;cooldown;1|1` |
+| C8 | An account whose phone is set but not confirmed is `needs_google`: insert inline an account with `auth.users.email` = the invited address, `phone = '5355500077'`, `phone_confirmed_at` NULL and only an `email` identity; a right code answers `needs_google` and the code row is still there | `needs_google;1` |
+| C9 | An address that no `auth.users.email` has but an identity carries is `needs_google`: insert an `auth.users` row with another address (e.g. `phone_5355500088@tricigo.app`) plus a `google` identity with `{"email": "<invited>", "email_verified": true}`; issue answers `account_exists = true`, a right code answers `needs_google` and keeps the code row | `issued|true;needs_google;1` |
+| A11 | `accept_team_invitation_by_code` refuses an internal address: a pending invitation to `ops@tricigo.app` and any user → `internal_address` | `internal_address|` |
+| A12 | Accept for a user with no `public.users` row → `no_account` | `no_account|` |
+| A13 | After a code acceptance the person's `password_set_at` is set and `email_verified_at` is set when `users.email` is the invited address (use NINA, the new-account path) | `t|t` |
+| A14 | `email_verified_at` is not touched when `users.email` is another address (e.g. PETE with `users.email` changed to another address inside the test), while `password_set_at` is set | `t|t` for "password_set_at set, email_verified_at still NULL" |
+| A15 | An `email_verified_at` already set is kept, not moved to `now()` | `t` (the value equals the one set before the accept) |
+| G4 | Negative proof: a copy of the migration whose two table REVOKEs leave out `service_role` aborts on the new self-check (below) with `service_role has TRUNCATE on` | grep the message |
+
+Pick the exact SQL by copying the closest existing test and changing what differs; keep the `expected` strings exact.
+
+- [ ] **Step 2: Run the rehearsal and see the new tests fail**
+
+Run (Windows; cluster from CLAUDE.md § "En Windows, sin sandbox"):
+`PGBIN=<scratchpad>/pg/pgsql/bin PGPORT=<port> PYTHON=python bash supabase/tests/00664/run.sh supabase/migrations/00664_team_invitation_email_code.sql`
+Expected: the old tests pass, every new test above fails (G4 fails because the self-check does not exist yet).
+
+- [ ] **Step 3: Fix the migration**
+
+1. Section 1, both tables: revoke from `service_role` too, before the grant (memory `reference_table_grants_revoke_first`):
+   ```sql
+   REVOKE ALL ON public.team_invitation_codes FROM PUBLIC, anon, authenticated, service_role;
+   GRANT SELECT, INSERT, UPDATE, DELETE ON public.team_invitation_codes TO service_role;
+   ```
+   ```sql
+   REVOKE ALL ON public.team_invitation_code_salt FROM PUBLIC, anon, authenticated, service_role;
+   GRANT SELECT ON public.team_invitation_code_salt TO service_role;
+   ```
+2. Section 1, after the salt insert: bring `users.password_set_at` into git without locking prod, where it already exists:
+   ```sql
+   -- users.password_set_at marks a password the person chose; verify-otp reads it so a phone
+   -- login does not overwrite that password. Prod has had it since before git tracked it
+   -- (set-password-after-otp writes it): adding it only when missing takes no lock there.
+   DO $col$
+   BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_attribute
+                    WHERE attrelid = 'public.users'::regclass AND attname = 'password_set_at' AND NOT attisdropped) THEN
+       ALTER TABLE public.users ADD COLUMN password_set_at timestamptz;
+     END IF;
+   END
+   $col$;
+   ```
+3. `_team_code_account`: a phone counts even unconfirmed, and an address only an identity carries is `needs_google`. Replace the body from `DECLARE` to `END;` with:
+   ```sql
+   DECLARE
+     v_email    text := lower(btrim(coalesce(p_email, '')));
+     v_id       uuid;
+     v_phone    boolean;
+     v_banned   boolean;
+     v_active   boolean;
+     v_identity boolean := false;
+   BEGIN
+     SELECT au.id,
+            au.phone_confirmed_at IS NOT NULL OR nullif(btrim(coalesce(au.phone, '')), '') IS NOT NULL,
+            coalesce(au.banned_until > now(), false)
+       INTO v_id, v_phone, v_banned
+     FROM auth.users au
+     WHERE au.email IS NOT NULL AND lower(btrim(au.email)) = v_email
+     ORDER BY au.created_at, au.id
+     LIMIT 1;
+     IF v_id IS NULL THEN
+       -- No account signs in with the address, but an identity may carry it: signing in with
+       -- Google would land on that account, so a second account with the address must not be made.
+       SELECT i.user_id INTO v_id
+       FROM auth.identities i
+       WHERE lower(btrim(coalesce(i.identity_data->>'email', ''))) = v_email
+       ORDER BY i.user_id
+       LIMIT 1;
+       IF v_id IS NULL THEN
+         RETURN jsonb_build_object('case', 'new');
+       END IF;
+       v_identity := true;
+       SELECT coalesce(au.banned_until > now(), false) INTO v_banned FROM auth.users au WHERE au.id = v_id;
+     END IF;
+
+     SELECT coalesce(u.is_active, true) INTO v_active FROM public.users u WHERE u.id = v_id;
+     IF coalesce(v_banned, false) OR NOT coalesce(v_active, true) THEN
+       RETURN jsonb_build_object('case', 'blocked', 'user_id', v_id);
+     END IF;
+     IF v_identity THEN
+       RETURN jsonb_build_object('case', 'needs_google', 'user_id', v_id);
+     END IF;
+
+     IF EXISTS (
+       SELECT 1 FROM auth.identities i
+       WHERE i.user_id = v_id
+         AND i.provider IN ('google', 'apple')
+         AND lower(btrim(coalesce(i.identity_data->>'email', ''))) = v_email
+         AND lower(coalesce(i.identity_data->>'email_verified', '')) = 'true'
+     ) THEN
+       RETURN jsonb_build_object('case', 'proven', 'user_id', v_id);
+     END IF;
+
+     IF coalesce(v_phone, false) OR EXISTS (
+       SELECT 1 FROM auth.identities i WHERE i.user_id = v_id AND i.provider <> 'email'
+     ) THEN
+       RETURN jsonb_build_object('case', 'needs_google', 'user_id', v_id);
+     END IF;
+     RETURN jsonb_build_object('case', 'password_only', 'user_id', v_id);
+   END;
+   ```
+   (`SELECT … INTO` with no row sets every target to NULL, hence the `coalesce`s.)
+4. `accept_team_invitation_by_code`, right after the `expires_at` check:
+   ```sql
+     IF v_inv.email ~ '@tricigo\.(app|system)$' THEN
+       RETURN jsonb_build_object('result', 'internal_address');
+     END IF;
+   ```
+   and right after the `_team_write_role` block (before marking the invitation accepted):
+   ```sql
+     -- What the code proved: the mailbox (password reset and e-mail login read email_verified_at,
+     -- 00611) and a password the person chose (verify-otp must not overwrite it on a phone login).
+     UPDATE public.users
+        SET password_set_at = now(),
+            email_verified_at = CASE WHEN email_verified_at IS NULL
+                                      AND lower(btrim(coalesce(email, ''))) = v_inv.email
+                                     THEN now() ELSE email_verified_at END
+      WHERE id = p_user;
+   ```
+   Add `internal_address` to the list of answers in the comment above the function.
+5. Section 6 (self-checks), inside the table loop:
+   ```sql
+       IF has_table_privilege('service_role', v_tbl, 'TRUNCATE') THEN
+         RAISE EXCEPTION '00664: service_role has TRUNCATE on %', v_tbl;
+       END IF;
+   ```
+   and after the loop:
+   ```sql
+     IF NOT EXISTS (SELECT 1 FROM pg_attribute
+                    WHERE attrelid = 'public.users'::regclass AND attname = 'password_set_at' AND NOT attisdropped) THEN
+       RAISE EXCEPTION '00664: public.users.password_set_at is missing';
+     END IF;
+   ```
+6. Header comment: the account cases now say "a phone (confirmed or not)" and "an address only an identity carries is needs_google"; add one line: "Accepting sets users.password_set_at and, when users.email is the invited address, users.email_verified_at."
+
+- [ ] **Step 4: Run the rehearsal, GREEN and RED**
+
+Run it with the migration (as in Step 2) and with `none`.
+Expected: with the migration, everything passes (report the count); with `none`, every functional test fails as before. Then update the `$BODIES` md5 list if a test pins it, and say the new md5 of each body in the commit message (Task 9 compares them with prod).
+
+- [ ] **Step 5: Run the repo's migration checks**
+
+Run: `pnpm test:migration-grants && pnpm check:migration-grants`
+Expected: both pass.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add supabase/migrations/00664_team_invitation_email_code.sql supabase/tests/00664/run.sh
+git commit -m "fix(db): tighten who a team invitation code can reach (00664 review)
+
+<what changed, the test count, the md5 of each body>
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+(Add `supabase/tests/00664/seed.sql` to `git add` only if it changed.)
+
+---
+
+### Task 4b: Phone logins keep a chosen password
+
+`verify-otp` (Strategy A) signs in with a password derived from the account id and, when that fails, writes the derived password over the account's. A team member with a confirmed phone (a `proven` account) would lose the password chosen with the code the first time they open the driver or passenger app. With `users.password_set_at` set, or unreadable, the function now mints the session with the magic link only (Strategy B), which writes no password and closes no session. The panel's password reset marks the password too.
+
+**Files:**
+- Modify: `supabase/functions/verify-otp/index.ts` (the block "Strategy A — stable-password grant")
+- Modify: `supabase/functions/verify-otp/index.test.ts`
+- Modify: `apps/admin/src/app/reset-password/page.tsx` (`handleSubmit`)
+
+- [ ] **Step 1: Write the failing handler tests**
+
+Extend the fake in `supabase/functions/verify-otp/index.test.ts` so a right code reaches the session, without changing what the existing tests see:
+
+- `db.lookupId: string | null` (reset to `null` in `beforeEach`). In `rpc`, `lookup_auth_user_by_contact` answers `{ data: db.lookupId, error: null }` when it is set; with `null` it keeps the current error, so the existing budget tests still end in 503.
+- `auth.admin.getUserById` answers an account with `email: 'carl@gmail.com'`, the test phone in GoTrue's format (digits without `+`, check what `phoneConflictsWithAccount` expects), `phone_confirmed_at` set and `banned_until: null`.
+- `from(table)`: for `'users'` return a chain whose `select`/`eq` return itself and `maybeSingle` resolves `db.mark` (`{ data: { password_set_at: '2026-10-16T00:00:00Z' } | { password_set_at: null } | null, error }`); every other table keeps the current chain.
+- `auth.signInWithPassword`, `auth.admin.updateUserById`, `auth.admin.generateLink` (answers `{ data: { properties: { hashed_token: 'h' } }, error: null }`) and `auth.verifyOtp` as `vi.fn`s; both sign-in paths answer a session whose `user.id` is `db.lookupId`.
+
+Then:
+
+```ts
+describe('verify-otp keeps a password the person chose', () => {
+  beforeEach(() => {
+    buckets();
+    db.verify = { data: { ok: true }, error: null };
+    db.lookupId = USER_ID;
+  });
+
+  it('with password_set_at, the session comes from the magic link and no password is tried or written', async () => {
+    db.mark = { data: { password_set_at: '2026-10-16T00:00:00Z' }, error: null };
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    expect(auth.updateUserById).not.toHaveBeenCalledWith(USER_ID, expect.objectContaining({ password: expect.anything() }));
+    expect(auth.generateLink).toHaveBeenCalledWith({ type: 'magiclink', email: 'carl@gmail.com' });
+  });
+
+  it('when the mark cannot be read, it also uses the magic link', async () => {
+    db.mark = { data: null, error: { message: 'column does not exist' } };
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    expect(auth.generateLink).toHaveBeenCalled();
+  });
+
+  it('without the mark, it signs in with the derived password as before and writes nothing', async () => {
+    db.mark = { data: { password_set_at: null }, error: null };
+    const res = await verify();
+    expect(res.status).toBe(200);
+    expect(auth.signInWithPassword).toHaveBeenCalledTimes(1);
+    expect(auth.updateUserById).not.toHaveBeenCalled();
+    expect(auth.generateLink).not.toHaveBeenCalled();
+  });
+});
+```
+(`USER_ID` and `auth` are the names you give the fake's id and its `vi.fn`s.)
+
+- [ ] **Step 2: Run them and see them fail**
+
+Run: `pnpm --filter @tricigo/api exec vitest run verify-otp`
+Expected: the first two new tests fail (Strategy A runs), the third and the 8 existing pass.
+
+- [ ] **Step 3: Read the mark in `verify-otp`**
+
+In `supabase/functions/verify-otp/index.ts`, delete the four `NOTE (latent conflict)` lines of the Strategy A comment, add this right before the Strategy A comment:
+
+```ts
+    // A password the person chose (a team invitation code, the panel's password reset,
+    // set-password-after-otp) is marked in users.password_set_at. Strategy A writes the
+    // derived password whenever its sign-in fails, so with the mark, or when it cannot be
+    // read, the session comes from the magic link only: no password written, no session closed.
+    let keepPassword = true;
+    try {
+      const { data: mark, error: markErr } = await supabase
+        .from('users')
+        .select('password_set_at')
+        .eq('id', userId)
+        .maybeSingle();
+      if (markErr) console.warn('password_set_at read failed, using the magic link:', markErr.message);
+      else keepPassword = Boolean((mark as { password_set_at?: string | null } | null)?.password_set_at);
+    } catch (e) {
+      console.warn('password_set_at read threw, using the magic link:', e instanceof Error ? e.message : String(e));
+    }
+```
+
+and run the whole Strategy A `try { … } catch { … }` only `if (!keepPassword)`. Strategy B is unchanged (it already runs when there is no session).
+
+- [ ] **Step 4: Run the tests**
+
+Run: `pnpm --filter @tricigo/api exec vitest run verify-otp`
+Expected: all pass (8 existing + 3 new).
+
+- [ ] **Step 5: Mark the password in the panel's reset page**
+
+In `apps/admin/src/app/reset-password/page.tsx`, `handleSubmit`: keep the `data` of `updateUser` and, after the `updateError` check and before the global sign-out:
+
+```ts
+      const { data: updated, error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+
+      // Phone logins (verify-otp) keep a password the person chose only when it is marked.
+      if (updated.user) {
+        const { error: markError } = await supabase
+          .from('users')
+          .update({ password_set_at: new Date().toISOString() })
+          .eq('id', updated.user.id);
+        if (markError) console.warn('[reset-password] password_set_at not saved:', markError.message);
+      }
+```
+
+A signed-in user may update that column on their own row (`users_update_own`; `tg_users_protect_admin_fields` does not cover it; checked in prod on 2026-10-16).
+
+- [ ] **Step 6: Type-check**
+
+Run: `pnpm check-types` and the Edge Function type check from Task 5 Step 7 for `verify-otp`.
+Expected: no new errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add supabase/functions/verify-otp/index.ts supabase/functions/verify-otp/index.test.ts apps/admin/src/app/reset-password/page.tsx
+git commit -m "fix(auth): phone logins keep a password the person chose
+
+verify-otp wrote its derived password whenever its sign-in failed, so a
+password chosen with a team invitation code (or the panel's reset) was
+lost on the next phone login. With users.password_set_at set, or
+unreadable, it now mints the session with the magic link only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 5: Edge Function `team-invitation-code`
 
 **Files:**
@@ -1414,7 +1733,7 @@ describe('team-invitation-code', () => {
       });
       sb.updateUserById.mockResolvedValue({ data: { user: { id: USER_ID } }, error: null });
       expect(await (await verify()).json()).toEqual({ result: 'accepted', email: 'info@bacoagency.com', role: 'admin' });
-      expect(sb.updateUserById).toHaveBeenCalledWith(USER_ID, { password: 'secreta123' });
+      expect(sb.updateUserById).toHaveBeenCalledWith(USER_ID, { password: 'secreta123', email_confirm: true });
       expect(sb.createUser).not.toHaveBeenCalled();
     });
 
@@ -1593,7 +1912,9 @@ async function verify(req: Request, admin: Admin, token: string, body: Record<st
     if (createErr || !created?.user) return gotrueFailure(req, createErr, 'create');
     userId = created.user.id;
   } else if ((checked.case === 'proven' || checked.case === 'password_only') && checked.user_id) {
-    const { error: updateErr } = await admin.auth.admin.updateUserById(checked.user_id, { password });
+    // email_confirm: since 2026-10-07 a GoTrue sign-up leaves the address unconfirmed, and an
+    // unconfirmed address cannot sign in with a password.
+    const { error: updateErr } = await admin.auth.admin.updateUserById(checked.user_id, { password, email_confirm: true });
     if (updateErr) return gotrueFailure(req, updateErr, 'update');
     userId = checked.user_id;
   } else {
@@ -2499,8 +2820,9 @@ At the end of the bullet list of `### Equipo del panel: invitaciones (00661)` in
 
 ```markdown
 - **Código por correo (00664).** Además de Google, la invitación se acepta con un código de 6 dígitos que la Edge Function `team-invitation-code` (`verify_jwt = false`) manda a la dirección invitada desde `noreply@tricigo.com` (plantilla `team_invitation_code`). Con el código, la persona elige una contraseña: se crea la cuenta con el correo confirmado, o se le pone esa contraseña a la que ya tiene la dirección como `auth.users.email`; se cierran todas sus sesiones y recibe el rol. Después entra con correo y contraseña. Spec: `docs/superpowers/specs/2026-10-16-team-invitation-email-code-design.md`. Ensayo: `supabase/tests/00664/run.sh`.
-- **Qué cuenta puede recibir el rol con código** (`_team_code_account`): `new`, `proven` (Google o Apple verificaron esa misma dirección; su teléfono es del mismo dueño) y `password_only` (solo correo y contraseña). Se rechazan `needs_google` (sin esa prueba y con un teléfono confirmado u otra identidad: quien tenga ese teléfono podría entrar al panel por la app) y `blocked`. El correo del perfil (`users.email`) no cuenta.
+- **Qué cuenta puede recibir el rol con código** (`_team_code_account`): `new`, `proven` (Google o Apple verificaron esa misma dirección; su teléfono es del mismo dueño) y `password_only` (solo correo y contraseña). Se rechazan `needs_google` (sin esa prueba y con un teléfono, confirmado o no, u otra identidad: quien tenga ese teléfono podría entrar al panel por la app; también cuando ninguna cuenta entra con la dirección pero una identidad de alguna la tiene) y `blocked`. El correo del perfil (`users.email`) no cuenta. Aceptar marca `users.password_set_at` y, si `users.email` es la dirección invitada, `users.email_verified_at`.
 - **Límites:** 6 dígitos, 10 minutos, un solo uso y 5 intentos; 60 s entre códigos, 5 por hora y 10 por día por invitación (`rate_limits`, claves `team-code-hour:<id>` y `team-code-day:<id>`); por IP, 10 envíos y 30 verificaciones por hora. El código se guarda como HMAC con la sal de `team_invitation_code_salt`; esa tabla y `team_invitation_codes` son tablas-candado.
+- **Una contraseña elegida sobrevive al login por teléfono.** Con `users.password_set_at` puesto (o si no se puede leer), `verify-otp` no prueba ni escribe su contraseña derivada: entra por enlace mágico. La marcan la aceptación con código, `set-password-after-otp` y `/reset-password` del panel. Sin la marca, todo sigue como antes.
 - **Si algo falla a mitad de camino** queda, como mucho, una cuenta sin rol: la persona pide otro código y el segundo intento la completa (cae en `password_only`).
 - **Diagnóstico de un código que no llega o no sirve:**
   ```sql
@@ -2511,17 +2833,24 @@ At the end of the bullet list of `### Equipo del panel: invitaciones (00661)` in
   más los logs de `team-invitation-code` (`[team-invitation-code] ... failed`). Una aceptación con código deja `admin_actions.new_values.method = 'email_code'`.
 ```
 
+In `### Login en una app deslogueaba la otra` of `CLAUDE.md`, replace the sentence that starts with "Conflicto latente documentado en el código" by:
+
+```markdown
+Una contraseña elegida ya no se pisa: desde 00664, con `users.password_set_at` puesto `verify-otp` entra por enlace mágico (Strategy B) y no escribe la contraseña derivada.
+```
+
 - [ ] **Step 2: Run everything**
 
 ```bash
 bash supabase/tests/00664/run.sh supabase/migrations/00664_team_invitation_email_code.sql
 bash supabase/tests/00661/run.sh supabase/migrations/00661_team_invitations.sql
+pnpm --filter @tricigo/api exec vitest run verify-otp team-invitation-code
 pnpm exec turbo run test --force
 pnpm check-types
 pnpm test:migration-grants && pnpm check:migration-grants
 ```
 
-Expected: `37 passed, 0 failed` for 00664; 00661 still all green (nothing of it changed); every package test passes (`--force` so turbo's cache does not replay an old green, memory `reference_turbo_test_cache_replay`); types pass; grants pass.
+Expected: 00664 all passed (the count Task 4a reported); 00661 still all green (nothing of it changed); every package test passes (`--force` so turbo's cache does not replay an old green, memory `reference_turbo_test_cache_replay`); types pass; grants pass.
 
 - [ ] **Step 3: Commit**
 
@@ -2559,21 +2888,32 @@ SELECT count(*) FROM public.team_invitation_code_salt;  -- 1
 
 The md5 of each body must equal the local rehearsal's (`$BODIES` in `run.sh`).
 
-- [ ] **Step 3: Deploy the functions**
+- [ ] **Step 3: Check the magic-link login with the demo account, then deploy `verify-otp`**
+
+The magic link has been only a fallback; before accounts depend on it, try it in prod. With the owner's OK, in this order:
+1. Deploy `verify-otp` (with `_shared/`, as below). Nobody has the mark yet, so nothing changes.
+2. Set the mark on the store demo passenger account: `UPDATE public.users SET password_set_at = now() WHERE id = (SELECT id FROM auth.users WHERE phone = '5355550100');`
+3. The owner signs in on a phone with `+5355550100` and the demo code (never written anywhere by Claude).
+4. Check the `verify-otp` logs: `Session minted for user <id>` and no `updateUserById(password)` line; the app opens.
+5. Clear the mark: `UPDATE public.users SET password_set_at = NULL WHERE id = (SELECT id FROM auth.users WHERE phone = '5355550100');`
+
+If step 3 fails, roll `verify-otp` back to the previous version and stop: the code path must not reach accounts with a phone until the magic link works.
+
+- [ ] **Step 4: Deploy the other functions**
 
 With the owner's OK: deploy `team-invitation-code` and redeploy `send-email` (new template and the changed invitation line), following memory `reference_supabase_mcp_tooling` (deploy from a `git archive` LF export with `npx supabase functions deploy <name> --project-ref lqaufszburqvlslpcuac`; then drift-check with `functions download`). Confirm `team-invitation-code` shows `verify_jwt: false`.
 
-- [ ] **Step 4: Merge**
+- [ ] **Step 5: Merge**
 
 With "Sí, autorizo el squash-merge de #<N>" from the owner (memory `feedback_merge_approval_classifier`). The merge deploys the admin panel (`deploy-admin.yml`).
 
-- [ ] **Step 5: Real run in prod**
+- [ ] **Step 6: Real run in prod**
 
 With the owner's OK and an address the owner controls:
 1. In *Equipo*, invite that address as *Marketing*.
 2. Open the link, *Crear cuenta con un código*, *Enviar código*; the e-mail arrives from `noreply@tricigo.com` with a 6-digit code.
 3. Enter the code, a name and a password; the panel opens on *Pulso del lanzamiento*.
-4. Check `admin_actions` (`method = 'email_code'`), the role, and that `team_invitation_codes` has no row left.
+4. Check `admin_actions` (`method = 'email_code'`), the role, `password_set_at` and `email_verified_at` on the account, and that `team_invitation_codes` has no row left.
 5. Sign out and sign in again with e-mail and password at admin.tricigo.com.
 6. In *Equipo*, remove that access.
 
@@ -2583,6 +2923,7 @@ Then update the marketing message for Baco: drop the "create a Google account" s
 
 ## Self-review
 
+- **Review fixes (Task 4a/4b):** service_role REVOKE before GRANT, unconfirmed phone and identity-only address are `needs_google`, internal address refused at accept, the two marks set at accept, `password_set_at` brought into git, `verify-otp` keeps a chosen password, `email_confirm: true` on existing accounts (Task 5), and the tests for each.
 - **Spec coverage:** page flow (Task 7), account cases (Task 3 `_team_code_account`, tested C7/A1–A6), code storage as HMAC with salt (Task 3, I2), issue/check/accept (Task 3), limits (I4–I7, C1–C4, Task 5 IP limits), errors (Task 6 messages), e-mail templates (Task 4), `teamService` (Task 6), tests (Tasks 2–7), rollout (Task 9), docs (Task 8). The spec's contradictions about the name are settled in Task 1.
 - **Placeholders:** none; every code step has its code and every run step its command and expected output. The migration number is a stated value (00664) with an explicit re-check.
 - **Consistency:** answers `issued|ok|accepted` and the refusal names match across SQL (Task 3), the Edge Function (Task 5), `INVITATION_CODE_RESULTS` (Task 6) and the tests. The Edge Function sends `invitee_name`, `teamService` reads `invitee_name` into `inviteeName`, the form uses `res.inviteeName`. `requestInvitationCode`/`acceptInvitationWithCode` names match between service, tests and form.
