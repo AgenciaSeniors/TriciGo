@@ -532,7 +532,9 @@ export default function BookPage() {
     setRouteInfo(null);
     setSelectionStep('pickup');
     setWaypoints([]);
-    setPromoCode('');
+    // 00665: the server applies the signup promotion anyway, so it goes back in
+    // the field (the auto-validate effect shows its discount again).
+    setPromoCode(signupPromo?.code ?? '');
     setPromoResult(null);
     setShareRide(false);
     setPassengerCount(1);
@@ -1923,11 +1925,12 @@ export default function BookPage() {
                 }}
               />
               {/* The signup code has no "Quitar": the server would apply it
-                  again. Typing another code replaces it. */}
+                  again. Typing another code replaces it, and removing a typed
+                  code puts the signup code back. */}
               {promoResult?.valid ? (showsSignupPromo ? null : (
                 <button
                   type="button"
-                  onClick={() => { setPromoCode(''); setPromoResult(null); }}
+                  onClick={() => { setPromoCode(signupPromo?.code ?? ''); setPromoResult(null); }}
                   style={{
                     padding: '0.5rem 0.75rem',
                     borderRadius: '0.5rem',
