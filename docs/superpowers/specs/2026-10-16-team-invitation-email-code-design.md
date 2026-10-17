@@ -67,7 +67,7 @@ Outcomes are jsonb answers (`{result: ...}`), never exceptions: the Edge Functio
 
 ### Edge Function `team-invitation-code`
 
-`verify_jwt = false`: the caller has no session yet. It answers with `getCorsHeaders` (`ALLOWED_ORIGINS` already has admin.tricigo.com).
+`verify_jwt = false`: the caller has no session yet. Its CORS answer follows `ALLOWED_ORIGINS` like the other functions (it already has admin.tricigo.com).
 
 - `{ action: 'send', token }`: per-IP limit (10 per hour), `team_invitation_code_issue`, then the `team_invitation_code` template through `send-email` with the service key. If the mail fails it answers `send_failed`.
 - `{ action: 'verify', token, code, password, full_name? }`: per-IP limit (30 per hour); validates the password (8 to 72 characters, the bcrypt limit) and the name (at most 80 characters; the form requires it for a new account, and the server uses the invitation's name when it is empty, because the code is already used at that point; ignored for an existing account); `team_invitation_code_check`; then `auth.admin.createUser` (new account) or `auth.admin.updateUserById` with the password and `email_confirm: true` (existing account: since 2026-10-07 a GoTrue sign-up leaves the address unconfirmed, and an unconfirmed address cannot sign in with a password); then `accept_team_invitation_by_code`. It answers `{ result: 'accepted', email, role }`. The full address is returned only after a right code.
@@ -115,8 +115,8 @@ Wrong code (attempts left), code expired or locked (ask for another), sent too s
 
 ## Testing
 
-- SQL rehearsal `supabase/tests/<n>/run.sh` on the live bodies: the account cases (including an unconfirmed phone and an address only an identity carries), expired, used and canceled invitations, the fifth wrong attempt, cooldown and caps (the last allowed code and the first refused one), internal addresses at every step, the role never going down, sessions closed, the two marks set, and an accept racing `remove_team_member`.
-- Vitest handler tests for `verify-otp`: with the mark, or when it cannot be read, no password is written or tried and the session comes from the magic link; without it, Strategy A as before. RED without the migration, GREEN with it applied twice, plus negative tests of its own checks and a CRLF copy.
+- SQL rehearsal `supabase/tests/<n>/run.sh` on the live bodies: the account cases (including an unconfirmed phone and an address only an identity carries), expired, used and canceled invitations, the fifth wrong attempt, cooldown and caps (the last allowed code and the first refused one), internal addresses at every step, the role never going down, sessions closed, the two marks set, and an accept racing `remove_team_member`. RED without the migration, GREEN with it applied twice, plus negative tests of its own checks and a CRLF copy.
+- Vitest handler tests for `verify-otp`: with the mark, or when it cannot be read, no password is written or tried and the session comes from the magic link; without it, Strategy A as before.
 - Vitest handler tests for the Edge Function (pattern of `send-email/index.test.ts`): both actions, IP limits, GoTrue failures, and that a wrong code never returns the address.
 - Template tests for `team_invitation_code` and the changed `team_invitation`.
 - `pnpm check-types` and the `@tricigo/api` tests.
