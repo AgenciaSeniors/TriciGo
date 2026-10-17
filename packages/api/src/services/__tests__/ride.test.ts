@@ -2618,3 +2618,65 @@ describe('createRide — a booking with stops is created at the direct fare (006
     expect(rideInsert).toHaveBeenCalledWith(expect.objectContaining({ estimated_fare_cup: 9000 }));
   });
 });
+
+// ============================================================
+// getMySignupPromotion (00665)
+// ============================================================
+
+describe('rideService.getMySignupPromotion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // clearAllMocks leaves queued "once" values; drop them so nothing leaks in or out.
+    mockRpc.mockReset();
+  });
+
+  it('reads the linked promotion of the code the user registered with', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [{
+        code: 'MOTO20', type: 'percentage_discount', discount_percent: 20, discount_fixed_cup: null,
+        first_ride_only: true, valid_until: null, signup_code: 'MOTORENKO',
+      }],
+      error: null,
+    });
+
+    const promo = await rideService.getMySignupPromotion();
+
+    expect(mockRpc).toHaveBeenCalledWith('get_my_signup_promotion');
+    expect(promo).toEqual({
+      code: 'MOTO20', type: 'percentage_discount', discountPercent: 20, discountFixedCup: null,
+      firstRideOnly: true, validUntil: null, signupCode: 'MOTORENKO',
+    });
+  });
+
+  it('turns numeric strings into numbers', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [{
+        code: 'MENOS500', type: 'fixed_discount', discount_percent: null, discount_fixed_cup: '500',
+        first_ride_only: false, valid_until: '2026-12-31T00:00:00Z', signup_code: 'BOLSAS-VEDADO',
+      }],
+      error: null,
+    });
+
+    const promo = await rideService.getMySignupPromotion();
+
+    expect(promo?.discountFixedCup).toBe(500);
+    expect(promo?.validUntil).toBe('2026-12-31T00:00:00Z');
+  });
+
+  it('is null when there is no linked promotion', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+    expect(await rideService.getMySignupPromotion()).toBeNull();
+  });
+
+  it('is null before migration 00665 (function missing)', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    expect(await rideService.getMySignupPromotion()).toBeNull();
+  });
+
+  it('is null on any other error, without throwing', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'permission denied' } });
+    expect(await rideService.getMySignupPromotion()).toBeNull();
+    mockRpc.mockRejectedValueOnce(new Error('network'));
+    expect(await rideService.getMySignupPromotion()).toBeNull();
+  });
+});
