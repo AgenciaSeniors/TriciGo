@@ -36,7 +36,9 @@ A code links to at most one promotion. A promotion can be linked to many codes. 
 
 ### 2. Applying it when a ride is created
 
-New function `tg_rides_signup_promo()` (SECURITY DEFINER, `search_path = public, pg_catalog`), trigger `rides_signup_promo` BEFORE INSERT on `rides`. Its name sorts before `rides_validate_promo_discount`, so it runs first.
+New function `tg_rides_signup_promo()` (SECURITY INVOKER, `search_path = public, pg_catalog`), trigger `rides_signup_promo` BEFORE INSERT on `rides`. Its name sorts before `rides_validate_promo_discount`, so it runs first.
+
+It has to be SECURITY INVOKER: inside a SECURITY DEFINER function `current_user` is always the owner, so the client check in rule 1 would never pass. Clients cannot read `acquisition_codes` (admin and marketing only), so the lookup goes through `_my_signup_promotion_id()`: SECURITY DEFINER, no arguments, returns the `promotion_id` of the code `auth.uid()` registered with, EXECUTE for `authenticated` and `service_role`. It reveals only the caller's own link, which `get_my_signup_promotion()` shows anyway.
 
 It sets `NEW.promo_code_id` to the linked promotion only when all of these hold:
 
@@ -72,8 +74,9 @@ The apps use it to show the discount before booking. It reveals nothing beyond w
 
 ### 4. Measuring it
 
-`admin_signup_code_stats()` gains two columns at the end:
+`admin_signup_code_stats()` gains three columns at the end:
 
+- `promotion_id uuid`: the linked promotion, so the panel can preselect it.
 - `promotion_code text`: the code of the linked promotion, or null.
 - `promo_rides bigint`: completed rides with `promo_code_id` = the linked promotion by users registered with that code.
 
@@ -90,8 +93,9 @@ Adding columns changes the return type, so the migration does `DROP FUNCTION` an
 ### 6. Passenger app and web (later step)
 
 - `rideService.getMySignupPromotion()` calls the RPC and returns null on any error, including `PGRST202` (function missing).
-- Client app booking: when the store has no promo code, it loads the signup promotion once per session, puts the code in `useRideStore.promoCode` and validates it automatically as soon as there is a fare, so the discounted price shows before "Pedir". The label names the code ("Descuento de tu código MOTORENKO").
+- Client app booking: each time the booking sheet opens it loads the signup promotion (one cheap RPC; after a canceled ride the promotion is available again), puts the code in `useRideStore.promoCode` when the field is empty, and validates it automatically as soon as there is a fare, so the discounted price shows before "Pedir". The label names the code ("Descuento de tu código MOTORENKO").
 - There is no button to remove it: the server would apply it again. Typing another code replaces it.
+- The apps validate it automatically only for a passenger ride the person pays (not a delivery, no company account), the same rides the server applies it to. If the person switches to a delivery or a company account after it was validated, the result is cleared, so the app does not send the promotion with that ride.
 - Web `/book`: the same, after its existing `?promo=` and sessionStorage prefills (a code from a link wins).
 - JavaScript only, so the client part can ship by OTA to runtime 1.8.0.
 - The driver app does not change.
@@ -122,6 +126,10 @@ Vitest: `acquisitionCodeService.create` / `setPromotion`, `rideService.getMySign
 2. Merge. The admin deploy lets marketing link promotions; the web deploy shows the discount before booking.
 3. Client OTA to 1.8.0 so the app shows it before booking.
 4. Update the marketing message (Promociones section) and CLAUDE.md.
+
+## Known limitation
+
+If the destination is a partner place (00559) whose discount is larger than the promotion's, the validator keeps the partner discount and the promotion's use is still taken. That is how a typed code behaves today. The partner discount is capped at the commission (15 %), so a promotion of 15 % or more always wins.
 
 ## Out of scope
 
