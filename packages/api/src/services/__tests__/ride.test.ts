@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, assert } from 'vitest';
-import { maskPhone, haversineDistance } from '@tricigo/utils';
+import { maskPhone, haversineDistance, logger } from '@tricigo/utils';
 import { createMockQueryChain, UUID } from './helpers/mockSupabase';
 
 // Mock the Supabase client
@@ -2673,10 +2673,72 @@ describe('rideService.getMySignupPromotion', () => {
     expect(await rideService.getMySignupPromotion()).toBeNull();
   });
 
-  it('is null on any other error, without throwing', async () => {
+  it('is null on any other error object, without throwing', async () => {
     mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'permission denied' } });
     expect(await rideService.getMySignupPromotion()).toBeNull();
+  });
+
+  it('is null when the call itself rejects, without throwing', async () => {
     mockRpc.mockRejectedValueOnce(new Error('network'));
     expect(await rideService.getMySignupPromotion()).toBeNull();
+  });
+
+  it('keeps fractional percentages and treats a null first_ride_only as false', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [{
+        code: 'DOCE', type: 'percentage_discount', discount_percent: '12.50', discount_fixed_cup: null,
+        first_ride_only: null, valid_until: null, signup_code: 'MOTORENKO',
+      }],
+      error: null,
+    });
+
+    const promo = await rideService.getMySignupPromotion();
+
+    expect(promo?.discountPercent).toBe(12.5);
+    expect(promo?.discountFixedCup).toBeNull();
+    expect(promo?.firstRideOnly).toBe(false);
+  });
+
+  it('is null when the row has no code', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [{ type: 'fixed_discount', signup_code: 'X' }], error: null });
+    expect(await rideService.getMySignupPromotion()).toBeNull();
+  });
+
+  it('is null when the data is not an array', async () => {
+    mockRpc.mockResolvedValueOnce({ data: {}, error: null });
+    expect(await rideService.getMySignupPromotion()).toBeNull();
+  });
+
+  describe('logging', () => {
+    let warn: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    it('logs an unexpected error', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'permission denied' } });
+      expect(await rideService.getMySignupPromotion()).toBeNull();
+      expect(warn).toHaveBeenCalledWith('get_my_signup_promotion_failed', { error: 'permission denied' });
+    });
+
+    it('stays silent while the function does not exist yet (PGRST202)', async () => {
+      mockRpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+      expect(await rideService.getMySignupPromotion()).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('stays silent for a missing-function message without the PGRST202 code', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: '42883', message: 'Could not find the function public.get_my_signup_promotion' },
+      });
+      expect(await rideService.getMySignupPromotion()).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 });

@@ -1726,14 +1726,20 @@ export const rideService = {
   /**
    * 00665: the promotion linked to the code the user registered with, or null.
    * The server applies it to the next ride anyway; this only lets the booking
-   * screens show it. Never throws: any error, including the function missing
-   * before the migration (PGRST202), is null.
+   * screens show it. Never throws: any error is null; the function missing
+   * before the migration (PGRST202) is silent, any other error is logged.
    */
   async getMySignupPromotion(): Promise<SignupPromotion | null> {
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.rpc('get_my_signup_promotion');
-      if (error || !Array.isArray(data) || data.length === 0) return null;
+      if (error) {
+        if (error.code !== 'PGRST202' && !/could not find the function/i.test(error.message ?? '')) {
+          logger.warn('get_my_signup_promotion_failed', { error: error.message });
+        }
+        return null;
+      }
+      if (!Array.isArray(data) || data.length === 0) return null;
       const row = data[0] as {
         code?: string;
         type: Promotion['type'];
