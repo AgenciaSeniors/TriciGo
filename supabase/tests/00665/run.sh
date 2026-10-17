@@ -208,6 +208,8 @@ val "M17 someone else's completed ride does not hide a first-ride promotion" \
   "$(tx "UPDATE public.promotions SET first_ride_only = true WHERE id = '$P20'; $(ride $R1 $RIDER2) $(complete $R1 $DP_DIEGO) $(client $ANA "$COUNT_MINE")")" "1"
 val "M18 a code closed to new signups still shows its promotion" \
   "$(tx "UPDATE public.acquisition_codes SET is_active = false WHERE code = 'MOTO'; $(client $ANA "$COUNT_MINE")")" "1"
+val "M19 nothing for an admin registered with the code: their ride never gets it (A15)" \
+  "$(tx "$(client $EVA "$COUNT_MINE")")" "0"
 
 echo "== 3. admin_signup_code_stats() =="
 val "S2 an admin sees the promotion and the completed rides that used it" \

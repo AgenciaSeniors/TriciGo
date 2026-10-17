@@ -142,6 +142,10 @@ BEGIN
   IF v_uid IS NULL THEN
     RETURN;
   END IF;
+  -- Same as the trigger: an admin's ride never gets the signup promotion.
+  IF public.is_admin() THEN
+    RETURN;
+  END IF;
   -- The rules tg_rides_validate_promo_discount applies when the ride is
   -- created (00658): the row is there exactly when rides_signup_promo would
   -- give the person the discount.
