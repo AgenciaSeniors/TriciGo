@@ -4,13 +4,19 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { adminService } from '@tricigo/api/services/admin';
+import { panelReadService } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
 import { getErrorMessage } from '@tricigo/utils';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { useCanAct } from '@/lib/useCanAct';
 import { useToast } from '@/components/ui/AdminToast';
+import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
 import { StatusBadge } from '@/components/data/StatusBadge';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
+
+/** Postgres "invalid input syntax for type uuid", as PostgREST reports it. */
+const INVALID_UUID_CODE = '22P02';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
 
@@ -33,10 +39,12 @@ type IncidentDetail = {
     reported_by: string;
     against_user_id: string | null;
     description: string;
-    evidence_urls: string[];
+    /** Left out of marketing's view (panel_incident_reports, 00663). */
+    evidence_urls?: string[];
     resolved_by: string | null;
     resolved_at: string | null;
-    resolution_notes: string | null;
+    /** Left out of marketing's view (panel_incident_reports, 00663). */
+    resolution_notes?: string | null;
     created_at: string;
     updated_at: string;
   };
@@ -44,6 +52,8 @@ type IncidentDetail = {
   against: UserInfo;
   resolver: UserInfo;
   ride: { id: string; status: string; pickup_address: string; dropoff_address: string } | null;
+  /** Marketing's read: the ride summary could not be read, so the page says "No disponible". */
+  rideUnavailable?: boolean;
   review: {
     id: string;
     rating: number;
@@ -51,6 +61,8 @@ type IncidentDetail = {
     is_visible: boolean;
     created_at: string;
   } | null;
+  /** Marketing's read: the reported review could not be read, so the page says "No disponible". */
+  reviewUnavailable?: boolean;
 };
 
 export default function IncidentDetailPage() {
@@ -58,31 +70,44 @@ export default function IncidentDetailPage() {
   const { showToast } = useToast();
   const { userId: adminUserId } = useAdminUser();
   const { id } = useParams<{ id: string }>();
+  const { canAct, ready } = useCanAct();
 
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
 
   const load = useCallback(async () => {
-    if (!id) return;
+    // Wait for the role: marketing reads the panel view, which leaves out evidence and notes.
+    if (!id || !ready) return;
     setLoading(true);
     setMissing(false);
+    setLoadError(null);
     try {
-      const data = await adminService.getIncidentDetail(id);
+      const data = canAct
+        ? await adminService.getIncidentDetail(id)
+        : await panelReadService.getIncidentDetail(id);
       if (!data) {
         setMissing(true);
         setDetail(null);
       } else {
         setDetail(data as unknown as IncidentDetail);
       }
-    } catch {
-      setMissing(true);
+    } catch (err) {
+      if ((err as { code?: unknown } | null)?.code === INVALID_UUID_CODE) {
+        // The admin read passes the id straight to a uuid column, so a malformed id
+        // (/incidents/abc) is a PostgREST 22P02. No such incident, not a failed read.
+        setMissing(true);
+      } else {
+        // A failed read is not a missing incident: say so, and let the user retry.
+        setLoadError(getErrorMessage(err));
+      }
       setDetail(null);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, canAct, ready]);
 
   useEffect(() => {
     void load();
@@ -145,6 +170,15 @@ export default function IncidentDetailPage() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="max-w-4xl">
+        {breadcrumb}
+        <AdminErrorBanner message={loadError} onRetry={() => void load()} />
+      </div>
+    );
+  }
+
   if (missing || !detail) {
     return (
       <div className="max-w-4xl">
@@ -156,7 +190,8 @@ export default function IncidentDetailPage() {
     );
   }
 
-  const { incident, reporter, against, resolver, ride, review } = detail;
+  const { incident, reporter, against, resolver, ride, review, rideUnavailable, reviewUnavailable } = detail;
+  const notAvailable = t('panel_view.not_available', { defaultValue: 'No disponible' });
   const sev = ((incident.severity as Severity) ?? 'low');
   const severityLabel: Record<Severity, string> = {
     critical: t('incidents.severity_critical', { defaultValue: 'Crítica' }),
@@ -194,28 +229,30 @@ export default function IncidentDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2">
-          {incident.status === 'open' && (
-            <button
-              type="button"
-              disabled={updating}
-              onClick={() => void advanceStatus('investigating', t('incidents.toast_now_investigating', { defaultValue: 'Incidente pasado a investigación' }))}
-              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50 dark:bg-amber-600 dark:hover:bg-amber-500"
-            >
-              {t('incidents.action_investigate', { defaultValue: 'Investigar' })}
-            </button>
-          )}
-          {incident.status === 'investigating' && (
-            <button
-              type="button"
-              disabled={updating}
-              onClick={() => void advanceStatus('resolved', t('incidents.toast_resolved', { defaultValue: 'Incidente resuelto' }))}
-              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50 dark:bg-green-700 dark:hover:bg-green-600"
-            >
-              {t('incidents.action_resolve', { defaultValue: 'Resolver' })}
-            </button>
-          )}
-        </div>
+        {canAct && (
+          <div className="flex gap-2">
+            {incident.status === 'open' && (
+              <button
+                type="button"
+                disabled={updating}
+                onClick={() => void advanceStatus('investigating', t('incidents.toast_now_investigating', { defaultValue: 'Incidente pasado a investigación' }))}
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50 dark:bg-amber-600 dark:hover:bg-amber-500"
+              >
+                {t('incidents.action_investigate', { defaultValue: 'Investigar' })}
+              </button>
+            )}
+            {incident.status === 'investigating' && (
+              <button
+                type="button"
+                disabled={updating}
+                onClick={() => void advanceStatus('resolved', t('incidents.toast_resolved', { defaultValue: 'Incidente resuelto' }))}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50 dark:bg-green-700 dark:hover:bg-green-600"
+              >
+                {t('incidents.action_resolve', { defaultValue: 'Resolver' })}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Description */}
@@ -242,7 +279,7 @@ export default function IncidentDetailPage() {
               <p className="text-sm text-ink-subtle">{t('incidents.review_no_comment', { defaultValue: 'Sin comentario (solo estrellas).' })}</p>
             )}
           </div>
-          {incident.status !== 'resolved' && incident.status !== 'dismissed' && (
+          {canAct && incident.status !== 'resolved' && incident.status !== 'dismissed' && (
             <div className="flex gap-2">
               {review.is_visible && (
                 <button
@@ -264,6 +301,12 @@ export default function IncidentDetailPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+      {incident.type === 'review_abuse' && !review && reviewUnavailable && (
+        <div className="mb-6 rounded-xl border border-line bg-surface-elevated p-6 shadow-sm">
+          <h2 className="mb-3 text-lg font-bold text-ink">{t('incidents.reported_review', { defaultValue: 'Reseña reportada' })}</h2>
+          <p className="text-sm text-ink-subtle">{notAvailable}</p>
         </div>
       )}
 
@@ -305,6 +348,8 @@ export default function IncidentDetailPage() {
                 <dd className="text-sm font-medium text-ink">{ride.dropoff_address}</dd>
               </div>
             </dl>
+          ) : rideUnavailable ? (
+            <p className="text-sm text-ink-subtle">{notAvailable}</p>
           ) : (
             <p className="text-sm text-ink-subtle">{t('incidents.no_ride', { defaultValue: 'Sin viaje asociado.' })}</p>
           )}
@@ -312,11 +357,11 @@ export default function IncidentDetailPage() {
       </div>
 
       {/* Evidence */}
-      {incident.evidence_urls.length > 0 && (
+      {(incident.evidence_urls?.length ?? 0) > 0 && (
         <div className="mb-6 rounded-xl border border-line bg-surface-elevated p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-bold text-ink">{t('incidents.evidence_section', { defaultValue: 'Evidencia' })}</h2>
           <ul className="space-y-2">
-            {incident.evidence_urls.map((url, i) => (
+            {(incident.evidence_urls ?? []).map((url, i) => (
               <li key={url}>
                 <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-500 hover:underline">
                   {t('incidents.evidence_item', { defaultValue: 'Adjunto' })} {i + 1}

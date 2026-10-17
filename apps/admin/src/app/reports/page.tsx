@@ -11,6 +11,7 @@ import { AdminEmptyState } from '@/components/ui/AdminEmptyState';
 import { Download } from 'lucide-react';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { SectionCard } from '@/components/dashboard/SectionCard';
+import { ProductFailuresSection } from '@/components/panel/ProductFailuresSection';
 
 type DashboardMetrics = {
   active_rides: number;
@@ -706,6 +707,10 @@ export default function ReportsPage() {
           </section>
         </>
       )}
+
+      {/* Outside the `loading` fragment: it has its own period and loading state, and must stay
+          mounted when this page's 7d/30d/90d selector reloads the numbers above. */}
+      <ProductFailuresSection />
     </div>
   );
 }

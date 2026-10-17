@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { adminService } from '@tricigo/api';
+import { panelReadService, type PanelDriverListItem } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import type { DriverProfileWithUser, DriverStatus } from '@tricigo/types';
+import type { DriverStatus } from '@tricigo/types';
 import { getErrorMessage } from '@tricigo/utils';
 import { createBrowserClient } from '@/lib/supabase-server';
 import { AdminErrorBanner } from '@/components/ui/AdminErrorBanner';
@@ -83,7 +83,7 @@ export default function DriversPage() {
   const { t } = useTranslation('admin');
 
   // ─── State ─────────────────────────────────────────────────
-  const [drivers, setDrivers] = useState<DriverProfileWithUser[]>([]);
+  const [drivers, setDrivers] = useState<PanelDriverListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -136,7 +136,7 @@ export default function DriversPage() {
         if (vehicleType) filters.vehicleType = vehicleType;
         if (selectedCity) filters.cityId = selectedCity;
 
-        const data = await adminService.getAllDrivers(page, PAGE_SIZE, filters);
+        const data = await panelReadService.getDrivers(page, PAGE_SIZE, filters);
         if (!cancelled) setDrivers(data);
       } catch (err) {
         if (!cancelled) {
@@ -358,7 +358,7 @@ export default function DriversPage() {
                 sortedData.map((driver) => {
                   const vehicle = driver.vehicles?.[0];
                   const VIcon = vehicleIcon(vehicle?.type);
-                  const status = STATUS_STYLES[driver.status];
+                  const status = STATUS_STYLES[driver.status] ?? STATUS_STYLES.pending_verification;
                   return (
                     <tr
                       key={driver.id}
@@ -374,7 +374,7 @@ export default function DriversPage() {
                         <div className="font-medium text-sm text-ink leading-tight">
                           {driver.users?.full_name || t('common.no_name', { defaultValue: 'Sin nombre' })}
                         </div>
-                        <div className="text-xs text-ink-muted mt-0.5">{driver.users?.phone ?? '—'}</div>
+                        <div className="text-xs text-ink-muted mt-0.5">{driver.users?.phone || '—'}</div>
                       </td>
                       <td className="px-4">
                         {vehicle ? (
@@ -401,7 +401,7 @@ export default function DriversPage() {
                         )}
                       </td>
                       <td className="px-4">
-                        {driver.rating_avg > 0 ? (
+                        {(driver.rating_avg ?? 0) > 0 ? (
                           <div className="inline-flex items-center gap-1">
                             <Star size={13} className="text-amber-500 fill-amber-500" />
                             <span className="text-sm text-ink-muted tabular-nums">
@@ -441,7 +441,7 @@ export default function DriversPage() {
         ) : (
           sortedData.map((driver) => {
             const vehicle = driver.vehicles?.[0];
-            const status = STATUS_STYLES[driver.status];
+            const status = STATUS_STYLES[driver.status] ?? STATUS_STYLES.pending_verification;
             return (
               <button
                 key={driver.id}
@@ -456,7 +456,7 @@ export default function DriversPage() {
                     {driver.users?.full_name || '—'}
                   </div>
                   <div className="text-xs text-ink-muted truncate mt-0.5">
-                    {driver.users?.phone ?? '—'} {vehicle && <>· {vehicle.plate_number}</>}
+                    {driver.users?.phone || '—'} {vehicle && <>· {vehicle.plate_number}</>}
                   </div>
                   <div className="mt-1 inline-flex items-center gap-1.5">
                     <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />

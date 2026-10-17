@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { DataTable, type DataColumn } from '@/components/data/DataTable';
 import { formatAdminDate } from '@/lib/formatDate';
+import { useCanAct } from '@/lib/useCanAct';
 
 const PAGE_SIZE = 50;
 
@@ -30,6 +31,7 @@ const emptyForm: PoiInput & { _editingId: number | null } = {
 
 export default function PoisAdminPage() {
   const { showToast } = useToast();
+  const { canAct } = useCanAct();
 
   const [pois, setPois] = useState<Poi[]>([]);
   const [total, setTotal] = useState(0);
@@ -247,37 +249,41 @@ export default function PoisAdminPage() {
       header: '',
       cell: (p) => (
         <div className="flex items-center gap-1 justify-end">
-          <button
-            onClick={() => openEdit(p)}
-            className="text-xs px-2 py-1 rounded hover:bg-surface-sunken"
-          >
-            Editar
-          </button>
-          {p.is_active ? (
-            <button
-              onClick={() => setDeactivateTarget(p)}
-              title="Desactivar"
-              className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400"
-            >
-              <EyeOff size={14} />
-            </button>
-          ) : (
-            <button
-              onClick={() => handleActivate(p)}
-              title="Reactivar"
-              className="p-1.5 rounded hover:bg-green-50 dark:hover:bg-green-900/20 text-green-600 dark:text-green-400"
-            >
-              <Eye size={14} />
-            </button>
-          )}
-          {p.is_admin && p.source !== 'admin' && (
-            <button
-              onClick={() => setUnlockTarget(p)}
-              title="Desbloquear (permitir que el próximo sync lo refresque)"
-              className="p-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400"
-            >
-              <Unlock size={14} />
-            </button>
+          {canAct && (
+            <>
+              <button
+                onClick={() => openEdit(p)}
+                className="text-xs px-2 py-1 rounded hover:bg-surface-sunken"
+              >
+                Editar
+              </button>
+              {p.is_active ? (
+                <button
+                  onClick={() => setDeactivateTarget(p)}
+                  title="Desactivar"
+                  className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400"
+                >
+                  <EyeOff size={14} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleActivate(p)}
+                  title="Reactivar"
+                  className="p-1.5 rounded hover:bg-green-50 dark:hover:bg-green-900/20 text-green-600 dark:text-green-400"
+                >
+                  <Eye size={14} />
+                </button>
+              )}
+              {p.is_admin && p.source !== 'admin' && (
+                <button
+                  onClick={() => setUnlockTarget(p)}
+                  title="Desbloquear (permitir que el próximo sync lo refresque)"
+                  className="p-1.5 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400"
+                >
+                  <Unlock size={14} />
+                </button>
+              )}
+            </>
           )}
           {!p.is_admin && (
             <span title="Sync puede sobrescribir este POI" className="p-1.5 text-neutral-400">
@@ -287,7 +293,7 @@ export default function PoisAdminPage() {
         </div>
       ),
     },
-  ], []);
+  ], [canAct]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -303,12 +309,14 @@ export default function PoisAdminPage() {
             {total.toLocaleString()} resultados — admin override sticky vs sync mensual
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium"
-        >
-          <Plus size={16} /> Agregar POI
-        </button>
+        {canAct && (
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium"
+          >
+            <Plus size={16} /> Agregar POI
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -401,7 +409,7 @@ export default function PoisAdminPage() {
       )}
 
       {/* Form modal */}
-      {showForm && (
+      {canAct && showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-neutral-900 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-800 sticky top-0 bg-white dark:bg-neutral-900">
@@ -535,27 +543,31 @@ export default function PoisAdminPage() {
         </div>
       )}
 
-      {/* Confirm: deactivate */}
-      <AdminConfirmModal
-        open={deactivateTarget !== null}
-        title="Desactivar POI"
-        message={`¿Confirmas desactivar "${deactivateTarget?.name}"? Dejará de aparecer en búsquedas hasta que lo reactives.`}
-        confirmLabel="Desactivar"
-        variant="danger"
-        onConfirm={() => deactivateTarget && handleDeactivate(deactivateTarget)}
-        onCancel={() => setDeactivateTarget(null)}
-      />
+      {canAct && (
+        <>
+          {/* Confirm: deactivate */}
+          <AdminConfirmModal
+            open={deactivateTarget !== null}
+            title="Desactivar POI"
+            message={`¿Confirmas desactivar "${deactivateTarget?.name}"? Dejará de aparecer en búsquedas hasta que lo reactives.`}
+            confirmLabel="Desactivar"
+            variant="danger"
+            onConfirm={() => deactivateTarget && handleDeactivate(deactivateTarget)}
+            onCancel={() => setDeactivateTarget(null)}
+          />
 
-      {/* Confirm: unlock */}
-      <AdminConfirmModal
-        open={unlockTarget !== null}
-        title="Desbloquear POI"
-        message={`Si desbloqueas "${unlockTarget?.name}", el próximo sync mensual podrá sobrescribir tus ediciones con los datos de OSM/Overture/Foursquare. ¿Confirmas?`}
-        confirmLabel="Desbloquear"
-        variant="warning"
-        onConfirm={() => unlockTarget && handleUnlock(unlockTarget)}
-        onCancel={() => setUnlockTarget(null)}
-      />
+          {/* Confirm: unlock */}
+          <AdminConfirmModal
+            open={unlockTarget !== null}
+            title="Desbloquear POI"
+            message={`Si desbloqueas "${unlockTarget?.name}", el próximo sync mensual podrá sobrescribir tus ediciones con los datos de OSM/Overture/Foursquare. ¿Confirmas?`}
+            confirmLabel="Desbloquear"
+            variant="warning"
+            onConfirm={() => unlockTarget && handleUnlock(unlockTarget)}
+            onCancel={() => setUnlockTarget(null)}
+          />
+        </>
+      )}
     </div>
   );
 }

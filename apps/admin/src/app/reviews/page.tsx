@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/AdminToast';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
+import { useCanAct } from '@/lib/useCanAct';
 
 const PAGE_SIZE = 20;
 
@@ -48,6 +49,7 @@ function Stars({ rating, ariaLabel }: { rating: number; ariaLabel: string }) {
 export default function ReviewsPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  const { canAct } = useCanAct();
 
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -365,7 +367,9 @@ export default function ReviewsPage() {
             {t('reviews.title', { defaultValue: 'Reseñas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('reviews.page_description', { defaultValue: 'Opiniones de pasajeros y conductores. Modera lo que se muestra y destaca lo mejor.' })}
+            {canAct
+              ? t('reviews.page_description', { defaultValue: 'Opiniones de pasajeros y conductores. Modera lo que se muestra y destaca lo mejor.' })
+              : t('panel_view.reviews_page_body', { defaultValue: 'Lo que la gente dice de sus viajes: calificaciones, comentarios y etiquetas.' })}
           </p>
         </div>
       </div>
@@ -455,7 +459,7 @@ export default function ReviewsPage() {
         onSortChange={setSort}
         pagination={{ page, pageSize: PAGE_SIZE, hasMore: reviews.length === PAGE_SIZE }}
         onPaginationChange={(next) => setPage(next.page)}
-        rowActions={[
+        rowActions={canAct ? [
           {
             label: t('reviews.action_toggle_visibility', { defaultValue: 'Mostrar/Ocultar' }),
             onClick: (r) => {
@@ -468,7 +472,7 @@ export default function ReviewsPage() {
               if (actionLoading !== r.id) void handleToggleFeatured(r);
             },
           },
-        ]}
+        ] : undefined}
       />
     </div>
   );

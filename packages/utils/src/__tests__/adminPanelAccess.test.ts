@@ -7,6 +7,7 @@ import {
   canOpenPanelPath,
   isPanelRole,
   menuRole,
+  panelCanAct,
   panelHome,
   panelRoleFromCookies,
   type PanelRole,
@@ -38,10 +39,27 @@ describe('canOpenPanelPath', () => {
   });
 
   it('keeps marketing out of everything else', () => {
-    for (const path of ['/', '/wallet', '/wallet/gifts', '/users', '/users/1', '/drivers', '/rides', '/settings',
-      '/notifications', '/content', '/competitors', '/earnings', '/support']) {
+    for (const path of ['/', '/wallet', '/wallet/gifts', '/settings', '/notifications', '/content',
+      '/competitors', '/earnings', '/cancellations', '/cancellations/1', '/live-map', '/fraud',
+      '/businesses', '/partners', '/quests', '/audit']) {
       expect(canOpenPanelPath('marketing', path)).toBe(false);
     }
+  });
+
+  it('opens the read-only pages to marketing (00663)', () => {
+    for (const path of ['/rides', '/rides/abc', '/drivers', '/drivers/abc', '/users', '/users/abc',
+      '/reviews', '/support', '/disputes', '/incidents', '/incidents/abc', '/lost-found',
+      '/incomplete-drivers', '/pois', '/pois/submissions', '/validation']) {
+      expect(canOpenPanelPath('marketing', path)).toBe(true);
+    }
+  });
+
+  it('keeps marketing out of the stuck-ride assist page under an open page', () => {
+    for (const path of ['/rides/abc/assist', '/rides/abc/assist/', '/rides/abc/assist/x']) {
+      expect(canOpenPanelPath('marketing', path)).toBe(false);
+      expect(canOpenPanelPath('admin', path)).toBe(true);
+    }
+    expect(canOpenPanelPath('marketing', '/rides/abc/assistance')).toBe(true);
   });
 
   it('does not take a longer name for a sub-page', () => {
@@ -110,5 +128,15 @@ describe('panelRoleFromCookies', () => {
 
   it('does not throw on a value that is not valid URI encoding', () => {
     expect(panelRoleFromCookies(`${PANEL_ROLE_COOKIE}=%E0%A4%A`)).toBeNull();
+  });
+});
+
+describe('panelCanAct', () => {
+  it('lets admins and super admins act and nobody else', () => {
+    expect(panelCanAct('admin')).toBe(true);
+    expect(panelCanAct('super_admin')).toBe(true);
+    expect(panelCanAct('marketing')).toBe(false);
+    expect(panelCanAct(null)).toBe(false);
+    expect(panelCanAct(undefined)).toBe(false);
   });
 });

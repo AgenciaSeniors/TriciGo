@@ -13,6 +13,7 @@ import { KpiCard } from '@/components/dashboard/KpiCard';
 import { useToast } from '@/components/ui/AdminToast';
 import { exportToCsv } from '@/lib/exportCsv';
 import { formatAdminDate, formatAdminDateShort } from '@/lib/formatDate';
+import { useCanAct } from '@/lib/useCanAct';
 
 // Drivers stuck in pending_verification (they started the signup and never
 // sent it), with what each one still has to upload, so the team can write to
@@ -252,6 +253,7 @@ function ContactDialog({
 export default function IncompleteDriversPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  const { canAct } = useCanAct();
 
   const [rows, setRows] = useState<IncompleteDriverSignup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -655,14 +657,16 @@ export default function IncompleteDriversPage() {
                   </button>
                 </span>
               )}
-              <button
-                type="button"
-                onClick={() => setContactRow(r)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-[12px] font-medium text-ink transition-colors hover:bg-surface-sunken"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {t('incomplete_drivers.action_mark_contacted', { defaultValue: 'Marcar contactado' })}
-              </button>
+              {canAct && (
+                <button
+                  type="button"
+                  onClick={() => setContactRow(r)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-[12px] font-medium text-ink transition-colors hover:bg-surface-sunken"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {t('incomplete_drivers.action_mark_contacted', { defaultValue: 'Marcar contactado' })}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => void handleCopy(r)}
@@ -686,7 +690,7 @@ export default function IncompleteDriversPage() {
         align: 'right',
       },
     ],
-    [t, channelLabels, handleCopy],
+    [t, channelLabels, handleCopy, canAct],
   );
 
   return (
@@ -830,7 +834,7 @@ export default function IncompleteDriversPage() {
         onPaginationChange={setPagination}
       />
 
-      {contactRow && (
+      {canAct && contactRow && (
         <ContactDialog row={contactRow} channelLabels={channelLabels} onClose={closeDialog} onSaved={handleSaved} />
       )}
     </div>

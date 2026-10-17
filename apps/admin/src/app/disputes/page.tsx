@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Scale } from 'lucide-react';
-import { disputeService } from '@tricigo/api';
+import { disputeService, panelReadService, type PanelDispute } from '@tricigo/api';
 import { useTranslation } from '@tricigo/i18n';
-import type { RideDispute, DisputeStatus, DisputeResolution } from '@tricigo/types';
+import type { DisputeStatus, DisputeResolution } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
+import { useCanAct } from '@/lib/useCanAct';
 import { formatTRC, getErrorMessage } from '@tricigo/utils';
 import { formatAdminDate } from '@/lib/formatDate';
 import { useToast } from '@/components/ui/AdminToast';
@@ -42,12 +43,13 @@ export default function DisputesPage() {
   const { userId: adminUserId } = useAdminUser();
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  const { canAct, ready } = useCanAct();
 
-  const [disputes, setDisputes] = useState<RideDispute[]>([]);
+  const [disputes, setDisputes] = useState<PanelDispute[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<Filter>('open');
-  const [selected, setSelected] = useState<RideDispute | null>(null);
+  const [selected, setSelected] = useState<PanelDispute | null>(null);
 
   const TABS: StatusTab<Filter>[] = useMemo(() => [
     { id: 'all', label: t('disputes.filter_all', { defaultValue: 'Todas' }) },
@@ -107,13 +109,15 @@ export default function DisputesPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const fetchDisputes = useCallback(async () => {
+    // Wait for the role: marketing reads the panel view, which leaves out evidence, refunds and notes.
+    if (!ready) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await disputeService.getAllDisputes({
-        status: statusFilter === 'all' ? undefined : statusFilter,
-        limit: 100,
-      });
+      const params = { status: statusFilter === 'all' ? undefined : statusFilter, limit: 100 };
+      const data = canAct
+        ? await disputeService.getAllDisputes(params)
+        : await panelReadService.getDisputes(params);
       setDisputes(data);
     } catch (err) {
       setDisputes([]);
@@ -121,13 +125,13 @@ export default function DisputesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, t]);
+  }, [statusFilter, t, canAct, ready]);
 
   useEffect(() => {
     void fetchDisputes();
   }, [fetchDisputes]);
 
-  const handleSelect = (d: RideDispute) => {
+  const handleSelect = (d: PanelDispute) => {
     setSelected(d);
     setAdminNotes(d.admin_notes ?? '');
     setRefundAmount('');
@@ -187,7 +191,7 @@ export default function DisputesPage() {
         status: 'under_review',
         assigned_to: adminUserId,
       });
-      const updated: RideDispute = {
+      const updated: PanelDispute = {
         ...selected,
         status: 'under_review' as DisputeStatus,
         assigned_to: adminUserId,
@@ -312,6 +316,7 @@ export default function DisputesPage() {
   };
 
   const canResolve =
+    canAct &&
     selected &&
     selected.status !== 'resolved_rider' &&
     selected.status !== 'resolved_driver' &&
@@ -329,7 +334,11 @@ export default function DisputesPage() {
             {t('disputes.title', { defaultValue: 'Disputas' })}
           </h1>
           <p className="mt-0.5 text-[12.5px] text-ink-muted">
-            {t('disputes.page_description', { defaultValue: 'Reclamos de pasajeros y conductores. Escucha ambas versiones antes de decidir.' })}
+            {!ready
+              ? ''
+              : canAct
+                ? t('disputes.page_description', { defaultValue: 'Reclamos de pasajeros y conductores. Escucha ambas versiones antes de decidir.' })
+                : t('panel_view.disputes_page_body', { defaultValue: 'Reclamos de pasajeros y conductores, con su estado y la respuesta de la otra parte.' })}
           </p>
         </div>
       </div>
@@ -363,7 +372,9 @@ export default function DisputesPage() {
               <DataEmptyState
                 icon={Scale}
                 title={t('disputes.pick_title', { defaultValue: 'Elige una disputa' })}
-                body={t('disputes.pick_body', { defaultValue: 'Selecciona un reclamo en la bandeja para ver los detalles y resolverlo.' })}
+                body={canAct
+                  ? t('disputes.pick_body', { defaultValue: 'Selecciona un reclamo en la bandeja para ver los detalles y resolverlo.' })
+                  : t('panel_view.disputes_pick_body', { defaultValue: 'Selecciona un reclamo en la bandeja para ver los detalles.' })}
               />
             </div>
           ) : (
@@ -425,9 +436,9 @@ export default function DisputesPage() {
                 </h3>
                 <div className="rounded-xl border border-line bg-surface-sunken p-4">
                   <p className="text-[13px] text-ink">{selected.description}</p>
-                  {selected.evidence_urls.length > 0 && (
+                  {(selected.evidence_urls?.length ?? 0) > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {selected.evidence_urls.map((url, i) => (
+                      {(selected.evidence_urls ?? []).map((url, i) => (
                         <a
                           key={i}
                           href={url}
@@ -451,9 +462,9 @@ export default function DisputesPage() {
                   {selected.respondent_message ? (
                     <>
                       <p className="text-[13px] text-ink">{selected.respondent_message}</p>
-                      {selected.respondent_evidence_urls.length > 0 && (
+                      {(selected.respondent_evidence_urls?.length ?? 0) > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {selected.respondent_evidence_urls.map((url, i) => (
+                          {(selected.respondent_evidence_urls ?? []).map((url, i) => (
                             <a
                               key={i}
                               href={url}
@@ -596,25 +607,27 @@ export default function DisputesPage() {
                   </section>
                 )}
 
-              <section className="px-5 py-4">
-                <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-                  {t('disputes.admin_notes_title', { defaultValue: 'Notas internas' })}
-                </h3>
-                <textarea
-                  value={adminNotes}
-                  onChange={(e) => setAdminNotes(e.target.value)}
-                  placeholder={t('disputes.admin_notes_placeholder', { defaultValue: 'Detalles de gestión, contactos, próximos pasos…' })}
-                  className="min-h-[80px] w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
-                />
-                <div className="mt-2 flex justify-end">
-                  <button
-                    onClick={() => void handleSaveAdminNotes()}
-                    className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-surface-sunken"
-                  >
-                    {t('disputes.save_notes', { defaultValue: 'Guardar notas' })}
-                  </button>
-                </div>
-              </section>
+              {canAct && (
+                <section className="px-5 py-4">
+                  <h3 className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+                    {t('disputes.admin_notes_title', { defaultValue: 'Notas internas' })}
+                  </h3>
+                  <textarea
+                    value={adminNotes}
+                    onChange={(e) => setAdminNotes(e.target.value)}
+                    placeholder={t('disputes.admin_notes_placeholder', { defaultValue: 'Detalles de gestión, contactos, próximos pasos…' })}
+                    className="min-h-[80px] w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none"
+                  />
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => void handleSaveAdminNotes()}
+                      className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-surface-sunken"
+                    >
+                      {t('disputes.save_notes', { defaultValue: 'Guardar notas' })}
+                    </button>
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </div>
