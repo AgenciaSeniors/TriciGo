@@ -188,6 +188,7 @@
     "promo_error_already_used": "You already used this code",
     "promo_error_first_ride": "Only valid for your first ride",
     "promo_error_phone_required": "Confirm your phone to use promo codes",
+    "signup_promo_applied": "Discount from your code {{code}}: {{amount}}",
     "promo_already_used": "You already used this code",
     "promo_max_uses": "Code is fully redeemed",
     "discount": "Discount",

@@ -18,6 +18,7 @@ import type {
   PartnerDiscount,
 } from '@tricigo/types';
 import type { GeoPoint } from '@tricigo/utils';
+import type { SignupPromotion } from '@tricigo/api';
 import { logger, deliveryVehicleToSlug } from '@tricigo/utils';
 import { RIDE_CONFIG } from '@/config/ride';
 import { upsertSplit } from './rideSplits';
@@ -147,6 +148,12 @@ interface RideState {
   // Promo state
   promoCode: string;
   promoResult: PromoResult | null;
+  /**
+   * 00665: the promotion of the user's signup code, as the server would apply
+   * it now. Account-level, so draft resets keep it; the booking sheet reloads
+   * it each time it opens.
+   */
+  signupPromo: SignupPromotion | null;
 
   // Partner-place discount for the current destination (00559). Display only —
   // the charged amount is recomputed server-side from the ride's dropoff, so
@@ -190,6 +197,7 @@ interface RideState {
   setError: (error: string | null) => void;
   setPromoCode: (code: string) => void;
   setPromoResult: (result: PromoResult | null) => void;
+  setSignupPromo: (promo: SignupPromotion | null) => void;
   setPartnerDiscount: (discount: PartnerDiscount | null) => void;
   setCorporateAccount: (id: string | null) => void;
   setAllFareEstimates: (estimates: Partial<Record<ServiceTypeSlug, FareEstimate>> | null) => void;
@@ -231,6 +239,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   prefetchedPickup: null,
   promoCode: '',
   promoResult: null,
+  signupPromo: null,
 
   partnerDiscount: null,
   allFareEstimates: null,
@@ -430,6 +439,7 @@ export const useRideStore = create<RideState>((set, get) => ({
   setError: (error) => set({ error }),
   setPromoCode: (promoCode) => set({ promoCode }),
   setPromoResult: (promoResult) => set({ promoResult }),
+  setSignupPromo: (signupPromo) => set({ signupPromo }),
   setPartnerDiscount: (partnerDiscount) => set({ partnerDiscount }),
   setAllFareEstimates: (allFareEstimates) => set({ allFareEstimates }),
   setCorporateAccount: (corporateAccountId) =>
@@ -582,6 +592,7 @@ export const useRideStore = create<RideState>((set, get) => ({
       error: null,
       promoCode: '',
       promoResult: null,
+      signupPromo: null,
 
       partnerDiscount: null,
       splits: [],
