@@ -9,6 +9,13 @@ import { useTranslation } from '@tricigo/i18n';
 // Shared with /book so the code survives the guest → login round-trip.
 const PENDING_PROMO_KEY = 'tricigo_pending_promo';
 
+const storeLinkStyle = {
+  fontSize: 'var(--text-sm)',
+  color: 'var(--primary)',
+  fontWeight: 600,
+  textDecoration: 'none',
+} as const;
+
 /**
  * Web landing page for promo code deep links.
  * URL: https://tricigo.com/promo/{code}
@@ -169,22 +176,33 @@ export default function PromoLandingPage() {
           {t('promo.no_app', { defaultValue: '¿No tienes la app? Descárgala desde la App Store o Google Play.' })}
         </p>
 
-        {/* Download on Google Play (the live store; App Store stays text-only until iOS ships) */}
-        <a
-          href="https://play.google.com/store/apps/details?id=app.tricigo.client"
-          target="_blank"
-          rel="noopener noreferrer"
+        {/* Download links for both stores */}
+        <div
           style={{
-            fontSize: 'var(--text-sm)',
-            color: 'var(--primary)',
-            fontWeight: 600,
-            textDecoration: 'none',
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            gap: 'var(--space-md)',
             marginTop: 'var(--space-sm)',
-            display: 'inline-block',
           }}
         >
-          {t('promo.download_play', { defaultValue: 'Descargar en Google Play' })}
-        </a>
+          <a
+            href="https://play.google.com/store/apps/details?id=app.tricigo.client"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={storeLinkStyle}
+          >
+            {t('promo.download_play', { defaultValue: 'Descargar en Google Play' })}
+          </a>
+          <a
+            href="https://apps.apple.com/app/id6785157005"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={storeLinkStyle}
+          >
+            {t('promo.download_app_store', { defaultValue: 'Descargar en la App Store' })}
+          </a>
+        </div>
 
         {/* Home link */}
         <Link
