@@ -3297,6 +3297,10 @@ function SelectingView({ openPicker }: {
     ? 0
     : (selectedEstimate?.estimated_fare_cup ?? 0);
   const signupPromoEligible = draft.serviceType !== 'mensajeria' && !draft.corporateAccountId;
+  // The field holds the signup code on a ride it doesn't apply to: "Aplicar"
+  // is disabled and a caption says why (the effect below clears its result).
+  const signupPromoBlocked =
+    signupPromo != null && isSignupPromoCode(promoCode, signupPromo.code) && !signupPromoEligible;
   useEffect(() => {
     const action = signupPromoAction({
       promoCode,
@@ -4191,19 +4195,30 @@ function SelectingView({ openPicker }: {
               <Ionicons name={promoExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.neutral[400]} />
             </Pressable>
             {promoExpanded && (
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                <View style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
-                  <TextInput
-                    value={promoCode}
-                    onChangeText={setPromoCode}
-                    placeholder={t('ride.enter_code', { defaultValue: 'Ingresa un código' })}
-                    placeholderTextColor={colors.neutral[400]}
-                    style={{ fontSize: 14, color: colors.neutral[700], paddingVertical: 12 }}
-                    autoCapitalize="characters"
-                  />
+              <>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                  <View style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
+                    <TextInput
+                      value={promoCode}
+                      onChangeText={setPromoCode}
+                      placeholder={t('ride.enter_code', { defaultValue: 'Ingresa un código' })}
+                      placeholderTextColor={colors.neutral[400]}
+                      style={{ fontSize: 14, color: colors.neutral[700], paddingVertical: 12 }}
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                  {/* Not while pricing: validatePromo drops a result whose estimate is in flight. */}
+                  <Button title={t('common.apply', { defaultValue: 'Aplicar' })} size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim() || isFareEstimating || signupPromoBlocked} />
                 </View>
-                <Button title={t('common.apply', { defaultValue: 'Aplicar' })} size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim()} />
-              </View>
+                {signupPromoBlocked && (
+                  <Text variant="caption" color="tertiary" style={{ marginBottom: 8 }}>
+                    {t('ride.signup_promo_not_eligible', {
+                      code: signupPromo?.signupCode ?? '',
+                      defaultValue: 'El descuento de tu código {{code}} no aplica a envíos ni a viajes pagados por una empresa.',
+                    })}
+                  </Text>
+                )}
+              </>
             )}
             {promoResult?.valid && (
               <View style={{ backgroundColor: '#f0fdf4', borderRadius: 8, padding: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>

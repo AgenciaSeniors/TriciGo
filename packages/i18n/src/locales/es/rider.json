@@ -189,6 +189,7 @@
     "promo_error_first_ride": "Solo válido para tu primer viaje",
     "promo_error_phone_required": "Confirma tu teléfono para usar códigos de promoción",
     "signup_promo_applied": "Descuento de tu código {{code}}: {{amount}}",
+    "signup_promo_not_eligible": "El descuento de tu código {{code}} no aplica a envíos ni a viajes pagados por una empresa.",
     "promo_already_used": "Ya usaste este código",
     "promo_max_uses": "Código agotado",
     "discount": "Descuento",
