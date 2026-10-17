@@ -7,14 +7,16 @@ import {
   acquisitionCodeService,
   marketingStatsService,
   normalizeAcquisitionCode,
+  promotionService,
   ACQUISITION_CODE_PATTERN,
   type AcquisitionAudience,
   type AcquisitionChannel,
   type AcquisitionCodeStats,
+  type Promotion,
   type PromoCodePerformance,
   type ReferralCodePerformance,
 } from '@tricigo/api';
-import { formatCUP, getErrorMessage } from '@tricigo/utils';
+import { formatCUP, getErrorMessage, promotionLinkStatus, type PromotionLinkStatus } from '@tricigo/utils';
 import { DataTable, type DataColumn, type SortState } from '@/components/data/DataTable';
 import { FilterBar, type StatusTab } from '@/components/data/FilterBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -50,9 +52,17 @@ interface AcquisitionForm {
   channel: AcquisitionChannel;
   audience: AcquisitionAudience;
   notes: string;
+  promotionId: string;
 }
 
-const EMPTY_FORM: AcquisitionForm = { code: '', label: '', channel: 'influencer', audience: 'ambos', notes: '' };
+const EMPTY_FORM: AcquisitionForm = {
+  code: '',
+  label: '',
+  channel: 'influencer',
+  audience: 'ambos',
+  notes: '',
+  promotionId: '',
+};
 
 const inputCls =
   'h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-[13px] text-ink placeholder:text-ink-subtle focus:border-primary-500 focus:outline-none';
@@ -214,6 +224,47 @@ export default function CodePerformancePage() {
     void loadCodes();
   }, [loadCodes]);
 
+  // Promotions for the "Promoción" selects. Marketing and admins read the
+  // table (00642). If this fails the codes still work: the selects stay off.
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotionsError, setPromotionsError] = useState(false);
+  useEffect(() => {
+    promotionService
+      .getAll(0, 200)
+      .then((rows) => {
+        setPromotions(rows);
+        setPromotionsError(false);
+      })
+      .catch(() => {
+        setPromotions([]);
+        setPromotionsError(true);
+      });
+  }, []);
+  const promotionById = useMemo(() => new Map(promotions.map((p) => [p.id, p])), [promotions]);
+  const [linkingCodes, setLinkingCodes] = useState<ReadonlySet<string>>(() => new Set());
+
+  const statusLabels = useMemo<Record<PromotionLinkStatus, string>>(
+    () => ({
+      active: t('code_performance.promo_status_active', { defaultValue: 'activa' }),
+      pending: t('code_performance.promo_status_pending', { defaultValue: 'pendiente de aprobación' }),
+      paused: t('code_performance.promo_status_paused', { defaultValue: 'pausada' }),
+      scheduled: t('code_performance.promo_status_scheduled', { defaultValue: 'todavía no empieza' }),
+      expired: t('code_performance.promo_status_expired', { defaultValue: 'vencida' }),
+      exhausted: t('code_performance.promo_status_exhausted', { defaultValue: 'sin usos' }),
+    }),
+    [t],
+  );
+
+  const promotionOptionLabel = useCallback(
+    (p: Promotion) => {
+      const status = statusLabels[promotionLinkStatus(p)];
+      if (p.type === 'fixed_discount') return `${p.code} · −${num(p.discount_fixed_cup ?? 0)} CUP · ${status}`;
+      if (p.type === 'percentage_discount') return `${p.code} · ${p.discount_percent ?? 0} % · ${status}`;
+      return `${p.code} · ${status}`;
+    },
+    [statusLabels],
+  );
+
   const promoTotals = useMemo(
     () => ({
       active: promos.filter((p) => p.is_active).length,
@@ -326,6 +377,43 @@ export default function CodePerformancePage() {
     [loadCodes, showToast, t],
   );
 
+  const handleSetPromotion = useCallback(
+    async (row: AcquisitionRow, promotionId: string | null) => {
+      setLinkingCodes((prev) => new Set(prev).add(row.code));
+      try {
+        await acquisitionCodeService.setPromotion(row.code, promotionId);
+        // Same as the toggle: an UPDATE that RLS filters out answers OK with
+        // 0 rows (the service throws on that), but confirm against the reload.
+        const rows = await loadCodes(true);
+        if (!rows) return; // the tab already shows the load error
+        if ((rows.find((r) => r.code === row.code)?.promotion_id ?? null) === promotionId) {
+          showToast(
+            'success',
+            promotionId
+              ? t('code_performance.toast_promo_linked', { code: row.code, defaultValue: 'Promoción vinculada a {{code}}' })
+              : t('code_performance.toast_promo_unlinked', { code: row.code, defaultValue: 'Promoción quitada de {{code}}' }),
+          );
+        } else {
+          showToast(
+            'error',
+            t('code_performance.toggle_not_saved', {
+              defaultValue: 'El cambio no se guardó. Recarga la página e inténtalo de nuevo.',
+            }),
+          );
+        }
+      } catch (err) {
+        showToast('error', getErrorMessage(err));
+      } finally {
+        setLinkingCodes((prev) => {
+          const rest = new Set(prev);
+          rest.delete(row.code);
+          return rest;
+        });
+      }
+    },
+    [loadCodes, showToast, t],
+  );
+
   const canonicalCode = normalizeAcquisitionCode(form.code);
   const codeValid = ACQUISITION_CODE_PATTERN.test(canonicalCode);
   const canCreate = codeValid && form.label.trim().length > 0 && !creating;
@@ -347,6 +435,7 @@ export default function CodePerformancePage() {
         channel: form.channel,
         audience: form.audience,
         notes: form.notes,
+        promotionId: form.promotionId || null,
       });
       showToast('success', t('code_performance.toast_created', { code: created.code, defaultValue: 'Código {{code}} creado' }));
       // Keep channel and audience: codes usually come in batches of the same kind.
@@ -390,6 +479,8 @@ export default function CodePerformancePage() {
           label: t('code_performance.csv_drivers_with_ride', { defaultValue: 'Choferes con primer viaje' }),
         },
         { key: 'first_rides', label: t('code_performance.col_first_rides', { defaultValue: 'Con primer viaje' }) },
+        { key: 'promotion_code', label: t('code_performance.col_promotion', { defaultValue: 'Promoción' }) },
+        { key: 'promo_rides', label: t('code_performance.col_promo_rides', { defaultValue: 'Usaron el descuento' }) },
         {
           key: 'is_active',
           label: t('code_performance.col_active', { defaultValue: 'Activo' }),
@@ -640,6 +731,53 @@ export default function CodePerformancePage() {
         sortKey: 'first_rides',
       },
       {
+        id: 'promotion',
+        header: t('code_performance.col_promotion', { defaultValue: 'Promoción' }),
+        cell: (c) => {
+          const linked = c.promotion_id ? promotionById.get(c.promotion_id) : undefined;
+          const status = linked ? promotionLinkStatus(linked) : null;
+          return (
+            <span className="inline-flex flex-col gap-1">
+              <select
+                value={c.promotion_id ?? ''}
+                onChange={(e) => void handleSetPromotion(c, e.target.value || null)}
+                disabled={promotionsError || linkingCodes.has(c.code)}
+                aria-label={t('code_performance.promotion_aria', { code: c.code, defaultValue: 'Promoción de {{code}}' })}
+                className={`${inputCls} h-8 min-w-[11rem] text-[12px]`}
+              >
+                <option value="">{t('code_performance.no_promotion', { defaultValue: 'Sin promoción' })}</option>
+                {c.promotion_id && !linked && (
+                  <option value={c.promotion_id}>{c.promotion_code ?? c.promotion_id}</option>
+                )}
+                {promotions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {promotionOptionLabel(p)}
+                  </option>
+                ))}
+              </select>
+              {status && status !== 'active' && (
+                <span className="text-[11px] text-amber-800 dark:text-amber-400">
+                  {t('code_performance.promo_not_applied', {
+                    status: statusLabels[status],
+                    defaultValue: 'No se aplica: {{status}}',
+                  })}
+                </span>
+              )}
+            </span>
+          );
+        },
+        hideBelow: 'lg',
+      },
+      {
+        id: 'promo_rides',
+        header: t('code_performance.col_promo_rides', { defaultValue: 'Usaron el descuento' }),
+        cell: (c) => <span className="font-mono text-ink-muted" data-tabular>{num(c.promo_rides)}</span>,
+        align: 'right',
+        sortKey: 'promo_rides',
+        width: '110px',
+        hideBelow: 'lg',
+      },
+      {
         id: 'is_active',
         header: t('code_performance.col_active', { defaultValue: 'Activo' }),
         cell: (c) => (
@@ -655,7 +793,21 @@ export default function CodePerformancePage() {
         width: '120px',
       },
     ],
-    [t, channelLabels, audienceLabels, firstRidesSplit, togglingCodes, handleToggleActive],
+    [
+      t,
+      channelLabels,
+      audienceLabels,
+      firstRidesSplit,
+      togglingCodes,
+      handleToggleActive,
+      promotionById,
+      promotions,
+      promotionsError,
+      linkingCodes,
+      handleSetPromotion,
+      promotionOptionLabel,
+      statusLabels,
+    ],
   );
 
   return (
@@ -678,7 +830,7 @@ export default function CodePerformancePage() {
                 })
               : t('code_performance.description_acquisition', {
                   defaultValue:
-                    'Cuánta gente se registró con cada código de origen y cuántos llegaron a su primer viaje. Total histórico.',
+                    'Cuánta gente se registró con cada código de origen, cuántos llegaron a su primer viaje y cuántos usaron la promoción del código. Total histórico.',
                 })}
         </p>
       </div>
@@ -750,7 +902,7 @@ export default function CodePerformancePage() {
               <p className="mt-1 max-w-[80ch] text-[12px] text-ink-muted">
                 {t('code_performance.form_help', {
                   defaultValue:
-                    'Estos códigos no pagan bono: solo registran de dónde viene cada persona. La gente los escribe en «Código de invitación» al registrarse. Usa un código por influencer, lote de bolsas, pantalla o grupo.',
+                    'Estos códigos no pagan bono: registran de dónde viene cada persona. La gente los escribe en «Código de invitación» al registrarse. Si eliges una promoción, quien se registre con el código la recibe en su próximo viaje sin escribir nada, mientras la promoción esté activa. Activar una promoción lo decide un administrador. Usa un código por influencer, lote de bolsas, pantalla o grupo.',
                 })}
               </p>
 
@@ -827,8 +979,26 @@ export default function CodePerformancePage() {
                   </select>
                 </Field>
                 <Field
+                  label={t('code_performance.field_promotion', { defaultValue: 'Promoción (opcional)' })}
+                  className="sm:col-span-2 lg:col-span-1"
+                >
+                  <select
+                    value={form.promotionId}
+                    onChange={(e) => updateForm('promotionId', e.target.value)}
+                    disabled={promotionsError}
+                    className={inputCls}
+                  >
+                    <option value="">{t('code_performance.no_promotion', { defaultValue: 'Sin promoción' })}</option>
+                    {promotions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {promotionOptionLabel(p)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
                   label={t('code_performance.field_notes', { defaultValue: 'Notas (opcional)' })}
-                  className="sm:col-span-2 lg:col-span-3"
+                  className="sm:col-span-2 lg:col-span-2"
                 >
                   <input
                     value={form.notes}

@@ -2282,7 +2282,7 @@
   },
   "code_performance": {
     "tab_acquisition": "Códigos de origen",
-    "description_acquisition": "Cuánta gente se registró con cada código de origen y cuántos llegaron a su primer viaje. Total histórico.",
+    "description_acquisition": "Cuánta gente se registró con cada código de origen, cuántos llegaron a su primer viaje y cuántos usaron la promoción del código. Total histórico.",
     "kpi_signups": "Registros con código",
     "kpi_rider_signups": "Pasajeros",
     "kpi_driver_signups": "Choferes",
@@ -2318,7 +2318,7 @@
     "audience_choferes": "Choferes",
     "audience_ambos": "Ambos",
     "form_title": "Nuevo código",
-    "form_help": "Estos códigos no pagan bono: solo registran de dónde viene cada persona. La gente los escribe en «Código de invitación» al registrarse. Usa un código por influencer, lote de bolsas, pantalla o grupo.",
+    "form_help": "Estos códigos no pagan bono: registran de dónde viene cada persona. La gente los escribe en «Código de invitación» al registrarse. Si eliges una promoción, quien se registre con el código la recibe en su próximo viaje sin escribir nada, mientras la promoción esté activa. Activar una promoción lo decide un administrador. Usa un código por influencer, lote de bolsas, pantalla o grupo.",
     "field_code": "Código",
     "field_label": "Nombre",
     "field_channel": "Canal",
