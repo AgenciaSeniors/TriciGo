@@ -413,7 +413,7 @@ export default function CodePerformancePage() {
               t('code_performance.toast_promo_linked_inactive', {
                 code: row.code,
                 status: statusLabels[linkedStatus],
-                defaultValue: 'Promoción vinculada a {{code}}. Todavía no se aplica: {{status}}.',
+                defaultValue: 'Promoción vinculada a {{code}}, pero no se aplica: {{status}}.',
               }),
             );
           } else {
@@ -770,13 +770,24 @@ export default function CodePerformancePage() {
         cell: (c) => {
           const linked = c.promotion_id ? promotionById.get(c.promotion_id) : undefined;
           const status = linked ? promotionLinkStatus(linked) : null;
-          const noteShown = status !== null && status !== 'active';
-          const noteId = `promo-note-${c.code}`;
+          // DataTable renders every cell twice (table and cards), so the note
+          // goes into the select's label: an id for aria-describedby would repeat.
+          const noteText =
+            status !== null && status !== 'active'
+              ? t('code_performance.promo_not_applied', {
+                  status: statusLabels[status],
+                  defaultValue: 'No se aplica: {{status}}',
+                })
+              : null;
+          const promotionAria = t('code_performance.promotion_aria', {
+            code: c.code,
+            defaultValue: 'Promoción de {{code}}',
+          });
           const linking = linkingCodes.has(c.code);
           // The select only edits the draft; the Guardar button writes it.
           const draft = promoDrafts.get(c.code);
           return (
-            <span className="flex w-full min-w-0 flex-col gap-1">
+            <span data-promo-cell className="flex w-full min-w-0 flex-col gap-1">
               <select
                 value={draft ?? c.promotion_id ?? ''}
                 onChange={(e) => {
@@ -784,8 +795,7 @@ export default function CodePerformancePage() {
                   setPromoDraft(c.code, next === (c.promotion_id ?? '') ? null : next);
                 }}
                 disabled={promotionsError || linking}
-                aria-label={t('code_performance.promotion_aria', { code: c.code, defaultValue: 'Promoción de {{code}}' })}
-                aria-describedby={noteShown ? noteId : undefined}
+                aria-label={noteText ? `${promotionAria}. ${noteText}` : promotionAria}
                 className={`${inputCls} h-8 min-w-0 text-[12px] md:min-w-[11rem]`}
               >
                 <option value="">{t('code_performance.no_promotion', { defaultValue: 'Sin promoción' })}</option>
@@ -814,7 +824,12 @@ export default function CodePerformancePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPromoDraft(c.code, null)}
+                    onClick={(e) => {
+                      // Keep the keyboard where it was: back on this row's select.
+                      const select = e.currentTarget.closest('[data-promo-cell]')?.querySelector('select');
+                      setPromoDraft(c.code, null);
+                      select?.focus();
+                    }}
                     disabled={linking}
                     aria-label={t('code_performance.promo_cancel_aria', {
                       code: c.code,
@@ -826,14 +841,7 @@ export default function CodePerformancePage() {
                   </button>
                 </span>
               )}
-              {noteShown && status && (
-                <span id={noteId} className="text-[11px] text-amber-800 dark:text-amber-400">
-                  {t('code_performance.promo_not_applied', {
-                    status: statusLabels[status],
-                    defaultValue: 'No se aplica: {{status}}',
-                  })}
-                </span>
-              )}
+              {noteText && <span className="text-[11px] text-amber-800 dark:text-amber-400">{noteText}</span>}
             </span>
           );
         },
@@ -903,7 +911,7 @@ export default function CodePerformancePage() {
                 })
               : t('code_performance.description_acquisition', {
                   defaultValue:
-                    'Cuánta gente se registró con cada código de origen y cuántos llegaron a su primer viaje (total histórico), y cuántos viajes completados usaron la promoción que el código tiene vinculada ahora.',
+                    'Cuánta gente se registró con cada código de origen y cuántos llegaron a su primer viaje, en total histórico. «Usaron el descuento» cuenta los viajes completados con la promoción que el código tiene vinculada ahora.',
                 })}
         </p>
       </div>
