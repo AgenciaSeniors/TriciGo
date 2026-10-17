@@ -4,9 +4,11 @@
 // Codes like MOTORENKO or BOLSAS-VEDADO, typed by a user in the optional
 // "Código de invitación" at signup. They pay no bonus. They record where the
 // user came from and, when a promotion is linked (00665), the server applies
-// it to the user's next ride. Users apply them through referralService.applyInviteCode;
-// this service is what the admin uses to create them and read their results.
-// RLS on acquisition_codes and the admin_signup_code_stats RPC are admin-only.
+// it to the user's next ride. Users apply them through
+// referralService.applyInviteCode; this service is what the admin uses to
+// create them and read their results.
+// RLS on acquisition_codes and the admin_signup_code_stats RPC are for admin
+// and marketing only (00642).
 // ============================================================
 
 import { getSupabaseClient } from '../client';
@@ -98,7 +100,9 @@ export const acquisitionCodeService = {
         channel: input.channel,
         audience: input.audience,
         notes: input.notes?.trim() || null,
-        promotion_id: input.promotionId ?? null,
+        // Only sent when chosen: before 00665 the column does not exist
+        // and PostgREST rejects the unknown key (PGRST204).
+        ...(input.promotionId ? { promotion_id: input.promotionId } : {}),
       })
       .select()
       .single();
@@ -121,18 +125,22 @@ export const acquisitionCodeService = {
 
   /**
    * Links a promotion to the code, or unlinks it with null (00665). An UPDATE
-   * that RLS filters out answers OK with 0 rows: the page confirms against the
-   * reloaded stats.
+   * that RLS filters out answers OK with 0 rows, so it throws when no row
+   * came back.
    */
   async setPromotion(code: string, promotionId: string | null): Promise<void> {
     const supabase = getSupabaseClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('acquisition_codes')
       .update({ promotion_id: promotionId })
-      .eq('code', code);
+      .eq('code', code)
+      .select('code');
     if (error) {
       if (error.code === '23503') throw new Error(PROMOTION_GONE);
       throw error;
+    }
+    if (!data || data.length === 0) {
+      throw new Error('No se pudo cambiar la promoción del código. Recarga la página e intenta de nuevo.');
     }
   },
 };

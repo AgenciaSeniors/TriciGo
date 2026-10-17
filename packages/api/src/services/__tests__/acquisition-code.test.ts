@@ -18,11 +18,12 @@ function mockInsertChain(result: { data: unknown; error: unknown }) {
   return { insert };
 }
 
-function mockUpdateChain(result: { error: unknown }) {
-  const eq = vi.fn().mockResolvedValue(result);
+function mockUpdateChain(result: { data?: unknown; error: unknown }) {
+  const select = vi.fn().mockResolvedValue({ data: result.data ?? null, error: result.error });
+  const eq = vi.fn(() => ({ select }));
   const update = vi.fn(() => ({ eq }));
   mockFrom.mockReturnValueOnce({ update });
-  return { update, eq };
+  return { update, eq, select };
 }
 
 describe('acquisitionCodeService', () => {
@@ -49,9 +50,20 @@ describe('acquisitionCodeService', () => {
         channel: 'influencer',
         audience: 'choferes',
         notes: null,
-        promotion_id: null,
       });
       expect(result).toEqual(row);
+    });
+
+    it('sends no promotion_id when none is chosen, so it works before 00665', async () => {
+      const { insert } = mockInsertChain({ data: { code: 'MOTORENKO' }, error: null });
+
+      await acquisitionCodeService.create({
+        code: 'MOTORENKO', label: 'Motorenko', channel: 'influencer', audience: 'ambos',
+      });
+
+      // The mock takes no parameters, so its calls are typed as empty tuples.
+      const [payload] = insert.mock.calls[0] as unknown as [Record<string, unknown>];
+      expect(payload).not.toHaveProperty('promotion_id');
     });
 
     it('rejects a code with characters the database does not accept, without calling it', async () => {
@@ -90,7 +102,7 @@ describe('acquisitionCodeService', () => {
 
   describe('setPromotion', () => {
     it('links a promotion to the code', async () => {
-      const { update, eq } = mockUpdateChain({ error: null });
+      const { update, eq } = mockUpdateChain({ data: [{ code: 'MOTORENKO' }], error: null });
 
       await acquisitionCodeService.setPromotion('MOTORENKO', 'p-1');
 
@@ -100,7 +112,7 @@ describe('acquisitionCodeService', () => {
     });
 
     it('unlinks it with null', async () => {
-      const { update } = mockUpdateChain({ error: null });
+      const { update } = mockUpdateChain({ data: [{ code: 'MOTORENKO' }], error: null });
 
       await acquisitionCodeService.setPromotion('MOTORENKO', null);
 
@@ -111,6 +123,18 @@ describe('acquisitionCodeService', () => {
       mockUpdateChain({ error: { code: '23503', message: 'violates foreign key constraint' } });
 
       await expect(acquisitionCodeService.setPromotion('MOTORENKO', 'gone')).rejects.toThrow('La promoción ya no existe');
+    });
+
+    it('throws when RLS filtered the row out and no row changed', async () => {
+      mockUpdateChain({ data: [], error: null });
+
+      await expect(acquisitionCodeService.setPromotion('MOTORENKO', 'p-1')).rejects.toThrow('No se pudo cambiar la promoción');
+    });
+
+    it('rethrows any other database error as it came', async () => {
+      mockUpdateChain({ error: { code: '42501', message: 'permission denied' } });
+
+      await expect(acquisitionCodeService.setPromotion('MOTORENKO', 'p-1')).rejects.toMatchObject({ code: '42501' });
     });
   });
 
