@@ -471,7 +471,21 @@ export default function CodePerformancePage() {
         notes: form.notes,
         promotionId: form.promotionId || null,
       });
-      showToast('success', t('code_performance.toast_created', { code: created.code, defaultValue: 'Código {{code}} creado' }));
+      const linked = form.promotionId ? promotionById.get(form.promotionId) : undefined;
+      const linkedStatus = linked ? promotionLinkStatus(linked) : 'active';
+      if (linkedStatus !== 'active') {
+        // Created, but the promotion is not live yet: one warning instead of the plain toast.
+        showToast(
+          'warning',
+          t('code_performance.toast_created_promo_inactive', {
+            code: created.code,
+            status: statusLabels[linkedStatus],
+            defaultValue: 'Código {{code}} creado. Su promoción no se aplica todavía: {{status}}.',
+          }),
+        );
+      } else {
+        showToast('success', t('code_performance.toast_created', { code: created.code, defaultValue: 'Código {{code}} creado' }));
+      }
       // Keep channel and audience: codes usually come in batches of the same kind.
       setForm((prev) => ({ ...EMPTY_FORM, channel: prev.channel, audience: prev.audience }));
       await loadCodes(true);
