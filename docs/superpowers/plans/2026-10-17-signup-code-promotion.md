@@ -153,6 +153,8 @@ If a md5 differs, stop: prod changed since this plan was written, and Task 3's g
 
 ### Task 2: Rehearsal scaffold and runner (RED)
 
+> **Superseded (2026-10-17):** the committed `supabase/tests/00665/scaffold.sql` and `run.sh` replace the blocks below. Two review rounds added tests (A10–A25, M1–M18, S6b, N5–N9) and changed helpers. Read the files, not this text.
+
 **Files:**
 - Create: `supabase/tests/00665/scaffold.sql`
 - Create: `supabase/tests/00665/run.sh`
@@ -632,6 +634,8 @@ git commit -m "test(db): rehearsal for 00665 signup code promotions (RED)"
 ---
 
 ### Task 3: Migration 00665 (GREEN)
+
+> **Superseded (2026-10-17):** the committed `supabase/migrations/00665_signup_code_promotion.sql` replaces the block below. After the SQL review it takes `rides` before `promotions`, runs every trigger check inside the protected block, casts two outputs and checks that the lookup functions stay SECURITY DEFINER. Its md5 values differ from the ones in this text.
 
 **Files:**
 - Create: `supabase/migrations/00665_signup_code_promotion.sql`
