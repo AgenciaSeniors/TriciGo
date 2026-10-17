@@ -296,7 +296,7 @@ if [ "$MIG" != "none" ]; then
                     || '|' || (SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.acquisition_codes'::regclass AND contype = 'f' AND confrelid = 'public.promotions'::regclass)")" != "1|0" ]; then
     ko "N5 a link column with no ON DELETE SET NULL key aborts it" "setup did not leave a column without its key"
   else
-    r=$(apply_err $NEG "$MIG"); echo "$r" | grep -q "ON DELETE SET NULL" \
+    r=$(apply_err $NEG "$MIG"); echo "$r" | grep -q "has to reference promotions ON DELETE SET NULL" \
       && ok "N5 a link column with no ON DELETE SET NULL key aborts it" || ko "N5 a link column with no ON DELETE SET NULL key aborts it" "got [$r]"
   fi
   neg_mutant N6 "a SECURITY DEFINER trigger function aborts it" \
