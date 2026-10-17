@@ -26,7 +26,18 @@
 -- (corporate_account_id) do not spend the welcome discount. The code's own
 -- is_active does not matter: it only controls who can still register with it.
 
-SET LOCAL lock_timeout = '10s';
+SET LOCAL lock_timeout = '5s';
+
+-- Take rides before promotions, the order a ride write with a promotion uses
+-- (the ride insert, then the validator's UPDATE of promotions); the FK below
+-- locks promotions and the trigger locks rides. Inside DO so a second run in
+-- autocommit still works (a bare LOCK needs a transaction block).
+DO $lock$
+BEGIN
+  PERFORM set_config('lock_timeout', '5s', true);
+  LOCK TABLE public.rides IN SHARE ROW EXCLUSIVE MODE;
+END
+$lock$;
 
 -- 0. What this relies on is what was read from prod on 2026-10-17.
 DO $guard$
@@ -81,21 +92,23 @@ AS $function$
 DECLARE
   v_promo uuid;
 BEGIN
-  IF current_user NOT IN ('anon', 'authenticated')
-     OR auth.uid() IS NULL
-     OR NEW.customer_id IS DISTINCT FROM auth.uid()
-     OR NEW.promo_code_id IS NOT NULL
-     OR COALESCE(NEW.ride_mode, 'passenger') <> 'passenger'
-     OR NEW.corporate_account_id IS NOT NULL THEN
+  IF current_user NOT IN ('anon', 'authenticated') THEN
     RETURN NEW;
   END IF;
 
-  -- Never block the ride: a failed lookup leaves it without the promotion.
+  -- Never block the ride: any error here leaves it without the promotion.
   BEGIN
-    IF public.is_admin() THEN
+    IF auth.uid() IS NULL
+       OR NEW.customer_id IS DISTINCT FROM auth.uid()
+       OR NEW.promo_code_id IS NOT NULL
+       OR COALESCE(NEW.ride_mode, 'passenger') <> 'passenger'
+       OR NEW.corporate_account_id IS NOT NULL THEN
       RETURN NEW;
     END IF;
     v_promo := public._my_signup_promotion_id();
+    IF v_promo IS NULL OR public.is_admin() THEN
+      RETURN NEW;
+    END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING '00665 tg_rides_signup_promo: lookup failed for ride %: % %', NEW.id, SQLSTATE, SQLERRM;
     RETURN NEW;
@@ -103,9 +116,7 @@ BEGIN
 
   -- Every rule (active, dates, first ride, once per phone, uses) belongs to
   -- the validator, which fires next and drops the promotion if one fails.
-  IF v_promo IS NOT NULL THEN
-    NEW.promo_code_id := v_promo;
-  END IF;
+  NEW.promo_code_id := v_promo;
   RETURN NEW;
 END;
 $function$;
@@ -136,7 +147,7 @@ BEGIN
   -- give the person the discount.
   RETURN QUERY
   SELECT p.code::text, p.type::text, p.discount_percent::numeric, p.discount_fixed_cup::integer,
-         COALESCE(p.first_ride_only, false), p.valid_until, u.signup_code
+         COALESCE(p.first_ride_only, false), p.valid_until::timestamptz, u.signup_code::text
     FROM public.users u
     JOIN public.acquisition_codes ac ON ac.code = u.signup_code
     JOIN public.promotions p ON p.id = ac.promotion_id
@@ -193,7 +204,8 @@ BEGIN
     p.code::text,
     (SELECT count(*) FROM public.rides r
        JOIN public.users ru ON ru.id = r.customer_id
-      WHERE ru.signup_code = ac.code
+      WHERE ac.promotion_id IS NOT NULL
+        AND ru.signup_code = ac.code
         AND r.promo_code_id = ac.promotion_id
         AND r.status = 'completed')
   FROM public.acquisition_codes ac
@@ -255,6 +267,14 @@ BEGIN
 
   IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.tg_rides_signup_promo()'::regprocedure) THEN
     RAISE EXCEPTION '00665: tg_rides_signup_promo() must be SECURITY INVOKER: current_user tells a client insert apart';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_proc
+              WHERE oid IN ('public._my_signup_promotion_id()'::regprocedure,
+                            'public.get_my_signup_promotion()'::regprocedure,
+                            'public.admin_signup_code_stats()'::regprocedure)
+                AND NOT prosecdef) THEN
+    RAISE EXCEPTION '00665: a lookup function lost SECURITY DEFINER (clients cannot read acquisition_codes or promotions)';
   END IF;
 
   IF has_function_privilege('anon', 'public.get_my_signup_promotion()', 'EXECUTE')

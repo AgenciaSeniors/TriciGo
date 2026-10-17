@@ -306,6 +306,9 @@ if [ "$MIG" != "none" ]; then
     "anon can call a function it must not"
   neg_mutant N8 "a stats function without the marketing gate aborts it" \
     '/IF NOT (public.is_admin() OR public.is_marketing()) THEN/s/ OR public.is_marketing()//' "lost its admin-or-marketing gate"
+  neg_mutant N9 "a lookup function without SECURITY DEFINER aborts it" \
+    '/^CREATE OR REPLACE FUNCTION public._my_signup_promotion_id()$/,/^AS \$function\$$/s/^ STABLE SECURITY DEFINER$/ STABLE/' \
+    "a lookup function lost SECURITY DEFINER"
   "$BIN/psql" $CONN -d postgres -qAt -c "DROP DATABASE IF EXISTS $NEG" >/dev/null 2>&1
   echo "== bodies after 00665 (copy into CLAUDE.md) =="
   "$BIN/psql" $CONN -d "$DB" -qAt -c "SELECT string_agg(proname || ' ' || md5(prosrc) || '/' || length(prosrc), E'\n' ORDER BY proname COLLATE \"C\") FROM pg_proc
