@@ -2486,7 +2486,11 @@ Marketing le vincula una promoción a un código de origen (MOTORENKO) desde `/c
   - Si la promoción deja de valer entre la vista previa y el pedido (un admin la pausa, se llenan los usos, el teléfono la usó en otro celular), el validador la descarta y el viaje sale sin descuento; `createRide` solo deja `promo_rejected_by_server` en el log.
   - El panel lista las 200 promociones más nuevas: un código vinculado a una más vieja muestra su código, pero sin el aviso "No se aplica".
 - Cuerpos tras 00665 (md5/largo): `_my_signup_promotion_id` `69802a6489e5767f37f1378cf6a5ccc2/142`, `tg_rides_signup_promo` `a295af88635a82cf9dbc0b272013ef30/952`, `get_my_signup_promotion` `b4209984f4bd3e9e822e28e3e28eb3c9/1373`, `admin_signup_code_stats` `22b65e286149e554225824d766ba81f5/1495`. La migración se niega a correr si el validador no tiene el md5 `cad4cf62…` de hoy: una migración que lo redefina antes de aplicar 00665 obliga a actualizar esa verja.
-- **Estado:** escrita y ensayada, no aplicada. Se aplica antes del merge: sin la columna, guardar una promoción en el panel falla. La app del pasajero sale por OTA al runtime 1.8.0.
+- **Estado: aplicada en prod el 2026-10-17** por MCP (`20261017201942`), antes del merge, como hace falta: sin la columna, guardar una promoción en el panel falla.
+  - Se mandó dentro de un bloque `DO` que reconstruye la única barra invertida del archivo (la de un retorno de carro citado en un comentario) y compara el md5 del texto con el del archivo (`08cd9913…`) antes de ejecutarlo.
+  - Verificado por objeto: los cuatro md5 de arriba, sin retornos de carro; `rides_signup_promo` dispara antes de `rides_validate_promo_discount`; la FK tiene `ON DELETE SET NULL`; `anon` no ejecuta ninguna de las funciones.
+  - Probado como pasajero y como admin reales, en un bloque revertido. El pasajero no recibe promoción y las estadísticas le dan 42501. El admin las lee (0 filas: en prod todavía no hay ningún código de origen).
+  - Falta: el merge (despliega panel y web), revisar el panel y el OTA de la app del pasajero al runtime 1.8.0.
 
 ### Canales de Realtime: cuáles son privados y cómo agregar uno (00626, verificado 2026-10-07)
 
