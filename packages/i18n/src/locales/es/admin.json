@@ -2282,7 +2282,7 @@
   },
   "code_performance": {
     "tab_acquisition": "Códigos de origen",
-    "description_acquisition": "Cuánta gente se registró con cada código de origen, cuántos llegaron a su primer viaje y cuántos usaron la promoción del código. Total histórico.",
+    "description_acquisition": "Cuánta gente se registró con cada código de origen y cuántos llegaron a su primer viaje (total histórico), y cuántos viajes completados usaron la promoción que el código tiene vinculada ahora.",
     "kpi_signups": "Registros con código",
     "kpi_rider_signups": "Pasajeros",
     "kpi_driver_signups": "Choferes",

@@ -229,6 +229,8 @@ export default function CodePerformancePage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [promotionsError, setPromotionsError] = useState(false);
   useEffect(() => {
+    // Only the 200 newest promotions are listed. A code linked to an older one
+    // still shows its code through the fallback <option> in the row select.
     promotionService
       .getAll(0, 200)
       .then((rows) => {
@@ -242,6 +244,19 @@ export default function CodePerformancePage() {
   }, []);
   const promotionById = useMemo(() => new Map(promotions.map((p) => [p.id, p])), [promotions]);
   const [linkingCodes, setLinkingCodes] = useState<ReadonlySet<string>>(() => new Set());
+  // Promotion picked in a row's select but not saved yet, by code ('' = none).
+  // Saving is an explicit button: an arrow key on a closed <select> fires
+  // `change` in Chrome and Edge on Windows, and that must not write to prod.
+  const [promoDrafts, setPromoDrafts] = useState<ReadonlyMap<string, string>>(() => new Map());
+
+  const setPromoDraft = useCallback((code: string, draft: string | null) => {
+    setPromoDrafts((prev) => {
+      const next = new Map(prev);
+      if (draft === null) next.delete(code);
+      else next.set(code, draft);
+      return next;
+    });
+  }, []);
 
   const statusLabels = useMemo<Record<PromotionLinkStatus, string>>(
     () => ({
@@ -250,7 +265,7 @@ export default function CodePerformancePage() {
       paused: t('code_performance.promo_status_paused', { defaultValue: 'pausada' }),
       scheduled: t('code_performance.promo_status_scheduled', { defaultValue: 'todavía no empieza' }),
       expired: t('code_performance.promo_status_expired', { defaultValue: 'vencida' }),
-      exhausted: t('code_performance.promo_status_exhausted', { defaultValue: 'sin usos' }),
+      exhausted: t('code_performance.promo_status_exhausted', { defaultValue: 'sin usos disponibles' }),
     }),
     [t],
   );
@@ -258,9 +273,11 @@ export default function CodePerformancePage() {
   const promotionOptionLabel = useCallback(
     (p: Promotion) => {
       const status = statusLabels[promotionLinkStatus(p)];
-      if (p.type === 'fixed_discount') return `${p.code} · −${num(p.discount_fixed_cup ?? 0)} CUP · ${status}`;
-      if (p.type === 'percentage_discount') return `${p.code} · ${p.discount_percent ?? 0} % · ${status}`;
-      return `${p.code} · ${status}`;
+      // Same labels as the promo tab (discountLabel): the server computes a
+      // bonus_credit promotion as a percentage too.
+      const discount =
+        p.type === 'fixed_discount' ? `−${num(p.discount_fixed_cup ?? 0)} CUP` : `${p.discount_percent ?? 0}%`;
+      return `${p.code} · ${discount} · ${status}`;
     },
     [statusLabels],
   );
@@ -387,12 +404,26 @@ export default function CodePerformancePage() {
         const rows = await loadCodes(true);
         if (!rows) return; // the tab already shows the load error
         if ((rows.find((r) => r.code === row.code)?.promotion_id ?? null) === promotionId) {
-          showToast(
-            'success',
-            promotionId
-              ? t('code_performance.toast_promo_linked', { code: row.code, defaultValue: 'Promoción vinculada a {{code}}' })
-              : t('code_performance.toast_promo_unlinked', { code: row.code, defaultValue: 'Promoción quitada de {{code}}' }),
-          );
+          const linked = promotionId ? promotionById.get(promotionId) : undefined;
+          const linkedStatus = linked ? promotionLinkStatus(linked) : 'active';
+          if (promotionId && linkedStatus !== 'active') {
+            // Saved, but nobody gets the discount yet: say so instead of a plain success.
+            showToast(
+              'warning',
+              t('code_performance.toast_promo_linked_inactive', {
+                code: row.code,
+                status: statusLabels[linkedStatus],
+                defaultValue: 'Promoción vinculada a {{code}}. Todavía no se aplica: {{status}}.',
+              }),
+            );
+          } else {
+            showToast(
+              'success',
+              promotionId
+                ? t('code_performance.toast_promo_linked', { code: row.code, defaultValue: 'Promoción vinculada a {{code}}' })
+                : t('code_performance.toast_promo_unlinked', { code: row.code, defaultValue: 'Promoción quitada de {{code}}' }),
+            );
+          }
         } else {
           showToast(
             'error',
@@ -404,6 +435,9 @@ export default function CodePerformancePage() {
       } catch (err) {
         showToast('error', getErrorMessage(err));
       } finally {
+        // After the reload, so the select shows the saved value without
+        // jumping back to the old one in between.
+        setPromoDraft(row.code, null);
         setLinkingCodes((prev) => {
           const rest = new Set(prev);
           rest.delete(row.code);
@@ -411,7 +445,7 @@ export default function CodePerformancePage() {
         });
       }
     },
-    [loadCodes, showToast, t],
+    [loadCodes, showToast, t, promotionById, statusLabels, setPromoDraft],
   );
 
   const canonicalCode = normalizeAcquisitionCode(form.code);
@@ -736,14 +770,23 @@ export default function CodePerformancePage() {
         cell: (c) => {
           const linked = c.promotion_id ? promotionById.get(c.promotion_id) : undefined;
           const status = linked ? promotionLinkStatus(linked) : null;
+          const noteShown = status !== null && status !== 'active';
+          const noteId = `promo-note-${c.code}`;
+          const linking = linkingCodes.has(c.code);
+          // The select only edits the draft; the Guardar button writes it.
+          const draft = promoDrafts.get(c.code);
           return (
-            <span className="inline-flex flex-col gap-1">
+            <span className="flex w-full min-w-0 flex-col gap-1">
               <select
-                value={c.promotion_id ?? ''}
-                onChange={(e) => void handleSetPromotion(c, e.target.value || null)}
-                disabled={promotionsError || linkingCodes.has(c.code)}
+                value={draft ?? c.promotion_id ?? ''}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPromoDraft(c.code, next === (c.promotion_id ?? '') ? null : next);
+                }}
+                disabled={promotionsError || linking}
                 aria-label={t('code_performance.promotion_aria', { code: c.code, defaultValue: 'Promoción de {{code}}' })}
-                className={`${inputCls} h-8 min-w-[11rem] text-[12px]`}
+                aria-describedby={noteShown ? noteId : undefined}
+                className={`${inputCls} h-8 min-w-0 text-[12px] md:min-w-[11rem]`}
               >
                 <option value="">{t('code_performance.no_promotion', { defaultValue: 'Sin promoción' })}</option>
                 {c.promotion_id && !linked && (
@@ -755,8 +798,36 @@ export default function CodePerformancePage() {
                   </option>
                 ))}
               </select>
-              {status && status !== 'active' && (
-                <span className="text-[11px] text-amber-800 dark:text-amber-400">
+              {draft !== undefined && (
+                <span className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleSetPromotion(c, draft || null)}
+                    disabled={linking}
+                    aria-label={t('code_performance.promo_save_aria', {
+                      code: c.code,
+                      defaultValue: 'Guardar la promoción de {{code}}',
+                    })}
+                    className="inline-flex h-7 items-center rounded-full bg-ink px-3 text-[11px] font-medium text-surface transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {t('code_performance.promo_save', { defaultValue: 'Guardar' })}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPromoDraft(c.code, null)}
+                    disabled={linking}
+                    aria-label={t('code_performance.promo_cancel_aria', {
+                      code: c.code,
+                      defaultValue: 'Cancelar el cambio de promoción de {{code}}',
+                    })}
+                    className="inline-flex h-7 items-center rounded-lg border border-line bg-surface px-3 text-[11px] font-medium text-ink transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {t('code_performance.promo_cancel', { defaultValue: 'Cancelar' })}
+                  </button>
+                </span>
+              )}
+              {noteShown && status && (
+                <span id={noteId} className="text-[11px] text-amber-800 dark:text-amber-400">
                   {t('code_performance.promo_not_applied', {
                     status: statusLabels[status],
                     defaultValue: 'No se aplica: {{status}}',
@@ -804,6 +875,8 @@ export default function CodePerformancePage() {
       promotions,
       promotionsError,
       linkingCodes,
+      promoDrafts,
+      setPromoDraft,
       handleSetPromotion,
       promotionOptionLabel,
       statusLabels,
@@ -830,7 +903,7 @@ export default function CodePerformancePage() {
                 })
               : t('code_performance.description_acquisition', {
                   defaultValue:
-                    'Cuánta gente se registró con cada código de origen, cuántos llegaron a su primer viaje y cuántos usaron la promoción del código. Total histórico.',
+                    'Cuánta gente se registró con cada código de origen y cuántos llegaron a su primer viaje (total histórico), y cuántos viajes completados usaron la promoción que el código tiene vinculada ahora.',
                 })}
         </p>
       </div>
@@ -995,6 +1068,13 @@ export default function CodePerformancePage() {
                       </option>
                     ))}
                   </select>
+                  {promotionsError && (
+                    <span className="text-[11px] leading-snug text-ink-muted">
+                      {t('code_performance.promotions_load_failed', {
+                        defaultValue: 'No se pudieron cargar las promociones. Recarga la página.',
+                      })}
+                    </span>
+                  )}
                 </Field>
                 <Field
                   label={t('code_performance.field_notes', { defaultValue: 'Notas (opcional)' })}
