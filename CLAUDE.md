@@ -2115,7 +2115,7 @@ Apagar: `... -e command exit` + `settings put global sysui_demo_allowed 0`. **Li
 cd apps/client && npx eas-cli@latest build:view <build-id-android> --json   # gitCommitHash, appVersion, appBuildVersion
 git diff --stat <gitCommitHash> HEAD -- apps/client apps/driver packages pnpm-lock.yaml package.json patches
 ```
-Si el diff sale vacío, iOS se puede armar desde `HEAD`.
+Si el diff sale vacío, iOS se puede armar desde `HEAD`. En el JSON de `build:view`, el canal está en `updateChannel.name` y el runtime en `runtime.version`: no hay `channel` ni `runtimeVersion` en la raíz (verificado con la 1.8.0).
 
 **1b. Justo antes de enviar a revisión, volver a mirar master.** Los `.aab` de 1.7.3 se armaron el 23/09 desde `c08b68c3` y en los días siguientes entraron **14 merges que tocan las apps** (flotas, cuentas de empresa, colores de tarjetas). La primera tanda (Android vc37/vc47, iOS 41/45) se descartó y se rearmaron las cuatro desde `c48b7604`. Chequeo: `git log --oneline <gitCommitHash>..origin/master -- apps/client apps/driver packages`. Si hay merges que importan:
 - **El número de versión se reusa** mientras nada de esa versión esté en revisión: en ASC no había versión 1.7.3 creada y en Play estaba solo el borrador, al que se le cambia el app bundle.
@@ -2123,6 +2123,8 @@ Si el diff sale vacío, iOS se puede armar desde `HEAD`.
 - **Armar desde el commit exacto sin reinstalar:** si `git diff --quiet <viejo> origin/master -- pnpm-lock.yaml` da igual, `git checkout --detach origin/master`, lanzar los cuatro `eas build … --no-wait` uno tras otro y volver a la rama recién cuando terminó el último (cada uno sube el árbol de trabajo en ese momento). Tardaron unos 15 min en EAS.
 
 **2. `pnpm install --frozen-lockfile` antes de cualquier comando `eas`.** Sin `node_modules` en el worktree falla hasta `eas build:view`, con `expo config --json exited with non-zero code: 1`: Node busca hacia arriba y usa el `expo` del checkout principal. En esta PC tardó 10 min.
+
+Para armar desde un commit exacto sin tocar otros checkouts, usar un worktree aparte: `git worktree add --detach C:/Users/Eduardo/TriciGo/.claude/worktrees/release-<versión> <commit>`. **La ruta tiene que ser absoluta:** `git worktree add` toma una ruta relativa desde el directorio actual, y si el comando corre desde el worktree de otra sesión, el de release queda anidado dentro de ese.
 
 **3. Armar iOS en local:** `cd apps/<app> && npx eas-cli@latest build -p ios --profile production --non-interactive --no-wait`. Usa las credenciales guardadas en EAS (el certificado y los perfiles vencen el 24-jun-2027) y no hace falta GitHub Actions. El número de build lo sube EAS solo. La 1.7.3 final quedó: iOS **42** pasajero y **46** conductor; Android vc**38** y vc**48**. Los 41 y 45 de la primera tanda quedaron sin usar en ASC: al elegir el build, fijarse en el número.
 
@@ -2145,7 +2147,7 @@ Si el diff sale vacío, iOS se puede armar desde `HEAD`.
 - **App Store Connect ya se puede, y así se envió la 1.7.3 (2026-09-28, unos 2 min por app).** La misma `.p8` firma la API. Pasos que funcionaron:
   1. `POST /v1/appStoreVersions` con `platform`, `versionString`, `releaseType: AFTER_APPROVAL` y el build en `relationships.build` (una sola llamada). La versión nueva hereda de la anterior la descripción, los datos de contacto y la cuenta demo del revisor.
   2. `PATCH` de `whatsNew` en su `appStoreVersionLocalizations` (única localización: es-ES), con el cuerpo leído de un archivo JSON UTF-8, y leerlo de vuelta para comparar.
-  3. Antes de enviar: `GET /v1/reviewSubmissions?filter[app]=…&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,UNRESOLVED_ISSUES,…` vacío, y la `ageRatingDeclaration` del appInfo nuevo sin campos obligatorios en `null`.
+  3. Antes de enviar: `GET /v1/reviewSubmissions?filter[app]=…&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,UNRESOLVED_ISSUES,…` vacío, y la `ageRatingDeclaration` del appInfo nuevo sin campos obligatorios en `null`. En las dos apps quedan siempre en `null` `kidsAgeBand`, `gracRatingClassificationNumber` y `developerAgeRatingInfoUrl`. Son opcionales: la 1.7.3 publicada los tiene igual y la 1.8.0 se envió así sin problemas (2026-10-15).
   4. `POST /v1/reviewSubmissions` → `POST /v1/reviewSubmissionItems` → `PATCH {submitted:true}`, de a una app y cortando al primer error. Queda `WAITING_FOR_REVIEW`.
 
   El JWT es ES256 con `node:crypto` (`dsaEncoding: 'ieee-p1363'`) y `iat` 60 s atrasado, o da 401. **Trampa de Git Bash:** un argumento que empieza con `/v1/…` sin `?` se convierte en ruta de Windows y el host queda `api.appstoreconnect.apple.comc` (`ENOTFOUND`). Exportar `MSYS_NO_PATHCONV=1` antes de llamar. Si un envío falla a medias, leer las trampas de la memoria `project_apple_ios_launch`: la lista de envíos miente, y un envío huérfano solo se borra desde la web.
