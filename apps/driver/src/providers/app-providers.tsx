@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PostHogProvider, usePostHog } from 'posthog-react-native';
-import { initI18n } from '@tricigo/i18n';
 import { initAnalytics } from '@tricigo/utils';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +14,7 @@ import { useAuthInit } from '@/hooks/useAuth';
 import { useNotificationSetup } from '@/hooks/useNotifications';
 import { useAuthStore } from '@/stores/auth.store';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { applyStartupLanguage, bootI18n } from '@/lib/i18nStartup';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +37,10 @@ initOfflineQueue({
   removeItem: (key) => AsyncStorage.removeItem(key),
 });
 registerAllOfflineMutations();
+
+// Before the first render: a useTranslation that renders before i18n exists
+// crashes the app on the next render (lib/i18nStartup.ts).
+bootI18n();
 
 const POSTHOG_API_KEY = process.env.EXPO_PUBLIC_POSTHOG_API_KEY ?? '';
 
@@ -64,11 +68,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     (async () => {
       // Prioritize saved preference, default to Spanish
       const savedLang = await AsyncStorage.getItem('tricigo_language');
-      if (savedLang && ['es', 'en', 'pt'].includes(savedLang)) {
-        initI18n(savedLang);
-        return;
-      }
-      initI18n('es');
+      await applyStartupLanguage(savedLang);
     })();
   }, []);
 
