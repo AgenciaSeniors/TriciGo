@@ -171,6 +171,10 @@ export default function BookPage() {
   const [promoCode, setPromoCode] = useState('');
   const [promoValidating, setPromoValidating] = useState(false);
   const [promoResult, setPromoResult] = useState<{ valid: boolean; promoId?: string; discount: number; error?: string } | null>(null);
+  // Sequence of promo validations. Every place that invalidates the result
+  // bumps it, so a response that lands afterwards (computed for another code
+  // or another fare) is dropped instead of shown.
+  const promoReqRef = useRef(0);
 
   // PASS #3 PROMO-STALE (extendido en PASS 2): clear a validated promo when
   // ANYTHING the discount was computed against changes — service type, the
@@ -178,6 +182,7 @@ export default function BookPage() {
   // recomputes the discount over the NEW fare, so a stale "-$600" chip over a
   // cheaper route showed a total the server would never charge.
   useEffect(() => {
+    promoReqRef.current++;
     setPromoResult(null);
     // Also clear a stale validation error (e.g. "destino a menos de 200m") once
     // the rider changes the input it complained about — handleEstimateAll never
@@ -535,6 +540,7 @@ export default function BookPage() {
     // 00665: the server applies the signup promotion anyway, so it goes back in
     // the field (the auto-validate effect shows its discount again).
     setPromoCode(signupPromo?.code ?? '');
+    promoReqRef.current++;
     setPromoResult(null);
     setShareRide(false);
     setPassengerCount(1);
@@ -655,6 +661,7 @@ export default function BookPage() {
 
   /* ─── Promo code validation ─── */
   async function handleApplyPromo() {
+    const req = ++promoReqRef.current;
     const code = promoCode.trim();
     if (!code) return;
     if (!selectedEstimate) {
@@ -670,6 +677,10 @@ export default function BookPage() {
         // The fare the server applies the promo to: without the stops (00633).
         fareAmount: discountBaseCup(selectedEstimate),
       });
+      // The code or the fare changed while validating: drop this response. The
+      // auto-validate effect re-validates the signup code; a typed code needs
+      // another tap.
+      if (req !== promoReqRef.current) return;
       if (result.valid && result.promotion) {
         setPromoResult({ valid: true, promoId: result.promotion.id, discount: result.discountAmount });
       } else {
@@ -684,7 +695,9 @@ export default function BookPage() {
         setPromoResult({ valid: false, discount: 0, error: msgs[result.error || 'invalid'] || t('book.promo_error_invalid', { defaultValue: 'Código no válido' }) });
       }
     } catch {
-      setPromoResult({ valid: false, discount: 0, error: t('book.promo_error_generic', { defaultValue: 'Error al validar código' }) });
+      if (req === promoReqRef.current) {
+        setPromoResult({ valid: false, discount: 0, error: t('book.promo_error_generic', { defaultValue: 'Error al validar código' }) });
+      }
     } finally {
       setPromoValidating(false);
     }
@@ -695,6 +708,9 @@ export default function BookPage() {
   // Same conditions handleRequest uses for ride_mode and corporate_account_id.
   // The fare counts only once the estimates for the current route have landed.
   const signupPromoEligible = serviceType !== 'mensajeria' && !selectedCorporateId;
+  // The signup code is in the field but this ride can't take it: "Aplicar" is
+  // off and a note explains why.
+  const signupPromoBlocked = showsSignupPromo && !signupPromoEligible;
   const signupPromoFareCup = estimateLoading ? 0 : (selectedEstimate?.estimated_fare_cup ?? 0);
   useEffect(() => {
     const action = signupPromoAction({
@@ -1910,7 +1926,7 @@ export default function BookPage() {
               <input
                 type="text"
                 value={promoCode}
-                onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoResult(null); }}
+                onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); promoReqRef.current++; setPromoResult(null); }}
                 placeholder={t('book.promo_placeholder', { defaultValue: 'Ingresa tu código' })}
                 aria-label={t('book.promo_question', { defaultValue: 'Código promocional' })}
                 disabled={promoResult?.valid === true && !showsSignupPromo}
@@ -1930,7 +1946,7 @@ export default function BookPage() {
               {promoResult?.valid ? (showsSignupPromo ? null : (
                 <button
                   type="button"
-                  onClick={() => { setPromoCode(signupPromo?.code ?? ''); setPromoResult(null); }}
+                  onClick={() => { setPromoCode(signupPromo?.code ?? ''); promoReqRef.current++; setPromoResult(null); }}
                   style={{
                     padding: '0.5rem 0.75rem',
                     borderRadius: '0.5rem',
@@ -1947,16 +1963,16 @@ export default function BookPage() {
                 <button
                   type="button"
                   onClick={handleApplyPromo}
-                  disabled={!promoCode.trim() || !selectedEstimate || promoValidating}
+                  disabled={!promoCode.trim() || !selectedEstimate || promoValidating || signupPromoBlocked}
                   style={{
                     padding: '0.5rem 1rem',
                     borderRadius: '0.5rem',
                     border: 'none',
-                    background: !promoCode.trim() || !selectedEstimate || promoValidating ? '#ccc' : 'var(--primary)',
+                    background: !promoCode.trim() || !selectedEstimate || promoValidating || signupPromoBlocked ? '#ccc' : 'var(--primary)',
                     color: 'white',
                     fontSize: '0.8rem',
                     fontWeight: 600,
-                    cursor: !promoCode.trim() || !selectedEstimate || promoValidating ? 'not-allowed' : 'pointer',
+                    cursor: !promoCode.trim() || !selectedEstimate || promoValidating || signupPromoBlocked ? 'not-allowed' : 'pointer',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -1975,6 +1991,14 @@ export default function BookPage() {
                         })
                       : `Descuento aplicado: -${formatPrice(promoResult.discount)}`)
                   : promoResult.error}
+              </p>
+            )}
+            {signupPromo && signupPromoBlocked && (
+              <p style={{ fontSize: '0.75rem', marginTop: '0.25rem', color: 'var(--text-tertiary)' }}>
+                {t('book.signup_promo_not_eligible', {
+                  code: signupPromo.signupCode,
+                  defaultValue: 'El descuento de tu código {{code}} no aplica a envíos ni a viajes pagados por una empresa.',
+                })}
               </p>
             )}
           </div>
@@ -2168,6 +2192,7 @@ export default function BookPage() {
             }}
             onApplyPromo={(code) => {
               setPromoCode(code.toUpperCase());
+              promoReqRef.current++;
               setPromoResult(null);
               if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
