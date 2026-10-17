@@ -14,6 +14,8 @@ describe('isSignupPromoCode', () => {
     expect(isSignupPromoCode('OTRO', 'MOTO20')).toBe(false);
     expect(isSignupPromoCode('', 'MOTO20')).toBe(false);
     expect(isSignupPromoCode('MOTO20', null)).toBe(false);
+    expect(isSignupPromoCode('MOTO 20', 'MOTO20')).toBe(false);
+    expect(isSignupPromoCode('MOTO20', '  ')).toBe(false);
   });
 });
 
@@ -27,6 +29,7 @@ describe('signupPromoPrefill', () => {
   });
   it('does nothing without a signup promotion', () => {
     expect(signupPromoPrefill('', null)).toBeNull();
+    expect(signupPromoPrefill('', '  ')).toBeNull();
   });
 });
 
@@ -57,6 +60,13 @@ describe('signupPromoAction', () => {
   it('clears its result on a delivery or a company ride, and validates again when that changes back', () => {
     expect(signupPromoAction({ ...base, hasResult: true, eligible: false })).toBe('clear');
     expect(signupPromoAction({ ...base, hasResult: false, eligible: false })).toBe('none');
+    expect(signupPromoAction({ ...base, hasResult: false, eligible: true })).toBe('validate');
+  });
+  it('matches the signup code ignoring case and spaces', () => {
+    expect(signupPromoAction({ ...base, promoCode: ' moto20 ' })).toBe('validate');
+  });
+  it('lets a validation in flight finish before clearing', () => {
+    expect(signupPromoAction({ ...base, validating: true, hasResult: true, eligible: false })).toBe('none');
   });
 });
 
@@ -81,8 +91,11 @@ describe('promotionLinkStatus', () => {
   it('is scheduled before it starts and expired after it ends', () => {
     expect(promotionLinkStatus({ ...active, valid_from: '2026-10-18T00:00:00Z' }, now)).toBe('scheduled');
     expect(promotionLinkStatus({ ...active, valid_until: '2026-10-17T12:00:00Z' }, now)).toBe('expired');
+    expect(promotionLinkStatus({ ...active, valid_from: '2026-10-17T12:00:00Z' }, now)).toBe('active');
   });
   it('is exhausted with no uses left', () => {
     expect(promotionLinkStatus({ ...active, max_uses: 10, current_uses: 10 }, now)).toBe('exhausted');
+    expect(promotionLinkStatus({ ...active, max_uses: 10, current_uses: 11 }, now)).toBe('exhausted');
+    expect(promotionLinkStatus({ ...active, max_uses: 0, current_uses: 0 }, now)).toBe('exhausted');
   });
 });
