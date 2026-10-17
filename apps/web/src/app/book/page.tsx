@@ -5,9 +5,9 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@tricigo/i18n';
-import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance, getErrorMessage, trimNotes, discountBaseCup } from '@tricigo/utils';
+import { formatTRC, formatTRCasUSD, formatCUP, findNearestPreset, serviceTypeToVehicleType, fetchETAsToPickup, enrichWithCrossStreets, adjustETAForVehicle, RIDE_CONFIG, haversineDistance, getErrorMessage, trimNotes, discountBaseCup, isSignupPromoCode, signupPromoAction, signupPromoPrefill } from '@tricigo/utils';
 import type { LocationPreset } from '@tricigo/utils';
-import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService, useFeatureFlag } from '@tricigo/api';
+import { rideService, nearbyService, customerService, corporateService, walletService, deliveryService, useFeatureFlag, type SignupPromotion } from '@tricigo/api';
 import type { FareEstimate, ServiceTypeSlug, PaymentMethod, NearbyVehicle, VehicleType, CorporateAccount, PackageCategory, RidePreferences } from '@tricigo/types';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useDestinationPredictions } from '../../hooks/useDestinationPredictions';
@@ -209,6 +209,22 @@ export default function BookPage() {
     } catch { /* ignore */ }
     if (pending) setPromoCode(pending.trim());
   }, []);
+  // 00665: the promotion of the code the user registered with. Loaded after the
+  // ?promo= / pending-link prefill above, so a code from a link always wins.
+  const [signupPromo, setSignupPromo] = useState<SignupPromotion | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void rideService.getMySignupPromotion().then((promo) => {
+      if (cancelled) return;
+      setSignupPromo(promo);
+      setPromoCode((cur) => signupPromoPrefill(cur, promo?.code ?? null) ?? cur);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+  const showsSignupPromo = !!signupPromo && isSignupPromoCode(promoCode, signupPromo.code);
   // Shared-ride discount (triciclo only) + the price the rider actually pays =
   // estimate − promo − shareDiscount. The server trigger (00347) applies the
   // same shared discount to discount_amount_cup, so this mirrors the real total.
@@ -671,6 +687,27 @@ export default function BookPage() {
       setPromoValidating(false);
     }
   }
+
+  // 00665: validate the signup code without a tap, only for a passenger ride
+  // the person pays; clear it when the ride becomes a delivery or a company ride.
+  // Same conditions handleRequest uses for ride_mode and corporate_account_id.
+  // The fare counts only once the estimates for the current route have landed.
+  const signupPromoEligible = serviceType !== 'mensajeria' && !selectedCorporateId;
+  const signupPromoFareCup = estimateLoading ? 0 : (selectedEstimate?.estimated_fare_cup ?? 0);
+  useEffect(() => {
+    const action = signupPromoAction({
+      promoCode,
+      signupPromoCode: signupPromo?.code ?? null,
+      hasResult: promoResult != null,
+      validating: promoValidating,
+      fareCup: signupPromoFareCup,
+      eligible: signupPromoEligible,
+    });
+    if (action === 'validate') void handleApplyPromo();
+    else if (action === 'clear') setPromoResult(null);
+    // handleApplyPromo is recreated every render; the inputs it reads are listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promoCode, signupPromo, promoResult, promoValidating, signupPromoFareCup, signupPromoEligible]);
 
   async function handleRequest() {
     if (!pickup || !dropoff || !selectedEstimate) return;
@@ -1874,7 +1911,7 @@ export default function BookPage() {
                 onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoResult(null); }}
                 placeholder={t('book.promo_placeholder', { defaultValue: 'Ingresa tu código' })}
                 aria-label={t('book.promo_question', { defaultValue: 'Código promocional' })}
-                disabled={promoResult?.valid === true}
+                disabled={promoResult?.valid === true && !showsSignupPromo}
                 style={{
                   flex: 1,
                   padding: '0.5rem',
@@ -1885,7 +1922,9 @@ export default function BookPage() {
                   boxSizing: 'border-box',
                 }}
               />
-              {promoResult?.valid ? (
+              {/* The signup code has no "Quitar": the server would apply it
+                  again. Typing another code replaces it. */}
+              {promoResult?.valid ? (showsSignupPromo ? null : (
                 <button
                   type="button"
                   onClick={() => { setPromoCode(''); setPromoResult(null); }}
@@ -1901,7 +1940,7 @@ export default function BookPage() {
                 >
                   Quitar
                 </button>
-              ) : (
+              )) : (
                 <button
                   type="button"
                   onClick={handleApplyPromo}
@@ -1925,7 +1964,13 @@ export default function BookPage() {
             {promoResult && (
               <p style={{ fontSize: '0.75rem', marginTop: '0.25rem', color: promoResult.valid ? '#22c55e' : '#ef4444' }}>
                 {promoResult.valid
-                  ? `Descuento aplicado: -${formatPrice(promoResult.discount)}`
+                  ? (signupPromo && showsSignupPromo
+                      ? t('book.signup_promo_applied', {
+                          code: signupPromo.signupCode,
+                          amount: formatPrice(promoResult.discount),
+                          defaultValue: 'Descuento de tu código {{code}}: {{amount}}',
+                        })
+                      : `Descuento aplicado: -${formatPrice(promoResult.discount)}`)
                   : promoResult.error}
               </p>
             )}

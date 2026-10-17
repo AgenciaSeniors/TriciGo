@@ -257,6 +257,7 @@
     "promo_error_already_used": "You already used this code",
     "promo_error_first_ride": "Only valid for your first ride",
     "promo_error_phone_required": "Confirm your phone to use promo codes",
+    "signup_promo_applied": "Discount from your code {{code}}: {{amount}}",
     "route_loading": "Calculating route...",
     "route_info": "{{distance}} km \u00b7 {{duration}} min by road",
     "route_error": "Could not calculate route",
