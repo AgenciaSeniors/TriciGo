@@ -1,6 +1,6 @@
 # Signup code promotions: a discount that comes with the invite code
 
-Date: 2026-10-17. Status: approved design, not implemented.
+Date: 2026-10-17. Status: implemented on branch `claude/signup-code-promotion`; migration 00665 not applied. CLAUDE.md § "Un código de origen puede traer una promoción (00665)" has the final behaviour, which adds to this design (admins excluded from `get_my_signup_promotion`, save with a button in the panel, stale previews dropped).
 
 ## Problem
 
