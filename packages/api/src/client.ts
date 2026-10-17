@@ -188,6 +188,14 @@ function pumpRealtimeAuth(client: SupabaseClient, anonKey: string | null): void 
   });
 }
 
+/** Web: delete the session this module's own client persisted (see setSupabaseClient). */
+function dropModuleSession(): void {
+  if (!_isWeb) return;
+  try {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch { /* storage blocked: there is no copy to replay */ }
+}
+
 /**
  * Use a client the app already owns as the shared one (getSupabaseClient).
  *
@@ -199,6 +207,15 @@ function pumpRealtimeAuth(client: SupabaseClient, anonKey: string | null): void 
  * waited behind them (7 such calls in the first 3 s of a page, measured
  * 2026-10-12). With one client there is one session and nothing to copy.
  *
+ * It also deletes the session that module client left in localStorage, now and
+ * each time the handed-over client gets a new token. Nothing in this version
+ * reads that copy, but its refresh token belongs to the same session as the
+ * cookies, and a panel tab still running the code from before the handover
+ * keeps using it (and writing it back). On 2026-10-15 such a tab refreshed with
+ * a four-day-old copy a second after the cookie client had rotated the session,
+ * and Supabase revoked the whole session as a replayed token: the admin was
+ * sent back to the login page.
+ *
  * Call it before anything uses getSupabaseClient(). The mobile apps and the web
  * keep the client this module creates.
  */
@@ -206,6 +223,10 @@ export function setSupabaseClient(client: SupabaseClient): void {
   const g = globalThis as Record<string, unknown>;
   if (g[GLOBAL_KEY] === client) return;
   g[INJECTED_KEY] = true;
+  dropModuleSession();
+  client.auth.onAuthStateChange((event) => {
+    if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') dropModuleSession();
+  });
   let anonKey: string | null = null;
   try {
     anonKey = getEnvVar('SUPABASE_ANON_KEY');
