@@ -46,6 +46,8 @@ export default defineConfig({
       // with vi.mock (Storage kept in memory), Deno stubbed.
       '../../supabase/functions/delete-account/*.test.ts',
       '../../supabase/functions/admin-delete-pending-account/*.test.ts',
+      // team-invitation-code (00664): supabase-js and the rate limiter replaced with vi.mock, Deno stubbed.
+      '../../supabase/functions/team-invitation-code/*.test.ts',
     ],
   },
 });

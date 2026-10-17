@@ -201,6 +201,9 @@ Deno.serve(async (req) => {
     }
 
     let userId: string;
+    // Sign-in address of an existing account, from the lookup below. The session is
+    // minted by address, so it is kept in case the second lookup further down fails.
+    let accountEmail: string | undefined;
 
     if (existingUserId) {
       userId = existingUserId;
@@ -216,6 +219,7 @@ Deno.serve(async (req) => {
         accountPhone = existing.user.phone;
         accountPhoneConfirmedAt = existing.user.phone_confirmed_at;
         accountBannedUntil = existing.user.banned_until;
+        if (existing.user.email) accountEmail = existing.user.email;
       } catch (e) {
         console.error('getUserById before login failed:', e);
         return new Response(
@@ -326,14 +330,33 @@ Deno.serve(async (req) => {
     // was linked later, this is NOT the synthetic devEmail (e.g. a real gmail). Using
     // devEmail for session minting made Strategy B's generateLink CREATE a brand-new
     // synthetic-email user and mint a session for THAT empty user — the "app asks for
-    // all my data again as if I never registered" bug. Fall back to devEmail (correct
-    // for phone-only users, where email === devEmail).
-    let authEmail = devEmail;
+    // all my data again as if I never registered" bug. Start from the address the first
+    // lookup returned (an existing account), and fall back to devEmail only without one
+    // (a new account, or a phone-only user, where email === devEmail): if this second
+    // lookup fails, an account with a real address still gets its own magic link.
+    let authEmail = accountEmail ?? devEmail;
     try {
       const { data: u } = await supabase.auth.admin.getUserById(userId);
       if (u?.user?.email) authEmail = u.user.email;
     } catch (e) {
       console.warn('getUserById(email) failed, using devEmail:', e instanceof Error ? e.message : String(e));
+    }
+
+    // A password the person chose (a team invitation code, the panel's password reset,
+    // set-password-after-otp) is marked in users.password_set_at. Strategy A writes the
+    // derived password whenever its sign-in fails, so with the mark, or when it cannot be
+    // read, the session comes from the magic link only: no password written, no session closed.
+    let keepPassword = true;
+    try {
+      const { data: mark, error: markErr } = await supabase
+        .from('users')
+        .select('password_set_at')
+        .eq('id', userId)
+        .maybeSingle();
+      if (markErr) console.error('password_set_at read failed, using the magic link:', markErr.message);
+      else keepPassword = Boolean((mark as { password_set_at?: string | null } | null)?.password_set_at);
+    } catch (e) {
+      console.error('password_set_at read threw, using the magic link:', e instanceof Error ? e.message : String(e));
     }
 
     // Strategy A — stable-password grant (NEVER log/return the password).
@@ -343,38 +366,36 @@ Deno.serve(async (req) => {
     // password when the sign-in fails (existing user whose password isn't the
     // deterministic value yet, e.g. first login after this deploy or a secret
     // rotation). That "heal" write happens once, then every later login is write-free.
-    // NOTE (latent conflict): this clobbers any user-chosen password from
-    // set-password-after-otp on every OTP login. Harmless today — phone users have no
-    // password-login path and password_set_at is unread — but if that's ever enabled,
-    // skip Strategy A (use the magic-link path below) when password_set_at is set.
-    try {
-      const stablePassword = await deriveStablePassword(userId);
-      let { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-        email: authEmail,
-        password: stablePassword,
-      });
-      if (pwErr) {
-        const { error: pwSetErr } = await supabase.auth.admin.updateUserById(userId, { password: stablePassword });
-        if (pwSetErr) {
-          console.error('updateUserById(password) failed:', pwSetErr.message);
-        } else {
-          ({ data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
-            email: authEmail,
-            password: stablePassword,
-          }));
-          if (pwErr) console.error('signInWithPassword (post-heal) failed:', pwErr.message);
+    if (!keepPassword) {
+      try {
+        const stablePassword = await deriveStablePassword(userId);
+        let { data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: stablePassword,
+        });
+        if (pwErr) {
+          const { error: pwSetErr } = await supabase.auth.admin.updateUserById(userId, { password: stablePassword });
+          if (pwSetErr) {
+            console.error('updateUserById(password) failed:', pwSetErr.message);
+          } else {
+            ({ data: pwData, error: pwErr } = await supabase.auth.signInWithPassword({
+              email: authEmail,
+              password: stablePassword,
+            }));
+            if (pwErr) console.error('signInWithPassword (post-heal) failed:', pwErr.message);
+          }
         }
+        if (pwData?.session) {
+          session = {
+            access_token: pwData.session.access_token,
+            refresh_token: pwData.session.refresh_token,
+            expires_in: pwData.session.expires_in,
+            user: pwData.session.user,
+          };
+        }
+      } catch (e) {
+        console.error('password-grant strategy threw:', e instanceof Error ? e.message : String(e));
       }
-      if (pwData?.session) {
-        session = {
-          access_token: pwData.session.access_token,
-          refresh_token: pwData.session.refresh_token,
-          expires_in: pwData.session.expires_in,
-          user: pwData.session.user,
-        };
-      }
-    } catch (e) {
-      console.error('password-grant strategy threw:', e instanceof Error ? e.message : String(e));
     }
 
     // Strategy B — magic-link hashed_token (fallback; PKCE-correct)

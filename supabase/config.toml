@@ -542,6 +542,8 @@ verify_jwt = true
 verify_jwt = true
 [functions.team-digest-unsubscribe]
 verify_jwt = false
+[functions.team-invitation-code]
+verify_jwt = false
 [functions.notify-document-rejection]
 verify_jwt = true
 [functions.notify-business-movement]

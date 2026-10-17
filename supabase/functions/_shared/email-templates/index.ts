@@ -106,6 +106,11 @@ import {
   teamInvitationSubject,
   type TeamInvitationData,
 } from './team_invitation.ts';
+import {
+  teamInvitationCodeHtml,
+  teamInvitationCodeSubject,
+  type TeamInvitationCodeData,
+} from './team_invitation_code.ts';
 
 export type TemplateKey =
   | 'welcome'
@@ -127,7 +132,8 @@ export type TemplateKey =
   | 'driver_document_rejected'
   | 'trusted_contact_ride_started'
   | 'trusted_contact_ride_completed'
-  | 'team_invitation';
+  | 'team_invitation'
+  | 'team_invitation_code';
 
 export interface RenderedTemplate {
   subject: string;
@@ -286,6 +292,13 @@ export function renderTemplate(
         html: teamInvitationHtml(d),
       };
     }
+    case 'team_invitation_code': {
+      const d = data as TeamInvitationCodeData;
+      return {
+        subject: subjectOverride ?? teamInvitationCodeSubject,
+        html: teamInvitationCodeHtml(d),
+      };
+    }
     default: {
       // Exhaustiveness check — TS will flag this if a TemplateKey
       // case is missing above.
@@ -323,7 +336,8 @@ export function isTemplateKey(key: string): key is TemplateKey {
     key === 'driver_document_rejected' ||
     key === 'trusted_contact_ride_started' ||
     key === 'trusted_contact_ride_completed' ||
-    key === 'team_invitation'
+    key === 'team_invitation' ||
+    key === 'team_invitation_code'
   );
 }
 

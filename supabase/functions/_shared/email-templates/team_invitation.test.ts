@@ -41,6 +41,8 @@ describe('team_invitation template', () => {
     expect(html).toContain('Administrador');
     expect(html).toContain('La invitación vence el 19 de octubre de 2026.');
     expect(html).toContain('Si no esperabas esta invitación, ignora este correo.');
+    expect(html).toContain('o crea tu cuenta con un código que te mandamos a esta dirección.');
+    expect(html).not.toContain('Con otra cuenta la invitación no funciona.');
   });
 
   it('escapes the names', () => {

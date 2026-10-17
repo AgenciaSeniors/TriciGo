@@ -2136,7 +2136,7 @@ Apagar: `... -e command exit` + `settings put global sysui_demo_allowed 0`. **Li
 cd apps/client && npx eas-cli@latest build:view <build-id-android> --json   # gitCommitHash, appVersion, appBuildVersion
 git diff --stat <gitCommitHash> HEAD -- apps/client apps/driver packages pnpm-lock.yaml package.json patches
 ```
-Si el diff sale vacío, iOS se puede armar desde `HEAD`.
+Si el diff sale vacío, iOS se puede armar desde `HEAD`. En el JSON de `build:view`, el canal está en `updateChannel.name` y el runtime en `runtime.version`: no hay `channel` ni `runtimeVersion` en la raíz (verificado con la 1.8.0).
 
 **1b. Justo antes de enviar a revisión, volver a mirar master.** Los `.aab` de 1.7.3 se armaron el 23/09 desde `c08b68c3` y en los días siguientes entraron **14 merges que tocan las apps** (flotas, cuentas de empresa, colores de tarjetas). La primera tanda (Android vc37/vc47, iOS 41/45) se descartó y se rearmaron las cuatro desde `c48b7604`. Chequeo: `git log --oneline <gitCommitHash>..origin/master -- apps/client apps/driver packages`. Si hay merges que importan:
 - **El número de versión se reusa** mientras nada de esa versión esté en revisión: en ASC no había versión 1.7.3 creada y en Play estaba solo el borrador, al que se le cambia el app bundle.
@@ -2144,6 +2144,8 @@ Si el diff sale vacío, iOS se puede armar desde `HEAD`.
 - **Armar desde el commit exacto sin reinstalar:** si `git diff --quiet <viejo> origin/master -- pnpm-lock.yaml` da igual, `git checkout --detach origin/master`, lanzar los cuatro `eas build … --no-wait` uno tras otro y volver a la rama recién cuando terminó el último (cada uno sube el árbol de trabajo en ese momento). Tardaron unos 15 min en EAS.
 
 **2. `pnpm install --frozen-lockfile` antes de cualquier comando `eas`.** Sin `node_modules` en el worktree falla hasta `eas build:view`, con `expo config --json exited with non-zero code: 1`: Node busca hacia arriba y usa el `expo` del checkout principal. En esta PC tardó 10 min.
+
+Para armar desde un commit exacto sin tocar otros checkouts, usar un worktree aparte: `git worktree add --detach C:/Users/Eduardo/TriciGo/.claude/worktrees/release-<versión> <commit>`. **La ruta tiene que ser absoluta:** `git worktree add` toma una ruta relativa desde el directorio actual, y si el comando corre desde el worktree de otra sesión, el de release queda anidado dentro de ese.
 
 **3. Armar iOS en local:** `cd apps/<app> && npx eas-cli@latest build -p ios --profile production --non-interactive --no-wait`. Usa las credenciales guardadas en EAS (el certificado y los perfiles vencen el 24-jun-2027) y no hace falta GitHub Actions. El número de build lo sube EAS solo. La 1.7.3 final quedó: iOS **42** pasajero y **46** conductor; Android vc**38** y vc**48**. Los 41 y 45 de la primera tanda quedaron sin usar en ASC: al elegir el build, fijarse en el número.
 
@@ -2166,7 +2168,7 @@ Si el diff sale vacío, iOS se puede armar desde `HEAD`.
 - **App Store Connect ya se puede, y así se envió la 1.7.3 (2026-09-28, unos 2 min por app).** La misma `.p8` firma la API. Pasos que funcionaron:
   1. `POST /v1/appStoreVersions` con `platform`, `versionString`, `releaseType: AFTER_APPROVAL` y el build en `relationships.build` (una sola llamada). La versión nueva hereda de la anterior la descripción, los datos de contacto y la cuenta demo del revisor.
   2. `PATCH` de `whatsNew` en su `appStoreVersionLocalizations` (única localización: es-ES), con el cuerpo leído de un archivo JSON UTF-8, y leerlo de vuelta para comparar.
-  3. Antes de enviar: `GET /v1/reviewSubmissions?filter[app]=…&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,UNRESOLVED_ISSUES,…` vacío, y la `ageRatingDeclaration` del appInfo nuevo sin campos obligatorios en `null`.
+  3. Antes de enviar: `GET /v1/reviewSubmissions?filter[app]=…&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,UNRESOLVED_ISSUES,…` vacío, y la `ageRatingDeclaration` del appInfo nuevo sin campos obligatorios en `null`. En las dos apps quedan siempre en `null` `kidsAgeBand`, `gracRatingClassificationNumber` y `developerAgeRatingInfoUrl`. Son opcionales: la 1.7.3 publicada los tiene igual y la 1.8.0 se envió así sin problemas (2026-10-15).
   4. `POST /v1/reviewSubmissions` → `POST /v1/reviewSubmissionItems` → `PATCH {submitted:true}`, de a una app y cortando al primer error. Queda `WAITING_FOR_REVIEW`.
 
   El JWT es ES256 con `node:crypto` (`dsaEncoding: 'ieee-p1363'`) y `iat` 60 s atrasado, o da 401. **Trampa de Git Bash:** un argumento que empieza con `/v1/…` sin `?` se convierte en ruta de Windows y el host queda `api.appstoreconnect.apple.comc` (`ENOTFOUND`). Exportar `MSYS_NO_PATHCONV=1` antes de llamar. Si un envío falla a medias, leer las trampas de la memoria `project_apple_ios_launch`: la lista de envíos miente, y un envío huérfano solo se borra desde la web.
@@ -2635,9 +2637,49 @@ Un super_admin invita a alguien al panel desde **Equipo** (`/equipo`, solo super
   ```
   Si la persona entró con correo y contraseña, el middleware no encuentra ninguna invitación para ella y la manda a `/sin-acceso?reason=none`: tiene que abrir el enlace o entrar con Google. `needs_google` aparece solo con el enlace, cuando la cuenta no tiene ninguna identidad de Google o Apple verificada.
 - **`/sin-acceso` ofrece "Entrar con otra cuenta de Google"**: cierra la sesión y abre Google con `prompt: 'select_account'`. Sin eso, Google vuelve a entrar con la misma cuenta y la persona vuelve a `/sin-acceso`. La dirección de la URL se muestra solo si tiene la forma enmascarada (`maskedEmailParam`); un enlace armado a mano no puede poner texto propio en la página. Quien ya tiene un rol del panel y abre un enlace viejo o usado va a su inicio, no a `/sin-acceso`.
-- **El token va en la ruta** (`/invitacion/<token>`), así que queda en los logs de nginx y puede llegar a Sentry. Solo no da acceso: aceptar exige la cuenta de Google de esa dirección.
+- **El token va en la ruta** (`/invitacion/<token>`), así que queda en los logs de nginx y puede llegar a Sentry. Solo no da acceso: aceptar exige la cuenta de Google de esa dirección o un código mandado a esa dirección (00664, abajo).
 - **Cuentas con contraseña y Google en la misma dirección.** GoTrue vincula un login de Google a la cuenta que ya tiene ese correo confirmado. Si alguien hubiera registrado con contraseña la dirección de otra persona, la invitación de esa persona le daría el rol a esa cuenta. Medido el 2026-10-12: la única cuenta con identidad `email` y Google en la misma dirección es la del dueño (super_admin), y desde el 2026-10-07 el alta con contraseña ya no se confirma sola.
 - **Estado: 00661 aplicada en prod el 2026-10-14** por MCP (`20261014014359`), después de un ensayo en prod dentro de un bloque revertido. Verificado por objeto: los 19 cuerpos tienen el mismo md5 que en el ensayo local, sin `\r`; `team_invitations` con RLS, sin políticas y sin permisos para `anon`/`authenticated`. `send-email` v60 desplegada el mismo día con la plantilla `team_invitation` (los 27 archivos iguales a git), y un envío de prueba a `delivered@resend.dev` salió con el asunto y el enlace correctos.
+
+### Equipo del panel: aceptar con un código por correo (00664)
+
+Además de Google, una invitación se acepta con un código de 6 dígitos que se manda a la dirección invitada. Hacía falta para direcciones sin cuenta de Google (Baco usa `info@bacoagency.com`, con correo en `mail.alanpro.dev`). Diseño: `docs/superpowers/specs/2026-10-16-team-invitation-email-code-design.md`. Ensayo: `supabase/tests/00664/run.sh` (con `none`, solo pasan los 5 controles; con la migración, aplicada dos veces, 59/59, con copia CRLF y pruebas negativas de cada autochequeo).
+
+- **El camino.** En `/invitacion/<token>`, debajo de Google, "Entrar con un código por correo" → "Enviar código". La Edge Function `team-invitation-code` (`verify_jwt = false`: la persona todavía no tiene sesión) llama a `team_invitation_code_issue` y manda el código por `send-email` (plantilla `team_invitation_code`, desde `noreply@tricigo.com`). Con el código, la persona elige una contraseña (y su nombre si la cuenta es nueva); la función llama a `team_invitation_code_check`, crea la cuenta (`createUser` con `email_confirm: true`) o le pone esa contraseña a la que ya tiene la dirección (`updateUserById` con `email_confirm: true`), y llama a `accept_team_invitation_by_code`. La página entra con `signInWithPassword` y va a `panelHome(role)`. Las tres funciones SQL son SECURITY DEFINER y solo las ejecuta `service_role`; los dos helpers (`_team_code_hash`, `_team_code_account`) solo su dueño.
+- **"Ya tengo un código"** abre el formulario sin mandar otro. Es para quien recargó la página o volvió desde el correo: mandar otro reemplaza el que tiene en la mano.
+- **Qué cuenta puede recibir el rol con código** (`_team_code_account`, por `auth.users.email`; `users.email` no cuenta):
+  - `new`: ninguna cuenta entra con esa dirección. Se crea.
+  - `proven`: Google o Apple verificaron esa misma dirección. Su teléfono es del mismo dueño.
+  - `password_only`: solo correo y contraseña. Quien la abrió antes con esa dirección pierde el acceso.
+  - Se rechazan `blocked` y `needs_google`: sin esa prueba y con un teléfono (confirmado o no) u otra identidad, porque quien tenga ese teléfono podría llegar al panel por la app; y también cuando ninguna cuenta entra con la dirección pero una identidad de alguna la tiene (Google caería en esa cuenta). La función responde `needs_google` sin gastar el código.
+  - Un caso desconocido cae en `needs_google`: la función nunca crea ni toca una cuenta fuera de esos tres.
+- **Qué deja aceptar:** el rol con `_team_write_role` (nunca baja), todas las sesiones y refresh tokens cerrados, `users.password_set_at = now()`, `users.email_verified_at` si estaba vacía y `users.email` es la dirección invitada (así funcionan "¿Olvidaste tu contraseña?" y el login por enlace), la invitación aceptada y `admin_actions` con `team_invite_accepted` y `new_values.method = 'email_code'`. El 00611 deja pasar el `email_verified_at` porque la función llama sin JWT de usuario; con un `sub` de usuario lo revertiría. Cerrar las sesiones incluye las de las apps: un conductor `proven` que acepta con código queda fuera de la app del conductor y tiene que volver a entrar con su teléfono.
+- **Una contraseña elegida sobrevive al login por teléfono.** `verify-otp` entraba con una contraseña derivada del id y, si fallaba, la escribía encima de la de la cuenta. Ahora lee `users.password_set_at` antes: puesto, o si no lo puede leer, entra solo por enlace mágico y no prueba ni escribe la contraseña. Sin la marca, todo sigue igual. La marcan:
+  - `team-invitation-code`, **antes** de escribir la contraseña de una cuenta existente (si no puede, responde `try_again` sin tocarla);
+  - `accept_team_invitation_by_code`;
+  - `/reset-password` del panel, antes de `updateUser` (una marca sin contraseña nueva no hace daño: el teléfono entra por enlace mágico);
+  - `set-password-after-otp`, que ya la escribía.
+  
+  La columna existía en prod sin estar en git (creada a mano, 0 filas marcadas el 2026-10-16); 00664 la agrega solo si falta, así que en prod no toma ningún lock. Su dueño puede escribirla en su propia fila (lo necesita `/reset-password`), y eso solo cambia cómo entra él mismo.
+- **Límites:** 6 dígitos, 10 minutos, un solo uso, 5 intentos; 60 s entre códigos, 5 por hora y 10 por día por invitación (`rate_limits`, claves `team-code-hour:<id>` y `team-code-day:<id>`, ventanas fijas: el tope diario se reinicia a las 00:00 UTC, 20:00 o 19:00 en La Habana); por IP, 10 envíos y 30 verificaciones por hora (`team-code-send-ip:`, `team-code-verify-ip:`). La contraseña va de 8 caracteres a **72 bytes** (GoTrue cuenta bytes: una contraseña con tildes llega antes al tope). El código se guarda como HMAC con la sal de `team_invitation_code_salt`; esa tabla y `team_invitation_codes` son tablas-candado.
+- **Si algo falla después de gastar el código** (GoTrue, la marca, o un error de la función de aceptación), la función responde `try_again` y la página pide un código nuevo; `weak_password` también dice que pida otro. Un rechazo de la aceptación (`expired`, `canceled`, `blocked`…) llega con su propio texto. Un `send_failed` también reemplaza el código anterior: `team_invitation_code_issue` guarda el nuevo antes de mandar el correo. Lo peor que queda es una cuenta con la contraseña elegida y sin rol: el segundo intento cae en `password_only` o `proven` y la completa.
+- **Conocido y aceptado:**
+  - En `password_only`, quien tenía una sesión conserva su último access token hasta que vence (1 h), ya con el rol. El middleware lo saca en menos de un minuto, pero una llamada directa a la API funciona hasta que vence. Es la misma ventana que bloquear un usuario (00629).
+  - Un login por teléfono de la misma cuenta en el mismo segundo en que se acepta puede todavía pisar la contraseña elegida.
+  - Quien tenga el enlace puede gastar los códigos del día de esa invitación.
+- **Diagnóstico de un código que no llega o no sirve:**
+  ```sql
+  SELECT i.email, i.status, c.attempts, c.sent_at, c.expires_at
+  FROM team_invitations i LEFT JOIN team_invitation_codes c ON c.invitation_id = i.id
+  ORDER BY i.created_at DESC LIMIT 10;
+  ```
+  más los logs de `team-invitation-code` (`[team-invitation-code] … failed`). Un "Sin conexión a internet" en la página también aparece si el navegador bloquea el pedido por CORS: revisar que `admin.tricigo.com` siga en `ALLOWED_ORIGINS`.
+- **Estado (2026-10-16): nada aplicado ni desplegado.** Cuerpos tras la migración (md5/largo): `_team_code_account` `239dd2fc…/2112`, `_team_code_hash` `7cb663c0…/155`, `accept_team_invitation_by_code` `7f31564e…/3713`, `team_invitation_code_check` `1a513d9d…/2357`, `team_invitation_code_issue` `b0a78658…/2836`. El despliegue va paso por paso con el OK del dueño:
+  1. **Migración.** Sus funciones tienen `DELETE FROM` en el cuerpo, así que por MCP casi seguro se queda esperando la aprobación (§ "Aplicar migraciones pesadas por MCP"): aplicarla desde el SQL Editor (el bloque `$crlf$` corrige un pegado desde Windows) y verificar los cinco md5 de arriba.
+  2. **Probar el enlace mágico de `verify-otp`** con la cuenta demo del pasajero: desplegar `verify-otp`, marcar la cuenta, entrar por teléfono, mirar el log y desmarcarla.
+  3. **Desplegar `team-invitation-code`** con `_shared/rate-limiter.ts` y `_shared/service-key.ts` y `verify_jwt = false` (la CLI lo lee de `config.toml`; por MCP hay que pasarlo).
+  4. **Redesplegar `send-email` y mergear seguidos:** desde el redeploy, el correo de invitación ya menciona el código, y la página lo muestra recién con el merge (que despliega el panel). Las dos desde una exportación LF del árbol de git.
+  5. **Prueba real** con una dirección del dueño, y quitar el acceso al final.
 
 ### Campañas: las manda el servidor, a la hora elegida (00649, PR #1129)
 
@@ -2769,7 +2811,7 @@ Cada mañana, cada cuenta con rol de panel (super_admin, admin, marketing) recib
 
 **Deploy de la EF sin CLI autenticado:** el sandbox NO tenía `SUPABASE_ACCESS_TOKEN` (CLI de Supabase sin login) → se desplegó vía **MCP `deploy_edge_function`** con los 2 archivos del bundle (`functions/verify-otp/index.ts` + `functions/_shared/rate-limiter.ts`, `verify_jwt=false`). Patrón seguro para reconstruir el contenido inline de una EF de auth: escribir la reconstrucción a un temp y `diff` (CR-normalizado, `tr -d '\r'`) contra el archivo del worktree ANTES de desplegar; y `get_edge_function` + diff DESPUÉS para confirmar. Ojo: prod corría `@supabase/supabase-js@2` sin pinear mientras master tiene `@2.108.2` — el deploy alineó prod con master.
 
-**Pendiente / residual:** `OTP_PASSWORD_SECRET` no se pudo setear desde el sandbox (sin CLI auth) → queda para el usuario (dashboard EF secrets o `npx supabase secrets set OTP_PASSWORD_SECRET=$(openssl rand -hex 32) --project-ref lqaufszburqvlslpcuac` desde un dir vacío tras `supabase login`); el fallback a service-role key funciona mientras tanto. Residual aceptado: el 1er login post-deploy de cada usuario existente escribe el password 1 vez (heal → revoca su única sesión previa; invisible). Conflicto latente documentado en el código: el password determinístico clobbea cualquier password propio de `set-password-after-otp` (inactivo hoy: sin login-por-password para phone users).
+**Pendiente / residual:** `OTP_PASSWORD_SECRET` no se pudo setear desde el sandbox (sin CLI auth) → queda para el usuario (dashboard EF secrets o `npx supabase secrets set OTP_PASSWORD_SECRET=$(openssl rand -hex 32) --project-ref lqaufszburqvlslpcuac` desde un dir vacío tras `supabase login`); el fallback a service-role key funciona mientras tanto. Residual aceptado: el 1er login post-deploy de cada usuario existente escribe el password 1 vez (heal → revoca su única sesión previa; invisible). Una contraseña elegida ya no se pisa: desde 00664, con `users.password_set_at` puesto (o si no se puede leer) `verify-otp` entra por enlace mágico (Strategy B) y no prueba ni escribe la contraseña derivada. Detalle en § "Equipo del panel: aceptar con un código por correo".
 
 ### Enlaces de login: nunca cambian la sesión de otra cuenta (verificado 2026-10-11)
 
