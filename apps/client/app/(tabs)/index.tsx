@@ -12,7 +12,7 @@ import { BalanceBadge } from '@tricigo/ui/BalanceBadge';
 import { StatusStepper } from '@tricigo/ui/StatusStepper';
 import { ServiceTypeCard } from '@tricigo/ui/ServiceTypeCard';
 import Toast from 'react-native-toast-message';
-import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup } from '@tricigo/utils';
+import { formatTRC, formatCUP, triggerSelection, triggerHaptic, suggestPickupPoint, logger, haversineDistance, findNearestPreset, estimateVehicleEtaMinutes, formatArrivalTime, serviceTypeToVehicleType, tricigoCategoryEmoji, deliveryVehicleToSlug, INCOMPATIBILITY_REASON_LABELS, MAP_STYLE_LIGHT, MAP_COLORS, fetchRoute, resolveAnnouncementCta, formatRating, SEARCH_TYPICAL_WAIT_S, searchWaitView, discountBaseCup, isSignupPromoCode, signupPromoAction } from '@tricigo/utils';
 import * as Location from 'expo-location';
 import { useTranslation } from '@tricigo/i18n';
 import { walletService, customerService, useFeatureFlag, notificationService, getSupabaseClient, blogService, type BlogPost, announcementService, type HomeAnnouncement, exchangeRateService, promotionService, type ActivePromotion, partnerPlaceService } from '@tricigo/api';
@@ -21,6 +21,7 @@ import { useRideStore } from '@/stores/ride.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useRideActions } from '@/hooks/useRide';
+import { useSignupPromotion } from '@/hooks/useSignupPromotion';
 import { useRoutePolyline } from '@/hooks/useRoutePolyline';
 import { WebMapView } from '@/components/WebMapView';
 import type { WebMapViewRef } from '@/components/WebMapView';
@@ -3143,6 +3144,9 @@ function SelectingView({ openPicker }: {
     fareEstimate,
   } = useRideStore();
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
+  useSignupPromotion();
+  const signupPromo = useRideStore((s) => s.signupPromo);
+  const setPromoResult = useRideStore((s) => s.setPromoResult);
   const { recentAddresses } = useRecentAddresses();
   // Memoized lat/lng form of the user center — feeds the search overlay's
   // proximity-aware "Lugares populares" section and the destination
@@ -3282,6 +3286,33 @@ function SelectingView({ openPicker }: {
       ? deliveryVehicleToSlug(draft.delivery.deliveryVehicleType)
       : draft.serviceType;
   const selectedEstimate = allFareEstimates?.[selectedEstimateSlug] ?? null;
+
+  // 00665: validate the signup code's promotion without a tap, only for a
+  // passenger ride the person pays (the rides the server applies it to). Same
+  // conditions confirmRide uses for ride_mode and corporate_account_id. The
+  // fare counts only once an estimate for the current route has landed:
+  // requestEstimate clears the result before it fetches, and validating against
+  // the previous route's fare in that window would show the wrong discount.
+  const signupPromoFareCup = isFareEstimating || !fareEstimate
+    ? 0
+    : (selectedEstimate?.estimated_fare_cup ?? 0);
+  const signupPromoEligible = draft.serviceType !== 'mensajeria' && !draft.corporateAccountId;
+  // The field holds the signup code on a ride it doesn't apply to: "Aplicar"
+  // is disabled and a caption says why (the effect below clears its result).
+  const signupPromoBlocked =
+    signupPromo != null && isSignupPromoCode(promoCode, signupPromo.code) && !signupPromoEligible;
+  useEffect(() => {
+    const action = signupPromoAction({
+      promoCode,
+      signupPromoCode: signupPromo?.code ?? null,
+      hasResult: promoResult != null,
+      validating: validatingPromo,
+      fareCup: signupPromoFareCup,
+      eligible: signupPromoEligible,
+    });
+    if (action === 'validate') void validatePromo({ auto: true });
+    else if (action === 'clear') setPromoResult(null);
+  }, [promoCode, signupPromo?.code, promoResult, validatingPromo, signupPromoFareCup, signupPromoEligible, validatePromo, setPromoResult]);
 
   // Live discount preview (promo + "Compartir viaje"). Mirrors the
   // server-side trigger 00347 exactly so the shown fare = what the server
@@ -4164,24 +4195,43 @@ function SelectingView({ openPicker }: {
               <Ionicons name={promoExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.neutral[400]} />
             </Pressable>
             {promoExpanded && (
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                <View style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
-                  <TextInput
-                    value={promoCode}
-                    onChangeText={setPromoCode}
-                    placeholder={t('ride.enter_code', { defaultValue: 'Ingresa un código' })}
-                    placeholderTextColor={colors.neutral[400]}
-                    style={{ fontSize: 14, color: colors.neutral[700], paddingVertical: 12 }}
-                    autoCapitalize="characters"
-                  />
+              <>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                  <View style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
+                    <TextInput
+                      value={promoCode}
+                      onChangeText={setPromoCode}
+                      placeholder={t('ride.enter_code', { defaultValue: 'Ingresa un código' })}
+                      placeholderTextColor={colors.neutral[400]}
+                      style={{ fontSize: 14, color: colors.neutral[700], paddingVertical: 12 }}
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                  {/* Not while pricing: validatePromo drops a result whose estimate is in flight. */}
+                  <Button title={t('common.apply', { defaultValue: 'Aplicar' })} size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim() || isFareEstimating || signupPromoBlocked} />
                 </View>
-                <Button title={t('common.apply', { defaultValue: 'Aplicar' })} size="sm" onPress={() => validatePromo()} loading={validatingPromo} disabled={!promoCode.trim()} />
-              </View>
+                {signupPromoBlocked && (
+                  <Text variant="caption" color="tertiary" style={{ marginBottom: 8 }}>
+                    {t('ride.signup_promo_not_eligible', {
+                      code: signupPromo?.signupCode ?? '',
+                      defaultValue: 'El descuento de tu código {{code}} no aplica a envíos ni a viajes pagados por una empresa.',
+                    })}
+                  </Text>
+                )}
+              </>
             )}
             {promoResult?.valid && (
               <View style={{ backgroundColor: '#f0fdf4', borderRadius: 8, padding: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="checkmark-circle" size={16} color={MAP_COLORS.pickup} />
-                <Text variant="caption" style={{ color: MAP_COLORS.pickup }}>{'¡'}Descuento de {formatCUP(promoResult.discountAmount)} aplicado!</Text>
+                <Text variant="caption" style={{ color: MAP_COLORS.pickup }}>
+                  {signupPromo && isSignupPromoCode(promoCode, signupPromo.code)
+                    ? t('ride.signup_promo_applied', {
+                        code: signupPromo.signupCode,
+                        amount: formatCUP(promoResult.discountAmount),
+                        defaultValue: 'Descuento de tu código {{code}}: {{amount}}',
+                      })
+                    : <>{'¡'}Descuento de {formatCUP(promoResult.discountAmount)} aplicado!</>}
+                </Text>
               </View>
             )}
 
@@ -4231,7 +4281,7 @@ function SelectingView({ openPicker }: {
             )}
 
           </ScrollView>
-          <Button title={selectedEstimate ? `${t('ride.request', { defaultValue: 'Solicitar' })} ${t(`service_type.${draft.serviceType}` as const)} · ${formatFare(netCup, netTrc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
+          <Button title={selectedEstimate ? `${t('ride.request', { defaultValue: 'Solicitar' })} ${t(`service_type.${draft.serviceType}` as const)} · ${formatFare(netCup, netTrc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating || validatingPromo} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
         </View>
       )}
     </View>
@@ -4261,6 +4311,7 @@ function ReviewingView() {
     return formatCUP(cupAmount);
   }, [draft.paymentMethod]);
   const { requestEstimate, confirmRide, validatePromo, validatingPromo } = useRideActions();
+  const signupPromo = useRideStore((s) => s.signupPromo);
   const user = useAuthStore((s) => s.user);
   const partnerDiscount = useRideStore((s) => s.partnerDiscount);
   const [promoExpanded, setPromoExpanded] = useState(false);
@@ -4813,7 +4864,7 @@ function ReviewingView() {
                   title={t('ride.apply', { defaultValue: 'Aplicar' })}
                   size="sm"
                   variant="outline"
-                  onPress={validatePromo}
+                  onPress={() => validatePromo()}
                   loading={validatingPromo}
                   disabled={!promoCode.trim()}
                 />
@@ -4827,7 +4878,13 @@ function ReviewingView() {
                   {/* discountAmount comes back in CUP from validate_promo_code —
                       formatTRC labelled it "TRC" (TriciCoin), a different unit. */}
                   {promoResult.valid
-                    ? t('ride.discount_applied', { defaultValue: `Descuento de ${formatCUP(promoResult.discountAmount)} aplicado`, amount: formatCUP(promoResult.discountAmount) })
+                    ? (signupPromo && isSignupPromoCode(promoCode, signupPromo.code)
+                        ? t('ride.signup_promo_applied', {
+                            code: signupPromo.signupCode,
+                            amount: formatCUP(promoResult.discountAmount),
+                            defaultValue: 'Descuento de tu código {{code}}: {{amount}}',
+                          })
+                        : t('ride.discount_applied', { defaultValue: `Descuento de ${formatCUP(promoResult.discountAmount)} aplicado`, amount: formatCUP(promoResult.discountAmount) }))
                     : promoResult.error ?? t('ride.promo_invalid')}
                 </Text>
               )}

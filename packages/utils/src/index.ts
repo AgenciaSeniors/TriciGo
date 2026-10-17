@@ -10,6 +10,7 @@ export * from './navigation';
 export * from './fareCalculator';
 export * from './farePresentation';
 export * from './ledger';
+export * from './signupPromo';
 export { initAnalytics, trackEvent, identifyUser, resetAnalytics } from './analytics';
 export type { AnalyticsEvent } from './analytics';
 export {

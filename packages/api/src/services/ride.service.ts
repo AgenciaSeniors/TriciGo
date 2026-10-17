@@ -65,6 +65,19 @@ function isMissingNotesColumn(err: { code?: string; message?: string } | null | 
   return /\b(pickup|dropoff)_notes\b/.test(err.message ?? '');
 }
 
+/** 00665: the promotion linked to the code the user registered with, when the server would apply it now. */
+export interface SignupPromotion {
+  /** The promotion's code; the booking screens put it in the promo field. */
+  code: string;
+  type: Promotion['type'];
+  discountPercent: number | null;
+  discountFixedCup: number | null;
+  firstRideOnly: boolean;
+  validUntil: string | null;
+  /** The signup code the user typed (MOTORENKO), for the label. */
+  signupCode: string;
+}
+
 export interface CreateRideParams {
   service_type: ServiceTypeSlug;
   payment_method: PaymentMethod;
@@ -1708,6 +1721,47 @@ export const rideService = {
     }
 
     return { valid: true, promotion, discountAmount };
+  },
+
+  /**
+   * 00665: the promotion linked to the code the user registered with, or null.
+   * The server applies it to the next ride anyway; this only lets the booking
+   * screens show it. Never throws: any error is null; the function missing
+   * before the migration (PGRST202) is silent, any other error is logged.
+   */
+  async getMySignupPromotion(): Promise<SignupPromotion | null> {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.rpc('get_my_signup_promotion');
+      if (error) {
+        if (error.code !== 'PGRST202' && !/could not find the function/i.test(error.message ?? '')) {
+          logger.warn('get_my_signup_promotion_failed', { error: error.message });
+        }
+        return null;
+      }
+      if (!Array.isArray(data) || data.length === 0) return null;
+      const row = data[0] as {
+        code?: string;
+        type: Promotion['type'];
+        discount_percent: number | string | null;
+        discount_fixed_cup: number | string | null;
+        first_ride_only: boolean | null;
+        valid_until: string | null;
+        signup_code: string;
+      };
+      if (!row?.code) return null;
+      return {
+        code: row.code,
+        type: row.type,
+        discountPercent: row.discount_percent == null ? null : Number(row.discount_percent),
+        discountFixedCup: row.discount_fixed_cup == null ? null : Number(row.discount_fixed_cup),
+        firstRideOnly: row.first_ride_only === true,
+        validUntil: row.valid_until ?? null,
+        signupCode: row.signup_code,
+      };
+    } catch {
+      return null;
+    }
   },
 
   /**
