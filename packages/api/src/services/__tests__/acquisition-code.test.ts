@@ -18,6 +18,13 @@ function mockInsertChain(result: { data: unknown; error: unknown }) {
   return { insert };
 }
 
+function mockUpdateChain(result: { error: unknown }) {
+  const eq = vi.fn().mockResolvedValue(result);
+  const update = vi.fn(() => ({ eq }));
+  mockFrom.mockReturnValueOnce({ update });
+  return { update, eq };
+}
+
 describe('acquisitionCodeService', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -42,6 +49,7 @@ describe('acquisitionCodeService', () => {
         channel: 'influencer',
         audience: 'choferes',
         notes: null,
+        promotion_id: null,
       });
       expect(result).toEqual(row);
     });
@@ -60,6 +68,50 @@ describe('acquisitionCodeService', () => {
         acquisitionCodeService.create({ code: 'CAFE1234', label: 'x', channel: 'otro', audience: 'ambos' }),
       ).rejects.toThrow('CAFE1234 ya existe');
     });
+
+    it('links the promotion chosen in the form', async () => {
+      const { insert } = mockInsertChain({ data: { code: 'MOTORENKO' }, error: null });
+
+      await acquisitionCodeService.create({
+        code: 'MOTORENKO', label: 'Motorenko', channel: 'influencer', audience: 'ambos', promotionId: 'p-1',
+      });
+
+      expect(insert).toHaveBeenCalledWith(expect.objectContaining({ promotion_id: 'p-1' }));
+    });
+
+    it('explains a promotion deleted while the form was open', async () => {
+      mockInsertChain({ data: null, error: { code: '23503', message: 'violates foreign key constraint' } });
+
+      await expect(
+        acquisitionCodeService.create({ code: 'MOTORENKO', label: 'x', channel: 'otro', audience: 'ambos', promotionId: 'gone' }),
+      ).rejects.toThrow('La promoción ya no existe');
+    });
+  });
+
+  describe('setPromotion', () => {
+    it('links a promotion to the code', async () => {
+      const { update, eq } = mockUpdateChain({ error: null });
+
+      await acquisitionCodeService.setPromotion('MOTORENKO', 'p-1');
+
+      expect(mockFrom).toHaveBeenCalledWith('acquisition_codes');
+      expect(update).toHaveBeenCalledWith({ promotion_id: 'p-1' });
+      expect(eq).toHaveBeenCalledWith('code', 'MOTORENKO');
+    });
+
+    it('unlinks it with null', async () => {
+      const { update } = mockUpdateChain({ error: null });
+
+      await acquisitionCodeService.setPromotion('MOTORENKO', null);
+
+      expect(update).toHaveBeenCalledWith({ promotion_id: null });
+    });
+
+    it('explains a promotion that no longer exists', async () => {
+      mockUpdateChain({ error: { code: '23503', message: 'violates foreign key constraint' } });
+
+      await expect(acquisitionCodeService.setPromotion('MOTORENKO', 'gone')).rejects.toThrow('La promoción ya no existe');
+    });
   });
 
   describe('getStats', () => {
@@ -77,6 +129,37 @@ describe('acquisitionCodeService', () => {
 
       expect(mockRpc).toHaveBeenCalledWith('admin_signup_code_stats');
       expect(row).toMatchObject({ signups: 2, rider_signups: 1, driver_signups: 1, drivers_approved: 1, riders_with_ride: 1, drivers_with_ride: 0 });
+    });
+
+    it('reads the linked promotion and its completed rides', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: [{
+          code: 'MOTORENKO', label: 'Motorenko', channel: 'influencer', audience: 'ambos', is_active: true,
+          created_at: '2026-10-06', signups: '2', rider_signups: '2', driver_signups: '0',
+          drivers_approved: '0', riders_with_ride: '1', drivers_with_ride: '0',
+          promotion_id: 'p-1', promotion_code: 'MOTO20', promo_rides: '1',
+        }],
+        error: null,
+      });
+
+      const [row] = await acquisitionCodeService.getStats();
+
+      expect(row).toMatchObject({ promotion_id: 'p-1', promotion_code: 'MOTO20', promo_rides: 1 });
+    });
+
+    it('works before migration 00665, without the promotion columns', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: [{
+          code: 'MOTORENKO', label: 'Motorenko', channel: 'influencer', audience: 'ambos', is_active: true,
+          created_at: '2026-10-06', signups: '2', rider_signups: '2', driver_signups: '0',
+          drivers_approved: '0', riders_with_ride: '1', drivers_with_ride: '0',
+        }],
+        error: null,
+      });
+
+      const [row] = await acquisitionCodeService.getStats();
+
+      expect(row).toMatchObject({ promotion_id: null, promotion_code: null, promo_rides: 0 });
     });
 
     it('throws when the caller is not an admin', async () => {
