@@ -1305,7 +1305,7 @@ También sanos: los 3 botones flotantes del mapa en `driver/(tabs)/index.tsx` (`
 - El efecto solo cambia al idioma guardado o al del dispositivo, con `applyStartupLanguage`.
 - Mientras quede la 1.8.0 instalada, "Reintentar" en la pantalla de error recupera la app: vuelve a montar todo con i18n ya listo.
 
-**Regla:** i18n se inicializa antes del primer render. El conductor todavía lo hace en un efecto (`apps/driver/src/providers/app-providers.tsx`). Hoy no falla porque nada de su `AppProviders` usa `useTranslation`, pero el primer hook que lo use ahí lo rompe igual: antes, pasarlo al mismo patrón.
+**Regla:** i18n se inicializa antes del primer render. El conductor usa el mismo patrón desde el 2026-10-17 (`apps/driver/src/lib/i18nStartup.ts`), con su propia regla de idioma: el guardado y, si no hay, español, sin mirar el idioma del celular. Una app nueva hace lo mismo.
 
 **Para probarlo:** no hay renderer de React Native en el repo. Una prueba temporal con `// @vitest-environment jsdom` y `react-dom/client` (están en el `node_modules` de la raíz) renderiza un componente con `useTranslation` dos veces. Si i18n se inicializa entre los dos renders, falla; con `bootI18n()` antes, anda.
 
