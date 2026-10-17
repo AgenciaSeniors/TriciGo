@@ -20,6 +20,9 @@ import type {
 } from '@tricigo/types';
 import { useAdminUser } from '@/lib/useAdminUser';
 import { formatAdminDate } from '@/lib/formatDate';
+import { DOC_TYPE_LABEL, VEHICLE_TYPE_LABEL, labelFor } from '@/lib/labels';
+import { useCanAct } from '@/lib/useCanAct';
+import { DriverDetailReadOnly } from '@/components/panel/DriverDetailReadOnly';
 import {
   ArrowLeft,
   FileText,
@@ -77,21 +80,6 @@ const STATUS_LABEL_KEY: Record<DriverStatus, string> = {
   suspended: 'drivers.status_suspended',
 };
 
-const VEHICLE_TYPE_KEY: Record<string, string> = {
-  triciclo: 'drivers.type_triciclo',
-  moto: 'drivers.type_moto',
-  auto: 'drivers.type_auto',
-};
-
-const DOC_TYPE_KEY: Record<string, string> = {
-  national_id: 'drivers.doc_ci',
-  drivers_license: 'drivers.doc_license',
-  vehicle_registration: 'drivers.doc_registration',
-  selfie: 'drivers.doc_selfie',
-  vehicle_photo: 'drivers.doc_vehicle_photo',
-  operating_license: 'drivers.doc_operating_license',
-};
-
 function getInitials(name?: string | null): string {
   if (!name) return '?';
   return name.split(' ').filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('');
@@ -105,7 +93,7 @@ function vehicleIcon(type?: string) {
   }
 }
 
-export default function DriverDetailPage() {
+function AdminDriverDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { userId: adminUserId } = useAdminUser();
@@ -629,7 +617,7 @@ export default function DriverDetailPage() {
                       <div className="flex items-center gap-2">
                         <FileText size={14} className="text-ink-subtle" />
                         <p className="text-sm font-medium text-ink">
-                          {DOC_TYPE_KEY[docType] ? t(DOC_TYPE_KEY[docType]) : docType}
+                          {labelFor(t, DOC_TYPE_LABEL, docType)}
                         </p>
                       </div>
                       <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
@@ -1039,10 +1027,7 @@ export default function DriverDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-ink capitalize">
-                    {(() => {
-                      const key = VEHICLE_TYPE_KEY[vehicle.type];
-                      return key ? t(key) : vehicle.type;
-                    })()}
+                    {labelFor(t, VEHICLE_TYPE_LABEL, vehicle.type)}
                   </p>
                   <p className="text-xs text-ink-muted">{vehicle.make} {vehicle.model}</p>
                 </div>
@@ -1340,4 +1325,15 @@ function Metric({ label, value, icon }: { label: string; value: string; icon?: R
       <div className="text-[10px] text-neutral-500 mt-0.5">{label}</div>
     </div>
   );
+}
+
+/**
+ * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
+ * the panel views. The role picks which component mounts, so the hooks of each never change.
+ */
+export default function DriverDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { canAct, ready } = useCanAct();
+  if (!ready) return null;
+  return canAct ? <AdminDriverDetailPage /> : <DriverDetailReadOnly driverId={id} />;
 }

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { MapPin, Check, X, ExternalLink, Filter } from 'lucide-react';
 import { getSupabaseClient } from '@tricigo/api';
+import { useTranslation } from '@tricigo/i18n';
 import { useToast } from '@/components/ui/AdminToast';
+import { useCanAct } from '@/lib/useCanAct';
 
 // ============================================================
 // POI moderation panel (PR 3 of POI parity program)
@@ -39,7 +41,9 @@ interface Submission {
 type StatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 
 export default function PoisSubmissionsPage() {
+  const { t } = useTranslation('admin');
   const { showToast } = useToast();
+  const { canAct } = useCanAct();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -213,24 +217,30 @@ export default function PoisSubmissionsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {s.status === 'pending' ? (
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleApprove(s.id)}
-                          disabled={actingId === s.id}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500 hover:bg-green-600 disabled:opacity-40 text-white text-xs font-semibold"
-                        >
-                          <Check size={14} />
-                          Aprobar
-                        </button>
-                        <button
-                          onClick={() => handleReject(s.id)}
-                          disabled={actingId === s.id}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 disabled:opacity-40 text-white text-xs font-semibold"
-                        >
-                          <X size={14} />
-                          Rechazar
-                        </button>
-                      </div>
+                      canAct ? (
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => handleApprove(s.id)}
+                            disabled={actingId === s.id}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500 hover:bg-green-600 disabled:opacity-40 text-white text-xs font-semibold"
+                          >
+                            <Check size={14} />
+                            Aprobar
+                          </button>
+                          <button
+                            onClick={() => handleReject(s.id)}
+                            disabled={actingId === s.id}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 disabled:opacity-40 text-white text-xs font-semibold"
+                          >
+                            <X size={14} />
+                            Rechazar
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-neutral-500">
+                          {t('panel_view.submission_pending', { defaultValue: 'Pendiente' })}
+                        </span>
+                      )
                     ) : s.status === 'approved' ? (
                       <span className="text-xs text-green-700 dark:text-green-400">
                         ✓ Aprobado{s.promoted_poi_id ? ` (POI #${s.promoted_poi_id})` : ''}

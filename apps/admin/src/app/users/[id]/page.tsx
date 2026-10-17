@@ -9,6 +9,9 @@ import type { User, UserLevel, ReviewTagSummaryItem } from '@tricigo/types';
 import { getErrorMessage } from '@tricigo/utils';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { formatAdminDate } from '@/lib/formatDate';
+import { USER_LEVEL_LABEL, labelFor } from '@/lib/labels';
+import { useCanAct } from '@/lib/useCanAct';
+import { UserDetailReadOnly } from '@/components/panel/UserDetailReadOnly';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { AdjustWalletModal, type WalletAccountType } from '@/components/ui/AdjustWalletModal';
@@ -22,14 +25,6 @@ const levelBadgeClasses: Record<UserLevel, string> = {
   oro: 'bg-yellow-100 text-yellow-800',
   platino: 'bg-teal-100 text-teal-800',
   diamante: 'bg-violet-100 text-violet-800',
-};
-
-const LEVEL_LABEL_KEY: Record<UserLevel, string> = {
-  bronce: 'users.level_bronze',
-  plata: 'users.level_silver',
-  oro: 'users.level_gold',
-  platino: 'users.level_platinum',
-  diamante: 'users.level_diamond',
 };
 
 const LANG_KEY: Record<string, string> = {
@@ -49,7 +44,7 @@ function formatCurrency(amount: number): string {
   return `${Math.round(amount).toLocaleString('es-CU')} TRC`;
 }
 
-export default function UserDetailPage() {
+function AdminUserDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
@@ -202,7 +197,7 @@ export default function UserDetailPage() {
             <span
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${levelBadgeClasses[currentLevel]}`}
             >
-              {LEVEL_LABEL_KEY[currentLevel] ? t(LEVEL_LABEL_KEY[currentLevel]!) : currentLevel}
+              {labelFor(t, USER_LEVEL_LABEL, currentLevel)}
             </span>
             <span
               className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
@@ -285,7 +280,7 @@ export default function UserDetailPage() {
               <dt className="text-sm text-ink-muted">{t('users.label_current_level')}</dt>
               <dd>
                 <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${levelBadgeClasses[currentLevel]}`}>
-                  {LEVEL_LABEL_KEY[currentLevel] ? t(LEVEL_LABEL_KEY[currentLevel]!) : currentLevel}
+                  {labelFor(t, USER_LEVEL_LABEL, currentLevel)}
                 </span>
               </dd>
             </div>
@@ -549,4 +544,15 @@ export default function UserDetailPage() {
       )}
     </div>
   );
+}
+
+/**
+ * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
+ * the panel views. The role picks which component mounts, so the hooks of each never change.
+ */
+export default function UserDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { canAct, ready } = useCanAct();
+  if (!ready) return null;
+  return canAct ? <AdminUserDetailPage /> : <UserDetailReadOnly userId={id} />;
 }

@@ -12,6 +12,9 @@ import type { DeliveryDetails, AdminRideMessage } from '@tricigo/api';
 import { AdminBreadcrumb } from '@/components/ui/AdminBreadcrumb';
 import { AdminConfirmModal } from '@/components/ui/AdminConfirmModal';
 import { formatAdminDate } from '@/lib/formatDate';
+import { PAYMENT_LABEL, labelFor } from '@/lib/labels';
+import { useCanAct } from '@/lib/useCanAct';
+import { RideDetailReadOnly } from '@/components/panel/RideDetailReadOnly';
 import { rideTypeLabel } from '@/lib/rideType';
 
 // States from which an admin may cancel a ride (matches valid_transitions
@@ -53,15 +56,6 @@ const STATUS_LABEL_KEY: Record<RideStatus, string> = {
   disputed: 'rides.status_disputed',
 };
 
-const PAYMENT_KEY: Record<string, string> = {
-  cash: 'rides.payment_cash',
-  tricicoin: 'rides.payment_tricicoin',
-  mixed: 'rides.payment_mixed',
-  corporate: 'rides.payment_corporate',
-  tropipay: 'rides.payment_tropipay',
-  stripe: 'rides.payment_tropipay',
-};
-
 const PACKAGE_CATEGORY_KEY: Record<string, string> = {
   documentos: 'rides.cargo_cat_documentos',
   paquete_pequeno: 'rides.cargo_cat_paquete_pequeno',
@@ -80,7 +74,7 @@ type RideDetail = {
   messages: AdminRideMessage[];
 };
 
-export default function RideDetailPage() {
+function AdminRideDetailPage() {
   const { t } = useTranslation('admin');
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
@@ -264,7 +258,7 @@ export default function RideDetailPage() {
               </div>
               <div>
                 <dt className="text-sm text-ink-muted">{t('rides.label_payment_method')}</dt>
-                <dd className="text-sm font-medium">{PAYMENT_KEY[ride.payment_method] ? t(PAYMENT_KEY[ride.payment_method]!) : ride.payment_method}</dd>
+                <dd className="text-sm font-medium">{labelFor(t, PAYMENT_LABEL, ride.payment_method)}</dd>
               </div>
             </div>
           </dl>
@@ -596,4 +590,15 @@ export default function RideDetailPage() {
       />
     </div>
   );
+}
+
+/**
+ * Admins keep the full page above; marketing gets the read-only view (00663), which reads only
+ * the panel views. The role picks which component mounts, so the hooks of each never change.
+ */
+export default function RideDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { canAct, ready } = useCanAct();
+  if (!ready) return null;
+  return canAct ? <AdminRideDetailPage /> : <RideDetailReadOnly rideId={id} />;
 }

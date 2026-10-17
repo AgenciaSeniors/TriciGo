@@ -116,6 +116,27 @@ export {
   type PublicInvitationStatus,
 } from './services/team.service';
 export {
+  panelReadService,
+  parseProductFailures,
+  CHURN_NEVER_RODE_DAYS,
+  type ProductFailures,
+  type CanceledByRole,
+  type PanelRide,
+  type PanelDriverRow,
+  type PanelDriverListItem,
+  type PanelRideFilters,
+  type PanelDriverFilters,
+  type PanelRideDetail,
+  type PanelDriverDocument,
+  type PanelChurnRisk,
+  type PanelDriverDetail,
+  type PanelUserDetail,
+  type PanelDispute,
+  type PanelIncident,
+  type PanelIncidentDetail,
+  type PanelLostItem,
+} from './services/panel-read.service';
+export {
   marketingStatsService,
   type PromoCodePerformance,
   type ReferralCodePerformance,

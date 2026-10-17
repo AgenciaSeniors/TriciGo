@@ -18,6 +18,7 @@
     "./services/driver": "./src/services/driver.service.ts",
     "./services/review": "./src/services/review.service.ts",
     "./services/admin": "./src/services/admin.service.ts",
+    "./services/panel-read": "./src/services/panel-read.service.ts",
     "./services/customer": "./src/services/customer.service.ts",
     "./services/chat": "./src/services/chat.service.ts",
     "./services/incident": "./src/services/incident.service.ts",
