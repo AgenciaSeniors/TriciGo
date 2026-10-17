@@ -3,7 +3,6 @@ import { Platform } from 'react-native';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PostHogProvider, usePostHog } from 'posthog-react-native';
-import { initI18n } from '@tricigo/i18n';
 import { initAnalytics } from '@tricigo/utils';
 import * as Localization from 'expo-localization';
 import NetInfo from '@react-native-community/netinfo';
@@ -18,6 +17,7 @@ import { useNotificationSetup } from '@/hooks/useNotifications';
 import { useDeepLinkHandler } from '@/hooks/useDeepLinkHandler';
 import { useAuthStore } from '@/stores/auth.store';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { applyStartupLanguage, bootI18n } from '@/lib/i18nStartup';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +40,10 @@ initOfflineQueue({
   removeItem: (key) => AsyncStorage.removeItem(key),
 });
 registerAllOfflineMutations();
+
+// Before the first render: a useTranslation that renders before i18n exists
+// crashes the app on the next render (lib/i18nStartup.ts).
+bootI18n();
 
 const POSTHOG_API_KEY = process.env.EXPO_PUBLIC_POSTHOG_API_KEY ?? '';
 
@@ -70,13 +74,8 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       // toggleLanguage writes `tricigo_language`); fall back to the device locale
       // on first run — a better default than 'es' for our tourist passengers.
       const savedLang = await AsyncStorage.getItem('tricigo_language');
-      if (savedLang && ['es', 'en', 'pt'].includes(savedLang)) {
-        initI18n(savedLang);
-        return;
-      }
-      const locales = Localization.getLocales();
-      const deviceLang = locales[0]?.languageCode ?? 'es';
-      initI18n(deviceLang);
+      const deviceLang = Localization.getLocales()[0]?.languageCode;
+      await applyStartupLanguage(savedLang, deviceLang);
     })();
   }, []);
 
