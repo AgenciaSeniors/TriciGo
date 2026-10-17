@@ -127,6 +127,10 @@ Vitest: `acquisitionCodeService.create` / `setPromotion`, `rideService.getMySign
 3. Client OTA to 1.8.0 so the app shows it before booking.
 4. Update the marketing message (Promociones section) and CLAUDE.md.
 
+## Known behaviour
+
+`apply_signup_code` (00619) lets any account that has no signup code yet set one, at any time (an invite link opened later, or the code field). With a linked promotion, an existing passenger who enters an influencer's code gets that promotion too, once per confirmed phone. To limit a promotion to new people, marketing marks it `first_ride_only`.
+
 ## Known limitation
 
 If the destination is a partner place (00559) whose discount is larger than the promotion's, the validator keeps the partner discount and the promotion's use is still taken. That is how a typed code behaves today. The partner discount is capped at the commission (15 %), so a promotion of 15 % or more always wins.
