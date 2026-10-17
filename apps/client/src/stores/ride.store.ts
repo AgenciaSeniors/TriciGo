@@ -437,7 +437,12 @@ export const useRideStore = create<RideState>((set, get) => ({
   setLoading: (isLoading) => set({ isLoading }),
   setFareEstimating: (isFareEstimating) => set({ isFareEstimating }),
   setError: (error) => set({ error }),
-  setPromoCode: (promoCode) => set({ promoCode }),
+  // A result belongs to the code it was validated for: a different code clears
+  // it, so a result (the signup code's auto-validated one included) never stays
+  // on screen or rides with the booking under another code. The same code is a
+  // no-op (returning `s` skips the update).
+  setPromoCode: (promoCode) =>
+    set((s) => (s.promoCode === promoCode ? s : { promoCode, promoResult: null })),
   setPromoResult: (promoResult) => set({ promoResult }),
   setSignupPromo: (signupPromo) => set({ signupPromo }),
   setPartnerDiscount: (partnerDiscount) => set({ partnerDiscount }),

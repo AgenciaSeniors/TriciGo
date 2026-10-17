@@ -3306,7 +3306,7 @@ function SelectingView({ openPicker }: {
       fareCup: signupPromoFareCup,
       eligible: signupPromoEligible,
     });
-    if (action === 'validate') void validatePromo();
+    if (action === 'validate') void validatePromo({ auto: true });
     else if (action === 'clear') setPromoResult(null);
   }, [promoCode, signupPromo?.code, promoResult, validatingPromo, signupPromoFareCup, signupPromoEligible, validatePromo, setPromoResult]);
 
@@ -4195,13 +4195,7 @@ function SelectingView({ openPicker }: {
                 <View style={{ flex: 1, backgroundColor: colors.neutral[100], borderRadius: 10, paddingHorizontal: 12, justifyContent: 'center', minHeight: 44 }}>
                   <TextInput
                     value={promoCode}
-                    onChangeText={(code) => {
-                      setPromoCode(code);
-                      // A result belongs to the code it was validated for; the
-                      // signup code's auto-applied one must not stay on screen
-                      // (or ride with the booking) once another code is typed.
-                      if (promoResult) setPromoResult(null);
-                    }}
+                    onChangeText={setPromoCode}
                     placeholder={t('ride.enter_code', { defaultValue: 'Ingresa un código' })}
                     placeholderTextColor={colors.neutral[400]}
                     style={{ fontSize: 14, color: colors.neutral[700], paddingVertical: 12 }}
@@ -4272,7 +4266,7 @@ function SelectingView({ openPicker }: {
             )}
 
           </ScrollView>
-          <Button title={selectedEstimate ? `${t('ride.request', { defaultValue: 'Solicitar' })} ${t(`service_type.${draft.serviceType}` as const)} · ${formatFare(netCup, netTrc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
+          <Button title={selectedEstimate ? `${t('ride.request', { defaultValue: 'Solicitar' })} ${t(`service_type.${draft.serviceType}` as const)} · ${formatFare(netCup, netTrc)}` : isFareEstimating ? t('home.calculating', { defaultValue: 'Calculando tarifa...' }) : t('ride.select_locations', { defaultValue: 'Selecciona recogida y destino' })} size="lg" fullWidth onPress={debouncedConfirmRide} loading={isFareEstimating || validatingPromo} disabled={!selectedEstimate} style={{ marginTop: 8 }} />
         </View>
       )}
     </View>
@@ -4855,7 +4849,7 @@ function ReviewingView() {
                   title={t('ride.apply', { defaultValue: 'Aplicar' })}
                   size="sm"
                   variant="outline"
-                  onPress={validatePromo}
+                  onPress={() => validatePromo()}
                   loading={validatingPromo}
                   disabled={!promoCode.trim()}
                 />

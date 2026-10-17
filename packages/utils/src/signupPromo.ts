@@ -59,8 +59,9 @@ export interface SignupPromoState {
  * What to do with the signup code without a tap. The server applies it only to
  * a passenger ride the person pays, so the screens validate it only for those,
  * and clear its result when the ride stops being one (the app would otherwise
- * send the promotion with a delivery or a company ride). A code the person
- * typed is never touched.
+ * send the promotion with a delivery or a company ride). A different code the
+ * person typed is never touched; the signup code's result is cleared on rides
+ * it doesn't apply to, even if the person typed it.
  */
 export function signupPromoAction(s: SignupPromoState): SignupPromoAction {
   if (s.validating || !isSignupPromoCode(s.promoCode, s.signupPromoCode)) return 'none';

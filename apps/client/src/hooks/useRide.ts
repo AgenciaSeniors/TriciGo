@@ -14,6 +14,21 @@ import { shouldSendSearchHeartbeat } from '@/hooks/searchHeartbeat';
 import { fireRideStatusEffects, muteCancelAnnouncementFor } from '@/hooks/rideStatusEffects';
 const SEARCH_TIMEOUT_MS = RIDE_CONFIG.SEARCH_TIMEOUT_MS;
 
+/**
+ * The estimate a promo is validated against: the one shown for the selected
+ * service (mensajería: the chosen vehicle's, BUG-213), else the primary one.
+ * Compared by reference to drop a result that arrives after it was replaced:
+ * a new estimate is always a new object (getLocalFareEstimate), and the store
+ * keeps each slug's object when it copies `allFareEstimates` or picks a service.
+ */
+function promoEstimateOf(state: ReturnType<typeof useRideStore.getState>) {
+  const d = state.draft;
+  const slug =
+    d.serviceType === 'mensajeria' && d.delivery.deliveryVehicleType
+      ? deliveryVehicleToSlug(d.delivery.deliveryVehicleType)
+      : d.serviceType;
+  return state.allFareEstimates?.[slug] ?? state.fareEstimate;
+}
 
 /**
  * Initialize ride state on app mount.
@@ -515,9 +530,14 @@ export function useRideActions() {
     }
   }, [draft, setFareEstimate, setFlowStep, setFareEstimating, setError]);
 
-  const validatePromo = useCallback(async () => {
+  /**
+   * `opts.auto`: the signup code's promotion validated without a tap (00665);
+   * not counted as `promo_applied`. Checked with `=== true` so a press event
+   * passed as the first argument can never count as one.
+   */
+  const validatePromo = useCallback(async (opts?: { auto?: boolean }) => {
     const state = useRideStore.getState();
-    const { promoCode, fareEstimate: fe, allFareEstimates, draft: d } = state;
+    const { promoCode } = state;
     if (!promoCode.trim() || !user || validatingPromo) return;
 
     // The fare the user is LOOKING AT, not the primary estimate. SelectingView
@@ -526,12 +546,10 @@ export function useRideActions() {
     // and previewed a discount the server would never apply.
     // Mensajería is priced by the chosen VEHICLE, same rule as
     // ride.store.setServiceType (BUG-213).
-    const effSlug =
-      d.serviceType === 'mensajeria' && d.delivery.deliveryVehicleType
-        ? deliveryVehicleToSlug(d.delivery.deliveryVehicleType)
-        : d.serviceType;
+    const estimate = promoEstimateOf(state);
+    const code = promoCode.trim().toUpperCase();
     // The fare the server applies the promo to: without the stops (00633).
-    const fareAmount = discountBaseCup(allFareEstimates?.[effSlug] ?? fe);
+    const fareAmount = discountBaseCup(estimate);
 
     // With no estimate the RPC returns `valid: true, discount_amount: 0`
     // (fare × pct = 0) and the UI cheerfully announced "¡Descuento de 0
@@ -547,6 +565,27 @@ export function useRideActions() {
       return;
     }
 
+    // A result is only for the code and estimate it was asked for. If either
+    // changed during the request (new route, refresh, another service, another
+    // code), it is dropped: the signup code's auto-validation then runs again
+    // against the current estimate, and a typed code needs another tap. That
+    // second request compares against the estimate current at its own start,
+    // so it only drops if the estimate changes again.
+    // The shown estimate alone is not enough: a route change clears
+    // `fareEstimate` but leaves the old `allFareEstimates` in place until the
+    // new estimate lands, so an estimate in flight, or a primary estimate
+    // replaced or cleared, also makes the result stale.
+    const primary = state.fareEstimate;
+    const isStale = () => {
+      const now = useRideStore.getState();
+      return (
+        promoEstimateOf(now) !== estimate ||
+        now.fareEstimate !== primary ||
+        now.isFareEstimating ||
+        now.promoCode.trim().toUpperCase() !== code
+      );
+    };
+
     setValidatingPromo(true);
     validatingPromoRef.current = true;
     try {
@@ -555,6 +594,7 @@ export function useRideActions() {
         userId: user.id,
         fareAmount,
       });
+      if (isStale()) return;
       // The service returns the RAW error key ('already_used', 'first_ride_only',
       // …) — untranslated it rendered literally in ReviewingView. Map to copy.
       const errorMsgs: Record<string, string> = {
@@ -571,10 +611,11 @@ export function useRideActions() {
         promotionId: result.promotion?.id,
         error: result.error ? (errorMsgs[result.error] ?? i18next.t('rider:ride.promo_invalid')) : undefined,
       });
-      if (result.valid) {
+      if (result.valid && opts?.auto !== true) {
         trackEvent('promo_applied', { code: promoCode.trim(), discount: result.discountAmount });
       }
     } catch {
+      if (isStale()) return;
       setPromoResult({ valid: false, discountAmount: 0, error: i18next.t('rider:ride.promo_invalid') });
     } finally {
       setValidatingPromo(false);
