@@ -71,7 +71,7 @@ New table `signup_driver_bonuses` (one row per paid bonus): `user_id uuid PRIMAR
 
 Then, inside a block that never rolls back the ride (`EXCEPTION WHEN OTHERS THEN RAISE WARNING … ; RETURN NEW`, as in the referral triggers; the claim is taken inside the same block so a failed payment undoes it):
 
-- Credit `driver_bonus_cup` (read now, at payment time) from `platform_promotions` (user `…0001`) to the driver's `tricicoin` wallet: `ledger_transactions` type `promo_credit`, idempotency key `signup_driver_bonus:<user_id>`, `reference_type 'signup_code'`, description `Bono de bienvenida - código <CODE>`, two `ledger_entries`, two balance updates. Same shape as the driver referral credit.
+- Credit `driver_bonus_cup` (read now, at payment time) from `platform_promotions` (user `…0001`) to the driver's `tricicoin` wallet: `ledger_transactions` type `promo_credit`, idempotency key `signup_driver_bonus:<user_id>`, `reference_type 'signup_driver_bonus'` and `reference_id` the ride, description `Bono de bienvenida - código <CODE>`, two `ledger_entries`, two balance updates. Same shape as the driver referral credit.
 - Insert the `signup_driver_bonuses` row.
 - Push to the driver through `cron_http_post('signup-driver-bonus', …send-push…)`, category `system`, title "Recibiste un bono de bienvenida", body "Te acreditamos <N> CUP en tu billetera por tu primer viaje.", data `{event: 'signup_driver_bonus'}`. A failed push is logged and does not undo the credit (its own inner block).
 
