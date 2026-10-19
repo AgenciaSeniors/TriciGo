@@ -12,10 +12,14 @@
 // (migración 00319). Tolerancia: si la migración no se aplicó aún
 // (PGRST202 / function does not exist), fallback al comportamiento
 // legacy para no crashear la UI.
+//
+// 00666: admins and marketing also read and save the four referral
+// amounts (platform_config) from the Referidos page.
 // ============================================================
 
 import type { Referral, ReferralStatus } from '@tricigo/types';
 import { getSupabaseClient } from '../client';
+import { AppError } from '../errors';
 
 const DEFAULT_BONUS_CUP = 500; // 500 CUP whole pesos
 
@@ -35,6 +39,40 @@ function isMissingFunctionError(error: { code?: string; message?: string } | nul
 export type InviteCodeResult =
   | { kind: 'source'; code: string; alreadySet: boolean }
   | { kind: 'referral'; referral: Referral };
+
+/** 00666: the four referral amounts in platform_config, in CUP. */
+export const REFERRAL_AMOUNT_KEYS = [
+  'referral_bonus_cup',
+  'referral_bonus_driver_cup',
+  'referral_welcome_bonus_cup',
+  'referral_welcome_bonus_driver_cup',
+] as const;
+export type ReferralAmountKey = (typeof REFERRAL_AMOUNT_KEYS)[number];
+export type ReferralAmounts = Record<ReferralAmountKey, number>;
+
+/** The `{error}` codes set_referral_amounts returns (00666), in Spanish. */
+const REFERRAL_AMOUNT_ERRORS: Record<string, string> = {
+  forbidden: 'No tienes permiso para cambiar los montos de referidos.',
+  invalid_amount: 'Los montos tienen que ser números enteros, 0 o más.',
+  unknown_key: 'Uno de los montos no existe. Recarga la página.',
+  nothing_to_save: 'No hay cambios para guardar.',
+};
+
+function isReferralAmountKey(key: string): key is ReferralAmountKey {
+  return (REFERRAL_AMOUNT_KEYS as readonly string[]).includes(key);
+}
+
+/** Builds the four amounts from key/value rows: a missing or non-numeric value is 0. */
+function toAmounts(rows: { key: string; value: unknown }[]): ReferralAmounts {
+  const out = Object.fromEntries(REFERRAL_AMOUNT_KEYS.map((k) => [k, 0])) as ReferralAmounts;
+  for (const row of rows) {
+    if (isReferralAmountKey(row.key)) {
+      const n = Number(row.value);
+      out[row.key] = Number.isFinite(n) ? n : 0;
+    }
+  }
+  return out;
+}
 
 export const referralService = {
   /**
@@ -162,6 +200,45 @@ export const referralService = {
   },
 
   // ==================== ADMIN OPERATIONS ====================
+
+  /** 00666: the referral amounts (any signed-in user can read these non-secret keys). */
+  async getReferralAmounts(): Promise<ReferralAmounts> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('platform_config')
+      .select('key, value')
+      .in('key', [...REFERRAL_AMOUNT_KEYS]);
+    if (error) throw error;
+    return toAmounts((data ?? []) as { key: string; value: unknown }[]);
+  },
+
+  /**
+   * 00666: admins and marketing save the changed amounts (integers >= 0)
+   * through set_referral_amounts. The function answers its refusals with an
+   * `{error}` object, mapped here to a Spanish AppError (status 400, so the
+   * panel shows the message instead of "session expired").
+   */
+  async setReferralAmounts(changes: Partial<ReferralAmounts>): Promise<ReferralAmounts> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('set_referral_amounts', { p_amounts: changes });
+    if (error) {
+      if (isMissingFunctionError(error)) {
+        throw new AppError('Esta función todavía no está disponible.', 'REFERRAL_AMOUNTS_UNAVAILABLE', 400);
+      }
+      throw error;
+    }
+    const result = (data ?? {}) as { success?: boolean; error?: string; key?: string; amounts?: Record<string, unknown> };
+    if (result.error || !result.success) {
+      const code = result.error ?? '';
+      throw new AppError(
+        REFERRAL_AMOUNT_ERRORS[code] ?? 'No se pudieron guardar los montos.',
+        code ? `REFERRAL_AMOUNTS_${code.toUpperCase()}` : 'REFERRAL_AMOUNTS_FAILED',
+        400,
+        result.key ? { key: result.key } : undefined,
+      );
+    }
+    return toAmounts(Object.entries(result.amounts ?? {}).map(([key, value]) => ({ key, value })));
+  },
 
   /**
    * Get all referrals with pagination and optional status filter.

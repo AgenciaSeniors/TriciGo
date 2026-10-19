@@ -98,6 +98,79 @@ describe('acquisitionCodeService', () => {
         acquisitionCodeService.create({ code: 'MOTORENKO', label: 'x', channel: 'otro', audience: 'ambos', promotionId: 'gone' }),
       ).rejects.toThrow('La promoción ya no existe');
     });
+
+    it('sends the driver bonus chosen in the form', async () => {
+      const { insert } = mockInsertChain({ data: { code: 'VIGO' }, error: null });
+
+      await acquisitionCodeService.create({
+        code: 'VIGO', label: 'Vigo', channel: 'influencer', audience: 'choferes', driverBonusCup: 1500,
+      });
+
+      expect(insert).toHaveBeenCalledWith(expect.objectContaining({ driver_bonus_cup: 1500 }));
+    });
+
+    it.each([
+      ['0', 0],
+      ['undefined', undefined],
+    ])('sends no driver_bonus_cup when it is %s, so it works before 00666', async (_label, driverBonusCup) => {
+      const { insert } = mockInsertChain({ data: { code: 'VIGO' }, error: null });
+
+      await acquisitionCodeService.create({
+        code: 'VIGO', label: 'Vigo', channel: 'influencer', audience: 'choferes', driverBonusCup,
+      });
+
+      const [payload] = insert.mock.calls[0] as unknown as [Record<string, unknown>];
+      expect(payload).not.toHaveProperty('driver_bonus_cup');
+    });
+
+    it.each([-1, 1.5, Number.NaN])('rejects a driver bonus of %s without calling the database', async (driverBonusCup) => {
+      await expect(
+        acquisitionCodeService.create({ code: 'VIGO', label: 'Vigo', channel: 'otro', audience: 'choferes', driverBonusCup }),
+      ).rejects.toThrow('El saldo para choferes tiene que ser un número entero, 0 o más.');
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setDriverBonus', () => {
+    it('sets the amount on the code', async () => {
+      const { update, eq, select } = mockUpdateChain({ data: [{ code: 'VIGO' }], error: null });
+
+      await acquisitionCodeService.setDriverBonus('VIGO', 2000);
+
+      expect(mockFrom).toHaveBeenCalledWith('acquisition_codes');
+      expect(update).toHaveBeenCalledWith({ driver_bonus_cup: 2000 });
+      expect(eq).toHaveBeenCalledWith('code', 'VIGO');
+      expect(select).toHaveBeenCalledWith('code');
+    });
+
+    it('turns it off with 0', async () => {
+      const { update } = mockUpdateChain({ data: [{ code: 'VIGO' }], error: null });
+
+      await acquisitionCodeService.setDriverBonus('VIGO', 0);
+
+      expect(update).toHaveBeenCalledWith({ driver_bonus_cup: 0 });
+    });
+
+    it('throws when RLS filtered the row out and no row changed', async () => {
+      mockUpdateChain({ data: [], error: null });
+
+      await expect(acquisitionCodeService.setDriverBonus('VIGO', 2000)).rejects.toThrow(
+        'No se pudo cambiar el saldo para choferes del código. Recarga la página e intenta de nuevo.',
+      );
+    });
+
+    it.each([-1, 1.5])('rejects %s without calling the database', async (amount) => {
+      await expect(acquisitionCodeService.setDriverBonus('VIGO', amount)).rejects.toThrow(
+        'El saldo para choferes tiene que ser un número entero, 0 o más.',
+      );
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('rethrows any database error as it came', async () => {
+      mockUpdateChain({ error: { code: '23514', message: 'violates check constraint' } });
+
+      await expect(acquisitionCodeService.setDriverBonus('VIGO', 2000)).rejects.toMatchObject({ code: '23514' });
+    });
   });
 
   describe('setPromotion', () => {
@@ -184,6 +257,39 @@ describe('acquisitionCodeService', () => {
       const [row] = await acquisitionCodeService.getStats();
 
       expect(row).toMatchObject({ promotion_id: null, promotion_code: null, promo_rides: 0 });
+    });
+
+    it('reads the driver bonus and the bonuses paid as numbers', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: [{
+          code: 'VIGO', label: 'Vigo', channel: 'influencer', audience: 'choferes', is_active: true,
+          created_at: '2026-10-19', signups: '3', rider_signups: '0', driver_signups: '3',
+          drivers_approved: '2', riders_with_ride: '0', drivers_with_ride: '2',
+          promotion_id: null, promotion_code: null, promo_rides: '0',
+          driver_bonus_cup: 1500, drivers_bonus_paid: '2', driver_bonus_paid_cup: '3000',
+        }],
+        error: null,
+      });
+
+      const [row] = await acquisitionCodeService.getStats();
+
+      expect(row).toMatchObject({ driver_bonus_cup: 1500, drivers_bonus_paid: 2, driver_bonus_paid_cup: 3000 });
+    });
+
+    it('works before migration 00666, without the driver bonus columns', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: [{
+          code: 'VIGO', label: 'Vigo', channel: 'influencer', audience: 'choferes', is_active: true,
+          created_at: '2026-10-19', signups: '1', rider_signups: '0', driver_signups: '1',
+          drivers_approved: '0', riders_with_ride: '0', drivers_with_ride: '0',
+          promotion_id: null, promotion_code: null, promo_rides: '0',
+        }],
+        error: null,
+      });
+
+      const [row] = await acquisitionCodeService.getStats();
+
+      expect(row).toMatchObject({ driver_bonus_cup: 0, drivers_bonus_paid: 0, driver_bonus_paid_cup: 0 });
     });
 
     it('throws when the caller is not an admin', async () => {
